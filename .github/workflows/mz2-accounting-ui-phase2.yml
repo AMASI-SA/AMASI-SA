@@ -1,0 +1,36 @@
+name: MZ2 Accounting UI Phase 2
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'frontend/src/pages/accounting/**'
+      - '.github/workflows/mz2-accounting-ui-phase2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile --non-interactive
+      - name: Accounting regression and presentation contracts
+        env:
+          CI: 'true'
+        run: >-
+          node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand
+          --testMatch '**/pages/accounting/**/*.test.js' '**/pages/accounting/**/*.test.jsx'
+          '**/services/accountingModule*.test.js' '**/services/accountingOnboarding.test.js'
+          '**/components/MezanV2NavigationShell*.test.jsx'
+      - name: Frontend source build (no release or deployment)
+        run: node node_modules/vite/bin/vite.js build

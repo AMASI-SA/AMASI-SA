@@ -1,0 +1,480 @@
+"""Employee OS payroll authority and unpaid-leave calendar policy.
+
+Runtime payroll reads only Employee OS V2 identities and salary contracts.
+Legacy ids are lookup/migration references only. Financial identities always
+resolve to ``mezan_employees_v2.id``; no salary value or status is read from
+``operating_salaries``.
+
+Suspension ranges are half-open: ``started_on`` is the first unpaid day and
+``returned_on`` is the first paid day after leave. An open range has no
+``returned_on``.
+"""
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+import math
+from fastapi import HTTPException
+from tz_utils import riyadh_today
+from typing import Any
+
+
+EMPLOYEES_COLLECTION = "mezan_employees_v2"
+SALARY_CONTRACTS_COLLECTION = "mezan_employee_salary_contracts_v2"
+PAYROLL_STATES = {"active", "unpaid_leave", "inactive"}
+
+
+def _date(value: Any) -> date | None:
+    raw = str(value or "").strip()
+    if len(raw) < 10:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except (TypeError, ValueError):
+        return None
+
+
+def normalized_suspensions(value: Any) -> list[dict[str, Any]]:
+    """Return valid, ordered payroll suspension ranges."""
+    rows: list[dict[str, Any]] = []
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        started = _date(item.get("started_on"))
+        returned = _date(item.get("returned_on"))
+        if not started or (returned and returned < started):
+            continue
+        row = deepcopy(item)
+        row["started_on"] = started.isoformat()
+        row["returned_on"] = returned.isoformat() if returned else None
+        row["reason"] = str(item.get("reason") or "inactive").strip()
+        rows.append(row)
+    return sorted(rows, key=lambda row: (row["started_on"], row.get("id") or ""))
+
+
+def _salary_amount(value: Any) -> float:
+    try:
+        amount = round(float(value or 0), 2)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return amount if math.isfinite(amount) and amount > 0 else 0.0
+
+
+def normalized_salary_revisions(
+    contract: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return one ordered, non-overlapping history of salary amounts.
+
+    Older V2 contracts pre-date salary revision history. They are projected as
+    one baseline revision from effective_from so historical payroll keeps
+    working without consulting operating_salaries.
+    """
+    contract = contract or {}
+    by_start: dict[str, dict[str, Any]] = {}
+    raw_rows = contract.get("salary_revisions")
+    if raw_rows is not None and not isinstance(raw_rows, list):
+        raise ValueError("employee_salary_history_invalid")
+    for item in raw_rows or []:
+        if not isinstance(item, dict):
+            raise ValueError("employee_salary_history_invalid")
+        started = _date(item.get("effective_from"))
+        amount = _salary_amount(item.get("monthly_amount"))
+        if not started or amount <= 0 or started.isoformat() in by_start:
+            raise ValueError("employee_salary_history_invalid")
+        row = deepcopy(item)
+        row["effective_from"] = started.isoformat()
+        row["monthly_amount"] = amount
+        ended = _date(item.get("effective_to"))
+        if (item.get("effective_to") and not ended) or (ended and ended < started):
+            raise ValueError("employee_salary_history_invalid")
+        row["effective_to"] = ended.isoformat() if ended else None
+        by_start[row["effective_from"]] = row
+
+    if not by_start:
+        started = _date(contract.get("effective_from") or contract.get("start_date"))
+        amount = _salary_amount(contract.get("monthly_amount"))
+        if started and amount > 0:
+            by_start[started.isoformat()] = {
+                "id": f"baseline:{contract.get('id') or 'contract'}",
+                "monthly_amount": amount,
+                "effective_from": started.isoformat(),
+                "effective_to": None,
+                "source": "contract_baseline",
+            }
+
+    rows = [by_start[key] for key in sorted(by_start)]
+    for index, row in enumerate(rows):
+        next_started = (
+            _date(rows[index + 1].get("effective_from"))
+            if index + 1 < len(rows)
+            else None
+        )
+        explicit_end = _date(row.get("effective_to"))
+        derived_end = next_started - timedelta(days=1) if next_started else None
+        if explicit_end and derived_end:
+            if explicit_end != derived_end:
+                raise ValueError("employee_salary_history_overlap_or_gap")
+            ended = derived_end
+        else:
+            ended = explicit_end or derived_end
+        row["effective_to"] = ended.isoformat() if ended else None
+    return rows
+
+
+def append_salary_revision(
+    contract: dict[str, Any] | None,
+    *,
+    monthly_amount: float,
+    effective_from: date,
+    revision_id: str,
+    changed_at: str,
+    changed_by: str,
+) -> list[dict[str, Any]]:
+    """Append a salary revision without rewriting any prior effective period."""
+    amount = _salary_amount(monthly_amount)
+    if amount <= 0:
+        raise ValueError("employee_salary_amount_invalid")
+    rows = normalized_salary_revisions(contract)
+    if rows:
+        previous_start = _date(rows[-1].get("effective_from"))
+        if previous_start and effective_from <= previous_start:
+            raise ValueError("employee_salary_effective_date_not_after_previous")
+        previous_end = _date(rows[-1].get("effective_to"))
+        if previous_end and previous_end != effective_from - timedelta(days=1):
+            raise ValueError("employee_salary_history_overlap_or_gap")
+        rows[-1]["effective_to"] = (effective_from - timedelta(days=1)).isoformat()
+    rows.append({
+        "id": revision_id,
+        "monthly_amount": amount,
+        "effective_from": effective_from.isoformat(),
+        "effective_to": None,
+        "created_at": changed_at,
+        "created_by": changed_by,
+        "source": "employee_management",
+    })
+    return rows
+
+
+def salary_amount_on(salary: dict[str, Any], day: date) -> float:
+    """Return the salary amount effective on one calendar day."""
+    amount = 0.0
+    for revision in normalized_salary_revisions(salary):
+        started = _date(revision.get("effective_from"))
+        ended = _date(revision.get("effective_to"))
+        if started and started <= day and (not ended or day <= ended):
+            amount = _salary_amount(revision.get("monthly_amount"))
+    return amount
+
+
+def first_salary_accrual_date(salary: dict[str, Any]) -> date | None:
+    """Contract start is unpaid; accrual starts the following calendar day.
+
+    Salary effectiveness (salary_amount_on) is deliberately separate. Later
+    amount revisions keep their effective dates and do not restart employment.
+    An explicitly later accrual boundary remains respected.
+    """
+    started = _date(salary.get("start_date") or salary.get("effective_from"))
+    if started is None:
+        revisions = normalized_salary_revisions(salary)
+        started = _date(revisions[0]["effective_from"]) if revisions else None
+    first = started + timedelta(days=1) if started else None
+    explicit = _date(salary.get("accrual_start_date"))
+    return max(first, explicit) if first and explicit else first or explicit
+
+
+def salary_accrual_for_period(salary: dict[str, Any], period: str, *, through: date | None = None, not_before: date | None = None) -> float:
+    """Prorate one YYYY-MM period using the salary effective on each paid day."""
+    try:
+        year, month = (int(part) for part in str(period).split("-", 1))
+        first = date(year, month, 1)
+    except (TypeError, ValueError):
+        raise ValueError("salary_period_invalid") from None
+    if month < 1 or month > 12:
+        raise ValueError("salary_period_invalid")
+    if month == 12:
+        following = date(year + 1, 1, 1)
+    else:
+        following = date(year, month + 1, 1)
+    last = following - timedelta(days=1)
+    start = max(first, not_before) if not_before else first
+    end = min(last, through) if through else last
+    total = Decimal(0)
+    for ordinal in range(start.toordinal(), end.toordinal() + 1):
+        day = date.fromordinal(ordinal)
+        if not salary_active_on(salary, day):
+            continue
+        amount = salary_amount_on(salary, day)
+        if amount <= 0:
+            continue
+        total += Decimal(str(amount)) / Decimal(last.day)
+    return float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def suspension_history(
+    contract: dict[str, Any] | None,
+    employee: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Read V2 history, with one compatibility range for migrated stops.
+
+    Existing migrated contracts stored ``effective_to`` as the last paid day.
+    Until that employee is edited in Employee OS, synthesize an open range
+    starting on the following day so the verified historical accrual remains
+    unchanged without consulting the legacy row.
+    """
+    contract = contract or {}
+    rows = normalized_suspensions(contract.get("suspension_periods"))
+    if rows:
+        return rows
+    state = str(
+        contract.get("payroll_state")
+        or (employee or {}).get("status")
+        or "active"
+    ).strip()
+    effective_to = _date(contract.get("effective_to"))
+    if state != "active" and effective_to:
+        return [{
+            "id": f"cutover:{contract.get('id') or 'contract'}",
+            "started_on": (effective_to + timedelta(days=1)).isoformat(),
+            "returned_on": None,
+            "reason": state,
+            "source": "employee_v2_cutover",
+        }]
+    employee_stopped_on = _date((employee or {}).get("updated_at"))
+    if state != "active" and employee_stopped_on:
+        return [{
+            "id": f"cutover:{contract.get('id') or 'contract'}",
+            "started_on": employee_stopped_on.isoformat(),
+            "returned_on": None,
+            "reason": state,
+            "source": "employee_v2_status_cutover",
+        }]
+    return []
+
+
+def open_suspension(periods: Any) -> dict[str, Any] | None:
+    rows = normalized_suspensions(periods)
+    return next((row for row in reversed(rows) if not row.get("returned_on")), None)
+
+
+def transition_suspensions(
+    periods: Any,
+    *,
+    target_state: str,
+    effective_date: date,
+    period_id: str,
+    changed_at: str,
+    changed_by: str,
+) -> list[dict[str, Any]]:
+    """Open/close one unpaid range while retaining every prior leave."""
+    if target_state not in PAYROLL_STATES:
+        raise ValueError("employee_status_invalid")
+    rows = normalized_suspensions(periods)
+    open_indexes = [index for index, row in enumerate(rows) if not row.get("returned_on")]
+    if len(open_indexes) > 1:
+        raise ValueError("employee_payroll_multiple_open_suspensions")
+
+    if target_state == "active":
+        if open_indexes:
+            index = open_indexes[0]
+            started = _date(rows[index].get("started_on"))
+            if started and effective_date < started:
+                raise ValueError("employee_payroll_return_before_leave")
+            rows[index] = {
+                **rows[index],
+                "returned_on": effective_date.isoformat(),
+                "returned_at": changed_at,
+                "returned_by": changed_by,
+            }
+        return rows
+
+    if open_indexes:
+        index = open_indexes[0]
+        rows[index] = {
+            **rows[index],
+            "reason": target_state,
+            "updated_at": changed_at,
+            "updated_by": changed_by,
+        }
+        return rows
+
+    rows.append({
+        "id": period_id,
+        "started_on": effective_date.isoformat(),
+        "returned_on": None,
+        "reason": target_state,
+        "created_at": changed_at,
+        "created_by": changed_by,
+    })
+    return normalized_suspensions(rows)
+
+
+def contract_salary_row(
+    contract: dict[str, Any],
+    employee: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose explicit employee/contract identities; id is always V2 employee id."""
+    employee_id = employee.get("id")
+    if (not isinstance(employee_id, str) or not employee_id.strip()
+            or employee_id != employee_id.strip() or contract.get("employee_id") != employee_id):
+        raise ValueError("employee_salary_identity_invalid")
+    revisions = normalized_salary_revisions(contract)
+    state = str(
+        employee.get("status")
+        or contract.get("payroll_state")
+        or "active"
+    ).strip()
+    if state not in PAYROLL_STATES:
+        state = "inactive"
+    compatibility_id = str(
+        contract.get("legacy_salary_id") or contract.get("id") or ""
+    ).strip()
+    start_date = max(str(contract.get("effective_from") or ""), str(employee.get("hire_date") or "")) or None
+    accrual_start = first_salary_accrual_date({**contract, "start_date": start_date})
+    return {
+        "id": employee_id,
+        "contract_id": contract.get("id"),
+        "employee_v2_id": employee_id,
+        "compatibility_id": compatibility_id,
+        "legacy_salary_id": contract.get("legacy_salary_id"),
+        "name": employee.get("display_name") or employee.get("name") or "",
+        "category": "employee",
+        "country": employee.get("country") or "saudi",
+        "monthly_amount": salary_amount_on(contract, riyadh_today()),
+        "salary_revisions": revisions,
+        "start_date": start_date,
+        "effective_to": contract.get("effective_to"),
+        "status": "active" if state == "active" else "stopped",
+        "payroll_state": state,
+        "payroll_suspension_periods": suspension_history(contract, employee),
+        "accrual_mode": contract.get("accrual_mode") or "monthly",
+        "accrual_start_date": accrual_start.isoformat() if accrual_start else None,
+        "payroll_source": "mezan_employee_salary_contracts_v2",
+    }
+
+
+def salary_suspended_on(salary: dict[str, Any], day: date) -> bool:
+    for period in normalized_suspensions(salary.get("payroll_suspension_periods")):
+        started = _date(period.get("started_on"))
+        returned = _date(period.get("returned_on"))
+        if started and started <= day and (not returned or day < returned):
+            return True
+    return False
+
+
+def salary_active_on(salary: dict[str, Any], day: date) -> bool:
+    """Whether one V2 salary contributes cost/accrual on this calendar day."""
+    started = first_salary_accrual_date(salary)
+    if started and day < started:
+        return False
+    ended = _date(salary.get("effective_to"))
+    if ended and day > ended:
+        return False
+    periods = normalized_suspensions(salary.get("payroll_suspension_periods"))
+    if periods:
+        return not salary_suspended_on(salary, day)
+    if str(salary.get("status") or "active") == "active":
+        return True
+    effective_to = _date(salary.get("effective_to"))
+    return bool(effective_to and day <= effective_to)
+
+
+def payable_days(salary: dict[str, Any], start: date, end: date) -> int:
+    if end < start:
+        return 0
+    return sum(
+        salary_active_on(salary, date.fromordinal(ordinal))
+        for ordinal in range(start.toordinal(), end.toordinal() + 1)
+    )
+
+
+async def employee_salary_rows(db: Any, user_id: str) -> list[dict[str, Any]]:
+    """Load authoritative employee salaries exclusively from Employee OS V2."""
+    contracts = await db[SALARY_CONTRACTS_COLLECTION].find(
+        {"user_id": user_id}, {"_id": 0}
+    ).to_list(10000)
+    employee_ids = [
+        str(row.get("employee_id") or "").strip()
+        for row in contracts
+        if str(row.get("employee_id") or "").strip()
+    ]
+    if not employee_ids:
+        return []
+    employees = await db[EMPLOYEES_COLLECTION].find(
+        {"user_id": user_id, "id": {"$in": employee_ids}}, {"_id": 0}
+    ).to_list(max(len(employee_ids), 1))
+    employees_by_id = {
+        str(row.get("id") or "").strip(): row
+        for row in employees
+        if str(row.get("id") or "").strip()
+        and not any(row.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted"))
+    }
+    latest_by_employee: dict[str, dict[str, Any]] = {}
+    for contract in contracts:
+        employee_id = str(contract.get("employee_id") or "").strip()
+        if not employee_id or employee_id not in employees_by_id:
+            continue
+        current = latest_by_employee.get(employee_id)
+        if current is not None:
+            raise ValueError("employee_salary_multiple_contracts")
+        latest_by_employee[employee_id] = contract
+    return [
+        contract_salary_row(contract, employees_by_id[employee_id])
+        for employee_id, contract in latest_by_employee.items()
+        if normalized_salary_revisions(contract)
+    ]
+
+
+async def require_employee_v2_identity(db, user_id, employee_id, *, session=None, allow_archived=False):
+    """Writer guard: accept an exact V2 id only, never rewrite a journal alias."""
+    if not isinstance(employee_id, str) or not employee_id.strip() or employee_id != employee_id.strip():
+        raise HTTPException(409, "employee_v2_identity_required")
+    query = {"user_id": user_id, "id": employee_id}
+    if not allow_archived:
+        query.update({flag: {"$ne": True} for flag in ("archived", "is_archived", "deleted", "is_deleted")})
+    kwargs = {"session": session} if session is not None else {}
+    employee = await db[EMPLOYEES_COLLECTION].find_one(query, {"_id": 0}, **kwargs)
+    if not employee:
+        raise HTTPException(409, "employee_v2_identity_required")
+    return employee
+
+
+async def resolve_employee_v2(db, user_id, reference):
+    """Resolve aliases to exactly one V2 record; ambiguous/orphan aliases fail closed."""
+    reference = str(reference or "").strip()
+    if not reference:
+        return None
+    employees = await db[EMPLOYEES_COLLECTION].find({
+        "user_id": user_id,
+        "$or": [{"id": reference}, {"legacy_employee_id": reference}, {"financial_entity_id": reference}],
+    }, {"_id": 0}).to_list(3)
+    contracts = await db[SALARY_CONTRACTS_COLLECTION].find({
+        "user_id": user_id,
+        "$or": [{"id": reference}, {"employee_id": reference}, {"legacy_salary_id": reference}],
+    }, {"_id": 0, "employee_id": 1}).to_list(3)
+    ids = {row.get("id") for row in employees} | {row.get("employee_id") for row in contracts}
+    if not ids:
+        return None
+    if len(ids) != 1 or len(employees) > 1 or len(contracts) > 1:
+        raise HTTPException(409, "employee_v2_alias_ambiguous")
+    return await require_employee_v2_identity(db, user_id, next(iter(ids)))
+
+
+async def find_employee_salary(
+    db: Any,
+    user_id: str,
+    salary_id: str,
+) -> dict[str, Any] | None:
+    """Accept a lookup alias, but return only the resolved V2 employee identity."""
+    employee = await resolve_employee_v2(db, user_id, salary_id)
+    if not employee:
+        return None
+    contracts = await db[SALARY_CONTRACTS_COLLECTION].find(
+        {"user_id": user_id, "employee_id": employee["id"]},
+        {"_id": 0},
+    ).to_list(2)
+    if len(contracts) > 1:
+        raise HTTPException(409, "employee_salary_multiple_contracts")
+    if not contracts:
+        return None
+    return contract_salary_row(contracts[0], employee)

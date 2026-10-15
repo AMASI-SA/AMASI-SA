@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowLeft, ArrowSquareOut, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
     FloppyDisk, MagnifyingGlass, Plus, SpinnerGap, WarningCircle, WhatsappLogo, X,
@@ -15,6 +15,13 @@ import {
     updateOrderReviewOperationalItemStatus,
     saveOrderReviewImageChoice,
 } from "../services/orderReviewEngine";
+import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
+import {
+    isReviewCompletionComplete, isReviewConfirmationPending, isReviewOperationCompleted,
+    LEGACY_REVIEW_RESOLUTION_MESSAGE, REVIEW_COMPLETION_UNVERIFIED_MESSAGE,
+    reviewConfirmationMessage, watchReviewConfirmation,
+} from "../reviewConfirmation";
+import { clearPendingReviewAdvance } from "../reviewAutoAdvance";
 
 function money(value, currency = "SAR") {
     const amount = Number(value || 0);
@@ -385,22 +392,7 @@ function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onC
 
 function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged }) {
     const [busy, setBusy] = useState(false);
-    const statusLabel = { pending: "لم يبدأ", in_progress: "قيد التجهيز", ready: "جاهز" }[item.preparation_status] || "قيد التجهيز";
-    const setStatus = async (preparationStatus) => {
-        setBusy(true);
-        try {
-            const next = await updateOrderReviewOperationalItemStatus(orderNumber, item.operational_item_id, {
-                expected_revision: workflowRevision,
-                preparation_status: preparationStatus,
-            });
-            onChanged(next);
-            toast.success("تم تحديث حالة المنتج التشغيلي.");
-        } catch (error) {
-            toast.error(error.message);
-        } finally {
-            setBusy(false);
-        }
-    };
+    const statusLabel = "بانتظار التجميع والعنونة";
     const rename = async () => {
         const nextName = window.prompt("اسم المنتج التشغيلي", item.name || "");
         if (!nextName || nextName.trim() === item.name) return;
@@ -451,11 +443,9 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                     ))}
                 </div>
                 <div className="mt-4 rounded-xl bg-white/80 p-3 text-xs font-bold leading-6 text-slate-600">
-                    يظهر داخل ميزان فقط، لا يُرسل إلى سلة أو قيود ولا يدخل ملف المورد. ويمنع اكتمال التجهيز حتى يصبح جاهزًا.
+                    يظهر داخل ميزان فقط، ولا يُرسل إلى سلة أو قيود أو ملف المورد. تُسجل جاهزيته من صفحة التجميع والعنونة فقط، ويمنع طباعة الشحنة حتى يصبح جاهزًا.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <button disabled={busy || item.preparation_status === "in_progress"} onClick={() => setStatus("in_progress")} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-extrabold text-amber-900 disabled:opacity-50">قيد التجهيز</button>
-                    <button disabled={busy || item.preparation_status === "ready"} onClick={() => setStatus("ready")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50">جاهز</button>
                     <button disabled={busy} onClick={rename} className="rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-extrabold text-violet-800 disabled:opacity-50">تعديل الاسم</button>
                     <button disabled={busy} onClick={unlink} data-testid="order-review-operational-item-unlink" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-extrabold text-rose-700 disabled:opacity-50">إلغاء الربط وإرجاع القيم</button>
                 </div>
@@ -464,21 +454,25 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
     );
 }
 
-function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
+export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [detail, setDetail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [completing, setCompleting] = useState(false);
+    const [confirmationPending, setConfirmationPending] = useState(false);
+    const [confirmationOperation, setConfirmationOperation] = useState(null);
+    const [confirmationWatchKey, setConfirmationWatchKey] = useState(0);
+    const [legacyResolutionRequired, setLegacyResolutionRequired] = useState(false);
     const [operationalDialog, setOperationalDialog] = useState(null);
     const [operationalName, setOperationalName] = useState("كرت إهداء");
     const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
     const [creatingOperational, setCreatingOperational] = useState(false);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async ({ localOnly = true } = {}) => {
         setLoading(true);
         setError("");
         try {
-            setDetail(await getOrderReview(orderNumber));
+            setDetail(await getOrderReview(orderNumber, { localOnly }));
         } catch (loadError) {
             setError(loadError.message);
         } finally {
@@ -487,6 +481,15 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     }, [orderNumber]);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => watchReviewConfirmation(orderNumber, (operation) => {
+        const pending = isReviewConfirmationPending(operation);
+        setConfirmationOperation(operation);
+        setConfirmationPending(pending);
+        if (isReviewOperationCompleted(operation)) onCompleted(orderNumber);
+        if (operation.state === "requires_review" || operation.state === "failed") {
+            toast.error(`توقف تأكيد المراجعة ويحتاج فحصًا: ${operation.resume_block_reason || "review_confirmation_blocked"}`);
+        }
+    }), [orderNumber, onCompleted, confirmationWatchKey]);
 
     const order = detail?.order;
     const customer = order?.customer || {};
@@ -529,15 +532,24 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         setCompleting(true);
         try {
             const result = await completeOrderReview(orderNumber, detail.revision);
-            if (result.salla_status_sync === "pending") {
-                toast.warning("تم اعتماد المراجعة في ميزان، وتغيير حالة سلة بانتظار المزامنة.");
-            } else {
-                toast.success("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
+            if (isReviewConfirmationPending(result)) {
+                clearPendingReviewAdvance();
+                setConfirmationPending(true);
+                setConfirmationOperation(result);
+                setConfirmationWatchKey((current) => current + 1);
+                toast.info(reviewConfirmationMessage(result));
+                return;
             }
+            if (!isReviewCompletionComplete(result)) throw new Error(REVIEW_COMPLETION_UNVERIFIED_MESSAGE);
+            toast.success("تمت مراجعة الطلب وانتقل من هذه المرحلة.");
             onCompleted(orderNumber);
         } catch (finishError) {
+            clearPendingReviewAdvance();
+            if (finishError.code === "review_completion_legacy_operation_requires_resolution") {
+                setLegacyResolutionRequired(true);
+            }
             toast.error(finishError.message);
-            await load();
+            await load({ localOnly: true });
         } finally {
             setCompleting(false);
         }
@@ -567,6 +579,12 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                                 <button type="button" onClick={() => copy(order.order_number, "رقم الطلب")} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-bold"><Clipboard /> نسخ رقم الطلب</button>
                             </div>
                         </div>
+
+                        <CustomerServiceInstructionBanner
+                            instructions={detail.customer_service_instructions || []}
+                            stage="pending_review"
+                            onUpdated={load}
+                        />
 
                         <section className="rounded-2xl border bg-white p-4">
                             <h3 className="mb-3 text-lg font-extrabold">معلومات العميل</h3>
@@ -630,7 +648,9 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
                         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <p className="text-sm font-semibold text-emerald-900">اعتماد المراجعة يجمّد الصورة والتعليمات المختارة، ويخرج الطلب من هذه الصفحة نهائيًا. لا يتم إنشاء ملف تجهيز أو بوليصة شحن في هذه المرحلة.</p>
-                            <button type="button" disabled={completing} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
+                            {confirmationPending && <p role="status">{reviewConfirmationMessage(confirmationOperation)}</p>}
+                            {legacyResolutionRequired && <p role="alert">{LEGACY_REVIEW_RESOLUTION_MESSAGE}</p>}
+                            <button type="button" disabled={completing || confirmationPending || legacyResolutionRequired} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
                                 {completing ? <SpinnerGap className="animate-spin" /> : <CheckCircle weight="fill" />}
                                 تمت المراجعة
                             </button>
@@ -655,43 +675,74 @@ function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
 
 export const REVIEW_PAGE_SIZE = 10;
 
-export default function OrderReview() {
+export default function OrderReview({ initialSearch = "" }) {
+    const normalizedInitialSearch = String(initialSearch || "").replace(/^#/, "").trim();
     const [orders, setOrders] = useState([]);
     const [currentCursor, setCurrentCursor] = useState(null);
     const [previousCursors, setPreviousCursors] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
+    const [totalPending, setTotalPending] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(normalizedInitialSearch);
+    const [searchQuery, setSearchQuery] = useState(normalizedInitialSearch);
+    const latestRequestId = useRef(0);
+
+    useEffect(() => {
+        if (!normalizedInitialSearch) return;
+        setSearch(normalizedInitialSearch);
+        setSearchQuery(normalizedInitialSearch);
+        setCurrentCursor(null);
+        setPreviousCursors([]);
+    }, [normalizedInitialSearch]);
 
     const pageNumber = previousCursors.length + 1;
     const hasPreviousPage = previousCursors.length > 0;
 
-    const load = useCallback(async ({ cursor = null, background = false } = {}) => {
+    const load = useCallback(async ({ cursor = null, query = "", background = false } = {}) => {
+        const requestId = latestRequestId.current + 1;
+        latestRequestId.current = requestId;
         if (!background) {
             setLoading(true);
             setError("");
         }
         try {
-            const result = await listPendingOrderReviews({ limit: REVIEW_PAGE_SIZE, cursor });
+            const result = await listPendingOrderReviews({
+                limit: REVIEW_PAGE_SIZE,
+                cursor: query ? null : cursor,
+                search: query,
+            });
+            if (requestId !== latestRequestId.current) return;
             setOrders(result.items);
             setNextCursor(result.nextCursor);
+            setTotalPending(result.totalCount ?? null);
         } catch (loadError) {
-            if (!background) setError(loadError.message);
+            if (!background && requestId === latestRequestId.current) {
+                setError(loadError.message);
+            }
         } finally {
-            if (!background) setLoading(false);
+            if (!background && requestId === latestRequestId.current) {
+                setLoading(false);
+            }
         }
     }, []);
 
     useEffect(() => {
-        load({ cursor: currentCursor });
-    }, [currentCursor, load]);
+        load({ cursor: currentCursor, query: searchQuery });
+    }, [currentCursor, load, searchQuery]);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setSearchQuery(search.trim());
+        }, 350);
+        return () => window.clearTimeout(timeoutId);
+    }, [search]);
 
     useEffect(() => {
         const refresh = () => {
-            if (document.hidden || !navigator.onLine) return;
-            load({ cursor: currentCursor, background: true });
+            if (searchQuery || document.hidden || !navigator.onLine) return;
+            load({ cursor: currentCursor, query: searchQuery, background: true });
         };
         const intervalId = window.setInterval(refresh, 10_000);
         window.addEventListener("focus", refresh);
@@ -703,7 +754,7 @@ export default function OrderReview() {
             window.removeEventListener("online", refresh);
             document.removeEventListener("visibilitychange", refresh);
         };
-    }, [currentCursor, load]);
+    }, [currentCursor, load, searchQuery]);
 
     const goToPreviousPage = () => {
         if (!hasPreviousPage || loading) return;
@@ -714,27 +765,33 @@ export default function OrderReview() {
     };
 
     const goToNextPage = () => {
-        if (!nextCursor || loading) return;
+        if (searchQuery || !nextCursor || loading) return;
         setPreviousCursors((history) => [...history, currentCursor]);
         setCurrentCursor(nextCursor);
         setSearch("");
     };
-
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        if (!q) return orders;
-        return orders.filter((order) => [order.order_number, order.customer?.name, order.customer?.mobile, paymentText(order)].some((value) => String(value || "").toLowerCase().includes(q)));
-    }, [orders, search]);
 
     return (
         <div className="mx-auto max-w-7xl space-y-5 p-4" dir="rtl">
             <header className="rounded-2xl border bg-white p-5 shadow-sm">
                 <h1 className="text-2xl font-extrabold text-slate-900">طلبات بانتظار المراجعة</h1>
                 <p className="mt-1 text-sm text-slate-500">المرحلة الأولى من محرك تجهيز الطلب — مراجعة بيانات العميل والدفع والشحن والمنتجات.</p>
-                <p className="mt-1 text-xs font-semibold text-violet-700">يعرض الجدول آخر 10 طلبات في كل صفحة، واستخدم الأسهم للانتقال بين الصفحات.</p>
+                <p className="mt-1 text-xs font-semibold text-violet-700">يعرض الجدول آخر 10 طلبات في كل صفحة، والبحث برقم الطلب يشمل جميع طلبات انتظار المراجعة.</p>
+                {totalPending !== null && <p className="mt-1 text-xs font-semibold text-slate-600" data-testid="pending-review-total">إجمالي الطلبات بانتظار المراجعة: {totalPending.toLocaleString("en-US")}</p>}
                 <div className="relative mt-4 max-w-xl">
                     <MagnifyingGlass className="absolute right-3 top-3 text-slate-400" />
-                    <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-xl border py-2.5 pr-10 pl-3 outline-none focus:border-violet-500" placeholder="ابحث في الصفحة الحالية برقم الطلب أو العميل أو طريقة الدفع" />
+                    <input
+                        value={search}
+                        onChange={(event) => {
+                            setSearch(event.target.value);
+                            setCurrentCursor(null);
+                            setPreviousCursors([]);
+                        }}
+                        inputMode="numeric"
+                        dir="ltr"
+                        className="w-full rounded-xl border py-2.5 pr-10 pl-3 outline-none focus:border-violet-500"
+                        placeholder="ابحث برقم الطلب في جميع طلبات انتظار المراجعة"
+                    />
                 </div>
             </header>
 
@@ -746,9 +803,9 @@ export default function OrderReview() {
                     <div className="flex min-h-64 items-center justify-center"><SpinnerGap size={32} className="animate-spin text-violet-600" /></div>
                 ) : error ? (
                     <div className="m-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>
-                ) : filtered.length === 0 ? (
-                    <div className="flex min-h-64 items-center justify-center text-slate-500">{search.trim() ? "لا توجد نتائج في هذه الصفحة" : "لا توجد طلبات بانتظار المراجعة"}</div>
-                ) : filtered.map((order) => (
+                ) : orders.length === 0 ? (
+                    <div className="flex min-h-64 items-center justify-center text-slate-500">{searchQuery ? "لم يتم العثور على طلب بهذا الرقم ضمن انتظار المراجعة" : "لا توجد طلبات بانتظار المراجعة"}</div>
+                ) : orders.map((order) => (
                     <button key={order.order_number} type="button" onClick={() => setSelectedOrder(order.order_number)} className={`grid w-full gap-2 border-b px-4 py-4 text-right last:border-b-0 md:grid-cols-[70px_1fr_1fr_1fr_1fr] md:items-center ${rowTone(order)}`}>
                         <span className="inline-flex items-center gap-1 font-bold text-violet-700"><ArrowLeft /> <span className="md:hidden">التفاصيل</span></span>
                         <span className="font-extrabold" dir="ltr">#{order.order_number}</span>
@@ -758,7 +815,7 @@ export default function OrderReview() {
                     </button>
                 ))}
 
-                {!loading && !error && (orders.length > 0 || hasPreviousPage) && (
+                {!searchQuery && !loading && !error && (orders.length > 0 || hasPreviousPage || nextCursor) && (
                     <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-xs font-bold text-slate-500">10 طلبات كحد أقصى في الصفحة</div>
                         <div className="flex items-center justify-center gap-2" aria-label="التنقل بين صفحات الطلبات">

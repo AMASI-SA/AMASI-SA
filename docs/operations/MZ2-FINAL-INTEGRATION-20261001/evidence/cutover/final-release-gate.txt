@@ -1,0 +1,6 @@
+Exact failed job: https://github.com/AMASI-SA/AMASI-SA/actions/runs/36856588349/job/110350408732
+2026-10-01T11:39:50.0057434Z   CHECKED_OUT_SHA: b24c20c0c33974d7bcb49ca441de8a267e4a685b
+2026-10-01T11:39:50.0057765Z   PR_BASE_SHA: 5a7b44b71c6c9974aba358493b3267a47d6e6314
+2026-10-01T11:39:50.1314372Z scripts.emergent_deployment_adapter.DeploymentAdapterError: frontend source differs from reviewed intent: src/pages/EmployeesV2Management.jsx
+2026-10-01T11:39:50.2541841Z scripts.emergent_deployment_adapter.DeploymentAdapterError: source A must change governed source without changing intent
+2026-10-01T11:39:50.2702683Z ##[error]Process completed with exit code 1.

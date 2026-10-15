@@ -1,0 +1,158 @@
+{
+  "status": "MZ2_ONBOARDING_SSOT_REMAINING_BLOCKED_BY_EXACT_GAP",
+  "production_head": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "production_tree": "87f9a44af5dc7d00fbc62417fb17e2f6273d8d93",
+  "environment": "Windows Python 3.13; disposable local Mongo 8.0.12 replica; no production access",
+  "primary_backend": {
+    "tests": 157,
+    "passed": 157,
+    "failures": [],
+    "errors": 0,
+    "skipped": 0,
+    "suites": [
+      "test_accounting_onboarding",
+      "test_accounting_onboarding_domains",
+      "test_onboarding_ssot_contracts",
+      "test_accounting_opening_quarantine",
+      "test_legacy_opening_quarantine",
+      "test_financial_accounts_real_mongo",
+      "test_track_g_native_reports",
+      "test_mz2_report_isolation",
+      "test_mz2_report_dates"
+    ]
+  },
+  "adjacent_backend": {
+    "tests": 154,
+    "passed": 140,
+    "failures": [
+      {
+        "class": "backend.tests.test_mz2_receivable_workflow.WorkflowTests",
+        "test": "test_new_sale_to_existing_settlement_service_and_balance_guard",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_balance_not_ready', 'status': 'not_ready', 'reason': 'mz2_native_ledger_required', 'missing_accounts': []}"
+      },
+      {
+        "class": "backend.tests.test_mz2_receivable_workflow.WorkflowTests",
+        "test": "test_partial_full_refund_uses_original_rate",
+        "reason": "AssertionError: 409 != 200 : {\"detail\":{\"code\":\"mz2_balance_not_ready\",\"status\":\"not_ready\",\"reason\":\"mz2_native_ledger_required\",\"missing_accounts\":[]}}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_changed_cod_facts_after_post_conflict_instead_of_second_sale",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_closed_period_rolls_back_cod_sale_fee_and_source_marks",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_closed_period_rolls_back_shipping_payment_and_bank_evidence_consumption",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_cod_order_creation_cutover_rejects_without_financial_changes",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_courier_fee_payment_consumes_outbound_bank_row_without_second_expense",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_driver_net_settlement_uses_one_inbound_bank_row_and_clears_both_balances",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_external_courier_fee_uses_verified_rate_not_salla_charge_and_no_revenue",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_non_cash_or_mismatched_cod_never_posts",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_p02_lock_blocks_financial_write_without_partial_event",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_shipping_movement_cannot_be_consumed_twice_or_over_settle",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_shipping_workspace_lists_only_pending_mz2_sources",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      },
+      {
+        "class": "backend.tests.test_mz2_shipping_p02.MZ2ShippingP02Tests",
+        "test": "test_store_driver_cash_cod_posts_sale_once_and_fee_separately",
+        "reason": "fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}"
+      }
+    ],
+    "errors": 0,
+    "skipped": 0,
+    "note": "Earlier adjacent regression run: unresolved failures retained. Subsequent coverage guard and expanded legacy quarantine independently verified by final primary suite; adjacent full run not repeated."
+  },
+  "frontend": {
+    "numTotalTests": 106,
+    "numPassedTests": 106,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "numTotalTestSuites": 11,
+    "success": true
+  },
+  "source_sha256": {
+    ".github/workflows/mz2-track-g-ssot.yml": "e76f1df96618035ace6041b04b39088c8055147f54cb22459f270528672c7bc1",
+    "backend/accounting_financial_accounts.py": "0d121a2e770e0cba5aa93559ee16d46e50d34e73328800f7bb0675e162bd8b66",
+    "backend/accounting_module_ledger.py": "65c5ac2dbd43568c74dd54cb74d5cf4dff53662cc6c7fd45d09ee55d2103f49d",
+    "backend/accounting_module_opening_balances.py": "7aa99192c077207a51c4b42ebf76ec096bd237abdb0950135ba30789fea0ea9c",
+    "backend/accounting_mz2_reports.py": "a55d81dc7138a228e06bd50ea44462b71d99d8a01f3e88a0c218fed89a45f928",
+    "backend/accounting_onboarding.py": "698079adaaa82e2ab93c63a400d28ac0134b3c3113d51944aafe3598343ccfae",
+    "backend/accounting_onboarding_contract.py": "0d8047fbe24bdf48ba883dd43ef6de1c6d4f8e7d79e7c948f226e0796aa915c2",
+    "backend/accounting_onboarding_domains.py": "56bf92fed03e8bed3b76698b12225260ced06455b122ca63eab5a63e7db55d53",
+    "backend/accounting_onboarding_identities.py": "0cdb27a5bbd258e2226ceb8ccd3b630be0656024d60736fbcf021b9fc6a8aa1d",
+    "backend/accounting_onboarding_setup_routes.py": "54300d6318d529dd34010bc639ccd73fd221f8919b6c43356e23193963df89a2",
+    "backend/accounting_onboarding_ssot.py": "a5ea088fb3a215fa23c1ec7e5ea1ac35b969d7ae1ac6ed2d9127a66cfaf1f610",
+    "backend/accounting_opening_quarantine.py": "b720cadc85d9829dd49a8c9de265b58440f306f28316ec4b20710cf762b3b085",
+    "backend/accounts_routes.py": "a3cab07d3e75c39aec1f73f819b137dc1377d35159e296be0e0a8a379202badd",
+    "backend/ad_account_routes.py": "6710a40e09a65e17dc272da06196c53404eea4d1593022264fb968f3f8422f72",
+    "backend/financial_provider_apps.py": "3b1cfe8ee64d2385da02a64413024b5aefcece98e617d858e2ccef1af997f3a4",
+    "backend/ledger_routes.py": "b06409c2dd0ea650be5ffb598116ff610584f716cc363edbcde23cfd8bb327d8",
+    "backend/migration_routes.py": "5b31da8c51168c5ff3ce85265c87125ace1f7b6ee87b1127653351dc329c9591",
+    "backend/tests/test_accounting_ledger_v2.py": "49a35e247dcc1b35c8672375758dae1cc11fd1c0778d8655c95d4a65a0326803",
+    "backend/tests/test_accounting_onboarding.py": "1a1c7eb2e1b0bc6c5ef76e57608f393891daa4f21d72b727d59e35c93dc6d301",
+    "backend/tests/test_accounting_onboarding_domains.py": "289150fc7d184c6df289d9985ed97d8e0136f25a25fc017a1b3f737a78f623dc",
+    "backend/tests/test_accounting_opening_categories.py": "8c99ea96583eb8869c4a7e36d28a9f82da58608cc76100f4354319d821e1a049",
+    "backend/tests/test_accounting_opening_quarantine.py": "9ea3342f6c23dde14b594de378800191666f236919a2b549bbc3b8bb869a114b",
+    "backend/tests/test_financial_accounts_real_mongo.py": "e265b803e0b0282b809205613091a03d5e960707e0d6cae325d0ab2b668a0a81",
+    "backend/tests/test_legacy_opening_quarantine.py": "89900c7cf03e54375b903b7b31b37bba94d6b2f2e2e40f1bbdc543b512c38df7",
+    "backend/tests/test_mz2_report_isolation.py": "36e69ee75175e04772e703603af173954014ffc9081a766b8834c44360ca5d69",
+    "backend/tests/test_onboarding_ssot_contracts.py": "bffcd4fa6bac91f3b0dab0aacf6fc8d425dbf7208b7f4f6ea35e72df5931f6f9",
+    "backend/tests/test_track_g_native_reports.py": "fb138d5a478e3ac77abfab1fd4fc645ce3cf6873af67153607458c9ae419ea60",
+    "backend/universal_accounting_routes.py": "a16eb6e8c35e0a249d92ccaae0c4168569c8a35dcb9ee886ac07dd3283f23e8b",
+    "frontend/src/pages/FinancialPosition.jsx": "a9de3531d7105a5c2e360920cc46f3617181339dc23b8b5d90599a5611726c0b",
+    "frontend/src/pages/FinancialPositionLedger.jsx": "f516ba512c35aca4d522f935479a208f8d1a5933be16d693bf2ca200f7265dc6",
+    "frontend/src/pages/accounting/AccountingFinancialAccounts.jsx": "e3c5957f0d253fd628836a6e7a01eb22f1f8ebfb4ced22ba8ff0785b9297151a",
+    "frontend/src/pages/accounting/AccountingFinancialAccounts.test.jsx": "01615d40ecefe96f3866e7435f3e3b86b288df5256e89a3f83625adee127baef",
+    "frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx": "fe8b9a5461bf0c63a003b429a92c54485edc0ba020ddd9b8c26ae92c51987115",
+    "frontend/src/pages/accounting/onboarding/OnboardingSsotSetup.jsx": "a3b655c87966f62676461d8e3188284aad8303d707141eab3977b9ec9e318ed1",
+    "frontend/src/pages/accounting/onboarding/OnboardingSsotSetup.test.jsx": "8b134689ef2211c64c6b2ed6a4572b1378667b5f4b7f5ccd3802d831f533d1ff",
+    "frontend/src/pages/accounting/onboarding/OnboardingWizardView.jsx": "3df260bd51fca816ff9141131f9c89d7fa03b7e2c6f0b9873135e870e3990e7d",
+    "frontend/src/pages/accounting/onboarding/onboardingFinancialAdapter.js": "db5a2e06cfd0119db69ab907c1b7ebc2c7f64e7357bbe2602a5ff305e43b0936",
+    "frontend/src/services/accountingOnboarding.js": "29b263869f0da58d394391b673ed9b265eb78673a6bf2a4a681e9fcb485fcfa2",
+    "frontend/src/services/accountingOnboarding.test.js": "e4be5690562d289576c3a3917bc0f5d60bea4e74a2f1c60718b3977a9a275d4a"
+  },
+  "production_financial_writes": 0,
+  "merge": false,
+  "deploy": false,
+  "opening_post": false,
+  "activation": false,
+  "release_guard_run": false
+}

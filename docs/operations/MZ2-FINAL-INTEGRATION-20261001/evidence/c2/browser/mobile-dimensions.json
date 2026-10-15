@@ -1,0 +1,156 @@
+{
+  "viewport": 390,
+  "document": 390,
+  "overflowing": [
+    {
+      "tag": "TABLE",
+      "class": "ac-table",
+      "text": "الموصل / الطلبالطريقةمبلغ الدليلالحالةالمرجعSynthetic drivergapشبكة / POS500.00 ر.سبانتظار المراجعة ",
+      "width": 600
+    },
+    {
+      "tag": "THEAD",
+      "class": "",
+      "text": "الموصل / الطلبالطريقةمبلغ الدليلالحالةالمرجع",
+      "width": 600
+    },
+    {
+      "tag": "TR",
+      "class": "",
+      "text": "الموصل / الطلبالطريقةمبلغ الدليلالحالةالمرجع",
+      "width": 600
+    },
+    {
+      "tag": "TH",
+      "class": "",
+      "text": "الحالة",
+      "width": 201.125
+    },
+    {
+      "tag": "TH",
+      "class": "",
+      "text": "المرجع",
+      "width": 110.875
+    },
+    {
+      "tag": "TBODY",
+      "class": "",
+      "text": "Synthetic drivergapشبكة / POS500.00 ر.سبانتظار المراجعة — ليس تحصيلاً نهائيًالا يثبت رفع الدليل وصول",
+      "width": 600
+    },
+    {
+      "tag": "TR",
+      "class": "",
+      "text": "Synthetic drivergapشبكة / POS500.00 ر.سبانتظار المراجعة — ليس تحصيلاً نهائيًالا يثبت رفع الدليل وصول",
+      "width": 600
+    },
+    {
+      "tag": "TD",
+      "class": "",
+      "text": "بانتظار المراجعة — ليس تحصيلاً نهائيًالا يثبت رفع الدليل وصول الأموال أو تسوية مسؤولية الموصل.",
+      "width": 201.125
+    },
+    {
+      "tag": "SPAN",
+      "class": "ac-status ac-status-neutral",
+      "text": "بانتظار المراجعة — ليس تحصيلاً نهائيًا",
+      "width": 167.171875
+    },
+    {
+      "tag": "SMALL",
+      "class": "",
+      "text": "لا يثبت رفع الدليل وصول الأموال أو تسوية مسؤولية الموصل.",
+      "width": 169.125
+    },
+    {
+      "tag": "TD",
+      "class": "",
+      "text": "gap-replacement",
+      "width": 110.875
+    },
+    {
+      "tag": "TABLE",
+      "class": "ac-table",
+      "text": "الموصل / الطلب / النسخةالقرار وأثرهالمبلغ والطريقةهوية الوجهةالمراجع والدليلSynthetic driverreversed",
+      "width": 600
+    },
+    {
+      "tag": "THEAD",
+      "class": "",
+      "text": "الموصل / الطلب / النسخةالقرار وأثرهالمبلغ والطريقةهوية الوجهةالمراجع والدليل",
+      "width": 600
+    },
+    {
+      "tag": "TR",
+      "class": "",
+      "text": "الموصل / الطلب / النسخةالقرار وأثرهالمبلغ والطريقةهوية الوجهةالمراجع والدليل",
+      "width": 600
+    },
+    {
+      "tag": "TH",
+      "class": "",
+      "text": "هوية الوجهة",
+      "width": 124.84375
+    },
+    {
+      "tag": "TH",
+      "class": "",
+      "text": "المراجع والدليل",
+      "width": 157.984375
+    },
+    {
+      "tag": "TBODY",
+      "class": "",
+      "text": "Synthetic driverreversedreview-reversed · نسخة 1معتمدقيد Backend: mz2j_e08bba27215b79b05b3abe4a602b1",
+      "width": 600
+    },
+    {
+      "tag": "TR",
+      "class": "",
+      "text": "Synthetic driverreversedreview-reversed · نسخة 1معتمدقيد Backend: mz2j_e08bba27215b79b05b3abe4a602b1",
+      "width": 600
+    },
+    {
+      "tag": "TD",
+      "class": "",
+      "text": "Synthetic manual POSasset / ede924239ea10bb0b0b412204fb6e79beeb0cbdfce909efde9f6eef43b48999a / other",
+      "width": 124.84375
+    },
+    {
+      "tag": "P",
+      "class": "",
+      "text": "Synthetic manual POS",
+      "width": 92.84375
+    },
+    {
+      "tag": "CODE",
+      "class": "break-all",
+      "text": "asset / ede924239ea10bb0b0b412204fb6e79beeb0cbdfce909efde9f6eef43b48999a / other_receivable",
+      "width": 91.515625
+    },
+    {
+      "tag": "DETAILS",
+      "class": "",
+      "text": "مرجع الربط الأصليmanual_pos_receipt / 54a9846728d8933e4b50b4c9ef86c4a1dcf743cd563970d4ddf457a3932472",
+      "width": 92.84375
+    },
+    {
+      "tag": "SUMMARY",
+      "class": "",
+      "text": "مرجع الربط الأصلي",
+      "width": 92.84375
+    },
+    {
+      "tag": "P",
+      "class": "break-all",
+      "text": "manual_pos_receipt / 54a9846728d8933e4b50b4c9ef86c4a1dcf743cd563970d4ddf457a3932472c8 / 7aee5c2cbe6f",
+      "width": 92.84375
+    },
+    {
+      "tag": "TD",
+      "class": "",
+      "text": "track-f-synthetic2026-10-01T20:43:39.910876+00:00receipt-reversedAccountant inspected actual bound r",
+      "width": 157.984375
+    }
+  ]
+}

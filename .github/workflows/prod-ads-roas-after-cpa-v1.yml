@@ -1,0 +1,68 @@
+name: Production Ads Native Metric Order V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.jsx"
+      - "frontend/src/components/marketing/AdManagerTable.test.jsx"
+      - ".github/workflows/prod-ads-roas-after-cpa-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test native metric order
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/components/marketing/AdManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce canonical metric sequence
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          CAMPAIGNS=frontend/src/components/marketing/CampaignManagerTable.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          ADS=frontend/src/components/marketing/AdManagerTable.jsx
+          ! grep -q 'marketingCampaignColumnOrder' "$INDEX"
+          python - <<'PY'
+          from pathlib import Path
+          for path, marker in [
+              ('frontend/src/components/marketing/CampaignManagerTable.jsx', 'CAMPAIGN_MANAGER_DEFAULT_COLUMNS'),
+              ('frontend/src/components/marketing/AdSquadManagerTable.jsx', 'AD_SQUAD_MANAGER_NATIVE_COLUMN_ORDER'),
+              ('frontend/src/components/marketing/AdManagerTable.jsx', 'AD_MANAGER_NATIVE_COLUMN_ORDER'),
+          ]:
+              text = Path(path).read_text()
+              start = text.index(marker)
+              block = text[start:text.index(']);', start)]
+              positions = [block.index(f'"{key}"') for key in ('cpa', 'roas', 'spend', 'sales')]
+              assert positions == sorted(positions), (path, positions)
+          PY
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$CAMPAIGNS" "$SQUADS" "$ADS"

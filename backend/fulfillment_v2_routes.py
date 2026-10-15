@@ -2,8 +2,13 @@
 from __future__ import annotations
 
 import io
+import hashlib
+import json
+import math
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -11,11 +16,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 
-from ai_store_access_control import effective_permissions
-from ai_store_operations_foundation import PERMISSIONS, ROLE_ASSIGNMENTS
+from ai_store_access_contract import effective_permissions, find_role_assignment
+from ai_store_operations_foundation import PERMISSIONS
+from carrier_handoff import (
+    CarrierHandoffError,
+    carrier_handoff_custody_is_visible,
+    confirm_carrier_label_print,
+    receive_carrier_shipment,
+)
 from fulfillment_batch_pdf import generate_shipping_batch_pdf
+from fulfillment_carrier_label import sync_completed_carrier_label, _require_print_completed_workflow
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
+from order_engine.shipping_label_service import ShippingLabelError, refresh_shipping_label
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
     FULFILLMENT_DECISIONS,
@@ -26,18 +39,25 @@ from product_fulfillment_rules import (
     evaluate_order_fulfillment,
 )
 from product_inventory_rules import (
+    build_inventory_configuration_key,
+    canonical_specifications,
+    PREPARATION_STATES,
     choose_inventory_rows,
     order_item_specifications,
 )
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_routes import PRODUCTS
 from warehouse_location_routes import LOCATIONS
+from accounting_atomic import SessionDatabase
+from operational_atomic import OperationalDatabase, operational_owner
+from product_fulfillment_rules import order_is_active, payment_is_eligible
 
 
 WORKFLOWS = "order_review_workflows"
 BATCHES = "mezan_fulfillment_batches_v2"
 EVENTS = "mezan_fulfillment_events_v2"
 INVENTORY_RESERVATIONS = "mezan_inventory_reservations_v2"
+COMPONENT_LIFECYCLES = "mezan_component_order_lifecycle_v1"
 TERMINAL_WORKFLOW_STAGES = {
     "completed",
     "delivering",
@@ -68,10 +88,34 @@ class BatchActionRequest(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class CarrierBarcodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    barcode: str = Field(min_length=1, max_length=256)
+
+
 async def ensure_fulfillment_indexes(db: Any) -> None:
+    if isinstance(db, (SessionDatabase, OperationalDatabase)):
+        return  # Indexes are prepared before entering the owner transaction.
+    from stock_component_consumption_service import ensure_component_consumption_indexes
+    await ensure_component_consumption_indexes(db)
     await db[WORKFLOWS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
         unique=True,
+    )
+    await db[WORKFLOWS].create_index(
+        [("user_id", ASCENDING), ("carrier_label_barcode", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"carrier_label_barcode": {"$type": "string"}},
+        name="uq_carrier_label_barcode_v2",
+    )
+    await db[WORKFLOWS].create_index(
+        [
+            ("user_id", ASCENDING),
+            ("carrier_handoff_employee_id", ASCENDING),
+            ("carrier_handoff_state", ASCENDING),
+            ("carrier_handoff_scanned_at", DESCENDING),
+        ],
+        name="ix_carrier_handoff_employee_v2",
     )
     await db[FULFILLMENT_DECISIONS].create_index(
         [("user_id", ASCENDING), ("order_number", ASCENDING)],
@@ -116,7 +160,216 @@ def _product_id(item: Any) -> str:
     )
 
 
-def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+INVENTORY_LOCATION_ELIGIBILITY_FIELDS = {key: 1 for key in (
+    "purpose", "condition", "quality_status", "inspection_status",
+    "saleability_status", "valuation_status", "receipt_confirmed",
+)}
+
+
+def _inventory_evidence_queries(owner: str, locations: list[dict]):
+    """Current occupancy references plus every adoption witness, all statuses."""
+    ordered = sorted((loc for loc in locations if loc.get("id")), key=lambda loc: _text(loc["id"]))
+    for offset in range(0, len(ordered), 100):
+        batch = ordered[offset:offset + 100]
+        ids = [_text(loc["id"]) for loc in batch]
+        refs = sorted({_text(item.get("receipt_id") or item.get("lot_id"))
+                       for loc in batch for item in (loc.get("occupancy") or {}).get("items") or []
+                       if isinstance(item, dict)} - {""})
+        for start in range(0, len(refs), 500):
+            keys = refs[start:start + 500]
+            yield offset, {"user_id": owner, "location_id": {"$in": ids}, "$or": [
+                {"id": {"$in": keys}},
+                {"source_type": "opening_inventory", "adopted_receipt_ids": {"$in": keys}},
+            ]}
+
+
+async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -> dict:
+    """Bounded owner-scoped proofs; no status filter or history fallback.
+
+    Mutation callers retain the shared owner transaction. Repeated adoption
+    witnesses across reference chunks are deduplicated by Mongo document ID.
+    Limits remain per100-location batch, including across reference chunks.
+    """
+    result, seen, batch_id = {}, set(), None
+    for offset, query in _inventory_evidence_queries(owner, locations):
+        if batch_id != offset:
+            seen, batch_id = set(), offset
+        receipts = await db["mezan_inventory_receipts_v2"].find(query).to_list(length=20001)
+        if len(receipts) > 20000:
+            raise HTTPException(409, detail={"code": "inventory_evidence_limit_reconciliation_required"})
+        for receipt in receipts:
+            identity = receipt["_id"]
+            if identity in seen:
+                continue
+            seen.add(identity)
+            if len(seen) > 20000:
+                raise HTTPException(409, detail={"code": "inventory_evidence_limit_reconciliation_required"})
+            location_id = _text(receipt.get("location_id"))
+            keys = {_text(receipt.get("id"))}
+            if receipt.get("source_type") == "opening_inventory":
+                keys.update(_text(key) for key in receipt.get("adopted_receipt_ids") or [])
+            for key in keys - {""}:
+                result.setdefault((location_id, key), []).append(receipt)
+    return result
+
+
+def _inventory_configuration_matches(item: dict, receipt: dict) -> bool:
+    """Use writer-owned configuration proof, never display name/SKU alone."""
+    key, proof = _text(item.get("configuration_key")), _text(receipt.get("configuration_key"))
+    if key and proof and key != proof:
+        return False
+    variants = [{_text(row.get(k)) for k in ("salla_variant_id", "variant_id")} - {""}
+                for row in (item, receipt)]
+    if any(len(values) > 1 for values in variants) or variants[0] != variants[1]:
+        return False
+    state, proof_state = item.get("preparation_state"), receipt.get("preparation_state")
+    specs, proof_specs = item.get("specifications"), receipt.get("specifications")
+    if any(value is not None and not isinstance(value, (dict, list)) for value in (specs, proof_specs)):
+        return False
+    if item.get("item_type") == "stock_component" and proof_specs is None and canonical_specifications(specs):
+        return False
+    if proof_state is not None and state != proof_state:
+        return False
+    if proof_specs is not None and canonical_specifications(specs) != canonical_specifications(proof_specs):
+        return False
+    # Original purchase receipts bind product state/specs in the configuration
+    # key but do not copy those two fields to the receipt document.
+    if item.get("item_type") != "stock_component" and proof and (state is not None or specs is not None):
+        if state not in PREPARATION_STATES:
+            return False
+        expected = build_inventory_configuration_key(
+            sku=receipt.get("sku") or receipt.get("product_id") or receipt.get("mezan_product_id"),
+            preparation_state=state, specifications=specs or {},
+        )
+        if expected != proof:
+            return False
+    if key and proof:
+        return True
+    # Missing keys require explicit complete matching original specifications;
+    # alternatively the original purchase key above proves the product values.
+    if state not in PREPARATION_STATES or not isinstance(specs, (dict, list)):
+        return False
+    if item.get("item_type") != "stock_component" and proof:
+        return True
+    return (proof_state == state and isinstance(proof_specs, (dict, list))
+            and canonical_specifications(specs) == canonical_specifications(proof_specs))
+
+
+def _inventory_receipt_matches(location: dict, item: dict, receipt: dict) -> bool:
+    if (_text(receipt.get("location_id")) != _text(location.get("id"))
+            or _text(receipt.get("warehouse_id")) != _text(location.get("warehouse_id"))):
+        return False
+    fields = ("resource_id",) if item.get("item_type") == "stock_component" else ("mezan_product_id", "product_id")
+    ids = {_text(item.get(k)) for k in fields} - {""}
+    proof_ids = {_text(receipt.get(k)) for k in (*fields, "salla_product_id")} - {""}
+    if not ids or not ids <= proof_ids:
+        return False
+    if not _inventory_configuration_matches(item, receipt):
+        return False
+    try:
+        quantity, received = Decimal(str(item["quantity"])), Decimal(str(receipt["quantity"]))
+        return (not isinstance(item["quantity"], bool) and not isinstance(receipt["quantity"], bool)
+                and quantity.is_finite() and received.is_finite() and 0 <= quantity <= received)
+    except (KeyError, ValueError, TypeError, OverflowError, InvalidOperation):
+        return False
+
+
+def _inventory_eligibility(location: dict, item: dict, evidence: dict) -> str | None:
+    """Fail closed unless current receipt or original opening adoption proves it."""
+    if location.get("state") == "disabled":
+        return "location_disabled"
+    if location.get("purpose") in {"returns", "damaged"}:
+        return "location_stock_held"
+    lot = _text(item.get("receipt_id") or item.get("lot_id"))
+    receipts = evidence.get((_text(location.get("id")), lot), [])
+    direct = [r for r in receipts if _text(r.get("id")) == lot]
+    adoptions = [r for r in receipts if r.get("source_type") == "opening_inventory"
+                 and lot in (r.get("adopted_receipt_ids") or []) and _text(r.get("id")) != lot]
+    if not receipts or len(direct) > 1 or len(adoptions) > 1 or len(receipts) != len(direct) + len(adoptions):
+        return "receipt_evidence_missing_or_ambiguous"
+    # A historical adoption cannot override ANY current negative evidence.
+    for row in (location, item, *receipts):
+        # No financially pending/novel valuation state is authorized for sale.
+        # Legacy approved contracts have no such marker; never infer approval
+        # from a client-provided positive valuation flag.
+        if _text(row.get("valuation_status")):
+            return "inventory_valuation_reconciliation_required"
+        if row.get("receipt_confirmed") is False:
+            return "receipt_unconfirmed"
+        for field in ("condition", "quality_status", "inspection_status", "saleability_status"):
+            value = _text(row.get(field)).casefold()
+            if value and value not in {"sellable", "good", "accepted", "passed"}:
+                return "stock_condition_reconciliation_required"
+    if any(r.get("status") != "posted" for r in receipts):
+        return "receipt_not_posted"
+    current = direct[0] if direct else None
+    receipt = adoptions[0] if adoptions else current
+    source = receipt.get("source_type")
+    if source not in {"purchase_invoice", "stock_preparation_order", "opening_inventory"}:
+        return "receipt_source_unproven"
+    for proof in receipts:
+        # Opening's original compiler proves occupancy independently of an old
+        # sparse receipt. Fill only absent historic positive evidence; explicit
+        # contradictions and all current negative states still veto adoption.
+        effective = ({**receipt, **{k: v for k, v in proof.items() if v is not None}}
+                     if adoptions and proof is current else proof)
+        if not effective.get("source_id") or not _inventory_receipt_matches(location, item, effective):
+            return "receipt_identity_or_configuration_reconciliation_required"
+    if source == "purchase_invoice" and not receipt.get("source_line_id"):
+        return "purchase_line_unproven"
+    if current:
+        for field in ("source_type", "source_id", "source_line_id"):
+            if item.get(field) and (not adoptions or current.get(field) is not None) and item[field] != current.get(field):
+                return "receipt_source_identity_mismatch"
+    if source == "opening_inventory":
+        if (receipt.get("schema_version") != "g47-opening-inventory-v1"
+                or not all(receipt.get(k) for k in ("opening_txn_group_id", "evidence_sha256", "cutover_at"))):
+            return "opening_adoption_unproven"
+        if adoptions:
+            # Original opening writer rejects manufactured provenance and adopts
+            # existing lots in place, with one aggregate receipt per location.
+            if any(r.get("source_type") == "stock_preparation_order" or any(r.get(k) for k in
+                   ("component_provenance", "components_consumed", "manufacturing_provenance")) for r in (item, *receipts)):
+                return "opening_adoption_unproven"
+            adopted = receipt.get("adopted_receipt_ids") or []
+            if len(adopted) != len(set(adopted)):
+                return "opening_adoption_ambiguous"
+            members = [r for r in (location.get("occupancy") or {}).get("items") or []
+                       if _text(r.get("receipt_id") or r.get("lot_id")) in adopted]
+            # After consumption, a remainder may be smaller; never larger than
+            # the proven opening quantity, nor duplicated across adopted lots.
+            if (len({_text(r.get("receipt_id") or r.get("lot_id")) for r in members}) != len(members)
+                    or any(not _inventory_receipt_matches(location, r, receipt) for r in members)
+                    or sum((Decimal(str(r["quantity"])) for r in members), Decimal(0)) > Decimal(str(receipt["quantity"]))):
+                return "opening_adoption_quantity_or_identity_mismatch"
+    if item.get("receipt_id") and item.get("lot_id") and item["receipt_id"] != item["lot_id"]:
+        if (not current or current.get("source_type") != "stock_preparation_order"
+                or not current.get("source_line_id")
+                or item["lot_id"] != f"stock-preparation:{current['source_id']}:{current['source_line_id']}:{current['id']}"):
+            return "stock_lot_identity_mismatch"
+    return None
+
+
+def _inventory_identity_snapshot(item: dict) -> dict:
+    return {key: item.get(key) for key in ("item_type", "product_id", "mezan_product_id", "resource_id",
+        "salla_variant_id", "variant_id", "sku", "configuration_key", "specifications", "preparation_state", "receipt_id", "lot_id")}
+
+
+async def _pin_inventory_locations(db: Any, owner: str, locations: list[dict]) -> None:
+    """Write-fence locations read for reservation against concurrent stock edits.
+
+    Receipt transitions serialize separately on the existing shared owner lock.
+    This changes no quantity, condition, cost, or order state.
+    """
+    for location in locations:
+        result = await db[LOCATIONS].update_one({"user_id": owner, "id": location["id"],
+            "state": location.get("state"), "occupancy": location.get("occupancy")},
+            {"$set": {"updated_at": _now()}})
+        if result.matched_count != 1:
+            raise HTTPException(409, detail={"code": "inventory_reservation_stock_conflict"})
+
+
+def _inventory_rows(locations: list[dict[str, Any]], evidence: dict | None = None) -> list[dict[str, Any]]:
     rows = []
     for location in locations:
         if location.get("state") == "disabled":
@@ -126,8 +379,10 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         occupancy = location.get("occupancy") or {}
         for index, item in enumerate(occupancy.get("items") or []):
+            if item.get("resource_id") or _text(item.get("item_type")).casefold() == "stock_component":
+                continue
             quantity = float(item.get("quantity") or 0)
-            if quantity <= 0:
+            if not math.isfinite(quantity) or quantity <= 0:
                 continue
             identifiers = {
                 _text(item.get("product_id")),
@@ -142,6 +397,7 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if receipt_id
                 else f"{location.get('id') or location.get('code')}:{index}"
             )
+            reason = _inventory_eligibility(location, item, evidence or {})
             rows.append({
                 "key": row_key,
                 "item_index": index,
@@ -149,8 +405,11 @@ def _inventory_rows(locations: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "warehouse_id": warehouse_id,
                 "identifiers": identifiers,
                 "on_hand": quantity,
-                "remaining": quantity,
+                "remaining": 0.0 if reason else quantity,
+                "eligibility_reason": reason,
+                "eligibility_identity": _inventory_identity_snapshot(item),
                 "receipt_id": receipt_id or None,
+                "source_type": item.get("source_type"),
                 "salla_variant_id": (
                     _text(item.get("salla_variant_id")) or None
                 ),
@@ -240,9 +499,20 @@ async def _persist_order_inventory_reservations(
     order_number: str,
     lines: list[dict[str, Any]],
 ) -> list[str]:
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def reserve(scoped):
+            return await _persist_order_inventory_reservations(
+                scoped, user_id=user_id, order_number=order_number, lines=lines)
+        return await operational_owner(db, user_id, reserve)
     now = _now()
     desired_keys: list[str] = []
     reservation_ids: list[str] = []
+    location_ids = sorted({a.get("location_id") for line in lines for a in line.get("inventory_allocations") or []
+                           if a.get("location_id")})
+    locations = await db[LOCATIONS].find({"user_id": user_id, "id": {"$in": location_ids}}).to_list(20001)
+    if len(locations) > 20000:
+        raise HTTPException(409, detail={"code": "inventory_reservation_scope_reconciliation_required"})
+    evidence = await _load_inventory_evidence(db, user_id, locations)
     for index, line in enumerate(lines):
         if line.get("requires_branch_inventory") is not True:
             continue
@@ -267,6 +537,21 @@ async def _persist_order_inventory_reservations(
         if existing and existing.get("status") == "consumed":
             reservation_ids.append(_text(existing.get("id")))
             continue
+        stock = _inventory_rows(locations, evidence)
+        holds = await db[INVENTORY_RESERVATIONS].find({"user_id": user_id, "status": "active"}).to_list(50001)
+        if len(holds) > 50000 or len(locations) > 20000:
+            raise HTTPException(409, detail={"code": "inventory_reservation_scope_reconciliation_required"})
+        _apply_inventory_reservations(stock, [h for h in holds if not (
+            h.get("order_number") == order_number and h.get("line_key") == line_key)], current_order_number="")
+        for allocation in allocations:
+            matches = [r for r in stock if r["location_id"] == allocation.get("location_id")
+                       and r["key"] == allocation.get("inventory_row_key")]
+            amount = float(allocation.get("quantity") or 0)
+            if len(matches) != 1 or not math.isfinite(amount) or amount <= 0 or matches[0]["remaining"] < amount:
+                raise HTTPException(409, detail={"code": "inventory_ineligible_or_unavailable_reconciliation_required"})
+            matches[0]["remaining"] -= amount
+            allocation["eligibility_identity"] = matches[0]["eligibility_identity"]
+        await _pin_inventory_locations(db, user_id, locations)
         reservation_id = (
             _text((existing or {}).get("id")) or uuid.uuid4().hex
         )
@@ -329,6 +614,11 @@ async def _consume_order_inventory_reservations(
     batch_id: str,
 ) -> int:
     """Deduct reserved units from their physical locations once handed off."""
+    if not isinstance(db, (OperationalDatabase, SessionDatabase)):
+        async def consume(scoped):
+            return await _consume_order_inventory_reservations(scoped, user_id=user_id,
+                order_numbers=order_numbers, actor_id=actor_id, batch_id=batch_id)
+        return await operational_owner(db, user_id, consume)
     reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": user_id,
@@ -347,11 +637,32 @@ async def _consume_order_inventory_reservations(
             "user_id": user_id,
             "id": {"$in": location_ids},
         },
-        {"_id": 0, "id": 1, "occupancy": 1},
+        {"_id": 0, "id": 1, "warehouse_id": 1, "state": 1, "occupancy": 1, **INVENTORY_LOCATION_ELIGIBILITY_FIELDS},
     ).to_list(length=max(1, len(location_ids)))
     locations_by_id = {
         _text(row.get("id")): row for row in locations
     }
+    evidence = await _load_inventory_evidence(db, user_id, locations)
+    for reservation in reservations:
+        for allocation in reservation.get("allocations") or []:
+            location = locations_by_id.get(allocation.get("location_id")) or {}
+            items = (location.get("occupancy") or {}).get("items") or []
+            if allocation.get("receipt_id"):
+                matches = [item for item in items if item.get("receipt_id") == allocation["receipt_id"]]
+            else:
+                index = allocation.get("item_index")
+                matches = [items[index]] if isinstance(index, int) and 0 <= index < len(items) else []
+            if len(matches) != 1:
+                raise HTTPException(409, detail={"code": "reserved_inventory_identity_reconciliation_required"})
+            item = matches[0]
+            snapshot = allocation.get("eligibility_identity")
+            # Older reservations can prove a stable receipt and product identity,
+            # but an index-only hold without an identity snapshot cannot be adopted.
+            historical_ids = {_text(reservation.get(k)) for k in ("product_id", "mezan_product_id", "sku")} - {""}
+            current_ids = {_text(item.get(k)) for k in ("product_id", "mezan_product_id", "sku")} - {""}
+            if ((snapshot is not None and snapshot != _inventory_identity_snapshot(item)) or
+                    (snapshot is None and (not allocation.get("receipt_id") or not historical_ids.intersection(current_ids)))):
+                raise HTTPException(409, detail={"code": "reserved_inventory_identity_reconciliation_required"})
     for target in targets.values():
         location = locations_by_id.get(target["location_id"])
         items = list(
@@ -371,6 +682,8 @@ async def _consume_order_inventory_reservations(
             item = items[index] if 0 <= index < len(items) else None
         if (
             not item
+            or _inventory_eligibility(location or {}, item, evidence)
+            or not math.isfinite(target["quantity"]) or target["quantity"] <= 0
             or float(item.get("quantity") or 0) < target["quantity"]
         ):
             raise HTTPException(
@@ -389,6 +702,7 @@ async def _consume_order_inventory_reservations(
                 {
                     "user_id": user_id,
                     "id": target["location_id"],
+                    "state": locations_by_id[target["location_id"]].get("state"),
                     "occupancy.items": {
                         "$elemMatch": {
                             "receipt_id": target["receipt_id"],
@@ -416,6 +730,7 @@ async def _consume_order_inventory_reservations(
                 {
                     "user_id": user_id,
                     "id": target["location_id"],
+                    "state": locations_by_id[target["location_id"]].get("state"),
                     quantity_path: {"$gte": quantity},
                 },
                 {
@@ -551,9 +866,15 @@ async def build_order_fulfillment_decision(
     user_id: str,
     order: Any,
     operational_items: list[dict[str, Any]] | None = None,
+    review_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Resolve product rules and Mezan warehouse availability for one order."""
     await ensure_fulfillment_indexes(db)
+    review_state_by_item_id = {
+        _text(row.get("order_item_id")): row
+        for row in (review_items or [])
+        if _text(row.get("order_item_id"))
+    }
     product_ids = {_product_id(item) for item in order.items}
     product_ids.discard("")
     products = await db[PRODUCTS].find(
@@ -625,9 +946,9 @@ async def build_order_fulfillment_decision(
             "state": {"$ne": "disabled"},
             "occupancy": {"$ne": None},
         },
-        {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1},
+        {"_id": 0, "id": 1, "code": 1, "warehouse_id": 1, "state": 1, "occupancy": 1, **INVENTORY_LOCATION_ELIGIBILITY_FIELDS},
     ).to_list(length=20000)
-    stock_rows = _inventory_rows(locations)
+    stock_rows = _inventory_rows(locations, await _load_inventory_evidence(db, user_id, locations))
     existing_reservations = await db[INVENTORY_RESERVATIONS].find(
         {
             "user_id": user_id,
@@ -664,6 +985,25 @@ async def build_order_fulfillment_decision(
             product_resources=product_resources,
             selected_option_resources=selected_option_resources,
         )
+        review_state = review_state_by_item_id.get(
+            _text(getattr(item, "order_item_id", None)),
+            {},
+        )
+        direct_assembly = (
+            _text(review_state.get("preparation_route")) == "direct_assembly"
+        )
+        if direct_assembly:
+            # This is a stocked warehouse product. It skips supplier and
+            # preparation custody but still reserves/deducts real inventory.
+            classification = {
+                **classification,
+                "resolved_type": FULFILLMENT_TYPE_INSTANT,
+                "requires_preparation": False,
+                "requires_branch_inventory": True,
+                "forcing_services": [],
+                "supplier_export_eligible": False,
+                "direct_assembly": True,
+            }
         quantity = float(getattr(item, "quantity", 1) or 1)
         identifiers = {
             product_id,
@@ -698,6 +1038,9 @@ async def build_order_fulfillment_decision(
                 "configuration_keys"
             ]
             inventory_allocations = selection["allocations"]
+            source_types = {row["key"]: row.get("source_type") for row in stock_rows}
+            inventory_allocations = [{**row, "source_type": source_types.get(row.get("inventory_row_key"))}
+                                     for row in inventory_allocations]
             preparation_satisfied_by_ready_stock = selection[
                 "preparation_satisfied_by_ready_stock"
             ]
@@ -712,6 +1055,7 @@ async def build_order_fulfillment_decision(
             "name": getattr(item, "name", None),
             "sku": getattr(item, "sku", None) or product.get("sku"),
             "quantity": quantity,
+            "direct_assembly": direct_assembly,
             **classification,
             "inventory_available": inventory_available,
             "available_quantity": available_quantity,
@@ -738,24 +1082,26 @@ async def build_order_fulfillment_decision(
         })
 
     decision = evaluate_order_fulfillment(order=order, lines=lines)
-    unready_operational_items = [
+    assembly_operational_items = [
         row for row in (operational_items or [])
         if row.get("blocks_order_completion") is not False
-        and _text(row.get("preparation_status")).casefold() != "ready"
     ]
-    if unready_operational_items:
-        decision["ready_to_ship"] = False
-        decision["route_stage"] = "reviewed"
-        decision["preparation_stages_required"] = True
-        decision["supplier_export_order_required"] = True
-        decision["blockers"] = list(dict.fromkeys([
-            *(decision.get("blockers") or []),
-            "operational_items_not_ready",
-        ]))
-        decision["unready_operational_item_ids"] = [
-            row.get("operational_item_id")
-            for row in unready_operational_items
-        ]
+    direct_assembly_lines = [
+        row for row in lines if row.get("direct_assembly") is True
+    ]
+    # Assembly-only work must reach the assembly screen. Its readiness is
+    # enforced there and may not create supplier/preparation blockers here.
+    decision["operational_assembly_required"] = bool(
+        assembly_operational_items
+    )
+    decision["operational_assembly_item_ids"] = [
+        row.get("operational_item_id")
+        for row in assembly_operational_items
+    ]
+    decision["direct_assembly_required"] = bool(direct_assembly_lines)
+    decision["direct_assembly_order_item_ids"] = [
+        row.get("order_item_id") for row in direct_assembly_lines
+    ]
     inventory_eligibility_blockers = _inventory_reservation_blockers(
         decision.get("blockers") or []
     )
@@ -797,11 +1143,468 @@ async def build_order_fulfillment_decision(
     return decision
 
 
+def component_source_time(value: Any) -> str | None:
+    """Accept comparable provider timestamps only; never invent a cutoff/version."""
+    source_zone = value.get("timezone") if isinstance(value, dict) else None
+    if isinstance(value, dict):
+        value = value.get("date") or value.get("updated_at")
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        if not source_zone:
+            return None
+        try:
+            parsed = parsed.replace(tzinfo=ZoneInfo(source_zone))
+        except (ZoneInfoNotFoundError, TypeError, ValueError):
+            return None
+    return parsed.astimezone(timezone.utc).isoformat(timespec="microseconds")
+
+
+def component_provider_version(payload: dict[str, Any], *, created_event: bool = False) -> str | None:
+    date = payload.get("date") if isinstance(payload.get("date"), dict) else {}
+    value = payload.get("updated_at") or date.get("updated")
+    if value is None and created_event:
+        value = payload.get("created_at") or date.get("created") or payload.get("date")
+    return component_source_time(value)
+
+
+LEGACY_COMPONENT_COHORT = "legacy_operational_pre_g47"
+
+
+async def legacy_component_cohort(db: Any, *, user_id: str, order_number: str) -> bool:
+    """Owner-approved operational exemption; never abandon an existing plan.
+
+    Canonical order existence is mandatory. After explicit G47 configuration,
+    use canonical provider creation evidence, never a caller's stale DTO.
+    This helper does not create rollout settings or stock/accounting records.
+    """
+    from stock_component_consumption_service import PLANS
+    existing_plan = await db[PLANS].find_one({"user_id": user_id, "order_id": order_number})
+    settings = await db.settings.find_one({"user_id": user_id}) or {}
+    configuration = settings.get("g47_inventory")
+    if configuration is None:
+        configuration = {}
+    if not isinstance(configuration, dict):
+        raise HTTPException(409, detail={"code": "component_configuration_required"})
+    raw_cutoff = configuration.get("component_lifecycle_starts_at")
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number})
+    if raw_cutoff is None:
+        if existing_plan:
+            return False
+        if not snapshot:
+            raise HTTPException(409, detail={"code": "component_canonical_order_required"})
+        return True
+    cutoff = component_source_time(raw_cutoff)
+    if not cutoff:
+        raise HTTPException(409, detail={"code": "component_configuration_required"})
+    if not snapshot:
+        raise HTTPException(409, detail={"code": "component_canonical_order_required"})
+    raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
+    # Only original Salla creation evidence is authoritative. A present but
+    # invalid date cannot fall through to an inferred order_date, receipt time,
+    # or a DTO assembled from those historical fallback fields.
+    created_value = raw.get("date") if "date" in raw else raw.get("created_at")
+    if isinstance(created_value, dict):
+        source_date = created_value
+        # Accept the documented mapper aliases, but never its fallback for an
+        # unknown timezone. Ambiguous dual creation representations fail closed.
+        if "created" in source_date and any(key in source_date for key in ("date", "datetime", "value")):
+            raise HTTPException(409, detail={"code": "component_source_created_at_required"})
+        created_value = next((source_date[key] for key in ("created", "date", "datetime", "value")
+                              if source_date.get(key) not in (None, "")), None)
+        source_zone = next((source_date[key] for key in ("timezone", "timezone_name", "tz")
+                            if source_date.get(key) not in (None, "")), None)
+        if source_zone is not None:
+            try:
+                ZoneInfo(source_zone)
+            except (ZoneInfoNotFoundError, TypeError, ValueError):
+                raise HTTPException(409, detail={"code": "component_source_created_at_required"}) from None
+            created_value = component_source_time({"date": created_value, "timezone": source_zone})
+    from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+    try:
+        require_order_created_on_or_after_cutover(created_value, cutoff, source_timezone=True)
+    except OrderCutoverError as exc:
+        if exc.code == "pre_cutover_order":
+            return not existing_plan
+        raise HTTPException(409, detail={"code": "component_source_created_at_required"}) from None
+    return False
+
+
+async def allow_legacy_component_execution(db: Any, *, user_id: str, order_number: str) -> bool:
+    """Recheck rollout/cancellation at execution, recording only an audit marker."""
+    if not await legacy_component_cohort(db, user_id=user_id, order_number=order_number):
+        return False
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+    watermark = snapshot.get("g47_salla_snapshot") or {}
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    current = await db[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+    raw = (snapshot.get("raw_by_source") or {}).get("salla_direct") or {}
+    status = raw.get("status") or {}
+    status = status.get("slug") or status.get("name") if isinstance(status, dict) else status
+    cancelled = any(_text(value).lower() in {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+                    for value in (status, snapshot.get("order_status_slug"), snapshot.get("order_status")))
+    if (cancelled or current.get("cancelled") or watermark.get("component_pending")
+            or watermark.get("requires_authoritative_refresh")
+            or (current and current.get("state") != LEGACY_COMPONENT_COHORT)):
+        raise HTTPException(409, detail={"code": "component_execution_blocked"})
+    await db[COMPONENT_LIFECYCLES].update_one({"_id": identity}, {"$set": {
+        "user_id": user_id, "order_number": order_number, "state": LEGACY_COMPONENT_COHORT,
+        "operational_cohort": LEGACY_COMPONENT_COHORT, "updated_at": _now(),
+    }}, upsert=True)
+    return True
+
+
+async def persist_component_source_snapshot(
+    db: Any, *, user_id: str, order_number: str, payload: dict[str, Any],
+    persist: Any, created_event: bool = False, authoritative_refresh: bool = False,
+) -> dict[str, Any]:
+    """Fence the canonical write, not merely its later fulfillment callback.
+
+    Provider I/O has already completed. The persistence callback contains only
+    local writes and joins the same owner transaction as the source watermark.
+    Equal-version cancellation wins; an unversioned snapshot cannot replace a
+    versioned one. Replays still reach fulfillment to retry a durable intent.
+    """
+    version = component_provider_version(payload, created_event=created_event)
+    status = payload.get("status") or {}
+    status = status.get("slug") or status.get("name") if isinstance(status, dict) else status
+    cancelled = _text(status).lower() in {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+
+    async def write(scoped):
+        query = {"user_id": user_id, "order_number": order_number}
+        current = await scoped.unified_orders.find_one(query) or {}
+        watermark = current.get("g47_salla_snapshot") or {}
+        raw = (current.get("raw_by_source") or {}).get("salla_direct") or {}
+        previous_version = watermark.get("source_updated_at") or component_provider_version(raw, created_event=True)
+        previous_cancelled = bool(watermark.get("cancelled")) or _text(current.get("order_status_slug")).lower() in {"canceled", "cancelled"}
+        if (cancelled and not version) or (watermark.get("requires_authoritative_refresh") and not authoritative_refresh):
+            # An undated cancellation is ambiguous, never proven stale. Keep
+            # the last canonical snapshot and stop execution pending refresh.
+            await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
+                **watermark, "revision": int(watermark.get("revision") or 0) + 1,
+                "component_pending": True, "requires_authoritative_refresh": True,
+            }}}, upsert=True)
+            identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+            await scoped[COMPONENT_LIFECYCLES].update_one({"_id": identity}, {"$set": {
+                "user_id": user_id, "order_number": order_number, "state": "blocked", "accepted": False,
+                "retry_required": True, "error_code": "component_cancellation_version_required", "updated_at": _now(),
+            }, "$setOnInsert": {"generation": 0}}, upsert=True)
+            return {"blocked": True, "retry_required": True, "error_code": "component_cancellation_version_required"}
+        if previous_version and (not version or version < previous_version or (
+            version == previous_version and previous_cancelled and not cancelled
+        )):
+            return {"stale": True, "created": False}
+        result = await persist(scoped)
+        revision = int(watermark.get("revision") or 0) + 1
+        await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
+            "source_updated_at": version, "cancelled": cancelled,
+            "revision": revision, "component_pending": True,
+        }}})
+        return {**result, "snapshot_revision": revision}
+
+    result = await operational_owner(db, user_id, write)
+    if not result.get("blocked") and not result.get("stale"):
+        # Financial work must run AFTER the restricted operational transaction.
+        # P02/pause remain authoritative; failures leave a durable retry marker.
+        try:
+            from accounting_shipping_native_observer import observe_delivery
+            await observe_delivery(db, owner=user_id, order_number=order_number)
+        except Exception:
+            # The canonical snapshot is already committed. Retrying its sync is
+            # safe and recognition owns its immutable per-order deduplication.
+            import logging
+            logging.getLogger(__name__).exception("MZ2 shipping observation failed after source commit")
+    return result
+
+
+async def record_component_intake_failure(
+    db: Any, *, user_id: str, order_number: str, source_updated_at: Any, source_revision: int | None = None,
+) -> None:
+    """A transport ACK must not erase a failed operational callback."""
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    version = component_source_time(source_updated_at)
+    async def record(scoped):
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        watermark = snapshot.get("g47_salla_snapshot") or {}
+        if source_revision is not None and (source_revision != watermark.get("revision") or not watermark.get("component_pending")):
+            return
+        current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+        if current.get("cancelled") or (current.get("source_updated_at") and (not version or version < current["source_updated_at"])):
+            return
+        await scoped[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity},
+            {"$set": {"user_id": user_id, "order_number": order_number,
+                      "source_updated_at": version, "state": "blocked", "accepted": False,
+                      "retry_required": True, "error_code": "component_intake_retry_required", "updated_at": _now()},
+             "$setOnInsert": {"generation": 0}}, upsert=True,
+        )
+    await operational_owner(db, user_id, record)
+
+
+def _component_order_cancelled(order: Any) -> bool:
+    markers = {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
+    return any(
+        marker in _text(getattr(order, key, None)).casefold()
+        for key in ("status", "status_native") for marker in markers
+    )
+
+
+def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[str, Any]]:
+    decisions = {str(row.get("order_item_id")): row for row in decision.get("lines") or []}
+    lines = []
+    for item in order.items:
+        row = item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(vars(item))
+        line_id = _text(row.get("order_item_id"))
+        if not line_id:
+            raise HTTPException(409, detail={"code": "component_order_line_identity_required"})
+        selected = decisions.get(line_id, {})
+        lines.append({
+            **row, "order_line_id": line_id, "product_id": _product_id(item),
+            "options_raw": row.get("options_raw") or row.get("options") or [],
+            "prebuilt_receipts": [
+                {"receipt_id": allocation.get("receipt_id"), "quantity": allocation.get("quantity"),
+                 "source_type": allocation.get("source_type")}
+                for allocation in selected.get("inventory_allocations") or []
+                if allocation.get("receipt_id")
+            ],
+        })
+    return lines
+
+
+async def reconcile_component_order_lifecycle(
+    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
+    actor_id: str = "system", decision: dict[str, Any] | None = None,
+    strict: bool = False, source_revision: int | None = None,
+) -> dict[str, Any]:
+    """Persist intake before retryable work; component service owns stock/state.
+
+    This is called on ingestion and explicit review, never by a bulk backfill.
+    An acknowledged webhook may leave a visible blocked intent, never a claim
+    that component acceptance succeeded. Replaying that event retries the intent.
+    """
+    from stock_component_consumption_service import PLANS, reserve_component_stock, release_component_stock
+    order_number = _text(order.order_number)
+    identity = hashlib.sha256(f"{user_id}:{order_number}".encode()).hexdigest()
+    cancelled = _component_order_cancelled(order)
+    eligible = order_is_active(order) and payment_is_eligible(order.payment)
+    created_at = component_source_time(getattr(order, "created_at", None))
+    version = component_source_time(source_updated_at)
+    lines = [] if cancelled else _component_order_lines(order, decision or {})
+    fingerprint = hashlib.sha256(json.dumps({
+        "cancelled": cancelled, "eligible": eligible,
+        "lines": [{key: row.get(key) for key in (
+            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
+        )} for row in lines],
+    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+
+    async def register(scoped):
+        previous = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        watermark = snapshot.get("g47_salla_snapshot") or {}
+        if watermark.get("requires_authoritative_refresh"):
+            raise HTTPException(409, detail={"code": "component_authoritative_refresh_required"})
+        if source_revision is not None and source_revision != int(watermark.get("revision") or 0):
+            return {**previous, "stale": True}
+        previous_version = previous.get("source_updated_at")
+        # A stale provider response cannot supersede a newer intake or cancel.
+        if version and previous_version and version < previous_version:
+            return {**previous, "stale": True}
+        if version and previous_version and version == previous_version and previous.get("cancelled") and not cancelled:
+            return {**previous, "stale": True}
+        if version and version == previous_version and previous.get("source_fingerprint") not in {None, fingerprint} and not cancelled:
+            return {**previous, "stale": True}
+        if not version and previous_version and not strict and not cancelled:
+            return {**previous, "stale": True}
+        if previous.get("source_fingerprint") == fingerprint and (not version or version == previous_version):
+            return {**previous, "snapshot_revision": watermark.get("revision")}
+        generation = int(previous.get("generation") or 0) + 1
+        row = {
+            "_id": identity, "user_id": user_id, "order_number": order_number,
+            "generation": generation, "source_updated_at": version or previous_version,
+            "source_created_at": created_at, "source_fingerprint": fingerprint,
+            "cancelled": cancelled or bool(previous.get("cancelled")),
+            "eligible": eligible, "state": "pending", "retry_required": True,
+            "updated_at": _now(), "plan_id": previous.get("plan_id"),
+        }
+        await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
+        return {**row, "snapshot_revision": watermark.get("revision")}
+
+    intent = await operational_owner(db, user_id, register)
+    if intent.get("stale"):
+        if strict:
+            raise HTTPException(409, detail={"code": "component_source_event_stale"})
+        return {"state": "stale_ignored", "accepted": False, "generation": intent.get("generation")}
+
+    async def apply(scoped):
+        current = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity})
+        if current["generation"] != intent["generation"]:
+            raise HTTPException(409, detail={"code": "component_lifecycle_changed"})
+        snapshot = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+        if (snapshot.get("g47_salla_snapshot") or {}).get("revision") != intent.get("snapshot_revision"):
+            raise HTTPException(409, detail={"code": "component_source_event_stale"})
+        legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
+        if current.get("cancelled") and legacy:
+            result, state = {}, "cancelled"
+        elif current.get("cancelled"):
+            result = await release_component_stock(
+                scoped, merchant_id=user_id, order_id=order_number,
+                source_version=current["generation"], actor_id=actor_id,
+            )
+            state = "reconciliation_required" if result.get("reconciliation_required") else "cancelled"
+        elif not eligible:
+            result, state = {}, "awaiting_eligibility"
+        elif legacy:
+            result, state = {}, LEGACY_COMPONENT_COHORT
+        else:
+            frozen_plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number})
+            settings = await scoped.settings.find_one({"user_id": user_id}) or {}
+            cutoff = component_source_time((settings.get("g47_inventory") or {}).get("component_lifecycle_starts_at"))
+            if not frozen_plan:
+                if not cutoff:
+                    raise HTTPException(409, detail={"code": "component_configuration_required"})
+                if not created_at or created_at < cutoff:
+                    raise HTTPException(409, detail={"code": "component_historical_order_requires_review"})
+                if not version and not strict:
+                    raise HTTPException(409, detail={"code": "component_source_version_required"})
+            frozen_lines = {row["order_line_id"]: row for row in (frozen_plan or {}).get("lines") or []}
+            if not frozen_plan:
+                from product_inventory_receipt_routes import INVENTORY_RECEIPTS
+                for line in lines:
+                    exemptions = []
+                    for candidate in line.get("prebuilt_receipts") or []:
+                        receipt = await scoped[INVENTORY_RECEIPTS].find_one({"user_id": user_id, "id": candidate["receipt_id"]}) or {}
+                        # Purchased finished goods carry no manufacturing
+                        # consumption proof: reserve their current recipe.
+                        # Unknown/malformed manufacturing proof stays fail-closed.
+                        if (receipt.get("source_type") == "stock_preparation_order"
+                                or candidate.get("source_type") == "stock_preparation_order"):
+                            exemptions.append({"receipt_id": candidate["receipt_id"], "quantity": candidate["quantity"]})
+                    line["prebuilt_receipts"] = exemptions
+            acceptance_lines = [
+                {**row, "prebuilt_receipts": frozen_lines[row["order_line_id"]].get("prebuilt_receipts") or []}
+                if row["order_line_id"] in frozen_lines else row for row in lines
+            ]
+            result = await reserve_component_stock(
+                scoped, merchant_id=user_id, order_id=order_number, lines=acceptance_lines,
+                source_version=current["generation"], actor_id=actor_id,
+                source_created_at=created_at,
+                warehouse_ids=(frozen_plan.get("warehouse_ids") if frozen_plan else (decision or {}).get("warehouse_ids")) or None,
+            )
+            state = "reserved"
+        ticket = {
+            "identity": identity, "generation": current["generation"],
+            "snapshot_revision": intent.get("snapshot_revision"),
+            "plan_id": result.get("plan_id"), "state": state,
+            "accepted": state in {"reserved", LEGACY_COMPONENT_COHORT}, "retry_required": False,
+            "operational_cohort": LEGACY_COMPONENT_COHORT if legacy else "g47",
+        }
+        await scoped[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity, "generation": current["generation"]},
+            {"$set": {**ticket, "updated_at": _now()}, "$unset": {"error_code": ""}},
+        )
+        if intent.get("snapshot_revision") is not None:
+            await scoped.unified_orders.update_one({"user_id": user_id, "order_number": order_number,
+                "g47_salla_snapshot.revision": intent["snapshot_revision"]},
+                {"$set": {"g47_salla_snapshot.component_pending": False}})
+        return ticket
+
+    try:
+        if eligible and not intent.get("cancelled") and decision is None:
+            workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": order_number}) or {}
+            decision = await build_order_fulfillment_decision(
+                db, user_id=user_id, order=order,
+                operational_items=workflow.get("operational_items") or [],
+                review_items=workflow.get("items") or [],
+            )
+            lines = _component_order_lines(order, decision)
+        result = await operational_owner(db, user_id, apply)
+    except Exception as exc:
+        detail = getattr(exc, "detail", None)
+        code = detail.get("code") if isinstance(detail, dict) else "component_lifecycle_retry_required"
+        # Separate durable evidence survives rollback of every stock mutation.
+        await db[COMPONENT_LIFECYCLES].update_one(
+            {"_id": identity, "generation": intent["generation"], "state": {"$in": ["pending", "blocked"]}},
+            {"$set": {"state": "blocked", "accepted": False, "retry_required": True,
+                      "error_code": code, "updated_at": _now()}},
+        )
+        if strict:
+            raise
+        return {"state": "blocked", "accepted": False, "retry_required": True, "error_code": code}
+    if strict and result.get("accepted") is not True:
+        raise HTTPException(409, detail={"code": "component_order_not_eligible", "state": result["state"]})
+    return {**result, "decision": decision}
+
+
+async def assert_component_acceptance(db: Any, *, ticket: dict[str, Any]) -> None:
+    current = await db[COMPONENT_LIFECYCLES].find_one({"_id": ticket["identity"]}) or {}
+    if current.get("generation") != ticket.get("generation") or current.get("state") not in {"reserved", LEGACY_COMPONENT_COHORT} or current.get("cancelled"):
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+    legacy = await legacy_component_cohort(
+        db, user_id=current["user_id"], order_number=current["order_number"],
+    )
+    if current.get("state") == LEGACY_COMPONENT_COHORT and not legacy:
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+    snapshot = await db.unified_orders.find_one({"user_id": current.get("user_id"), "order_number": current.get("order_number")}) or {}
+    watermark = snapshot.get("g47_salla_snapshot") or {}
+    if watermark.get("requires_authoritative_refresh") or watermark.get("component_pending") or watermark.get("revision") != ticket.get("snapshot_revision"):
+        raise HTTPException(409, detail={"code": "component_acceptance_changed"})
+
+
+async def assert_component_execution(db: Any, *, user_id: str, order_number: str, plan: dict[str, Any]) -> None:
+    """An accepted old stock plan cannot authorize a blocked newer order."""
+    await legacy_component_cohort(db, user_id=user_id, order_number=order_number)
+    intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": order_number}) or {}
+    snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": order_number}) or {}
+    source_version = plan.get("source_version") or {}
+    if (intent.get("state") != "reserved" or intent.get("accepted") is not True
+            or intent.get("cancelled") or intent.get("retry_required")
+            or source_version.get("value") != intent.get("generation")
+            or (snapshot.get("g47_salla_snapshot") or {}).get("component_pending")
+            or (snapshot.get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh")):
+        raise HTTPException(409, detail={"code": "component_execution_blocked"})
+
+
+async def _consume_batch_components(db: Any, *, user_id: str, batch: dict[str, Any], actor_id: str) -> None:
+    """Close no-assembly paths under the same transaction as packing/handoff."""
+    from stock_component_consumption_service import PLANS, consume_component_stock
+    for number in batch.get("order_numbers") or []:
+        plan = await db[PLANS].find_one({"user_id": user_id, "order_id": str(number)})
+        if not plan:
+            if await allow_legacy_component_execution(db, user_id=user_id, order_number=str(number)):
+                continue
+            snapshot = await db.unified_orders.find_one({"user_id": user_id, "order_number": str(number)}) or {}
+            watermark = snapshot.get("g47_salla_snapshot") or {}
+            intent = await db[COMPONENT_LIFECYCLES].find_one({"user_id": user_id, "order_number": str(number)}) or {}
+            if (watermark.get("component_pending") or watermark.get("requires_authoritative_refresh")
+                    or intent.get("cancelled") or intent.get("state") in {"pending", "blocked", "cancelled", "reconciliation_required"}):
+                raise HTTPException(409, detail={"code": "component_execution_blocked"})
+            # Canonical creation already proved this is the new cohort. A DTO
+            # or inferred historical date cannot override that decision.
+            raise HTTPException(409, detail={"code": "component_reservation_missing"})
+        await assert_component_execution(db, user_id=user_id, order_number=str(number), plan=plan)
+        result = await consume_component_stock(db, merchant_id=user_id, order_id=str(number), actor_id=actor_id)
+        if any(unit.get("state") != "consumed" for unit in result.get("units") or []):
+            raise HTTPException(409, detail={"code": "component_execution_incomplete"})
+
+
 async def auto_route_instant_order(
+    db: Any, *, user_id: str, order: Any, source_updated_at: Any = None, source_revision: int | None = None,
+) -> dict[str, Any]:
+    await ensure_fulfillment_indexes(db)
+    return await _auto_route_instant_order(
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at, source_revision=source_revision,
+    )
+
+
+async def _auto_route_instant_order(
     db: Any,
     *,
     user_id: str,
     order: Any,
+    source_updated_at: Any = None,
+    source_revision: int | None = None,
 ) -> dict[str, Any]:
     """Promote a newly ingested eligible order without human preparation.
 
@@ -815,6 +1618,12 @@ async def auto_route_instant_order(
         {"_id": 0},
     )
     current_stage = _text((workflow or {}).get("stage")) or "pending_review"
+    component_lifecycle = await reconcile_component_order_lifecycle(
+        db, user_id=user_id, order=order, source_updated_at=source_updated_at, source_revision=source_revision,
+    )
+    if component_lifecycle.get("accepted") is not True:
+        return {"promoted": False, "reverted": False, "stage": current_stage,
+                "component_lifecycle": component_lifecycle, "reason": "component_acceptance_blocked"}
     if workflow and (
         current_stage in TERMINAL_WORKFLOW_STAGES
         or workflow.get("claim_batch_id")
@@ -833,7 +1642,21 @@ async def auto_route_instant_order(
         operational_items=list(
             (workflow or {}).get("operational_items") or []
         ),
+        review_items=list((workflow or {}).get("items") or []),
     )
+    async def apply(scoped):
+        await assert_component_acceptance(scoped, ticket=component_lifecycle)
+        return await _apply_auto_route_decision(
+            scoped, user_id=user_id, order=order, workflow=workflow,
+            current_stage=current_stage, decision=decision,
+        )
+    return await operational_owner(db, user_id, apply)
+
+
+async def _apply_auto_route_decision(
+    db: Any, *, user_id: str, order: Any, workflow: dict[str, Any] | None,
+    current_stage: str, decision: dict[str, Any],
+) -> dict[str, Any]:
     if decision.get("ready_to_ship") is not True:
         if (
             workflow
@@ -845,6 +1668,17 @@ async def auto_route_instant_order(
                 _text(workflow.get("auto_route_previous_stage"))
                 or "pending_review"
             )
+            if (
+                workflow.get("completion_mode") == "mezan_local_v1"
+                and _text(workflow.get("review_completion_operation_id"))
+                and restored_stage not in {
+                    "reviewed", "in_progress", "assembly", "ready_to_ship",
+                    *TERMINAL_WORKFLOW_STAGES,
+                }
+            ):
+                # Provider refresh may revoke readiness, but cannot undo an
+                # explicit local review. Cancellation/stock checks ran above.
+                restored_stage = "reviewed"
             now = _now()
             await db[WORKFLOWS].update_one(
                 {
@@ -940,6 +1774,43 @@ async def auto_route_instant_order(
     }
 
 
+def effective_operation_actor(
+    user: dict[str, Any],
+    context: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Resolve the human who actually performed a native operation.
+
+    Native employee requests are tenant-scoped through the merchant principal,
+    but mobile_app_request_user preserves the authenticated employee in
+    server-owned _mobile_actor_* fields. This helper changes audit attribution
+    only; it does not alter tenant scope or authorization.
+    """
+    mobile_actor_id = _text(user.get("_mobile_actor_id"))
+    if (
+        _text(user.get("_session_client")) == "amasi_mobile"
+        and mobile_actor_id
+    ):
+        return {
+            "id": mobile_actor_id,
+            "name": (
+                _text(user.get("_mobile_actor_name"))
+                or _text(user.get("_mobile_actor_email"))
+                or mobile_actor_id
+            ),
+            "email": _text(user.get("_mobile_actor_email")),
+        }
+    return {
+        "id": _text((context or {}).get("actor_id")) or _text(user.get("id")),
+        "name": (
+            _text(user.get("name"))
+            or _text(user.get("email"))
+            or _text((context or {}).get("actor_id"))
+            or "مستخدم ميزان"
+        ),
+        "email": _text(user.get("email")),
+    }
+
+
 async def _actor_context(
     db: Any,
     user: dict[str, Any],
@@ -967,9 +1838,10 @@ async def _actor_context(
             status_code=409,
             detail={"code": "employee_store_not_linked"},
         )
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=actor_id,
     )
     return {
         "actor_id": actor_id,
@@ -1011,6 +1883,36 @@ def _require_permission(
         )
 
 
+def _can_operate_completed_carrier_label(context: dict[str, Any]) -> bool:
+    if "fulfillment.labels.print" not in context["permissions"]:
+        return False
+    return bool(
+        context["is_owner"]
+        or "shipping_labeling" in context["responsibilities"]
+    )
+
+
+def _can_receive_carrier_handoff(context: dict[str, Any]) -> bool:
+    return bool(
+        "fulfillment.carrier.handoff" in context["permissions"]
+        and (
+            context["is_owner"]
+            or "carrier_handoff" in context["responsibilities"]
+        )
+    )
+
+
+def _carrier_handoff_http_error(exc: CarrierHandoffError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={
+            "code": exc.code,
+            "message": str(exc),
+            **exc.details,
+        },
+    )
+
+
 def _warehouse_allowed(
     context: dict[str, Any],
     warehouse_ids: list[str],
@@ -1021,6 +1923,22 @@ def _warehouse_allowed(
     if context["is_owner"]:
         return True
     return required.issubset(context["warehouse_ids"])
+
+
+def _ready_order_allowed(
+    context: dict[str, Any],
+    workflow: dict[str, Any],
+) -> bool:
+    warehouses = (
+        (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
+        or []
+    )
+    if warehouses:
+        return _warehouse_allowed(context, warehouses)
+    # Preparation orders are physical pieces already received into Mezan's
+    # assembly queue. They do not need an inventory-location assignment to be
+    # assembled and labeled.
+    return _text(workflow.get("ready_to_ship_source")) == "preparation_receipt"
 
 
 async def _order_view(
@@ -1037,6 +1955,23 @@ async def _order_view(
         )
     except OrderNotFoundError:
         return None
+    # Current provider facts are a read projection, independent of a previous
+    # print attempt. They never grant permission to open/print a saved label.
+    shipping = order.shipping
+    cancelled = _text(shipping.status).lower() in {"cancelled", "canceled", "void", "deleted"}
+    label_available = bool(shipping.label_url and shipping.tracking_number and not cancelled)
+    current_shipment = {
+        "source": "salla_current_shipping",
+        "shipment_id": shipping.shipment_id,
+        "carrier_name": shipping.company,
+        "carrier_code": shipping.company_code,
+        "tracking_number": shipping.tracking_number,
+        "label_status": (
+            "cancelled" if cancelled else "available" if label_available
+            else "pending" if shipping.shipment_id or shipping.tracking_number else "none"
+        ),
+        "label_available": label_available,
+    }
     return {
         "order_number": order.order_number,
         "order_id": order.order_id,
@@ -1048,6 +1983,7 @@ async def _order_view(
             else None
         ),
         "shipping_company": order.shipping.company,
+        "current_shipment": current_shipment,
         "items_count": len(order.items),
         "items": [{
             "order_item_id": item.order_item_id,
@@ -1070,6 +2006,67 @@ async def _order_view(
         "claimed_by": workflow.get("claimed_by"),
         "claimed_by_name": workflow.get("claimed_by_name"),
         "ready_at": workflow.get("ready_to_ship_at"),
+        "ready_to_ship_source": workflow.get("ready_to_ship_source"),
+        "assembly_status": workflow.get("assembly_status"),
+        "assembly_ready_count": int(
+            workflow.get("assembly_ready_piece_count") or 0
+        ),
+        "assembly_piece_count": int(
+            workflow.get("assembly_piece_count")
+            or workflow.get("preparation_piece_count")
+            or 0
+        ),
+        "print_batch_id": (
+            workflow.get("shipping_print_batch_id")
+            or workflow.get("claim_batch_id")
+        ),
+        "completed_at": workflow.get("completed_at"),
+        "order_status": order.status,
+        "order_status_native": order.status_native,
+        "salla_order_status": workflow.get("salla_order_status"),
+        "carrier_label_status": workflow.get("carrier_label_status"),
+        "carrier_label_ready": bool(workflow.get("carrier_label_ready")),
+        "carrier_label_url": workflow.get("carrier_label_url"),
+        "carrier_label_type": workflow.get("carrier_label_type"),
+        "carrier_label_print_data": workflow.get("carrier_label_print_data"),
+        "carrier_name": workflow.get("carrier_name") or order.shipping.company,
+        "carrier_tracking_number": workflow.get("carrier_tracking_number"),
+        "carrier_label_message": workflow.get("carrier_label_message"),
+        "carrier_label_error_code": workflow.get("carrier_label_error_code"),
+        "carrier_label_error_message": workflow.get("carrier_label_error_message"),
+        "carrier_label_print_confirmed": bool(
+            workflow.get("carrier_label_print_confirmed")
+        ),
+        "carrier_label_print_confirmed_at": workflow.get(
+            "carrier_label_print_confirmed_at"
+        ),
+        "carrier_label_print_confirmed_by_name": workflow.get(
+            "carrier_label_print_confirmed_by_name"
+        ),
+        "carrier_handoff_state": workflow.get("carrier_handoff_state"),
+        "carrier_handoff_employee_id": workflow.get(
+            "carrier_handoff_employee_id"
+        ),
+        "carrier_handoff_employee_name": workflow.get(
+            "carrier_handoff_employee_name"
+        ),
+        "carrier_handoff_scanned_at": workflow.get(
+            "carrier_handoff_scanned_at"
+        ),
+        "carrier_handoff_released_at": workflow.get(
+            "carrier_handoff_released_at"
+        ),
+        "carrier_handoff_release_source": workflow.get(
+            "carrier_handoff_release_source"
+        ),
+        "delivering_at": workflow.get("delivering_at"),
+        "delivered_at": workflow.get("delivered_at"),
+        "customer_service_instructions": list(
+            workflow.get("customer_service_instructions") or []
+        ),
+        "customer_service_hold_active": bool(
+            workflow.get("customer_service_hold_active")
+        ),
     }
 
 
@@ -1100,11 +2097,7 @@ def make_fulfillment_v2_router(
         ).sort("ready_to_ship_at", 1).limit(limit * 3).to_list(limit * 3)
         items = []
         for workflow in workflows:
-            warehouses = (
-                (workflow.get("fulfillment_decision") or {}).get("warehouse_ids")
-                or []
-            )
-            if not _warehouse_allowed(context, warehouses):
+            if not _ready_order_allowed(context, workflow):
                 continue
             claimed_by = _text(workflow.get("claimed_by"))
             if claimed_by and claimed_by != context["actor_id"] and not context["is_owner"]:
@@ -1129,6 +2122,306 @@ def make_fulfillment_v2_router(
                 "can_handoff": "fulfillment.carrier.handoff" in context["permissions"],
             },
         }
+
+    @router.get("/completed")
+    async def list_completed_assembly_orders(
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.ready.read")
+        can_label = _can_operate_completed_carrier_label(context)
+        can_handoff = _can_receive_carrier_handoff(context)
+        if not can_label and not can_handoff:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "fulfillment_responsibility_required",
+                    "responsibility": "shipping_labeling_or_carrier_handoff",
+                },
+            )
+        query: dict[str, Any] = {
+            "user_id": context["merchant_id"],
+            "stage": "completed",
+            "assembly_status": "completed",
+        }
+        # Labeling owns the order until the handoff employee scans the AWB.
+        # Handoff employees receive their custody list from the dedicated
+        # endpoint below and must not see other employees' labeling queues.
+        if can_label:
+            query["carrier_label_print_confirmed"] = {"$ne": True}
+            query["$or"] = [
+                {"carrier_handoff_employee_id": {"$exists": False}},
+                {"carrier_handoff_employee_id": None},
+                {"carrier_handoff_employee_id": ""},
+            ]
+        else:
+            query["carrier_handoff_employee_id"] = "__scan_to_receive__"
+        workflows = await db[WORKFLOWS].find(
+            query,
+            {"_id": 0},
+        ).sort("completed_at", -1).limit(limit * 2).to_list(limit * 2)
+        items = []
+        for workflow in workflows:
+            claimed_by = _text(workflow.get("claimed_by"))
+            if (
+                claimed_by
+                and claimed_by != context["actor_id"]
+                and not context["is_owner"]
+            ):
+                continue
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if row:
+                items.append(row)
+            if len(items) >= limit:
+                break
+        batch_ids = sorted({
+            _text(row.get("print_batch_id"))
+            for row in items
+            if _text(row.get("print_batch_id"))
+        })
+        batches = (
+            await db[BATCHES].find(
+                {
+                    "user_id": context["merchant_id"],
+                    "id": {"$in": batch_ids},
+                },
+                {"_id": 0, "id": 1, "print_count": 1, "status": 1},
+            ).to_list(max(1, len(batch_ids)))
+            if batch_ids
+            else []
+        )
+        batch_by_id = {_text(row.get("id")): row for row in batches}
+        for row in items:
+            batch = batch_by_id.get(_text(row.get("print_batch_id"))) or {}
+            row["print_count"] = int(batch.get("print_count") or 0)
+            row["print_status"] = _text(batch.get("status")) or None
+        return {
+            "items": items,
+            "total": len(items),
+            "permissions": {
+                "can_print": can_label,
+                "can_confirm_print": can_label,
+                "can_handoff_scan": can_handoff,
+                "can_reprint": (
+                    "fulfillment.labels.reprint" in context["permissions"]
+                ),
+            },
+        }
+
+    async def _carrier_label_action(
+        *,
+        order_number: str,
+        user: dict[str, Any],
+        action: str,
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.labels.print")
+        if not _can_operate_completed_carrier_label(context):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "fulfillment_responsibility_required",
+                    "responsibility": "shipping_labeling",
+                },
+            )
+        actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
+        try:
+            if action == "refresh":
+                # Printing reads only; retain the existing access/completion
+                # checks without writing a label snapshot to the workflow.
+                await _require_print_completed_workflow(
+                    db, user_id=context["merchant_id"], order_number=_text(order_number),
+                )
+                return await refresh_shipping_label(db, context["merchant_id"], _text(order_number))
+            return await sync_completed_carrier_label(
+                db,
+                user_id=context["merchant_id"],
+                order_number=_text(order_number),
+                actor_id=context["actor_id"],
+                actor_name=actor_name,
+                action=action,
+            )
+        except ShippingLabelError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={
+                    "code": exc.code,
+                    "message": str(exc),
+                    "order_number": _text(order_number),
+                },
+            ) from exc
+
+    @router.post("/completed/{order_number}/carrier-label")
+    async def issue_completed_order_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _carrier_label_action(
+            order_number=order_number,
+            user=user,
+            action="issue",
+        )
+
+    @router.post("/completed/{order_number}/carrier-label/refresh")
+    async def refresh_completed_order_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        return await _carrier_label_action(
+            order_number=order_number,
+            user=user,
+            action="refresh",
+        )
+
+    @router.post("/completed/{order_number}/carrier-label/confirm-print")
+    async def confirm_completed_order_carrier_label_print(
+        order_number: str,
+        payload: CarrierBarcodeRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.labels.print",
+            responsibility="shipping_labeling",
+        )
+        try:
+            return await confirm_carrier_label_print(
+                db,
+                user_id=context["merchant_id"],
+                order_number=_text(order_number),
+                scanned_barcode=payload.barcode,
+                actor_id=context["actor_id"],
+                actor_name=(
+                    _text(user.get("name") or user.get("email"))
+                    or "موظف العنونة والشحن"
+                ),
+            )
+        except CarrierHandoffError as exc:
+            raise _carrier_handoff_http_error(exc) from exc
+
+    @router.get("/carrier-handoff")
+    async def list_employee_carrier_handoff_shipments(
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.carrier.handoff",
+            responsibility="carrier_handoff",
+        )
+        query: dict[str, Any] = {
+            "user_id": context["merchant_id"],
+            "stage": "completed",
+            "carrier_handoff_state": "with_handoff_employee",
+        }
+        if not context["is_owner"]:
+            query["carrier_handoff_employee_id"] = context["actor_id"]
+        workflows = await db[WORKFLOWS].find(
+            query,
+            {"_id": 0},
+        ).sort("carrier_handoff_scanned_at", -1).limit(limit).to_list(limit)
+        items = []
+        for workflow in workflows:
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if not row:
+                continue
+            if not carrier_handoff_custody_is_visible(
+                workflow_stage=workflow.get("stage"),
+                handoff_state=workflow.get("carrier_handoff_state"),
+                order_status_slug=row.get("order_status"),
+                order_status_name=row.get("order_status_native"),
+            ):
+                continue
+            items.append(row)
+        return {
+            "items": items,
+            "total": len(items),
+            "poll_seconds": 15,
+        }
+
+    @router.get("/delivery-tracking")
+    async def list_delivery_tracking_shipments(
+        stage: str = Query(pattern="^(delivering|delivered)$"),
+        limit: int = Query(default=100, ge=1, le=300),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Read the external-carrier delivery board from Mezan state only.
+
+        This endpoint never calls Salla. The existing Orders V2 page sync is
+        the sole process that advances carrier custody to these stages.
+        Store-courier orders intentionally remain on their separate flow.
+        """
+        context = await _actor_context(db, user)
+        _require_permission(context, "fulfillment.ready.read")
+        normalized_stage = _text(stage).casefold()
+        workflows = await db[WORKFLOWS].find(
+            {
+                "user_id": context["merchant_id"],
+                "stage": normalized_stage,
+                "carrier_label_type": {"$ne": "store_courier"},
+            },
+            {"_id": 0},
+        ).sort(
+            (
+                "delivered_at"
+                if normalized_stage == "delivered"
+                else "delivering_at"
+            ),
+            -1,
+        ).limit(limit).to_list(limit)
+        items = []
+        for workflow in workflows:
+            row = await _order_view(
+                repository,
+                user_id=context["merchant_id"],
+                workflow=workflow,
+            )
+            if row:
+                items.append(row)
+        return {
+            "stage": normalized_stage,
+            "items": items,
+            "total": len(items),
+            "flow": "external_carrier",
+            "sync_source": "mezan_orders_page_status_sync",
+            "poll_seconds": 15,
+        }
+
+    @router.post("/carrier-handoff/scan")
+    async def scan_carrier_handoff_shipment(
+        payload: CarrierBarcodeRequest,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        context = await _actor_context(db, user)
+        _require_permission(
+            context,
+            "fulfillment.carrier.handoff",
+            responsibility="carrier_handoff",
+        )
+        try:
+            return await receive_carrier_shipment(
+                db,
+                user_id=context["merchant_id"],
+                scanned_barcode=payload.barcode,
+                actor_id=context["actor_id"],
+                actor_name=(
+                    _text(user.get("name") or user.get("email"))
+                    or "موظف تسليم الشحن"
+                ),
+            )
+        except CarrierHandoffError as exc:
+            raise _carrier_handoff_http_error(exc) from exc
 
     @router.post("/ready-to-ship/claim")
     async def claim_ready_batch(
@@ -1179,10 +2472,16 @@ def make_fulfillment_v2_router(
             })
             for workflow in workflows
         }
+        preparation_orders = {
+            _text(workflow.get("order_number"))
+            for workflow in workflows
+            if _text(workflow.get("ready_to_ship_source"))
+            == "preparation_receipt"
+        }
         missing_inventory_orders = sorted(
             order_number
             for order_number, warehouse_ids in inventory_by_order.items()
-            if not warehouse_ids
+            if not warehouse_ids and order_number not in preparation_orders
         )
         if missing_inventory_orders:
             raise HTTPException(
@@ -1195,7 +2494,7 @@ def make_fulfillment_v2_router(
         unauthorized_orders = sorted(
             order_number
             for order_number, warehouse_ids in inventory_by_order.items()
-            if not _warehouse_allowed(context, warehouse_ids)
+            if warehouse_ids and not _warehouse_allowed(context, warehouse_ids)
         )
         if unauthorized_orders:
             raise HTTPException(
@@ -1254,7 +2553,10 @@ def make_fulfillment_v2_router(
             "status": "claimed",
             "order_numbers": order_numbers,
             "warehouse_ids": warehouse_ids,
-            "warehouse_resolution_sources": ["inventory_location"],
+            "warehouse_resolution_sources": sorted({
+                *(["inventory_location"] if warehouse_ids else []),
+                *(["preparation_receipt"] if preparation_orders else []),
+            }),
             "claimed_by": context["actor_id"],
             "claimed_by_name": _text(user.get("name") or user.get("email")),
             "claimed_at": now,
@@ -1429,23 +2731,18 @@ def make_fulfillment_v2_router(
         }
         if not context["is_owner"]:
             query["claimed_by"] = context["actor_id"]
-        now = _now()
-        result = await db[BATCHES].update_one(
-            query,
-            {"$set": {
-                "status": "packed",
-                "packed_at": now,
-                "packed_by": context["actor_id"],
-                "packing_note": _text(payload.note) or None,
-                "updated_at": now,
-            }},
-        )
-        if not result.modified_count:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_must_be_printed_before_packing"},
-            )
-        return {"ok": True, "batch_id": batch_id, "status": "packed"}
+        async def pack(scoped):
+            batch = await scoped[BATCHES].find_one(query)
+            if not batch or batch.get("status") in {"handed_off", "inventory_consuming"}:
+                raise HTTPException(409, detail={"code": "batch_must_be_printed_before_packing"})
+            await _consume_batch_components(scoped, user_id=context["merchant_id"], batch=batch, actor_id=context["actor_id"])
+            now = _now()
+            await scoped[BATCHES].update_one(query, {"$set": {
+                "status": "packed", "packed_at": now, "packed_by": context["actor_id"],
+                "packing_note": _text(payload.note) or None, "updated_at": now,
+            }})
+            return {"ok": True, "batch_id": batch_id, "status": "packed"}
+        return await operational_owner(db, context["merchant_id"], pack)
 
     @router.post("/batches/{batch_id}/handoff")
     async def confirm_carrier_handoff(
@@ -1466,83 +2763,29 @@ def make_fulfillment_v2_router(
         }
         if not context["is_owner"]:
             query["claimed_by"] = context["actor_id"]
-        batch = await db[BATCHES].find_one(query, {"_id": 0})
-        if not batch:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_must_be_packed_before_handoff"},
+        async def handoff(scoped):
+            batch = await scoped[BATCHES].find_one(query)
+            if not batch:
+                raise HTTPException(409, detail={"code": "batch_must_be_packed_before_handoff"})
+            # Revalidate cancellation and execution even when packing already
+            # consumed the material. All local finalization rolls back together.
+            await _consume_batch_components(scoped, user_id=context["merchant_id"], batch=batch, actor_id=context["actor_id"])
+            consumed_reservations = await _consume_order_inventory_reservations(
+                scoped, user_id=context["merchant_id"],
+                order_numbers=list(batch.get("order_numbers") or []),
+                actor_id=context["actor_id"], batch_id=batch_id,
             )
-        now = _now()
-        lock = await db[BATCHES].update_one(
-            query,
-            {"$set": {
-                "status": "inventory_consuming",
-                "updated_at": now,
-            }},
-        )
-        if not lock.modified_count:
-            raise HTTPException(
-                status_code=409,
-                detail={"code": "batch_handoff_conflict_refresh_required"},
-            )
-        try:
-            consumed_reservations = (
-                await _consume_order_inventory_reservations(
-                    db,
-                    user_id=context["merchant_id"],
-                    order_numbers=list(batch.get("order_numbers") or []),
-                    actor_id=context["actor_id"],
-                    batch_id=batch_id,
-                )
-            )
-        except Exception:
-            await db[BATCHES].update_one(
-                {
-                    "id": batch_id,
-                    "user_id": context["merchant_id"],
-                    "status": "inventory_consuming",
-                },
-                {
-                    "$set": {
-                        "status": "inventory_reconciliation_required",
-                        "inventory_reconciliation_required_at": _now(),
-                        "updated_at": _now(),
-                    },
-                },
-            )
-            raise
-        handed_off_at = _now()
-        await db[BATCHES].update_one(
-            {
-                "id": batch_id,
-                "user_id": context["merchant_id"],
-                "status": "inventory_consuming",
-            },
-            {
-                "$set": {
-                    "status": "handed_off",
-                    "handed_off_at": handed_off_at,
-                    "handed_off_by": context["actor_id"],
-                    "handoff_note": _text(payload.note) or None,
-                    "inventory_reservations_consumed": consumed_reservations,
-                    "updated_at": handed_off_at,
-                },
-            },
-        )
-        await db[WORKFLOWS].update_many(
-            {
-                "user_id": context["merchant_id"],
-                "claim_batch_id": batch_id,
-                "stage": "ready_to_ship",
-            },
-            {"$set": {
-                "stage": "completed",
-                "completed_at": handed_off_at,
-                "carrier_handoff_at": handed_off_at,
-                "updated_at": handed_off_at,
-            }},
-        )
-        return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
+            now = _now()
+            await scoped[BATCHES].update_one(query, {"$set": {
+                "status": "handed_off", "handed_off_at": now,
+                "handed_off_by": context["actor_id"], "handoff_note": _text(payload.note) or None,
+                "inventory_reservations_consumed": consumed_reservations, "updated_at": now,
+            }})
+            await scoped[WORKFLOWS].update_many({
+                "user_id": context["merchant_id"], "claim_batch_id": batch_id, "stage": "ready_to_ship",
+            }, {"$set": {"stage": "completed", "completed_at": now, "carrier_handoff_at": now, "updated_at": now}})
+            return {"ok": True, "batch_id": batch_id, "status": "handed_off"}
+        return await operational_owner(db, context["merchant_id"], handoff)
 
     return router
 

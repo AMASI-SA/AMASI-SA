@@ -1,0 +1,14 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand --runTestsByPath src/components/fulfillment/FulfillmentExperimentPanel.test.jsx src/components/SnapchatSeparatedAccountsView.test.jsx src/mezanUnifiedHeader.test.js src/pages/CampaignRecommendations.test.jsx src/defaultDashboardRoute.test.js
+PASS src/pages/CampaignRecommendations.test.jsx
+PASS src/mezanUnifiedHeader.test.js
+PASS src/components/fulfillment/FulfillmentExperimentPanel.test.jsx
+PASS src/defaultDashboardRoute.test.js
+PASS src/components/SnapchatSeparatedAccountsView.test.jsx
+
+Test Suites: 5 passed, 5 total
+Tests:       17 passed, 17 total
+Snapshots:   0 total
+Time:        4.121 s, estimated 5 s
+Ran all test suites within paths "src/components/fulfillment/FulfillmentExperimentPanel.test.jsx", "src/components/SnapchatSeparatedAccountsView.test.jsx", "src/mezanUnifiedHeader.test.js", "src/pages/CampaignRecommendations.test.jsx", "src/defaultDashboardRoute.test.js".
+Done in 5.35s.

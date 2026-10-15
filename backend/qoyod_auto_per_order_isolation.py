@@ -1,7 +1,8 @@
 """Per-order failure isolation policy for Plan-B automatic Qoyod sending.
 
-A bad order must never disable automatic sending for healthy orders. Only
-systemic failures may trip the global circuit breaker.
+Every failure associated with an order is isolated on that order.  The
+historical code list remains exported for compatibility only; runtime policy
+is no longer allow-list based and there is no global circuit breaker.
 """
 from __future__ import annotations
 
@@ -31,10 +32,10 @@ ORDER_LOCAL_FAILURE_CODES = frozenset({
     "invoice_created_payment_failed",
 })
 
+ALL_FAILURES_ARE_ORDER_LOCAL = True
+
 
 def install_per_order_isolation() -> None:
     from integrations.qoyod_manual import auto_send
 
-    current = set(auto_send._PER_ORDER_MANUAL_REVIEW_CODES)
-    current.update(ORDER_LOCAL_FAILURE_CODES)
-    auto_send._PER_ORDER_MANUAL_REVIEW_CODES = frozenset(current)
+    auto_send._ALL_FAILURES_ARE_ORDER_LOCAL = True

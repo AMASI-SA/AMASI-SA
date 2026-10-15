@@ -1,0 +1,148 @@
+name: Public Legal Pages Noindex
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/publicLegalNoIndex.js"
+      - "frontend/src/index.jsx"
+      - "frontend/index.html"
+      - "frontend/public/_headers"
+      - "frontend/public/.well-known/security.txt"
+      - "frontend/vite.config.js"
+      - "frontend/package.json"
+      - "frontend/yarn.lock"
+      - ".github/workflows/legal-pages-noindex.yml"
+  push:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/publicLegalNoIndex.js"
+      - "frontend/src/index.jsx"
+      - "frontend/index.html"
+      - "frontend/public/_headers"
+      - "frontend/public/.well-known/security.txt"
+      - "frontend/vite.config.js"
+      - "frontend/package.json"
+      - "frontend/yarn.lock"
+      - ".github/workflows/legal-pages-noindex.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  production-runtime:
+    runs-on: ubuntu-24.04
+    env:
+      CI: "false"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install production runtime dependencies only
+        run: yarn install --frozen-lockfile --non-interactive --production=true
+      - name: Build with production dependencies only
+        run: yarn build:release
+      - name: Start the supervisor frontend command with production dependencies only
+        run: |
+          set -euo pipefail
+          yarn start >/tmp/mezan-production-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill "$VITE_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/mezan-production-vite.log >&2
+          exit 1
+
+  frontend-build:
+    runs-on: ubuntu-24.04
+    env:
+      CI: "false"
+      REACT_APP_BACKEND_URL: https://mezansalla.com
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Validate Vite server configuration
+        run: node --check vite.config.js
+      - name: Build Production frontend
+        run: yarn build:release
+      - name: Verify built browser security contract
+        run: |
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' build/index.html
+          grep -q 'Content-Security-Policy' build/index.html
+          test -f build/_headers
+          test -f build/.well-known/security.txt
+          grep -q "frame-ancestors 'none'" build/_headers
+          grep -q 'X-Frame-Options: DENY' build/_headers
+          grep -q 'Permissions-Policy: camera=(self)' build/_headers
+          grep -q 'X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex' build/_headers
+          grep -q 'Canonical: https://mezansalla.com/.well-known/security.txt' build/.well-known/security.txt
+      - name: Verify Vite origin emits HTTP security headers
+        run: |
+          set -euo pipefail
+          yarn vite --host 127.0.0.1 --port 4175 >/tmp/mezan-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill "$VITE_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:4175/; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS -D /tmp/mezan-headers.txt -o /dev/null http://127.0.0.1:4175/
+          grep -Fi "content-security-policy: default-src 'self';" /tmp/mezan-headers.txt
+          grep -Fi "frame-ancestors 'none'" /tmp/mezan-headers.txt
+          grep -Fi "strict-transport-security: max-age=63072000; includeSubDomains; preload" /tmp/mezan-headers.txt
+          grep -Fi "x-frame-options: DENY" /tmp/mezan-headers.txt
+          grep -Fi "x-content-type-options: nosniff" /tmp/mezan-headers.txt
+          grep -Fi "x-permitted-cross-domain-policies: none" /tmp/mezan-headers.txt
+          grep -Fi "referrer-policy: strict-origin-when-cross-origin" /tmp/mezan-headers.txt
+          grep -Fi "permissions-policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()" /tmp/mezan-headers.txt
+          grep -Fi "x-robots-tag: noindex, nofollow, noarchive, nosnippet, noimageindex" /tmp/mezan-headers.txt
+          curl -fsS http://127.0.0.1:4175/.well-known/security.txt | grep -F 'Canonical: https://mezansalla.com/.well-known/security.txt'
+
+  source-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce crawler-visible noindex and HTTP header contract
+        run: |
+          META=frontend/src/publicLegalNoIndex.js
+          SERVER=frontend/vite.config.js
+          INDEX=frontend/src/index.jsx
+          HTML=frontend/index.html
+          HEADERS=frontend/public/_headers
+          SECURITY_TXT=frontend/public/.well-known/security.txt
+          grep -q 'noindex, nofollow, noarchive, nosnippet, noimageindex' "$META" "$HTML" "$HEADERS" "$SERVER"
+          grep -q 'applyPublicLegalNoIndex(window.location.pathname)' "$INDEX"
+          grep -q '"/privacy-policy"' "$META"
+          grep -q '"/data-deletion"' "$META"
+          grep -q '"/terms"' "$META"
+          grep -q "frame-ancestors 'none'" "$HEADERS" "$SERVER"
+          grep -q '"X-Frame-Options": "DENY"' "$SERVER"
+          grep -q '"Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()"' "$SERVER"
+          grep -q '"X-Robots-Tag": FRONTEND_NOINDEX_DIRECTIVES' "$SERVER"
+          grep -q 'headers: FRONTEND_SECURITY_HEADERS' "$SERVER"
+          grep -q '^Contact: https://github.com/AMASI-SA/AMASI-SA/security/advisories/new$' "$SECURITY_TXT"
+          ! grep -q 'Disallow: /privacy-policy\|Disallow: /data-deletion\|Disallow: /terms' frontend/public/robots.txt 2>/dev/null || false

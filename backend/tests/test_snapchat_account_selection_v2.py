@@ -225,6 +225,269 @@ async def test_native_operations_read_only_selected_accounts():
 
 
 @pytest.mark.asyncio
+async def test_canonical_scheduler_includes_migrated_account_with_tenant_credentials(
+    monkeypatch,
+):
+    db = _db()
+    migrated = db.rows["mezan_integration_accounts_v2"][1]
+    migrated["mezan_selected"] = True
+    migrated["selection_status"] = "selected"
+    migrated.pop("connection_provenance")
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda value: "refresh-token" if value == b"tenant-refresh" else "",
+    )
+
+    failure_stages = []
+    rows = await selection._load_canonical_scheduler_accounts(
+        db,
+        "owner-1",
+        failure_stage_observer=failure_stages.append,
+    )
+
+    assert [row["ad_account_id"] for row in rows] == ["account-2"]
+    assert rows[0].get("connection_provenance") is None
+    assert failure_stages == [
+        "integration_account_credential_proof",
+        "selected_accounts_load",
+        "integration_account_credential_proof",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_canonical_scheduler_recovers_missing_provider_projection_after_proof(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integrations_v2"] = []
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    account["selection_status"] = "selected"
+    account.pop("connection_provenance")
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda value: "refresh-token" if value == b"tenant-refresh" else "",
+    )
+    monkeypatch.setattr(
+        selection,
+        "_now_iso",
+        lambda: "2026-08-23T07:15:00+00:00",
+    )
+
+    rows = await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert [row["ad_account_id"] for row in rows] == ["account-2"]
+    assert db.rows["mezan_integrations_v2"] == [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "connection_status": "connected",
+            "connection_provenance": "api_connection",
+            "source_mode": selection.SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE,
+            "data_quality": "incomplete",
+            "data_delay_minutes": None,
+            "health_score": 70,
+            "checked_at": "2026-08-23T07:15:00+00:00",
+            "created_at": "2026-08-23T07:15:00+00:00",
+            "updated_at": "2026-08-23T07:15:00+00:00",
+            "projection_recovered_at": "2026-08-23T07:15:00+00:00",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_canonical_scheduler_never_overwrites_disconnected_projection(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integrations_v2"][0]["connection_status"] = "needs_reauth"
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+
+    with pytest.raises(selection.SnapchatNativeSyncError) as exc:
+        await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert exc.value.code == "snapchat_integration_not_connected"
+    assert db.rows["mezan_integrations_v2"][0]["connection_status"] == "needs_reauth"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mutation", "expected_code"),
+    [
+        ("foreign_tenant", "snapchat_accounts_not_selected"),
+        ("disconnected", "snapchat_accounts_not_selected"),
+        ("unselected", "snapchat_accounts_not_selected"),
+        ("missing_identity", "snapchat_selected_account_identity_invalid"),
+        ("ambiguous_identity", "snapchat_selected_account_identity_invalid"),
+        ("numeric_identity", "snapchat_selected_account_identity_invalid"),
+        ("foreign_organization", "snapchat_selected_account_identity_invalid"),
+    ],
+)
+async def test_canonical_scheduler_rejects_unowned_or_ineligible_accounts(
+    monkeypatch,
+    mutation,
+    expected_code,
+):
+    db = _db()
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    account["selection_status"] = "selected"
+    account.pop("connection_provenance")
+    if mutation == "foreign_tenant":
+        account["user_id"] = "owner-2"
+    elif mutation == "disconnected":
+        account["connection_status"] = "needs_reauth"
+    elif mutation == "unselected":
+        account["mezan_selected"] = False
+    elif mutation == "missing_identity":
+        account.pop("ad_account_id")
+        account.pop("external_account_id")
+    elif mutation == "ambiguous_identity":
+        account["external_account_id"] = "different-account"
+    elif mutation == "numeric_identity":
+        account["ad_account_id"] = 123
+        account["external_account_id"] = 123
+    elif mutation == "foreign_organization":
+        account["organization_id"] = "foreign-org"
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+        {
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "refresh_token_ciphertext": b"tenant-refresh",
+            "organization_ids": ["org-1"],
+        }
+    ]
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+
+    with pytest.raises(selection.SnapchatNativeSyncError) as exc:
+        await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert exc.value.code == expected_code
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credentials", [None, b"undecryptable"])
+async def test_canonical_scheduler_excludes_credential_unproven_account(
+    monkeypatch,
+    credentials,
+):
+    db = _db()
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    account.pop("connection_provenance")
+    if credentials is not None:
+        db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = [
+            {
+                "user_id": "owner-1",
+                "provider": "snapchat_ads",
+                "refresh_token_ciphertext": credentials,
+            }
+        ]
+
+    def decrypt(_value):
+        raise ValueError("invalid credential")
+
+    monkeypatch.setattr(selection, "decrypt_snapchat_token", decrypt)
+
+    with pytest.raises(selection.SnapchatNativeSyncError) as exc:
+        await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert exc.value.code == "snapchat_needs_reauth"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("credential_mutation", "expected_code"),
+    [
+        ("wrong_user", "snapchat_needs_reauth"),
+        ("wrong_provider", "snapchat_needs_reauth"),
+        ("duplicate", "snapchat_credential_identity_ambiguous"),
+        ("empty_organizations", "snapchat_selected_account_identity_invalid"),
+        ("null_organizations", "snapchat_credential_metadata_invalid"),
+        ("scalar_organizations", "snapchat_credential_metadata_invalid"),
+        ("malformed_organization_member", "snapchat_credential_metadata_invalid"),
+    ],
+)
+async def test_canonical_scheduler_rejects_ambiguous_or_malformed_credentials(
+    monkeypatch,
+    credential_mutation,
+    expected_code,
+):
+    db = _db()
+    account = db.rows["mezan_integration_accounts_v2"][1]
+    account["mezan_selected"] = True
+    account.pop("connection_provenance")
+    credential = {
+        "user_id": "owner-1",
+        "provider": "snapchat_ads",
+        "refresh_token_ciphertext": b"tenant-refresh",
+        "organization_ids": ["org-1"],
+    }
+    if credential_mutation == "wrong_user":
+        credential["user_id"] = "owner-2"
+    elif credential_mutation == "wrong_provider":
+        credential["provider"] = "meta_ads"
+    elif credential_mutation == "scalar_organizations":
+        credential["organization_ids"] = 123
+    elif credential_mutation == "empty_organizations":
+        credential["organization_ids"] = []
+    elif credential_mutation == "null_organizations":
+        credential["organization_ids"] = None
+    elif credential_mutation == "malformed_organization_member":
+        credential["organization_ids"] = ["org-1", 123]
+    rows = [credential]
+    if credential_mutation == "duplicate":
+        rows.append(dict(credential))
+    db.rows[selection.SNAPCHAT_CREDENTIALS_COLLECTION] = rows
+    monkeypatch.setattr(
+        selection,
+        "decrypt_snapchat_token",
+        lambda _value: "refresh-token",
+    )
+
+    with pytest.raises(selection.SnapchatNativeSyncError) as exc:
+        await selection._load_canonical_scheduler_accounts(db, "owner-1")
+
+    assert exc.value.code == expected_code
+
+
+@pytest.mark.asyncio
 async def test_oauth_rediscovery_preserves_only_explicit_selection(monkeypatch):
     from integrations_control_center import snapchat_connections
 

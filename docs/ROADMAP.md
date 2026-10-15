@@ -103,6 +103,44 @@ Scope:
 - Shipping readiness
 - Full audit timeline
 
+## Employee OS Foundation — Employee, Payroll and Fulfillment Access
+
+Status: EMPLOYEE MANAGEMENT COMPLETE; PAYROLL CUTOVER PENDING
+
+Phase 1:
+
+- Canonical employee identity in Mezan V2
+- Read-only migration preview from `operating_salaries`
+- Explicit login-account and operational-role linkage
+- Ledger-backed salary payable, advance and custody snapshot
+- Idempotent `shadow_read_only` employee and salary-contract migration
+- Owner-only migration and audit controls
+
+Phase 2 employee management:
+
+- Owner-managed creation and editing for native and migrated employees
+- Active/inactive employee lifecycle with immediate login revocation
+- V2-only link, unlink and password reset for non-owner team accounts
+- Canonical operational role and permission assignment, including the
+  assigned-work-only preparation role
+- Search and filters for status, account and role across responsive employee cards
+- Append-only before/after employee activity timeline
+- Zero writes to legacy payroll, liabilities, advances, custody or ledger
+- Existing migrated salary, advance and custody data remains read-only until
+  payroll cutover
+
+Required before payroll cutover:
+
+- Resolve suggested or conflicting login links manually
+- Keep the Employee OS cutover gate read-only and validate identity, contract,
+  live accrual, net due, salary-payable ledger and open-advance totals at 100%
+- Reconcile the live payroll-versus-ledger gaps; a zero ledger balance is not a
+  substitute for the calendar-daily salary accrual used by legacy payroll
+- Route new salary changes through effective-dated V2 contracts
+- Run one complete payroll cycle in parallel
+- Verify fulfillment permissions and task assignment by canonical employee ID
+- Preserve a rollback checkpoint, then retire the legacy employee page
+
 ## Sprint 5 — Unified PDF and Preparation Output
 
 Status: PLANNED

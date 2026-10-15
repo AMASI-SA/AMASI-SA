@@ -202,6 +202,7 @@ def make_order_review_mezan_image_unlink_router(
                     total_cleared += int(plan["cleared_items"] or 0)
                     affected_orders.add(order_number)
 
+            # A concurrent editor may have won one revision. Re-read and retry.
             if not progressed:
                 break
 
@@ -256,6 +257,9 @@ def make_order_review_mezan_image_unlink_router(
         image_url = mezan_image_url(image_id)
         now = base._now()
 
+        # Clear every order, including approved/advanced workflows, as requested.
+        # Removing selected_image_url makes the normal detail mapper use Salla's
+        # original product image without modifying any Salla media.
         cleared_items, affected_orders = await clear_all_workflow_references(
             user_id=user_id,
             image_url=image_url,
@@ -270,6 +274,7 @@ def make_order_review_mezan_image_unlink_router(
             }
         )
 
+        # Protect against a new concurrent reference created after the sweep.
         remaining_references = await db[base.WORKFLOWS].count_documents(
             {"user_id": user_id, "items.selected_image_url": image_url}
         )

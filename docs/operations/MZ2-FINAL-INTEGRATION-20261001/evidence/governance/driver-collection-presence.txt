@@ -1,0 +1,6 @@
+EVENTS before recognition: False
+EVENTS after recognition: False
+review result: {'state': 'posted', 'decision': 'approved', 'txn_group_id': 'mz2j_48dc3dbb9e00c1ce6d658e43002e89055fd16c22224fda5e22bdeeceaee8c864', 'review_id': 'review-1'}
+EVENTS after review: True
+event count: 2
+server version: 8.0.12

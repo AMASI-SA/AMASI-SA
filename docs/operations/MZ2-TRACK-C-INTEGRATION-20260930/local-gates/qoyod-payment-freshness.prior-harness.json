@@ -1,0 +1,38 @@
+{
+  "workflow": "qoyod-payment-freshness",
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "backend/tests/test_qoyod_auto_send_authoritative_payment.py",
+    "backend/tests/test_qoyod_auto_send_latest_payment.py",
+    "backend/tests/test_qoyod_auto_send_per_order_isolation.py",
+    "backend/tests/test_qoyod_manual_current_status.py",
+    "backend/tests/test_qoyod_reconciliation_v2.py",
+    "backend/tests/test_qoyod_order_accounting_sync.py",
+    "backend/tests/test_qoyod_failed_retry.py",
+    "backend/tests/test_qoyod_unsent_range_counts.py",
+    "backend/tests/test_qoyod_manual_client_fail_closed.py",
+    "backend/tests/test_qoyod_manual_product_lookup.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\qoyod-payment-freshness.xml"
+  ],
+  "exit_code": 1,
+  "duration_seconds": 5.95,
+  "test_files": [
+    "backend/tests/test_qoyod_auto_send_authoritative_payment.py",
+    "backend/tests/test_qoyod_auto_send_latest_payment.py",
+    "backend/tests/test_qoyod_auto_send_per_order_isolation.py",
+    "backend/tests/test_qoyod_manual_current_status.py",
+    "backend/tests/test_qoyod_reconciliation_v2.py",
+    "backend/tests/test_qoyod_order_accounting_sync.py",
+    "backend/tests/test_qoyod_failed_retry.py",
+    "backend/tests/test_qoyod_unsent_range_counts.py",
+    "backend/tests/test_qoyod_manual_client_fail_closed.py",
+    "backend/tests/test_qoyod_manual_product_lookup.py"
+  ]
+}

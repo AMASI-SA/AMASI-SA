@@ -1,6 +1,6 @@
 """Iter-219 — BNPL → general_ledger bridge (Phase 2a: sales + refunds).
 
-Bridges new Tabby/Tamara `payment_transactions` and `payment_refunds`
+Bridges new Tabby/Tamara/Emkan `payment_transactions` and `payment_refunds`
 events into the Universal Ledger (SSOT) without touching historical
 data. Every poster is idempotent via the
 `metadata.idempotency_key` field on each leg.
@@ -15,14 +15,14 @@ Both return:
 
 Conventions (matches the audit proposal):
 
-  • Sale  →  DEBIT  payment_gateway.{tabby|tamara}/receivable  = amount
+  • Sale  →  DEBIT  payment_gateway.{tabby|tamara|emkan}/receivable = amount
             CREDIT revenue.bnpl_sales                          = amount
 
   • Refund → DEBIT  revenue.bnpl_sales                          = amount
-            CREDIT payment_gateway.{tabby|tamara}/receivable   = amount
+            CREDIT payment_gateway.{tabby|tamara|emkan}/receivable = amount
 
 Where  `entity_id` for the payment_gateway leg = the provider name
-(`tabby` / `tamara`) and `sub_account = "receivable"`. This matches
+(`tabby` / `tamara` / `emkan`) and `sub_account = "receivable"`. This matches
 the same entity-naming scheme used by `_find_provider_account` and
 `compute_settlement_for_provider` so reports keep working.
 
@@ -82,7 +82,9 @@ def _before_cutoff(created_at_iso: Optional[str]) -> bool:
 
 def _norm_provider(txn: dict) -> str:
     p = (txn.get("provider") or "").lower().strip()
-    return p if p in ("tabby", "tamara") else (p or "unknown")
+    if p == "imkan":
+        p = "emkan"
+    return p if p in ("tabby", "tamara", "emkan") else (p or "unknown")
 
 
 async def _already_posted(db, user_id: str, idem_key: str) -> bool:
@@ -98,17 +100,28 @@ async def _already_posted(db, user_id: str, idem_key: str) -> bool:
 async def post_bnpl_sale_to_ledger(
     db, *, user_id: str, txn: dict,
 ) -> dict[str, Any]:
-    """Book a single Tabby/Tamara sale into general_ledger.
+    """Book a single Tabby/Tamara/Emkan sale into general_ledger.
 
     `txn` is a `payment_transactions` document (post-upsert).
     No-op for unsupported statuses or zero amounts. Safe to call
     after every upsert — re-runs short-circuit via the idem key.
     """
+    from accounting_receivable_service import managed_owner
+    if await managed_owner(db, user_id):
+        from accounting_ingress import ingest
+        evidence = {key: txn[key] for key in (
+            "provider_id", "currency", "amount", "order_reference_id"
+        ) if key in txn}
+        evidence["provider"] = _norm_provider(txn)
+        result = await ingest(db, owner=user_id, kind="sale", evidence=evidence)
+        return {**result, "ok": True,
+                "skipped": result["state"] in {"already_posted", "deferred"},
+                "reason": "idempotent_duplicate" if result["state"] == "already_posted" else result.get("reason")}
     provider = _norm_provider(txn)
     status = (txn.get("status") or "").lower()
     provider_id = (txn.get("provider_id") or "").strip()
     amount = float(txn.get("amount") or 0)
-    if provider not in ("tabby", "tamara"):
+    if provider not in ("tabby", "tamara", "emkan"):
         return {"ok": True, "skipped": True, "reason": "unknown_provider"}
     if not provider_id:
         return {"ok": True, "skipped": True, "reason": "missing_provider_id"}
@@ -117,6 +130,12 @@ async def post_bnpl_sale_to_ledger(
     if status not in SALE_BOOK_STATUSES:
         return {"ok": True, "skipped": True,
                 "reason": f"status_not_bookable:{status}"}
+    if provider == "emkan" and not _cutoff_iso():
+        # Emkan is newly enabled by statement evidence. Do not let the
+        # settlement catch-up scan create historical receivables until the
+        # owner approves an explicit post-cutover timestamp.
+        return {"ok": True, "skipped": True,
+                "reason": "missing_bridge_cutoff"}
     if _before_cutoff(txn.get("created_at_provider")):
         return {"ok": True, "skipped": True,
                 "reason": "before_bridge_cutoff"}
@@ -162,21 +181,34 @@ async def post_bnpl_sale_to_ledger(
 async def post_bnpl_refund_to_ledger(
     db, *, user_id: str, refund: dict,
 ) -> dict[str, Any]:
-    """Book a single Tabby/Tamara refund into general_ledger.
+    """Book a single Tabby/Tamara/Emkan refund into general_ledger.
 
     `refund` is a `payment_refunds` document. Idempotent on
     (provider, provider_refund_id).
     """
+    from accounting_receivable_service import managed_owner
+    if await managed_owner(db, user_id):
+        from accounting_order_refunds import process_order_refunds
+        payment = await db.payment_transactions.find_one({'user_id':user_id,
+            'provider':_norm_provider(refund),'provider_id':refund.get('provider_payment_id')})
+        reference=(payment or {}).get('order_reference_id') or (payment or {}).get('order_number')
+        result = await process_order_refunds(db,owner=user_id,order_number=str(reference or ''),
+            source={'kind':'provider_refund_sync','provider':_norm_provider(refund),
+                    'refund_id':refund.get('provider_refund_id')})
+        return {**result,'ok':True,'skipped':True,'reason':'daily_movement_approval_required'}
     provider = _norm_provider(refund)
     refund_id = (refund.get("provider_refund_id") or "").strip()
     amount = float(refund.get("amount") or 0)
-    if provider not in ("tabby", "tamara"):
+    if provider not in ("tabby", "tamara", "emkan"):
         return {"ok": True, "skipped": True, "reason": "unknown_provider"}
     if not refund_id:
         return {"ok": True, "skipped": True,
                 "reason": "missing_refund_id"}
     if amount <= 0:
         return {"ok": True, "skipped": True, "reason": "zero_amount"}
+    if provider == "emkan" and not _cutoff_iso():
+        return {"ok": True, "skipped": True,
+                "reason": "missing_bridge_cutoff"}
     if _before_cutoff(refund.get("refunded_at")
                        or refund.get("created_at_provider")):
         return {"ok": True, "skipped": True,

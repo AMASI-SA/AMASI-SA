@@ -1,4 +1,6 @@
 import io
+from datetime import datetime, timezone
+import unicodedata
 from types import SimpleNamespace
 
 import fitz
@@ -6,6 +8,7 @@ import pytest
 from PIL import Image
 
 import reviewed_preparation_batches as batch_module
+import preparation_pdf_reference_layout as reference_layout_module
 from order_review_forward_stage_guard import (
     FORWARD_FULFILLMENT_STAGES,
     install_order_review_forward_stage_guard,
@@ -16,6 +19,7 @@ from preparation_pdf_reference_layout import (
     REFERENCE_CARDS_PER_PAGE,
     REFERENCE_COLUMNS,
     REFERENCE_ROWS,
+    build_reference_batch_lines,
     generate_reference_preparation_pdf,
     image_candidate_urls,
     reference_card_rows,
@@ -25,13 +29,19 @@ from preparation_pdf_wrapped_text import (
     generate_wrapped_reference_preparation_pdf,
     wrap_reference_text,
 )
+from preparation_pdf_reference_layout import split_reference_card_rows
 from reviewed_products_catalog import PREPARATION_UNIT_ALLOCATIONS
+from reviewed_preparation_v3 import stable_ready_item_id, stable_ready_unit_id
 from reviewed_preparation_batches import (
     _batch_response,
     _card_field_projection,
+    _finalize_batch_assignment,
+    _review_snapshot_identity,
+    _reviewed_ready_identity,
     _reconcile_order_stage,
     make_reviewed_preparation_batches_router,
     plan_preparation_allocations,
+    repair_batch_line_customer_options,
     render_preparation_batch_pdf,
 )
 
@@ -90,6 +100,520 @@ def _reference_line(index=1):
         sku=f"SKU-{index}",
         product_options={"الخامة": "ستانلس"},
     )
+
+
+
+def test_normal_reviewed_ready_identity_does_not_remap_live_salla_line():
+    order = SimpleNamespace(
+        order_id="order-200",
+        order_number="200",
+        created_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-200"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "reviewed-line-200",
+        "product_id": "p-ready",
+        "sku": "READY-1",
+        "product_name": "منتج جاهز",
+        "quantity": 3,
+        "specifications_snapshot": {"المقاس": "كبير", "اللون": "ذهبي"},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "200",
+        "order_item_id": "reviewed-line-200",
+        "line_index": 0,
+        "quantity": 3,
+        "product_id": "p-ready",
+        "product_name": "منتج جاهز",
+        "sku": "READY-1",
+        "ready_item_identity": {
+            "order_item_id": "reviewed-line-200",
+            "product_id": "p-ready",
+            "sku": "READY-1",
+            "quantity": 3,
+            "product_name": "منتج جاهز",
+            "options": {"المقاس": "كبير", "اللون": "ذهبي"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    allocation = {
+        "order_item_id": "reviewed-line-200",
+        "ready_item_id": line["ready_item_id"],
+        "quantity": 3,
+        "line": line,
+    }
+
+    resolved = _reviewed_ready_identity(order, workflow, allocation)
+
+    assert resolved is not None
+    identity, state = resolved
+    assert identity.order_item_id == "reviewed-line-200"
+    assert identity.quantity == 3
+    assert {row.name: row.value for row in identity.options} == {
+        "المقاس": "كبير",
+        "اللون": "ذهبي",
+    }
+    assert state == workflow["items"][0]
+
+    changed = {
+        **allocation,
+        "line": {**line, "line_index": 1},
+    }
+    assert _reviewed_ready_identity(order, workflow, changed) is None
+
+
+def test_ready_piece_uses_frozen_identity_even_when_workflow_projection_differs():
+    order = SimpleNamespace(
+        order_id="order-201",
+        order_number="201",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-201"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "line-201",
+        "product_id": "later-enrichment",
+        "sku": "LATER-SKU",
+        "quantity": 99,
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "201",
+        "order_item_id": "line-201",
+        "line_index": 0,
+        "quantity": 2,
+        "ready_item_identity": {
+            "order_item_id": "line-201",
+            "product_id": "frozen-product",
+            "sku": "FROZEN-SKU",
+            "quantity": 2,
+            "product_name": "المنتج وقت المراجعة",
+            "options": {"المقاس": "10"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 2)
+    allocation = {
+        "order_item_id": "line-201",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [2],
+        "line": line,
+    }
+
+    resolved = _reviewed_ready_identity(order, workflow, allocation)
+
+    assert resolved is not None
+    identity, state = resolved
+    assert identity.product_id == "frozen-product"
+    assert identity.sku == "FROZEN-SKU"
+    assert identity.quantity == 2
+    assert state == workflow["items"][0]
+
+
+@pytest.mark.asyncio
+async def test_reference_builder_keeps_canonical_frozen_piece_identity():
+    order = SimpleNamespace(
+        order_id="order-203",
+        order_number="203",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-203"),
+        shipping=SimpleNamespace(company="iMile"),
+        items=[],
+    )
+    workflow = {"order_number": "203", "items": [{
+        "order_item_id": "line-203",
+        "quantity": 1,
+        "specifications_snapshot": {"المقاس": "10 سنوات"},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "203",
+        "order_item_id": "line-203",
+        "line_index": 0,
+        "quantity": 1,
+        "file_spec_fields": [{
+            "spec_key": "size",
+            "name": "المقاس",
+            "value": "10 سنوات",
+            "text": "المقاس: 10 سنوات",
+        }],
+        "ready_item_identity": {
+            "order_item_id": "line-203",
+            "quantity": 1,
+            "product_name": "منتج محفوظ بعد المراجعة",
+            "options": {"المقاس": "10 سنوات"},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 1)
+    allocation = {
+        "group_key": line["ready_unit_id"],
+        "order_number": "203",
+        "order_item_id": "line-203",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [1],
+        "line": line,
+    }
+
+    rows = await build_reference_batch_lines(
+        {"pairs": [(order, workflow)]},
+        [allocation],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["ready_item_id"] == line["ready_item_id"]
+    assert rows[0]["ready_unit_id"] == line["ready_unit_id"]
+    assert rows[0]["quantity"] == 1
+    assert rows[0]["size"] == "10 سنوات"
+
+
+@pytest.mark.asyncio
+async def test_reference_builder_accepts_a_genuine_no_option_piece():
+    order = SimpleNamespace(
+        order_id="order-204",
+        order_number="204",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-204"),
+        shipping=SimpleNamespace(company="iMile"),
+        items=[],
+    )
+    workflow = {"order_number": "204", "items": [{
+        "order_item_id": "line-204",
+        "quantity": 1,
+        "specifications_snapshot": {},
+    }]}
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "204",
+        "order_item_id": "line-204",
+        "line_index": 0,
+        "quantity": 1,
+        "file_spec_fields": [],
+        "ready_item_identity": {
+            "order_item_id": "line-204",
+            "quantity": 1,
+            "product_name": "منتج بلا خيارات",
+            "options": {},
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 1)
+
+    rows = await build_reference_batch_lines(
+        {"pairs": [(order, workflow)]},
+        [{
+            "group_key": line["ready_unit_id"],
+            "order_number": "204",
+            "order_item_id": "line-204",
+            "ready_item_id": line["ready_item_id"],
+            "ready_unit_id": line["ready_unit_id"],
+            "quantity": 1,
+            "unit_indices": [1],
+            "line": line,
+        }],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["quantity"] == 1
+    assert rows[0]["file_spec_fields"] == []
+    assert rows[0]["product_options"] == {}
+
+
+@pytest.mark.asyncio
+async def test_reference_image_enrichment_pairs_duplicate_group_rows_by_order(
+    monkeypatch,
+):
+    async def canonical_builder(_context, _planned):
+        return [
+            {
+                "group_key": "legacy-group",
+                "order_number": "301",
+                "order_item_id": "line-a",
+                "image_b64": "already-hydrated-a",
+            },
+            {
+                "group_key": "legacy-group",
+                "order_number": "302",
+                "order_item_id": "line-b",
+                "image_b64": "already-hydrated-b",
+            },
+        ]
+
+    monkeypatch.setattr(
+        reference_layout_module,
+        "_ORIGINAL_BATCH_LINE_BUILDER",
+        canonical_builder,
+    )
+    rows = await build_reference_batch_lines(
+        {"pairs": []},
+        [
+            {
+                "group_key": "legacy-group",
+                "order_number": "301",
+                "order_item_id": "line-a",
+                "line": {"image_url": "https://cdn.example/a.jpg"},
+            },
+            {
+                "group_key": "legacy-group",
+                "order_number": "302",
+                "order_item_id": "line-b",
+                "line": {"image_url": "https://cdn.example/b.jpg"},
+            },
+        ],
+    )
+
+    assert rows[0]["image_candidates"] == ["https://cdn.example/a.jpg"]
+    assert rows[1]["image_candidates"] == ["https://cdn.example/b.jpg"]
+
+
+def test_ready_piece_rejects_a_different_physical_unit_identity():
+    line = {
+        "identity_source": "reviewed_ready",
+        "order_number": "202",
+        "order_item_id": "line-202",
+        "line_index": 0,
+        "quantity": 2,
+        "ready_item_identity": {
+            "order_item_id": "line-202",
+            "quantity": 2,
+            "product_name": "منتج",
+        },
+    }
+    line["ready_item_id"] = stable_ready_item_id(line)
+    line["ready_unit_id"] = stable_ready_unit_id(line, 1)
+    order = SimpleNamespace(
+        order_id="order-202",
+        order_number="202",
+        created_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-202"),
+    )
+
+    assert _reviewed_ready_identity(order, {"items": []}, {
+        "order_item_id": "line-202",
+        "ready_item_id": line["ready_item_id"],
+        "ready_unit_id": line["ready_unit_id"],
+        "quantity": 1,
+        "unit_indices": [2],
+        "line": line,
+    }) is None
+
+
+def test_full_selected_products_allocate_every_available_piece_into_one_plan():
+    first = _product(
+        "product:p-1",
+        5,
+        [
+            {**_line("100", "line-a", 2), "ready_item_id": "ready-a"},
+            {**_line("101", "line-b", 3), "ready_item_id": "ready-b"},
+        ],
+    )
+    second = _product(
+        "product:p-2",
+        2,
+        [{**_line("102", "line-c", 2), "ready_item_id": "ready-c"}],
+    )
+
+    result = plan_preparation_allocations(
+        [first, second],
+        [
+            {"group_key": "product:p-1", "quantity": 5},
+            {"group_key": "product:p-2", "quantity": 2},
+        ],
+    )
+
+    assert sum(row["quantity"] for row in result) == 7
+    assert [
+        (row["order_item_id"], row["quantity"], row["ready_item_id"])
+        for row in result
+    ] == [
+        ("line-a", 2, "ready-a"),
+        ("line-b", 3, "ready-b"),
+        ("line-c", 2, "ready-c"),
+    ]
+
+
+def test_multiple_piece_cards_share_one_plan_with_exact_unit_ids():
+    first_line = {
+        **_line("100", "line-a", 3),
+        "available_unit_indices": [2],
+        "identity_source": "reviewed_ready",
+    }
+    first_line["ready_item_id"] = stable_ready_item_id(first_line)
+    first_line["ready_unit_id"] = stable_ready_unit_id(first_line, 2)
+    second_line = {
+        **_line("101", "line-b", 5),
+        "available_unit_indices": [4],
+        "identity_source": "reviewed_ready",
+    }
+    second_line["ready_item_id"] = stable_ready_item_id(second_line)
+    second_line["ready_unit_id"] = stable_ready_unit_id(second_line, 4)
+    products = [
+        {**_product(first_line["ready_unit_id"], 1, [first_line]), "piece_level": True},
+        {**_product(second_line["ready_unit_id"], 1, [second_line]), "piece_level": True},
+    ]
+
+    planned = plan_preparation_allocations(products, [
+        {"group_key": first_line["ready_unit_id"], "quantity": 1},
+        {"group_key": second_line["ready_unit_id"], "quantity": 1},
+    ])
+
+    assert len(planned) == 2
+    assert [row["unit_indices"] for row in planned] == [[2], [4]]
+    assert [row["ready_unit_id"] for row in planned] == [
+        first_line["ready_unit_id"],
+        second_line["ready_unit_id"],
+    ]
+
+
+def test_piece_card_cannot_request_more_than_one_piece():
+    with pytest.raises(ValueError, match="preparation_piece_quantity_must_be_one"):
+        plan_preparation_allocations(
+            [{**_product("ready-unit:one", 2, [_line("100", "line-a", 2)]), "piece_level": True}],
+            [{"group_key": "ready-unit:one", "quantity": 2}],
+        )
+
+
+def test_review_snapshot_recovery_identity_keeps_stale_guard_strict():
+    order = SimpleNamespace(
+        order_id="order-279803951",
+        order_number="279803951",
+        created_at=datetime(2026, 8, 25, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-1"),
+    )
+    workflow = {"items": [{
+        "product_id": "p-dress",
+        "sku": "AMS11353",
+        "product_name": "فستان بناتي أخضر",
+        "quantity": 2,
+        "options": [{"name": "المقاس", "value": "10 سنوات"}],
+    }]}
+    allocation = {
+        "order_item_id": "review-snapshot:279803951:0",
+        "quantity": 2,
+        "line": {
+            "identity_source": "review_snapshot",
+            "review_snapshot_index": 0,
+            "line_index": 0,
+            "product_id": "p-dress",
+            "sku": "AMS11353",
+            "product_name": "فستان بناتي أخضر",
+        },
+    }
+
+    recovered = _review_snapshot_identity(order, workflow, allocation)
+
+    assert recovered is not None
+    identity, state = recovered
+    assert identity.order_item_id == "review-snapshot:279803951:0"
+    assert identity.product_id == "p-dress"
+    assert identity.sku == "AMS11353"
+    assert identity.options[0].value == "10 سنوات"
+    assert state is workflow["items"][0]
+
+    changed = {**allocation, "line": {**allocation["line"], "sku": "OTHER"}}
+    assert _review_snapshot_identity(order, workflow, changed) is None
+
+    workflow["items"][0]["order_item_id"] = "historical-line-1"
+    historical = {
+        **allocation,
+        "order_item_id": "historical-line-1",
+    }
+    assert _review_snapshot_identity(order, workflow, historical) is not None
+
+
+def test_review_snapshot_allows_proven_canonical_sku_enrichment():
+    order = SimpleNamespace(
+        order_id="order-13062",
+        order_number="13062",
+        created_at=datetime(2026, 8, 27, tzinfo=timezone.utc),
+        source=SimpleNamespace(source_order_id="salla-order-13062"),
+    )
+    workflow = {"items": [{
+        "order_item_id": "historical-line-13062",
+        "source_item_id": "source-line-13062",
+        "product_id": "variant-product-13062",
+        "product_name": "فستان بناتي أنيق",
+        "quantity": 7,
+        # Historical review snapshot was sparse before Product V2 enrichment.
+        "sku": None,
+    }]}
+    allocation = {
+        "order_item_id": "historical-line-13062",
+        "quantity": 7,
+        "line": {
+            "identity_source": "review_snapshot",
+            "review_snapshot_index": 0,
+            "product_id": "canonical-product-13062",
+            "sku": "AMS13062",
+            "product_name": "فستان بناتي أنيق",
+            "review_snapshot_identity": {
+                "order_item_id": "historical-line-13062",
+                "source_item_id": "source-line-13062",
+                "product_id": "variant-product-13062",
+                "sku": "",
+                "quantity": 7,
+            },
+        },
+    }
+
+    recovered = _review_snapshot_identity(order, workflow, allocation)
+
+    assert recovered is not None
+    identity, _state = recovered
+    assert identity.order_item_id == "historical-line-13062"
+    assert identity.product_id == "canonical-product-13062"
+    assert identity.sku == "AMS13062"
+
+    changed_snapshot = {
+        **allocation,
+        "line": {
+            **allocation["line"],
+            "review_snapshot_identity": {
+                **allocation["line"]["review_snapshot_identity"],
+                "product_id": "unrelated-product",
+            },
+        },
+    }
+    assert _review_snapshot_identity(order, workflow, changed_snapshot) is None
+
+
+@pytest.mark.asyncio
+async def test_batch_success_requires_employee_piece_registry_ready(monkeypatch):
+    import preparation_file_registry as registry_module
+
+    responses = iter([
+        {
+            "status": "ready",
+            "piece_registry_status": "recovery_required",
+            "responsible_employee_id": "employee-1",
+        },
+        {
+            "status": "ready",
+            "piece_registry_status": "ready",
+            "responsible_employee_id": "employee-1",
+        },
+    ])
+    calls = []
+
+    async def finalize(*_args, **_kwargs):
+        calls.append(True)
+        return next(responses)
+
+    monkeypatch.setattr(registry_module, "_finalize_registry_row", finalize)
+
+    result = await _finalize_batch_assignment(
+        object(),
+        user_id="owner-1",
+        client_request_id="request-123",
+        actor={"id": "reviewer-1"},
+    )
+
+    assert result["piece_registry_status"] == "ready"
+    assert len(calls) == 2
 
 
 class _Cursor:
@@ -242,6 +766,120 @@ def test_reference_card_uses_full_labels_and_confirmed_field_order():
     assert rows[-3] == ("تاريخ", "2026-08-02")
     assert rows[-2] == ("الكمية", "1")
     assert rows[-1] == ("للتوصيل", "2 - iMile")
+
+
+def test_salla_spec_order_and_full_values_survive_batch_snapshot():
+    fields = [
+        {"spec_key": "اختر مقاس اللوحه", "name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
+        {"spec_key": "الاسم المبرز", "name": "الاسم المبرز", "value": "مريم لمار"},
+        {"spec_key": "باقي الأسماء على اللوحة", "name": "باقي الأسماء على اللوحة", "value": "محمد ريم عبدالله روان احمد فهيمه"},
+    ]
+    row = {
+        "order_number": "288047865", "order_date": "2026-09-23",
+        "product_name": "لوحة جدارية بالخط العربي مع إطار خشبي فاخر وصف المنتج",
+        "quantity": 1, "total_products_in_order": 1,
+        "file_spec_fields": fields,
+        **_card_field_projection(fields, None),
+    }
+    from reviewed_preparation_batches import _line_from_batch_storage
+    line = _line_from_batch_storage(row)
+    assert reference_card_rows(line)[:3] == [
+        (field["name"], field["value"]) for field in fields
+    ]
+    assert " ".join(wrap_reference_text(
+        fields[-1]["value"], font_name=_register_font()[0],
+        font_size=6.6, first_width=28, continuation_width=65,
+    )) == fields[-1]["value"]
+
+    font_name, font_bold = _register_font()
+    specifications, _order = split_reference_card_rows(line)
+    plan = build_wrapped_specification_plan(
+        specifications, font_name=font_name, font_bold=font_bold,
+        width=76, available_height=55,
+    )
+    assert [field.label for field in plan.fields] == [field["name"] for field in fields]
+    assert [" ".join(field.lines) for field in plan.fields] == [field["value"] for field in fields]
+    assert plan.fields[-1].value_below  # the long label stays inside its column
+    assert plan.physical_line_count * plan.line_height <= 55
+
+    page = fitz.open(
+        stream=generate_wrapped_reference_preparation_pdf([line]), filetype="pdf",
+    )[0]
+    printed = page.get_text()
+    assert "…" not in printed and "..." not in printed
+    # The last line of the long value remains inside the first card.
+    assert max(block[3] for block in page.get_text("blocks")) < page.rect.height / 5
+
+
+def test_mug_order_288180853_prints_each_phrase_in_full():
+    # This order has three distinct custom fields in Salla. The old card
+    # projected every "عبارة" into one shortened ملاحظة field.
+    specs = [
+        {"name": "العبارة خارج الفنجان", "value": "Samaher"},
+        {"name": "العبارة داخل الفنجان على الجانب", "value":
+         "ألا ياغزال في عيونك سهوم الموت وفي مبسمك جنة وفي شوفتك راحه"},
+        {"name": "العبارة داخل الفنجان في الأسفل", "value": "من بعدك ياغزال"},
+    ]
+    from reviewed_preparation_batches import _line_from_batch_storage
+    line = _line_from_batch_storage({
+        "order_number": "288180853", "order_date": "2026-09-23",
+        "product_name": "كوب غزال وزهور 200 مل مخصص بالاسم والعبارات",
+        "quantity": 1, "total_products_in_order": 1,
+        "image_b64": __import__("base64").b64encode(_image_bytes(8)).decode("ascii"),
+        "file_spec_fields": specs,
+        "note": "Samaher | ألا ياغزال في عيونك سهوم الموت | من بعدك ياغزال",
+    })
+    page = fitz.open(
+        stream=generate_wrapped_reference_preparation_pdf([line]), filetype="pdf",
+    )[0]
+    visible = unicodedata.normalize("NFKC", page.get_text())
+    assert len(page.get_images(full=True)) >= 2
+    assert visible.index(specs[0]["name"]) < visible.index(specs[1]["name"])
+    assert visible.index(specs[1]["name"]) < visible.index(specs[2]["name"])
+    for part in ("Samaher", "ألا ياغزال في عيونك سهوم الموت",
+                 "وفي مبسمك جنة وفي شوفتك راحه", "من بعدك ياغزال"):
+        assert part in visible
+    assert "…" not in visible and "..." not in visible
+    assert max(block[3] for block in page.get_text("blocks")) < page.rect.height / 5
+
+
+def test_employee_product_file_uses_final_a4_renderer_and_keeps_ordered_fields():
+    from preparation_pdf_amasi_a4_layout import _card_origin
+    from reportlab.lib.pagesizes import A4
+
+    fields = [
+        {"name": "اختر مقاس اللوحه", "value": "30 طول * 50 عرض (SAR 214.92)"},
+        {"name": "الاسم المبرز", "value": "مريم لمار"},
+        {"name": "باقي الأسماء على اللوحة", "value": "محمد ريم عبدالله روان احمد فهيمه"},
+    ]
+    pdf = batch_module.render_preparation_batch_pdf({
+        "id": "batch-print", "file_number": "PF-96", "lines": [{
+            "order_number": "288047865", "order_date": "2026-09-23",
+            "order_item_id": "item-print", "unit_index": 1,
+            "product_name": "لوحة جدارية بالخط العربي مع إطار خشبي فاخر",
+            "image_b64": __import__("base64").b64encode(_image_bytes(8)).decode("ascii"),
+            "file_spec_fields": fields,
+        }],
+    })
+    with fitz.open(stream=pdf, filetype="pdf") as document:
+        page = document[0]
+        printed = unicodedata.normalize("NFKC", page.get_text())
+        assert len(page.get_images(full=True)) >= 2
+        assert [printed.index(field["name"]) for field in fields] == sorted(
+            printed.index(field["name"]) for field in fields
+        )
+        assert "(SAR 214.92)" in printed
+        assert "مريم لمار" in printed
+        assert "محمد\nريم عبدالله روان احمد فهيمه" in printed
+        assert "…" not in printed and "..." not in printed
+        x, y, width, height = _card_origin(0, *A4)
+        # Text below the image stays on this card, inside its detail column.
+        detail_blocks = [block for block in page.get_text("blocks")
+                         if "فهيمه" in unicodedata.normalize("NFKC", block[4])]
+        assert detail_blocks
+        assert all(x <= block[0] and block[2] <= x + width and
+                   page.rect.height - y - height <= block[1] and
+                   block[3] <= page.rect.height - y for block in detail_blocks)
 
 
 def test_long_note_wraps_without_ellipsis_or_word_loss():
@@ -431,6 +1069,265 @@ async def test_final_unit_moves_order_to_in_progress(monkeypatch):
     assert db[EVENTS].inserted[0]["salla_updated"] is False
 
 
+@pytest.mark.asyncio
+async def test_failed_batch_release_restores_in_progress_order_to_reviewed(monkeypatch):
+    workflow = {
+        "user_id": "owner-1",
+        "order_number": "100",
+        "stage": "in_progress",
+        "reviewed_at": "2026-08-25T10:00:00+00:00",
+        "revision": 2,
+        "items": [],
+    }
+    order = SimpleNamespace(
+        order_number="100",
+        items=[SimpleNamespace(order_item_id="line-a", quantity=2)],
+    )
+    db = _DB(workflow, [
+        {"status": "committed", "order_item_id": "line-a", "unit_index": 1},
+    ])
+
+    async def reviewed_context(*_args, **_kwargs):
+        return {"pairs": []}
+
+    async def canonical_order(*_args, **_kwargs):
+        return order
+
+    monkeypatch.setattr(batch_module, "load_reviewed_product_context", reviewed_context)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+
+    complete, remaining = await _reconcile_order_stage(
+        db,
+        user_id="owner-1",
+        order_number="100",
+        batch_id="",
+        actor={"id": "owner-1", "name": "المالك"},
+    )
+
+    assert complete is False
+    assert remaining == 1
+    update = db[WORKFLOWS].last_update
+    assert update["$set"]["stage"] == "reviewed"
+    assert update["$set"]["preparation_progress"]["remaining_quantity"] == 1
+    assert "preparation_batch_ids" not in update.get("$addToSet", {})
+    assert "in_progress_at" in update["$unset"]
+    assert db[EVENTS].inserted[0]["event_type"] == (
+        "order_restored_to_reviewed_after_failed_preparation_file"
+    )
+
+
+def test_old_batch_line_options_are_rebuilt_from_canonical_order_item():
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[
+            SimpleNamespace(name="المقاس", value="من 3 إلى 6 أشهر"),
+            SimpleNamespace(name="الاسم", value="سلمان"),
+        ],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+    repaired, count, unresolved = repair_batch_line_customer_options(
+        [{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+            "product_options": {},
+        }],
+        identities_by_order={"100": [identity]},
+        workflows_by_order={"100": {"items": []}},
+    )
+
+    assert count == 1
+    assert unresolved == []
+    assert repaired[0]["size"] == "من 3 إلى 6 أشهر"
+    assert repaired[0]["customer_name"] == "سلمان"
+    assert len(repaired[0]["file_spec_fields"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_force_refreshes_missing_line_before_pdf(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[
+            SimpleNamespace(name="المقاس", value="كبير"),
+            SimpleNamespace(name="هل تريد إضافة الاسم؟", value="نعم"),
+            SimpleNamespace(name="الاسم", value="سلمان"),
+        ],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+    refresh_calls = []
+
+    async def refresh(_db, user_id, order_number, **kwargs):
+        refresh_calls.append((user_id, order_number, kwargs))
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(
+        batch_module,
+        "map_order_item_identities",
+        lambda _order: [identity],
+    )
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+            "product_options": {},
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert refresh_calls == [(
+        "owner-1",
+        "100",
+        {
+            "force": True,
+            "minimum_fresh_seconds": 0,
+            "allow_auto_fulfillment": False,
+        },
+    )]
+    assert result["refresh_failures"] == []
+    assert result["unresolved"] == []
+    assert result["repaired_line_count"] == 1
+    assert result["lines"][0]["size"] == "كبير"
+    assert result["lines"][0]["customer_name"] == "سلمان"
+    assert result["lines"][0]["product_options"] == {
+        "هل تريد إضافة الاسم؟": "نعم",
+    }
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_skips_salla_when_snapshot_is_complete(monkeypatch):
+    async def unexpected_refresh(*_args, **_kwargs):
+        raise AssertionError("complete option snapshots must not refresh Salla")
+
+    monkeypatch.setattr(
+        batch_module,
+        "refresh_order_from_salla",
+        unexpected_refresh,
+    )
+    original = {
+        "order_number": "100",
+        "order_item_id": "line-a",
+        "file_spec_fields": [
+            {"spec_key": "size", "name": "المقاس", "value": "كبير"},
+        ],
+        "size": "كبير",
+    }
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        object(),
+        user_id="owner-1",
+        lines=[original],
+        refresh_only_missing=True,
+    )
+
+    assert result["lines"] == [original]
+    assert result["refreshed_order_numbers"] == []
+    assert result["repaired_line_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_allows_canonical_line_with_no_real_options(monkeypatch):
+    identity = SimpleNamespace(
+        order_item_id="line-a",
+        line_index=0,
+        sku="SKU-1",
+        options=[],
+        custom_fields=[],
+        color=None,
+        size=None,
+        material=None,
+    )
+
+    async def refresh(*_args, **_kwargs):
+        return {"ok": True, "found": True}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(
+        batch_module,
+        "map_order_item_identities",
+        lambda _order: [identity],
+    )
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "sku": "SKU-1",
+            "file_spec_fields": [],
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert result["refresh_failures"] == []
+    assert result["unresolved"] == []
+    assert result["repaired_line_count"] == 0
+    assert result["lines"][0]["file_spec_fields"] == []
+
+
+@pytest.mark.asyncio
+async def test_auto_option_repair_reports_refresh_and_identity_failure(monkeypatch):
+    async def refresh(*_args, **_kwargs):
+        return {"ok": False, "found": False, "code": "salla_unavailable"}
+
+    async def canonical_order(*_args, **_kwargs):
+        return SimpleNamespace(order_number="100")
+
+    monkeypatch.setattr(batch_module, "refresh_order_from_salla", refresh)
+    monkeypatch.setattr(batch_module, "MongoOrderRepository", lambda _db: object())
+    monkeypatch.setattr(batch_module, "get_order", canonical_order)
+    monkeypatch.setattr(batch_module, "map_order_item_identities", lambda _order: [])
+
+    result = await batch_module.refresh_and_repair_batch_customer_options(
+        _DB(None, []),
+        user_id="owner-1",
+        lines=[{
+            "order_number": "100",
+            "order_item_id": "line-a",
+            "line_index": 0,
+            "file_spec_fields": [],
+        }],
+        refresh_only_missing=True,
+    )
+
+    assert result["refresh_failures"] == [{
+        "order_number": "100",
+        "code": "salla_unavailable",
+    }]
+    assert result["unresolved"] == ["100:line-a"]
+
+
 def test_forward_stages_freeze_review_mutations():
     previous = set(REVIEW_COMPLETED_STAGES)
     try:
@@ -474,6 +1371,10 @@ def test_router_registers_create_list_and_download_routes():
 
     assert ("/reviewed-preparation-batches-v1/batches", "POST") in routes
     assert ("/reviewed-preparation-batches-v1/batches", "GET") in routes
+    assert (
+        "/reviewed-preparation-batches-v1/batches/{batch_id}/repair-customer-options",
+        "POST",
+    ) in routes
     assert (
         "/reviewed-preparation-batches-v1/batches/{batch_id}/pdf",
         "GET",

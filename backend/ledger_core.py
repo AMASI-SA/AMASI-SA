@@ -83,6 +83,13 @@ REASON_CODES: dict[str, str] = {
 }
 
 ENTRY_TYPES = (
+    "customer_advance_capture",
+    "customer_advance_cancellation",
+    "customer_advance_payment",
+    "customer_refund_due",
+    "customer_refund_payment",
+    "bank_transfer_advance",
+    "bank_transfer_sale",
     # Generic
     "spend", "topup", "payment", "adjustment", "reversal",
     "settlement", "writeoff", "accrual", "opening_balance",
@@ -111,6 +118,12 @@ ENTRY_TYPES = (
     "expense_record",       # مصروف عام: مصروف + نقص bank
     # Couriers / shipping companies
     "courier_cod_settle",   # تسوية COD متعددة الأرجل (Iter-190): نقص cod_receivable + bank/cash + مصروفات
+    # Mezan 2 store drivers — individual driver sub-ledgers.
+    "store_delivery_accrual",    # توصيل ناجح: عهدة COD + أجرة الموصل
+    "store_delivery_settlement", # توريد COD / دفع الأجرة / المقاصة الصريحة
+    "cod_sale",                  # بيع COD مثبت من دليل تحصيل P02
+    "shipping_fee_accrual",      # استحقاق شحن/أجرة مستقل بلا إيراد
+    "shipping_settlement",       # سداد/توريد/مقاصة شحن من دليل بنك MZ2
     # ── Phase 3 (Iter-196) — manual employee correction ──
     "correction",           # تصحيح: نقل أثر بين كيانَين دون مساس بالبنك/الصندوق
     # ── Iter-219 — BNPL bridge (Tabby/Tamara) ──
@@ -228,6 +241,23 @@ async def post_ledger_entry(
         the same business event (mandatory for grouped operations
         posted via post_txn_group).
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_ledger_entry(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entity_type=entity_type, entity_id=entity_id,
+                entry_type=entry_type, amount=amount, side=side,
+                sub_account=sub_account, txn_group_id=txn_group_id,
+                reason_code=reason_code, notes=notes, metadata=metadata,
+                status=status, reverses_entry_id=reverses_entry_id,
+            )
+        return await atomic_owner(db, user_id, operation)
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if entry_type not in ENTRY_TYPES:
         raise HTTPException(400, f"entry_type غير صحيح: {entry_type}")
     if side not in SIDES:
@@ -246,60 +276,15 @@ async def post_ledger_entry(
                 400, f"reason_code غير معتمد: {reason_code}",
             )
 
-    # Iter-226 — orphan-prevention guard.
-    # Iter-250b · P1.5.p — Widened to check BOTH `operating_salaries`
-    # (modern primary storage) AND `employees` (legacy collection).
-    # The previous implementation checked only `employees`, which
-    # rejected EVERY employee created via the modern flow because
-    # those records live exclusively in `operating_salaries`.
-    #
-    # We additionally reject employees that have been explicitly
-    # marked `archived=true` or `deleted=true` — `status=active|stopped`
-    # is still allowed because a stopped employee can legitimately
-    # carry an open custody/advance/payable that needs settling.
-    #
-    # Reversals remain exempt (they may target an already-archived
-    # employee for symmetry).
-    if (
-        entity_type == "employee"
-        and entry_type != "reversal"
-        and entity_id
-    ):
-        eid_str = str(entity_id)
-        id_or_clause = [
-            {"id": eid_str},
-            {"employee_id": eid_str},
-            {"external_id": eid_str},
-            {"legacy_id": eid_str},
-        ]
-        # Exclude archived / deleted records. A missing flag means
-        # "not archived / not deleted" — the absence of the field
-        # MUST be treated as falsy.
-        not_dead = {
-            "archived": {"$ne": True},
-            "is_archived": {"$ne": True},
-            "deleted": {"$ne": True},
-            "is_deleted": {"$ne": True},
-        }
-        query = {"user_id": user_id, "$or": id_or_clause, **not_dead}
-        proj = {"_id": 1, "id": 1, "name": 1, "status": 1}
-        # Prefer the modern collection. Fall back to the legacy one
-        # so historical employees that exist only in `employees`
-        # still pass (read-only — no copy / no migration).
-        emp = (
-            await db.operating_salaries.find_one(query, proj)
-            or await db.employees.find_one(query, proj)
+    # Every new employee leg uses the exact Employee OS V2 identity. Resolve
+    # aliases at the request boundary, never silently rewrite journal content.
+    # Historical reversals may reference an archived V2 identity, but cannot
+    # mint another legacy-identity leg. Existing historical rows are untouched.
+    if entity_type == "employee":
+        from employee_payroll_status import require_employee_v2_identity
+        await require_employee_v2_identity(
+            db, user_id, entity_id, allow_archived=entry_type == "reversal",
         )
-        if not emp:
-            raise HTTPException(
-                400,
-                (
-                    f"لا يمكن إنشاء قيد على موظف غير موجود "
-                    f"(entity_id={eid_str}). "
-                    f"تأكد أن الموظف مُسجَّل في النظام قبل إنشاء "
-                    f"أيّ قيد محاسبي عليه."
-                ),
-            )
 
     entry_no = await _next_entry_no(db, user_id)
     eid = str(uuid.uuid4())
@@ -375,6 +360,20 @@ async def post_txn_group(
         "credit_total": float,
     }
     """
+    from accounting_atomic import SessionDatabase, atomic_owner
+    from accounting_write_control import AccountingDatabase
+    current_db = db.current() if isinstance(db, AccountingDatabase) else db
+    if not isinstance(current_db, SessionDatabase):
+        async def operation(scoped):
+            return await post_txn_group(
+                scoped,
+                user_id=user_id, actor_id=actor_id, actor_name=actor_name,
+                entries=entries, txn_type=txn_type, reason_code=reason_code,
+                notes=notes, metadata=metadata,
+            )
+        return await atomic_owner(db, user_id, operation)
+    from accounting_writer_transition import assert_writer_allowed
+    await assert_writer_allowed(db, user_id, "legacy")
     if not entries or len(entries) < 2:
         raise HTTPException(400, "كل حركة محاسبية تحتاج قيدين على الأقل")
     debit_total = round(sum(float(e["amount"]) for e in entries
@@ -433,6 +432,11 @@ async def reverse_entry(
     )
     if not orig:
         raise HTTPException(404, "القيد غير موجود")
+    if str((orig.get("metadata") or {}).get("operation_id") or "").startswith("MZ2-"):
+        # A single-leg legacy reversal bypasses the owner barrier and would
+        # invalidate refund/payment evidence. MZ2 corrections require an
+        # explicitly reviewed balanced workflow; that phase is not enabled.
+        raise HTTPException(409, "mz2_balanced_correction_workflow_required")
     if orig.get("status") != "posted":
         raise HTTPException(
             400, "يمكن عكس القيود المعتمدة فقط (status=posted)",

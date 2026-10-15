@@ -244,6 +244,7 @@ async def test_returns_full_diagnostics_when_all_endpoints_succeed(monkeypatch):
     assert res["mezan"]["api_key_fingerprint"]
     assert "live-key-xyz" not in str(res)
     assert res["mezan"]["base_url"] == "https://legacy.qoyod.com/api/2.0"
+    assert res["mezan"]["effective_base_url"] == "https://api.qoyod.com/2.0"
 
     # Tenant hint extracted from /branches.
     assert res["qoyod"]["tenant_hints"]["organisation"] == "Tariq Trading Co."

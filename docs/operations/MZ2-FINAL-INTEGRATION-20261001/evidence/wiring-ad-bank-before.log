@@ -1,0 +1,76 @@
+FFFFFFFFF                                                                [100%]
+================================== FAILURES ===================================
+_______________ test_missing_track_a_bank_identity_fails_closed _______________
+backend\tests\test_mz2_advertising_v2.py:282: in test_missing_track_a_bank_identity_fails_closed
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+_ test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier[wallet_funding] _
+backend\tests\test_mz2_advertising_v2.py:303: in test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier
+    assert response.json()["detail"]["code"] == "track_a_bank_evidence_and_posting_integration_required"
+E   AssertionError: assert 'track_a_requ...ot_integrated' == 'track_a_bank...tion_required'
+E     
+E     - track_a_bank_evidence_and_posting_integration_required
+E     + track_a_require_financial_ledger_identity_not_integrated
+_ test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier[payable_settlement] _
+backend\tests\test_mz2_advertising_v2.py:303: in test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier
+    assert response.json()["detail"]["code"] == "track_a_bank_evidence_and_posting_integration_required"
+E   AssertionError: assert 'track_a_requ...ot_integrated' == 'track_a_bank...tion_required'
+E     
+E     - track_a_bank_evidence_and_posting_integration_required
+E     + track_a_require_financial_ledger_identity_not_integrated
+____________ test_ad_bank_identity_cannot_be_substituted[change0] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+____________ test_ad_bank_identity_cannot_be_substituted[change1] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+____________ test_ad_bank_identity_cannot_be_substituted[change2] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+____________ test_ad_bank_identity_cannot_be_substituted[change3] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+____________ test_ad_bank_identity_cannot_be_substituted[change4] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+____________ test_ad_bank_identity_cannot_be_substituted[change5] _____________
+backend\tests\test_mz2_advertising_v2.py:319: in test_ad_bank_identity_cannot_be_substituted
+    with pytest.raises(HTTPException, match="MZ2_LINK_REQUIRED"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'MZ2_LINK_REQUIRED'
+E     Actual message: "409: {'code': 'track_a_require_financial_ledger_identity_not_integrated'}"
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_advertising_v2.py::test_missing_track_a_bank_identity_fails_closed
+FAILED backend/tests/test_mz2_advertising_v2.py::test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier[wallet_funding]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_canonical_bank_reaches_only_the_remaining_evidence_posting_barrier[payable_settlement]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change0]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change1]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change2]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change3]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change4]
+FAILED backend/tests/test_mz2_advertising_v2.py::test_ad_bank_identity_cannot_be_substituted[change5]
+9 failed, 42 deselected in 10.31s

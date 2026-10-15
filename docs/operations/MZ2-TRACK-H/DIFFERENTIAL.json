@@ -1,0 +1,1257 @@
+{
+  "base": "5a7b44b71c6c9974aba358493b3267a47d6e6314",
+  "tree": "87f9a44af5dc7d00fbc62417fb17e2f6273d8d93",
+  "phase1Source": "https://github.com/AMASI-SA/AMASI-SA/issues/1006#issuecomment-5912052425",
+  "rows": [
+    {
+      "id": "H001",
+      "section": "الحركات المالية اليومية",
+      "item": "اختيار نوع العملية وتصنيفها إلى مجموعات",
+      "contract": "خدمات `accountingModule.js`؛ daily، payroll، settlements، shipping",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "محدد نوع يفتح نموذج المحرك المناسب. لا writer عام ولا إرسال حقول debit/credit من نموذج الحدث.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H002",
+      "section": "الحركات المالية اليومية",
+      "item": "إيداع بنكي وارد",
+      "contract": "`POST D/manual-incoming`، `createAccountingManualIncomingMovement`",
+      "phase1": "SUPPORTED",
+      "boundary": "دليل حركة بنكية وليس قيد إيداع حرًا؛ `request_id` ثابت لإعادة المحاولة لنفس البيانات. يقبل حساب بنك فعليًا، فلا تعميم على الصناديق.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H003",
+      "section": "الحركات المالية اليومية",
+      "item": "سحب بنكي خارج",
+      "contract": "`POST D/manual-outgoing`، `createAccountingManualOutgoingMovement`",
+      "phase1": "SUPPORTED",
+      "boundary": "حفظ دليل ثم تصنيف صريح مستقل؛ لا وصف الحفظ بأنه ترحيل مكتمل.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H004",
+      "section": "الحركات المالية اليومية",
+      "item": "البنك، المبلغ، الطرف، التاريخ، المرجع، الملاحظات",
+      "contract": "`GET D/context` + عقود manual incoming/outgoing",
+      "phase1": "SUPPORTED",
+      "boundary": "إظهار حقول العقد حسب الاتجاه. لا تخمين بيانات الطرف.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H005",
+      "section": "الحركات المالية اليومية",
+      "item": "رفع كشف البنك",
+      "contract": "`POST D/upload`، `uploadAccountingDailyMovements`",
+      "phase1": "SUPPORTED",
+      "boundary": "XLSX فقط؛ 8 MiB و5000 صف في العقد الحالي. لا وعد PDF أو صور أو MT940.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H006",
+      "section": "الحركات المالية اليومية",
+      "item": "مصروف عام",
+      "contract": "`POST D/{id}/classify-outgoing`, `action=expense`",
+      "phase1": "SUPPORTED",
+      "boundary": "التصنيف يرحّل فعليًا؛ يحتاج `accounting.journals.manual_create`، ولا يُستدعى بمجرد تغيير القائمة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H007",
+      "section": "الحركات المالية اليومية",
+      "item": "إيجار، اشتراك، بنزين، فئات أخرى",
+      "contract": "`GET D/context.expense_categories`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "اختيار الأكواد التي يعيدها المصدر؛ insurance ليس فئة مضمونة، يُظهر فقط إن أعاده المصدر. الفئات المحجوزة لا تمر كمصروف عام.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H008",
+      "section": "الحركات المالية اليومية",
+      "item": "سداد مورد",
+      "contract": "نفس مسار classify-outgoing، `action=supplier_payment`, `supplier_id`",
+      "phase1": "SUPPORTED",
+      "boundary": "يحتاج `accounting.settlements.post` وذمة المورد الحقيقية؛ ليس فاتورة شراء أو قيدًا يدويًا.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H009",
+      "section": "الحركات المالية اليومية",
+      "item": "إضافة مورد",
+      "contract": "`POST /api/suppliers-v2`، صفحة `/suppliers-v2`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "انتقال إلى مسار المورد الحالي وصلاحياته وهوياته؛ لا دمج أسماء ومعرفات مصادر الموردين بالاسم.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H010",
+      "section": "الحركات المالية اليومية",
+      "item": "فاتورة مورد",
+      "contract": "`/purchase-invoices`، `POST /api/purchase-invoices`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "فتح المسار المتخصص؛ لا إنشاء فاتورة عبر daily أو اعتماد استلام تلقائي.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H011",
+      "section": "الحركات المالية اليومية",
+      "item": "راتب، استحقاق، سلفة، استرداد سلفة، تسليم/إرجاع عهدة",
+      "contract": "`POST P/accrue` و`POST P/movements/{id}/classify`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "نقل المستخدم إلى سياق الموظف والحركة البنكية المناسبة؛ التفاصيل في جدول الرواتب.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H012",
+      "section": "الحركات المالية اليومية",
+      "item": "نقل عهدة بين موظفين",
+      "contract": "يوجد legacy `POST /api/accounting/employees/custody/transfer`، لا action مقابل في MZ2 payroll",
+      "phase1": "GAP",
+      "boundary": "لا استدعاء legacy من النموذج الجديد ولا اختراع قيد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H013",
+      "section": "الحركات المالية اليومية",
+      "item": "تحويل بين الحسابات",
+      "contract": "legacy transfers يكتب `account_transactions`؛ لا عقد مقابل مثبت في MZ2 daily",
+      "phase1": "GAP",
+      "boundary": "لا ربط التحويل القديم على أنه محرك MZ2.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H014",
+      "section": "الحركات المالية اليومية",
+      "item": "تسوية تابي، تمارا، إمكان، سلة",
+      "contract": "خدمات `S`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "انتقال إلى التسوية؛ لا إنشاء تسوية بعملية daily موحدة.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H015",
+      "section": "الحركات المالية اليومية",
+      "item": "تسوية COD، تحصيل شركة شحن",
+      "contract": "خدمات `H`",
+      "phase1": "LOCKED",
+      "boundary": "معاينة/قراءة وفق العقد فقط، مع بقاء P02 مقفولًا.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Existing financial gate unchanged"
+    },
+    {
+      "id": "H016",
+      "section": "الحركات المالية اليومية",
+      "item": "تأكيد مزود الدفع للحركة",
+      "contract": "`POST D/{id}/confirm-provider`",
+      "phase1": "SUPPORTED",
+      "boundary": "المزود والسبب وربط البنك المتحقق مطلوبون؛ ينشئ receipt draft وليس قيدًا بمجرد التأكيد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H017",
+      "section": "الحركات المالية اليومية",
+      "item": "آخر الحركات، الحالة، المبلغ، الطرف، المرجع",
+      "contract": "`GET D?status=&limit=`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "حتى 500 حركة؛ label واضح للنتائج المحمّلة. عدم مساواة `unclassified` بـ«مكتملة».",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H018",
+      "section": "الحركات المالية اليومية",
+      "item": "معاينة القيد قبل التصنيف اليومي/الموظف",
+      "contract": "لا preview contract مستقل مثبت للمصروف/سداد المورد أو تصنيف الموظف",
+      "phase1": "GAP",
+      "boundary": "لا تركيب مدين/دائن في frontend. بعد الترحيل تُقرأ المجموعة من reports إن متاحة؛ التسويات والشحن لهما preview مستقل.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H019",
+      "section": "الحركات المالية اليومية",
+      "item": "المرفقات العامة لكل حركة",
+      "contract": "عقود manual لا تملك رفع مرفق عام؛ رفع كشف البنك قدرة مختلفة",
+      "phase1": "GAP",
+      "boundary": "حذف منطقة PDF/JPG/PNG العامة من هذا النموذج؛ لا رفع إلى endpoint افتتاحي أو تسوية.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H020",
+      "section": "الحركات المالية اليومية",
+      "item": "حفظ، حفظ وإضافة جديدة، إلغاء",
+      "contract": "callbacks على عقد الحفظ المختار",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "الإلغاء محلي قبل الإرسال؛ إعادة التهيئة بعد النجاح فقط. الحفظ لا يضم Post خفيًا، ولا يعيد إرسال حركة نجحت إن فشل إجراء تالٍ.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H021",
+      "section": "الحركات المالية اليومية",
+      "item": "قواعد الاستخدام والتاريخ",
+      "contract": "نصوص مطابقة للعقود ووقت الرياض",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "تصحيح جملة التصميم «ينشأ القيد تلقائيًا بعد الحفظ»؛ حفظ الدليل يختلف عن الاعتماد المالي.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H022",
+      "section": "التسويات",
+      "item": "مزودو سلة/تابي/تمارا/إمكان والبنوك",
+      "contract": "`GET S/context`، `getAccountingSettlementContext`",
+      "phase1": "SUPPORTED",
+      "boundary": "المصدر يعيد providers، banks، bindings، permissions.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H023",
+      "section": "التسويات",
+      "item": "ربط المزود بالبنك",
+      "contract": "`PUT S/bindings/{provider}`",
+      "phase1": "SUPPORTED",
+      "boundary": "صلاحية `accounting.rules.manage` وعقد الربط الحالي؛ ليس تغيير guard.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H024",
+      "section": "التسويات",
+      "item": "رفع ملف تسوية",
+      "contract": "`POST S/drafts/upload`، `POST S/drafts/from-file`",
+      "phase1": "SUPPORTED",
+      "boundary": "XLSX مثبت في uploader الحالي. drag/drop مجرد UI adapter لنفس الملف والعقد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H025",
+      "section": "التسويات",
+      "item": "PDF وMT940 والصيغ الأخرى المرسومة",
+      "contract": "uploader الحالي يستعمل `read_safe_xlsx_upload`",
+      "phase1": "GAP",
+      "boundary": "لا إعلان دعمها، ولا نسخ حد 10 MB من الصورة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H026",
+      "section": "التسويات",
+      "item": "جدول الملفات: مزود، مرجع، فترة، مبالغ، رسوم، صافي، حالة",
+      "contract": "`GET S/drafts` أو `GET S/register` وتفاصيل draft.amounts/calculation",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "الرسوم تؤخذ من تفاصيل حقيقية، لا إجمالي تقديري. قائمة register لا تعيد جميع مبالغ الرسوم.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H027",
+      "section": "التسويات",
+      "item": "من/إلى، بنك، مزود، حالة، بحث",
+      "contract": "`GET S/register?q=&provider=&status=&bank_account_id=&period_from=&period_to=`",
+      "phase1": "SUPPORTED",
+      "boundary": "register يفحص آخر 2000 مستند ويعيد حتى 500؛ `total_filtered` محدود بهذا النطاق.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H028",
+      "section": "التسويات",
+      "item": "pagination وإعادة تعيين",
+      "contract": "تقسيم محلي للنتائج المحملة + query reset",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا اختراع offset/cursor ولا وعد سجل تاريخي كامل.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H029",
+      "section": "التسويات",
+      "item": "بطاقات عدد الحالات",
+      "contract": "`GET S/context.status_counts`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "هذه أعداد tenant حسب الحالة، ليست تلقائيًا خاضعة لفلاتر الجدول. يجب وصف النطاق.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H030",
+      "section": "التسويات",
+      "item": "بطاقات مبالغ غير المسوّى/التطابق/المراجعة/الفروقات عالميًا",
+      "contract": "لا مجموع مالي شامل بهذه التعريفات في context؛ قوائم bounded",
+      "phase1": "GAP",
+      "boundary": "يمكن بدلًا منها ملخص «النتائج المعروضة» عند اكتمال حقولها، دون تسميته إجمالي المتجر أو مساواة الحالات بالمطابقة التلقائية.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H031",
+      "section": "التسويات",
+      "item": "تفاصيل المطابقة والصفوف غير المتطابقة",
+      "contract": "`GET S/drafts/{id}`، `source_snapshot`، `review_reasons`",
+      "phase1": "SUPPORTED",
+      "boundary": "المصدر يفرّق matched/unmatched وأسباب المراجعة.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H032",
+      "section": "التسويات",
+      "item": "مطابقة صف بأمر",
+      "contract": "`POST S/drafts/{id}/match-entry`",
+      "phase1": "SUPPORTED",
+      "boundary": "فعل صريح؛ ليس تعديلًا محليًا لحالة الصف.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H033",
+      "section": "التسويات",
+      "item": "مرشحو البنك وربط الحركة",
+      "contract": "`GET S/drafts/{id}/bank-candidates`، `PUT .../bank-match`",
+      "phase1": "SUPPORTED",
+      "boundary": "عرض المرشح لا يعني قبوله. الفارق وهوية الحركة من المصدر.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H034",
+      "section": "التسويات",
+      "item": "مطابقة تلقائية عامة بالذكاء أو سماحية ±1 ريال/3 أيام",
+      "contract": "لا عقد إعداد/تنفيذ بهذه الوعود مثبت في هذا المسار",
+      "phase1": "GAP",
+      "boundary": "importer وmatcher الموجودان فقط؛ لا نسخ قواعد الصورة ولا ابتكار match-all.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H035",
+      "section": "التسويات",
+      "item": "المسودة والتعديل ومرجع الكشف",
+      "contract": "`PATCH S/drafts/{id}`، `PATCH .../identity`",
+      "phase1": "SUPPORTED",
+      "boundary": "الإبقاء على reason/revision والتطبيع الحالي؛ `matched` قد يُعرض `ready_for_review` دون تغيير workflow_state.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing mutation contract preserved; no expanded execution authority in Track H."
+    },
+    {
+      "id": "H036",
+      "section": "التسويات",
+      "item": "إرسال للمراجعة",
+      "contract": "`POST S/drafts/{id}/submit`",
+      "phase1": "SUPPORTED",
+      "boundary": "يحتاج `accounting.drafts.create`، والخادم يعيد حساب الموانع.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing mutation contract preserved; no expanded execution authority in Track H."
+    },
+    {
+      "id": "H037",
+      "section": "التسويات",
+      "item": "مراجعة ورفض",
+      "contract": "`POST .../review`، `POST .../reject`",
+      "phase1": "SUPPORTED",
+      "boundary": "review يحتاج `accounting.settlements.post` في العقد الحالي؛ لا صلاحية مخترعة باسم review.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing mutation contract preserved; no expanded execution authority in Track H."
+    },
+    {
+      "id": "H038",
+      "section": "التسويات",
+      "item": "اعتماد التسوية/ترحيل",
+      "contract": "`POST .../post`",
+      "phase1": "SUPPORTED",
+      "boundary": "لا يعمل إلا بتفاعل صريح بعد reviewed؛ صلاحية post لا تتجاوز paused أو readiness.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H039",
+      "section": "التسويات",
+      "item": "معاينة القيد",
+      "contract": "`draft.journal_preview.entries`",
+      "phase1": "READ_ONLY",
+      "boundary": "لا توليد القيد في frontend؛ unavailable إذا لم يُرجع الخادم معاينة.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H040",
+      "section": "التسويات",
+      "item": "سجل التسويات، الدليل، حركة البنك، القيد",
+      "contract": "`GET S/register/{id}`",
+      "phase1": "READ_ONLY",
+      "boundary": "detail يعيد evidence وbank_movement وledger.status/reason/entries؛ لا تفسير ledger غير الجاهز كصفر.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H041",
+      "section": "التسويات",
+      "item": "إلغاء في أسفل الصفحة",
+      "contract": "إغلاق/إعادة تعيين محلي",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "ليس حذف تسوية محفوظة ولا عكس قيد مرحّل.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H042",
+      "section": "الشحن والتحصيل",
+      "item": "شركات الشحن وموصلو المتجر",
+      "contract": "`GET H/workspace.counterparties`",
+      "phase1": "READ_ONLY",
+      "boundary": "استعمال الهويات الحقيقية؛ الشعارات أو الأسماء لا تنشئ هوية جديدة.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H043",
+      "section": "الشحن والتحصيل",
+      "item": "شحنات مرشحة لأجرة الشحن",
+      "contract": "`workspace.courier_candidates`",
+      "phase1": "READ_ONLY",
+      "boundary": "حد 200 مرشح؛ ليست جميع شحنات المتجر أو كل المتأخرات.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H044",
+      "section": "الشحن والتحصيل",
+      "item": "مرشحو COD لموصلي المتجر",
+      "contract": "`workspace.driver_candidates`",
+      "phase1": "READ_ONLY",
+      "boundary": "حد 200، مع حقول collection/evidence الحالية فقط.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H045",
+      "section": "الشحن والتحصيل",
+      "item": "الحركات البنكية القابلة للتسوية",
+      "contract": "`workspace.bank_movements`",
+      "phase1": "READ_ONLY",
+      "boundary": "حد 200؛ لا إدخال تحصيل وهمي بديلًا عن دليل البنك.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H046",
+      "section": "الشحن والتحصيل",
+      "item": "أسعار الشحن المعتمدة",
+      "contract": "`GET H/rates`، `workspace.latest_rates/rate_policy`",
+      "phase1": "READ_ONLY",
+      "boundary": "عرض السعر وتاريخ سريانه ومرجع اعتماده.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H047",
+      "section": "الشحن والتحصيل",
+      "item": "إعداد سعر معتمد",
+      "contract": "`PUT H/rates`، `saveAccountingShippingRate`",
+      "phase1": "SUPPORTED",
+      "boundary": "يتطلب `accounting.rules.manage`، reason/evidence/revision. يبقى خاضعًا للكتابة الموقوفة؛ لا تفعيل P02 عند حفظ إعداد.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H048",
+      "section": "الشحن والتحصيل",
+      "item": "معاينة أجرة شركة الشحن",
+      "contract": "`GET H/courier-fee/{evidence_id}/preview`",
+      "phase1": "READ_ONLY",
+      "boundary": "تعرض رفض/أهلية الخادم، ولا تحول أهلية المعاينة إلى إذن Post.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H049",
+      "section": "الشحن والتحصيل",
+      "item": "معاينة COD الموصل",
+      "contract": "`GET H/store-driver-cod/{assignment_id}/preview`",
+      "phase1": "READ_ONLY",
+      "boundary": "لا اختراع دخل/أجرة من بيانات الشحنة الناقصة.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H050",
+      "section": "الشحن والتحصيل",
+      "item": "معاينة تسوية أو تحصيل أو سداد أجرة",
+      "contract": "`POST H/settlements/preview`",
+      "phase1": "READ_ONLY",
+      "boundary": "هذا POST للمعاينة وفق العقد، مع احترام rejection/paused؛ ليس إذنًا للترحيل.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H051",
+      "section": "الشحن والتحصيل",
+      "item": "إثبات المصروف أو بيع COD",
+      "contract": "`POST H/courier-fee`، `POST H/store-driver-cod`",
+      "phase1": "LOCKED",
+      "boundary": "P02 يبقى LOCKED، أزرار الاعتماد المالي مقفلة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Existing financial gate unchanged"
+    },
+    {
+      "id": "H052",
+      "section": "الشحن والتحصيل",
+      "item": "إضافة تسوية COD أو تحصيل شركة أو تسوية صافية",
+      "contract": "`POST H/settlements/post`",
+      "phase1": "LOCKED",
+      "boundary": "لا إرسال هذا الطلب في المهمة. الأنواع الحالية cod_remittance/fee_payment/net_settlement.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Existing financial gate unchanged"
+    },
+    {
+      "id": "H053",
+      "section": "الشحن والتحصيل",
+      "item": "أحدث الأنشطة/التسويات",
+      "contract": "`workspace.recent_events`",
+      "phase1": "READ_ONLY",
+      "boundary": "آخر 50 حدثًا، لا تحويله إلى سجل شامل ذي total مختلق.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H054",
+      "section": "الشحن والتحصيل",
+      "item": "فلترة شركة/حالة/تاريخ، بحث، صفحات",
+      "contract": "حقول الأحداث والمرشحين المحمّلة",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "فلاتر محلية على مجموعة معلنة؛ لا اختراع search endpoint.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H055",
+      "section": "الشحن والتحصيل",
+      "item": "ذمم COD ومبالغ قيد التحصيل وتحصيل اليوم ونسب النمو",
+      "contract": "workspace لا يعيد هذه المؤشرات الشاملة؛ تقارير MZ2 مصدر مستقل",
+      "phase1": "GAP",
+      "boundary": "لا جمع عينات المرشحين والأحداث لإظهار أرقام التصميم. يمكن عرض رصيد تقرير MZ2 المتاح باسمه ونطاقه فقط.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H056",
+      "section": "الشحن والتحصيل",
+      "item": "عدد الشحنات المعلقة وآخر تسوية وافتتاحي الشركة",
+      "contract": "الأحداث/المرشحون لا يثبتون كل الأرقام؛ الافتتاحي يحتاج دليل معتمد",
+      "phase1": "GAP",
+      "boundary": "لا عرض رقم افتراضي أو استنتاج الرصيد الافتتاحي من السعر.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H057",
+      "section": "الشحن والتحصيل",
+      "item": "شرائح عمولة COD حسب قيمة الطلب",
+      "contract": "`rates` الحالي total_fee مؤرخ، وليس نفس جدول الشرائح المصور",
+      "phase1": "GAP",
+      "boundary": "لا تعديل الأسعار لتقليد جدول الصورة دون عقد مثبت.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H058",
+      "section": "الشحن والتحصيل",
+      "item": "فروقات تحتاج مراجعة",
+      "contract": "rejection reasons من previews",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "عرض الموانع الفعلية للعنصر؛ لا invent عدد «3 تسويات».",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H059",
+      "section": "الشحن والتحصيل",
+      "item": "عرض القيد كاملًا",
+      "contract": "`GET R/journals` وتصفية txn_group_id إن عاد في الحدث",
+      "phase1": "READ_ONLY",
+      "boundary": "شرط report available ووجود المرجع؛ لا صياغة قيد من مثال التصميم.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H060",
+      "section": "المخزون والمشتريات",
+      "item": "لوحة مشتركة للموردين والفواتير والاستلام",
+      "contract": "القراءات أدناه مع `PartialWorkflowPage` الحالي",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "تجميع عرض فقط، مع فصل مصادر المخزون التشغيلي والمحاسبي وصلاحيات كل منها.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H061",
+      "section": "المخزون والمشتريات",
+      "item": "الموردون وهوياتهم",
+      "contract": "`GET /api/suppliers-v2/workspace`، `GET /api/purchase-invoices/catalog`",
+      "phase1": "READ_ONLY",
+      "boundary": "لا ضم مفاتيح supplier/counterparty بالاسم؛ استعمال الروابط المعتمدة.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H062",
+      "section": "المخزون والمشتريات",
+      "item": "جدول فواتير الموردين والتفاصيل",
+      "contract": "`GET /api/purchase-invoices`، `GET .../{id}`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "يعيد state/status/payment_status/remaining_amount؛ الفلاتر from/to/supplier_id/status، وحد حتى 2000. total عدد المرجع المعاد وليس بالضرورة كل التاريخ.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H063",
+      "section": "المخزون والمشتريات",
+      "item": "مفتوحة، مدفوعة، متأخرة",
+      "contract": "نفس القائمة؛ الحقول الفعلية",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "يمكن ربط payment_status/state؛ لا اختراع متأخرة دون due_date موثوق. القيم الناقصة لا تصبح صفرًا أو مدفوعة.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H064",
+      "section": "المخزون والمشتريات",
+      "item": "بطاقة الفواتير المفتوحة",
+      "contract": "remaining_amount والفواتير المؤهلة في القائمة",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "ملخص المجموعة المحملة فقط؛ لا ضم drafts إلى دين مرحّل.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H065",
+      "section": "المخزون والمشتريات",
+      "item": "إضافة/تعديل فاتورة شراء",
+      "contract": "`POST /api/purchase-invoices`، `PUT .../{id}`",
+      "phase1": "SUPPORTED",
+      "boundary": "عبر workflow الحالي بصلاحية `accounting.purchases.post` وحالة الكتابة؛ لا اعتماد تلقائي.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H066",
+      "section": "المخزون والمشتريات",
+      "item": "اعتماد واستلام الفاتورة",
+      "contract": "`POST /api/purchase-invoices/{id}/approve-receive`",
+      "phase1": "LOCKED",
+      "boundary": "قدرة قائمة ذات أثر مخزني ومالي؛ لا تنفيذها أو تفعيل G47 ضمن هذه المهمة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Existing financial gate unchanged"
+    },
+    {
+      "id": "H067",
+      "section": "المخزون والمشتريات",
+      "item": "شاشة استلام المخزون",
+      "contract": "`GET /api/inventory-v2/purchase-receiving/catalog`، خدمة `mezanInventoryReceiving.js`",
+      "phase1": "READ_ONLY",
+      "boundary": "تعرض products، warehouses، locations، recent_receipts، inventory_health وفق صلاحيات المستودع. هذا مخزون تشغيلي.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H068",
+      "section": "المخزون والمشتريات",
+      "item": "أسماء الأصناف وأكوادها وتصنيفها ووحداتها",
+      "contract": "`GET /api/components-v2/workspace`، `GET /api/products-v2`",
+      "phase1": "READ_ONLY",
+      "boundary": "المنتجات مرقمة الصفحات، المكونات محدودة. لا استعمال fixtures في mezanProductCatalog كبيانات حقيقية.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H069",
+      "section": "المخزون والمشتريات",
+      "item": "فلترة النوع والموقع والبحث",
+      "contract": "الكتالوجات وبيانات الاستلام أعلاه",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "فلترة الحقول الموجودة فعليًا؛ لا افتراض وحدة أو تحويل صنف/مكوّن.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H070",
+      "section": "المخزون والمشتريات",
+      "item": "حالة تكلفة المنتج/المكون",
+      "contract": "مصادر components وproducts الحالية؛ `GET /api/products-v2/cost-review` يعني مراجعة تكلفة مكتملة",
+      "phase1": "READ_ONLY",
+      "boundary": "لا مساواة cost-review بـ«بلا تكلفة». تُظهر الحالة فقط إذا حقول المصدر تثبتها.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H071",
+      "section": "المخزون والمشتريات",
+      "item": "إجمالي عدد المنتجات بلا تكلفة",
+      "contract": "يتطلب نطاق كتالوج كامل وتعريف missing_cost المثبت",
+      "phase1": "GAP",
+      "boundary": "لا عدّ صفحة واحدة وتسميتها عددًا شاملًا؛ لا استنتاج من مبلغ مفقود أو صفر وحده.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H072",
+      "section": "المخزون والمشتريات",
+      "item": "قيمة المخزون المالي لكل صنف/موقع والإجمالي",
+      "contract": "لا endpoint موحد مثبت يربط valuation المحاسبي بجدول الكميات المصور",
+      "phase1": "GAP",
+      "boundary": "ممنوع حساب quantity × تكلفة تشغيلية وتسميته financial valuation.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H073",
+      "section": "المخزون والمشتريات",
+      "item": "مقارنة قيمة المخزون بالشهر الماضي",
+      "contract": "لا تاريخ valuation مثبت لهذا العنصر",
+      "phase1": "GAP",
+      "boundary": "حذف نسبة النمو.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H074",
+      "section": "المخزون والمشتريات",
+      "item": "أوامر شراء الشهر وعددها وقيمتها/إنشاء أمر شراء",
+      "contract": "purchase invoices وstock preparation orders قدرات مختلفة",
+      "phase1": "GAP",
+      "boundary": "لا إعادة تسمية الفاتورة أو أمر التجهيز كأمر شراء.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H075",
+      "section": "المخزون والمشتريات",
+      "item": "لوحة تفاصيل الصنف وصورته ومعلوماته",
+      "contract": "نفس الكتالوجات، حقول الهوية والوحدة والتصنيف الفعلية",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "أية صورة/مورد افتراضي/تبويب لا يملك بيانات يُحذف. لا invent تاريخ حركات محاسبي للصنف.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H076",
+      "section": "المخزون والمشتريات",
+      "item": "تحديث التكلفة وحفظ تفاصيل الصنف",
+      "contract": "توجد editors للمنتجات والمكونات؛ ليست valuation writer موحدًا",
+      "phase1": "READ_ONLY",
+      "boundary": "في هذه الصفحة عرض وروابط للقدرات القائمة فقط؛ لا زر عام يغير التكلفة المحاسبية.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H077",
+      "section": "المخزون والمشتريات",
+      "item": "مراجعة القيمة الافتتاحية",
+      "contract": "صفحة opening-balances الحالية؛ `GET /api/opening-inventory/imports/{id}` لمعرّف معروف",
+      "phase1": "READ_ONLY",
+      "boundary": "لا فتح approval أو تغيير opening semantics؛ لا endpoint list مختلق للاستيرادات.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H078",
+      "section": "المخزون والمشتريات",
+      "item": "استيراد الأصناف من ملف",
+      "contract": "opening-inventory imports مسار ذو معنى افتتاحي، وليس importer عام للصورة",
+      "phase1": "GAP",
+      "boundary": "لا إعادة استعماله كاستيراد أصناف عام.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H079",
+      "section": "المخزون والمشتريات",
+      "item": "طباعة التقرير",
+      "contract": "طباعة بيانات العرض الفعلية من frontend",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "عنوان واضح «بيانات تشغيلية/فواتير معروضة»؛ لا تقرير valuation غير موجود.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H080",
+      "section": "المخزون والمشتريات",
+      "item": "ملاحظة الفرق بين المخزون الفعلي والقيمة المالية",
+      "contract": "نص توضيحي",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "إبقاء الفصل صريحًا؛ زر مراجعة الجرد لا يظهر ما لم يربط workflow فعليًا.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H081",
+      "section": "المخزون والمشتريات",
+      "item": "مراجعة الجرد كإجراء جديد",
+      "contract": "لا عقد جرد/تسوية شامل مثبت لهذه الصفحة",
+      "phase1": "GAP",
+      "boundary": "لا correction أو posting جديد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H082",
+      "section": "الرواتب والالتزامات",
+      "item": "الموظفون والراتب الأساسي",
+      "contract": "`GET P/context.employees`",
+      "phase1": "READ_ONLY",
+      "boundary": "id/name/monthly_amount من operating_salaries، حتى 500 موظف. ليس employee directory كاملًا بالضرورة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H083",
+      "section": "الرواتب والالتزامات",
+      "item": "بطاقات الرواتب المستحقة والسلف والعهد",
+      "contract": "salary_payable/advance/custody + ledger_status/ledger_reason",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا عرض أي صفر/مجموع مالي إلا عندما ledger_status=available؛ الخادم قد يعيد صفرًا حسابيًا عند عدم جاهزية ledger. وصف المجموعة المحدودة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H084",
+      "section": "الرواتب والالتزامات",
+      "item": "جدول الموظفين، البحث والاختيار والتفاصيل",
+      "contract": "نفس السياق",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "الاسم والرصيد الحقيقيان، pagination محلية، لا department مختلق.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H085",
+      "section": "الرواتب والالتزامات",
+      "item": "إثبات استحقاق راتب",
+      "contract": "`POST P/accrue`، `accrueAccountingPayroll`",
+      "phase1": "SUPPORTED",
+      "boundary": "period/accrued_at/reason؛ per-employee يدعمه PayrollAccrualIn، والbulk لا يُشغّل تلقائيًا. يحتاج accounting.payroll.post.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H086",
+      "section": "الرواتب والالتزامات",
+      "item": "صرف راتب",
+      "contract": "`POST P/movements/{id}/classify`, action=salary_payment",
+      "phase1": "SUPPORTED",
+      "boundary": "دليل حركة خارجة موجود، موظف، سبب، apply_open_advances؛ لا مبلغ حر ينتج حركة بنك جديدة ضمن classifier.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H087",
+      "section": "الرواتب والالتزامات",
+      "item": "منح سلفة",
+      "contract": "نفس classifier، action=advance_grant",
+      "phase1": "SUPPORTED",
+      "boundary": "حركة خارجة؛ أثر مالي فوري عند نجاح التصنيف.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H088",
+      "section": "الرواتب والالتزامات",
+      "item": "استرداد سلفة",
+      "contract": "نفس classifier، action=advance_repayment",
+      "phase1": "SUPPORTED",
+      "boundary": "حركة واردة، مع فحص الرصيد في المحرك.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H089",
+      "section": "الرواتب والالتزامات",
+      "item": "تسليم عهدة",
+      "contract": "نفس classifier، action=custody_grant",
+      "phase1": "SUPPORTED",
+      "boundary": "حركة خارجة؛ لا عبور من مصروف عام.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H090",
+      "section": "الرواتب والالتزامات",
+      "item": "إرجاع عهدة",
+      "contract": "نفس classifier، action=custody_return",
+      "phase1": "SUPPORTED",
+      "boundary": "حركة واردة؛ لا تجاوز الرصيد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H091",
+      "section": "الرواتب والالتزامات",
+      "item": "الحركات البنكية المعلقة للموظفين",
+      "contract": "`GET P/context.pending_movements`",
+      "phase1": "READ_ONLY",
+      "boundary": "حتى 300 unclassified بدون provider؛ ليست كل حركة معلقة صالحة لكل action/اتجاه.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H092",
+      "section": "الرواتب والالتزامات",
+      "item": "تبويب حركات الموظف",
+      "contract": "`GET R/journals` مع تصفية هوية الموظف عند توافر الصلاحية",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "يحتفظ بمصدر القيد وتاريخه؛ لا طلب report بصلاحية payroll وحدها.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H093",
+      "section": "الرواتب والالتزامات",
+      "item": "المبلغ المصروف وحالة «تم الصرف» للشهر",
+      "contract": "context الحالي يعيد رصيدًا حاليًا لا payroll run شهريًا",
+      "phase1": "GAP",
+      "boundary": "لا اعتبار salary_payable=0 دليل صرف الشهر أو طرح الرصيد من monthly_amount.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H094",
+      "section": "الرواتب والالتزامات",
+      "item": "القسم، البدلات، الاستقطاعات، صافي راتب شهري مفصل",
+      "contract": "غير موجودة في payroll context الحالي",
+      "phase1": "GAP",
+      "boundary": "لا عرض الأصفار في التصميم كحقائق ولا محرك حساب رواتب جديد.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H095",
+      "section": "الرواتب والالتزامات",
+      "item": "معاينة قيد مقترح قبل الدفع",
+      "contract": "classifier لا يعيد preview مستقلًا",
+      "phase1": "GAP",
+      "boundary": "لا اختراع mapping محاسبي في frontend؛ تعرض المراجعة الواقعية للحركة ثم فعل اعتماد صريح.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H096",
+      "section": "الرواتب والالتزامات",
+      "item": "الالتزامات القادمة خلال 30 يومًا",
+      "contract": "`GET /api/recurring-obligations`، summary.due_next_30_days، items.next_due_date",
+      "phase1": "READ_ONLY",
+      "boundary": "مصدر حقيقي موجود، خاص بالمالك `_require_owner`، غير مدمج تلقائيًا برصيد MZ2 المرحّل. تصنيفه ليس GAP.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H097",
+      "section": "الرواتب والالتزامات",
+      "item": "عرض الكل للالتزامات",
+      "contract": "`/recurring-obligations` مع `loadRecurringObligationsWorkspace`",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "رابط للمالك فقط؛ لا ترقية صلاحيات موظف له payroll.view.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H098",
+      "section": "الرواتب والالتزامات",
+      "item": "تقويم شهري مستقبلي/forecast غير مستند لحقول due",
+      "contract": "العقد يعيد next_due_date لا تقويمًا عامًا لكل الأشهر",
+      "phase1": "GAP",
+      "boundary": "عرض المستحق التالي الموجود فقط، دون توليد توقعات مالية جديدة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H099",
+      "section": "الرواتب والالتزامات",
+      "item": "تصدير جدول الموظفين",
+      "contract": "frontend على حقول السياق المتاحة",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا تصدير بيانات غير جاهزة/غير مصرح بها أو استنتاج payslip.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H100",
+      "section": "القيود والتقارير",
+      "item": "المركز المالي",
+      "contract": "`GET R/financial-position?as_of=`",
+      "phase1": "READ_ONLY",
+      "boundary": "assets/liabilities/totals من ledger الصحيح فقط. status غير available ليس صفرًا.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "Canonical identity/source dependency; independent A/B/C tracks unmerged"
+    },
+    {
+      "id": "H101",
+      "section": "القيود والتقارير",
+      "item": "ميزان المراجعة",
+      "contract": "`GET R/trial-balance?as_of=`",
+      "phase1": "READ_ONLY",
+      "boundary": "debits/credits/net لكل entity/sub_account. لا تغيير طريقة حساب الأرصدة.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H102",
+      "section": "القيود والتقارير",
+      "item": "دفتر اليومية",
+      "contract": "`GET R/journals?as_of=`",
+      "phase1": "READ_ONLY",
+      "boundary": "entries مع txn_group_id وside وamount وmetadata. القيود ليست صفًا واحدًا لكل entry leg في عرض المستخدم.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H103",
+      "section": "القيود والتقارير",
+      "item": "جدول القيود مع مدين/دائن",
+      "contract": "تجميع entries حسب txn_group_id",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "تجميع عرض فقط باستخدام decimal-safe amounts؛ لا تغيير ledger أو إنشاء قيد.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H104",
+      "section": "القيود والتقارير",
+      "item": "مرجع، مصدر، تاريخ، وصف",
+      "contract": "حقول journal الفعلية، entry_type/metadata وeffective_at",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "القيم المفقودة «غير متوفر»؛ لا إنشاء JV-000784 أو اسم منشئ من الصورة. التاريخ المحاسبي يأخذ effective_at ثم الحقول الموثقة.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H105",
+      "section": "القيود والتقارير",
+      "item": "تفاصيل القيد في لوحة جانبية وإغلاقها",
+      "contract": "نفس entries للمجموعة المحددة",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا endpoint detail جديد؛ focus يعود للصف، mobile drawer داخل حدود الشاشة.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H106",
+      "section": "القيود والتقارير",
+      "item": "فلتر حتى تاريخ",
+      "contract": "`as_of`",
+      "phase1": "SUPPORTED",
+      "boundary": "الرياض وفق report_cutoff؛ حدود القطع والجهاز ليست مصدر التاريخ.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H107",
+      "section": "القيود والتقارير",
+      "item": "من تاريخ/المصدر/الحساب/المرجع/بحث",
+      "contract": "فلترة frontend للدفتر الذي أعاده الخادم",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "الخادم يرفض أي query غير as_of بـ422؛ لا إرسال from/source/account. لا تحويل فلتر الفترة إلى إعادة تعريف financial-position.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H108",
+      "section": "القيود والتقارير",
+      "item": "الحالة وإعادة التعيين والصفحات",
+      "contract": "حالات entries المتاحة وتقسيم محلي",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا افتراض drafts ضمن تقرير posted؛ report maximum 10000 legs وحدود failure مغلقة.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H109",
+      "section": "القيود والتقارير",
+      "item": "قيود اليوم وإجمالي المدين والدائن",
+      "contract": "تجميع مجموعات report available مع نطاق تاريخ معلن",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "count للمجموعات لا للأسطر. القيم من المصدر؛ لا تثبيت قيم التصميم.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H110",
+      "section": "القيود والتقارير",
+      "item": "قيود غير معتمدة ومراجعة واعتماد القيود العامة",
+      "contract": "journals لا يمثل register عام لمسودات المحركات",
+      "phase1": "GAP",
+      "boundary": "لا جمع settlement drafts كأنها كل القيود ولا زر approve-all.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H111",
+      "section": "القيود والتقارير",
+      "item": "نسب النمو منذ الشهر/أمس",
+      "contract": "لا مؤشر مطابق جاهز؛ يتطلب تعريف نطاقين متكافئين",
+      "phase1": "GAP",
+      "boundary": "حذفها في هذه المرحلة؛ لا نسبة من بيانات ناقصة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H112",
+      "section": "القيود والتقارير",
+      "item": "قيد جديد عام",
+      "contract": "ليس هدف الصفحة ولا يوجد عقد MZ2 عام معتمد ضمن المهمة",
+      "phase1": "GAP",
+      "boundary": "لا ربط legacy GL writer؛ يمكن توجيه المستخدم للحركة الواقعية المدعومة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H113",
+      "section": "القيود والتقارير",
+      "item": "الأستاذ العام وكشف الحساب",
+      "contract": "فلترة entries لمعرف حساب صريح مع تجميع عرض",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "فقط ضمن ledger available ونطاقه الكامل؛ لا تشغيل legacy report كبديل عند not_ready.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H114",
+      "section": "القيود والتقارير",
+      "item": "ملخص المصروفات حسب التصنيف",
+      "contract": "expense_record والـmetadata الموثقة من journals",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "يقتصر على قيود المصروف المؤهلة ذات التصنيف الصريح في البيانات، مع إعلان النطاق؛ ليس P&L جديدًا ولا دمج كل المصروفات التشغيلية.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H115",
+      "section": "القيود والتقارير",
+      "item": "طباعة وPDF",
+      "contract": "print stylesheet ونافذة المتصفح لحفظ PDF",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "عملية frontend فقط؛ تسمية «طباعة / حفظ PDF» وليست وعد downloadable PDF backend.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H116",
+      "section": "القيود والتقارير",
+      "item": "Excel",
+      "contract": "`exceljs` موجود في frontend/package.json",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "تصدير التقرير المتاح والفلاتر والنطاق نفسه؛ لا معادلات/روابط من نصوص غير موثوقة ولا كتابة مالية.",
+      "phase2": "NEEDS_ADAPTER",
+      "dependency": "Existing contract requires additional UI mapping; not implemented in this slice"
+    },
+    {
+      "id": "H117",
+      "section": "القيود والتقارير",
+      "item": "مرفقات أي قيد وتنزيلها",
+      "contract": "دليل الملف متاح لبعض المحركات، لا attachment contract عام لكل journal",
+      "phase1": "GAP",
+      "boundary": "إظهار الدليل فقط عند وجود مسار محرك مثبت؛ لا ملفات وهمية أو روابط مركبة.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H118",
+      "section": "القيود والتقارير",
+      "item": "مركز المساعدة/جميع التقارير",
+      "contract": "نص إرشادي وروابط للتقارير الثلاثة الموجودة",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا أعداد إشعارات/مقالات وهمية أو تبويبات بلا وجهة.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H119",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "التنقل الرئيسي والفرعي",
+      "contract": "AccountingWorkspace، accountingPages، MezanV2NavigationShell",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "المحافظة على first-run وowner setup بعد #1205؛ لا إعادة تطبيقه على أساس قديم. جميع الوجهات لها capability.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H120",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "البحث العام، الجرس وعدد 6 في الصورة",
+      "contract": "خارج contract صفحات المحاسبة الجديدة",
+      "phase1": "GAP",
+      "boundary": "إبقاء قدرات shell الحالية فقط؛ لا بحث مالي عالمي أو notification counter مصطنع.",
+      "phase2": "BLOCKED_BY_BACKEND",
+      "dependency": "No proven current contract"
+    },
+    {
+      "id": "H121",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "الصلاحيات",
+      "contract": "`GET A/access`، permissions من backend",
+      "phase1": "SUPPORTED",
+      "boundary": "صلاحية الصفحة لا تمنح action؛ الحفاظ على explicit grants، ورفض API=403 دون retry mutation.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H122",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "paused writers",
+      "contract": "`GET A/write-control`",
+      "phase1": "READ_ONLY",
+      "boundary": "تعطيل mutations عند paused/unknown. لا PUT/replay من الواجهة الجديدة. عدم الجاهزية المالية لا يُخفى.",
+      "phase2": "READ_ONLY",
+      "dependency": "Source read only; not new financial execution"
+    },
+    {
+      "id": "H123",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "RTL، 1440 و390",
+      "contract": "presentation فقط",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "أعمدة minmax(0,1fr)، wrap للنصوص، mobile cards/drawer، focus/labels، صفر overflow للصفحة. الاختبار مؤجل.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H124",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "loading/error/empty/missing",
+      "contract": "كل read contract",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "فصل الحالات، إسقاط البيانات القديمة عند تغير النطاق/الصلاحيات، عدم تحويل null/error إلى 0.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    },
+    {
+      "id": "H125",
+      "section": "العناصر المشتركة والصلاحيات",
+      "item": "bulk select وellipsis",
+      "contract": "إجراءات المصدر المثبتة فقط",
+      "phase1": "SUPPORTED_WITH_UI_ADAPTER",
+      "boundary": "لا bulk Post، ولا قوائم إجراءات فارغة؛ إن لم توجد عملية supported يُحذف عنصر التحديد.",
+      "phase2": "READY_FOR_UI",
+      "dependency": "Presentation only over existing contract; no posting authority"
+    }
+  ]
+}

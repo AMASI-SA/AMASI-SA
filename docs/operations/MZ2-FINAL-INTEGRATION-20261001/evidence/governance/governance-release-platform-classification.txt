@@ -1,0 +1,285 @@
+Scope clarification: production_release_guard was NOT run on Windows because fcntl is unavailable; it is included in the156 passing Linux preflight tests for exacta586. The66 failed parentcases below include additional subfailure events; full pytest reports82 platform failure events plus4 fixture failures. All4 fixture failures were repaired and root rerun52passed+484subtests. No Windows single-run green result is claimed.
+
+All66 failures across4 release suites in governance-backend-results.xml classified. test_production_release_guard had no failing cases in this XML. No release/platform tests or guards edited.
+
+COUNTS
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests: 20
+backend.tests.test_frontend_build_identity.FrontendBuildIdentityTests: 4
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests: 20
+backend.tests.test_release_identity.ReleaseIdentityTests: 22
+
+CAUSES
+Windows symlink privilege unavailable: 5
+Windows mode bits do not implement required POSIX permissions: 34
+Executable chmod delta absent with Windows core.filemode=false: 1
+POSIX os API unavailable on Windows: 22
+Windows write_text CRLF vs Git autocrlf=true normalized LF blob: 1
+CRLF checkout changes worker byte count/hash (596 vs574): 3
+
+Evidence: representative -x test reproduced WinError1314 before adapter invocation; independent temp chmod0600 returns0666. Windows11 Python3.13.15 lacks getuid/geteuid/mkfifo. Checkout core.filemode=false, core.autocrlf=true. Both frontend/public/sw.js and service-worker.js have596bytes/22CRLF; HEAD blobs574bytes, SHA256 c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd matching backend/frontend_build_identity.py constants. Normalizing CRLF yields exact HEAD bytes. Frontend identity fixture copies worktree sw.js verbatim (test_frontend_build_identity.py:58-62). Source-tree comparison fixture uses write_text('original\n') before gitadd with autocrlf, so workingbytes differ fromnormalizedblob. Adapter manifest fixture expects two modifications including chmod0755 (test_emergent_deployment_adapter_v5.py:86); Windows filemodefalse omits executablebit delta. 438vs420 decimal is0666vs0644.
+Root supplied independent exact-a586 Linux ReleaseReadinessBackend preflight110376225155 evidence:156tests PASS coveringallfive identity/guard suites. This agent didnotrerunLinux. Windowsresults are not rewritten aspasses and no releaseguard weakened.
+
+PER-CASE
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_build_rejects_symlinked_root_before_cleanup_touches_target
+  Class: Windows symlink privilege unavailable
+  Exact error: OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpb91guv6n\\outside-frontend' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpb91guv6n\\frontend'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_candidate_loader_accepts_a_but_tracked_loader_still_requires_b
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpri6uzvjd\repo\backend: 0777
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_cloud_build_restores_manifest_bound_requirements_before_validation
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp_1t0tlx8\backend: 0777
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_cloud_requirements_reject_symlink_without_touching_target
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpjs7nvddy\backend: 0777
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_cloud_requirements_reject_tampered_reviewed_copy_before_write
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp2jewt03c\backend: 0777
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_frontend_public_env_allowlist_rejects_variants_and_unsafe_nodes
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: "forbidden sensitive path" does not match "deployment package has unsafe directory mode: nested"
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_frontend_public_env_requires_explicit_exact_allowlist
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: scripts.emergent_deployment_adapter.DeploymentAdapterError: Frontend public package path has unsafe file permissions: .env: 0666
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_generated_release_symlink_is_unlinked_without_touching_target
+  Class: Windows symlink privilege unavailable
+  Exact error: OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp9alb9ap9\\outside' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp9alb9ap9\\frontend\\.release'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_git_collector_rejects_secret_before_blob_read_and_excluded_symlink
+  Class: Windows symlink privilege unavailable
+  Exact error: OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp5388r440\\backend\\server.py' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp5388r440\\backend\\tests\\linked.py'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_git_manifests_bind_j_to_a_with_exact_delta_and_tombstones
+  Class: Executable chmod delta absent with Windows core.filemode=false
+  Exact error: AssertionError: 1 != 2
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_git_workspace_requirements_mismatch_is_not_repaired
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp5bcxq67t\backend: 0777
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_governed_build_uses_exact_local_toolchain_commands
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'getuid'. Did you mean: 'getpid'?
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_materialization_is_atomic_and_exact
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: 438 != 420
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_package_boundary_never_dereferences_frontend_symlink
+  Class: Windows symlink privilege unavailable
+  Exact error: OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp2yoyicw1\\outside.txt' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmp2yoyicw1\\frontend\\build\\leak.txt'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_package_boundary_rejects_workspace_only_metadata
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: "missing exact build-meta" does not match "deployment package has unsafe directory mode: build"
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_package_boundary_requires_build_meta_route_middleware
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: "lost runtime file: scripts/governed-preview.cjs" does not match "deployment package has unsafe directory mode: build"
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_package_record_scan_rejects_special_nodes
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'mkfifo'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_repository_reviewed_requirements_match_runtime_source
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: scripts.emergent_deployment_adapter.DeploymentAdapterError: reviewed Backend requirements has unsafe file permissions: scripts/release_backend_requirements.lock: 0666
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_reviewed_source_rejects_non_integer_count_and_symlink_root
+  Class: Windows symlink privilege unavailable
+  Exact error: OSError: [WinError 1314] A required privilege is not held by the client: 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpqubsir_9\\real-frontend' -> 'C:\\Users\\amasi\\AppData\\Local\\Temp\\tmpqubsir_9\\frontend'
+
+backend.tests.test_emergent_deployment_adapter_v5.EmergentDeploymentAdapterV5Tests::test_reviewed_source_validates_without_git_and_rejects_tamper
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: scripts.emergent_deployment_adapter.DeploymentAdapterError: frontend source has unsafe file permissions: src.js: 0666
+
+backend.tests.test_frontend_build_identity.FrontendBuildIdentityTests::test_head_tree_comparison_defeats_assume_unchanged_and_untracked
+  Class: Windows write_text CRLF vs Git autocrlf=true normalized LF blob
+  Exact error: frontend_build_identity.FrontendBuildIdentityError: tracked frontend input differs from Git HEAD: frontend/app.js
+
+backend.tests.test_frontend_build_identity.FrontendBuildIdentityTests::test_reproducibility_proof_must_match_retained_build_b
+  Class: CRLF checkout changes worker byte count/hash (596 vs574)
+  Exact error: frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+
+backend.tests.test_frontend_build_identity.FrontendBuildIdentityTests::test_reproducibility_proof_symlink_is_rejected
+  Class: CRLF checkout changes worker byte count/hash (596 vs574)
+  Exact error: frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+
+backend.tests.test_frontend_build_identity.FrontendBuildIdentityTests::test_valid_identity_is_compact_and_covers_every_public_file
+  Class: CRLF checkout changes worker byte count/hash (596 vs574)
+  Exact error: frontend_build_identity.FrontendBuildIdentityError: frontend retirement service worker is missing or invalid: service-worker.js
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_bootstrap_does_not_change_system_node_path_or_git_status
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_cached_node_or_yarn_version_mismatch_fails_closed
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_checksum_mismatch_prevents_extract_and_any_subprocess
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_cold_then_warm_cache_downloads_only_once
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_corrupt_metadata_is_not_used_and_forces_reinstall
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_corrupt_or_incomplete_archive_is_never_published
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_default_cache_honors_xdg_and_remains_outside_repo
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_exec_preserves_local_tools_inside_bash_login_shell
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_exec_version_mismatch_never_runs_user_command
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_execute_sanitizes_hostile_process_and_shell_environment
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_execute_uses_local_env_without_mutating_parent_process
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_group_writable_cached_directory_is_rejected_before_execution
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_install_is_atomic_and_validation_failure_cleans_stage
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_intermediate_symlink_escape_is_rejected_before_execution
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_non_launcher_corepack_tamper_is_rejected_before_execution
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_successful_install_publishes_only_after_exact_versions
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_verified_archive_missing_node_is_rejected_before_execution
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_world_writable_cached_file_is_rejected_before_execution
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests::test_yarn_corepack_marker_must_match_pinned_sha512
+  Class: POSIX os API unavailable on Windows
+  Exact error: AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_backend_mode_symlink_and_sourceless_bytecode_fail_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp5bp8fk_t\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_backend_modification_deletion_and_mode_drift_fail_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpkmabckwe\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_changed_packaged_critical_byte_fails_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpue0wuqz2\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_complete_backend_runtime_source_is_bound_to_identity
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpd0g5g8nq\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_critical_hash_keys_must_be_exact
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmps47uf2p8\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_frontend_proof_mismatch_fails_closed_even_with_recomputed_id
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp7__up54b\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_incomplete_frontend_summary_is_rejected
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: "frontend build fields" does not match "Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpw8mfwhxj\backend-package: 0777"
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_plain_python_boot_accepts_derived_cache_under_umask_077
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpng_mzy34\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_platform_generated_requirements_remain_outside_runtime_identity
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpamkqcvod\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_random_lease_fields_and_v4_payload_are_rejected
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpltabrhu8\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_release_id_cannot_be_reused_after_core_tampering
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp19j7ts46\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_release_id_is_sha256_of_canonical_compact_sorted_core
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmprpsb38dg\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_restrictive_source_and_directory_modes_preserve_git_category
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpviy213vs\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_root_env_sidecar_shape_and_permissions_fail_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpj3cu6_ou\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_runtime_validation_needs_no_git_or_sibling_frontend
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpt468ow4a\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_safe_root_env_sidecar_is_unread_and_outside_identity
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpp5g9wagf\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_source_sha_must_be_full_lowercase_and_match_frontend
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: AssertionError: "not bound to source_git_sha" does not match "Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpiqmy5i90\backend-package: 0777"
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_symlink_identity_and_symlink_critical_file_fail_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmp4dppvpbo\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_tests_and_identity_are_excluded_but_bytecode_cache_is_rejected
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpce18czgh\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_unreviewed_backend_addition_fails_closed
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpw6u74pcx\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_valid_identity_is_public_exact_and_deterministic
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmprgsl9oat\backend-package: 0777
+
+backend.tests.test_release_identity.ReleaseIdentityTests::test_validation_is_idempotent_and_rejects_json_type_coercion
+  Class: Windows mode bits do not implement required POSIX permissions
+  Exact error: release_protocol_v5.ReleaseProtocolV5Error: Backend runtime source has unsafe directory permissions: C:\Users\amasi\AppData\Local\Temp\tmpyaivdibq\backend-package: 0777

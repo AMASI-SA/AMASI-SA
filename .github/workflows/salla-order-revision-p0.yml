@@ -1,0 +1,45 @@
+name: Salla Order Revision P0 contracts
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'scripts/research/salla_order_item_contract_runner.py'
+      - 'backend/tests/test_salla_order_item_contract_runner_p0.py'
+      - 'backend/tests/test_salla_order_item_amasi_test_orders.py'
+      - 'backend/tests/test_salla_order_item_console.py'
+      - 'backend/order_revision_*.py'
+      - 'backend/server.py'
+      - 'docs/operations/MZ-ORDER-REVISION-SALLA-001/**'
+      - '.env.salla-sandbox.example'
+      - '.env.salla-amasi-test.example'
+      - '.github/workflows/salla-order-revision-p0.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: salla-order-revision-p0-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      SALLA_SANDBOX_RUN_WRITES: 'false'
+      SALLA_DEMO_STORE_CONFIRMED: 'false'
+      SALLA_AMASI_TEST_RUN_WRITES: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated contract dependencies
+        run: python -m pip install 'jsonschema==4.26.0' 'jsonschema-specifications==2025.9.1' 'fastapi==0.140.0' 'httpx==0.28.1' 'pymongo==4.6.3' 'mongomock==4.3.0'
+      - name: Run isolated CLI/HTTP contracts and full Draft 2020-12 validation
+        run: python -B -m unittest discover -s backend/tests -p 'test_salla_order_item_*.py' -v

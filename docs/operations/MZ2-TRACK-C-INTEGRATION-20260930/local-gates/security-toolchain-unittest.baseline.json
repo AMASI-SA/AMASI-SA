@@ -1,0 +1,11 @@
+{
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "unittest",
+    "backend.tests.test_frontend_release_toolchain",
+    "-q"
+  ],
+  "base": "1d9d65d8576d5bc852f52262b84af150356b9385",
+  "exit_code": 1
+}

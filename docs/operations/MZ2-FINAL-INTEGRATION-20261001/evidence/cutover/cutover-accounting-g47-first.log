@@ -1,0 +1,184 @@
+...............FF...................................................................................... [ 16%]
+........................................FFFFFFFF............... [ 27%]
+................................................................. [ 37%]
+.................................FFFF.................... [ 47%]
+................................................... [ 55%]
+..................................................................... [ 66%]
+.................................................................. [ 77%]
+............................................................................................. [ 92%]
+............................................                      [100%]
+================================== FAILURES ===================================
+_ OpeningBalanceTests.test_preview_post_activate_is_atomic_balanced_and_reportable _
+backend\tests\test_mz2_opening_balances.py:193: in test_preview_post_activate_is_atomic_balanced_and_reportable
+    activation = await self.activate()
+                 ^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_mz2_opening_balances.py:140: in activate
+    return await self.tx(
+backend\tests\test_mz2_opening_balances.py:108: in tx
+    return await atomic_owner(self.db, "owner", callback)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:85: in atomic_owner
+    return await _owner_transaction(db, owner, callback)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:136: in _owner_transaction
+    return await session.with_transaction(
+.venv\Lib\site-packages\motor\core.py:473: in with_transaction
+    ret = await coro(self)
+          ^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:124: in commit_work
+    result = await callback(scoped)
+             ^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_module_opening_balances.py:721: in activate_p01
+    raise HTTPException(409, detail={
+E   fastapi.exceptions.HTTPException: 409: {'code': 'mz2_p01_activation_not_ready', 'missing': ['opening_posted']}
+_ HistoricalPositionTests.test_august_115_september_75_then_zero_and_august_unchanged _
+backend\tests\test_mz2_historical_position.py:33: in test_august_115_september_75_then_zero_and_august_unchanged
+    await check("2020-08-31", 115, 1000)
+backend\tests\test_mz2_historical_position.py:30: in check
+    self.assertEqual(report["liabilities"]["customer_refund_payable"], liability)
+E   AssertionError: 0.0 != 115
+------------------------------ Captured log call ------------------------------
+WARNING  asyncio:base_events.py:2056 Executing <Task pending name='Task-36' coro=<WorkflowTests.asyncSetUp() running at C:\Users\amasi\mz2-final-integration-owner-20261001\backend\tests\test_mz2_receivable_workflow.py:55> wait_for=<Future pending cb=[_chain_future.<locals>._call_check_cancel() at C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\futures.py:384, Task.task_wakeup()] created at C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:460> cb=[_run_until_complete_cb() at C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:181] created at C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py:101> took 0.102 seconds
+_ BankCodCutoverTests.test_bank_approval_accepts_exact_and_postcut_dates_without_changing_advance_semantics _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_bank_approval_rejects_order_dates_before_any_financial_change _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+__ BankCodCutoverTests.test_bank_conversion_accepts_exact_and_postcut_dates ___
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_bank_conversion_rechecks_latest_order_date_inside_transaction _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_bank_conversion_rejects_order_dates_in_preview_and_execution _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_cod_exact_and_postcut_dates_keep_sale_and_separate_fee _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_cod_post_rechecks_latest_order_date_inside_transaction _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+_ BankCodCutoverTests.test_cod_prepare_and_post_reject_order_dates_without_financial_changes _
+backend\tests\test_mz2_bank_cod_cutover.py:174: in setUp
+    self.enterContext(patch.object(module, name, replacement))
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1503: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+..\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:1473: in get_original
+    raise AttributeError(
+E   AttributeError: <module 'accounting_bank_transfer_receipts' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_bank_transfer_receipts.py'> does not have the attribute 'post_txn_group'
+____ test_post_snapshots_bank_and_uses_one_balanced_group[matched-refund] _____
+backend\tests\test_mz2_settlements_p01.py:210: in test_post_snapshots_bank_and_uses_one_balanced_group
+    monkeypatch.setattr(service, "post_recognition_journal", fake_post)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: <module 'accounting_settlement_service' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_settlement_service.py'> has no attribute 'post_txn_group'
+__ test_post_snapshots_bank_and_uses_one_balanced_group[missing-refund-link] __
+backend\tests\test_mz2_settlements_p01.py:210: in test_post_snapshots_bank_and_uses_one_balanced_group
+    monkeypatch.setattr(service, "post_recognition_journal", fake_post)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: <module 'accounting_settlement_service' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_settlement_service.py'> has no attribute 'post_txn_group'
+__ test_post_snapshots_bank_and_uses_one_balanced_group[partial-refund-link] __
+backend\tests\test_mz2_settlements_p01.py:210: in test_post_snapshots_bank_and_uses_one_balanced_group
+    monkeypatch.setattr(service, "post_recognition_journal", fake_post)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: <module 'accounting_settlement_service' from 'C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\backend\\accounting_settlement_service.py'> has no attribute 'post_txn_group'
+________ test_post_rejects_insufficient_canonical_provider_receivable _________
+backend\tests\test_mz2_settlements_p01.py:273: in test_post_rejects_insufficient_canonical_provider_receivable
+    async def fake_native_rows(_db, owner):
+backend\accounting_settlement_service.py:451: in _post_reviewed_settlement_transaction
+    existing = next((r for r in await native_rows(db, owner_id)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_recognition_native.py:28: in native_rows
+    rows = await read_reporting_entries_v2(db, user_id=owner, effective_before="9999-12-31T00:00:00Z",
+backend\accounting_ledger_v2.py:1701: in read_reporting_entries_v2
+    rows = await db[GENERAL_LEDGER_COLLECTION].find(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_mz2_settlements_p01.py:174: in __getitem__
+    return self.mz2_financial_accounts
+E   AssertionError: No legacy bank fallback in settlement tests
+E   assert 'accounting_general_ledger_v2' == 'mz2_financial_accounts'
+E
+E     - mz2_financial_accounts
+E     + accounting_general_ledger_v2
+============================== warnings summary ===============================
+backend\liabilities_routes.py:170
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:170: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("ad_provider")
+
+backend\liabilities_routes.py:177
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:177: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("employee_salary_id")
+
+backend\liabilities_routes.py:183
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:183: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("paid_from_account_id")
+
+backend\liabilities_routes.py:191
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:191: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("supplier_name")
+
+backend\liabilities_routes.py:207
+  C:\Users\amasi\mz2-final-integration-owner-20261001\backend\liabilities_routes.py:207: PydanticDeprecatedSince20: Pydantic V1 style `@validator` validators are deprecated. You should migrate to Pydantic V2 style `@field_validator` validators, see the migration guide for more details. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    @validator("counterparty_name")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_opening_balances.py::OpeningBalanceTests::test_preview_post_activate_is_atomic_balanced_and_reportable
+FAILED backend/tests/test_mz2_historical_position.py::HistoricalPositionTests::test_august_115_september_75_then_zero_and_august_unchanged
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_bank_approval_accepts_exact_and_postcut_dates_without_changing_advance_semantics
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_bank_approval_rejects_order_dates_before_any_financial_change
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_bank_conversion_accepts_exact_and_postcut_dates
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_bank_conversion_rechecks_latest_order_date_inside_transaction
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_bank_conversion_rejects_order_dates_in_preview_and_execution
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_cod_exact_and_postcut_dates_keep_sale_and_separate_fee
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_cod_post_rechecks_latest_order_date_inside_transaction
+FAILED backend/tests/test_mz2_bank_cod_cutover.py::BankCodCutoverTests::test_cod_prepare_and_post_reject_order_dates_without_financial_changes
+FAILED backend/tests/test_mz2_settlements_p01.py::test_post_snapshots_bank_and_uses_one_balanced_group[matched-refund]
+FAILED backend/tests/test_mz2_settlements_p01.py::test_post_snapshots_bank_and_uses_one_balanced_group[missing-refund-link]
+FAILED backend/tests/test_mz2_settlements_p01.py::test_post_snapshots_bank_and_uses_one_balanced_group[partial-refund-link]
+FAILED backend/tests/test_mz2_settlements_p01.py::test_post_rejects_insufficient_canonical_provider_receivable
+14 failed, 597 passed, 5 warnings, 304 subtests passed in 1239.55s (0:20:39)

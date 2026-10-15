@@ -1,0 +1,176 @@
+{
+  "status": "PASS",
+  "scope": "Complete existing 16-stage synthetic SETUP business acceptance; Stage16 remains deliberately locked",
+  "head": "9b451cc03b4f8159483cbf58ef0fd128d24530e1",
+  "tree": "1756c44f0f631c4f72dc24525c694601e0ee8011",
+  "stage_results": [
+    {
+      "stage": 1,
+      "name": "Explicit cutover and retained original in a newly created session",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:23.959Z",
+      "finished": "2026-10-01T22:02:24.968Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 2
+    },
+    {
+      "stage": 2,
+      "name": "Bank/cash/overdraft exact identities; explicit zero and separate liability",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:24.969Z",
+      "finished": "2026-10-01T22:02:25.832Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 3
+    },
+    {
+      "stage": 3,
+      "name": "Provider receivable and explicit canonical bank binding",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:25.833Z",
+      "finished": "2026-10-01T22:02:26.627Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 4
+    },
+    {
+      "stage": 4,
+      "name": "Employee salary, advance and custody entered and restored independently",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:26.628Z",
+      "finished": "2026-10-01T22:02:27.591Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 5
+    },
+    {
+      "stage": 5,
+      "name": "Supplier payable and advance remain separate",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:27.593Z",
+      "finished": "2026-10-01T22:02:28.582Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 6
+    },
+    {
+      "stage": 6,
+      "name": "Create/select actual external contact and preserve supplier siblings",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:28.584Z",
+      "finished": "2026-10-01T22:02:29.447Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 7
+    },
+    {
+      "stage": 7,
+      "name": "Rich courier terms, actual uploaded source review and immutable approval",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:29.449Z",
+      "finished": "2026-10-01T22:02:32.608Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 7
+    },
+    {
+      "stage": 8,
+      "name": "Courier balances entered through Stage7 and financially saved from Stage8",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:32.610Z",
+      "finished": "2026-10-01T22:02:33.564Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 8
+    },
+    {
+      "stage": 9,
+      "name": "Driver opening responsibility and fees stay separate from courier siblings",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:33.566Z",
+      "finished": "2026-10-01T22:02:34.357Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 9
+    },
+    {
+      "stage": 10,
+      "name": "Actual V2 inventory catalogue, variant/component draft and independent account valuation",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:34.359Z",
+      "finished": "2026-10-01T22:02:36.452Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 11
+    },
+    {
+      "stage": 11,
+      "name": "Create actual effective fee policy through UI and preserve provider facts",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:36.453Z",
+      "finished": "2026-10-01T22:02:37.499Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 13
+    },
+    {
+      "stage": 12,
+      "name": "Confirmed advertising identity with explicit wallet and payable selection",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:37.500Z",
+      "finished": "2026-10-01T22:02:38.377Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 14
+    },
+    {
+      "stage": 13,
+      "name": "Select actual paid native invoice with independently calculated325 remaining days",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:38.379Z",
+      "finished": "2026-10-01T22:02:39.538Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 17
+    },
+    {
+      "stage": 14,
+      "name": "Actual supported typed obligations/taxes without netting or deposit fallback",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:39.539Z",
+      "finished": "2026-10-01T22:02:41.894Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 23
+    },
+    {
+      "stage": 15,
+      "name": "One complete source session: exact independent legs, original hashes and locked review",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:41.896Z",
+      "finished": "2026-10-01T22:02:43.244Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 25
+    },
+    {
+      "stage": 16,
+      "name": "Correct final lock; separate initially-paused owner rejects actual handoff423",
+      "status": "PASS",
+      "began": "2026-10-01T22:02:43.245Z",
+      "finished": "2026-10-01T22:02:44.117Z",
+      "session_id": "onboarding-9632db0a93cff3486dc50f68fdef8360f73fda19bdae653d1bb69c1da1a178b1",
+      "session_version": 25
+    }
+  ],
+  "tracked_files_sha256_unchanged": true,
+  "full_manifest_sha256": "603b9391b0173b6b72b9f65c406daee2950349edf33049236874837ea4434a73",
+  "command_exit_codes": {
+    "source_before": 0,
+    "build": 0,
+    "fixture_server": 0,
+    "actual_browser": 0,
+    "source_after": 0
+  },
+  "production_writes": 0,
+  "production_verified": false,
+  "physical_stock_approval": "NOT_EXECUTED",
+  "opening_post": "NOT_EXECUTED",
+  "activation": "NOT_EXECUTED",
+  "merge": "NO",
+  "deploy": "NO",
+  "notes": [
+    "Real HTTP/JWT database verifier/Mongo replica; synthetic session fixture, not login acceptance",
+    "Initially unpaused setup owner and distinct initially paused guard owner; no toggle",
+    "No source edits and no retry of this final acceptance attempt",
+    "Physical inventory is planned setup metadata, not an attested count",
+    "Legacy fingerprint probes are test-observer reads; no claim of Legacy business-read absence from hashes alone",
+    "Desktop and mobile final screenshots visually inspected"
+  ]
+}

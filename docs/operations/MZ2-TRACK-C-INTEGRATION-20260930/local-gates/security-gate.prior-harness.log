@@ -1,0 +1,263 @@
+FFFFFFFF...FFFFFFFF...FFFF......................................... [ 21%]
+...........F............................................................ [ 43%]
+........................................................................ [ 66%]
+........................................................................ [ 88%]
+...................................         [100%]
+================================== FAILURES ===================================
+_ FrontendReleaseToolchainTests.test_bootstrap_does_not_change_system_node_path_or_git_status _
+backend\tests\test_frontend_release_toolchain.py:908: in test_bootstrap_does_not_change_system_node_path_or_git_status
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_cached_node_or_yarn_version_mismatch_fails_closed _
+backend\tests\test_frontend_release_toolchain.py:606: in test_cached_node_or_yarn_version_mismatch_fails_closed
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_checksum_mismatch_prevents_extract_and_any_subprocess _
+backend\tests\test_frontend_release_toolchain.py:215: in test_checksum_mismatch_prevents_extract_and_any_subprocess
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_cold_then_warm_cache_downloads_only_once _
+backend\tests\test_frontend_release_toolchain.py:387: in test_cold_then_warm_cache_downloads_only_once
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_metadata_is_not_used_and_forces_reinstall _
+backend\tests\test_frontend_release_toolchain.py:442: in test_corrupt_metadata_is_not_used_and_forces_reinstall
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_or_incomplete_archive_is_never_published _
+backend\tests\test_frontend_release_toolchain.py:245: in test_corrupt_or_incomplete_archive_is_never_published
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_corrupt_retained_archive_is_not_executed_and_is_reinstalled _
+backend\tests\test_frontend_release_toolchain.py:412: in test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+    first = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_default_cache_honors_xdg_and_remains_outside_repo _
+backend\tests\test_frontend_release_toolchain.py:839: in test_default_cache_honors_xdg_and_remains_outside_repo
+    result = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_exec_preserves_local_tools_inside_bash_login_shell _
+backend\tests\test_frontend_release_toolchain.py:801: in test_exec_preserves_local_tools_inside_bash_login_shell
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_exec_version_mismatch_never_runs_user_command _
+backend\tests\test_frontend_release_toolchain.py:774: in test_exec_version_mismatch_never_runs_user_command
+    toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_execute_sanitizes_hostile_process_and_shell_environment _
+backend\tests\test_frontend_release_toolchain.py:699: in test_execute_sanitizes_hostile_process_and_shell_environment
+    status = toolchain.execute(
+scripts\frontend_release_toolchain.py:1293: in execute
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_execute_uses_local_env_without_mutating_parent_process _
+backend\tests\test_frontend_release_toolchain.py:650: in test_execute_uses_local_env_without_mutating_parent_process
+    status = toolchain.execute(
+scripts\frontend_release_toolchain.py:1293: in execute
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_group_writable_cached_directory_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:530: in test_group_writable_cached_directory_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_install_is_atomic_and_validation_failure_cleans_stage _
+backend\tests\test_frontend_release_toolchain.py:308: in test_install_is_atomic_and_validation_failure_cleans_stage
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_intermediate_symlink_escape_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:472: in test_intermediate_symlink_escape_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_non_launcher_corepack_tamper_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:499: in test_non_launcher_corepack_tamper_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_successful_install_publishes_only_after_exact_versions _
+backend\tests\test_frontend_release_toolchain.py:347: in test_successful_install_publishes_only_after_exact_versions
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_verified_archive_missing_node_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:273: in test_verified_archive_missing_node_is_rejected_before_execution
+    toolchain._install_toolchain(
+scripts\frontend_release_toolchain.py:1068: in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:756: in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_world_writable_cached_file_is_rejected_before_execution _
+backend\tests\test_frontend_release_toolchain.py:554: in test_world_writable_cached_file_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_ FrontendReleaseToolchainTests.test_yarn_corepack_marker_must_match_pinned_sha512 _
+backend\tests\test_frontend_release_toolchain.py:578: in test_yarn_corepack_marker_must_match_pinned_sha512
+    installed = toolchain.ensure_toolchain(
+scripts\frontend_release_toolchain.py:1269: in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts\frontend_release_toolchain.py:162: in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+_____ test_frontend_rebind_uses_authentication_not_duplicate_registration _____
+backend\tests\test_passkey_security_v1.py:140: in test_frontend_rebind_uses_authentication_not_duplicate_registration
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source
+E   assert 'ceremony === "renew" || ceremony === "rebind"' in '"""Owner trusted-device WebAuthn/passkey security for Mezan.\n\nThis layer sits between the distributed password-abus...an Owner trusted-device passkeys enabled: rp_id=%s trust_days=%s",\n        _rp_id(),\n        _trust_days(),\n    )\n'
+============================== warnings summary ===============================
+backend\tests\test_browser_security.py:4
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_browser_security.py:4: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient
+
+backend/tests/test_mfa_security_v1.py::test_mfa_challenge_token_is_short_lived_typed_and_scoped
+backend/tests/test_mfa_security_v1.py::test_owner_password_only_access_token_is_rejected
+backend/tests/test_mfa_security_v1.py::test_owner_mfa_access_token_is_accepted_and_secret_fields_are_not_returned
+backend/tests/test_mfa_security_v1.py::test_non_privileged_token_does_not_require_mfa_claim_shape
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\.venv\Lib\site-packages\jwt\api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 30 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+backend/tests/test_mfa_security_v1.py::test_mfa_challenge_token_is_short_lived_typed_and_scoped
+backend/tests/test_mfa_security_v1.py::test_owner_password_only_access_token_is_rejected
+backend/tests/test_mfa_security_v1.py::test_owner_mfa_access_token_is_accepted_and_secret_fields_are_not_returned
+backend/tests/test_mfa_security_v1.py::test_non_privileged_token_does_not_require_mfa_claim_shape
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\.venv\Lib\site-packages\jwt\api_jwt.py:368: InsecureKeyLengthWarning: The HMAC key is 30 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    decoded = self.decode_complete(
+
+backend/tests/test_inherited_security_qoyod.py: 77 warnings
+backend/tests/test_inherited_security_qoyod_one_shot.py: 30 warnings
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\integrations\qoyod\migration_routes.py:76: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort: str = Query("occurrences", regex="^(occurrences|last_order_date|status)$"),
+
+backend/tests/test_inherited_security_qoyod.py: 77 warnings
+backend/tests/test_inherited_security_qoyod_one_shot.py: 30 warnings
+  C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\integrations\qoyod\migration_routes.py:77: FastAPIDeprecationWarning: `regex` has been deprecated, please use `pattern` instead
+    sort_dir: str = Query("desc", regex="^(asc|desc)$"),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_bootstrap_does_not_change_system_node_path_or_git_status
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_cached_node_or_yarn_version_mismatch_fails_closed
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_checksum_mismatch_prevents_extract_and_any_subprocess
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_cold_then_warm_cache_downloads_only_once
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_metadata_is_not_used_and_forces_reinstall
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_or_incomplete_archive_is_never_published
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_default_cache_honors_xdg_and_remains_outside_repo
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_exec_preserves_local_tools_inside_bash_login_shell
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_exec_version_mismatch_never_runs_user_command
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_execute_sanitizes_hostile_process_and_shell_environment
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_execute_uses_local_env_without_mutating_parent_process
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_group_writable_cached_directory_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_install_is_atomic_and_validation_failure_cleans_stage
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_intermediate_symlink_escape_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_non_launcher_corepack_tamper_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_successful_install_publishes_only_after_exact_versions
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_verified_archive_missing_node_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_world_writable_cached_file_is_rejected_before_execution
+FAILED backend/tests/test_frontend_release_toolchain.py::FrontendReleaseToolchainTests::test_yarn_corepack_marker_must_match_pinned_sha512
+FAILED backend/tests/test_passkey_security_v1.py::test_frontend_rebind_uses_authentication_not_duplicate_registration
+21 failed, 297 passed, 223 warnings, 34 subtests passed in 65.80s (0:01:05)

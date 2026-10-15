@@ -3,6 +3,7 @@ const ACTIVE_SYNC_STATUSES = new Set(["queued", "running"]);
 const RECOVERABLE_HTTP_STATUSES = new Set([408, 499, 502, 504, 522, 524]);
 const RECOVERABLE_TRANSPORT_CODES = new Set(["ECONNABORTED", "ERR_NETWORK"]);
 const RETRYABLE_POLL_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504, 522, 524]);
+const ACTIVE_SYNC_CONFLICT_CODE = "snapchat_analytics_sync_in_progress";
 
 function syncPath(config = {}) {
     const rawUrl = typeof config?.url === "string" ? config.url : "";
@@ -27,11 +28,28 @@ function shouldRetryPollFailure(error) {
         || RECOVERABLE_TRANSPORT_CODES.has(transportCode);
 }
 
+function activeSyncConflict(error) {
+    const detail = error?.response?.data?.detail;
+    if (!detail || typeof detail !== "object") return null;
+    if (String(detail.code || "").trim() !== ACTIVE_SYNC_CONFLICT_CODE) {
+        return null;
+    }
+    const runId = String(detail.run_id || "").trim();
+    return runId ? { ...detail, run_id: runId } : null;
+}
+
 export function isSnapchatSyncRequest(config = {}) {
     if (config?._mezanSnapchatSyncRequest === true) return true;
     const method = String(config?.method || "").trim().toLowerCase();
-    return method === "post"
-        && syncPath(config).endsWith("/integrations-v2/snapchat_ads/sync");
+    if (method !== "post") return false;
+    if (syncPath(config).endsWith("/integrations-v2/snapchat_ads/sync")) return true;
+    if (!syncPath(config).endsWith("/integrations-v2/snapchat-v2/sync")) return false;
+    try {
+        const payload = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+        return payload?.action_report_time === "conversion" && payload?.run_type === "manual";
+    } catch {
+        return false;
+    }
 }
 
 export function rewriteSnapchatSyncRequest(config = {}) {
@@ -42,7 +60,15 @@ export function rewriteSnapchatSyncRequest(config = {}) {
     const pathname = queryIndex >= 0 ? rawUrl.slice(0, queryIndex) : rawUrl;
     const suffix = queryIndex >= 0 ? rawUrl.slice(queryIndex) : "";
     const normalizedPath = pathname.replace(/\/+$/, "");
-    const rewrittenPath = normalizedPath.endsWith(
+    const canonical = normalizedPath.endsWith("/integrations-v2/snapchat-v2/sync");
+    const payload = canonical && typeof config.data === "string"
+        ? JSON.parse(config.data) : config.data;
+    // Preserve the synchronous API's other supported modes. The UI's manual
+    // conversion report can use the durable canonical background job.
+    if (canonical && (payload?.action_report_time !== "conversion" || payload?.run_type !== "manual")) return config;
+    const rewrittenPath = canonical
+        ? normalizedPath.replace(/\/snapchat-v2\/sync$/, "/snapchat_ads/sync-async")
+        : normalizedPath.endsWith(
         "/integrations-v2/snapchat_ads/sync",
     )
         ? `${normalizedPath}-async`
@@ -51,6 +77,14 @@ export function rewriteSnapchatSyncRequest(config = {}) {
     return {
         ...config,
         url: `${rewrittenPath}${suffix}`,
+        ...(canonical ? {
+            data: {
+                from_date: payload.date_from,
+                to_date: payload.date_to,
+                ad_account_id: payload.ad_account_id,
+            },
+            _mezanSnapchatCanonicalSync: true,
+        } : {}),
         _mezanSnapchatSyncRequest: true,
         _mezanSnapchatAsyncSync: true,
     };
@@ -58,6 +92,17 @@ export function rewriteSnapchatSyncRequest(config = {}) {
 
 export function isSnapchatAsyncSyncResponse(response = {}) {
     return response?.config?._mezanSnapchatAsyncSync === true;
+}
+
+export function assertCanonicalSnapchatSyncResult(config, payload) {
+    if (config?._mezanSnapchatCanonicalSync !== true || payload?.status !== "failed") return;
+    const detail = payload.error || {
+        code: "snapchat_canonical_sync_failed",
+        message: "تعذر إكمال مزامنة صرف Snapchat.",
+    };
+    const failure = new Error(detail.message);
+    failure.response = { status: 502, data: { detail } };
+    throw failure;
 }
 
 export async function pollSnapchatAsyncSyncJob({
@@ -80,12 +125,10 @@ export async function pollSnapchatAsyncSyncJob({
     }
 
     const boundedAttempts = Math.min(
-        Math.max(Number(attempts) || 1, 1),
-        1_000,
+        Math.max(Number(attempts) || 1, 1), 1_000,
     );
     const boundedInterval = Math.min(
-        Math.max(Number(intervalMs) || 0, 0),
-        30_000,
+        Math.max(Number(intervalMs) || 0, 0), 30_000,
     );
 
     for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
@@ -112,7 +155,16 @@ export async function pollSnapchatAsyncSyncJob({
 export function shouldRecoverSnapchatSyncFailure(error) {
     if (!isSnapchatSyncRequest(error?.config)) return false;
 
-    // A structured Backend error is authoritative and must be shown directly.
+    // A duplicate click or a scheduled refresh may meet an already-running
+    // V2 job. This is not a failure: join that run and return its result.
+    if (activeSyncConflict(error)) return true;
+
+    // Without the accepted job ID a canonical request cannot be matched to a
+    // scheduler by timing alone. Keep the original transport error visible.
+    if (error?.config?._mezanSnapchatCanonicalSync === true) return false;
+
+    // Any other structured Backend error is authoritative and should be
+    // presented directly instead of being hidden by transport recovery.
     const detailCode = error?.response?.data?.detail?.code;
     if (typeof detailCode === "string" && detailCode.trim()) return false;
 
@@ -128,14 +180,26 @@ export function findTerminalSnapchatSyncRun(runs, startedAfterMs) {
     return (Array.isArray(runs) ? runs : [])
         .filter((run) => {
             if (run?.provider !== "snapchat_ads") return false;
-            if (run?.run_type !== "analytics_refresh") return false;
-            if (!TERMINAL_SYNC_STATUSES.has(run?.status)) return false;
+            if (!["analytics_refresh", "analytics_refresh_async"].includes(run?.run_type)) {
+                return false;
+            }
+            if (!TERMINAL_SYNC_STATUSES.has(syncStatus(run?.status))) return false;
             const startedAt = Date.parse(run?.started_at || "");
             return Number.isFinite(startedAt) && startedAt >= threshold;
         })
         .sort((left, right) => (
             Date.parse(right?.started_at || "") - Date.parse(left?.started_at || "")
         ))[0] || null;
+}
+
+function findTerminalRunById(runs, runId) {
+    const target = String(runId || "").trim();
+    if (!target) return null;
+    return (Array.isArray(runs) ? runs : []).find((run) => (
+        String(run?.run_id || "").trim() === target
+        && run?.provider === "snapchat_ads"
+        && TERMINAL_SYNC_STATUSES.has(syncStatus(run?.status))
+    )) || null;
 }
 
 function recoveredPayload(run) {
@@ -147,6 +211,7 @@ function recoveredPayload(run) {
         run_id: run?.run_id || summary.run_id || null,
         provider: "snapchat_ads",
         status: run?.status || summary.status || "failed",
+        ...(run?.error ? { error: run.error } : {}),
     };
 }
 
@@ -160,15 +225,19 @@ export async function recoverSnapchatSyncAfterTransportFailure({
     if (!shouldRecoverSnapchatSyncFailure(error)) return null;
     if (typeof loadRuns !== "function") return null;
 
+    const conflict = activeSyncConflict(error);
+    const targetRunId = conflict?.run_id || null;
     const startedAfterMs = Number(
         error?.config?._mezanSyncStartedAt || Date.now(),
     );
-    const boundedAttempts = Math.min(Math.max(Number(attempts) || 1, 1), 60);
+    const boundedAttempts = Math.min(Math.max(Number(attempts) || 1, 1), 120);
 
     for (let attempt = 0; attempt < boundedAttempts; attempt += 1) {
         try {
             const runs = await loadRuns();
-            const run = findTerminalSnapchatSyncRun(runs, startedAfterMs);
+            const run = targetRunId
+                ? findTerminalRunById(runs, targetRunId)
+                : findTerminalSnapchatSyncRun(runs, startedAfterMs);
             if (run) {
                 return { run, payload: recoveredPayload(run) };
             }

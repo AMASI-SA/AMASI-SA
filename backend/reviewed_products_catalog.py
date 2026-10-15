@@ -1,20 +1,32 @@
-"""Aggregated product catalogue for the reviewed fulfillment stage.
+"""Physical-piece catalogue for the reviewed fulfillment stage.
 
-The reviewed screen is product-first, not order-first. It reads durable Mezan
+The reviewed screen is piece-first, not quantity-first. It reads durable Mezan
 order/review/product snapshots and the immutable preparation allocation ledger.
 It never mutates Salla or Qoyod.
 """
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, Query
 
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import get_orders
+from order_review_spec_replacements import supplier_file_spec_fields
 from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer, _text
+from review_local_policy import (
+    ASSIGNMENT_STAGES, LOCAL_COMPLETION_MODE, assignment_workflow_query,
+    is_known_review_mode, load_local_assignment_workflows, local_review_stage_eligible,
+)
 from product_category_variant_support import _build_category_catalog, _flatten_categories
+from reviewed_preparation_v3 import (
+    stable_ready_item_id,
+    stable_ready_unit_id,
+    stable_reviewed_line_revision,
+    stable_reviewed_product_revision,
+)
 
 
 PRODUCTS = "mezan_products_v2"
@@ -22,6 +34,7 @@ PREPARATION_UNIT_ALLOCATIONS = "mezan_preparation_unit_allocations_v2"
 ACTIVE_PREPARATION_ALLOCATION_STATUSES = ("reserved", "committed")
 UNCATEGORIZED_ID = "uncategorized"
 MAX_REVIEWED_ORDERS = 2000
+CATALOG_SELECTION_BATCH = 64
 
 
 def _plain(value: Any) -> Any:
@@ -80,6 +93,112 @@ def _review_state_map(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for row in workflow.get("items") or []
         if isinstance(row, dict) and _text(row.get("order_item_id"))
     }
+
+
+def reviewed_customer_spec_fields(
+    item: dict[str, Any],
+    state: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Project the exact options used by cards and preparation files.
+
+    The shared supplier-field contract is live-first and fills missing keys
+    from the review snapshot. It also applies reviewed replacements and
+    explicit exclusions. Therefore an empty legacy snapshot is not a tombstone
+    for customer choices that still exist on the durable order.
+    """
+    return supplier_file_spec_fields(item, state)
+
+
+def order_items_with_review_snapshot(
+    order: dict[str, Any],
+    workflow: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Keep reviewed lines visible when Salla later omits live order items.
+
+    Review completion freezes the operational identity, quantity, SKU and
+    customer specifications for every line.  The live Salla order remains the
+    preferred source, while missing identities are appended from that durable
+    snapshot.  Matching by order-item identity prevents double counting when
+    Salla still returns a line normally.
+    """
+    live_items = [
+        _dict(value) for value in (order.get("items") or []) if _dict(value)
+    ]
+    live_ids = {
+        _text(item.get("order_item_id"))
+        for item in live_items
+        if _text(item.get("order_item_id"))
+    }
+    live_by_id = {
+        _text(item.get("order_item_id")): item
+        for item in live_items
+        if _text(item.get("order_item_id"))
+    }
+
+    def product_signature(item: dict[str, Any]) -> tuple[str, str, str, str]:
+        return (
+            _text(item.get("product_id")),
+            _text(item.get("parent_product_id")),
+            _text(item.get("variant_id")),
+            _text(item.get("sku")).upper(),
+        )
+
+    # Old review snapshots can predate preservation of Salla's order-item id.
+    # Track live quantity by product identity so those anonymous rows can be
+    # reconciled without duplicating a line that Salla still returns.
+    unmatched_live_quantity: dict[tuple[str, str, str, str], int] = defaultdict(int)
+    for item in live_items:
+        unmatched_live_quantity[product_signature(item)] += _unit_quantity(item.get("quantity"))
+
+    order_number = _text(order.get("order_number") or workflow.get("order_number"))
+    for snapshot_index, row in enumerate(workflow.get("items") or []):
+        snapshot = _dict(row)
+        order_item_id = _text(snapshot.get("order_item_id"))
+        quantity = _unit_quantity(snapshot.get("quantity"))
+        if quantity <= 0:
+            continue
+
+        signature = product_signature(snapshot)
+        if order_item_id and order_item_id in live_ids:
+            live = live_by_id[order_item_id]
+            # The review snapshot is the durable identity captured before
+            # Salla later returned a sparse in-progress order.  Restore only
+            # missing facts; never replace a current non-empty value.
+            for field in (
+                "product_id",
+                "parent_product_id",
+                "variant_id",
+                "source_item_id",
+                "sku",
+                "barcode",
+            ):
+                if not _text(live.get(field)) and _text(snapshot.get(field)):
+                    live[field] = snapshot.get(field)
+            unmatched_live_quantity[signature] = max(
+                0, unmatched_live_quantity[signature] - quantity
+            )
+            continue
+
+        if not order_item_id:
+            represented = min(quantity, unmatched_live_quantity[signature])
+            unmatched_live_quantity[signature] -= represented
+            quantity -= represented
+            if quantity <= 0:
+                continue
+            order_item_id = f"review-snapshot:{order_number}:{snapshot_index}"
+
+        live_items.append({
+            **snapshot,
+            "order_item_id": order_item_id,
+            "quantity": quantity,
+            "name": _text(snapshot.get("product_name")) or "منتج بدون اسم",
+            "image_url": _text(snapshot.get("selected_image_url")) or None,
+            "options_normalized": snapshot.get("specifications_snapshot") or {},
+            "_review_snapshot_state": True,
+            "_review_snapshot_index": snapshot_index,
+        })
+        live_ids.add(order_item_id)
+    return live_items
 
 
 def _raw_product_categories(product: dict[str, Any]) -> list[dict[str, Any]]:
@@ -145,6 +264,7 @@ def aggregate_reviewed_products(
     product_documents: list[dict[str, Any]],
 ) -> dict[str, Any]:
     product_lookup: dict[str, dict[str, Any]] = {}
+    products_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for product in product_documents:
         for identity in (
             product.get("salla_product_id"),
@@ -154,6 +274,9 @@ def aggregate_reviewed_products(
             value = _text(identity)
             if value:
                 product_lookup[value] = product
+        normalized_name = _normalized(product.get("name"))
+        if normalized_name:
+            products_by_name[normalized_name].append(product)
 
     category_catalog = build_category_catalog(product_documents)
     categories_by_id = {
@@ -172,9 +295,7 @@ def aggregate_reviewed_products(
         if order_number:
             reviewed_order_numbers.add(order_number)
         states = _review_state_map(workflow)
-        order_items = [
-            _dict(value) for value in (order.get("items") or []) if _dict(value)
-        ]
+        order_items = order_items_with_review_snapshot(order, workflow)
         total_products_in_order = sum(
             _unit_quantity(item.get("quantity")) for item in order_items
         ) or 1
@@ -182,6 +303,8 @@ def aggregate_reviewed_products(
 
         for line_index, item in enumerate(order_items):
             state = states.get(_text(item.get("order_item_id")), {})
+            if item.get("_review_snapshot_state"):
+                state = {**item, **state}
             # A reviewer may deliberately exclude a line from supplier files or
             # route it to internal preparation. Such a line is already routed
             # operationally and must not appear in this supplier-file queue.
@@ -192,10 +315,48 @@ def aggregate_reviewed_products(
             if quantity_units <= 0:
                 continue
             total_source_lines += 1
-            key = _product_group_key(item)
-            product_id = _text(item.get("product_id") or item.get("parent_product_id"))
-            sku = _text(item.get("sku"))
-            product = product_lookup.get(product_id) or product_lookup.get(sku) or {}
+            frozen_product_key = _text(state.get("product_key"))
+            frozen_kind, _, frozen_value = frozen_product_key.partition(":")
+            raw_product_id = _text(
+                item.get("product_id")
+                or item.get("parent_product_id")
+                or state.get("product_id")
+                or state.get("parent_product_id")
+                or (frozen_value if frozen_kind in {"product", "parent"} else "")
+            )
+            raw_sku = _text(
+                item.get("sku")
+                or state.get("sku")
+                or (frozen_value if frozen_kind == "sku" else "")
+            )
+            product = product_lookup.get(raw_product_id) or product_lookup.get(raw_sku) or {}
+            if not product:
+                # Some legacy Salla/order snapshots lose both SKU and product
+                # id while retaining the exact catalog name. Resolve by name
+                # only when it is unambiguous so the line rejoins the real
+                # product card instead of becoming a second name-only card.
+                name_matches = products_by_name.get(_normalized(item.get("name")), [])
+                if len(name_matches) == 1:
+                    product = name_matches[0]
+            product_id = _text(
+                product.get("salla_product_id")
+                or product.get("product_id")
+                or raw_product_id
+            )
+            sku = raw_sku or _text(product.get("sku"))
+            canonical_item = {
+                **item,
+                "product_id": product_id or None,
+                "parent_product_id": _text(
+                    item.get("parent_product_id") or state.get("parent_product_id")
+                ) or None,
+                "variant_id": _text(
+                    item.get("variant_id") or state.get("variant_id")
+                ) or None,
+                "sku": sku or None,
+                "name": _text(product.get("name")) or _text(item.get("name")),
+            }
+            key = _product_group_key(canonical_item)
             product_categories = _raw_product_categories(product)
             direct_category_ids = {
                 _text(row.get("id"))
@@ -213,7 +374,7 @@ def aggregate_reviewed_products(
             group = groups.setdefault(key, {
                 "group_key": key,
                 "product_id": product_id or None,
-                "parent_product_id": _text(item.get("parent_product_id")) or None,
+                "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
                 "sku": sku or _text(product.get("sku")) or None,
                 "name": product_name,
                 "image_url": image or None,
@@ -232,25 +393,100 @@ def aggregate_reviewed_products(
             group["direct_category_ids"].update(direct_category_ids)
             if not group.get("image_url") and image:
                 group["image_url"] = image
-            group["source_lines"].append({
+            customer_spec_fields = reviewed_customer_spec_fields(item, state)
+            source_line = {
                 "group_key": key,
                 "order_number": order_number,
                 "order_item_id": _text(item.get("order_item_id")),
                 "line_index": line_index,
                 "quantity": quantity_units,
-                "variant_id": _text(item.get("variant_id")) or None,
+                # Ready virtual units have no supplier allocation row. Keep
+                # their durable unit positions unavailable without writing a
+                # synthetic allocation or changing the reviewed identity.
+                "started_unit_indices": ([
+                    index for index, piece_id in enumerate(state.get("direct_assembly_piece_ids") or [], 1)
+                    if piece_id in (state.get("assembly_ready_piece_ids") or [])
+                ] if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE else []),
+                "variant_id": _text(canonical_item.get("variant_id")) or None,
+                "parent_product_id": _text(canonical_item.get("parent_product_id")) or None,
+                "barcode": _text(item.get("barcode") or state.get("barcode")) or None,
+                "source_item_id": _text(item.get("source_item_id") or state.get("source_item_id")) or None,
                 "product_id": product_id or None,
                 "product_name": product_name,
                 "sku": sku or None,
                 "image_url": image or None,
                 "order_date": order.get("created_at"),
                 "reviewed_at": workflow.get("reviewed_at"),
+                "incident_recovery_id": _text(workflow.get("incident_recovery_id")) or None,
                 "shipping_company": _text(shipping.get("company")) or None,
                 "total_products_in_order": total_products_in_order,
-                "options_normalized": item.get("options_normalized") or {},
+                "options_normalized": {
+                    row["name"]: row["value"]
+                    for row in customer_spec_fields
+                    if _text(row.get("name")) and _text(row.get("value"))
+                },
+                "file_spec_fields": customer_spec_fields,
                 "selected_image_url": selected_image or None,
                 "preparation_note": _text(state.get("preparation_note")) or None,
-            })
+                "identity_source": "review_snapshot" if item.get("_review_snapshot_state") else "reviewed_ready",
+                "review_snapshot_index": item.get("_review_snapshot_index"),
+                # Normal reviewed lines become immutable, file-ready records.
+                # This is derived lazily from the durable review workflow so
+                # existing reviewed products need no destructive backfill.
+                "ready_item_identity": ({
+                    "order_item_id": _text(item.get("order_item_id")),
+                    "source_item_id": _text(
+                        state.get("source_item_id") or item.get("source_item_id")
+                    ),
+                    "product_id": _text(
+                        state.get("product_id") or item.get("product_id") or product_id
+                    ),
+                    "parent_product_id": _text(
+                        state.get("parent_product_id") or item.get("parent_product_id")
+                    ),
+                    "variant_id": _text(
+                        state.get("variant_id") or item.get("variant_id")
+                    ),
+                    "sku": _text(state.get("sku") or item.get("sku") or sku),
+                    "barcode": _text(state.get("barcode") or item.get("barcode")),
+                    "quantity": quantity_units,
+                    "product_name": _text(
+                        state.get("product_name") or item.get("name") or product_name
+                    ),
+                    "selected_image_url": selected_image or _text(item.get("image_url")),
+                    "options": (
+                        state.get("specifications_snapshot")
+                        if state.get("specifications_snapshot") is not None
+                        else (
+                            state.get("options")
+                            if state.get("options") is not None
+                            else (item.get("options_normalized") or {})
+                        )
+                    ),
+                } if not item.get("_review_snapshot_state") else None),
+                # Keep the immutable facts that identify the reviewed snapshot
+                # separate from the Product V2-enriched display identity above.
+                # File creation can then prove it is materialising the same
+                # reviewed line without treating a newly resolved SKU/product id
+                # as a stale-data conflict.
+                "review_snapshot_identity": ({
+                    "order_item_id": _text(item.get("order_item_id")),
+                    "source_item_id": _text(item.get("source_item_id")),
+                    "product_id": _text(item.get("product_id")),
+                    "parent_product_id": _text(item.get("parent_product_id")),
+                    "variant_id": _text(item.get("variant_id")),
+                    "sku": _text(item.get("sku")),
+                    "barcode": _text(item.get("barcode")),
+                    "quantity": quantity_units,
+                    "options": (
+                        state.get("specifications_snapshot")
+                        if state.get("specifications_snapshot") is not None
+                        else (item.get("options_normalized") or {})
+                    ),
+                } if item.get("_review_snapshot_state") else None),
+            }
+            source_line["ready_item_id"] = stable_ready_item_id(source_line)
+            group["source_lines"].append(source_line)
 
     if any(UNCATEGORIZED_ID in group["category_ids"] for group in groups.values()):
         category_catalog.append({
@@ -268,7 +504,10 @@ def aggregate_reviewed_products(
     products: list[dict[str, Any]] = []
     total_quantity = 0
     for group in groups.values():
+        for source_line in group["source_lines"]:
+            source_line["line_revision"] = stable_reviewed_line_revision(source_line)
         group["source_lines"].sort(key=lambda row: (
+            0 if _text(row.get("incident_recovery_id")) else 1,
             _text(row.get("reviewed_at")),
             _text(row.get("order_number")),
             int(row.get("line_index") or 0),
@@ -276,14 +515,16 @@ def aggregate_reviewed_products(
         total_quantity += int(group["quantity"])
         for category_id in group["category_ids"]:
             counts[category_id].add(group["group_key"])
-        products.append({
+        product_row = {
             **group,
             "quantity": int(group["quantity"]),
             "source_order_numbers": sorted(group["source_order_numbers"]),
             "source_order_count": len(group["source_order_numbers"]),
             "category_ids": sorted(group["category_ids"]),
             "direct_category_ids": sorted(group["direct_category_ids"]),
-        })
+        }
+        product_row["revision"] = stable_reviewed_product_revision(product_row)
+        products.append(product_row)
 
     products.sort(key=lambda row: (_normalized(row.get("name")), row.get("group_key") or ""))
     categories = [
@@ -337,7 +578,8 @@ def apply_preparation_allocations(
                 continue
             key = (_text(line.get("order_number")), _text(line.get("order_item_id")))
             allocated_indices = sorted(
-                index for index in used_units.get(key, set()) if index <= quantity
+                index for index in (used_units.get(key, set()) | set(line.get("started_unit_indices") or []))
+                if 0 < index <= quantity
             )
             allocated = len(allocated_indices)
             remaining = max(0, quantity - allocated)
@@ -378,6 +620,12 @@ def apply_preparation_allocations(
             "source_order_count": len(remaining_orders),
             "source_line_count": len(source_lines),
         }
+        for source_line in row["source_lines"]:
+            source_line["line_revision"] = (
+                source_line.get("line_revision")
+                or stable_reviewed_line_revision(source_line)
+            )
+        row["revision"] = stable_reviewed_product_revision(row)
         remaining_products.append(row)
         for category_id in row.get("category_ids") or []:
             category_counts[_text(category_id)].add(_text(row.get("group_key")))
@@ -407,33 +655,295 @@ def apply_preparation_allocations(
     }
 
 
+def expand_reviewed_ready_units(catalog: dict[str, Any]) -> dict[str, Any]:
+    """Expose every available reviewed piece as its own selectable card."""
+    products: list[dict[str, Any]] = []
+    category_counts: dict[str, set[str]] = defaultdict(set)
+
+    for product in catalog.get("products") or []:
+        for source in product.get("source_lines") or []:
+            line = dict(source)
+            quantity = _unit_quantity(line.get("quantity"))
+            available_indices = sorted({
+                int(value)
+                for value in (line.get("available_unit_indices") or [])
+                if 0 < int(value) <= quantity
+            })
+            for unit_index in available_indices:
+                ready_unit_id = stable_ready_unit_id(line, unit_index)
+                unit_line = {
+                    **line,
+                    "group_key": ready_unit_id,
+                    "ready_unit_id": ready_unit_id,
+                    "unit_index": unit_index,
+                    "unit_total": quantity,
+                    "remaining_quantity": 1,
+                    "available_unit_indices": [unit_index],
+                }
+                row = {
+                    **product,
+                    "group_key": ready_unit_id,
+                    "base_product_group_key": _text(product.get("group_key")),
+                    "piece_level": True,
+                    "ready_unit_id": ready_unit_id,
+                    "unit_index": unit_index,
+                    "unit_total": quantity,
+                    "quantity": 1,
+                    "total_quantity": 1,
+                    "allocated_quantity": 0,
+                    "remaining_quantity": 1,
+                    "source_lines": [unit_line],
+                    "source_order_numbers": [_text(line.get("order_number"))],
+                    "source_order_count": 1,
+                    "source_line_count": 1,
+                }
+                row["revision"] = stable_reviewed_product_revision(row)
+                products.append(row)
+
+    products.sort(key=lambda row: (
+        _normalized(row.get("name")),
+        _text((row.get("source_order_numbers") or [""])[0]),
+        int(row.get("unit_index") or 0),
+        _text(row.get("group_key")),
+    ))
+    for row in products:
+        for category_id in row.get("category_ids") or []:
+            category_counts[_text(category_id)].add(_text(row.get("group_key")))
+
+    categories = [
+        {**row, "product_count": len(category_counts.get(_text(row.get("id")), set()))}
+        for row in catalog.get("categories") or []
+        if category_counts.get(_text(row.get("id")))
+    ]
+    summary = {
+        **(catalog.get("summary") or {}),
+        "selectable_card_count": len(products),
+        "piece_card_count": sum(1 for row in products if row.get("piece_level")),
+        "total_quantity": sum(_unit_quantity(row.get("quantity")) for row in products),
+        "remaining_quantity": sum(
+            _unit_quantity(row.get("remaining_quantity")) for row in products
+        ),
+    }
+    if any(
+        not row.get("piece_level")
+        or _unit_quantity(row.get("quantity")) != 1
+        or len(row.get("source_lines") or []) != 1
+        for row in products
+    ):
+        raise RuntimeError("reviewed_piece_catalog_invariant_failed")
+    return {
+        **catalog,
+        "products": products,
+        "categories": categories,
+        "summary": summary,
+        "selection_grain": "physical_piece",
+    }
+
+
+def _available_workflow_pipeline(query: dict[str, Any]) -> list[dict[str, Any]]:
+    """Exclude proven exhausted rows in Mongo before hydrating any OrderDTO.
+
+    This is only a negative filter, never approval evidence. Unknown/anonymous
+    item identities and changed live quantities go through canonical mapping.
+    Do not use preparation_progress: releases can make that cache stale.
+    """
+    def array(value):
+        return {"$cond": [{"$isArray": value}, value, []]}
+
+    def number(value):
+        return {"$convert": {"input": value, "to": "double", "onError": -1, "onNull": -1}}
+
+    def plain_id(value):
+        # The mapper trims identifiers. Only prove exhaustion for normalized
+        # ASCII identifiers; all other shapes use the canonical mapper below.
+        return {"$regexMatch": {"input": {"$convert": {
+            "input": value, "to": "string", "onError": "", "onNull": "",
+        }}, "regex": r"\A[A-Za-z0-9_:-]+\z"}}
+
+    snapshot = array("$items")
+    raw = array({"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.items", 0]})
+    # Prove current provider identities/quantities are covered by the frozen
+    # lines. Missing live lines are retained by order_items_with_review_snapshot.
+    summaries = {"$map": {"input": snapshot, "as": "s", "in": {
+        "id": "$$s.order_item_id", "quantity": number("$$s.quantity"),
+    }}}
+    live_summaries = {"$map": {"input": raw, "as": "r", "in": {
+        "id": {"$concat": ["salla:", {"$convert": {
+            "input": "$order_number", "to": "string", "onError": "", "onNull": "",
+        }}, ":", {
+            "$convert": {"input": "$$r.id", "to": "string", "onError": "", "onNull": ""},
+        }]}, "quantity": number("$$r.quantity"),
+    }}}
+    valid_snapshot = {"$allElementsTrue": [{"$map": {"input": snapshot, "as": "s", "in": {"$and": [
+        {"$eq": [{"$type": "$$s.order_item_id"}, "string"]},
+        plain_id("$$s.order_item_id"),
+        {"$gt": [number("$$s.quantity"), 0]},
+        {"$eq": [number("$$s.quantity"), {"$trunc": number("$$s.quantity")}]},
+    ]}}}]}
+    valid_live = {"$allElementsTrue": [{"$map": {"input": raw, "as": "r", "in": {"$and": [
+        {"$in": [{"$type": "$$r.id"}, ["string", "int", "long"]]},
+        plain_id("$$r.id"),
+    ]}}}]}
+    distinct_snapshot = {"$setUnion": [{"$map": {"input": snapshot, "as": "s", "in": "$$s.order_item_id"}}, []]}
+    distinct_live = {"$setUnion": [{"$map": {"input": raw, "as": "r", "in": "$$r.id"}}, []]}
+    proven = {"$and": [
+        {"$gt": [{"$size": snapshot}, 0]}, {"$gt": [{"$size": raw}, 0]},
+        {"$eq": [{"$size": "$_catalog_source"}, 1]}, valid_snapshot, valid_live,
+        plain_id("$order_number"),
+        {"$eq": [{"$type": "$order_number"}, "string"]},
+        {"$in": [{"$type": {"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.reference_id", 0]}},
+                 ["string", "int", "long"]]},
+        {"$eq": [{"$convert": {
+            "input": {"$arrayElemAt": ["$_catalog_source.raw_by_source.salla_direct.reference_id", 0]},
+            "to": "string", "onError": "", "onNull": "",
+        }}, "$order_number"]},
+        {"$eq": [{"$size": distinct_snapshot}, {"$size": snapshot}]},
+        {"$eq": [{"$size": distinct_live}, {"$size": raw}]},
+        {"$setIsSubset": [live_summaries, summaries]},
+    ]}
+    reserved = {"$map": {"input": {"$filter": {
+        "input": "$_catalog_allocations", "as": "a",
+        "cond": {"$eq": ["$$a.order_item_id", "$$s.order_item_id"]},
+    }}, "as": "a", "in": {"$cond": [
+        {"$in": [{"$type": "$$a.unit_index"}, ["int", "long"]]}, "$$a.unit_index", 0,
+    ]}}}
+    direct = {"$cond": [{"$eq": ["$completion_mode", LOCAL_COMPLETION_MODE]}, {
+        "$map": {"input": {"$filter": {
+            "input": {"$range": [0, {"$size": array("$$s.direct_assembly_piece_ids")}]}, "as": "i",
+            "cond": {"$and": [
+                {"$eq": [{"$type": {"$arrayElemAt": [array("$$s.direct_assembly_piece_ids"), "$$i"]}}, "string"]},
+                {"$in": [{"$arrayElemAt": [array("$$s.direct_assembly_piece_ids"), "$$i"]},
+                          array("$$s.assembly_ready_piece_ids")]},
+            ]},
+        }}, "as": "i", "in": {"$add": ["$$i", 1]}},
+    }, []]}
+    remaining = {"$anyElementTrue": [{"$map": {"input": snapshot, "as": "s", "in": {"$and": [
+        {"$ne": [{"$ifNull": ["$$s.supplier_export", True]}, False]},
+        {"$lt": [{"$size": {"$filter": {
+            "input": {"$setUnion": [reserved, direct]}, "as": "i",
+            "cond": {"$and": [{"$gt": ["$$i", 0]}, {"$lte": ["$$i", number("$$s.quantity")]}]},
+        }}}, number("$$s.quantity")]},
+    ]}}}]}
+    def lookup(collection, projection, extra=None):
+        return {"$lookup": {"from": collection, "let": {"u": "$user_id", "n": "$order_number"},
+            "pipeline": [{"$match": {"$expr": {"$and": [
+                {"$eq": ["$user_id", "$$u"]}, {"$eq": ["$order_number", "$$n"]},
+            ]}, **(extra or {})}}, {"$project": {"_id": 0, **projection}}],
+            "as": "_catalog_source" if collection == "unified_orders" else "_catalog_allocations"}}
+    return [
+        {"$match": query}, {"$sort": {"reviewed_at": 1, "_id": 1}},
+        lookup("unified_orders", {"raw_by_source.salla_direct.items.id": 1,
+                                  "raw_by_source.salla_direct.items.quantity": 1,
+                                  "raw_by_source.salla_direct.reference_id": 1}),
+        lookup(PREPARATION_UNIT_ALLOCATIONS, {"order_item_id": 1, "unit_index": 1},
+               {"status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)}}),
+        {"$match": {"$expr": {"$or": [{"$not": [proven]}, remaining]}}},
+        {"$project": {"_id": 0, "_catalog_source": 0, "_catalog_allocations": 0}},
+    ]
+
+
+async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
+    numbers = list(dict.fromkeys(_text(w.get("order_number")) for w in workflows))
+    orders = await get_orders(MongoOrderRepository(db), user_id=user_id, order_numbers=numbers)
+    approved = {} if historical else await load_local_assignment_workflows(
+        db, user_id=user_id, workflows=workflows,
+    )
+    pairs = []
+    for workflow in workflows:
+        number = _text(workflow.get("order_number"))
+        order = orders.get(number)
+        mode = workflow.get("completion_mode")
+        if order is None or (not historical and (not is_known_review_mode(mode) or (
+            mode == LOCAL_COMPLETION_MODE and not local_review_stage_eligible(
+                order, approved.get(number), ASSIGNMENT_STAGES,
+            )
+        ))):
+            continue
+        pairs.append((order, workflow))
+    allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find({
+        "user_id": user_id, "order_number": {"$in": numbers},
+        "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
+    }, {"_id": 0}).to_list(None) if numbers else []
+    return pairs, allocations
+
+
 async def load_reviewed_product_context(
     db: Any,
     *,
     user_id: str,
     limit: int = MAX_REVIEWED_ORDERS,
+    reviewed_date: str = "",
+    order_number: str = "",
 ) -> dict[str, Any]:
-    repository = MongoOrderRepository(db)
-    workflows = await db[WORKFLOWS].find(
-        {"user_id": user_id, "stage": "reviewed"},
-        {"_id": 0},
-    ).sort("reviewed_at", 1).limit(limit + 1).to_list(limit + 1)
-    truncated = len(workflows) > limit
-    workflows = workflows[:limit]
+    workflow_query: dict[str, Any] = {"user_id": user_id, **assignment_workflow_query()}
+    historical = bool(_text(reviewed_date))
+    if historical:
+        # Older workflow rows stored reviewed_at as an ISO string while newer
+        # rows may use BSON datetimes. Match both representations using Riyadh
+        # calendar boundaries. The stage predicate is intentionally removed:
+        # this view answers "passed reviewed on this date", not "is reviewed".
+        local_start = datetime.fromisoformat(reviewed_date).replace(
+            tzinfo=timezone(timedelta(hours=3)),
+        )
+        utc_start = local_start.astimezone(timezone.utc)
+        utc_end = utc_start + timedelta(days=1)
+        workflow_query = {
+            "user_id": user_id,
+            "$or": [
+                {"reviewed_at": {"$regex": f"^{reviewed_date}"}},
+                {
+                    "reviewed_at": {
+                        "$gte": utc_start.isoformat(),
+                        "$lt": utc_end.isoformat(),
+                    },
+                },
+                {"reviewed_at": {"$gte": utc_start, "$lt": utc_end}},
+            ],
+        }
+    pairs = []
+    allocation_documents = []
+    if historical or order_number:
+        # Stage reconciliation must still see its specific fully allocated
+        # order; it must not search a limited catalogue of remaining units.
+        if order_number:
+            workflow_query["order_number"] = order_number
+        workflows = await db[WORKFLOWS].find(workflow_query, {"_id": 0}).sort(
+            "reviewed_at", 1,
+        ).limit(limit + 1).to_list(limit + 1)
+        truncated = len(workflows) > limit
+        pairs, allocation_documents = await _load_catalog_pairs(
+            db, user_id=user_id, workflows=workflows[:limit], historical=historical,
+        )
+    else:
+        cursor = db[WORKFLOWS].aggregate(
+            _available_workflow_pipeline(workflow_query), batchSize=CATALOG_SELECTION_BATCH,
+        )
+        try:
+            while len(pairs) <= limit:
+                workflows = await cursor.to_list(min(CATALOG_SELECTION_BATCH, limit + 1 - len(pairs)))
+                if not workflows:
+                    break
+                candidates, allocations = await _load_catalog_pairs(db, user_id=user_id, workflows=workflows)
+                by_number = defaultdict(list)
+                for row in allocations:
+                    by_number[_text(row.get("order_number"))].append(row)
+                for pair in candidates:
+                    rows = by_number[_text(pair[1].get("order_number"))]
+                    available = apply_preparation_allocations(aggregate_reviewed_products([pair], []), rows)
+                    if available["products"]:
+                        pairs.append(pair)
+                        allocation_documents.extend(rows)
+        finally:
+            await cursor.close()
+        truncated = len(pairs) > limit
+        pairs = pairs[:limit]
 
-    pairs: list[tuple[Any, dict[str, Any]]] = []
     product_ids: set[str] = set()
     skus: set[str] = set()
     order_numbers: set[str] = set()
-    for workflow in workflows:
+
+    for order, workflow in pairs:
         order_number = _text(workflow.get("order_number"))
-        if not order_number:
-            continue
-        try:
-            order = await get_order(repository, user_id=user_id, order_number=order_number)
-        except OrderNotFoundError:
-            continue
-        pairs.append((order, workflow))
         order_numbers.add(order_number)
         for item in order.items:
             if _text(item.product_id):
@@ -442,6 +952,23 @@ async def load_reviewed_product_context(
                 product_ids.add(_text(item.parent_product_id))
             if _text(item.sku):
                 skus.add(_text(item.sku))
+        # Product V2 enrichment must also be available when Salla returns a
+        # sparse in-progress order and the durable review snapshot is the only
+        # remaining source of product identity.
+        for state in workflow.get("items") or []:
+            if not isinstance(state, dict):
+                continue
+            for value in (state.get("product_id"), state.get("parent_product_id")):
+                if _text(value):
+                    product_ids.add(_text(value))
+            if _text(state.get("sku")):
+                skus.add(_text(state.get("sku")))
+            product_key = _text(state.get("product_key"))
+            kind, _, value = product_key.partition(":")
+            if kind in {"product", "parent"} and _text(value):
+                product_ids.add(_text(value))
+            elif kind == "sku" and _text(value):
+                skus.add(_text(value))
 
     clauses: list[dict[str, Any]] = []
     if product_ids:
@@ -455,24 +982,17 @@ async def load_reviewed_product_context(
             {"_id": 0},
         ).to_list(max(len(product_ids) + len(skus), 1))
 
-    allocation_documents = []
-    if order_numbers:
-        allocation_documents = await db[PREPARATION_UNIT_ALLOCATIONS].find(
-            {
-                "user_id": user_id,
-                "order_number": {"$in": sorted(order_numbers)},
-                "status": {"$in": list(ACTIVE_PREPARATION_ALLOCATION_STATUSES)},
-            },
-            {"_id": 0},
-        ).to_list(100000)
+    allocation_documents = [row for row in allocation_documents if _text(row.get("order_number")) in order_numbers]
 
-    catalog = apply_preparation_allocations(
-        aggregate_reviewed_products(pairs, product_documents),
-        allocation_documents,
+    original_catalog = aggregate_reviewed_products(pairs, product_documents)
+    catalog = original_catalog if historical else expand_reviewed_ready_units(
+        apply_preparation_allocations(original_catalog, allocation_documents),
     )
     catalog.update({
         "ok": True,
-        "stage": "reviewed",
+        "stage": "reviewed_history" if historical else "reviewed",
+        "historical": historical,
+        "reviewed_date": reviewed_date or None,
         "truncated": truncated,
         "order_limit": limit,
     })
@@ -491,6 +1011,7 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
     @router.get("/catalog")
     async def reviewed_products_catalog(
         limit: int = Query(500, ge=1, le=MAX_REVIEWED_ORDERS),
+        reviewed_date: str = Query("", pattern=r"^$|^\d{4}-\d{2}-\d{2}$"),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
@@ -499,6 +1020,7 @@ def make_reviewed_products_catalog_router(db: Any, current_user: Callable) -> AP
             db,
             user_id=user_id,
             limit=limit,
+            reviewed_date=reviewed_date,
         )
         return context["catalog"]
 
@@ -512,6 +1034,9 @@ __all__ = [
     "PRODUCTS",
     "aggregate_reviewed_products",
     "apply_preparation_allocations",
+    "expand_reviewed_ready_units",
     "load_reviewed_product_context",
     "make_reviewed_products_catalog_router",
+    "order_items_with_review_snapshot",
+    "reviewed_customer_spec_fields",
 ]

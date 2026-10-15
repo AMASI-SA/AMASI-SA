@@ -6,21 +6,29 @@ preparation batches or move items into procurement/shipping.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import uuid
+import httpx
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import DuplicateKeyError
+from operational_atomic import operational_owner
+from review_local_policy import LOCAL_COMPLETION_MODE
 
 from order_engine.models import OrderDTO
 from order_engine.repository import MongoOrderRepository
 from order_engine.salla_refresh import refresh_order_from_salla
-from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, list_orders
+from order_engine.service import InvalidOrderCursorError, OrderNotFoundError, get_order, get_orders, list_orders
 from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
+from order_engine.product_identity_enrichment import enrich_order_item_identity
+from order_engine.recipient_enrichment import enrich_order_recipients
+from order_tracking_notes import enforce_stage_instructions
+from product_inventory_rules import order_item_specifications
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
 
@@ -31,10 +39,20 @@ EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
 REVIEW_COMPLETED_STAGES = {
     "reviewed",
+    "in_progress",
+    "assembly",
     "ready_to_ship",
     "completed",
     "delivering",
     "delivered",
+}
+PENDING_REVIEW_STATUS_KEYS = {
+    "under review",
+    "waiting review",
+    "pending review",
+    "بإنتظار المراجعة",
+    "بانتظار المراجعة",
+    "انتظار المراجعة",
 }
 
 _PERSONAL_OPTION_HINTS = (
@@ -57,6 +75,66 @@ def _text(value: Any) -> str:
 
 def _normalized(value: Any) -> str:
     return " ".join(_text(value).casefold().replace("_", " ").split())
+
+
+def _is_pending_review_order(order: OrderDTO) -> bool:
+    return any(
+        _normalized(value) in PENDING_REVIEW_STATUS_KEYS
+        for value in (order.status_native, order.status)
+        if _text(value)
+    )
+
+
+async def _find_pending_review_order(
+    db: Any,
+    repository: MongoOrderRepository,
+    *,
+    user_id: str,
+    order_number: str,
+    local_only: bool = False,
+) -> Optional[OrderDTO]:
+    """Resolve one queue result globally without advancing its workflow.
+
+    Exact search first refreshes the Salla snapshot so a new order can be found
+    before the background ingestion cycle reaches it.  Auto-fulfillment is
+    explicitly disabled because typing in a search box must remain read-only.
+    """
+    normalized_number = _text(order_number).lstrip("#").strip()
+    if not normalized_number:
+        return None
+
+    if not local_only:
+        await refresh_order_from_salla(
+            db,
+            user_id,
+            normalized_number,
+            force=False,
+            minimum_fresh_seconds=30,
+            allow_auto_fulfillment=False,
+        )
+    try:
+        order = await get_order(
+            repository,
+            user_id=user_id,
+            order_number=normalized_number,
+        )
+    except OrderNotFoundError:
+        return None
+    if not _is_pending_review_order(order):
+        return None
+
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": user_id, "order_number": normalized_number},
+        {"_id": 0, "stage": 1},
+    )
+    if _text((workflow or {}).get("stage")) in REVIEW_COMPLETED_STAGES:
+        return None
+    enriched = await enrich_order_recipients(
+        db,
+        user_id=user_id,
+        orders=[order],
+    )
+    return enriched[0] if enriched else order
 
 
 def _is_personal_option(name: str) -> bool:
@@ -103,12 +181,46 @@ def build_image_preference_identity(item: Any) -> tuple[str, str, dict[str, str]
     return product_key, signature, option_values
 
 
+APP_REVIEW_PERMISSIONS = {
+    "app.role.manager",
+    "app.page.pending_review",
+    "app.page.reviewed_preparation",
+}
+
+
+def _mobile_app_permissions(user: Any) -> set[str]:
+    if not isinstance(user, dict):
+        return set()
+    values: set[str] = set()
+    for raw in (
+        user.get("mobile_app_permissions"),
+        user.get("app_permissions"),
+    ):
+        if isinstance(raw, (list, tuple, set)):
+            values.update(_text(value) for value in raw if _text(value))
+    access = user.get("mobile_app_access")
+    if isinstance(access, dict):
+        raw = access.get("permissions")
+        if isinstance(raw, (list, tuple, set)):
+            values.update(_text(value) for value in raw if _text(value))
+    return values
+
+
 def _can_review(user: Any) -> bool:
     if not isinstance(user, dict):
         return False
     role = _normalized(user.get("role"))
     if role == "owner" or user.get("is_owner") is True:
         return True
+
+    # Native AMASI permissions are intentionally isolated from Mezan web
+    # permissions. A native app manager, or an employee granted either review
+    # page, may use review mutations without receiving orders.manage in Mezan.
+    mobile_permissions = _mobile_app_permissions(user)
+    if mobile_permissions.intersection(APP_REVIEW_PERMISSIONS):
+        return True
+
+    # Preserve the legacy web path for browser users and older integrations.
     if "orders.manage" in set(user.get("denied_permissions") or []):
         return False
     if role in {"admin", "operations"}:
@@ -172,6 +284,8 @@ class ReviewItemPatch(BaseModel):
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
+    reapprove_operation_id: Optional[str] = Field(default=None, pattern=r"^review_[a-f0-9]{64}$")
+    expected_acceptance_fingerprint: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class OperationalItemCreateRequest(BaseModel):
@@ -250,16 +364,23 @@ def _item_view(item: Any, saved: Optional[dict[str, Any]], preference: Optional[
     }
 
 
-async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> list[Any]:
+async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> list[Any]:
     """Build review items and refresh incomplete galleries once from Salla.
 
     Normal order reads remain local. The review stage is the one place where
     seeing every catalogue image is operationally required, so a product with
     a one-image cache is refreshed and the full gallery is persisted locally.
     """
-    identities = await enrich_order_item_images(
-        db, user_id=user_id, items=map_order_item_identities(order)
+    identities = await enrich_order_item_identity(
+        db,
+        user_id=user_id,
+        items=map_order_item_identities(order),
     )
+    identities = await enrich_order_item_images(
+        db, user_id=user_id, items=identities
+    )
+    if local_only:
+        return identities
     candidates = {
         (_text(getattr(item, "product_id", None)), _text(getattr(item, "sku", None)))
         for item in identities
@@ -383,6 +504,11 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO) -> lis
         refreshed = True
 
     if refreshed:
+        identities = await enrich_order_item_identity(
+            db,
+            user_id=user_id,
+            items=identities,
+        )
         identities = await enrich_order_item_images(db, user_id=user_id, items=identities)
     return identities
 
@@ -397,8 +523,14 @@ async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
     return _text(urls.get("admin"))
 
 
-async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
-    identities = await _review_item_identities(db, user_id, order)
+async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = False) -> dict[str, Any]:
+    enriched_orders = await enrich_order_recipients(
+        db,
+        user_id=user_id,
+        orders=[order],
+    )
+    order = enriched_orders[0] if enriched_orders else order
+    identities = await _review_item_identities(db, user_id, order, local_only=local_only)
     workflow = await db[WORKFLOWS].find_one(
         {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
     )
@@ -414,22 +546,118 @@ async def _detail(db: Any, user_id: str, order: OrderDTO) -> dict[str, Any]:
         "revision": int((workflow or {}).get("revision") or 0),
         "items": item_views,
         "operational_items": list((workflow or {}).get("operational_items") or []),
+        "customer_service_instructions": list(
+            (workflow or {}).get("customer_service_instructions") or []
+        ),
     }
 
 
 async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[str, Optional[str]]:
+    from order_review_completion import PROVIDER_DISPATCH
+    journal = PROVIDER_DISPATCH.get()
     internal_id = _text(order.source.source_order_id) or _text(order.order_id)
     if not internal_id:
         return "pending", "missing_salla_order_id"
+    async def guarded_call(method, path, **kwargs):
+        from order_review_completion import guard_provider_request, PROVIDER_CALL_TIMEOUT_SECONDS
+        await guard_provider_request(method)
+        return await asyncio.wait_for(
+            call_salla(db, user_id, method, path, **kwargs),
+            timeout=PROVIDER_CALL_TIMEOUT_SECONDS,
+        )
+
+    async def observed():
+        response = await guarded_call("GET", f"/orders/{internal_id}")
+        data = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(data, dict) or _text(data.get("id")) != internal_id:
+            raise ValueError("unverified_salla_order_identity")
+        value = data.get("status")
+        if not isinstance(value, dict):
+            raise ValueError("unverified_salla_order_status")
+        from product_fulfillment_rules import order_is_active, payment_is_eligible
+        customized = value.get("customized")
+        name = customized.get("name") if isinstance(customized, dict) else customized
+        check = order.model_copy(update={"status": value.get("slug"), "status_native": name or value.get("name")})
+        if not order_is_active(check):
+            raise ValueError("salla_order_not_active")
+        # Do not approve a stale local order while its webhook is still in
+        # flight. Read the authoritative lines without ingesting/materializing.
+        items = []
+        page = 1
+        while True:
+            item_response = await guarded_call("GET", "/orders/items",
+                                            params={"order_id": internal_id, "page": page})
+            rows = item_response.get("data") if isinstance(item_response, dict) else None
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ValueError("unverified_salla_items")
+            items.extend(rows)
+            pagination = item_response.get("pagination") or {}
+            pages = int(pagination.get("totalPages") or pagination.get("total_pages") or pagination.get("last_page") or 1)
+            if page >= pages:
+                break
+            page += 1
+            if page > 100:
+                raise ValueError("salla_items_truncated")
+        from order_engine.mapper import map_salla_order
+        from order_review_completion import provider_fingerprint
+        provider_order = map_salla_order({**data, "items": items})
+        if (provider_order.order_number != order.order_number
+                or not payment_is_eligible(provider_order.payment)
+                or provider_fingerprint(provider_order) != provider_fingerprint(order)):
+            raise ValueError("salla_review_source_changed")
+        return _text(name) in REVIEWED_STATUS_NAMES or _text(value.get("name")) in REVIEWED_STATUS_NAMES
+
     try:
-        statuses = await call_salla(db, user_id, "GET", "/orders/statuses")
+        # Retry/readback never posts a duplicate status transition when the
+        # previous attempt succeeded but its response or local commit was lost.
+        if await observed():
+            return "sent", None
+        if journal and journal["read_only"]:
+            return "confirmation_pending", "salla_review_status_unconfirmed"
+        statuses = await guarded_call("GET", "/orders/statuses")
         status_id = _reviewed_status_id(statuses)
         if status_id is None:
             return "pending", "reviewed_status_not_found"
-        await call_salla(db, user_id, "POST", f"/orders/{internal_id}/status", json={"status_id": status_id})
-        return "sent", None
-    except SallaError as exc:
-        return "pending", f"salla_{exc.status_code}"
+        try:
+            await guarded_call("POST", f"/orders/{internal_id}/status", json={"status_id": status_id})
+        except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
+            if journal:
+                # Only the client's explicit HTTP rejection format proves this
+                # endpoint rejected. Auth errors and 5xx/timeouts are ambiguous.
+                rejected = (isinstance(exc, SallaError) and exc.status_code in (400, 403, 404, 409, 422, 429)
+                            and str(exc).startswith(f"Salla POST /orders/{internal_id}/status → {exc.status_code}:"))
+                await journal["record"]("rejected" if rejected else "outcome_unknown", {
+                    "error_type": type(exc).__name__, "reported_status": getattr(exc, "status_code", None),
+                    "phase": "status_post",
+                })
+                if rejected:
+                    return "pending", f"salla_{exc.status_code}"
+            # The provider may have committed before a timeout/invalid response.
+            # Only authoritative readback can classify this as success.
+            if await observed():
+                return "sent", None
+            return "confirmation_pending" if journal else "pending", "salla_review_status_unconfirmed"
+        if journal:
+            # call_salla returns decoded JSON, not HTTP metadata. Do not invent
+            # an HTTP status or equate response receipt with confirmed review.
+            await journal["record"]("response_received", {"phase": "status_post"})
+        return ("sent", None) if await observed() else (
+            "confirmation_pending" if journal else "pending", "salla_review_status_unconfirmed")
+    except (SallaError, httpx.RequestError, ValueError, TimeoutError) as exc:
+        if journal:
+            if isinstance(exc, ValueError):
+                if journal["possible"] and isinstance(exc, json.JSONDecodeError):
+                    return "confirmation_pending", "invalid_provider_json"
+                # Provider identity/payment/line/cancellation guards remain hard
+                # failures, never eventual-consistency successes or waits.
+                allowed = {"unverified_salla_order_identity", "unverified_salla_order_status",
+                           "salla_order_not_active", "unverified_salla_items", "salla_items_truncated",
+                           "salla_review_source_changed"}
+                reason = str(exc) if str(exc) in allowed else "invalid_provider_response"
+                raise HTTPException(409, detail={"code": "review_provider_validation_failed", "reason": reason}) from None
+            if journal["possible"]:
+                return "confirmation_pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
+        return "pending", f"salla_{exc.status_code}" if isinstance(exc, SallaError) else type(exc).__name__
 
 
 def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
@@ -440,37 +668,75 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     async def list_pending_reviews(
         limit: int = Query(15, ge=1, le=50),
         cursor: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None, max_length=50),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
-        # Non-blocking, throttled Salla Direct ingestion. It reads only the
-        # light order list and order items, performs no Qoyod API calls, and
-        # never delays the local queue response.
-        schedule_salla_auto_sync(db, merchant_id)
-        try:
-            page = await list_orders(
-                repository, user_id=merchant_id, limit=limit,
-                cursor=cursor, status_group="under_review",
+        exact_order_number = _text(search).lstrip("#").strip()
+        if exact_order_number:
+            order = await _find_pending_review_order(
+                db,
+                repository,
+                user_id=merchant_id,
+                order_number=exact_order_number,
+                local_only=True,
             )
+            return {
+                "items": [order.model_dump(mode="json")] if order else [],
+                "total_count": int(order is not None),
+                "next_cursor": None,
+                "skipped_invalid": 0,
+            }
+        from order_engine.service import _decode_cursor, _encode_cursor
+        try:
+            position = _decode_cursor(cursor) if cursor else {}
         except InvalidOrderCursorError as exc:
-            raise HTTPException(status_code=400, detail={"code": "invalid_orders_cursor"}) from exc
-        numbers = [order.order_number for order in page.items]
-        completed = set()
-        if numbers:
-            docs = await db[WORKFLOWS].find(
-                {
-                    "user_id": merchant_id,
-                    "order_number": {"$in": numbers},
-                    "stage": {"$in": sorted(REVIEW_COMPLETED_STAGES)},
-                },
-                {"_id": 0, "order_number": 1},
-            ).to_list(len(numbers))
-            completed = {_text(doc.get("order_number")) for doc in docs}
+            raise HTTPException(400, detail={"code": "invalid_orders_cursor"}) from exc
+        rows, total = await repository.cursor_pending_review_order_numbers(
+            user_id=merchant_id, limit=limit + 1, workflow_collection=WORKFLOWS,
+            completed_stages=REVIEW_COMPLETED_STAGES,
+            before_order_date=position.get("order_date"),
+            before_order_number=position.get("order_number"),
+        )
+        visible = rows[:limit]
+        numbers = [row["order_number"] for row in visible]
+        orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
+        page_items = await enrich_order_recipients(
+            db, user_id=merchant_id, orders=[orders[n] for n in numbers if n in orders],
+        )
+        next_cursor = (_encode_cursor(visible[-1]["order_date"], visible[-1]["order_number"])
+                       if len(rows) > limit and visible else None)
+        return {"items": [order.model_dump(mode="json") for order in page_items],
+                "next_cursor": next_cursor, "total_count": total,
+                "skipped_invalid": len(numbers) - len(page_items)}
+
+    @router.get("/pages")
+    async def list_pending_review_pages(
+        page: int = Query(1, ge=1, le=100_000),
+        limit: int = Query(10, ge=1, le=50),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        numbers, total_count = await repository.numbered_pending_review_order_numbers(
+            user_id=merchant_id,
+            page=page,
+            limit=limit,
+            workflow_collection=WORKFLOWS,
+            completed_stages=REVIEW_COMPLETED_STAGES,
+        )
+        orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
+        ordered_rows = [orders[number] for number in numbers if number in orders]
+        ordered_rows = await enrich_order_recipients(
+            db,
+            user_id=merchant_id,
+            orders=ordered_rows,
+        )
         return {
-            "items": [order.model_dump(mode="json") for order in page.items if order.order_number not in completed],
-            "next_cursor": page.next_cursor,
-            "skipped_invalid": page.skipped_invalid,
+            "items": [order.model_dump(mode="json") for order in ordered_rows],
+            "page": page,
+            "total_count": total_count,
         }
 
     @router.get("/reviewed")
@@ -493,6 +759,12 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 order = await get_order(repository, user_id=merchant_id, order_number=order_number)
             except OrderNotFoundError:
                 continue
+            enriched_orders = await enrich_order_recipients(
+                db,
+                user_id=merchant_id,
+                orders=[order],
+            )
+            order = enriched_orders[0] if enriched_orders else order
             payload = order.model_dump(mode="json")
             payload.update({
                 "stage": "reviewed",
@@ -506,7 +778,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         return {"items": items}
 
     @router.get("/{order_number}")
-    async def get_review_detail(order_number: str, user: dict = Depends(current_user)) -> dict[str, Any]:
+    async def get_review_detail(order_number: str, local_only: bool = Query(False), user: dict = Depends(current_user)) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
 
@@ -514,19 +786,20 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         # Order Details and line items from List Order Items, never Shipments or
         # Qoyod. Failure is non-blocking so the durable local snapshot remains
         # available to the reviewer.
-        await refresh_order_from_salla(
-            db,
-            merchant_id,
-            order_number,
-            force=False,
-            minimum_fresh_seconds=120,
-        )
+        if not local_only:
+            await refresh_order_from_salla(
+                db,
+                merchant_id,
+                order_number,
+                force=False,
+                minimum_fresh_seconds=120,
+            )
 
         try:
             order = await get_order(repository, user_id=merchant_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        return await _detail(db, merchant_id, order)
+        return await _detail(db, merchant_id, order, local_only=local_only)
 
     @router.post("/{order_number}/operational-items")
     async def create_operational_item(
@@ -538,6 +811,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            order_item_id=payload.source_order_item_id,
+            stage="pending_review",
+            actor_id=actor_id,
+        )
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -598,7 +879,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "source_order_item_id": source_item.order_item_id,
             "source_product_name": _text(getattr(source_item, "name", None)),
             "linked_specs": linked_specs,
-            "preparation_status": "in_progress",
+            "preparation_status": "pending",
             "blocks_order_completion": True,
             "supplier_export": False,
             "salla_product": False,
@@ -679,20 +960,22 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
-        normalized_status = None
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
         if payload.preparation_status is not None:
-            status_value = _normalized(payload.preparation_status)
-            status_map = {
-                "pending": "pending",
-                "لم يبدأ": "pending",
-                "in progress": "in_progress",
-                "قيد التجهيز": "in_progress",
-                "ready": "ready",
-                "جاهز": "ready",
-            }
-            normalized_status = status_map.get(status_value)
-            if not normalized_status:
-                raise HTTPException(status_code=422, detail={"code": "invalid_operational_item_status"})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "operational_status_managed_in_assembly",
+                    "message": "جاهزية المنتج التشغيلي تُسجل من صفحة التجميع والعنونة فقط.",
+                },
+            )
         if payload.preparation_status is None and payload.name is None:
             raise HTTPException(status_code=422, detail={"code": "operational_item_update_required"})
         workflow = await db[WORKFLOWS].find_one(
@@ -705,8 +988,6 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         target = next((row for row in operational_items if _text(row.get("operational_item_id")) == operational_item_id), None)
         if target is None:
             raise HTTPException(status_code=404, detail={"code": "operational_item_not_found"})
-        if normalized_status:
-            target["preparation_status"] = normalized_status
         if payload.name is not None:
             target["name"] = _text(payload.name)
         target["updated_at"] = _now()
@@ -730,6 +1011,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order_number}, {"_id": 0}
         )
@@ -804,6 +1093,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            order_item_id=order_item_id,
+            stage="pending_review",
+            actor_id=actor_id,
+        )
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
@@ -846,6 +1143,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         states[order_item_id] = current
         new_doc = {
+            **(workflow or {}),
             "user_id": user_id,
             "order_number": order.order_number,
             "order_id": order.order_id,
@@ -855,6 +1153,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_at": _now(),
             "updated_by": actor_id,
         }
+        new_doc.pop("_id", None)
         if workflow:
             result = await db[WORKFLOWS].replace_one(
                 {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
@@ -889,6 +1188,17 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         return await _detail(db, user_id, order)
 
+    @router.get("/{order_number}/completion-operation")
+    async def completion_operation_status(order_number: str, user: dict = Depends(current_user)):
+        reviewer = _require_reviewer(user)
+        operation = await db.order_review_completion_operations.find_one(
+            {"user_id": _merchant_user_id(reviewer), "order_number": order_number,
+             "superseded_by": {"$exists": False}},
+            {"_id": 1, "state": 1, "resume_attempts": 1, "resume_due_at": 1,
+             "resume_block_reason": 1, "resume_last_error": 1, "completion_mode": 1}, sort=[("created_at", -1)],
+        )
+        return {"operation": operation}
+
     @router.post("/{order_number}/complete")
     async def complete_review(
         order_number: str,
@@ -899,22 +1209,109 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         user_id = _merchant_user_id(reviewer)
         actor_id = str(reviewer["id"])
         await _ensure_indexes(db)
+        await enforce_stage_instructions(
+            db,
+            user_id=user_id,
+            order_number=order_number,
+            stage="pending_review",
+            actor_id=actor_id,
+            order_wide=True,
+        )
+        source_snapshot = await db.unified_orders.find_one(
+            {"user_id": user_id, "order_number": order_number},
+        ) or {}
+        source_watermark = source_snapshot.get("g47_salla_snapshot") or {}
+        if source_watermark.get("requires_authoritative_refresh"):
+            raise HTTPException(409, detail={"code": "component_authoritative_refresh_required"})
         try:
             order = await get_order(repository, user_id=user_id, order_number=order_number)
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
-        identities = await _review_item_identities(db, user_id, order)
+        identities = await _review_item_identities(db, user_id, order, local_only=True)
         if not identities:
             raise HTTPException(status_code=409, detail={"code": "order_has_no_items", "message": "لا يمكن اعتماد طلب بلا منتجات."})
         workflow = await db[WORKFLOWS].find_one(
             {"user_id": user_id, "order_number": order.order_number}, {"_id": 0}
         )
+        if (workflow or {}).get("completion_mode") not in (None, LOCAL_COMPLETION_MODE):
+            raise HTTPException(409, detail={"code": "review_completion_mode_unknown"})
         if (workflow or {}).get("stage") in REVIEW_COMPLETED_STAGES:
+            if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:
+                operation = await db.order_review_completion_operations.find_one({
+                    "_id": workflow.get("review_completion_operation_id"),
+                    "user_id": user_id, "order_number": order.order_number,
+                    "completion_mode": LOCAL_COMPLETION_MODE, "state": "completed",
+                    "superseded_by": {"$exists": False},
+                })
+                if not operation or not operation.get("result"):
+                    raise HTTPException(409, detail={"code": "review_completion_local_evidence_missing"})
+                return {**operation["result"], "already_reviewed": True}
             return {"ok": True, "already_reviewed": True, "order_number": order.order_number}
         revision = int((workflow or {}).get("revision") or 0)
         if revision != payload.expected_revision:
             raise HTTPException(status_code=409, detail={"code": "review_revision_conflict", "message": "حدّث بيانات الطلب قبل الاعتماد."})
         states = _state_map(workflow)
+
+        from order_review_acceptance_snapshot import acceptance_snapshot
+        approved_acceptance = await acceptance_snapshot(db, user_id=user_id, order=order)
+
+        # Product-level routing defaults are authoritative for future orders.
+        # A direct warehouse route intentionally bypasses the supplier file,
+        # preparation employee and preparation receipt stages.
+        from order_review_export_controls import (
+            ASSIGNMENT_DEFAULTS,
+            DIRECT_ASSEMBLY_ROUTE,
+            INTERNAL_PREPARATION_ROUTE,
+            SUPPLIER_FILE_ROUTE,
+            preparation_assignment_product_key,
+        )
+        product_keys = {
+            preparation_assignment_product_key(item)
+            for item in identities
+        }
+        default_docs = await db[ASSIGNMENT_DEFAULTS].find(
+            {
+                "user_id": user_id,
+                "product_key": {"$in": list(product_keys)},
+            },
+            {"_id": 0},
+        ).to_list(max(1, len(product_keys)))
+        defaults_by_key = {
+            _text(row.get("product_key")): row
+            for row in default_docs
+            if _text(row.get("product_key"))
+        }
+        for item in identities:
+            order_item_id = _text(item.order_item_id)
+            current = dict(states.get(order_item_id) or {})
+            if not _text(current.get("preparation_route")):
+                default = defaults_by_key.get(
+                    preparation_assignment_product_key(item)
+                ) or {}
+                route = _text(default.get("preparation_route"))
+                if route in {
+                    SUPPLIER_FILE_ROUTE,
+                    INTERNAL_PREPARATION_ROUTE,
+                    DIRECT_ASSEMBLY_ROUTE,
+                }:
+                    current["preparation_route"] = route
+                    current["supplier_export"] = route == SUPPLIER_FILE_ROUTE
+                    current["preparation_status"] = (
+                        "in_progress"
+                        if route == INTERNAL_PREPARATION_ROUTE
+                        else "awaiting_assembly"
+                        if route == DIRECT_ASSEMBLY_ROUTE
+                        else "pending_file"
+                    )
+                    current["assigned_employee_id"] = (
+                        _text(default.get("assigned_employee_id")) or None
+                        if route == INTERNAL_PREPARATION_ROUTE
+                        else None
+                    )
+                    current["route_source"] = "product_default"
+                    current["order_item_id"] = order_item_id
+                    states[order_item_id] = current
+
         preferences = await _preference_map(db, user_id, identities)
         now = _now()
         frozen_items = []
@@ -924,6 +1321,44 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             frozen_items.append({
                 **states.get(item.order_item_id, {}),
                 "order_item_id": item.order_item_id,
+                "product_key": preparation_assignment_product_key(item),
+                "product_id": _text(getattr(item, "product_id", None)) or None,
+                "parent_product_id": _text(
+                    getattr(item, "parent_product_id", None)
+                ) or None,
+                "variant_id": _text(getattr(item, "variant_id", None)) or None,
+                "source_item_id": _text(
+                    getattr(getattr(item, "source", None), "source_order_item_id", None)
+                ) or None,
+                "product_name": _text(getattr(item, "name", None)) or "منتج",
+                "sku": _text(getattr(item, "sku", None)) or None,
+                "barcode": _text(getattr(item, "barcode", None)) or None,
+                "options": [
+                    option.model_dump(mode="json")
+                    for option in (getattr(item, "options", None) or [])
+                ],
+                "quantity": int(getattr(item, "quantity", 1) or 1),
+                "direct_assembly_piece_ids": (
+                    [
+                        "direct_" + hashlib.sha256(
+                            (
+                                f"{order.order_number}:"
+                                f"{item.order_item_id}:{unit_index}"
+                            ).encode("utf-8")
+                        ).hexdigest()[:32]
+                        for unit_index in range(
+                            1,
+                            int(getattr(item, "quantity", 1) or 1) + 1,
+                        )
+                    ]
+                    if _text(
+                        states.get(item.order_item_id, {}).get(
+                            "preparation_route"
+                        )
+                    ) == DIRECT_ASSEMBLY_ROUTE
+                    else []
+                ),
+                "specifications_snapshot": order_item_specifications(item),
                 "review_status": "reviewed",
                 "selected_image_url": view["selected_image_url"],
                 "selected_image_source": view["selected_image_source"],
@@ -935,101 +1370,34 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "revision": int(states.get(item.order_item_id, {}).get("revision") or 0) + 1,
             })
 
-        # The order must remain visible in stage one when Salla rejects or
-        # cannot confirm the status transition.  The employee can retry
-        # without losing any previously saved images or notes.
-        sync_status, sync_error = await _sync_salla_reviewed(db, user_id, order)
-        if sync_status != "sent":
-            await db[EVENTS].insert_one({
-                "user_id": user_id,
-                "order_number": order.order_number,
-                "event_type": "order_review_salla_sync_failed",
-                "error_code": sync_error,
-                "occurred_at": _now(),
-                "actor_id": actor_id,
-            })
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail={
-                    "code": "salla_review_status_sync_failed",
-                    "message": "حُفظت الصور والملاحظات، لكن لم تعتمد سلة حالة «تمت المراجعة». بقي الطلب في هذه الصفحة ويمكن إعادة المحاولة.",
-                    "reason": sync_error,
-                },
-            )
-        # Product V2 owns the fulfillment classification.  Only an explicitly
-        # configured, fully eligible instant order may skip preparation and
-        # enter the shipping/labeling queue automatically.  Any missing local
-        # fact fails closed and leaves the order in the reviewed stage.
-        try:
-            from fulfillment_v2_routes import build_order_fulfillment_decision
+        from order_review_completion import complete_local_review_operation
 
-            fulfillment_decision = await build_order_fulfillment_decision(
-                db,
-                user_id=user_id,
-                order=order,
-                operational_items=list(
-                    (workflow or {}).get("operational_items") or []
-                ),
+        async def load_current(scoped):
+            return await get_order(MongoOrderRepository(scoped), user_id=user_id,
+                                   order_number=order.order_number)
+
+        async def sync_current(current):
+            return await _sync_salla_reviewed(db, user_id, current)
+
+        async def instructions(scoped):
+            await enforce_stage_instructions(
+                scoped, user_id=user_id, order_number=order.order_number,
+                stage="pending_review", actor_id=actor_id, order_wide=True,
             )
-        except Exception as exc:
-            fulfillment_decision = {
-                "order_number": order.order_number,
-                "order_type": "unknown",
-                "route_stage": "reviewed",
-                "ready_to_ship": False,
-                "preparation_stages_required": True,
-                "blockers": ["fulfillment_evaluation_failed"],
-                "error": str(exc)[:300],
-                "evaluated_at": _now(),
-                "external_calls_made": False,
-            }
-            await db[EVENTS].insert_one({
-                "user_id": user_id,
-                "order_number": order.order_number,
-                "event_type": "fulfillment_evaluation_failed",
-                "error": str(exc)[:500],
-                "occurred_at": _now(),
-                "actor_id": actor_id,
-            })
-        next_stage = (
-            "ready_to_ship"
-            if fulfillment_decision.get("ready_to_ship") is True
-            else "reviewed"
+
+        result = await complete_local_review_operation(
+            db, user_id=user_id, actor_id=actor_id,
+            actor_name=_text(reviewer.get("name") or reviewer.get("email")),
+            order=order, workflow=workflow, frozen_items=frozen_items,
+            revision=revision, load_order=load_current, sync_salla=sync_current,
+            enforce_instructions=instructions, source_snapshot=source_snapshot,
+            approved_acceptance=approved_acceptance,
+            reapprove_operation_id=payload.reapprove_operation_id,
+            expected_acceptance_fingerprint=payload.expected_acceptance_fingerprint,
         )
-        new_doc = {
-            "user_id": user_id, "order_number": order.order_number, "order_id": order.order_id,
-            "stage": next_stage, "revision": revision + 1, "items": frozen_items,
-            "operational_items": list((workflow or {}).get("operational_items") or []),
-            "fulfillment_decision": fulfillment_decision,
-            "reviewed_at": now, "reviewed_by": actor_id,
-            "reviewed_by_name": _text(reviewer.get("name") or reviewer.get("email")),
-            "salla_status_sync": "sent", "salla_status_sync_error": None,
-            "salla_status_sync_at": _now(), "updated_at": now, "updated_by": actor_id,
-        }
-        if next_stage == "ready_to_ship":
-            new_doc["ready_to_ship_at"] = now
-        if workflow:
-            result = await db[WORKFLOWS].replace_one(
-                {"user_id": user_id, "order_number": order.order_number, "revision": revision}, new_doc
-            )
-            if not result.matched_count:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"})
-        else:
-            new_doc["created_at"] = now
-            try:
-                await db[WORKFLOWS].insert_one(new_doc)
-            except DuplicateKeyError as exc:
-                raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
-        await db[EVENTS].insert_one({
-            "user_id": user_id, "order_number": order.order_number,
-            "event_type": "order_review_completed", "item_count": len(frozen_items),
-            "occurred_at": now, "actor_id": actor_id,
-        })
-        return {
-            "ok": True, "order_number": order.order_number, "stage": next_stage,
-            "reviewed_item_count": len(frozen_items), "salla_status_sync": "sent",
-            "salla_status_sync_error": None,
-            "fulfillment_decision": fulfillment_decision,
-        }
+        if result.get("confirmation_pending"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=202, content=result)
+        return result
 
     return router

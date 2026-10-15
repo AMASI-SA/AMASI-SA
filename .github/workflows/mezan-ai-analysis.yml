@@ -11,8 +11,6 @@ on:
       - "frontend/src/lib/api.js"
       - "frontend/src/lib/aiAnalysisAsync.js"
       - "frontend/src/lib/aiAnalysisAsync.test.js"
-      - "frontend/src/pages/AIControlCenter.jsx"
-      - "frontend/src/pages/AIControlCenter.scope.test.js"
       - ".github/workflows/mezan-ai-analysis.yml"
   workflow_dispatch:
 
@@ -74,12 +72,9 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --non-interactive
-      - name: Run AI frontend tests
+      - name: Run asynchronous transport tests
         run: >-
           CI=true yarn test
           --watchAll=false
           --runInBand
           src/lib/aiAnalysisAsync.test.js
-          src/pages/AIControlCenter.scope.test.js
-      - name: Build frontend
-        run: CI=false yarn build

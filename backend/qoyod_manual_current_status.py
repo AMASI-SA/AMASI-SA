@@ -8,8 +8,8 @@ processing.
 """
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Optional
-
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Iterable, Optional
 
 _STATUS_MATCHERS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "completed": (
@@ -21,7 +21,10 @@ _STATUS_MATCHERS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
         frozenset({"تم التوصيل"}),
     ),
     "in_delivery": (
-        frozenset({"in_delivery", "جاري_التوصيل", "جاري التوصيل"}),
+        frozenset({
+            "in_delivery", "shipping", "delivering",
+            "جاري_التوصيل", "جاري التوصيل",
+        }),
         frozenset({"جاري التوصيل", "جارٍ التوصيل"}),
     ),
 }
@@ -56,6 +59,8 @@ async def filter_pending_by_current_status(
     status: str,
 ) -> dict[str, Any]:
     """Remove rows whose current unified-order status no longer matches."""
+    if result.get("source_authority") == "unified_orders":
+        return result
     orders = list(result.get("orders") or [])
     if not orders:
         return result
@@ -145,6 +150,10 @@ def install_manual_list_current_status_patch() -> None:
         limit: int = 500,
         search: Optional[str] = None,
         status: str = "completed",
+        from_date: Any = None,
+        to_date: Any = None,
+        now: Optional[datetime] = None,
+        open_quarantine_order_numbers: Optional[Iterable[str]] = None,
     ) -> dict[str, Any]:
         result = await original(
             db,
@@ -154,6 +163,10 @@ def install_manual_list_current_status_patch() -> None:
             limit=limit,
             search=search,
             status=status,
+            from_date=from_date,
+            to_date=to_date,
+            now=now,
+            open_quarantine_order_numbers=open_quarantine_order_numbers,
         )
         return await filter_pending_by_current_status(
             db,
@@ -177,4 +190,3 @@ def install_manual_list_current_status_patch() -> None:
         pass
 
     pending_module._current_status_patch_installed = True
-

@@ -1,0 +1,26 @@
+[
+  {
+    "ProcessId": 4972,
+    "CreationDate": "2026-10-01T23:07:46.450241+03:00",
+    "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+    "CommandLine": "\"C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe\" --bind_ip 127.0.0.1 --port 27130 --replSet mz2c --dbpath C:/Users/amasi/mz2-c-fixtures-20261001/replica --logpath C:/Users/amasi/mz2-c-fixtures-20261001/replica/mongo.log"
+  },
+  {
+    "ProcessId": 25320,
+    "CreationDate": "2026-10-02T00:20:13.154723+03:00",
+    "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+    "CommandLine": "\"C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe\" --dbpath C:/Users/amasi/mz2-c-fixtures-20261001/standalone --bind_ip 127.0.0.1 --port 27131 --logpath C:/Users/amasi/mz2-c-fixtures-20261001/standalone.log"
+  },
+  {
+    "ProcessId": 20732,
+    "CreationDate": "2026-10-02T00:52:40.520358+03:00",
+    "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+    "CommandLine": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe --dbpath C:\\Users\\amasi\\mz2-c-fixtures-20261001\\final-70221be96ca74a279b89ad22d826f6d8\\replica --port 27132 --bind_ip 127.0.0.1 --logpath C:\\Users\\amasi\\mz2-c-evidence-20261001\\full-regression-final\\replica-mongo.log --replSet mz2final --setParameter transactionLifetimeLimitSeconds=5"
+  },
+  {
+    "ProcessId": 13692,
+    "CreationDate": "2026-10-02T00:52:43.9221+03:00",
+    "ExecutablePath": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe",
+    "CommandLine": "C:\\Users\\amasi\\.codex\\tmp\\a10-mongo\\bin-dist\\mongodb-win32-x86_64-windows-8.0.12\\bin\\mongod.exe --dbpath C:\\Users\\amasi\\mz2-c-fixtures-20261001\\final-70221be96ca74a279b89ad22d826f6d8\\standalone --port 27133 --bind_ip 127.0.0.1 --logpath C:\\Users\\amasi\\mz2-c-evidence-20261001\\full-regression-final\\standalone-mongo.log"
+  }
+]

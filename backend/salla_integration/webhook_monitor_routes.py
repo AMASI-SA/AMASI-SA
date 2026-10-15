@@ -9,6 +9,22 @@ from fastapi import APIRouter, Depends
 
 # Only events approved/enabled by Salla for this application are monitored.
 APPROVED_EVENTS: tuple[tuple[str, str, str], ...] = (
+    ("abandoned.cart", "إنشاء سلة متروكة", "abandoned_carts"),
+    (
+        "abandoned.cart.updated",
+        "تحديث السلة المتروكة",
+        "abandoned_carts",
+    ),
+    (
+        "abandoned.cart.status.changed",
+        "تغيير حالة السلة المتروكة",
+        "abandoned_carts",
+    ),
+    (
+        "abandoned.cart.purchased",
+        "تحويل السلة إلى طلب",
+        "abandoned_carts",
+    ),
     ("order.created", "إنشاء الطلب", "orders"),
     ("order.updated", "تحديث بيانات الطلب", "orders"),
     ("order.status.updated", "تحديث حالة الطلب", "orders"),
@@ -75,6 +91,7 @@ async def _event_snapshot(db: Any, merchant_id: str | None) -> dict[str, dict[st
             "last_payload": {"$first": "$payload"},
             "last_order_sync": {"$first": "$order_sync"},
             "last_shipment_sync": {"$first": "$shipment_sync"},
+            "last_abandoned_cart_sync": {"$first": "$abandoned_cart_sync"},
         }},
     ]
     rows = await db.salla_webhook_event_captures.aggregate(pipeline).to_list(length=200)
@@ -117,6 +134,9 @@ def attach_salla_webhook_monitor_routes(api_router: APIRouter, db: Any) -> None:
                 "last_order_number": _extract_order_number(row.get("last_payload")) if row else None,
                 "order_sync": row.get("last_order_sync") if row else None,
                 "shipment_sync": row.get("last_shipment_sync") if row else None,
+                "abandoned_cart_sync": (
+                    row.get("last_abandoned_cart_sync") if row else None
+                ),
             })
 
         received_count = sum(1 for item in events if item["observed"])

@@ -1,4 +1,8 @@
-"""Mongo read adapter for complete customer-history lookup."""
+"""Mongo read adapter retained for compatibility with older imports.
+
+The live review-card path no longer uses this adapter. Customer history for
+that card is fetched directly from Salla by customer id.
+"""
 from __future__ import annotations
 
 import re
@@ -49,7 +53,7 @@ def _mobile_regex(normalized_mobile: str) -> Optional[str]:
 
 
 class MongoCustomerHistoryStore:
-    """Read matching orders across the complete unified-orders collection."""
+    """Legacy local adapter; not used by the live customer-history card."""
 
     def __init__(self, collection: Any):
         self._collection = collection

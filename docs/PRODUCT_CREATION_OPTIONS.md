@@ -47,6 +47,9 @@ publish flow finds the product by SKU, rechecks saved conditions and skips those
 already applied. It never creates another product for that resolved SKU.
 Existing tenant permissions, SKU duplicate checks, approval, publication
 confirmation and reconciliation remain in force.
+The existing temporary operation freeze is preserved: new products require
+preparation and do not track finished-goods inventory, regardless of older
+client choices. This change does not reopen those controls.
 Editing a draft resets approval. Existing images and categories survive edits.
 
 Read-back must confirm the product type, option names, input kinds, required

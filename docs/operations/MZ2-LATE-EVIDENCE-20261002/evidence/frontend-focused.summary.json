@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "numPassedTestSuites": 4,
+  "numFailedTestSuites": 0,
+  "numPassedTests": 37,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "duration_seconds": 7.547,
+  "exit_code": 0,
+  "node": "22.23.2",
+  "dependency_root": "C:/Users/amasi/mz2-final-integration-owner-20261001/frontend/node_modules"
+}

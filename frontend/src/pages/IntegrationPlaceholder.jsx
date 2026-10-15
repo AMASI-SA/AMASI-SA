@@ -7,7 +7,6 @@
  * phase it ships in.
  */
 import { Link } from "react-router-dom";
-import QoyodProducts from "./QoyodProducts";
 import SallaWebhookMonitor from "./SallaWebhookMonitor";
 
 export default function IntegrationPlaceholder({
@@ -15,10 +14,6 @@ export default function IntegrationPlaceholder({
   testid = "integration-placeholder",
   related = [],
 }) {
-  if (testid === "qoyod-products-placeholder") {
-    return <QoyodProducts />;
-  }
-
   if (testid === "salla-events-placeholder") {
     return <SallaWebhookMonitor />;
   }

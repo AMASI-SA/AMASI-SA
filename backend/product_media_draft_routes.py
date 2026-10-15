@@ -15,7 +15,11 @@ from urllib.parse import unquote, urlparse
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from ai_store_operations_foundation import AI_ACTION_LOG, ROLE_ASSIGNMENTS
+from ai_store_access_contract import (
+    find_role_assignment,
+    role_assignment_owner_user_id,
+)
+from ai_store_operations_foundation import AI_ACTION_LOG
 from product_media_upload_routes import MEDIA_UPLOADS, delete_temp_uploads
 from product_v2_routes import PRODUCTS
 from salla_integration.service import SALLA_API_BASE, SallaError, ensure_fresh_access_token
@@ -126,8 +130,12 @@ async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
     return row
 
 
-async def _assignment(db: Any, user_id: str) -> dict[str, Any] | None:
-    return await db[ROLE_ASSIGNMENTS].find_one({"user_id": user_id}, {"_id": 0})
+async def _assignment(db: Any, user: dict[str, Any]) -> dict[str, Any] | None:
+    return await find_role_assignment(
+        db,
+        owner_user_id=role_assignment_owner_user_id(user),
+        user_id=str(user.get("id") or ""),
+    )
 
 
 async def _salla_multipart(
@@ -217,7 +225,7 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
     @router.get("/{product_id}/media-control")
     async def media_control(product_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         product = await _product(db, str(user["id"]), product_id)
-        assignment = await _assignment(db, str(user["id"]))
+        assignment = await _assignment(db, user)
         draft = await db[MEDIA_DRAFTS].find_one({
             "user_id": str(user["id"]),
             "salla_product_id": str(product["salla_product_id"]),
@@ -238,7 +246,7 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
     @router.put("/{product_id}/media-draft")
     async def save_media_draft(product_id: str, payload: dict = Body(...), user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         if not _has_media_permission(user, assignment, "products.media.edit"):
             raise HTTPException(status_code=403, detail={"code": "products_media_edit_required"})
         product = await _product(db, user_id, product_id)
@@ -293,7 +301,7 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
     @router.post("/{product_id}/media-draft/{draft_id}/approve")
     async def approve_media_draft(product_id: str, draft_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         if not _has_media_permission(user, assignment, "products.approve"):
             raise HTTPException(status_code=403, detail={"code": "products_approve_required"})
         product = await _product(db, user_id, product_id)
@@ -322,7 +330,7 @@ def make_product_media_draft_router(db: Any, current_user: Callable) -> APIRoute
     @router.post("/{product_id}/media-draft/{draft_id}/publish")
     async def publish_media_draft(product_id: str, draft_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         user_id = str(user["id"])
-        assignment = await _assignment(db, user_id)
+        assignment = await _assignment(db, user)
         if not _has_media_permission(user, assignment, "products.media.publish"):
             raise HTTPException(status_code=403, detail={"code": "products_media_publish_required"})
         product = await _product(db, user_id, product_id)

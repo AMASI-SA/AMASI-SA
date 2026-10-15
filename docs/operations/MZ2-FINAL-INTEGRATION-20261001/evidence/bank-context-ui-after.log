@@ -1,0 +1,26 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand src/pages/accounting/h2/DriverPanel.test.jsx
+PASS src/pages/accounting/h2/DriverPanel.test.jsx
+  √ loads exact F context then pending evidence only; no bank legacy endpoint or writes (71 ms)
+  √ 404 stops after context and shows blocked instead of legacy fallback (10 ms)
+  √ connected bank port removes stale wiring blocker while destination proof remains blocked (29 ms)
+  √ bank port without explicit ready=true retains blocker (false) (19 ms)
+  √ bank port without explicit ready=true retains blocker (undefined) (31 ms)
+  √ bank port without explicit ready=true retains blocker (true) (13 ms)
+  √ server failures show retry and no replacement data (5 ms)
+  √ empty review queue is explicitly unrelated to driver balance (13 ms)
+  √ selecting driver displays native balances unchanged, no netting from entries (75 ms)
+  √ legacy or mismatched statement is rejected (22 ms)
+  √ loading skeleton does not claim zero (7 ms)
+  √ pending queue cannot silently represent approved history (11 ms)
+  √ pending queue cannot silently represent rejected history (14 ms)
+  √ approved financial result requires both backend posted state and journal (1 ms)
+  √ network transport failure offers retry instead of capability status (4 ms)
+  √ unimplemented native route is blocked without probing another endpoint (5 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       16 passed, 16 total
+Snapshots:   0 total
+Time:        2.122 s, estimated 5 s
+Ran all test suites matching /src\\pages\\accounting\\h2\\DriverPanel.test.jsx/i.
+Done in 3.74s.

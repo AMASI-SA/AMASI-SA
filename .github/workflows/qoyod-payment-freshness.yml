@@ -2,24 +2,6 @@ name: Qoyod Payment Freshness
 
 on:
   pull_request:
-    paths:
-      - "backend/order_engine/__init__.py"
-      - "backend/integrations/qoyod_manual/__init__.py"
-      - "backend/qoyod_auto_payment_freshness.py"
-      - "backend/qoyod_auto_per_order_isolation.py"
-      - "backend/qoyod_manual_current_status.py"
-      - "backend/qoyod_order_accounting_sync.py"
-      - "backend/integrations/qoyod_manual/send.py"
-      - "backend/integrations/qoyod_manual/routes.py"
-      - "backend/integrations/qoyod/reconciliation_v2.py"
-      - "backend/tests/test_qoyod_auto_send_latest_payment.py"
-      - "backend/tests/test_qoyod_auto_send_authoritative_payment.py"
-      - "backend/tests/test_qoyod_auto_send_per_order_isolation.py"
-      - "backend/tests/test_qoyod_manual_current_status.py"
-      - "backend/tests/test_qoyod_reconciliation_v2.py"
-      - "backend/tests/test_qoyod_order_accounting_sync.py"
-      - "frontend/src/pages/QoyodReconciliation.jsx"
-      - ".github/workflows/qoyod-payment-freshness.yml"
   workflow_dispatch:
 
 jobs:
@@ -34,8 +16,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install targeted dependencies
-        run: |
-          python -m pip install -q pytest pytest-asyncio mongomock-motor motor==3.3.1 pymongo==4.5.0 fastapi==0.110.1 python-dotenv cryptography python-jose passlib bcrypt httpx requests openpyxl reportlab==4.5.1
+        run: >-
+          python -m pip install -q pytest pytest-asyncio mongomock-motor
+          motor==3.3.1 pymongo==4.5.0 fastapi==0.110.1 python-dotenv
+          cryptography python-jose passlib bcrypt httpx requests openpyxl
+          reportlab==4.5.1
       - name: Verify latest-payment invariants
         run: |
           python - <<'PY'
@@ -62,6 +47,10 @@ jobs:
             tests/test_qoyod_manual_current_status.py \
             tests/test_qoyod_reconciliation_v2.py \
             tests/test_qoyod_order_accounting_sync.py \
+            tests/test_qoyod_failed_retry.py \
+            tests/test_qoyod_unsent_range_counts.py \
+            tests/test_qoyod_manual_client_fail_closed.py \
+            tests/test_qoyod_manual_product_lookup.py \
             -q --tb=short > /tmp/qoyod-payment-freshness.log 2>&1
           status=$?
           cat /tmp/qoyod-payment-freshness.log
@@ -73,5 +62,3 @@ jobs:
           name: qoyod-payment-freshness-log
           path: /tmp/qoyod-payment-freshness.log
           if-no-files-found: ignore
-
-

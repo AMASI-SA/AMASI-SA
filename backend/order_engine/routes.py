@@ -21,6 +21,7 @@ from .gift_db_enrichment import enrich_order_gifts
 from .gift_diagnostic import build_gift_diagnostic
 from .gift_enrichment import enrich_single_order_gift
 from .models import OrderDTO
+from .product_image_enrichment import enrich_order_item_images
 from .recipient_enrichment import enrich_order_recipients
 from .repository import MongoOrderRepository, OrderRepository
 from .salla_refresh import refresh_order_from_salla
@@ -37,6 +38,8 @@ from .service import (
     get_order,
     list_orders,
 )
+from .search import search_orders
+from .preparation_tracking import install_preparation_tracking_read_route
 
 
 class OrderListResponse(BaseModel):
@@ -45,6 +48,7 @@ class OrderListResponse(BaseModel):
     next_cursor: Optional[str] = None
     limit: int
     skipped_invalid: int = 0
+    result_summary: Optional[dict[str, Any]] = None
 
 
 class CustomerHistoryResponse(BaseModel):
@@ -96,6 +100,7 @@ def make_order_engine_router(
     current_user: Callable,
     *,
     repository_factory: Callable[[Any], OrderRepository] = MongoOrderRepository,
+    customer_history_salla_request: Optional[Callable] = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/orders-v2", tags=["order-engine"])
 
@@ -108,10 +113,40 @@ def make_order_engine_router(
         cursor: Optional[str] = Query(default=None),
         status_group: Optional[str] = Query(default=None),
         status_exact: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None, max_length=200),
+        product: Optional[str] = Query(default=None, max_length=200),
+        sku: Optional[str] = Query(default=None, max_length=120),
+        payment_status: Optional[str] = Query(default=None, max_length=80),
+        provider: Optional[str] = Query(default=None, max_length=40),
+        campaign: Optional[str] = Query(default=None, max_length=300),
+        campaign_id: Optional[str] = Query(default=None, max_length=160),
+        ad_squad: Optional[str] = Query(default=None, max_length=300),
+        ad_squad_id: Optional[str] = Query(default=None, max_length=160),
+        ad: Optional[str] = Query(default=None, max_length=300),
+        ad_id: Optional[str] = Query(default=None, max_length=160),
+        utm: Optional[str] = Query(default=None, max_length=300),
+        attribution_status: Optional[str] = Query(default=None, pattern="^(matched|unattributed|conflicted)$"),
+        created_from: Optional[str] = Query(default=None),
+        created_to: Optional[str] = Query(default=None),
+        baseline_cutoff_at: Optional[str] = Query(default=None),
         user: dict = Depends(current_user),
     ) -> OrderListResponse:
         owner = _require_owner(user)
         owner_id = str(owner["id"])
+
+        combined_filters = {
+            "q": q, "product": product, "sku": sku, "status": status_exact,
+            "payment_status": payment_status, "provider": provider, "campaign": campaign,
+            "campaign_id": campaign_id, "ad_squad": ad_squad, "ad_squad_id": ad_squad_id,
+            "ad": ad, "ad_id": ad_id, "utm": utm, "attribution_status": attribution_status,
+            "created_from": created_from, "created_to": created_to,
+            "baseline_cutoff_at": baseline_cutoff_at,
+        }
+        advanced = any(value for key, value in combined_filters.items() if key != "status")
+        if advanced:
+            result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
+            enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[:limit])
+            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary)
 
         try:
             page = await list_orders(
@@ -159,6 +194,66 @@ def make_order_engine_router(
         )
 
     @router.get(
+        "/latest-sold-products",
+        response_model=OrderListResponse,
+    )
+    async def list_latest_sold_product_rows(
+        limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+        cursor: Optional[str] = Query(default=None),
+        user: dict = Depends(current_user),
+    ) -> OrderListResponse:
+        """Return latest order items without dashboard-only enrichments."""
+        owner = _require_owner(user)
+        owner_id = str(owner["id"])
+        try:
+            page = await list_orders(
+                repository(),
+                user_id=owner_id,
+                limit=limit,
+                cursor=cursor,
+            )
+        except InvalidOrderCursorError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "invalid_orders_cursor",
+                    "message": "مؤشر تحميل الطلبات غير صالح.",
+                },
+            ) from exc
+
+        flat_items = [
+            item
+            for order in page.items
+            for item in order.items
+        ]
+        enriched_flat_items = await enrich_order_item_images(
+            db,
+            user_id=owner_id,
+            items=flat_items,
+        )
+        enriched_orders: list[OrderDTO] = []
+        item_offset = 0
+        for order in page.items:
+            item_count = len(order.items)
+            enriched_orders.append(
+                order.model_copy(
+                    update={
+                        "items": enriched_flat_items[
+                            item_offset:item_offset + item_count
+                        ]
+                    }
+                )
+            )
+            item_offset += item_count
+
+        return OrderListResponse(
+            items=enriched_orders,
+            next_cursor=page.next_cursor,
+            limit=limit,
+            skipped_invalid=page.skipped_invalid,
+        )
+
+    @router.get(
         "/{order_number}/customer-history",
         response_model=CustomerHistoryResponse,
     )
@@ -170,8 +265,14 @@ def make_order_engine_router(
         try:
             result = await get_customer_history(
                 repository(),
+                db=db,
                 user_id=str(owner["id"]),
                 order_number=str(order_number),
+                **(
+                    {"salla_request": customer_history_salla_request}
+                    if customer_history_salla_request is not None
+                    else {}
+                ),
             )
         except OrderNotFoundError as exc:
             raise HTTPException(
@@ -464,4 +565,8 @@ def make_order_engine_router(
                 },
             ) from exc
 
+    install_preparation_tracking_read_route(
+        router, db=db, current_user=current_user, require_owner=_require_owner,
+        get_order=get_order, repository=repository, not_found_error=OrderNotFoundError,
+    )
     return router

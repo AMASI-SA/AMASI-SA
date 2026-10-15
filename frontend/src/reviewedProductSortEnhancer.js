@@ -22,12 +22,14 @@ function element(tag, value = "") {
     return node;
 }
 
-function isReviewedStage() {
-    const params = new URLSearchParams(window.location.search);
-    return (
-        (window.location.pathname.includes("/fulfillment-v2") && params.get("stage") === "reviewed")
-        || Boolean(document.querySelector('[data-testid="reviewed-orders-stage"]'))
+export function isReviewedProductsWindow(location = window.location, root = document) {
+    const params = new URLSearchParams(location.search || "");
+    const explicitProducts = (
+        String(location.pathname || "").includes("/fulfillment-v2")
+        && params.get("stage") === "reviewed"
+        && params.get("view") !== "files"
     );
+    return explicitProducts || Boolean(root.querySelector?.('[data-testid="reviewed-orders-stage"]'));
 }
 
 function ensureBadgeStyles() {
@@ -35,36 +37,18 @@ function ensureBadgeStyles() {
     const style = element("style");
     style.id = STYLE_ID;
     style.textContent = `
-        [data-testid="reviewed-product-card"][data-reviewed-sort-label] {
-            position: relative;
-        }
+        [data-testid="reviewed-product-card"][data-reviewed-sort-label] { position: relative; }
         [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
-            content: attr(data-reviewed-sort-label);
-            position: absolute;
-            left: 12px;
-            top: 12px;
-            z-index: 5;
-            max-width: 46%;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            border: 1px solid #c4b5fd;
-            border-radius: 999px;
-            background: #f5f3ff;
-            padding: 5px 10px;
-            color: #6d28d9;
-            font-family: Tajawal, sans-serif;
-            font-size: 11px;
-            font-weight: 900;
+            content: attr(data-reviewed-sort-label); position: absolute; left: 12px; top: 12px;
+            z-index: 5; max-width: 46%; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; border: 1px solid #c4b5fd; border-radius: 999px;
+            background: #f5f3ff; padding: 5px 10px; color: #6d28d9;
+            font-family: Tajawal, sans-serif; font-size: 11px; font-weight: 900;
             box-shadow: 0 5px 16px #6d28d91f;
         }
         @media (max-width: 640px) {
             [data-testid="reviewed-product-card"][data-reviewed-sort-label]::after {
-                left: 8px;
-                top: 8px;
-                max-width: 52%;
-                padding: 4px 8px;
-                font-size: 10px;
+                left: 8px; top: 8px; max-width: 52%; padding: 4px 8px; font-size: 10px;
             }
         }
     `;
@@ -76,15 +60,16 @@ function cardIdentity(card) {
     const skuNode = [...card.querySelectorAll('[dir="ltr"]')].find((entry) =>
         text(entry.textContent).toUpperCase().startsWith("SKU:"),
     );
-    const sku = text(skuNode?.textContent).replace(/^SKU:\s*/i, "");
-    return { name, sku };
+    return {
+        name,
+        sku: text(skuNode?.textContent).replace(/^SKU:\s*/i, ""),
+    };
 }
 
 function syncProductBadges() {
     ensureBadgeStyles();
     const stage = document.querySelector('[data-testid="reviewed-orders-stage"]');
     if (!stage) return;
-
     const used = new Set();
     stage.querySelectorAll('[data-testid="reviewed-product-card"]').forEach((card) => {
         const product = findReviewedProductForCard(products, cardIdentity(card), used);
@@ -94,11 +79,8 @@ function syncProductBadges() {
         }
         used.add(text(product.group_key));
         const label = text(product.preparation_sort_label || product.preparation_sort_spec);
-        if (label) {
-            card.setAttribute("data-reviewed-sort-label", `ترتيب الملف: ${label}`);
-        } else {
-            card.removeAttribute("data-reviewed-sort-label");
-        }
+        if (label) card.setAttribute("data-reviewed-sort-label", `ترتيب الملف: ${label}`);
+        else card.removeAttribute("data-reviewed-sort-label");
     });
 }
 
@@ -124,71 +106,53 @@ function closeModal() {
     modal = null;
 }
 
-function candidateFor(product, key) {
-    return (product?.preparation_sort_candidates || []).find(
-        (candidate) => text(candidate?.key) === text(key),
-    ) || null;
-}
-
-function productRow(product) {
+function renderProductRow(product) {
     const card = element("article");
     card.style.cssText = "border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:14px";
 
     const heading = element("div");
     heading.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:10px";
-    const nameBox = element("div");
-    nameBox.style.cssText = "min-width:0;flex:1";
-    const name = element("div", text(product?.name) || "منتج");
-    name.style.cssText = "font-size:14px;font-weight:950;color:#0f172a;line-height:1.6";
-    const sku = element("div", text(product?.sku) ? `SKU: ${text(product.sku)}` : "");
-    sku.style.cssText = "margin-top:2px;font-size:10px;font-weight:750;color:#94a3b8;direction:ltr;text-align:right";
-    nameBox.append(name);
-    if (sku.textContent) nameBox.append(sku);
-
-    const quantity = Math.max(0, Math.floor(Number(product?.remaining_quantity ?? product?.quantity) || 0));
-    const badge = element("div", `${quantity} قطعة`);
-    badge.style.cssText = "flex:none;border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
-    heading.append(nameBox, badge);
+    const name = element("strong", text(product.name) || "منتج");
+    name.style.cssText = "font-size:14px;color:#0f172a;line-height:1.6";
+    const quantity = Math.max(0, Math.floor(Number(product.remaining_quantity ?? product.quantity) || 0));
+    const badge = element("span", `${quantity} قطعة`);
+    badge.style.cssText = "border-radius:999px;background:#ecfdf5;padding:6px 10px;color:#047857;font-size:11px;font-weight:950";
+    heading.append(name, badge);
 
     const current = element("div", reviewedProductSortButtonLabel(product));
-    current.style.cssText = "margin-top:9px;font-size:11px;font-weight:850;color:#6d28d9";
+    current.style.cssText = "margin-top:8px;font-size:11px;font-weight:850;color:#6d28d9";
 
-    const candidates = Array.isArray(product?.preparation_sort_candidates)
-        ? product.preparation_sort_candidates
-        : [];
     const controls = element("div");
     controls.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:10px";
-
     const select = element("select");
-    select.style.cssText = "min-width:0;min-height:44px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:0 10px;font-size:12px;font-weight:850;color:#334155;outline:none";
-    const noSort = element("option", "بدون ترتيب مخصص");
-    noSort.value = "";
-    select.append(noSort);
-    candidates.forEach((candidate) => {
-        const option = element("option", text(candidate?.label || candidate?.key));
-        option.value = text(candidate?.key);
+    select.style.cssText = "min-height:44px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:0 10px;font-size:12px;font-weight:850";
+    const none = element("option", "بدون ترتيب مخصص");
+    none.value = "";
+    select.append(none);
+    (product.preparation_sort_candidates || []).forEach((candidate) => {
+        const option = element("option", text(candidate.label || candidate.key));
+        option.value = text(candidate.key);
         select.append(option);
     });
-    select.value = text(product?.preparation_sort_spec);
+    select.value = text(product.preparation_sort_spec);
 
     const save = element("button", "حفظ");
     save.type = "button";
     save.style.cssText = "min-height:44px;border:0;border-radius:11px;background:#6d28d9;padding:0 17px;color:#fff;font-size:12px;font-weight:950";
+    controls.append(select, save);
 
     const summary = element("div");
     summary.style.cssText = "margin-top:8px;border-radius:10px;background:#f8fafc;padding:9px;color:#64748b;font-size:10px;font-weight:750;line-height:1.7";
     const status = element("div");
-    status.style.cssText = "display:none;margin-top:8px;border-radius:10px;padding:9px;font-size:11px;font-weight:850";
 
-    function refreshSummary() {
-        const candidate = candidateFor(product, select.value);
+    const refreshSummary = () => {
+        const candidate = (product.preparation_sort_candidates || []).find(
+            (row) => text(row.key) === text(select.value),
+        );
         summary.textContent = candidate
             ? reviewedProductSortCandidateSummary(candidate, 8)
-            : (candidates.length
-                ? "اختر العمر أو المقاس أو اللون. القيمة الأكثر عددًا بالقطع ستظهر أولًا في ملف PDF."
-                : "لا توجد مواصفات قابلة للترتيب في الطلبات الحالية لهذا المنتج.");
-    }
-
+            : "اختر العمر أو المقاس أو اللون لترتيب بطاقات PDF المتشابهة معًا.";
+    };
     select.onchange = refreshSummary;
     refreshSummary();
 
@@ -196,7 +160,6 @@ function productRow(product) {
         save.disabled = true;
         select.disabled = true;
         save.textContent = "جارٍ الحفظ…";
-        status.style.display = "none";
         try {
             const { data } = await api.put("/reviewed-product-sorting-v1/preference", {
                 group_key: product.group_key,
@@ -206,17 +169,12 @@ function productRow(product) {
             products = products.map((row) => row.group_key === updated.group_key ? updated : row);
             product = updated;
             current.textContent = reviewedProductSortButtonLabel(updated);
-            status.textContent = select.value
-                ? "تم حفظ طريقة ترتيب بطاقات هذا المنتج."
-                : "تم إلغاء الترتيب المخصص.";
-            status.style.cssText = "display:block;margin-top:8px;border-radius:10px;padding:9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
-            refreshSummary();
+            status.textContent = select.value ? "تم حفظ ترتيب المنتج." : "تم إلغاء الترتيب المخصص.";
+            status.style.cssText = "margin-top:8px;border-radius:10px;padding:9px;background:#ecfdf5;color:#047857;font-size:11px;font-weight:850";
             syncProductBadges();
         } catch (error) {
-            status.textContent = error?.response?.data?.detail?.message
-                || error?.message
-                || "تعذّر حفظ ترتيب المنتج.";
-            status.style.cssText = "display:block;margin-top:8px;border-radius:10px;padding:9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
+            status.textContent = error?.response?.data?.detail?.message || error?.message || "تعذّر حفظ ترتيب المنتج.";
+            status.style.cssText = "margin-top:8px;border-radius:10px;padding:9px;background:#fff1f2;color:#be123c;font-size:11px;font-weight:850";
         } finally {
             save.disabled = false;
             select.disabled = false;
@@ -224,7 +182,6 @@ function productRow(product) {
         }
     };
 
-    controls.append(select, save);
     card.append(heading, current, controls, summary, status);
     return card;
 }
@@ -232,16 +189,16 @@ function productRow(product) {
 function renderRows(container) {
     container.replaceChildren();
     if (!products.length) {
-        const empty = element("div", "لا توجد منتجات متبقية في مرحلة تمت المراجعة.");
+        const empty = element("div", "لا توجد منتجات متبقية في مرحلة تم المراجعة.");
         empty.style.cssText = "border:1px dashed #cbd5e1;border-radius:14px;padding:25px;text-align:center;color:#64748b;font-size:13px";
         container.append(empty);
         return;
     }
-    products.forEach((product) => container.append(productRow(product)));
+    products.forEach((product) => container.append(renderProductRow(product)));
 }
 
 async function openModal() {
-    if (modal) return;
+    if (modal || !isReviewedProductsWindow()) return;
     const overlay = element("div");
     modal = overlay;
     overlay.style.cssText = "position:fixed;inset:0;z-index:2147483646;background:#02061799;display:flex;align-items:center;justify-content:center;padding:14px;direction:rtl";
@@ -254,40 +211,18 @@ async function openModal() {
     const titleBox = element("div");
     const title = element("h2", "ترتيب بطاقات المنتجات في الملف");
     title.style.cssText = "margin:0;font-size:20px;font-weight:950;color:#0f172a";
-    const description = element("p", "اختر مواصفة واحدة لكل منتج. يتم تجميع البطاقات المتشابهة، وتظهر القيمة ذات أكبر عدد من القطع أولًا.");
+    const description = element("p", "اختر مواصفة واحدة لكل منتج. القيمة ذات أكبر عدد من القطع تظهر أولًا.");
     description.style.cssText = "margin:6px 0 0;color:#64748b;font-size:11px;line-height:1.8";
     titleBox.append(title, description);
-
-    const actions = element("div");
-    actions.style.cssText = "display:flex;gap:7px";
-    const refresh = element("button", "تحديث");
-    refresh.type = "button";
-    refresh.style.cssText = "min-height:38px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;padding:0 12px;color:#475569;font-size:11px;font-weight:900";
     const close = element("button", "×");
     close.type = "button";
-    close.style.cssText = "width:38px;height:38px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px;line-height:1";
+    close.style.cssText = "width:38px;height:38px;border:0;border-radius:10px;background:#f1f5f9;color:#475569;font-size:24px";
     close.onclick = closeModal;
-    actions.append(refresh, close);
-    header.append(titleBox, actions);
+    header.append(titleBox, close);
 
     const list = element("div");
     list.style.cssText = "display:grid;gap:10px;overflow:auto;padding:14px";
-    const loading = element("div", "جارٍ تحميل المنتجات والمواصفات…");
-    loading.style.cssText = "padding:30px;text-align:center;color:#64748b;font-size:13px;font-weight:850";
-    list.append(loading);
-
-    refresh.onclick = async () => {
-        refresh.disabled = true;
-        refresh.textContent = "…";
-        try {
-            await loadProducts(true);
-            renderRows(list);
-        } finally {
-            refresh.disabled = false;
-            refresh.textContent = "تحديث";
-        }
-    };
-
+    list.append(element("div", "جارٍ تحميل المنتجات والمواصفات…"));
     panel.append(header, list);
     overlay.append(panel);
     document.body.append(overlay);
@@ -296,11 +231,9 @@ async function openModal() {
         await loadProducts(true);
         if (modal === overlay) renderRows(list);
     } catch (error) {
-        if (modal !== overlay) return;
-        list.replaceChildren();
-        const warning = element("div", error?.message || "تعذّر تحميل المنتجات.");
-        warning.style.cssText = "border-radius:14px;background:#fff1f2;padding:18px;color:#be123c;font-size:12px;font-weight:850";
-        list.append(warning);
+        if (modal === overlay) {
+            list.replaceChildren(element("div", error?.message || "تعذّر تحميل المنتجات."));
+        }
     }
 }
 
@@ -317,11 +250,10 @@ function ensureButton() {
 }
 
 function syncVisibility() {
-    const reviewed = isReviewedStage();
+    const reviewed = isReviewedProductsWindow();
     ensureButton().style.display = reviewed ? "block" : "none";
-    if (reviewed) {
-        loadProducts().then(syncProductBadges).catch(() => null);
-    }
+    if (!reviewed) closeModal();
+    if (reviewed) loadProducts().then(syncProductBadges).catch(() => null);
 }
 
 function patchHistory() {
@@ -347,7 +279,6 @@ function start() {
     ensureBadgeStyles();
     ensureButton();
     patchHistory();
-
     const observer = new MutationObserver(syncVisibility);
     observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("popstate", syncVisibility);
@@ -356,14 +287,10 @@ function start() {
         loadingPromise = null;
         syncVisibility();
     });
-    window.setInterval(syncVisibility, 1500);
     syncVisibility();
 }
 
 if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
-    if (document.readyState === "loading") {
-        window.addEventListener("DOMContentLoaded", start, { once: true });
-    } else {
-        start();
-    }
+    if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", start, { once: true });
+    else start();
 }

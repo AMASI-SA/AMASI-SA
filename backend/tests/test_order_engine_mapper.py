@@ -313,6 +313,53 @@ def test_maps_partial_collection_without_marking_fully_paid(
     )
 
 
+def test_uncollected_cod_with_null_salla_remaining_uses_order_total(salla_order_payload):
+    salla_order_payload.update({
+        "status": {"slug": "under_review", "name": "بانتظار المراجعة"},
+        "payment_method": "cod",
+        "payment": {},
+        "payment_actions": {
+            "remaining_action": {
+                "has_remaining_amount": False,
+                "paid_amount": {"amount": 0, "currency": "SAR"},
+                "remaining_amount": None,
+            }
+        },
+        "remaining_amount": 0,
+    })
+
+    payment = map_salla_order(salla_order_payload).payment
+
+    assert payment.paid_amount == 0
+    assert payment.remaining_amount == 135
+    assert payment.has_remaining_amount is True
+    assert payment.collection_status == "unpaid"
+
+
+@pytest.mark.parametrize("override", [
+    {"payment_actions": {"remaining_action": {
+        "has_remaining_amount": False, "remaining_amount": {"amount": 0, "currency": "SAR"},
+    }}},
+    {"payment": {"status": "paid"}},
+    {"status": {"slug": "delivered"}},
+    {"payment_method": "mada"},
+    {"paid_amount": 40},
+])
+def test_cod_missing_balance_does_not_override_collected_or_explicit_data(salla_order_payload, override):
+    salla_order_payload.update({
+        "status": {"slug": "under_review"},
+        "payment_method": "cod",
+        "payment": {},
+        "payment_actions": {"remaining_action": {
+            "has_remaining_amount": False, "paid_amount": {"amount": 0, "currency": "SAR"},
+            "remaining_amount": None,
+        }},
+    })
+    salla_order_payload.update(override)
+
+    assert map_salla_order(salla_order_payload).payment.remaining_amount == 0
+
+
 def test_missing_creation_date_is_rejected(salla_order_payload):
     salla_order_payload.pop("date")
 
@@ -367,3 +414,21 @@ def test_maps_nested_transfer_receipt_and_files_custom_field(salla_order_payload
         "name": "هل تريد إضافة كرت اهداء",
         "value": {"name": "لا"},
     }
+
+
+def test_salla_customer_choices_are_preserved_for_order_details(salla_order_payload):
+    item = salla_order_payload["items"][0]
+    item.pop("options", None)
+    item["customer_options"] = [
+        {"title": "لون الفستان", "answer": {"name": "أخضر"}},
+        {"question": "هل تريد إضافة اسم على الفستان", "option_value": "لا"},
+        {"label": "مقاس الطفل بالعمر", "selected": {"value": "5 سنة"}},
+    ]
+
+    order = map_salla_order(salla_order_payload)
+    mapped = order.items[0]
+
+    assert mapped.options_normalized["لون الفستان"] == "أخضر"
+    assert mapped.options_normalized["هل تريد إضافة اسم على الفستان"] == "لا"
+    assert mapped.options_normalized["مقاس الطفل بالعمر"] == "5 سنة"
+    assert len(mapped.options_raw) == 3

@@ -1,0 +1,61 @@
+name: Production Ads Product Return Date V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/campaignProfitabilityProductCostLink.js"
+      - "frontend/src/campaignProfitabilityProductCostLink.test.js"
+      - "frontend/src/marketingCampaignResultSource.js"
+      - "frontend/src/marketingCampaignResultSource.test.js"
+      - "frontend/src/marketingSnapchatManualRangeGuard.js"
+      - "frontend/src/marketingSnapchatManualRangeGuard.test.js"
+      - "frontend/src/marketingSnapchatAccountTimezoneEnhancer.js"
+      - "frontend/src/marketingSnapchatAccountTimezoneEnhancer.test.js"
+      - ".github/workflows/prod-ads-product-return-date-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test Ads product return state
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/campaignProfitabilityProductCostLink.test.js
+          src/marketingCampaignResultSource.test.js
+          src/marketingSnapchatManualRangeGuard.test.js
+          src/marketingSnapchatAccountTimezoneEnhancer.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce return-date contract
+        working-directory: .
+        run: |
+          LINK=frontend/src/campaignProfitabilityProductCostLink.js
+          SOURCE=frontend/src/marketingCampaignResultSource.js
+          TIMEZONE=frontend/src/marketingSnapchatAccountTimezoneEnhancer.js
+          grep -q 'rememberSnapchatRangeBeforeProductNavigation' "$LINK"
+          grep -q 'mezan-snapchat-manager-return-range-v1' "$SOURCE"
+          grep -q 'params.from_date = returnRange.date_from' "$SOURCE"
+          grep -q 'params.to_date = returnRange.date_to' "$SOURCE"
+          grep -q 'syncRestoredReturnRange' "$TIMEZONE"
+          grep -q 'submit: false' "$TIMEZONE"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$LINK" "$SOURCE" "$TIMEZONE"

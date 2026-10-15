@@ -1,18 +1,8 @@
 """Product-first ordering and one-field PDF card sorting for reviewed items.
 
 The reviewed stage stays aggregated by Salla product so a merchant can select a
-large quantity quickly.  Each product may persist exactly one specification
-field (for example age, size, or color) that controls the order of its source
-cards inside the generated preparation PDF.
-
-Sorting rules:
-
-* Reviewed product cards: largest remaining piece quantity first.
-* Inside one product: values of the selected specification are ranked by their
-  total remaining piece quantity, descending.
-* All cards sharing the same value stay adjacent.
-* One Salla order-item line remains one PDF card; its original line quantity is
-  preserved and is never expanded into one card per physical unit.
+large quantity quickly. Each product may persist exactly one specification
+field that controls the order of its source cards inside the generated PDF.
 """
 from __future__ import annotations
 
@@ -33,29 +23,14 @@ MISSING_VALUE_LABEL = "غير محدد"
 MAX_PREFERENCE_ROWS = 10000
 
 _EXCLUDED_SPEC_HINTS = (
-    "الاسم",
-    "اسم العميل",
-    "الاسم اللي",
-    "ملاحظ",
-    "رسالة",
-    "رساله",
-    "كتابة",
-    "كتابه",
-    "عبارة",
-    "عباره",
-    "اهداء",
-    "إهداء",
-    "customer name",
-    "name on",
-    "note",
-    "message",
-    "greeting",
+    "الاسم", "اسم العميل", "الاسم اللي", "ملاحظ", "رسالة", "رساله",
+    "كتابة", "كتابه", "عبارة", "عباره", "اهداء", "إهداء",
+    "customer name", "name on", "note", "message", "greeting",
 )
 
 
 class ReviewedProductSortPreferenceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     group_key: str = Field(min_length=1, max_length=500)
     spec_key: str | None = Field(default=None, max_length=160)
 
@@ -69,11 +44,7 @@ def _normalized(value: Any) -> str:
 
 
 def _line_quantity(line: dict[str, Any]) -> int:
-    raw = (
-        line.get("remaining_quantity")
-        if line.get("remaining_quantity") is not None
-        else line.get("quantity")
-    )
+    raw = line.get("remaining_quantity") if line.get("remaining_quantity") is not None else line.get("quantity")
     try:
         number = float(raw or 0)
     except (TypeError, ValueError, OverflowError):
@@ -88,18 +59,14 @@ def _natural_key(value: Any) -> tuple:
     normalized = _normalized(value)
     parts = re.split(r"(\d+(?:\.\d+)?)", normalized)
     return tuple(
-        (0, float(part)) if re.fullmatch(r"\d+(?:\.\d+)?", part or "")
-        else (1, part)
-        for part in parts
-        if part != ""
+        (0, float(part)) if re.fullmatch(r"\d+(?:\.\d+)?", part or "") else (1, part)
+        for part in parts if part != ""
     )
 
 
 def _is_sortable_spec_key(value: Any) -> bool:
     key = _normalized(value)
-    if not key:
-        return False
-    return not any(hint in key for hint in _EXCLUDED_SPEC_HINTS)
+    return bool(key) and not any(hint in key for hint in _EXCLUDED_SPEC_HINTS)
 
 
 def _options(line: dict[str, Any]) -> dict[str, Any]:
@@ -118,7 +85,6 @@ def _spec_value(line: dict[str, Any], spec_key: Any) -> str:
 
 
 def reviewed_product_sort_candidates(product: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return selectable specification fields with demand totals per value."""
     field_labels: dict[str, str] = {}
     value_quantities: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     value_cards: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -135,11 +101,7 @@ def reviewed_product_sort_candidates(product: dict[str, Any]) -> list[dict[str, 
             value = _text(raw_value)
             normalized_key = _normalized(label)
             normalized_value = _normalized(value)
-            if (
-                not normalized_key
-                or not normalized_value
-                or not _is_sortable_spec_key(label)
-            ):
+            if not normalized_key or not normalized_value or not _is_sortable_spec_key(label):
                 continue
             field_labels.setdefault(normalized_key, label)
             value_quantities[normalized_key][normalized_value] += quantity
@@ -164,16 +126,11 @@ def reviewed_product_sort_candidates(product: dict[str, Any]) -> list[dict[str, 
             "distinct_value_count": len(values),
             "values": values,
         })
-
     candidates.sort(key=lambda row: _natural_key(row.get("label")))
     return candidates
 
 
-def _sort_source_lines(
-    source_lines: list[dict[str, Any]],
-    *,
-    spec_key: str,
-) -> list[dict[str, Any]]:
+def _sort_source_lines(source_lines: list[dict[str, Any]], *, spec_key: str) -> list[dict[str, Any]]:
     totals: dict[str, int] = defaultdict(int)
     display_values: dict[str, str] = {}
     for line in source_lines:
@@ -186,11 +143,9 @@ def _sort_source_lines(
     def sort_key(line: dict[str, Any]) -> tuple:
         value = _spec_value(line, spec_key)
         normalized_value = _normalized(value)
-        missing = 1 if not normalized_value else 0
-        group_total = totals.get(normalized_value, 0)
         return (
-            missing,
-            -group_total,
+            1 if not normalized_value else 0,
+            -totals.get(normalized_value, 0),
             _natural_key(display_values.get(normalized_value, value)),
             -_line_quantity(line),
             _text(line.get("reviewed_at")),
@@ -198,50 +153,33 @@ def _sort_source_lines(
             int(line.get("line_index") or 0),
         )
 
-    return sorted(
-        [dict(line) for line in source_lines if isinstance(line, dict)],
-        key=sort_key,
-    )
+    return sorted([dict(line) for line in source_lines if isinstance(line, dict)], key=sort_key)
 
 
 def apply_reviewed_product_sorting(
     catalog: dict[str, Any],
     preference_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Attach choices, sort lines by the saved field, and rank products by pieces."""
     preferences = {
         _text(row.get("group_key")): _text(row.get("spec_key"))
-        for row in (preference_rows or [])
-        if _text(row.get("group_key"))
+        for row in (preference_rows or []) if _text(row.get("group_key"))
     }
-
     products: list[dict[str, Any]] = []
     for raw_product in catalog.get("products") or []:
         if not isinstance(raw_product, dict):
             continue
         product = dict(raw_product)
-        source_lines = [
-            dict(line)
-            for line in (product.get("source_lines") or [])
-            if isinstance(line, dict)
-        ]
+        source_lines = [dict(line) for line in (product.get("source_lines") or []) if isinstance(line, dict)]
         product["source_lines"] = source_lines
         candidates = reviewed_product_sort_candidates(product)
-        candidate_by_normalized = {
-            _normalized(row.get("key")): row for row in candidates
-        }
+        candidate_by_normalized = {_normalized(row.get("key")): row for row in candidates}
         requested = preferences.get(_text(product.get("group_key")), "")
         selected = candidate_by_normalized.get(_normalized(requested))
         active_key = _text(selected.get("key")) if selected else ""
         if active_key:
-            product["source_lines"] = _sort_source_lines(
-                source_lines,
-                spec_key=active_key,
-            )
+            product["source_lines"] = _sort_source_lines(source_lines, spec_key=active_key)
         product["preparation_sort_spec"] = active_key or None
-        product["preparation_sort_label"] = (
-            _text(selected.get("label")) if selected else None
-        )
+        product["preparation_sort_label"] = _text(selected.get("label")) if selected else None
         product["preparation_sort_candidates"] = candidates
         products.append(product)
 
@@ -254,14 +192,11 @@ def apply_reviewed_product_sorting(
 
 
 def order_selections_by_product_rank(
-    products: list[dict[str, Any]],
-    selections: list[dict[str, Any]],
+    products: list[dict[str, Any]], selections: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep generated PDF product blocks in the same quantity-first order."""
     rank = {
         _text(product.get("group_key")): index
-        for index, product in enumerate(products or [])
-        if _text(product.get("group_key"))
+        for index, product in enumerate(products or []) if _text(product.get("group_key"))
     }
     return sorted(
         [dict(selection) for selection in selections or []],
@@ -282,12 +217,8 @@ async def ensure_reviewed_product_sorting_indexes(db: Any) -> None:
 
 async def _load_preferences(db: Any, user_id: str) -> list[dict[str, Any]]:
     try:
-        return await db[PREFERENCES].find(
-            {"user_id": user_id},
-            {"_id": 0},
-        ).to_list(MAX_PREFERENCE_ROWS)
+        return await db[PREFERENCES].find({"user_id": user_id}, {"_id": 0}).to_list(MAX_PREFERENCE_ROWS)
     except (AttributeError, TypeError):
-        # Lightweight test doubles may not expose arbitrary collections.
         return []
 
 
@@ -297,11 +228,9 @@ _ORIGINAL_PLAN_ALLOCATIONS: Callable | None = None
 
 
 def install_reviewed_product_sorting() -> None:
-    """Patch both catalogue reads and batch allocation before routers are built."""
     global _INSTALLED, _ORIGINAL_CONTEXT_LOADER, _ORIGINAL_PLAN_ALLOCATIONS
     if _INSTALLED:
         return
-
     import reviewed_products_catalog as catalog_module
     import reviewed_preparation_batches as batch_module
 
@@ -313,23 +242,21 @@ def install_reviewed_product_sorting() -> None:
         *,
         user_id: str,
         limit: int = catalog_module.MAX_REVIEWED_ORDERS,
+        reviewed_date: str = "",
     ) -> dict[str, Any]:
         assert _ORIGINAL_CONTEXT_LOADER is not None
         context = await _ORIGINAL_CONTEXT_LOADER(
             database,
             user_id=user_id,
             limit=limit,
+            reviewed_date=reviewed_date,
         )
         preferences = await _load_preferences(database, user_id)
-        context["catalog"] = apply_reviewed_product_sorting(
-            context.get("catalog") or {},
-            preferences,
-        )
+        context["catalog"] = apply_reviewed_product_sorting(context.get("catalog") or {}, preferences)
         return context
 
     def plan_allocations_in_catalog_order(
-        products: list[dict[str, Any]],
-        selections: list[dict[str, Any]],
+        products: list[dict[str, Any]], selections: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         assert _ORIGINAL_PLAN_ALLOCATIONS is not None
         return _ORIGINAL_PLAN_ALLOCATIONS(
@@ -343,14 +270,8 @@ def install_reviewed_product_sorting() -> None:
     _INSTALLED = True
 
 
-def make_reviewed_product_sorting_router(
-    db: Any,
-    current_user: Callable,
-) -> APIRouter:
-    router = APIRouter(
-        prefix="/reviewed-product-sorting-v1",
-        tags=["Reviewed Product Sorting"],
-    )
+def make_reviewed_product_sorting_router(db: Any, current_user: Callable) -> APIRouter:
+    router = APIRouter(prefix="/reviewed-product-sorting-v1", tags=["Reviewed Product Sorting"])
 
     @router.put("/preference")
     async def save_preference(
@@ -359,7 +280,6 @@ def make_reviewed_product_sorting_router(
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         user_id = _merchant_user_id(reviewer)
-
         import reviewed_products_catalog as catalog_module
 
         context = await catalog_module.load_reviewed_product_context(
@@ -367,28 +287,19 @@ def make_reviewed_product_sorting_router(
             user_id=user_id,
             limit=catalog_module.MAX_REVIEWED_ORDERS,
         )
-        product = next(
-            (
-                row for row in (context.get("catalog") or {}).get("products") or []
-                if _text(row.get("group_key")) == payload.group_key
-            ),
-            None,
-        )
+        product = next((
+            row for row in (context.get("catalog") or {}).get("products") or []
+            if _text(row.get("group_key")) == payload.group_key
+        ), None)
         if not product:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "reviewed_product_not_available"},
-            )
+            raise HTTPException(status_code=404, detail={"code": "reviewed_product_not_available"})
 
         requested = _text(payload.spec_key)
         candidates = reviewed_product_sort_candidates(product)
-        candidate = next(
-            (
-                row for row in candidates
-                if _normalized(row.get("key")) == _normalized(requested)
-            ),
-            None,
-        ) if requested else None
+        candidate = next((
+            row for row in candidates
+            if _normalized(row.get("key")) == _normalized(requested)
+        ), None) if requested else None
         if requested and not candidate:
             raise HTTPException(
                 status_code=422,

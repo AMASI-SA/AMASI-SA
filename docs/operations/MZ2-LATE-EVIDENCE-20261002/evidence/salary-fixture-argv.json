@@ -1,0 +1,17 @@
+{
+  "cwd": "C:\\Users\\amasi\\mz2-late-evidence-20261002",
+  "head": "4f7547644d3612fe118c3feaa883a080d95c971f",
+  "argv": [
+    "C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-q",
+    "-o",
+    "asyncio_mode=auto",
+    "--tb=short",
+    "backend/tests/test_employee_salary_contract_management.py",
+    "--junitxml=C:\\Users\\amasi\\mz2-late-evidence-proof-20261002\\salary-fixture.xml"
+  ],
+  "environment_policy": "OS allowlist, synthetic JWT, dotenv disabled, loopback Mongo only"
+}

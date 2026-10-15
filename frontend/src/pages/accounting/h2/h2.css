@@ -1,0 +1,19 @@
+.h2-desk { min-width:0; color:#0f172a; }
+.h2-desk h2 { font-size:1.15rem; font-weight:800; }
+.h2-desk>p { color:#64748b; font-size:.85rem; margin:.4rem 0 1rem; }
+.h2-review-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; }
+.h2-review-actions button { background:white; border:1px solid #cbd5e1; border-radius:1rem; text-align:start; padding:1rem; min-height:5rem; }
+.h2-review-actions button[aria-expanded=true] { border-color:#047857; background:#ecfdf5; }
+.h2-review-actions strong,.h2-review-actions span { display:block; }
+.h2-review-actions span { font-size:.75rem; color:#64748b; margin-top:.4rem; }
+.h2-desk button:focus-visible { outline:3px solid #059669; outline-offset:3px; }
+.h2-inline-panel { margin-top:1rem; padding:1rem; background:white; border:1px solid #cbd5e1; border-radius:1rem; overflow-wrap:anywhere; min-width:0; }
+.h2-inline-panel>header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:.75rem; margin-bottom:1rem; }
+.h2-inline-panel>header h3 { font-weight:800; }
+.h2-inline-panel>header button { min-height:44px; padding:.5rem .8rem; border:1px solid #cbd5e1; border-radius:.6rem; }
+.h2-blocked { padding:.75rem; margin:.75rem 0; border:1px solid #f1d19a; border-radius:.65rem; background:#fffaf0; font-size:.85rem; line-height:1.7; }
+.h2-blocked small { color:#64748b; overflow-wrap:anywhere; }
+.h2-inline-panel .ac-empty { padding:1rem; }
+.h2-inline-panel select,.h2-inline-panel input { max-width:100%; min-height:44px; padding:.5rem; border:1px solid #cbd5e1; border-radius:.5rem; }
+.h2-inline-panel button { min-height:44px; }
+@media(max-width:700px) { .h2-review-actions { grid-template-columns:1fr; } .h2-inline-panel { padding:.75rem; } }

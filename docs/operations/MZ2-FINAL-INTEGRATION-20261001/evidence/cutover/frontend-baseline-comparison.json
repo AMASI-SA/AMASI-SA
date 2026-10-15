@@ -1,0 +1,84 @@
+[
+  {
+    "suite": "src/components/SnapchatSeparatedAccountsView.test.jsx",
+    "failed": 1,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "renders one independent Mezan V2 Snapchat card per account"
+    ]
+  },
+  {
+    "suite": "src/components/fulfillment/FulfillmentExperimentPanel.test.jsx",
+    "failed": 1,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "FulfillmentExperimentPanel uses an in-app confirmation before resetting the experiment"
+    ]
+  },
+  {
+    "suite": "src/components/fulfillment/PreparationFilesRegistry.test.jsx",
+    "failed": 0,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": []
+  },
+  {
+    "suite": "src/defaultDashboardRoute.test.js",
+    "failed": 1,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "advanced dashboard remains the only dashboard UI while keeping its governed data API"
+    ]
+  },
+  {
+    "suite": "src/marketingAdsSalesVisibilityFix.test.js",
+    "failed": 2,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "Ads sales visibility repair keeps both spend and Salla sales labels and values visible",
+      "Ads sales visibility repair repairs Ad Squad spend and sales without changing their amounts"
+    ]
+  },
+  {
+    "suite": "src/mezanUnifiedHeader.test.js",
+    "failed": 4,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "Mezan 2 navigation and order search share one responsive header",
+      "the unified header uses the established Mezan green identity",
+      "the search field stays collapsed until its header icon is activated",
+      "mobile and narrow desktop widths keep primary labels on one line"
+    ]
+  },
+  {
+    "suite": "src/pages/CampaignRecommendations.test.jsx",
+    "failed": 1,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "recommendation page explains the decision and observation window"
+    ]
+  },
+  {
+    "suite": "src/publicLegalNoIndex.test.js",
+    "failed": 0,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": []
+  },
+  {
+    "suite": "src/services/mezanComponentCatalog.test.js",
+    "failed": 11,
+    "runtime_failure_equal_excluding_paths_and_stack_frames": true,
+    "failed_tests": [
+      "Mezan component preview catalog builds the seven isolated component definitions without stock quantities",
+      "Mezan component preview catalog summarizes stock components, services, and missing costs",
+      "Mezan component preview catalog supports Arabic search and operational filters",
+      "Mezan component preview catalog hides stopped components by default and exposes explicit status filters",
+      "Mezan component preview catalog derives component usages from the product recipe",
+      "Mezan component preview catalog keeps option-specific component links explicit",
+      "Mezan component preview catalog writes a preview link to the canonical product recipe and derives it back",
+      "Mezan component preview catalog rejects option links that are not present on the selected product",
+      "Mezan component preview catalog adds and removes a valid option-specific product link",
+      "Mezan component preview catalog supports the same component across multiple product recipes",
+      "Mezan component preview catalog keeps usage identities unique when two option fields share a value key"
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "classification": "AMASI_TEST_ORDER_CASE",
+  "id": "amasi-add-reviewed-1",
+  "client_request_id": "amasi-add-reviewed-1",
+  "order_id": "FILL_INTERNAL_ORDER_ID",
+  "method": "POST",
+  "path": "/orders/items",
+  "body": {
+    "order_id": "FILL_INTERNAL_ORDER_ID",
+    "product_id": "FILL_TARGET_PRODUCT_ID",
+    "sku": "FILL_TARGET_SKU",
+    "branch_id": "FILL_BRANCH_ID",
+    "quantity": 1,
+    "options": [{"option_id": "FILL_OPTION_ID", "value": "TEST"}]
+  },
+  "assertions": [
+    {"path": "before.order_total", "equals": 100},
+    {"path": "after.order_total", "equals": 110}
+  ],
+  "retry_once": false,
+  "disposable_order_confirmed": true,
+  "steps": []
+}

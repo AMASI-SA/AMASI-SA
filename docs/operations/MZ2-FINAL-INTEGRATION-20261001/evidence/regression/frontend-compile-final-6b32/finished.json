@@ -1,0 +1,9 @@
+{
+  "head": "6b32eee684c7a3a37901e351d49c3fabbd55d5dd",
+  "tree": "37ef48d023c8d857e8cab36984f2ce5a4e7caf00",
+  "exit_code": 0,
+  "source_unchanged": true,
+  "duration_seconds": 12.534,
+  "scope": "Local full application Vite compile only; no release materialization, lease, deploy or Production request",
+  "production_writes": 0
+}

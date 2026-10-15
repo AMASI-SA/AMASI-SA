@@ -57,7 +57,7 @@ describe("TikTok Integrations V2 client", () => {
         const result = await startTikTokReportingSync({ days: 30 });
         expect(api.post).toHaveBeenCalledWith(
             "/integrations-v2/tiktok_ads/sync-async",
-            { days: 30 },
+            { days: 30, include_hierarchy: true },
         );
         expect(result).toMatchObject({
             run_id: "run-1",

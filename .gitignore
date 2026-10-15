@@ -180,6 +180,8 @@ frontend/node_modules/.cache/default-development/139.pack
 .env
 .env.*
 *.env
+# Required non-secret marker for Emergent build-context preparation.
+!/frontend/.env
 credentials.json
 *.key
 .credentials
@@ -248,6 +250,9 @@ frontend/node_modules/.cache/default-development/221.pack
 frontend/node_modules/.cache/default-development/225.pack
 frontend/node_modules/.cache/default-development/226.pack
 frontend/node_modules/.cache/default-development/228.pack
+backend/release_identity.json
+/frontend/.release/reproducible-build.json
+/frontend/.release/reproducible-build.json.tmp
 frontend/node_modules/.cache/default-development/223.pack
 frontend/node_modules/.cache/default-development/5.pack
 frontend/node_modules/.cache/default-development/20.pack
@@ -278,3 +283,13 @@ frontend/node_modules/.cache/default-development/112.pack
 frontend/node_modules/.cache/default-development/121.pack
 frontend/node_modules/.cache/default-development/116.pack
 frontend/node_modules/.cache/default-development/123.pack
+.worktrees/p01-acceptance-state-20260919/mongo/journal/WiredTigerLog.0000000014
+.worktrees/p01-acceptance-state-20260919/mongo/journal/WiredTigerPreplog.0000000001
+.worktrees/p01-acceptance-state-20260919/mongo/journal/WiredTigerPreplog.0000000002
+.worktrees/p01-intake-runtime-20260919/standalone-test/data/journal/WiredTigerPreplog.0000000001
+.worktrees/p01-intake-runtime-20260919/standalone-test/data/journal/WiredTigerLog.0000000001
+.worktrees/p01-intake-runtime-20260919/standalone-test/data/journal/WiredTigerPreplog.0000000002
+.worktrees/preview-runtime-state-20260919/toolcache/mezan-release-toolchains/v1/node-v22.23.2-yarn-1.22.22-linux-arm64/node/bin/node
+
+# Isolated operational UI preview cache
+frontend/.operational-preview-cache/

@@ -1,0 +1,34 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+________________ test_http_setup_and_financial_pause_boundary _________________
+backend\tests\test_mz2_shipping_native.py:380: in test_http_setup_and_financial_pause_boundary
+    assert result.json()["bank_port"] == {"ready": True, "code": None}
+E   AssertionError: assert {'ready': Fal...t_integrated'} == {'ready': True, 'code': None}
+E     
+E     Differing items:
+E     {'ready': False} != {'ready': True}
+E     {'code': 'mz2_shipping_bank_port_not_integrated'} != {'code': None}
+E     Use -v to get more diff
+_ test_connected_bank_context_does_not_authorize_posting[missing_bank-409-MZ2_LINK_REQUIRED] _
+backend\tests\test_mz2_shipping_native.py:410: in test_connected_bank_context_does_not_authorize_posting
+    assert context.json()["bank_port"] == {"ready": True, "code": None}
+E   AssertionError: assert {'ready': Fal...t_integrated'} == {'ready': True, 'code': None}
+E     
+E     Differing items:
+E     {'ready': False} != {'ready': True}
+E     {'code': 'mz2_shipping_bank_port_not_integrated'} != {'code': None}
+E     Use -v to get more diff
+_ test_connected_bank_context_does_not_authorize_posting[paused-423-mz2_writes_paused] _
+backend\tests\test_mz2_shipping_native.py:410: in test_connected_bank_context_does_not_authorize_posting
+    assert context.json()["bank_port"] == {"ready": True, "code": None}
+E   AssertionError: assert {'ready': Fal...t_integrated'} == {'ready': True, 'code': None}
+E     
+E     Differing items:
+E     {'ready': False} != {'ready': True}
+E     {'code': 'mz2_shipping_bank_port_not_integrated'} != {'code': None}
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_shipping_native.py::test_http_setup_and_financial_pause_boundary
+FAILED backend/tests/test_mz2_shipping_native.py::test_connected_bank_context_does_not_authorize_posting[missing_bank-409-MZ2_LINK_REQUIRED]
+FAILED backend/tests/test_mz2_shipping_native.py::test_connected_bank_context_does_not_authorize_posting[paused-423-mz2_writes_paused]
+3 failed, 41 deselected in 5.29s

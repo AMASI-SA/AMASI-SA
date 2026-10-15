@@ -1,0 +1,16 @@
+PASS stage 1 Explicit cutover and retained original in a newly created session
+PASS stage 2 Bank/cash/overdraft exact identities; explicit zero and separate liability
+PASS stage 3 Provider receivable and explicit canonical bank binding
+PASS stage 4 Employee salary, advance and custody entered and restored independently
+PASS stage 5 Supplier payable and advance remain separate
+PASS stage 6 Create/select actual external contact and preserve supplier siblings
+PASS stage 7 Rich courier terms, actual uploaded source review and immutable approval
+PASS stage 8 Courier balances entered through Stage7 and financially saved from Stage8
+PASS stage 9 Driver opening responsibility and fees stay separate from courier siblings
+PASS stage 10 Actual V2 inventory catalogue, variant/component draft and independent account valuation
+PASS stage 11 Create actual effective fee policy through UI and preserve provider facts
+PASS stage 12 Confirmed advertising identity with explicit wallet and payable selection
+PASS stage 13 Select actual paid native invoice with independently calculated325 remaining days
+PASS stage 14 Actual supported typed obligations/taxes without netting or deposit fallback
+PASS stage 15 One complete source session: exact independent legs, original hashes and locked review
+PASS stage 16 Correct final lock; separate initially-paused owner rejects actual handoff423

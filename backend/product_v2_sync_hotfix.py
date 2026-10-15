@@ -36,32 +36,19 @@ def _pagination(response: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _as_int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
 def next_product_page(*, requested_page: int, row_count: int, pagination: dict[str, Any]) -> int | None:
-    """Resolve the next Salla page without treating the default 15 rows as EOF."""
+    """Probe until Salla returns an empty page.
+
+    The products endpoint has returned contradictory pagination metadata in
+    production (``totalPages=1`` while more products remained).  Treating that
+    metadata as authoritative archived the rest of the Mezan catalogue.  The
+    remote metadata is therefore advisory only; an empty page is the only
+    successful end-of-catalogue proof.  A repeated-page signature in the main
+    loop still stops providers that ignore the requested page number.
+    """
     if row_count <= 0:
         return None
-    current = _as_int(
-        pagination.get("currentPage")
-        or pagination.get("current_page")
-        or pagination.get("page"),
-        requested_page,
-    )
-    total = _as_int(
-        pagination.get("totalPages")
-        or pagination.get("total_pages")
-        or pagination.get("last_page")
-        or pagination.get("lastPage"),
-        0,
-    )
-    if total and current >= total:
-        return None
+    _ = pagination
     return requested_page + 1
 
 
@@ -82,7 +69,7 @@ async def run_product_v2_sync_fixed(db: Any, user_id: str) -> dict[str, Any]:
         "errors_count": 0,
         "pages_fetched": 0,
         "collection": PRODUCTS,
-        "pagination_strategy": "full_products_without_format_light",
+        "pagination_strategy": "probe_until_empty_without_format_light",
     })
 
     created = updated = unchanged = errors_count = pages_fetched = 0

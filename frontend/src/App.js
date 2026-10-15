@@ -1,10 +1,17 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AuthLoadingScreen from "./components/AuthLoadingScreen";
+import AuthRecoveryScreen from "./components/AuthRecoveryScreen";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import AdvancedDashboard from "./pages/AdvancedDashboard";
+import SoldProducts from "./pages/SoldProducts";
+const ChartDashboard = lazy(() => import("./pages/ChartDashboard"));
+import CampaignRecommendations from "./pages/CampaignRecommendations";
 import UploadExcel from "./pages/UploadExcel";
 import AnalysisResult from "./pages/AnalysisResult";
 import Settings from "./pages/Settings";
@@ -17,6 +24,7 @@ import ShippingTransfers from "./pages/ShippingTransfers";
 import ShippingCompanySettings from "./pages/ShippingCompanySettings";
 import MakeWebhook from "./pages/MakeWebhook";
 import OperatingExpenses from "./pages/OperatingExpenses";
+import RecurringObligations from "./pages/RecurringObligations";
 import OperationalReports from "./pages/OperationalReports";
 import AdsReport from "./pages/AdsReport";
 import AdvertisingExpensesReport from "./pages/AdvertisingExpensesReport";
@@ -29,22 +37,7 @@ import SettlementDashboard from "./pages/SettlementDashboard";
 import ProductPreparation from "./pages/ProductPreparation";
 import ImageCatalog from "./pages/ImageCatalog";
 import SallaIntegration from "./pages/SallaIntegration";
-import QoyodSettings from "./pages/QoyodSettings";
-import QoyodInvoices from "./pages/QoyodInvoices";
-import QoyodGoLive from "./pages/QoyodGoLive";
-import QoyodMigration from "./pages/QoyodMigration";
-import QoyodFreshStart from "./pages/QoyodFreshStart";
-import QoyodFirstSyncMonitor from "./pages/QoyodFirstSyncMonitor";
-import QoyodWebhookMonitor from "./pages/QoyodWebhookMonitor";
-import QoyodUnallocatedReceipts from "./pages/QoyodUnallocatedReceipts";
-import QoyodRoundingReport from "./pages/QoyodRoundingReport";
-import QoyodRoundingDryRun from "./pages/QoyodRoundingDryRun";
-import QoyodCodReceiptsReport from "./pages/QoyodCodReceiptsReport";
-import QoyodPendingOrders from "./pages/QoyodPendingOrders";
-import QoyodManualSend from "./pages/QoyodManualSend";
-import QoyodUnsentOrders from "./pages/QoyodUnsentOrders";
-import QoyodReconciliation from "./pages/QoyodReconciliation";
-import EligibleOrders from "./pages/EligibleOrders";
+import QoyodControlCenter from "./pages/QoyodControlCenter";
 import IntegrationPlaceholder from "./pages/IntegrationPlaceholder";
 import SallaSourceComparison from "./pages/SallaSourceComparison";
 import PaymentSettlements from "./pages/PaymentSettlements";
@@ -54,17 +47,24 @@ import Settlements from "./pages/Settlements";
 import Accounts from "./pages/Accounts";
 import AccountDetails from "./pages/AccountDetails";
 import OrdersDiagnostics from "./pages/OrdersDiagnostics";
+import SnapchatPeriodDiagnosticsPage from "./pages/SnapchatPeriodDiagnosticsPage";
 import Orders from "./pages/Orders";
 import OrdersV2 from "./pages/OrdersV2";
 import OrderDetailsV2 from "./pages/OrderDetailsV2";
 import MezanProducts from "./pages/MezanProducts";
 import MezanComponents from "./pages/MezanComponents";
 import AppsIntegrationsControlCenter from "./pages/AppsIntegrationsControlCenter";
+import SnapchatV2Page from "./pages/SnapchatV2Page";
+import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerIntelligenceIntegration";
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
+import OrderTrackingNotes from "./pages/OrderTrackingNotes";
 import AdsManager from "./pages/AdsManager";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
+import MezanSuppliersV2 from "./pages/MezanSuppliersV2";
+import EmployeesV2 from "./pages/EmployeesV2";
 import OwnerOnlyRoute from "./components/OwnerOnlyRoute";
+import PermissionRoute from "./components/PermissionRoute";
 import ImportJobs from "./pages/ImportJobs";
 import Transfers from "./pages/Transfers";
 import Reconciliation from "./pages/Reconciliation";
@@ -92,7 +92,8 @@ import FinancialMovementNewPage from "./pages/FinancialMovementNewPage";
 import FinancialMovementsListPage from "./pages/FinancialMovementsListPage";
 import LegacyUsageReportPage from "./pages/LegacyUsageReportPage";
 import SuppliersReportPage from "./pages/SuppliersReportPage";
-import AdsCurrencySettings from "./pages/AdsCurrencySettings";
+import AdsCostSettingsV2 from "./pages/AdsCostSettingsV2";
+import CustomerCohortReport from "./pages/CustomerCohortReport";
 import SallaSettlements from "./pages/SallaSettlements";
 import SettlementsOverview from "./pages/SettlementsOverview";
 import AlertsPage from "./pages/AlertsPage";
@@ -126,20 +127,30 @@ import BalanceDriftDiagnostic from "./pages/BalanceDriftDiagnostic";
 import AIControlCenter from "./pages/AIControlCenter";
 import { Toaster } from "./components/ui/sonner";
 
+const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
+const OperationalCustomerReturns = lazy(() => import("./pages/operational/CustomerReturns"));
+const OperationalCustomerExchanges = lazy(() => import("./pages/operational/CustomerExchanges"));
+
 function PublicOnly({ children }) {
-    const { user, loading } = useAuth();
-    if (loading) return null;
-    if (user) return <Navigate to="/dashboard-v2" replace />;
+    const { user, loading, authStatus, retryAuth } = useAuth();
+    if (authStatus === "unavailable") {
+        return <AuthRecoveryScreen onRetry={retryAuth} />;
+    }
+    if (loading) return <AuthLoadingScreen />;
+    if (user) return <Navigate to="/dashboard-advanced" replace />;
     return children;
 }
 
 function AppRoutes() {
     return (
         <Routes>
+            <Route path="/operational-balances" element={<ProtectedRoute><Layout><OperationalBalances /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-returns" element={<ProtectedRoute><Layout><OperationalCustomerReturns /></Layout></ProtectedRoute>} />
+            <Route path="/operational-balances/customer-exchanges" element={<ProtectedRoute><Layout><OperationalCustomerExchanges /></Layout></ProtectedRoute>} />
             <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
             <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
 
-            <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-v2" replace /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard-advanced" replace /></ProtectedRoute>} />
             <Route path="/legacy-dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><Layout><UploadExcel /></Layout></ProtectedRoute>} />
             <Route path="/analyses/:id" element={<ProtectedRoute><Layout><AnalysisResult /></Layout></ProtectedRoute>} />
@@ -150,7 +161,7 @@ function AppRoutes() {
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
-            <Route path="/snapchat-accounts" element={<ProtectedRoute><Navigate to="/integrations-v2?provider=snapchat_ads" replace /></ProtectedRoute>} />
+            <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatV2Page /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/settings" element={<ProtectedRoute><Layout><AdsV2Settings /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/report" element={<ProtectedRoute><Layout><AdsV2Report /></Layout></ProtectedRoute>} />
             <Route path="/product-costs" element={<ProtectedRoute><Layout><ProductCosts /></Layout></ProtectedRoute>} />
@@ -184,25 +195,13 @@ function AppRoutes() {
             <Route path="/receivables" element={<ProtectedRoute><Layout><Receivables /></Layout></ProtectedRoute>} />
             <Route path="/operations-dashboard" element={<ProtectedRoute><Layout><OperationsDashboard /></Layout></ProtectedRoute>} />
             <Route path="/integrations/custom-app" element={<ProtectedRoute><Layout><CustomAppIntegration /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Layout><QoyodSettings /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/go-live" element={<ProtectedRoute><Layout><QoyodGoLive /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/migration" element={<ProtectedRoute><Layout><QoyodMigration /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/fresh-start" element={<ProtectedRoute><Layout><QoyodFreshStart /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/first-sync-monitor" element={<ProtectedRoute><Layout><QoyodFirstSyncMonitor /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/invoices" element={<ProtectedRoute><Layout><QoyodInvoices /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/rounding-report" element={<ProtectedRoute><Layout><QoyodRoundingReport /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/rounding-dry-run" element={<ProtectedRoute><Layout><QoyodRoundingDryRun /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/cod-receipts-report" element={<ProtectedRoute><Layout><QoyodCodReceiptsReport /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Layout><QoyodUnsentOrders /></Layout></ProtectedRoute>} />
-            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Layout><QoyodManualSend /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Layout><QoyodReconciliation /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/pending-orders" element={<ProtectedRoute><Layout><QoyodPendingOrders /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/eligible-orders" element={<ProtectedRoute><Layout><EligibleOrders /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/products" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="منتجات قيود" subtitle="تتبع SKUs المرتبطة بمنتجات قيود وتقارير المنتجات غير المربوطة." icon="📦" phase="Day 4-5" testid="qoyod-products-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"},{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/customers" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="عملاء قيود" subtitle="إدارة ربط العملاء (هاتف/إيميل) مع جهات الاتصال في قيود." icon="👥" phase="Day 4-5" testid="qoyod-customers-placeholder" related={[{to:"/integrations/qoyod/settings",label:"إعدادات قيود"}]} /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/sync-log" element={<ProtectedRoute><Layout><QoyodWebhookMonitor /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/unallocated-receipts" element={<ProtectedRoute><Layout><QoyodUnallocatedReceipts /></Layout></ProtectedRoute>} />
-            <Route path="/integrations/qoyod/error-log" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأخطاء — قيود" subtitle="جميع حالات الفشل (FAILED_*, DEAD_LETTER) قابلة للفلترة وإعادة المحاولة." icon="⚠️" phase="Day 4-5" testid="qoyod-error-log-placeholder" related={[{to:"/integrations/qoyod/invoices",label:"فواتير قيود — مراقبة"}]} /></Layout></ProtectedRoute>} />
+            <Route path="/integrations-v2/qoyod" element={<ProtectedRoute><OwnerOnlyRoute><Layout><QoyodControlCenter /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
+            {/* Qoyod is automatic-only now. Old bookmarks converge on the V2 control center. */}
+            <Route path="/integrations/qoyod/settings" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=settings" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/reconciliation" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=reconciliation" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/unsent-orders" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=exceptions" replace /></ProtectedRoute>} />
+            <Route path="/admin/qoyod-manual-send" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod?tab=exceptions" replace /></ProtectedRoute>} />
+            <Route path="/integrations/qoyod/*" element={<ProtectedRoute><Navigate to="/integrations-v2/qoyod" replace /></ProtectedRoute>} />
             <Route path="/integrations/salla/orders" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="مراقبة الطلبات — سلة" subtitle="عرض الطلبات الواردة من سلة وحالتها الحالية في خط الأنابيب." icon="🛒" phase="مرحلة لاحقة" testid="salla-orders-placeholder" related={[{to:"/orders",label:"الطلبات"},{to:"/salla-sources",label:"مقارنة مصادر البيانات"}]} /></Layout></ProtectedRoute>} />
             <Route path="/integrations/salla/events" element={<ProtectedRoute><Layout><IntegrationPlaceholder title="سجل الأحداث — سلة" subtitle="جميع أحداث Webhooks من سلة (طلب جديد، شحن، إلغاء، استرجاع…)." icon="📋" phase="مرحلة لاحقة" testid="salla-events-placeholder" related={[{to:"/make-webhook",label:"ربط Make.com"}]} /></Layout></ProtectedRoute>} />
             <Route path="/ad-accounts" element={<ProtectedRoute><Layout><AdAccounts /></Layout></ProtectedRoute>} />
@@ -236,7 +235,7 @@ function AppRoutes() {
             <Route path="/financial-movements" element={<ProtectedRoute><Layout><FinancialMovementsListPage /></Layout></ProtectedRoute>} />
             <Route path="/legacy-usage-report" element={<ProtectedRoute><Layout><LegacyUsageReportPage /></Layout></ProtectedRoute>} />
             <Route path="/reports/suppliers" element={<ProtectedRoute><Layout><SuppliersReportPage /></Layout></ProtectedRoute>} />
-            <Route path="/settings/ads-currencies" element={<ProtectedRoute><Layout><AdsCurrencySettings /></Layout></ProtectedRoute>} />
+            <Route path="/settings/ads-currencies" element={<ProtectedRoute><Navigate to="/ads-manager/cost-settings" replace /></ProtectedRoute>} />
             <Route path="/salla-settlements" element={<ProtectedRoute><Layout><SallaSettlements /></Layout></ProtectedRoute>} />
             <Route path="/settlements-overview" element={<ProtectedRoute><Layout><SettlementsOverview /></Layout></ProtectedRoute>} />
             <Route path="/alerts" element={<ProtectedRoute><Layout><AlertsPage /></Layout></ProtectedRoute>} />
@@ -269,6 +268,7 @@ function AppRoutes() {
             <Route path="/shipping/orders-ledger" element={<ProtectedRoute><Layout><ShippingLedger /></Layout></ProtectedRoute>} />
             <Route path="/reconciliation/:accountId" element={<ProtectedRoute><Layout><ReconciliationDetail /></Layout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<ProtectedRoute><Layout><OrdersDiagnostics /></Layout></ProtectedRoute>} />
+            <Route path="/diagnostics/snapchat-period" element={<ProtectedRoute><Layout><SnapchatPeriodDiagnosticsPage /></Layout></ProtectedRoute>} />
             <Route path="/orders" element={<ProtectedRoute><Layout><Orders /></Layout></ProtectedRoute>} />
             <Route
                 path="/dashboard-v2"
@@ -276,6 +276,40 @@ function AppRoutes() {
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
                             <Layout><Dashboard sourceMode="mezan_v2" /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/dashboard-advanced"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><AdvancedDashboard /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+      <Route
+        path="/dashboard-charts"
+        element={
+          <ProtectedRoute>
+            <OwnerOnlyRoute>
+              <Layout>
+                <Suspense fallback={null}>
+                  <ChartDashboard />
+                </Suspense>
+              </Layout>
+            </OwnerOnlyRoute>
+          </ProtectedRoute>
+        }
+      />
+            <Route
+                path="/ads-manager/recommendations"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><CampaignRecommendations /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
@@ -310,6 +344,27 @@ function AppRoutes() {
                     </ProtectedRoute>
                 }
             />
+            <Route path="/products-v2/sold" element={<ProtectedRoute><OwnerOnlyRoute><Layout><SoldProducts /></Layout></OwnerOnlyRoute></ProtectedRoute>} />
+            <Route
+                path="/employees-v2"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><EmployeesV2 /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/recurring-obligations"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><RecurringObligations /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
             <Route
                 path="/components-v2"
                 element={
@@ -317,6 +372,14 @@ function AppRoutes() {
                         <OwnerOnlyRoute>
                             <Layout><MezanComponents /></Layout>
                         </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/suppliers-v2"
+                element={
+                    <ProtectedRoute>
+                        <Layout><MezanSuppliersV2 /></Layout>
                     </ProtectedRoute>
                 }
             />
@@ -331,11 +394,51 @@ function AppRoutes() {
                 }
             />
             <Route
-                path="/customer-intelligence"
+                path="/integrations-v2/instagram"
                 element={
                     <ProtectedRoute>
                         <OwnerOnlyRoute>
+                            <Layout><InstagramCustomerIntelligenceIntegration /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/customer-intelligence"
+                element={
+                    <ProtectedRoute>
+                        <PermissionRoute permission="customer_intelligence.inbox.read">
                             <Layout><CustomerIntelligenceCenter /></Layout>
+                        </PermissionRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/order-tracking-notes"
+                element={
+                    <ProtectedRoute>
+                        <PermissionRoute permission="customer_intelligence.inbox.read">
+                            <Layout><OrderTrackingNotes /></Layout>
+                        </PermissionRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/ads-manager/cost-settings"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><AdsCostSettingsV2 /></Layout>
+                        </OwnerOnlyRoute>
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/ads-manager/customer-cohorts"
+                element={
+                    <ProtectedRoute>
+                        <OwnerOnlyRoute>
+                            <Layout><CustomerCohortReport /></Layout>
                         </OwnerOnlyRoute>
                     </ProtectedRoute>
                 }
@@ -365,7 +468,7 @@ function AppRoutes() {
             <Route path="/import-jobs" element={<ProtectedRoute><Layout><ImportJobs /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
 
-            <Route path="*" element={<Navigate to="/dashboard-v2" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard-advanced" replace />} />
         </Routes>
     );
 }

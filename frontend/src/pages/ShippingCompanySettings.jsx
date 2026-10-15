@@ -45,6 +45,35 @@ export default function ShippingCompanySettings() {
         setSettings({ ...settings, shipping_companies: next });
     };
 
+    const addCodFeeTier = (companyIndex) => {
+        const current = companies[companyIndex]?.cod_fee_tiers || [];
+        updateCompany(companyIndex, {
+            cod_fee_tiers: [...current, {
+                min_amount: 0,
+                max_amount: null,
+                min_inclusive: true,
+                max_inclusive: true,
+                commission_percent: 0,
+                fixed_fee: 0,
+                vat_percent: 15,
+            }],
+        });
+    };
+
+    const updateCodFeeTier = (companyIndex, tierIndex, patch) => {
+        const tiers = (companies[companyIndex]?.cod_fee_tiers || []).map(
+            (tier, index) => index === tierIndex ? { ...tier, ...patch } : tier,
+        );
+        updateCompany(companyIndex, { cod_fee_tiers: tiers });
+    };
+
+    const removeCodFeeTier = (companyIndex, tierIndex) => {
+        const tiers = (companies[companyIndex]?.cod_fee_tiers || []).filter(
+            (_tier, index) => index !== tierIndex,
+        );
+        updateCompany(companyIndex, { cod_fee_tiers: tiers });
+    };
+
     // Iter-155 — add a brand-new shipping company row inline.
     const addCompany = () => {
         const name = (window.prompt("اسم شركة الشحن الجديدة:") || "").trim();
@@ -60,6 +89,8 @@ export default function ShippingCompanySettings() {
             is_deferred: true,
             cod_fee_percent: 0.0,
             cod_fee_fixed_per_order: 0.0,
+            cod_fee_vat_percent: 15.0,
+            cod_fee_tiers: [],
         }];
         setSettings({ ...settings, shipping_companies: next });
     };
@@ -88,6 +119,19 @@ export default function ShippingCompanySettings() {
                         0, Math.min(1, Number(c.cod_fee_percent) || 0)),
                     cod_fee_fixed_per_order: Math.max(
                         0, Number(c.cod_fee_fixed_per_order) || 0),
+                    cod_fee_vat_percent: Math.max(
+                        0, Math.min(100, Number(c.cod_fee_vat_percent ?? 15) || 0)),
+                    cod_fee_tiers: (c.cod_fee_tiers || []).map((tier) => ({
+                        ...tier,
+                        min_amount: Math.max(0, Number(tier.min_amount) || 0),
+                        max_amount: tier.max_amount === null || tier.max_amount === ""
+                            ? null : Math.max(0, Number(tier.max_amount) || 0),
+                        commission_percent: Math.max(
+                            0, Math.min(1, Number(tier.commission_percent) || 0)),
+                        fixed_fee: Math.max(0, Number(tier.fixed_fee) || 0),
+                        vat_percent: Math.max(
+                            0, Math.min(100, Number(tier.vat_percent ?? 15) || 0)),
+                    })),
                 })),
             };
             await api.put("/settings", payload);
@@ -119,6 +163,9 @@ export default function ShippingCompanySettings() {
                 <span><span className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 text-[10px] font-bold mx-1">فورية</span> تكلفة الشحن مصروف مباشر — لا يدخل الـ ledger.</span>
                 <div className="mt-2 pt-2 border-t border-blue-200">
                     <strong>رسوم COD:</strong> اكتب النسبة كرقم عادي مثل <code className="bg-white px-1 rounded">5</code> لتعني 5%. الحقل الثاني للرسوم الثابتة بالريال لكل طلب موصَّل.
+                </div>
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                    <strong>الشرائح:</strong> عند إضافة شريحة تُحسب العمولة على مبلغ COD لكل شحنة موصّلة، وتعلو الشرائح على النسبة الثابتة القديمة. استخدم شمول الحدود لضبط مبلغ 1,000 أو 3,000 بدقة.
                 </div>
             </div>
 
@@ -187,13 +234,13 @@ export default function ShippingCompanySettings() {
                                             className="w-16 px-1 py-1 text-xs num text-right bg-transparent focus:outline-none"
                                             data-testid={`cod-pct-${c.name}`}
                                             placeholder="5"
-                                            disabled={!c.is_deferred}
+                                            disabled={!c.is_deferred || (c.cod_fee_tiers || []).length > 0}
                                             title="نسبة مئوية مثل 5 = 5%"
                                         />
                                         <span className="px-1.5 text-[10px] text-slate-500 border-s border-slate-300 bg-slate-50">%</span>
                                     </div>
                                 </td>
-                                <td className="p-2"><input type="number" step="0.01" min="0" value={c.cod_fee_fixed_per_order ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_fixed_per_order: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-fixed-${c.name}`} placeholder="5.00" disabled={!c.is_deferred} /></td>
+                                <td className="p-2"><input type="number" step="0.01" min="0" value={c.cod_fee_fixed_per_order ?? 0} onChange={(e) => updateCompany(idx, { cod_fee_fixed_per_order: Number(e.target.value) })} className="w-20 border border-slate-300 rounded px-1 py-1 text-xs num text-right" data-testid={`cod-fixed-${c.name}`} placeholder="5.00" disabled={!c.is_deferred || (c.cod_fee_tiers || []).length > 0} /></td>
                                 <td className="p-2">
                                     <button type="button" onClick={() => removeCompany(idx)} className="text-rose-500 hover:text-rose-700 text-sm font-extrabold" title="حذف من الإعدادات" data-testid={`remove-${c.name}`}>×</button>
                                 </td>
@@ -202,6 +249,68 @@ export default function ShippingCompanySettings() {
                     </tbody>
                 </table>
             </div>
+
+            <section className="space-y-3" data-testid="cod-fee-tiers-section">
+                <div>
+                    <h2 className="text-lg font-extrabold text-slate-900">شرائح عمولة التحصيل عند الاستلام</h2>
+                    <p className="mt-1 text-xs text-slate-500">كل شريحة = شرط مبلغ + نسبة + رسم ثابت + ضريبة العمولة. الفاتورة أو كشف الشركة يبقى المرجع الفعلي.</p>
+                </div>
+                {companies.filter((company) => company.is_deferred).map((company) => {
+                    const companyIndex = companies.indexOf(company);
+                    const tiers = company.cod_fee_tiers || [];
+                    return (
+                        <article key={`tiers-${company.name}-${companyIndex}`} className="rounded-xl border-2 border-slate-200 bg-white p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <div className="font-extrabold text-slate-900">{company.name}</div>
+                                    <div className="text-[11px] text-slate-500">{tiers.length ? `${tiers.length} شرائح مفعلة` : "لا توجد شرائح؛ تُستخدم العمولة الثابتة أعلاه"}</div>
+                                </div>
+                                <button type="button" onClick={() => addCodFeeTier(companyIndex)} className="rounded-lg bg-sky-700 px-3 py-2 text-xs font-extrabold text-white" data-testid={`add-cod-tier-${company.name}`}>
+                                    + إضافة شريحة
+                                </button>
+                            </div>
+                            {tiers.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                    {tiers.map((tier, tierIndex) => (
+                                        <div key={`${company.name}-tier-${tierIndex}`} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-8" data-testid={`cod-tier-${company.name}-${tierIndex}`}>
+                                            <label className="text-[10px] font-bold text-slate-600">شرط البداية
+                                                <select value={tier.min_inclusive === false ? "exclusive" : "inclusive"} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { min_inclusive: e.target.value === "inclusive" })} className="mt-1 w-full rounded border px-2 py-2 text-xs">
+                                                    <option value="inclusive">أكبر أو يساوي</option>
+                                                    <option value="exclusive">أكبر من</option>
+                                                </select>
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">من مبلغ
+                                                <input type="number" min="0" step="0.01" value={tier.min_amount ?? 0} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { min_amount: Number(e.target.value) })} className="mt-1 w-full rounded border px-2 py-2 text-xs num" />
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">شرط النهاية
+                                                <select value={tier.max_inclusive === false ? "exclusive" : "inclusive"} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { max_inclusive: e.target.value === "inclusive" })} disabled={tier.max_amount === null || tier.max_amount === ""} className="mt-1 w-full rounded border px-2 py-2 text-xs disabled:bg-slate-100">
+                                                    <option value="inclusive">أقل أو يساوي</option>
+                                                    <option value="exclusive">أقل من</option>
+                                                </select>
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">إلى مبلغ
+                                                <input type="number" min="0" step="0.01" placeholder="بدون حد" value={tier.max_amount ?? ""} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { max_amount: e.target.value === "" ? null : Number(e.target.value) })} className="mt-1 w-full rounded border px-2 py-2 text-xs num" />
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">العمولة %
+                                                <input type="number" min="0" max="100" step="0.01" value={decimalToPct(tier.commission_percent)} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { commission_percent: pctToDecimal(e.target.value) })} className="mt-1 w-full rounded border px-2 py-2 text-xs num" />
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">الرسم الثابت
+                                                <input type="number" min="0" step="0.01" value={tier.fixed_fee ?? 0} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { fixed_fee: Number(e.target.value) })} className="mt-1 w-full rounded border px-2 py-2 text-xs num" />
+                                            </label>
+                                            <label className="text-[10px] font-bold text-slate-600">ضريبة العمولة %
+                                                <input type="number" min="0" max="100" step="0.01" value={tier.vat_percent ?? 15} onChange={(e) => updateCodFeeTier(companyIndex, tierIndex, { vat_percent: Number(e.target.value) })} className="mt-1 w-full rounded border px-2 py-2 text-xs num" />
+                                            </label>
+                                            <div className="flex items-end">
+                                                <button type="button" onClick={() => removeCodFeeTier(companyIndex, tierIndex)} className="w-full rounded border border-rose-200 bg-rose-50 px-2 py-2 text-xs font-extrabold text-rose-700">حذف</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </article>
+                    );
+                })}
+            </section>
 
             <div className="flex items-center justify-between gap-3">
                 <button onClick={addCompany} type="button" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg" data-testid="add-shipping-company">

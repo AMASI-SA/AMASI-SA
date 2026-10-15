@@ -24,8 +24,14 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from pydantic import BaseModel, ConfigDict
 
 from integrations.qoyod_manual.pending import list_pending_orders
+from integrations.qoyod.orders_owner import orders_owner_id
 from integrations.qoyod_manual.send import (
     manual_send_one, ManualSendRefused,
+)
+from integrations.qoyod_manual.failed_retry import retry_failed_order
+from integrations.qoyod_manual.payment_recheck import (
+    recheck_payment_batch_read_only,
+    recheck_payment_read_only,
 )
 from integrations.qoyod_manual.diagnose import diagnose_totals
 from integrations.qoyod_manual.missing_diagnostics import (
@@ -82,6 +88,12 @@ class CanaryBatchPayload(BaseModel):
     confirmation: str
 
 
+class PaymentRecheckBatchPayload(BaseModel):
+    """Bounded read-only Salla payment scan; never sends to Qoyod."""
+    model_config = ConfigDict(extra="forbid")
+    order_numbers: list[str]
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -91,6 +103,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         prefix="/integrations/qoyod/manual",
         tags=["integrations:qoyod:manual"],
     )
+    from .recovery_routes import make_recovery_router
+    router.include_router(make_recovery_router(db, current_user))
 
     @router.get("/health")
     async def health(user=Depends(current_user)):
@@ -117,6 +131,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
     @router.get("/pending-orders")
     async def pending_orders(
         days: int = Query(60, ge=1, le=365),
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
         limit: int = Query(500, ge=1, le=1000),
         search: Optional[str] = Query(None),
         status: str = Query(
@@ -135,7 +151,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         if exact_order.isdigit():
             try:
                 from salla_integration.sync import resync_single_order
-                await resync_single_order(db, str(user["id"]), exact_order)
+                await resync_single_order(db, orders_owner_id(user), exact_order)
             except Exception:
                 # Listing remains available from local evidence when Salla
                 # is temporarily unavailable; resync diagnostics live in the
@@ -143,9 +159,10 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
                 logger.exception(
                     "Plan-B exact-search resync failed order=%s", exact_order)
         return await list_pending_orders(
-            db, user_id=_TENANT, orders_user_id=str(user["id"]),
+            db, user_id=_TENANT, orders_user_id=orders_owner_id(user),
             days=days, limit=limit,
-            search=search, status=status)
+            search=search, status=status,
+            from_date=from_date, to_date=to_date)
 
     # ── Diagnostic-only endpoint (temporary, opt-in) ──────────────
     # Read-only. Simulates the exact filter chain of
@@ -203,10 +220,43 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         except Exception:
             pass
         try:
-            result = await manual_send_one(
-                db, user_id=_TENANT, orders_user_id=str(user["id"]),
+            # A manual recovery request is still an accounting write. Refresh
+            # the order from Salla immediately before the Qoyod path and use
+            # the same closed three-status gate as the automatic worker. This
+            # prevents a stale eligible inbox row from posting an order that
+            # has since moved to a cancelled/refunded state.
+            from integrations.qoyod_manual.auto_send import (
+                _refresh_and_verify_salla_status,
+            )
+            orders_user = orders_owner_id(user)
+            still_eligible, refresh = await _refresh_and_verify_salla_status(
+                db,
+                orders_user_id=orders_user,
                 order_number=str(order_number),
-                actor=actor)
+            )
+            if not still_eligible:
+                snapshot = refresh.get("plan_b_status_snapshot") or {}
+                raise ManualSendRefused(
+                    "not_qoyod_eligible_status",
+                    "حالة الطلب الحالية في سلة ليست ضمن الحالات المسموحة "
+                    "(تم التنفيذ / جاري التوصيل / تم التوصيل)",
+                    {
+                        "order_number": str(order_number),
+                        "current_status": (
+                            snapshot.get("status_native")
+                            or snapshot.get("status_slug")
+                        ),
+                    },
+                )
+            result = await manual_send_one(
+                db, user_id=_TENANT, orders_user_id=orders_user,
+                order_number=str(order_number),
+                actor=actor,
+                # This operator-confirmed path is bounded to explicit order
+                # numbers and already rechecks the live native Salla status.
+                # Qoyod invoice/payment dates remain the send date.
+                allow_missing_salla_order_date=True,
+                allow_historical_positive_total=True)
             return result
         except ManualSendRefused as exc:
             # 409 = business-rule / guard refusal.
@@ -359,7 +409,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             return await manual_send_one(
                 db,
                 user_id=_TENANT,
-                orders_user_id=str(user["id"]),
+                orders_user_id=orders_owner_id(user),
                 order_number=order_number,
                 actor=actor,
             )
@@ -417,6 +467,79 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             actor,
         )
         return result
+
+    @router.post("/retry-failed/{order_number}")
+    async def retry_failed(order_number: str,
+                           user=Depends(current_user)):
+        """Safely retry one failed order after a fresh Salla status check."""
+        actor = "failed-retry-ui"
+        try:
+            username = (user or {}).get("email") or (user or {}).get("id")
+            if username:
+                actor = f"failed-retry-ui:{username}"
+        except Exception:
+            pass
+
+        try:
+            return await retry_failed_order(
+                db,
+                orders_user_id=orders_owner_id(user),
+                order_number=str(order_number),
+                actor=actor,
+            )
+        except ManualSendRefused as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=exc.to_dict(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            ref = uuid.uuid4().hex[:8]
+            logger.exception(
+                "failed Qoyod retry ref=%s order=%s actor=%s",
+                ref, order_number, actor,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "code": "failed_retry_unexpected",
+                    "message": "تعذر إكمال إعادة الإرسال بأمان",
+                    "error_reference": ref,
+                },
+            ) from exc
+
+    @router.post("/recheck-payment/{order_number}")
+    async def recheck_payment(order_number: str,
+                              user=Depends(current_user)):
+        """Read current Salla payment facts only; never send or persist."""
+        return await recheck_payment_read_only(
+            db,
+            orders_user_id=orders_owner_id(user),
+            order_number=order_number,
+        qoyod_user_id=_TENANT,
+        )
+
+    @router.post("/recheck-payment-bulk")
+    async def recheck_payment_bulk(
+        payload: PaymentRecheckBatchPayload = Body(...),
+        user=Depends(current_user),
+    ):
+        order_numbers = list(dict.fromkeys(
+            str(value or "").strip() for value in payload.order_numbers
+        ))
+        if not order_numbers or len(order_numbers) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_payment_recheck_batch",
+                    "message": "اختر من 1 إلى 100 طلب للفحص فقط",
+                },
+            )
+        return await recheck_payment_batch_read_only(
+            db,
+            orders_user_id=orders_owner_id(user),
+            order_numbers=order_numbers,
+        qoyod_user_id=_TENANT,
+        )
 
     @router.get("/status/{order_number}")
     async def send_status(order_number: str,
@@ -490,6 +613,8 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
     @router.get("/missing-from-plan-b")
     async def missing_from_plan_b(
         days: int = Query(90, ge=1, le=365),
+        from_date: Optional[str] = Query(None),
+        to_date: Optional[str] = Query(None),
         limit: int = Query(1000, ge=1, le=5000),
         search: Optional[str] = Query(None),
         include_already_sent: bool = Query(
@@ -519,10 +644,11 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         """
         return await list_missing_from_plan_b(
             db,
-            orders_user_id=user["id"],
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             days=days, limit=limit,
-            search=search, include_already_sent=include_already_sent)
+            search=search, include_already_sent=include_already_sent,
+            from_date=from_date, to_date=to_date)
 
     @router.get("/audit/plan-b-sent-vs-diagnostic")
     async def audit_sent(
@@ -535,7 +661,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         reason. No side-effects, no writes."""
         return await audit_plan_b_vs_diagnostic(
             db,
-            orders_user_id=user["id"],
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             days=days,
         )
@@ -551,7 +677,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         return await diagnose_totals(
             db,
             user_id=_TENANT,
-            orders_user_id=str(user["id"]),
+            orders_user_id=orders_owner_id(user),
             order_number=str(order_number),
         )
 
@@ -589,11 +715,21 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         skipped_already_unified = 0
         affected: list[str] = []
 
+        repair_owner_ids = list(dict.fromkeys(
+            value for value in (
+                _TENANT,
+                str(orders_owner_id(user) or "").strip(),
+            ) if value
+        ))
+        repair_owner_query: str | dict = repair_owner_ids[0]
+        if len(repair_owner_ids) > 1:
+            repair_owner_query = {"$in": repair_owner_ids}
         cursor = db.integration_inbox.find(
-            {"user_id": _TENANT,
+            {"user_id": repair_owner_query,
              "manual_qoyod_invoice_id":
                 {"$exists": True, "$nin": [None, ""]}},
-            {"_id": 0, "id": 1, "salla_order_number": 1,
+            {"_id": 0, "id": 1, "user_id": 1,
+             "salla_order_number": 1,
              "manual_qoyod_invoice_id": 1,
              "manual_qoyod_invoice_number": 1,
              "qoyod_invoice_id": 1},
@@ -621,7 +757,10 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
             if num:
                 patch["qoyod_invoice_number"] = str(num)
             await db.integration_inbox.update_one(
-                {"id": row.get("id")}, {"$set": patch})
+                {"id": row.get("id"), "user_id": row.get("user_id")},
+                {"$set": patch},
+                upsert=False,
+            )
             updated += 1
             on = str(row.get("salla_order_number") or "")
             if on and len(affected) < 200:
@@ -629,7 +768,7 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
 
         accounting_repair = await repair_qoyod_order_accounting(
             db,
-            orders_user_id=str(user["id"]),
+            orders_user_id=orders_owner_id(user),
             markers_user_id=_TENANT,
             actor=str(actor),
         )
@@ -658,4 +797,3 @@ def make_qoyod_manual_router(db, current_user) -> APIRouter:
         }
 
     return router
-

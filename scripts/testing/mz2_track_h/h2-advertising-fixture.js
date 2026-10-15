@@ -1,0 +1,20 @@
+// Synthetic payloads matching Track E PR #1218 native GET contracts only.
+// No automatic-run result is fabricated as a readable posting-history endpoint.
+const base = "/accounting-module/advertising-v2";
+const accounts = [
+    { platform: "meta", integration_account_id: "SYN-E-META", platform_account_id: "SYN-EXT-META", display_name: "Meta · حساب توضيحي", currency: "USD", status: "connected", timezone: "Asia/Riyadh", wallet_binding: "SYN-META-WALLET", payable_binding: "SYN-META-PAYABLE", funding_mode: "hybrid", readiness: "SETUP_READY", missing_contract_reason: null, daily_spend_readiness: "AUTOMATIC_POLICY_CONFIGURED", daily_spend_gap: null, run_at: "01:00", schedule_timezone: "Asia/Riyadh", bank_movement_readiness: "NOT_READY", bank_movement_gap: "track_a_require_financial_ledger_identity_not_integrated", original_wallet: { currency: "USD", opening_confirmed: true, opening_materialized: true, confirmed_opening_amount: "500", posted_original_balance: "125.75" } },
+    { platform: "snapchat", integration_account_id: "SYN-E-SNAP", platform_account_id: "SYN-EXT-SNAP", display_name: "Snap · حساب توضيحي", currency: "USD", status: "connected", timezone: "America/New_York", wallet_binding: "SYN-SNAP-WALLET", payable_binding: null, funding_mode: "prepaid", readiness: "SETUP_READY", missing_contract_reason: null, daily_spend_readiness: "AUTOMATIC_POLICY_CONFIGURED", daily_spend_gap: null, run_at: "01:00", schedule_timezone: "America/New_York", bank_movement_readiness: "NOT_READY", bank_movement_gap: "track_a_require_financial_ledger_identity_not_integrated", original_wallet: { currency: "USD", opening_confirmed: true, opening_materialized: true, confirmed_opening_amount: "100", posted_original_balance: "0" } },
+    { platform: "tiktok", integration_account_id: "SYN-E-TIKTOK", platform_account_id: "SYN-EXT-TIKTOK", display_name: "TikTok · حساب توضيحي", currency: "SAR", status: "connected", timezone: null, wallet_binding: null, payable_binding: null, funding_mode: null, readiness: "NOT_READY", missing_contract_reason: "ad_source_timezone_or_date_missing", daily_spend_readiness: "NOT_READY", daily_spend_gap: "ad_automation_policy_missing", bank_movement_readiness: "NOT_READY", bank_movement_gap: "track_a_require_financial_ledger_identity_not_integrated" },
+    { platform: "google_ads", integration_account_id: "SYN-E-GOOGLE", platform_account_id: "SYN-EXT-GOOGLE", display_name: "Google Ads · حساب توضيحي", currency: "SAR", status: "connected", timezone: "Asia/Riyadh", wallet_binding: null, payable_binding: null, funding_mode: null, readiness: "NOT_READY", missing_contract_reason: "ad_binding_missing", daily_spend_readiness: "NOT_READY", daily_spend_gap: "ad_automation_policy_missing", bank_movement_readiness: "NOT_READY", bank_movement_gap: "track_a_require_financial_ledger_identity_not_integrated" },
+];
+export function fixture(url, params = {}) {
+    if (url === `${base}/stage-12`) return { stage: 12, identity_source: "mezan_integration_accounts_v2", items: accounts, readiness: "ACCOUNT_POLICIES", missing_contract_reason: null };
+    if (url === `${base}/due-items`) return { items: [{ platform: "meta", integration_account_id: "SYN-E-META", business_date: "2026-09-29", policy_id: "SYN-E-POLICY", due_at: "2026-09-30T01:00:00+03:00" }] };
+    if (url === `${base}/daily-source`) {
+        const account = accounts.find(item => item.platform === params.platform && item.integration_account_id === params.integration_account_id);
+        if (!account) throw new Error("Synthetic advertising account missing");
+        return { platform: account.platform, integration_account_id: account.integration_account_id, platform_account_id: account.platform_account_id, business_date: params.business_date, original_currency: account.currency, original_amount: "20.50", source_revision: "SYN-AD-SOURCE-REVISION", source_timezone: account.timezone, native_approval_required: true, missing_contract_reason: "owner_confirmed_completeness_timezone_and_native_snapshot_required" };
+    }
+    return undefined;
+}
+export default fixture;

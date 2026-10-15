@@ -3,10 +3,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
+from .tiktok_native_insights import TikTokCampaignAnalysisInput, analyze_tiktok_campaign
+from .tiktok_campaign_management import attach_tiktok_campaign_management_routes
+from .tiktok_content_publishing import attach_tiktok_content_routes
+from .tiktok_comments_ingress import attach_tiktok_comment_routes
+from .tiktok_comment_replies import attach_tiktok_reply_routes
+from .tiktok_campaign_products import attach_tiktok_product_routes
 from .tiktok_native_reporting import (
     TIKTOK_REPORTING_SOURCE_MODE,
     TikTokReportingError,
@@ -60,6 +66,7 @@ def _safe_result(run: dict[str, Any]) -> dict[str, Any]:
         "accounts_complete": int(summary.get("accounts_complete") or 0),
         "rows_saved": int(summary.get("rows_saved") or 0),
         "errors_count": int(summary.get("errors_count") or 0),
+        "hierarchy": summary.get("hierarchy"),
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -359,6 +366,49 @@ def attach_tiktok_native_reporting_routes(
     require_owner: Callable[[Any], dict],
 ) -> None:
     install_tiktok_reporting_actions()
+    attach_tiktok_campaign_management_routes(router, db, current_user, require_owner)
+    attach_tiktok_content_routes(router, db, current_user, require_owner)
+    attach_tiktok_comment_routes(router, db, current_user, require_owner)
+    attach_tiktok_reply_routes(router, db, current_user, require_owner)
+    attach_tiktok_product_routes(router, db, current_user, require_owner)
+
+    @router.post(f"/{TIKTOK_PROVIDER_ID}/analyze-campaign")
+    async def analyze_campaign(
+        payload: TikTokCampaignAnalysisInput,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        owner = require_owner(user)
+        try:
+            return await analyze_tiktok_campaign(db, str(owner["id"]), payload)
+        except TikTokReportingError as exc:
+            raise HTTPException(status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message}) from None
+
+    @router.get(f"/{TIKTOK_PROVIDER_ID}/workspace")
+    async def native_workspace(
+        from_date: str | None = None,
+        to_date: str | None = None,
+        entity_type: Literal["campaign", "adgroup", "ad", "overview"] = "campaign",
+        page: int = Query(default=1, ge=1),
+        limit: int = Query(default=25, ge=1, le=100),
+        campaign_query: str = Query(default="", max_length=120),
+        campaign_id: str | None = Query(default=None, max_length=120),
+        adgroup_id: str | None = Query(default=None, max_length=120),
+        account_id: str | None = Query(default=None, max_length=120),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from .tiktok_native_hierarchy import tiktok_workspace
+        owner = require_owner(user)
+        try:
+            return await tiktok_workspace(db, str(owner["id"]), from_date=from_date,
+                to_date=to_date, entity_type=entity_type, page=page, limit=limit,
+                query=campaign_query, campaign_id=campaign_id, adgroup_id=adgroup_id,
+                account_id=account_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail={"code": "invalid_tiktok_report_range"}) from None
+        except TikTokReportingError as exc:
+            raise HTTPException(status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message}) from None
 
     @router.post(
         f"/{TIKTOK_PROVIDER_ID}/sync-async",

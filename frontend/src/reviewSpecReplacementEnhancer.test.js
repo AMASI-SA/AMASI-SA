@@ -30,14 +30,29 @@ describe("supplier-file spec field overrides UI", () => {
   });
 
   test("recognizes independent name or value changes", () => {
-    expect(hasSpecFieldReplacement({ replacement_name: "المقاس المطلوب", replacement_value: null })).toBe(true);
-    expect(hasSpecFieldReplacement({ replacement_name: null, replacement_value: "54 بوصة" })).toBe(true);
-    expect(hasSpecFieldReplacement({ replacement_name: null, replacement_value: null })).toBe(false);
+    expect(hasSpecFieldReplacement({
+      replacement_name: "المقاس المطلوب",
+      replacement_value: null,
+    })).toBe(true);
+    expect(hasSpecFieldReplacement({
+      replacement_name: null,
+      replacement_value: "54 بوصة",
+    })).toBe(true);
+    expect(hasSpecFieldReplacement({
+      replacement_name: null,
+      replacement_value: null,
+    })).toBe(false);
   });
 
   test("uses a compact field-edit action label", () => {
-    expect(specReplacementButtonLabel({ replacement_name: null, replacement_value: null })).toBe("تعديل للملف");
-    expect(specReplacementButtonLabel({ replacement_name: null, replacement_value: "54 بوصة" })).toBe("تعديل الحقول");
+    expect(specReplacementButtonLabel({
+      replacement_name: null,
+      replacement_value: null,
+    })).toBe("تعديل للملف");
+    expect(specReplacementButtonLabel({
+      replacement_name: null,
+      replacement_value: "54 بوصة",
+    })).toBe("تعديل الحقول");
   });
 
   test("builds the item patch endpoint safely", () => {

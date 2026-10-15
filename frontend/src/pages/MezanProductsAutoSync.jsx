@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import ProductGoogleTaxonomyPilotPanel from "../components/products/ProductGoogleTaxonomyPilotPanel";
 import { syncRecentProductsV2 } from "../services/mezanProductsV2";
 import MezanProductsWorkspace from "./MezanProductsWorkspace";
 
@@ -31,5 +32,8 @@ export default function MezanProductsAutoSync() {
     }, []);
 
     // Never key/remount the workspace: a background sync must not erase unsaved edits.
-    return <MezanProductsWorkspace />;
+    return <div className="space-y-4" dir="rtl">
+        <ProductGoogleTaxonomyPilotPanel />
+        <MezanProductsWorkspace />
+    </div>;
 }

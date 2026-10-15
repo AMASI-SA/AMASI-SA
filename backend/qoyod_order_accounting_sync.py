@@ -229,6 +229,17 @@ async def repair_qoyod_order_accounting(
     actor: str,
 ) -> dict[str, Any]:
     """Repair local markers/accounting from real mirrored Qoyod invoices."""
+    inbox_user_ids = list(dict.fromkeys(
+        value for value in (
+            str(markers_user_id or "").strip(),
+            str(orders_user_id or "").strip(),
+        ) if value
+    ))
+    if not inbox_user_ids:
+        raise ValueError("At least one Qoyod marker owner is required")
+    inbox_owner_query: str | dict = inbox_user_ids[0]
+    if len(inbox_user_ids) > 1:
+        inbox_owner_query = {"$in": inbox_user_ids}
     cursor = db.qoyod_invoices.find(
         {"user_id": str(markers_user_id)},
         {
@@ -302,7 +313,7 @@ async def repair_qoyod_order_accounting(
         try:
             marker_result = await db.integration_inbox.update_many(
                 {
-                    "user_id": str(markers_user_id),
+                    "user_id": inbox_owner_query,
                     "salla_order_number": order_number,
                     "$or": [
                         {"qoyod_invoice_id": {"$exists": False}},
@@ -317,6 +328,7 @@ async def repair_qoyod_order_accounting(
                     ],
                 },
                 {"$set": marker_patch},
+                upsert=False,
             )
             inbox_markers_updated += _result_count(
                 marker_result,

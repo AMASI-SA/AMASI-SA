@@ -1,0 +1,17 @@
+{
+  "task_id": "TIKTOK-COMMENT-REPLIES-20261012",
+  "phase": "integration_CI_running",
+  "base": "e96f18b9fda85e743316db9053e8c84e04794d01",
+  "production_changed": false,
+  "release_ready": false,
+  "tests": {
+    "previous_native_run": 38285248143,
+    "backend": 342,
+    "frontend": 107,
+    "frontend_suites": 18,
+    "local_api_passed": 5,
+    "new_cases": "Three extra real-Mongo cases for multiworker duplicate prevention, expiry during proof, owner-scoped history; pending latest CI"
+  },
+  "scope": "Owner preview/approval/send/status/history, encrypted records, exact account/video/comment authority, no autoAI/media/global egress. PR1341 generation fix incorporated.",
+  "next_action": "Latest combined sourceCI and review, then freeze A/B intent. No provider writes or publication from this branch."
+}

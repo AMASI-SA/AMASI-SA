@@ -19,8 +19,19 @@ import json
 import logging
 import re
 import uuid
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+from order_currency import order_total_sar, summarize_orders_sar
+from salla_shipping import (
+    CURRENT_SHIPPING, SHIPPING_FIELDS, accept_shipping, extract_shipping, shipping_root_fields,
+)
+from salla_marketing_attribution import (
+    canonical_marketing_source,
+    preserve_salla_raw_attribution,
+    promoted_salla_attribution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +75,30 @@ SHIPPING_WITHOUT_ACTIVE_LABEL = {
     "void",
     "deleted",
 }
+MARKETING_ATTRIBUTION_FIELDS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "campaign_id",
+    "campaign_name",
+    "source_campaign_id",
+    "source_campaign_name",
+    "source_native",
+    "traffic_source",
+    "marketing_source",
+    "ad_platform_source",
+}
+ORDER_CURRENCY_FIELDS = {
+    "currency",
+    "original_total_amount",
+    "original_currency",
+    "exchange_rate_to_sar",
+    "total_amount_sar",
+    "accounting_currency",
+    "currency_conversion_status",
+    "currency_conversion_source",
+    "currency_conversion_reason",
+}
 
 # Scalar fields we copy across sources. Lists/dicts handled separately below.
 TRACKED_FIELDS = (
@@ -83,6 +118,7 @@ TRACKED_FIELDS = (
     "payment_receipt_url",
     "customer_name",
     "customer_mobile",
+    "customer_email",
     "payment_method",
 
     # Salla webhook shipping fields.
@@ -124,10 +160,26 @@ TRACKED_FIELDS = (
     "tax",
     "total_amount",
     "currency",
+    "original_total_amount",
+    "original_currency",
+    "exchange_rate_to_sar",
+    "total_amount_sar",
+    "accounting_currency",
+    "currency_conversion_status",
+    "currency_conversion_source",
+    "currency_conversion_reason",
     "source",                # Salla traffic source ("store", "snapchat" ...)
     "utm_source",
     "utm_medium",
     "utm_campaign",
+    "campaign_id",
+    "campaign_name",
+    "source_campaign_id",
+    "source_campaign_name",
+    "source_native",
+    "traffic_source",
+    "marketing_source",
+    "ad_platform_source",
     "device",
 )
 
@@ -146,6 +198,82 @@ def _is_empty(v: Any) -> bool:
     if isinstance(v, (list, dict)):
         return len(v) == 0
     return False
+
+
+def _salla_item_identity(item: Any) -> Optional[tuple[str, str]]:
+    """Return a stable identity for merging two Salla order-item snapshots."""
+    if not isinstance(item, dict):
+        return None
+    for field in ("id", "item_id", "order_item_id"):
+        value = item.get(field)
+        if value not in (None, ""):
+            return "source_item_id", str(value).strip()
+    for field in ("product_sku_id", "variant_id"):
+        value = item.get(field)
+        if value not in (None, ""):
+            return "variant_id", str(value).strip()
+    sku = str(item.get("sku") or "").strip()
+    return ("sku", sku) if sku else None
+
+
+def _merge_salla_order_items(
+    existing_items: list[Any],
+    incoming_items: list[Any],
+) -> list[Any]:
+    """Keep immutable customer choices when a later item snapshot is sparse."""
+    existing_by_identity = {
+        identity: item
+        for item in existing_items
+        if (identity := _salla_item_identity(item)) is not None
+    }
+    merged: list[Any] = []
+    for index, incoming_item in enumerate(incoming_items):
+        if not isinstance(incoming_item, dict):
+            merged.append(deepcopy(incoming_item))
+            continue
+        identity = _salla_item_identity(incoming_item)
+        existing_item = existing_by_identity.get(identity) if identity else None
+        if existing_item is None and identity is None and index < len(existing_items):
+            positional = existing_items[index]
+            if isinstance(positional, dict):
+                existing_item = positional
+        merged.append(_merge_salla_item_snapshot(existing_item or {}, incoming_item))
+    return merged
+
+
+def _merge_salla_item_snapshot(existing: dict, incoming: dict) -> dict:
+    """Overlay one item while treating omitted customer choices as immutable."""
+    immutable_detail_fields = {
+        "options", "custom_fields", "customizations", "personalization",
+        "fields", "questions", "attachments", "files", "choices",
+        "attributes", "product_options", "selected_options", "customer_options",
+    }
+    merged = deepcopy(existing)
+    for key, incoming_value in incoming.items():
+        if (
+            key in immutable_detail_fields
+            and incoming_value in (None, "", [], {})
+            and key in merged
+        ):
+            continue
+        merged[key] = deepcopy(incoming_value)
+    return merged
+
+
+def _merge_salla_raw_snapshot(existing: Any, incoming: Any) -> Any:
+    """Preserve rich order items without reviving unrelated stale raw facts."""
+    previous = existing if isinstance(existing, dict) else {}
+    merged = deepcopy(incoming) if isinstance(incoming, dict) else {}
+    existing_items = previous.get("items")
+    incoming_items = merged.get("items")
+    if isinstance(incoming_items, list) and incoming_items:
+        merged["items"] = _merge_salla_order_items(
+            existing_items if isinstance(existing_items, list) else [],
+            incoming_items,
+        )
+    elif isinstance(existing_items, list) and existing_items:
+        merged["items"] = deepcopy(existing_items)
+    return merged
     
     # ── Phase 1: Auto-seed /products from order line-items ──────────────
 # Safe scope:
@@ -624,6 +752,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     # First-time insert path
     if not existing:
         for f in TRACKED_FIELDS:
+            if f in SHIPPING_FIELDS and source == "salla_direct":
+                continue
             v = incoming.get(f)
             if not _is_empty(v):
                 merged[f] = v
@@ -643,6 +773,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
     else:
         # Update path
         for f in TRACKED_FIELDS:
+            if f in SHIPPING_FIELDS and (source == "salla_direct" or existing.get(CURRENT_SHIPPING)):
+                continue
             new_val = incoming.get(f)
             old_val = merged.get(f)
             new_empty = _is_empty(new_val) and not (
@@ -682,8 +814,15 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
                     "order_status_slug",
                     *COLLECTION_FIELDS,
                     *PAYMENT_EVIDENCE_FIELDS,
+                    *MARKETING_ATTRIBUTION_FIELDS,
+                    *ORDER_CURRENCY_FIELDS,
                     "shipping_label_url",
                 }
+                and (
+                    f not in ORDER_CURRENCY_FIELDS
+                    or incoming.get("total_amount_sar") is not None
+                    or merged.get("currency_conversion_status") != "verified"
+                )
             )
             if fills_empty_only and not salla_authoritative_override:
                 continue
@@ -727,6 +866,17 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
         if new_tags:
             merged["tags"] = sorted(set((merged.get("tags") or []) + new_tags))
             field_sources["tags"] = source
+
+    # Current Salla shipping is one identity group, independent of Make and
+    # of the order/component lifecycle watermark.
+    if source == "salla_direct":
+        observation = accept_shipping(existing, incoming.get(CURRENT_SHIPPING) if CURRENT_SHIPPING in incoming else extract_shipping(incoming))
+        if observation:
+            merged[CURRENT_SHIPPING] = observation
+            merged.update(shipping_root_fields(observation))
+            for field in SHIPPING_FIELDS:
+                if field in merged:
+                    field_sources[field] = source
 
     # Append an auditable collection snapshot only when Salla supplied
     # collection facts and the canonical values changed.
@@ -813,32 +963,75 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
 
 
 async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
-                       source: str, raw: Optional[dict] = None) -> dict:
+                       source: str, raw: Optional[dict] = None,
+                       shipping_snapshot: Optional[dict] = None) -> dict:
+    observation = shipping_snapshot if shipping_snapshot is not None else (
+        extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
+    )
+    if observation:
+        # Commit current shipping through the existing operational serialization.
+        # Nested verified order intake joins its existing operational session.
+        from operational_atomic import operational_owner
+        async def persist(scoped):
+            return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+        return await operational_owner(db, user_id, persist)
+    return await _upsert_order(db, user_id, order_number, incoming, source, raw, observation)
+
+
+async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
+                        source: str, raw: Optional[dict],
+                        shipping_snapshot: Optional[dict]) -> dict:
     """Upsert a single order into `unified_orders`. Returns {"created": bool, "doc": dict}."""
     order_number = str(order_number).strip()
     if not order_number:
         raise ValueError("order_number is required")
 
-    existing = await db.unified_orders.find_one(
-        {"user_id": user_id, "order_number": order_number}
-    ) or {}
-    merged = _merge_into(existing, incoming, source)
-    merged["user_id"] = user_id
-    merged["order_number"] = order_number
-    if raw is not None:
-        # Track raw per source so we can audit later
-        raws = dict(merged.get("raw_by_source") or {})
-        raws[source] = raw
-        merged["raw_by_source"] = raws
-    if not existing:
-        merged["received_at"] = _now()
+    if source == "salla_direct":
+        incoming = dict(incoming)
+        incoming[CURRENT_SHIPPING] = shipping_snapshot if shipping_snapshot is not None else extract_shipping(raw if raw is not None else incoming)
+        for field, value in promoted_salla_attribution(raw or incoming).items():
+            if value not in (None, ""):
+                incoming[field] = value
 
-    await db.unified_orders.update_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"$set": merged},
-        upsert=True,
-    )
-          # Phase 1: auto-create missing product catalogue rows from order lines.
+    selector = {"user_id": user_id, "order_number": order_number}
+    for attempt in range(5):
+        existing = await db.unified_orders.find_one(selector) or {}
+        merged = _merge_into(existing, incoming, source)
+        merged["user_id"] = user_id
+        merged["order_number"] = order_number
+        if raw is not None:
+            # Keep archived payloads and richer product options. Current
+            # shipping is projected separately from this source history.
+            raws = dict(merged.get("raw_by_source") or {})
+            if source == "salla_direct":
+                existing_raw = raws.get(source) or {}
+                attributed_raw = preserve_salla_raw_attribution(existing_raw, raw)
+                raws[source] = _merge_salla_raw_snapshot(existing_raw, attributed_raw)
+            else:
+                raws[source] = raw
+            merged["raw_by_source"] = raws
+        if not existing:
+            merged["received_at"] = _now()
+        fenced_selector = dict(selector)
+        if not existing:
+            # An intake that read an absent row must never overwrite another
+            # writer's newly inserted carrier. Claim only the insertion; if a
+            # row appeared meanwhile, re-read and apply the version fence.
+            result = await db.unified_orders.update_one(
+                selector, {"$setOnInsert": merged}, upsert=True,
+            )
+            if getattr(result, "upserted_id", None) is not None or not getattr(result, "matched_count", 0):
+                break
+            continue
+        fenced_selector[CURRENT_SHIPPING] = existing[CURRENT_SHIPPING] if CURRENT_SHIPPING in existing else {"$exists": False}
+        result = await db.unified_orders.update_one(fenced_selector, {"$set": merged})
+        # Real Mongo exposes matched_count. Retry a lost shipping CAS against
+        # the latest observation rather than overwriting a concurrent change.
+        if getattr(result, "matched_count", 1):
+            break
+    else:
+        raise RuntimeError("salla_shipping_concurrent_update_retry_required")
+    # Phase 1: auto-create missing product catalogue rows from order lines.
     # This is intentionally non-accounting: no COGS, no inventory movement.
     try:
         await _ensure_order_products_catalogued(
@@ -890,12 +1083,23 @@ def orders_to_parsed(orders: list[dict]) -> dict:
     shippings: dict[str, dict] = {}
     sources: dict[str, dict] = {}
     sample: list[dict] = []
+    individual: list[dict] = []
+
+    currency_summary = summarize_orders_sar(orders)
 
     for o in orders:
-        amount = float(o.get("total_amount") or 0)
+        resolved_sar = order_total_sar(o)
+        # Keep the legacy parser shape numeric for fee matching, while the
+        # explicit completeness contract below prevents an unknown foreign
+        # amount from being presented as a complete financial total.
+        amount = float(resolved_sar) if resolved_sar is not None else 0.0
         pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
         ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
-        src = (o.get("source") or "").strip() or (o.get("data_source") or "غير محدد")
+        src = (
+            canonical_marketing_source(o)
+            or str(o.get("source") or "").strip()
+            or str(o.get("data_source") or "غير محدد")
+        )
 
         total_sales += amount
         total_orders += 1
@@ -911,6 +1115,15 @@ def orders_to_parsed(orders: list[dict]) -> dict:
         sr["orders_count"] += 1
         sr["total_sales"] += amount
 
+        # Preserve the minimum per-order inputs needed for processor-accurate
+        # fee rounding.  Salla rounds the commission and its VAT per order;
+        # aggregating a rail first can drift by several halalas.
+        individual.append({
+            "order_number": str(o.get("order_number") or ""),
+            "total_amount": amount,
+            "payment_method": pay,
+        })
+
         if len(sample) < 10:
             sample.append({
                 "order_id": str(o.get("order_number") or ""),
@@ -924,6 +1137,14 @@ def orders_to_parsed(orders: list[dict]) -> dict:
     return {
         "total_sales": round(total_sales, 2),
         "total_orders": total_orders,
+        "accounting_currency": "SAR",
+        "currency_conversion": {
+            "complete": currency_summary["conversion_complete"],
+            "known_total_sar": currency_summary["known_total_sar"],
+            "unverified_orders_count": currency_summary["unverified_orders_count"],
+            "missing_order_numbers": currency_summary["missing_order_numbers"],
+            "unknown_is_zero": False,
+        },
         "payment_methods": [
             {**v, "total_sales": round(v["total_sales"], 2)}
             for v in sorted(payments.values(), key=lambda x: -x["total_sales"])
@@ -936,5 +1157,100 @@ def orders_to_parsed(orders: list[dict]) -> dict:
             for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
         ],
         "orders_sample": sample,
+        "orders_individual": individual,
+        "detected_columns": {"unified": True},
+    }
+
+
+async def orders_to_parsed_cooperative(orders: list[dict]) -> dict:
+    """Reduce unified orders → the dict shape parse_salla_excel produces.
+
+    Lets us reuse match_settings() + build_report() unchanged.
+    """
+    total_sales = 0.0
+    total_orders = 0
+    payments: dict[str, dict] = {}
+    shippings: dict[str, dict] = {}
+    sources: dict[str, dict] = {}
+    sample: list[dict] = []
+    individual: list[dict] = []
+
+    from dashboard_cpu_budget import CPUWorkBudget, PARSER_BUDGET_MS
+    from order_currency import summarize_orders_sar_cooperative
+    budget = CPUWorkBudget(PARSER_BUDGET_MS)
+    currency_summary = await summarize_orders_sar_cooperative(orders, checkpoint=budget.checkpoint)
+
+    for o in orders:
+        await budget.checkpoint()
+        resolved_sar = order_total_sar(o)
+        # Keep the legacy parser shape numeric for fee matching, while the
+        # explicit completeness contract below prevents an unknown foreign
+        # amount from being presented as a complete financial total.
+        amount = float(resolved_sar) if resolved_sar is not None else 0.0
+        pay = (o.get("payment_method") or "غير محدد").strip() or "غير محدد"
+        ship = (o.get("shipping_company") or "غير محدد").strip() or "غير محدد"
+        src = (
+            canonical_marketing_source(o)
+            or str(o.get("source") or "").strip()
+            or str(o.get("data_source") or "غير محدد")
+        )
+
+        total_sales += amount
+        total_orders += 1
+
+        p = payments.setdefault(pay, {"name": pay, "orders_count": 0, "total_sales": 0.0})
+        p["orders_count"] += 1
+        p["total_sales"] += amount
+
+        s = shippings.setdefault(ship, {"name": ship, "orders_count": 0})
+        s["orders_count"] += 1
+
+        sr = sources.setdefault(src, {"name": src, "orders_count": 0, "total_sales": 0.0})
+        sr["orders_count"] += 1
+        sr["total_sales"] += amount
+
+        # Preserve the minimum per-order inputs needed for processor-accurate
+        # fee rounding.  Salla rounds the commission and its VAT per order;
+        # aggregating a rail first can drift by several halalas.
+        individual.append({
+            "order_number": str(o.get("order_number") or ""),
+            "total_amount": amount,
+            "payment_method": pay,
+        })
+
+        if len(sample) < 10:
+            sample.append({
+                "order_id": str(o.get("order_number") or ""),
+                "amount": amount,
+                "payment_method": pay,
+                "shipping_company": ship,
+                "status": o.get("order_status") or "",
+                "date": o.get("order_date") or "",
+            })
+
+    return {
+        "total_sales": round(total_sales, 2),
+        "total_orders": total_orders,
+        "accounting_currency": "SAR",
+        "currency_conversion": {
+            "complete": currency_summary["conversion_complete"],
+            "known_total_sar": currency_summary["known_total_sar"],
+            "unverified_orders_count": currency_summary["unverified_orders_count"],
+            "missing_order_numbers": currency_summary["missing_order_numbers"],
+            "unknown_is_zero": False,
+        },
+        "payment_methods": [
+            {**v, "total_sales": round(v["total_sales"], 2)}
+            for v in sorted(payments.values(), key=lambda x: -x["total_sales"])
+        ],
+        "shipping_companies": [
+            v for v in sorted(shippings.values(), key=lambda x: -x["orders_count"])
+        ],
+        "order_sources": [
+            {**v, "total_sales": round(v["total_sales"], 2)}
+            for v in sorted(sources.values(), key=lambda x: -x["orders_count"])
+        ],
+        "orders_sample": sample,
+        "orders_individual": individual,
         "detected_columns": {"unified": True},
     }

@@ -168,9 +168,7 @@ def _line_variants(send_module, item: dict, line_resolutions: dict,
 
 def _distribute(send_module, items: list[dict], line_resolutions: dict,
                 tax_factor: float, tax_percent: float,
-                residual_to_absorb: float, *,
-                target_document_total: float | None = None,
-                trailing_lines: list[dict] | None = None):
+                residual_to_absorb: float):
     """Return rebuilt item lines after absorbing ``residual_to_absorb``."""
     residual = _d(residual_to_absorb).quantize(
         _TWO_PLACES, rounding=ROUND_HALF_UP)
@@ -216,30 +214,7 @@ def _distribute(send_module, items: list[dict], line_resolutions: dict,
             return None
 
     selected = states.get(target_cents)
-    if target_document_total is not None:
-        target_document = _d(target_document_total).quantize(
-            _TWO_PLACES, rounding=ROUND_HALF_UP)
-        trailing = list(trailing_lines or [])
-        document_matches: list[tuple[tuple, tuple]] = []
-        for delta_cents, state in states.items():
-            candidate_lines = [
-                variant[0] for variant in state[1]
-            ] + trailing
-            predicted = _d(
-                send_module._predict_qoyod_document_total(
-                    candidate_lines)["predicted_total"]
-            ).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-            if predicted == target_document:
-                rank = (
-                    abs(delta_cents - target_cents),
-                    state[0],
-                    abs(delta_cents),
-                )
-                document_matches.append((rank, state))
-        if not document_matches:
-            return None
-        selected = min(document_matches, key=lambda row: row[0])[1]
-    elif selected is None:
+    if selected is None:
         return None
 
     payloads: list[dict] = []
@@ -275,6 +250,44 @@ def install(send_module) -> None:
             settings=safe_settings,
             send_date_iso=send_date_iso,
         )
+
+        # The merchant policy is fixed: every Qoyod invoice line is 15% VAT
+        # inclusive, while the customer-paid Salla gross remains unchanged.
+        # LRM used to rebuild product lines from the persisted setting, which
+        # could be stale (for example 5%) even after the canonical invoice had
+        # correctly selected 15%.  Use the builder's effective policy and
+        # fail before any Qoyod write if either it or an outgoing line differs.
+        effective_tax_percent = send_module._q2(
+            breakdown.get("tax_percent"))
+
+        def assert_fixed_tax_policy() -> None:
+            invoice = payload.get("invoice") if isinstance(payload, dict) else None
+            lines = invoice.get("line_items") if isinstance(invoice, dict) else None
+            violations = []
+            for index, line in enumerate(lines or []):
+                actual = send_module._q2(
+                    line.get("tax_percent") if isinstance(line, dict) else None)
+                if actual != 15.0:
+                    violations.append({"line_index": index, "tax_percent": actual})
+            if (
+                effective_tax_percent != 15.0
+                or not isinstance(lines, list)
+                or not lines
+                or violations
+            ):
+                raise send_module.ManualSendRefused(
+                    "qoyod_tax_policy_violation",
+                    "ضريبة فاتورة قيود يجب أن تكون 15% على جميع البنود؛ "
+                    "أُوقف الإرسال قبل أي كتابة.",
+                    {
+                        "expected_tax_percent": 15.0,
+                        "effective_tax_percent": effective_tax_percent,
+                        "violations": violations,
+                        "qoyod_write_performed": False,
+                    },
+                )
+
+        assert_fixed_tax_policy()
 
         salla_total = send_module._q2(canon.get("total_amount"))
         expected_total = send_module._q2(expected_total)
@@ -321,34 +334,30 @@ def install(send_module) -> None:
             reason = "residual_exceeds_0_10"
 
         raw_items = canon.get("items") or []
-        invoice = payload.get("invoice") or {}
-        old_lines = invoice.get("line_items") or []
-        trailing_lines = old_lines[len(raw_items):]
         distributed = None if reason else _distribute(
             send_module,
             raw_items,
             line_resolutions,
-            float(1 + send_module._q2(
-                safe_settings.get("qoyod_tax_percent") or 15) / 100),
-            send_module._q2(
-                safe_settings.get("qoyod_tax_percent") or 15),
+            float(1 + effective_tax_percent / 100),
+            effective_tax_percent,
             residual,
-            target_document_total=salla_total,
-            trailing_lines=trailing_lines,
         )
 
         if distributed is not None:
             item_lines, item_rows, item_total_after = distributed
-            candidate_lines = item_lines + trailing_lines
-            document_prediction = (
-                send_module._predict_qoyod_document_total(
-                    candidate_lines)
-            )
+            original_item_total = send_module._q2(sum(
+                send_module._f(row.get("line_gross_after_tax"))
+                for row in (breakdown.get("items") or [])
+            ))
+            non_item_total = send_module._q2(
+                expected_total - original_item_total)
             candidate_total = send_module._q2(
-                document_prediction["predicted_total"])
+                item_total_after + non_item_total)
 
             if candidate_total == salla_total:
-                invoice["line_items"] = candidate_lines
+                invoice = payload.get("invoice") or {}
+                old_lines = invoice.get("line_items") or []
+                invoice["line_items"] = item_lines + old_lines[len(raw_items):]
                 shifted = [
                     {
                         "sku": row.get("sku"),
@@ -394,6 +403,7 @@ def install(send_module) -> None:
                             "after": len(invoice["line_items"]),
                         },
                     )
+                assert_fixed_tax_policy()
                 return payload, candidate_total, breakdown
 
             reason = "distribution_did_not_reach_exact_parity"

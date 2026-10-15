@@ -1,0 +1,72 @@
+name: Production Campaign Current Salla Cost V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/snapchat_campaign_current_catalog_cost.py"
+      - "backend/tests/test_snapchat_campaign_current_catalog_cost_v1.py"
+      - ".github/workflows/prod-campaign-current-salla-cost-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          bcrypt
+          PyJWT
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile current-catalog cost adapter
+        run: >-
+          python -m py_compile
+          integrations_control_center/snapchat_campaign_current_catalog_cost.py
+          integrations_control_center/__init__.py
+          tests/test_snapchat_campaign_current_catalog_cost_v1.py
+      - name: Run Salla fallback and profitability contracts
+        run: >-
+          python -m pytest
+          tests/test_snapchat_campaign_current_catalog_cost_v1.py
+          tests/test_dashboard_v2_product_cost.py
+          tests/test_snapchat_campaign_profitability_v1.py
+          tests/test_snapchat_campaign_created_order_semantics_v1.py
+          -q --tb=short
+      - name: Enforce current catalog and read-only contract
+        working-directory: .
+        run: |
+          MODULE=backend/integrations_control_center/snapchat_campaign_current_catalog_cost.py
+          INIT=backend/integrations_control_center/__init__.py
+          grep -q 'install_current_catalog_salla_cost_resolution' "$INIT"
+          grep -q 'raw_salla_details' "$MODULE"
+          grep -q 'NAME_ALIAS_PREFIX' "$MODULE"
+          grep -q 'unique exact-name' "$MODULE"
+          grep -q 'read_only' "$MODULE"
+          ! grep -Eq 'call_salla|client\.(post|put|patch|delete)\(' "$MODULE"
+          ! grep -Eq 'provider_write_reached": True|accounting_write_reached": True|qoyod_write_reached": True' "$MODULE"

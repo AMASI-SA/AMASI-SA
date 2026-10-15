@@ -1,0 +1,9 @@
+PASS src/pages/accounting/LateDeliveryEvidenceReview.test.jsx
+PASS src/components/driver/LateDeliveryEvidence.test.jsx
+
+Test Suites: 2 passed, 2 total
+Tests:       13 passed, 13 total
+Snapshots:   0 total
+Time:        3.425 s
+Ran all test suites within paths "src/components/driver/LateDeliveryEvidence.test.jsx", "src/pages/accounting/LateDeliveryEvidenceReview.test.jsx".
+Test results written to: ..\..\mz2-late-evidence-proof-20261002\UI-r2.json

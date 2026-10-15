@@ -1,0 +1,250 @@
+PR1345 READ-ONLY SCOPE / BASE AUDIT
+Candidate 71a846db72fea7cb8ade180e33c9506639f1f62c
+Merge-base 82de9e3091183fa6d14c5f45a1b651984bb28ec7
+CI base 6a4d26e429e540d8cd3bafdebee7f037ac9482e9
+Latest Production 921685228d37fa7604d3aabb3685bd86133cfa60
+Candidate TREE c71a713229527deb9f2080b696909c7d6b1b6808
+
+194 files in merge-base comparison; 191 relative to CI base. This difference is exactly three Production carryforwards, not 194 newly authored writer files.
+No candidate edits, commits, provider calls, workflow dispatch or Production operations were performed in this audit.
+
+CI/repository tooling: 3
+  .github/workflows/operational-balance-web.yml
+  .github/workflows/operational-stock-eligibility.yml
+  .gitignore
+
+Production carryforward (not inventory-authored): 3
+  backend/customer_intelligence/reply_suggestions.py
+  docs/operations/TIKTOK-COUPON-TONE-20261012/STATUS.json
+  release/release-intent-v5.json
+
+Inherited operational composition/auth/domain dependencies: 12
+  backend/employees_v2_routes.py
+  backend/mobile_app_permissions.py
+  backend/mobile_app_request_context.py
+  backend/operational_app_banks.py
+  backend/operational_balance_bank_orders.py
+  backend/operational_balance_engine.py
+  backend/operational_balance_exchanges.py
+  backend/operational_balance_routes.py
+  backend/operational_balance_worker.py
+  backend/operational_customer_returns.py
+  backend/operational_supplier_adjustments.py
+  backend/server.py
+
+Inventory runtime and shared contract dependencies: 15
+  backend/fulfillment_v2_routes.py
+  backend/operational_atomic.py
+  backend/operational_balance_inventory.py
+  backend/operational_balance_service.py
+  backend/operational_balance_sources.py
+  backend/operational_balance_store.py
+  backend/operational_inventory_identity.py
+  backend/operational_inventory_projection.py
+  backend/operational_physical_receipts.py
+  backend/operational_purchase_metadata.py
+  backend/product_inventory_receipt_routes.py
+  backend/purchase_invoices_routes.py
+  backend/purchase_receiving_service.py
+  backend/salla_inventory_sync_routes.py
+  backend/stock_component_consumption_service.py
+
+Backend acceptance/regression/preview support: 39
+  backend/tests/operational_balance_preview.py
+  backend/tests/test_inventory_separation_implementation_gate.py
+  backend/tests/test_mobile_app_manager_role.py
+  backend/tests/test_operational_balance_app_permissions.py
+  backend/tests/test_operational_balance_assigned_banks.py
+  backend/tests/test_operational_balance_bank_orders.py
+  backend/tests/test_operational_balance_cash_assignments.py
+  backend/tests/test_operational_balance_cod_flow.py
+  backend/tests/test_operational_balance_custody_payments.py
+  backend/tests/test_operational_balance_customer_returns.py
+  backend/tests/test_operational_balance_engine.py
+  backend/tests/test_operational_balance_engine_fixes.py
+  backend/tests/test_operational_balance_entry_ux.py
+  backend/tests/test_operational_balance_exchanges.py
+  backend/tests/test_operational_balance_expanded_review.py
+  backend/tests/test_operational_balance_expanded_routes.py
+  backend/tests/test_operational_balance_integration.py
+  backend/tests/test_operational_balance_inventory.py
+  backend/tests/test_operational_balance_inventory_customizations.py
+  backend/tests/test_operational_balance_inventory_personalizations.py
+  backend/tests/test_operational_balance_inventory_projection.py
+  backend/tests/test_operational_balance_inventory_variants.py
+  backend/tests/test_operational_balance_invoice_flow.py
+  backend/tests/test_operational_balance_native_cases.py
+  backend/tests/test_operational_balance_ownership_fixes.py
+  backend/tests/test_operational_balance_purchase_metadata.py
+  backend/tests/test_operational_balance_security.py
+  backend/tests/test_operational_balance_source_fixes.py
+  backend/tests/test_operational_balance_sources.py
+  backend/tests/test_operational_balance_supplier_adjustments.py
+  backend/tests/test_operational_balance_worker.py
+  backend/tests/test_operational_inventory_projection_eligibility.py
+  backend/tests/test_operational_physical_stock_prerequisites.py
+  backend/tests/test_operational_physical_writer.py
+  backend/tests/test_physical_inventory_operational_boundary.py
+  backend/tests/test_physical_receipt_financial_adoption.py
+  backend/tests/test_stock_component_consumption.py
+  backend/tests/test_stock_eligibility_acceptance.py
+  backend/tests/test_stock_eligibility_receipt_evidence_gap.py
+
+Evidence, reports, historical UAT and diagnostics: 85
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/ANDROID_UAT_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/CASH_CARDS_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/CUSTODY_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/CUSTODY_RESTART_RCA_20261008.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/CUSTOMER_RETURNS_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/EXCHANGES_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/INVENTORY_PURCHASES_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/INVENTORY_VARIANTS_20261008.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/ISOLATED_INTEGRATION_20261009.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/MZ2_INVENTORY_CURRENT_SCOPE_20261010.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/MZ2_INVENTORY_FOUNDATION_20261010.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/MZ2_OPERATIONAL_INVENTORY_SEPARATION_DESIGN_REVIEW.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/MZ2_OPERATIONAL_INVENTORY_SEPARATION_IMPLEMENTATION_GATE.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/MZ2_PHYSICAL_INVENTORY_AND_OPERATIONAL_UAT_FINAL.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/NATIVE_BUILD_RCA_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/NATIVE_CASES_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/NATIVE_DEVICE_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/READINESS_20261009.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/REVIEW.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/SETTLEMENTS_20261007.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/STANDALONE_CHECKPOINT_20261008.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/STATUS.json
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/SUPPLIER_ADJUSTMENTS.md
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/cash-cards-desktop.png
+  docs/operations/OPERATIONAL_APP_PERMISSIONS/cash-cards-mobile.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/APK_READY.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/APP_BLOCKERS.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/DELIVERY.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/DEVICE_AND_APP_REVIEW.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/FILES.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/FIX_RESULT.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/SPEC.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/STATUS.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/WEB_FINAL_UAT.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/WEB_FIRST.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/WEB_LATEST_RULES.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/WEB_SCOPE_CLEAN.md
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/android-safe-area-paused.patch
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/android-source-parity.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/apk-badging.txt
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/apk-manifest.txt
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/apk-provenance.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/apk-signature.txt
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/app-device-review.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/app-verifiers.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/build-isolated.ps1
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/configure-generated-android.py
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/custody-expense-form.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/custody-flows-proof.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/daily-final.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/fix-verification.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/fresh-native-staging.gradle
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/mobile-verification.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/native-fix-regression.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/opening-expanded.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/report-expanded.png
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/verify-apk-content.py
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/RESULT.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/conflicts.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/final_preview.py
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/finish-retry.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/in-progress.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/manual-retry.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/opening-retry.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/probe.py
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/readback.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/resync.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/reviewed.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/seed-pending.json
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/summarize.py
+  docs/operations/OPERATIONAL_BALANCE_SYSTEM/evidence/web-final-uat/trace.jsonl
+  docs/operations/OPERATIONAL_INVENTORY_PROJECTION_INDEX/STATUS.md
+  docs/operations/OPERATIONAL_INVENTORY_PROJECTION_INDEX/benchmark_evidence_queries.json
+  docs/operations/OPERATIONAL_INVENTORY_PROJECTION_INDEX/benchmark_evidence_queries.md
+  docs/operations/OPERATIONAL_INVENTORY_PROJECTION_INDEX/benchmark_evidence_queries.py
+  docs/operations/OPERATIONAL_INVENTORY_PROJECTION_INDEX/production_compatibility.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/ELIGIBILITY_FIX_FINAL.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/ELIGIBILITY_REVIEW.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/FINAL_CONTRACT_FIX.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/IMPLEMENTED.txt
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/INDEX_REVIEW.txt
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/REVIEW.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/STATUS.md
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/diagnostic-baseline/test_operational_physical_stock_prerequisites.py.txt
+  docs/operations/OPERATIONAL_PHYSICAL_STOCK_WRITER/diagnostic-baseline/test_stock_eligibility_receipt_evidence_gap.py.txt
+
+Inherited operational web UI, routing and UI tests/preview: 37
+  frontend/operational-preview.config.mjs
+  frontend/operational-preview.html
+  frontend/scripts/verify-customer-exchanges-browser.cjs
+  frontend/scripts/verify-customer-returns-browser.cjs
+  frontend/scripts/verify-operational-cards-browser.cjs
+  frontend/src/App.js
+  frontend/src/components/MezanV2NavigationShell.jsx
+  frontend/src/components/MezanV2NavigationShellLegacy.jsx
+  frontend/src/pages/EmployeesV2Management.jsx
+  frontend/src/pages/EmployeesV2Management.test.jsx
+  frontend/src/pages/operational/AddOperationalEntity.jsx
+  frontend/src/pages/operational/CustomerExchanges.jsx
+  frontend/src/pages/operational/CustomerExchanges.test.jsx
+  frontend/src/pages/operational/CustomerReturns.jsx
+  frontend/src/pages/operational/CustomerReturns.test.jsx
+  frontend/src/pages/operational/DailyMovements.jsx
+  frontend/src/pages/operational/DomainDetails.jsx
+  frontend/src/pages/operational/DomainDetails.test.jsx
+  frontend/src/pages/operational/InventoryAvailability.jsx
+  frontend/src/pages/operational/InventoryAvailability.test.jsx
+  frontend/src/pages/operational/InventoryPurchases.jsx
+  frontend/src/pages/operational/InventoryPurchases.test.jsx
+  frontend/src/pages/operational/MovementHistory.jsx
+  frontend/src/pages/operational/MovementHistory.test.jsx
+  frontend/src/pages/operational/OpeningBalances.jsx
+  frontend/src/pages/operational/OperationalBalances.jsx
+  frontend/src/pages/operational/OperationalBalances.test.jsx
+  frontend/src/pages/operational/PurchaseConfiguration.jsx
+  frontend/src/pages/operational/SupplierAdjustments.jsx
+  frontend/src/pages/operational/SupplierAdjustments.test.jsx
+  frontend/src/pages/operational/SupplierReturn.jsx
+  frontend/src/pages/operational/api.js
+  frontend/src/pages/operational/inventoryIdentity.js
+  frontend/src/pages/operational/inventoryPersonalizations.js
+  frontend/src/pages/operational/operational.css
+  frontend/src/pages/operational/pendingMovementStorage.js
+  frontend/src/pages/operational/preview.jsx
+
+DEPENDENCY RATIONALE
+Inventory projection imports eligibility/evidence from fulfillment_v2_routes and shared store helpers. Purchase receiving and invoices supply existing G47 recognition/adoption. Operational physical writer uses the shared inventory placement writer, atomic owner transaction, receipt routing and purchase helpers. These cannot be dropped merely to shrink PR.
+Broader #1263/#1271 operational modules include customer returns, exchanges, movements, workers, assigned banks, permissions and employee integration. These are broader than physical writer but part of inherited approved full runtime chain. Operational route composition dynamically registers multiple domains; removal would require a separate tested split, not blind deletion.
+Frontend is the inherited operational web surface with inventory purchase/configuration/availability, supplier adjustments, routing, permissions and shared UI; it is not Android Build44 source. Docs contain Android APK provenance and build scripts as historical evidence only; no active Android project/build44 file occurs in the194file list.
+85 evidence files and39backend test/preview files are review/verification rather than runtime prerequisites. Retain diagnostic baseline evidence; historical screenshots/scripts are optional packaging concerns, not inventory behavioral changes.
+
+PRODUCTION CARRYFORWARD PROOF
+backend/customer_intelligence/reply_suggestions.py candidate=e218fc67864b28b148440f0ce1c0ac4e89d61cec CIbase=e218fc67864b28b148440f0ce1c0ac4e89d61cec
+docs/operations/TIKTOK-COUPON-TONE-20261012/STATUS.json candidate=5bf6ccfee6a8b9dc84f7fb890b37c377d1aedb81 CIbase=5bf6ccfee6a8b9dc84f7fb890b37c377d1aedb81
+release/release-intent-v5.json candidate=f5a52342b69dc6b1ca12ec00d374829ef40d69f0 CIbase=f5a52342b69dc6b1ca12ec00d374829ef40d69f0
+
+ADS CI INHERITED DEPENDENCY PROOF
+Workflow focused pip install does not include cryptography. Eager import chain: integrations_control_center/__init__.py:101 -> tiktok_native_reporting_routes.py:13 -> tiktok_comments_ingress.py:16/20 -> customer_intelligence/channel_gateway.py:24 and foundation.py:20 -> customer_identity.py:23 imports cryptography.fernet.
+Identical Git blob hashes below across CIbase,candidate,latestProduction establish this is not introduced by inventory candidate. Runtime cryptography dependency itself is not being removed or bypassed.
+.github/workflows/mz2-advertising-v2.yml | 249f10cfc1850e3313ece46f3ee51dcb87993114 | 249f10cfc1850e3313ece46f3ee51dcb87993114 | 249f10cfc1850e3313ece46f3ee51dcb87993114 | identical=True
+backend/integrations_control_center/__init__.py | 276a94f7a011813dece0698230a3b06281698314 | 276a94f7a011813dece0698230a3b06281698314 | 276a94f7a011813dece0698230a3b06281698314 | identical=True
+backend/integrations_control_center/tiktok_native_reporting_routes.py | 46a40b661c9e0f21e79913343a5ed5c2fd50b6d5 | 46a40b661c9e0f21e79913343a5ed5c2fd50b6d5 | 46a40b661c9e0f21e79913343a5ed5c2fd50b6d5 | identical=True
+backend/integrations_control_center/tiktok_comments_ingress.py | d24b0ce3fd0ffdf411553bcb757f367d231b39e3 | d24b0ce3fd0ffdf411553bcb757f367d231b39e3 | d24b0ce3fd0ffdf411553bcb757f367d231b39e3 | identical=True
+backend/customer_intelligence/__init__.py | c61d14c69985afadae23d7e56231c14c07e60701 | c61d14c69985afadae23d7e56231c14c07e60701 | c61d14c69985afadae23d7e56231c14c07e60701 | identical=True
+backend/customer_intelligence/channel_gateway.py | 395e76ac449fb492fbdbddc0e4cd4eb10a222813 | 395e76ac449fb492fbdbddc0e4cd4eb10a222813 | 395e76ac449fb492fbdbddc0e4cd4eb10a222813 | identical=True
+backend/customer_intelligence/foundation.py | dc04971f52cde3bf835054ebd8e734f5a3e077a4 | dc04971f52cde3bf835054ebd8e734f5a3e077a4 | dc04971f52cde3bf835054ebd8e734f5a3e077a4 | identical=True
+backend/customer_identity.py | 968df1a2a9a8849f18b60104631eb9d7371ea4b3 | 968df1a2a9a8849f18b60104631eb9d7371ea4b3 | 968df1a2a9a8849f18b60104631eb9d7371ea4b3 | identical=True
+
+LATEST PRODUCTION PRESERVATION
+Delta from CIbase6a4 to latest921685:
+M	backend/integrations_control_center/tiktok_content_publishing.py
+M	backend/tests/test_tiktok_content_routes.py
+A	docs/operations/TIKTOK-PUBLISHING-READINESS-20261012/STATUS.json
+M	release/release-intent-v5.json
+No inventory functional file overlaps this delta. Future candidate preservation should use exactly reviewed delta patches or exact new files. Do not replace fulfillment or other Production files with older full copies. Release-intent is protected: do not author an inventory release intent or activate it to satisfy CI. Changes in this delta are TikTok publishing/test/status plus Production release intent and require retaining Production semantics during eventual integration.
+Source compatibility of the disjoint delta is established by path comparison; runtime execution of the new TikTok tests is not claimed here.
+PR comparisons against latestProduction also show these newer files absent/stale in candidate; they must not be interpreted as intended inventory reversions.

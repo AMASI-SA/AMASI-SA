@@ -19,7 +19,7 @@
  *  10. Setup Guide (expandable — where to find IDs in Qoyod)
  *  11. Sticky save bar
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 // Iter-290i — Searchable picker for قيود reference lists.
@@ -882,12 +882,15 @@ export default function QoyodSettings() {
   const [saving, setSaving]       = useState(false);
   const [settings, setSettings]   = useState(null);
   const [apiKey, setApiKey]       = useState("");
+  const [editingCredentials, setEditingCredentials] = useState(false);
+  const [savingCredentials, setSavingCredentials] = useState(false);
   const [branches, setBranches]   = useState([]);
   const [accounts, setAccounts]   = useState([]);
   const [taxes, setTaxes]         = useState([]);
   const [inventories, setInventories] = useState([]);
   const [testing, setTesting]     = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const connectionRequestVersion = useRef(0);
 
   const [branchesMeta, setBranchesMeta] = useState({ unsupported: false });
   const [taxesMeta,    setTaxesMeta]    = useState({ unsupported: false });
@@ -1060,14 +1063,49 @@ export default function QoyodSettings() {
       capabilities: { ...(s?.capabilities || {}), ...changes } }));
 
   const saveCredentials = async () => {
-    if (!apiKey.trim()) { toast.error("أدخل مفتاح API الخاص بقيود"); return; }
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) { toast.error("أدخل مفتاح API الخاص بقيود"); return; }
+    connectionRequestVersion.current += 1;
+    setTesting(false);
+    setTestResult(null);
+    setSavingCredentials(true);
     try {
-      await axios.post(`${API}/integrations/qoyod/credentials`,
-        { api_key: apiKey });
+      const { data } = await axios.post(
+        `${API}/integrations/qoyod/credentials`,
+        { api_key: trimmedApiKey },
+      );
+      if (!data?.ok || !data?.fingerprint) {
+        throw new Error("credential persistence was not confirmed");
+      }
+      setSettings((current) => ({
+        ...current,
+        credentials: {
+          configured: true,
+          fingerprint: data.fingerprint,
+        },
+      }));
       setApiKey("");
+      setEditingCredentials(false);
       toast.success("تم حفظ المفتاح بشكل آمن");
-      await loadAll();
-    } catch (_) { toast.error("فشل حفظ المفتاح"); }
+    } catch (_) {
+      toast.error("فشل حفظ المفتاح");
+    } finally {
+      setSavingCredentials(false);
+    }
+  };
+
+  const beginCredentialReplacement = () => {
+    connectionRequestVersion.current += 1;
+    setTesting(false);
+    setTestResult(null);
+    setApiKey("");
+    setEditingCredentials(true);
+  };
+
+  const cancelCredentialReplacement = () => {
+    connectionRequestVersion.current += 1;
+    setApiKey("");
+    setEditingCredentials(false);
   };
 
   const removeCredentials = async () => {
@@ -1081,19 +1119,28 @@ export default function QoyodSettings() {
   };
 
   const test = async () => {
+    const requestVersion = connectionRequestVersion.current + 1;
+    connectionRequestVersion.current = requestVersion;
+    const testedFingerprint = settings?.credentials?.fingerprint || null;
     setTesting(true); setTestResult(null);
     try {
       const { data } = await axios.post(`${API}/integrations/qoyod/test-connection`);
+      if (connectionRequestVersion.current !== requestVersion
+          || data?.fingerprint !== testedFingerprint) return;
       setTestResult(data);
       if (data.ok) {
         toast.success("الاتصال بقيود ناجح");
-        await loadCatalogs();
       } else {
         toast.error(data.error?.message || "فشل الاتصال");
       }
     } catch (e) {
+      if (connectionRequestVersion.current !== requestVersion) return;
       toast.error(e.response?.data?.detail || "فشل الاختبار");
-    } finally { setTesting(false); }
+    } finally {
+      if (connectionRequestVersion.current === requestVersion) {
+        setTesting(false);
+      }
+    }
   };
 
   const save = async () => {
@@ -1194,7 +1241,7 @@ export default function QoyodSettings() {
         // Iter-293.1 — COD-fee product id (Qoyod product representing
         // the "رسوم الدفع عند الاستلام" charge). Required only when
         // incoming COD orders carry `amounts.cash_on_delivery > 0`.
-        default_cod_fee_product_id:   (settings.default_cod_fee_product_id || "").trim() || null,
+        default_cod_fee_product_id:   String(settings.default_cod_fee_product_id || "").trim() || null,
         // Optional shipping product id (kept for parity with backend).
         default_shipping_product_id:  (settings.default_shipping_product_id || "").trim() || null,
         // Iter-285 — Tax mode + zero-tax id (for customer_first invoicing).
@@ -1236,6 +1283,11 @@ export default function QoyodSettings() {
     const issues = [];
     const branch = (settings.default_branch_id || "").toString().trim();
     const tax    = (settings.default_tax_id    || "").toString().trim();
+    const codProduct = String(settings.default_cod_fee_product_id || "").trim();
+    if (codProduct && !/^[1-9]\d*$/.test(codProduct)) {
+      issues.push({ code: "invalid_cod_fee_product_id", field: "default_cod_fee_product_id",
+        severity: "blocker", message: "معرّف بند رسوم الدفع عند الاستلام يجب أن يكون رقم منتج صحيحًا موجبًا من قيود." });
+    }
     if (!branch) {
       issues.push({ code: "missing_branch_id", field: "default_branch_id",
         severity: "warning",
@@ -1414,7 +1466,7 @@ export default function QoyodSettings() {
 
       {/* 2) API Key */}
       <Section title="مفتاح API الخاص بقيود">
-        {hasCreds ? (
+        {hasCreds && (
           <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg p-3">
             <div>
               <div className="text-sm font-bold text-emerald-800">
@@ -1425,29 +1477,47 @@ export default function QoyodSettings() {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={test} disabled={testing}
+              <button onClick={test} disabled={testing || editingCredentials || savingCredentials}
                 data-testid="btn-test-connection"
                 className="px-3 py-2 text-sm font-bold rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-50">
                 {testing ? "جاري الاختبار…" : "اختبار الاتصال"}
               </button>
+              <button onClick={beginCredentialReplacement}
+                disabled={savingCredentials}
+                data-testid="btn-edit-credentials"
+                className="px-3 py-2 text-sm font-bold rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 disabled:opacity-50">
+                استبدال المفتاح
+              </button>
               <button onClick={removeCredentials}
+                disabled={savingCredentials}
                 data-testid="btn-remove-credentials"
                 className="px-3 py-2 text-sm font-bold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200">
                 حذف المفتاح
               </button>
             </div>
           </div>
-        ) : (
-          <div className="flex gap-2">
+        )}
+        {(!hasCreds || editingCredentials) && (
+          <div className="flex gap-2 mt-2">
             <input type="password" value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
+              disabled={savingCredentials}
               placeholder="الصق هنا مفتاح Qoyod API الخاص بك"
               dir="ltr" data-testid="input-api-key"
               className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono" />
-            <button onClick={saveCredentials} data-testid="btn-save-credentials"
+            <button onClick={saveCredentials} disabled={savingCredentials}
+              data-testid="btn-save-credentials"
               className="px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
-              حفظ
+              {savingCredentials ? "جاري الحفظ…" : (hasCreds ? "حفظ البديل" : "حفظ")}
             </button>
+            {hasCreds && (
+              <button onClick={cancelCredentialReplacement}
+                disabled={savingCredentials}
+                data-testid="btn-cancel-credentials"
+                className="px-3 py-2 text-sm font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50">
+                إلغاء
+              </button>
+            )}
           </div>
         )}
         {testResult && !testResult.ok && testResult.error && (
@@ -1472,8 +1542,9 @@ export default function QoyodSettings() {
           checked={settings.auto_send}
           onChange={(v) => patch(v ? {
             auto_send: true,
-            // The live automatic path is deliberately narrower than the
-            // manual fallback: exact Salla "تم التنفيذ", once only.
+            // The configured trigger stays canonical completed. The final
+            // live Salla gate may also accept an order that has advanced to
+            // in_delivery/delivered before the worker reaches it.
             invoice_trigger_statuses: ["completed"],
             trigger_once_only: true,
             auto_receipt: true,
@@ -1503,9 +1574,11 @@ export default function QoyodSettings() {
                    data-testid="plan-b-auto-send-armed">
                 <div className="font-bold text-sm">✅ الإرسال التلقائي الجديد يعمل</div>
                 <div className="text-xs mt-1">
-                  يفحص الحالة الحالية مباشرة من سلة ثم يرسل طلبات «تم التنفيذ»
-                  فقط كل 15 ثانية مع منع التكرار. الدفع عند الاستلام يُنشئ
-                  فاتورة بلا سند، وأول خطأ حقيقي يوقف التشغيل تلقائياً.
+                  يفحص الحالة الحالية مباشرة من سلة، ولا يقبل إلا «تم التنفيذ»
+                  أو «جاري التوصيل» أو «تم التوصيل»، كل 15 ثانية مع منع
+                  التكرار. «تم التجهيز» يُقبل فقط عندما تصنّفه سلة completed.
+                  الدفع عند الاستلام يُنشئ فاتورة بلا سند، وأول خطأ حقيقي
+                  يوقف التشغيل تلقائياً.
                 </div>
               </div>
             );
@@ -1796,6 +1869,23 @@ export default function QoyodSettings() {
               <div className="text-xs text-rose-600 mt-1">مطلوب</div>
             )}
           </div>
+        </div>
+
+        <div data-testid="field-default_cod_fee_product_id" className="mt-4">
+          <IDInput
+            label="معرّف بند رسوم الدفع عند الاستلام في قيود"
+            value={settings.default_cod_fee_product_id}
+            onChange={(value) => patch({ default_cod_fee_product_id: value })}
+            placeholder="معرّف منتج الخدمة الموجود في قيود"
+            testid="input-cod-fee-product"
+            disabled={!hasCreds}
+            invalid={fieldInvalid("default_cod_fee_product_id")}
+          />
+          <p className="mt-2 text-xs text-slate-600">
+            يُستخدم لإضافة رسوم الدفع عند الاستلام المسجلة في الطلب إلى الفاتورة.
+            عند وجود رسوم دون ربط هذا البند يبقى الطلب متوقفًا بسبب فرق المبلغ.
+            فاتورة الدفع عند الاستلام تبقى آجلة دون سند قبض.
+          </p>
         </div>
 
         {/* Auto-Adopt toggle (Iter-288) */}

@@ -13,6 +13,15 @@ Internal pipeline stages stay developer-only. READ-ONLY module.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import re
+from typing import Any
+
+from integrations.qoyod.candidate_orders import (
+    CANDIDATE_AUDIT_SCAN_LIMIT,
+    _bounded_cursor,
+    build_candidate_audit,
+)
+from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 
 SENT      = "أُرسل"
 UNSENT    = "لم يُرسل"
@@ -23,7 +32,14 @@ DUPLICATE = "مكرر"
 def _order_created_date(row: dict) -> date | None:
     """Salla order CREATION date for an inbox row — same priority as
     eligible_orders._extract_order_created_at (canonical order_date →
-    raw_payload data.date.date → data.created_at)."""
+    raw_payload data.date.date → data.created_at).
+
+    Never fall back to ``received_at`` here.  That is the time the event
+    reached Mezan, not the time Salla created the order.  Using it as an order
+    date can make a pre-integration legacy order look newer than the fixed
+    2026-07-01 Qoyod floor and incorrectly place it in both the yellow header
+    alert and the unsent-orders page.
+    """
     from integrations.qoyod.eligible_orders import _parse_iso_date
     canon = row.get("canonical_payload") or {}
     d = _parse_iso_date(canon.get("order_date")) \
@@ -45,9 +61,6 @@ def _order_created_date(row: dict) -> date | None:
         d = _parse_iso_date(data.get("created_at"))
         if d is not None:
             return d
-    received = row.get("received_at")
-    if hasattr(received, "date"):
-        return received.date()
     return None
 
 
@@ -66,6 +79,25 @@ _FAIL_REASONS_AR = {
 def _is_real(v) -> bool:
     s = str(v or "")
     return bool(s) and not s.upper().startswith(("DRY:", "PREVIEW:"))
+
+
+def _include_in_daily_report(entry: dict) -> bool:
+    """Return whether an entry is an actionable daily Qoyod result."""
+    # A real Qoyod invoice or duplicate evidence remains useful history even
+    # when the order later moves to a non-billable Salla status.  A merely
+    # pending/failed local attempt does not: the *current* Salla status is the
+    # final authority on whether the order is an actionable exception.
+    if entry.get("status") in (SENT, DUPLICATE):
+        return True
+    current = entry.get("salla_status_slug") or entry.get("salla_status")
+    # Preserve unknown legacy rows for investigation; only exclude a row
+    # when Salla supplied a definite non-eligible current status.  This also
+    # prevents an old quarantine/manual-send failure from exposing a retry
+    # button after the order became non-eligible in Salla.
+    if not current:
+        return True
+    from integrations.qoyod.eligible_orders import _is_eligible_status
+    return _is_eligible_status(current)
 
 
 def simplify_row(row: dict, *,
@@ -175,11 +207,95 @@ def simplify_row(row: dict, *,
     return {"status": UNSENT, "reason": "بانتظار الإرسال إلى قيود"}
 
 
-async def list_unsent_orders(
+def _failure_time(value: Any) -> datetime | None:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def _newer_failure_time(candidate: Any, current: Any) -> bool:
+    candidate, current = _failure_time(candidate), _failure_time(current)
+    return candidate is not None and (current is None or candidate > current)
+
+
+def _provider_failure_evidence(detail: Any, observed_at: Any = None) -> dict | None:
+    """Expose only known operation/status/time, never provider payloads or IDs.
+
+    This describes a persisted failure, not a fresh provider probe. Unknown
+    endpoints stay undisclosed instead of leaking query strings or response data.
+    """
+    if not isinstance(detail, dict):
+        return None
+    endpoint = detail.get("endpoint")
+    operations = {
+        "GET /customers": "البحث عن العميل",
+        "POST /customers": "إنشاء العميل",
+        "GET /products": "البحث عن المنتج",
+        "POST /products": "إنشاء المنتج",
+        "GET /invoices": "البحث عن مرجع الفاتورة",
+        "GET /invoices/{id}": "قراءة الفاتورة",
+        "POST /invoices": "إنشاء الفاتورة",
+        "POST /invoice_payments": "تسجيل السداد",
+    }
+    if isinstance(endpoint, str) and re.fullmatch(r"GET /invoices/[0-9]+", endpoint):
+        endpoint = "GET /invoices/{id}"
+    if not isinstance(endpoint, str) or endpoint not in operations:
+        return None
+    status_code = detail.get("status_code")
+    if type(status_code) is not int or not (status_code == 0 or 100 <= status_code <= 599):
+        return None
+    if isinstance(observed_at, str):
+        try:
+            observed_at = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except ValueError:
+            observed_at = None
+    if isinstance(observed_at, datetime) and observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    return {
+        "endpoint": endpoint,
+        "operation": operations[endpoint],
+        "status_code": status_code,
+        "observed_at": observed_at.isoformat() if isinstance(observed_at, datetime) else None,
+    }
+
+
+def _overlay_manual_failure(
+    classification: dict, failure: dict | None,
+) -> dict:
+    """Make Plan-B retry/quarantine failures visible in the four-state view.
+
+    A real invoice or duplicate marker always wins.  Everything else with a
+    persisted failed send is actionable and belongs in ``لم يُرسل`` with the
+    exact reason and a safe manual retry action.  This keeps the operator's
+    list aligned with the runtime policy: the order stopped, not Qoyod.
+    """
+    if not failure or classification.get("status") in (SENT, DUPLICATE):
+        return classification
+    message = str(failure.get("message") or "").strip()
+    if not message:
+        message = "فشل الإرسال إلى قيود — يمكن إعادة الفحص والإرسال"
+    return {
+        "status": UNSENT,
+        "reason": message,
+        "failure_code": failure.get("code"),
+        "failure_source": failure.get("source"),
+        "provider_failure": failure.get("provider_failure"),
+        "retry_allowed": True,
+    }
+
+
+async def _list_unsent_orders_from_inbox_legacy(
     db, *, user_id: str, days: int = 30, limit: int = 500,
+    orders_user_id: str | None = None,
     status: str | None = None,
     salla_status: str | None = None,
     search: str | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """All recent orders mapped to the 4-status contract + counts.
 
@@ -192,9 +308,43 @@ async def list_unsent_orders(
     from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
     sync_start = date.fromisoformat(QOYOD_SYNC_START_DATE)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        days=max(1, min(days, 365)))
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    requested_days = max(1, min(days, 365))
+    requested_start = (
+        current_time.astimezone(timezone.utc) - timedelta(
+            days=requested_days)
+    ).date()
+    # The integration itself cannot expose orders before 2026-07-01, even
+    # when the operator selects a wider period such as 90 days.
+    period_start = max(sync_start, requested_start)
+    # Query by the earliest possible receive time, then enforce the requested
+    # period with Salla's order creation date below.  A backfill received today
+    # must not make an old Salla order look like a "last 7 days" order.
+    scan_cutoff = datetime.combine(
+        period_start, datetime.min.time(), tzinfo=timezone.utc,
+    )
     excluded_pre_sync = 0
+    excluded_missing_order_date = 0
+    excluded_outside_requested_period = 0
+
+    # Qoyod accounting markers historically live under the singleton
+    # ``main`` tenant, while the live Salla refresh stores its newest inbox
+    # trace under the merchant's Orders owner.  Manual Plan-B sends therefore
+    # may place the authoritative marker on either side.  Read only those two
+    # explicit owners and de-duplicate by order number below; never scan every
+    # tenant for a matching order number.
+    inbox_user_ids = list(dict.fromkeys(
+        value
+        for value in (
+            str(user_id or "").strip(),
+            str(orders_user_id or "").strip(),
+        )
+        if value
+    ))
+    if not inbox_user_ids:
+        inbox_user_ids = [str(user_id)]
 
     # ── Preload قيود reference set (user directive 2026-07-09) ──
     # STRICT rule: any inbox row whose salla_order_number matches a
@@ -215,6 +365,64 @@ async def list_unsent_orders(
             if v:
                 ref_set.add(v)
 
+    # Plan-B automatic sends keep order-local failures outside the legacy
+    # integration stages.  Overlay those open quarantines (and failed manual
+    # send locks) so the operator sees them under "فشل" with the safe retry
+    # action instead of a misleading "لم يُرسل".
+    failure_by_order: dict[str, dict] = {}
+    quarantine_cursor = db.qoyod_manual_auto_quarantines.find(
+        {"user_id": user_id, "status": "open"},
+        {
+            "_id": 0,
+            "order_number": 1,
+            "code": 1,
+            "message": 1,
+            "attempt_count": 1,
+            "detail.endpoint": 1,
+            "detail.status_code": 1,
+            "last_seen_at": 1,
+        },
+    )
+    async for failed in quarantine_cursor:
+        failed_order = str(failed.get("order_number") or "").strip()
+        if failed_order:
+            failure_by_order[failed_order] = {
+                "source": "auto_quarantine",
+                "code": failed.get("code"),
+                "message": failed.get("message"),
+                "provider_failure": _provider_failure_evidence(
+                    failed.get("detail"), failed.get("last_seen_at")),
+            }
+
+    lock_cursor = db.qoyod_manual_send_locks.find(
+        {
+            "user_id": user_id,
+            "status": {"$in": ["failed", "partial_payment_failed"]},
+        },
+        {
+            "_id": 0,
+            "order_number": 1,
+            "status": 1,
+            "last_error.code": 1,
+            "last_error.message": 1,
+            "last_error.detail.endpoint": 1,
+            "last_error.detail.status_code": 1,
+            "finished_at": 1,
+        },
+    )
+    async for failed in lock_cursor:
+        failed_order = str(failed.get("order_number") or "").strip()
+        if not failed_order or failed_order in failure_by_order:
+            continue
+        last_error = failed.get("last_error") or {}
+        failure_by_order[failed_order] = {
+            "source": "manual_send_lock",
+            "code": last_error.get("code") or failed.get("status"),
+            "message": last_error.get("message"),
+            "provider_failure": _provider_failure_evidence(
+                last_error.get("detail"), failed.get("finished_at")),
+        }
+
     # rev37.1 — ONE entry per SALLA ORDER, not per inbox row. The
     # inbox intentionally stores a row per status transition
     # (idempotency key includes status_slug), so a single order can
@@ -225,7 +433,13 @@ async def list_unsent_orders(
     grouped: dict[str, dict] = {}
     order_keys: list[str] = []
 
-    query: dict = {"user_id": user_id, "received_at": {"$gte": cutoff}}
+    inbox_owner_query: str | dict = inbox_user_ids[0]
+    if len(inbox_user_ids) > 1:
+        inbox_owner_query = {"$in": inbox_user_ids}
+    query: dict = {
+        "user_id": inbox_owner_query,
+        "received_at": {"$gte": scan_cutoff},
+    }
     if search and str(search).strip():
         import re as _re
         query["salla_order_number"] = {
@@ -250,17 +464,33 @@ async def list_unsent_orders(
          "canonical_payload.payment_method": 1,
          "canonical_payload.order_status": 1,
          "canonical_payload.order_status_native": 1},
-    ).sort("received_at", -1).limit(max(1, min(limit, 2000)))
+    )
+    # Do not apply the public row limit to raw inbox events.  One Salla order
+    # can have several status traces, so limiting here makes 30 and 90 days
+    # collapse to the same newest-event window.  We group and classify the
+    # complete requested period first, then cap only the returned table rows.
+    cursor = cursor.sort("received_at", -1)
 
     async for row in cursor:
         # ── Integration start date — hard scope boundary ─────────────
         order_date = _order_created_date(row)
-        if order_date is not None and order_date < sync_start:
+        # The unsent alert/page are operational accounting surfaces.  An
+        # order must prove its Salla creation date is inside the integration
+        # period; an unknown date is not eligible and must not be represented
+        # as an actionable unsent invoice.
+        if order_date is None:
+            excluded_missing_order_date += 1
+            continue
+        if order_date < sync_start:
             excluded_pre_sync += 1
+            continue
+        if order_date < period_start:
+            excluded_outside_requested_period += 1
             continue
         on = str(row.get("salla_order_number") or "").strip()
         in_qoyod = bool(on) and (on in ref_set)
         s = simplify_row(row, in_qoyod_by_reference=in_qoyod)
+        s = _overlay_manual_failure(s, failure_by_order.get(on))
         canon = row.get("canonical_payload") or {}
         received = row.get("received_at")
         # Debug bag (user directive 2026-07-09): every row surfaces
@@ -280,6 +510,12 @@ async def list_unsent_orders(
             "salla_status_slug": canon.get("order_status"),
             "status":         s["status"],
             "reason":         s["reason"],
+            "failure_code":   s.get("failure_code"),
+            "failure_source": s.get("failure_source"),
+            "provider_failure": s.get("provider_failure"),
+            "retry_allowed":  bool(
+                s.get("retry_allowed", s["status"] == FAILED)
+            ),
             "qoyod_invoice_id": (row.get("qoyod_invoice_id")
                                  if _is_real(row.get("qoyod_invoice_id"))
                                  else None),
@@ -322,11 +558,22 @@ async def list_unsent_orders(
                         and entry.get(f) not in (None, ""):
                     prev[f] = entry[f]
 
+    # Daily operations must only call an unsent/failed order actionable when
+    # its CURRENT Salla status is eligible for invoicing. Historical inbox
+    # rows for awaiting-review/payment, cancelled, shipped, deleted, etc.
+    # remain available in the source collections but are not actionable
+    # Qoyod exceptions and must not inflate the unsent/failed counts.
+    visible_keys = [
+        key for key in order_keys
+        if _include_in_daily_report(grouped[key])
+    ]
+    excluded_not_eligible = len(order_keys) - len(visible_keys)
+
     # rev37.3 — Salla-status facet: distinct statuses ACTUALLY present
-    # (computed BEFORE the salla_status filter so the dropdown always
-    # shows every available option) + optional backend-side filter.
+    # in the actionable report (computed BEFORE the salla_status filter)
+    # + optional backend-side filter.
     salla_status_counts: dict[str, int] = {}
-    for key in order_keys:
+    for key in visible_keys:
         e = grouped[key]
         label = e.get("salla_status") or e.get("salla_status_slug")
         if label:
@@ -340,18 +587,353 @@ async def list_unsent_orders(
 
     counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
     orders: list[dict] = []
-    for key in order_keys:
+    matched_order_count = 0
+    for key in visible_keys:
         e = grouped[key]
         if not _salla_match(e):
             continue
+        # Count the full period before limiting table rows.  The cards must
+        # reflect the selected 7/30/90-day range, not the display page size.
         counts[e["status"]] += 1
         if status and e["status"] != status:
             continue
-        orders.append(e)
+        matched_order_count += 1
+        if len(orders) < limit:
+            orders.append(e)
 
     return {"ok": True, "days": days, "counts": counts,
             "total": sum(counts.values()),
             "sync_start_date": sync_start.isoformat(),
+            "requested_order_start_date": period_start.isoformat(),
             "excluded_pre_sync_start": excluded_pre_sync,
+            "excluded_missing_order_date": excluded_missing_order_date,
+            "excluded_outside_requested_period":
+                excluded_outside_requested_period,
+            "excluded_not_eligible": excluded_not_eligible,
+            "matched_order_count": matched_order_count,
+            "returned_order_count": len(orders),
+            "truncated": matched_order_count > len(orders),
             "salla_status_counts": salla_status_counts,
             "orders": orders}
+
+
+async def _manual_failure_evidence(
+    db: Any,
+    *,
+    markers_user_id: str,
+    order_numbers: Any = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+) -> dict[str, dict[str, Any]]:
+    """Load bounded open failures only for the current candidate universe."""
+    references = list(dict.fromkeys(
+        str(value).strip()
+        for value in (order_numbers or [])
+        if str(value).strip()
+    ))
+    if order_numbers is not None and not references:
+        return {}
+    scan_limit = max(1, int(scan_limit))
+    failures: dict[str, dict[str, Any]] = {}
+    evidence_times: dict[str, Any] = {}
+    quarantines = getattr(db, "qoyod_manual_auto_quarantines", None)
+    if quarantines is not None:
+        quarantine_query: dict[str, Any] = {
+            "user_id": markers_user_id,
+            "status": "open",
+        }
+        if references:
+            quarantine_query["order_number"] = {"$in": references}
+        cursor = quarantines.find(
+            quarantine_query,
+            {"_id": 0, "order_number": 1, "code": 1, "message": 1,
+             "detail.endpoint": 1, "detail.status_code": 1, "last_seen_at": 1,
+             "last_manual_retry_at": 1, "last_manual_retry_error.code": 1,
+             "last_manual_retry_error.detail.endpoint": 1,
+             "last_manual_retry_error.detail.status_code": 1},
+        )
+        cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
+        async for row in cursor:
+            reference = str(row.get("order_number") or "").strip()
+            if reference:
+                observed_at = row.get("last_seen_at")
+                detail = row.get("detail")
+                retry = row.get("last_manual_retry_error")
+                if isinstance(retry, dict) and retry and _newer_failure_time(
+                    row.get("last_manual_retry_at"), observed_at,
+                ):
+                    observed_at = row.get("last_manual_retry_at")
+                    detail = retry.get("detail")
+                evidence_times[reference] = observed_at
+                failures[reference] = {
+                    "source": "auto_quarantine",
+                    "code": row.get("code"),
+                    "message": row.get("message"),
+                    "provider_failure": _provider_failure_evidence(
+                        detail, observed_at),
+                }
+    locks = getattr(db, "qoyod_manual_send_locks", None)
+    if locks is not None:
+        lock_query: dict[str, Any] = {
+            "user_id": markers_user_id,
+            "status": {"$in": ["failed", "partial_payment_failed"]},
+        }
+        if references:
+            lock_query["order_number"] = {"$in": references}
+        cursor = locks.find(
+            lock_query,
+            {"_id": 0, "order_number": 1, "status": 1,
+             "last_error.code": 1, "last_error.message": 1,
+             "last_error.detail.endpoint": 1, "last_error.detail.status_code": 1,
+             "finished_at": 1},
+        )
+        cursor = _bounded_cursor(cursor, scan_limit=scan_limit)
+        async for row in cursor:
+            reference = str(row.get("order_number") or "").strip()
+            if not reference:
+                continue
+            error = row.get("last_error") or {}
+            if reference in failures:
+                if _newer_failure_time(row.get("finished_at"), evidence_times.get(reference)):
+                    # Keep quarantine classification/guards; refresh diagnostics only.
+                    failures[reference]["provider_failure"] = _provider_failure_evidence(
+                        error.get("detail"), row.get("finished_at"))
+                    evidence_times[reference] = row.get("finished_at")
+                continue
+            failures[reference] = {
+                "source": "manual_send_lock",
+                "code": error.get("code") or row.get("status"),
+                "message": error.get("message"),
+                "provider_failure": _provider_failure_evidence(
+                    error.get("detail"), row.get("finished_at")),
+            }
+    return failures
+
+
+async def list_unsent_orders(
+    db, *, user_id: str, days: int = 30, limit: int = 500,
+    orders_user_id: str | None = None,
+    status: str | None = None,
+    salla_status: str | None = None,
+    search: str | None = None,
+    now: datetime | None = None,
+    from_date: Any = None,
+    to_date: Any = None,
+    scan_limit: int = CANDIDATE_AUDIT_SCAN_LIMIT,
+    _include_internal: bool = False,
+) -> dict:
+    """Map canonical unified candidates to the four read-only UI states."""
+    effective_orders_user_id = str(orders_user_id or user_id)
+    limit = max(1, min(int(limit), 5000))
+    audit = await build_candidate_audit(
+        db,
+        orders_user_id=effective_orders_user_id,
+        markers_user_id=str(user_id),
+        marker_user_ids=(str(user_id), effective_orders_user_id),
+        from_date=from_date,
+        to_date=to_date,
+        days=days,
+        now=now,
+        search=search,
+        scan_limit=scan_limit,
+        lightweight=True,
+        require_complete=False,
+    )
+    failures = await _manual_failure_evidence(
+        db,
+        markers_user_id=str(user_id),
+        order_numbers=audit["eligible_references"],
+        scan_limit=scan_limit,
+    )
+
+    entries: list[dict[str, Any]] = []
+    for proof in audit["orders"]:
+        reference = proof["order_number"]
+        inbox_row = proof.get("inbox_row")
+        invoice = proof.get("qoyod_invoice")
+        invoice_count = int(
+            proof.get("qoyod_invoice_count_for_reference") or 0
+        )
+        if invoice_count > 1:
+            classification = {
+                "status": DUPLICATE,
+                "reason": (
+                    "يوجد أكثر من فاتورة قيود تحمل reference نفسه؛ "
+                    "الإرسال محظور حتى المراجعة"
+                ),
+                "retry_allowed": False,
+            }
+        elif invoice is not None and failures.get(reference):
+            failure = failures[reference]
+            classification = {
+                "status": FAILED,
+                "reason": str(failure.get("message") or (
+                    "الفاتورة موجودة في قيود لكن السداد المحلي غير مكتمل"
+                )),
+                "failure_code": failure.get("code"),
+                "failure_source": failure.get("source"),
+                "provider_failure": failure.get("provider_failure"),
+                "retry_allowed": True,
+            }
+        elif (
+            invoice is not None
+            and str(invoice.get("status") or "").lower()
+            == "invoice_sent_receipt_failed"
+        ):
+            classification = {
+                "status": FAILED,
+                "reason": (
+                    "الفاتورة موجودة في قيود لكن سند السداد لم يكتمل"
+                ),
+                "failure_code": "invoice_sent_receipt_failed",
+                "failure_source": "qoyod_invoices",
+                "retry_allowed": False,
+            }
+        elif invoice is not None:
+            classification = {
+                "status": SENT,
+                "reason": (
+                    f"فاتورة قيود #{invoice.get('qoyod_invoice_id')} — "
+                    "مطابقة دقيقة لرقم الطلب في reference"
+                ),
+                "retry_allowed": False,
+            }
+        elif inbox_row is not None:
+            classification = simplify_row(
+                inbox_row, in_qoyod_by_reference=False
+            )
+            if classification.get("status") == SENT:
+                classification = {
+                    "status": UNSENT,
+                    "reason": (
+                        "توجد علامة محلية لكن لا يوجد مرجع فاتورة مطابق "
+                        "في qoyod_invoices"
+                    ),
+                    "retry_allowed": True,
+                }
+            classification = _overlay_manual_failure(
+                classification, failures.get(reference)
+            )
+        else:
+            classification = {
+                "status": UNSENT,
+                "reason": (
+                    "طلب مؤهل في unified_orders وغير موجود في "
+                    "integration_inbox؛ لم يكن العامل القديم يراه"
+                ),
+                "retry_allowed": False,
+            }
+
+        received_at = (inbox_row or {}).get("received_at")
+        entries.append({
+            "order_number": reference,
+            "order_date": proof.get("order_date"),
+            "received_at": (
+                received_at.isoformat()
+                if hasattr(received_at, "isoformat") else received_at
+            ),
+            "total_amount": proof.get("total_amount"),
+            "payment_method": proof.get("payment_method"),
+            "salla_status": proof.get("current_status"),
+            "salla_status_slug": proof.get("current_status_key"),
+            "status": classification["status"],
+            "reason": classification["reason"],
+            "failure_code": classification.get("failure_code"),
+            "failure_source": classification.get("failure_source"),
+            "provider_failure": classification.get("provider_failure"),
+            "retry_allowed": bool(classification.get("retry_allowed", False)),
+            "qoyod_invoice_id": proof.get("qoyod_invoice_id"),
+            "trace_id": proof.get("trace_id"),
+            "events_count": int(
+                proof.get("integration_inbox_event_count") or 0
+            ),
+            "in_unified_orders": True,
+            "in_integration_inbox": proof.get("in_integration_inbox"),
+            "has_qoyod_reference_match": proof.get(
+                "has_qoyod_reference_match"
+            ),
+            "worker_candidate": proof.get("worker_candidate"),
+            "automation_visibility_reason": proof.get(
+                "legacy_worker_visibility_reason"
+            ),
+            "debug": {
+                "order_number": reference,
+                "qoyod_reference": proof.get("qoyod_reference"),
+                "invoice_id": proof.get("qoyod_invoice_id"),
+                "match_source": (
+                    "qoyod_invoices.reference" if invoice else "none"
+                ),
+            },
+        })
+
+    salla_status_counts: dict[str, int] = {}
+    for entry in entries:
+        label = entry.get("salla_status") or entry.get("salla_status_slug")
+        if label:
+            salla_status_counts[str(label)] = (
+                salla_status_counts.get(str(label), 0) + 1
+            )
+    filtered = [
+        entry for entry in entries
+        if not salla_status or salla_status in (
+            entry.get("salla_status"), entry.get("salla_status_slug")
+        )
+    ]
+    counts = {SENT: 0, UNSENT: 0, FAILED: 0, DUPLICATE: 0}
+    for entry in filtered:
+        counts[entry["status"]] += 1
+    table = [
+        entry for entry in filtered
+        if not status or entry["status"] == status
+    ]
+    matched_order_count = len(table)
+    table = table[:limit]
+    result = {
+        "ok": True,
+        "read_only": True,
+        "source_authority": "unified_orders",
+        "match_contract": audit["match_contract"],
+        "captured_at": audit["captured_at"],
+        "snapshot_fingerprint": audit["snapshot_fingerprint"],
+        "status_counts": audit["status_counts"],
+        "status_display_counts": audit["status_display_counts"],
+        "worker_candidate_status_counts": audit[
+            "worker_candidate_status_counts"
+        ],
+        "worker_candidate_status_display_counts": audit[
+            "worker_candidate_status_display_counts"
+        ],
+        "reference_hashes": audit["reference_hashes"],
+        "scan_truncated": audit["scan_truncated"],
+        "scan_limit": audit["scan_limit"],
+        "scanned_rows": audit["scanned_rows"],
+        "days": days,
+        "from_date": audit["from_date"],
+        "to_date": audit["to_date"],
+        "counts": counts,
+        "total": sum(counts.values()),
+        "worker_candidate_count": len(audit["unsent_references"]),
+        "sync_start_date": QOYOD_SYNC_START_DATE,
+        "requested_order_start_date": audit["from_date"],
+        "excluded_pre_sync_start": 0,
+        "excluded_missing_order_date": audit["unified_exclusions"][
+            "missing_or_inferred_order_date"
+        ],
+        "excluded_outside_requested_period": audit["unified_exclusions"][
+            "outside_requested_date_range"
+        ],
+        "excluded_not_eligible": audit["unified_exclusions"][
+            "status_not_eligible"
+        ],
+        "matched_order_count": matched_order_count,
+        "returned_order_count": len(table),
+        "truncated": matched_order_count > len(table),
+        "salla_status_counts": salla_status_counts,
+        "duplicate_qoyod_reference_count": audit["counts"][
+            "duplicate_qoyod_references"
+        ],
+        "orders": table,
+    }
+    if _include_internal:
+        result["_candidate_audit"] = audit
+        result["_manual_failures"] = failures
+    return result

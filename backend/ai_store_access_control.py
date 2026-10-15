@@ -12,28 +12,25 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
-from ai_store_operations_foundation import AI_ACTION_LOG, PERMISSIONS, ROLE_ASSIGNMENTS, ROLE_CATALOG
+from ai_store_access_contract import (
+    AI_ACTION_LOG,
+    PERMISSIONS,
+    RESPONSIBILITY_TYPES,
+    ROLE_ASSIGNMENTS,
+    ROLE_ASSIGNMENT_OWNER_FIELD,
+    ROLE_CATALOG,
+    ROLE_LABELS,
+    effective_permissions,
+    find_role_assignment,
+    find_role_assignments,
+    validate_assignment,
+    write_role_assignment,
+)
+from store_courier_dispatch_routes import make_store_courier_dispatch_router
 from warehouse_location_routes import WAREHOUSES
 
 
 AI_AGENT_ID = "mezan-ai-product-optimizer"
-ROLE_LABELS = {
-    "owner": "مالك النظام",
-    "product_manager": "مدير المنتجات",
-    "product_operator": "موظف المنتجات",
-    "cost_manager": "مسؤول التكاليف والمشتريات",
-    "warehouse_operator": "موظف المخزن",
-    "shipping_operator": "موظف الشحن والعنونة",
-    "marketing_manager": "مسؤول التسويق",
-    "ai_product_optimizer": "وكيل تحسين المنتجات بالذكاء الاصطناعي",
-}
-RESPONSIBILITY_TYPES = {
-    "instant_ready",
-    "packing",
-    "shipping_labeling",
-    "carrier_handoff",
-    "stock_preparation",
-}
 
 
 def _now() -> str:
@@ -45,65 +42,11 @@ def _require_owner(user: dict[str, Any]) -> None:
         raise HTTPException(status_code=403, detail={"code": "owner_required"})
 
 
-def validate_assignment(payload: dict[str, Any]) -> dict[str, Any]:
-    role_key = str(payload.get("role_key") or "").strip()
-    if role_key not in ROLE_CATALOG:
-        raise ValueError("invalid_role_key")
-    extra = sorted({str(value).strip() for value in payload.get("extra_permissions") or [] if str(value).strip()})
-    denied = sorted({str(value).strip() for value in payload.get("denied_permissions") or [] if str(value).strip()})
-    unknown = [value for value in extra + denied if value not in PERMISSIONS]
-    if unknown:
-        raise ValueError(f"unknown_permission:{unknown[0]}")
-    overlap = set(extra) & set(denied)
-    if overlap:
-        raise ValueError(f"permission_conflict:{sorted(overlap)[0]}")
-    warehouse_ids = sorted({
-        str(value).strip()
-        for value in payload.get("warehouse_ids") or []
-        if str(value).strip()
-    })
-    workplace_warehouse_id = str(
-        payload.get("workplace_warehouse_id") or ""
-    ).strip()
-    if workplace_warehouse_id and workplace_warehouse_id not in warehouse_ids:
-        raise ValueError("workplace_warehouse_not_assigned")
-    responsibilities = sorted({
-        str(value).strip()
-        for value in payload.get("fulfillment_responsibilities") or []
-        if str(value).strip()
-    })
-    unknown_responsibilities = [
-        value for value in responsibilities
-        if value not in RESPONSIBILITY_TYPES
-    ]
-    if unknown_responsibilities:
-        raise ValueError(
-            f"unknown_fulfillment_responsibility:{unknown_responsibilities[0]}"
-        )
-    return {
-        "role_key": role_key,
-        "extra_permissions": extra,
-        "denied_permissions": denied,
-        "enabled": bool(payload.get("enabled", True)),
-        "warehouse_ids": warehouse_ids,
-        "workplace_warehouse_id": workplace_warehouse_id or None,
-        "fulfillment_responsibilities": responsibilities,
-    }
-
-
-def effective_permissions(assignment: dict[str, Any] | None) -> list[str]:
-    if not assignment or not assignment.get("enabled", True):
-        return []
-    role_key = str(assignment.get("role_key") or "")
-    base = set(ROLE_CATALOG.get(role_key, []))
-    base |= set(assignment.get("extra_permissions") or [])
-    base -= set(assignment.get("denied_permissions") or [])
-    return sorted(base)
-
-
 async def _audit(db: Any, *, actor: dict[str, Any], action: str, target_id: str, before: Any, after: Any) -> None:
+    owner_user_id = str(actor.get("id") or "").strip()
     await db[AI_ACTION_LOG].insert_one({
         "id": uuid.uuid4().hex,
+        ROLE_ASSIGNMENT_OWNER_FIELD: owner_user_id,
         "actor_type": "human",
         "actor_id": str(actor.get("id") or ""),
         "actor_name": actor.get("name"),
@@ -129,10 +72,11 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
             {"_id": 0, "password_hash": 0, "security_answer_hash": 0},
         ).sort("created_at", -1).to_list(5000)
         user_ids = [str(row.get("id")) for row in users if row.get("id")]
-        assignments = await db[ROLE_ASSIGNMENTS].find(
-            {"user_id": {"$in": user_ids}},
-            {"_id": 0},
-        ).to_list(5000)
+        assignments = await find_role_assignments(
+            db,
+            owner_user_id=owner_id,
+            user_ids=user_ids,
+        )
         warehouses = await db[WAREHOUSES].find(
             {"user_id": owner_id, "status": {"$ne": "disabled"}},
             {
@@ -217,10 +161,15 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
                     status_code=422,
                     detail={"code": "warehouse_assignment_invalid"},
                 )
-        before = await db[ROLE_ASSIGNMENTS].find_one({"user_id": target_user_id}, {"_id": 0})
+        before = await find_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=target_user_id,
+        )
         now = _now()
         document = {
             "id": (before or {}).get("id") or uuid.uuid4().hex,
+            ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
             "user_id": target_user_id,
             "user_name": target.get("name"),
             "user_email": target.get("email"),
@@ -232,16 +181,31 @@ def make_ai_store_access_router(db: Any, current_user: Callable) -> APIRouter:
         if not before:
             document["created_at"] = now
             document["created_by"] = str(user.get("id") or "")
-        await db[ROLE_ASSIGNMENTS].update_one({"user_id": target_user_id}, {"$set": document}, upsert=True)
+        await write_role_assignment(
+            db,
+            owner_user_id=owner_id,
+            user_id=target_user_id,
+            existing=before,
+            values=document,
+            upsert=True,
+        )
         await _audit(db, actor=user, action="store_operations_role_assigned", target_id=target_user_id, before=before, after=document)
         return {"ok": True, "assignment": document}
 
     @router.get("/audit/log")
     async def audit_log(limit: int = Query(100, ge=1, le=500), user: dict = Depends(current_user)) -> dict[str, Any]:
         _require_owner(user)
+        owner_id = str(user.get("id") or "").strip()
         rows = await db[AI_ACTION_LOG].find(
-            {"target_type": "store_operations_access"}, {"_id": 0}
+            {
+                ROLE_ASSIGNMENT_OWNER_FIELD: owner_id,
+                "target_type": "store_operations_access",
+            },
+            {"_id": 0},
         ).sort("occurred_at", -1).limit(limit).to_list(limit)
         return {"ok": True, "items": rows, "total": len(rows)}
 
+    router.include_router(
+        make_store_courier_dispatch_router(db, current_user)
+    )
     return router

@@ -21,11 +21,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from ai_store_access_control import effective_permissions
-from ai_store_operations_foundation import ROLE_ASSIGNMENTS
+from ai_store_access_contract import find_role_assignment
 from product_fulfillment_rules import (
     DEFAULT_LOW_STOCK_THRESHOLD,
+    FROZEN_FULFILLMENT_TYPE,
+    FROZEN_INVENTORY_POLICY,
     FULFILLMENT_TYPES,
     INVENTORY_POLICIES,
+    PRODUCT_OPERATION_CHOICES_FROZEN,
     PRODUCT_OPERATION_PROFILES,
     STOCKOUT_POLICY_CLOSE,
     inventory_policy_details,
@@ -170,8 +173,14 @@ class ProductCreationDraftRequest(BaseModel):
     options: list[ProductCreationOption] = Field(default_factory=list, max_length=20)
     category_ids: list[int] = Field(default_factory=list, max_length=50)
     image_urls: list[str] = Field(default_factory=list, max_length=20)
-    fulfillment_type: str = Field(max_length=40)
-    inventory_policy: str = Field(max_length=60)
+    fulfillment_type: str = Field(
+        default=FROZEN_FULFILLMENT_TYPE,
+        max_length=40,
+    )
+    inventory_policy: str = Field(
+        default=FROZEN_INVENTORY_POLICY,
+        max_length=60,
+    )
     stockout_policy: str = Field(
         default=STOCKOUT_POLICY_CLOSE,
         max_length=60,
@@ -203,12 +212,26 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
         raise ValueError("unsupported_product_type")
     if product_type == "service" and payload.weight is None:
         raise ValueError("shipping_weight_required")
-    fulfillment_type = normalize_fulfillment_type(payload.fulfillment_type)
-    inventory_policy = normalize_inventory_policy(payload.inventory_policy)
-    stockout_policy = normalize_stockout_policy(payload.stockout_policy)
-    low_stock_threshold = normalize_low_stock_threshold(
-        payload.low_stock_threshold
-    )
+    # Product operation choices are temporarily frozen. Inputs are accepted
+    # for compatibility with older clients, but cannot alter effective rules.
+    if PRODUCT_OPERATION_CHOICES_FROZEN:
+        fulfillment_type = FROZEN_FULFILLMENT_TYPE
+        inventory_policy = FROZEN_INVENTORY_POLICY
+        stockout_policy = STOCKOUT_POLICY_CLOSE
+        low_stock_threshold = DEFAULT_LOW_STOCK_THRESHOLD
+    else:
+        fulfillment_type = normalize_fulfillment_type(
+            payload.fulfillment_type
+        )
+        inventory_policy = normalize_inventory_policy(
+            payload.inventory_policy
+        )
+        stockout_policy = normalize_stockout_policy(
+            payload.stockout_policy
+        )
+        low_stock_threshold = normalize_low_stock_threshold(
+            payload.low_stock_threshold
+        )
     image_urls: list[str] = []
     for value in payload.image_urls:
         url = _text(value)
@@ -241,30 +264,47 @@ def _serialize_draft(row: dict[str, Any] | None) -> dict[str, Any] | None:
         result.pop("quantity", None)
         if isinstance(result.get("inventory_policy"), dict):
             result["inventory_policy"] = result["inventory_policy"].get("mode")
-        if (
-            result.get("inventory_policy") not in INVENTORY_POLICIES
-            and result.get("fulfillment_type") in FULFILLMENT_TYPES
-        ):
-            result["inventory_policy"] = inventory_policy_for_fulfillment(
-                result["fulfillment_type"]
-            )["mode"]
-            result["inventory_policy_inferred_from_legacy"] = True
-        if not result.get("stockout_policy"):
-            result["stockout_policy"] = STOCKOUT_POLICY_CLOSE
-            result["stockout_policy_inferred_from_legacy"] = True
-        try:
-            result["low_stock_threshold"] = normalize_low_stock_threshold(
-                result.get(
-                    "low_stock_threshold",
-                    DEFAULT_LOW_STOCK_THRESHOLD,
+        if PRODUCT_OPERATION_CHOICES_FROZEN:
+            result.update({
+                "fulfillment_type": FROZEN_FULFILLMENT_TYPE,
+                "inventory_policy": FROZEN_INVENTORY_POLICY,
+                "stockout_policy": STOCKOUT_POLICY_CLOSE,
+                "low_stock_threshold": DEFAULT_LOW_STOCK_THRESHOLD,
+                "operation_choices_frozen": True,
+            })
+        else:
+            if (
+                result.get("inventory_policy") not in INVENTORY_POLICIES
+                and result.get("fulfillment_type") in FULFILLMENT_TYPES
+            ):
+                result["inventory_policy"] = (
+                    inventory_policy_for_fulfillment(
+                        result["fulfillment_type"]
+                    )["mode"]
                 )
-            )
-        except ValueError:
-            result["low_stock_threshold"] = DEFAULT_LOW_STOCK_THRESHOLD
+                result["inventory_policy_inferred_from_legacy"] = True
+            if not result.get("stockout_policy"):
+                result["stockout_policy"] = STOCKOUT_POLICY_CLOSE
+                result["stockout_policy_inferred_from_legacy"] = True
+            try:
+                result["low_stock_threshold"] = (
+                    normalize_low_stock_threshold(
+                        result.get(
+                            "low_stock_threshold",
+                            DEFAULT_LOW_STOCK_THRESHOLD,
+                        )
+                    )
+                )
+            except ValueError:
+                result["low_stock_threshold"] = (
+                    DEFAULT_LOW_STOCK_THRESHOLD
+                )
     return result
 
 
 def _draft_inventory_policy(draft: dict[str, Any]) -> dict[str, Any]:
+    if PRODUCT_OPERATION_CHOICES_FROZEN:
+        return inventory_policy_details(FROZEN_INVENTORY_POLICY)
     value = draft.get("inventory_policy")
     if isinstance(value, dict):
         value = value.get("mode")
@@ -487,9 +527,10 @@ async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
             "is_owner": True,
         }
     merchant_id = _text(user.get("created_by"))
-    assignment = await db[ROLE_ASSIGNMENTS].find_one(
-        {"user_id": actor_id},
-        {"_id": 0},
+    assignment = await find_role_assignment(
+        db,
+        owner_user_id=merchant_id,
+        user_id=actor_id,
     )
     return {
         "actor_id": actor_id,
@@ -688,15 +729,27 @@ async def _save_created_product(
                 "user_id": merchant_id,
                 "salla_product_id": product["salla_product_id"],
                 "mezan_product_id": product["mezan_product_id"],
-                "fulfillment_type": draft["fulfillment_type"],
-                "inventory_policy": _draft_inventory_policy(draft)["mode"],
-                "stockout_policy": draft.get(
-                    "stockout_policy",
-                    STOCKOUT_POLICY_CLOSE,
+                "fulfillment_type": (
+                    FROZEN_FULFILLMENT_TYPE
+                    if PRODUCT_OPERATION_CHOICES_FROZEN
+                    else draft["fulfillment_type"]
                 ),
-                "low_stock_threshold": draft.get(
-                    "low_stock_threshold",
-                    DEFAULT_LOW_STOCK_THRESHOLD,
+                "inventory_policy": _draft_inventory_policy(draft)["mode"],
+                "stockout_policy": (
+                    STOCKOUT_POLICY_CLOSE
+                    if PRODUCT_OPERATION_CHOICES_FROZEN
+                    else draft.get(
+                        "stockout_policy",
+                        STOCKOUT_POLICY_CLOSE,
+                    )
+                ),
+                "low_stock_threshold": (
+                    DEFAULT_LOW_STOCK_THRESHOLD
+                    if PRODUCT_OPERATION_CHOICES_FROZEN
+                    else draft.get(
+                        "low_stock_threshold",
+                        DEFAULT_LOW_STOCK_THRESHOLD,
+                    )
                 ),
                 "configured": True,
                 "updated_at": now,

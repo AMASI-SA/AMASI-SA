@@ -55,6 +55,13 @@ class FakeCollection:
             )
         ]
 
+        requested_numbers = (query.get("order_number") or {}).get("$in")
+        if requested_numbers is not None:
+            rows = [
+                row for row in rows
+                if row.get("order_number") in set(requested_numbers)
+            ]
+
         conditions = query.get("$or") or []
         if not conditions:
             for clause in query.get("$and") or []:
@@ -200,6 +207,23 @@ async def test_repository_gets_exact_order(rows):
 
     assert result is not None
     assert result.order_number == "200"
+
+
+@pytest.mark.asyncio
+async def test_repository_gets_exact_order_set_with_one_query(rows):
+    db = FakeDB(rows)
+    repository = MongoOrderRepository(db)
+
+    result = await repository.get_salla_orders(
+        user_id="u1",
+        order_numbers=["300", "200", "300", "999"],
+    )
+
+    assert {row.order_number for row in result} == {"300", "200"}
+    assert db.unified_orders.last_query["order_number"] == {
+        "$in": ["300", "200", "999"],
+    }
+    assert db.unified_orders.write_calls == 0
 
 
 @pytest.mark.asyncio

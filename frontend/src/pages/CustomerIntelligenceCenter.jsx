@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import {
     ArrowClockwise,
     ChartLineUp,
@@ -34,9 +35,18 @@ import {
 } from "../components/customerIntelligence/CustomerIntelligencePanels";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    connectInstagramCustomerIntelligence,
+    createCustomerIntelligenceReplySuggestion,
+    saveTikTokReplyPolicy,
+    regenerateTikTokReplySuggestion,
     customerIntelligenceWritesLocked,
+    getCustomerIntelligenceInbox,
+    getCustomerLearningStatus,
     getCustomerIntelligenceWorkspace,
+    getInstagramCustomerIntelligenceSetup,
+    normalizeCustomerIntelligenceInbox,
     normalizeCustomerIntelligenceWorkspace,
+    reviewCustomerIntelligenceReplySuggestion,
 } from "../services/customerIntelligence";
 
 export const CUSTOMER_INTELLIGENCE_TABS = [
@@ -72,11 +82,40 @@ function LoadingPanel() {
     );
 }
 
-function renderActivePanel({ activeTab, model, writesLocked }) {
+function renderActivePanel({
+    activeTab,
+    model,
+    writesLocked,
+    inbox,
+    inboxError,
+    instagramSetup,
+    learningStatus,
+    onConnectInstagram,
+    onRegenerateTikTokSuggestion,
+    onSaveTikTokPolicy,
+    onCreateSuggestion,
+    onReviewSuggestion,
+    onRejectSuggestion,
+    onEscalateSuggestion,
+}) {
     const common = { model };
     switch (activeTab) {
         case "conversations":
-            return <ConversationsPanel {...common} />;
+            return (
+                <ConversationsPanel
+                    inbox={inbox}
+                    error={inboxError}
+                    learningStatus={learningStatus}
+                    instagramSetup={instagramSetup}
+                    onConnectInstagram={onConnectInstagram}
+                    onRegenerateTikTokSuggestion={onRegenerateTikTokSuggestion}
+                    onSaveTikTokPolicy={onSaveTikTokPolicy}
+                    onCreateSuggestion={onCreateSuggestion}
+                    onReviewSuggestion={onReviewSuggestion}
+                    onRejectSuggestion={onRejectSuggestion}
+                    onEscalateSuggestion={onEscalateSuggestion}
+                />
+            );
         case "customers":
             return <CustomersPanel {...common} />;
         case "followups":
@@ -119,35 +158,61 @@ function renderActivePanel({ activeTab, model, writesLocked }) {
 
 export function CustomerIntelligenceCenterView({
     model,
+    inbox,
     activeTab = "overview",
     onTabChange = () => {},
     onRefresh = () => {},
     loading = false,
     refreshing = false,
     error = "",
+    inboxError = "",
+    instagramSetup = null,
+    learningStatus = null,
+    onConnectInstagram = null,
+    onRegenerateTikTokSuggestion = null,
+    onSaveTikTokPolicy = null,
+    onCreateSuggestion = null,
+    onReviewSuggestion = null,
+    onRejectSuggestion = null,
+    onEscalateSuggestion = null,
+    isOwner = true,
 }) {
     const normalized = normalizeCustomerIntelligenceWorkspace(model);
-    const selectedTab = tabIsSupported(activeTab) ? activeTab : "overview";
+    const normalizedInbox = normalizeCustomerIntelligenceInbox(inbox);
+    const selectedTab = isOwner && tabIsSupported(activeTab)
+        ? activeTab
+        : "conversations";
+    const visibleTabs = isOwner
+        ? CUSTOMER_INTELLIGENCE_TABS
+        : CUSTOMER_INTELLIGENCE_TABS.filter((tab) => tab.id === "conversations");
     const writesLocked = customerIntelligenceWritesLocked(normalized.safety_policy);
+    const liveInbox = selectedTab === "conversations";
     const titleAr = normalized.workspace.title_ar || "مركز ذكاء العملاء والمبيعات";
     const titleEn = normalized.workspace.title_en || "Customer Intelligence & Sales Center";
-    const description = normalized.workspace.description_ar
-        || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
+    const description = liveInbox
+        ? "صندوق موحّد لتفاعلات واتساب وإنستغرام وتعليقات تيك توك المستوردة يدويًا، مع اقتراحات قابلة للمراجعة وبقاء الإرسال التلقائي مغلقًا."
+        : normalized.workspace.description_ar
+            || "مركز موحد لفهم العملاء وتحويل المحادثات إلى اقتراحات قابلة للمراجعة.";
+    const inboxConnected = normalizedInbox.connection.status === "connected";
 
     return (
         <div
             className="space-y-5"
             dir="rtl"
             data-testid="customer-intelligence-center"
-            data-preview-only="true"
+            data-preview-only={liveInbox ? "false" : "true"}
             data-write-mode="observe_only"
         >
             <header className="overflow-hidden rounded-xl border border-emerald-950 bg-emerald-950 text-white">
                 <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                     <div>
                         <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-300/40 bg-violet-400/10 px-3 py-1 text-xs font-extrabold text-violet-100">
-                            <Eye size={16} weight="fill" />
-                            معاينة المالك · Owner Preview
+                            {liveInbox
+                                ? <ChatCircleDots size={16} weight="fill" />
+                                : <Eye size={16} weight="fill" />}
+                            {liveInbox
+                                ? `قنوات حية · ${inboxConnected ? "متصلة" : "قراءة فقط"}`
+                                : "معاينة المالك · Owner Preview"}
                         </div>
                         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">{titleAr}</h1>
                         <div className="mt-1 text-xs font-bold tracking-wide text-emerald-300">{titleEn}</div>
@@ -155,9 +220,15 @@ export function CustomerIntelligenceCenterView({
                     </div>
                     <div className="flex flex-col gap-3">
                         <div className="rounded-xl border border-emerald-700 bg-emerald-900 p-3 text-xs font-bold leading-5 text-emerald-100">
-                            <div>المستوى {normalized.workspace.operating_level || 1}</div>
+                            <div>
+                                {liveInbox
+                                    ? "وضع التشغيل"
+                                    : `المستوى ${normalized.workspace.operating_level || 1}`}
+                            </div>
                             <div className="mt-1 text-white">
-                                {normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
+                                {liveInbox
+                                    ? "استقبال حقيقي · مراجعة بشرية"
+                                    : normalized.workspace.operating_level_label || "اقتراح ومراجعة بشرية"}
                             </div>
                         </div>
                         <button
@@ -168,27 +239,40 @@ export function CustomerIntelligenceCenterView({
                             data-testid="customer-intelligence-refresh"
                         >
                             <ArrowClockwise size={18} weight="bold" className={refreshing ? "animate-spin" : ""} />
-                            {refreshing ? "جارٍ تحديث المعاينة…" : "تحديث المعاينة"}
+                            {refreshing
+                                ? liveInbox ? "جارٍ تحديث الرسائل…" : "جارٍ تحديث المعاينة…"
+                                : liveInbox ? "تحديث الرسائل" : "تحديث المعاينة"}
                         </button>
                     </div>
                 </div>
                 <div className="border-t border-emerald-800 bg-emerald-900 px-5 py-3 text-xs font-semibold leading-6 text-emerald-100 sm:px-7">
-                    البيانات مصطنعة من Backend ومخصّصة لإثبات البنية فقط. لا اتصال واتساب،
-                    ولا طلب أو خصم أو رابط دفع حقيقي، ولا تعديل منتج أو حملة.
+                    {liveInbox ? (
+                        <>
+                            المعروض تفاعلات واتساب وإنستغرام الحقيقية وتعليقات تيك توك المستوردة يدويًا والمحفوظة في ميزان.
+                            الرد التلقائي وإنشاء الطلبات مغلقان. ردود تيك توك العامة لها مسار منفصل للمعاينة واعتماد المالك؛ إرسال واتساب وإنستغرام والرسائل الخاصة مغلق.
+                        </>
+                    ) : (
+                        <>
+                            البيانات مصطنعة من Backend ومخصّصة لإثبات البنية فقط. لا اتصال واتساب،
+                            ولا طلب أو خصم أو رابط دفع حقيقي، ولا تعديل منتج أو حملة.
+                        </>
+                    )}
                 </div>
             </header>
 
-            {error && (
+            {(liveInbox ? inboxError : error) && (
                 <div
                     className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900"
                     data-testid="customer-intelligence-error"
                 >
                     <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
                     <div>
-                        <div className="font-extrabold">تعذر تحميل مساحة المعاينة</div>
-                        <p className="mt-1 text-xs leading-5">{error}</p>
+                        <div className="font-extrabold">
+                            {liveInbox ? "تعذر تحميل تفاعلات قنوات العملاء" : "تعذر تحميل مساحة المعاينة"}
+                        </div>
+                        <p className="mt-1 text-xs leading-5">{liveInbox ? inboxError : error}</p>
                         <p className="mt-1 text-xs font-bold">
-                            لم تُستخدم بيانات محلية بديلة. أعد التحديث بعد التحقق من Backend.
+                            لم تُعرض بيانات بديلة. أعد التحديث بعد التحقق من Backend.
                         </p>
                     </div>
                 </div>
@@ -196,7 +280,7 @@ export function CustomerIntelligenceCenterView({
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 [scrollbar-width:thin]">
                 <nav className="flex min-w-max gap-2" aria-label="أقسام مركز ذكاء العملاء">
-                    {CUSTOMER_INTELLIGENCE_TABS.map(({ id, label, Icon }) => {
+                    {visibleTabs.map(({ id, label, Icon }) => {
                         const active = selectedTab === id;
                         return (
                             <button
@@ -223,26 +307,47 @@ export function CustomerIntelligenceCenterView({
                 activeTab: selectedTab,
                 model: normalized,
                 writesLocked,
+                inbox: normalizedInbox,
+                inboxError,
+                instagramSetup,
+                learningStatus,
+                onConnectInstagram,
+                onRegenerateTikTokSuggestion,
+                onSaveTikTokPolicy,
+                onCreateSuggestion,
+                onReviewSuggestion,
+                onRejectSuggestion,
+                onEscalateSuggestion,
             })}
         </div>
     );
 }
 
-function errorMessage(error) {
+function errorMessage(error, fallback) {
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) return detail;
     if (typeof detail?.message === "string" && detail.message.trim()) return detail.message;
-    return "تعذر الاتصال بمساحة ذكاء العملاء التجريبية.";
+    return fallback;
 }
 
 export default function CustomerIntelligenceCenter() {
+    const { user } = useAuth();
+    const isOwner = user?.is_owner === true;
     const [searchParams, setSearchParams] = useSearchParams();
     const requestedTab = searchParams.get("tab") || "overview";
-    const activeTab = tabIsSupported(requestedTab) ? requestedTab : "overview";
+    const activeTab = isOwner && tabIsSupported(requestedTab)
+        ? requestedTab
+        : "conversations";
     const [model, setModel] = useState(() => normalizeCustomerIntelligenceWorkspace({}));
+    const [inbox, setInbox] = useState(() => normalizeCustomerIntelligenceInbox({}));
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [inboxLoading, setInboxLoading] = useState(activeTab === "conversations");
+    const [inboxRefreshing, setInboxRefreshing] = useState(false);
+    const [inboxError, setInboxError] = useState("");
+    const [instagramSetup, setInstagramSetup] = useState(null);
+    const [learningStatus, setLearningStatus] = useState(null);
 
     const load = useCallback(async ({ refresh = false } = {}) => {
         if (refresh) setRefreshing(true);
@@ -252,32 +357,179 @@ export default function CustomerIntelligenceCenter() {
             setModel(await getCustomerIntelligenceWorkspace());
         } catch (requestError) {
             setModel(normalizeCustomerIntelligenceWorkspace({}));
-            setError(errorMessage(requestError));
+            setError(errorMessage(
+                requestError,
+                "تعذر الاتصال بمساحة ذكاء العملاء التجريبية.",
+            ));
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
+    const loadInbox = useCallback(async ({ refresh = false } = {}) => {
+        if (refresh) setInboxRefreshing(true);
+        else setInboxLoading(true);
+        setInboxError("");
+        try {
+            setInbox(await getCustomerIntelligenceInbox());
+        } catch (requestError) {
+            setInbox(normalizeCustomerIntelligenceInbox({}));
+            setInboxError(errorMessage(
+                requestError,
+                "تعذر تحميل تفاعلات قنوات العملاء الواردة.",
+            ));
+        } finally {
+            setInboxLoading(false);
+            setInboxRefreshing(false);
+        }
+    }, []);
+
+    const loadInstagramSetup = useCallback(async () => {
+        if (!isOwner) return;
+        try {
+            setInstagramSetup(await getInstagramCustomerIntelligenceSetup());
+        } catch (_requestError) {
+            setInstagramSetup(null);
+        }
+    }, [isOwner]);
+
+    const loadLearningStatus = useCallback(async () => {
+        try {
+            setLearningStatus(await getCustomerLearningStatus());
+        } catch (_requestError) {
+            setLearningStatus(null);
+        }
+    }, []);
+
+    const connectInstagram = useCallback(async (candidateRef) => {
+        await connectInstagramCustomerIntelligence(candidateRef);
+        await Promise.all([
+            loadInstagramSetup(),
+            loadInbox({ refresh: true }),
+        ]);
+    }, [loadInbox, loadInstagramSetup]);
+
+    const createSuggestion = useCallback(async (conversationId) => {
+        await createCustomerIntelligenceReplySuggestion(conversationId);
+        await loadInbox({ refresh: true });
+    }, [loadInbox]);
+
+    const regenerateSuggestion = useCallback(async (conversationId, suggestionId, version) => {
+        try {
+            await regenerateTikTokReplySuggestion(conversationId, suggestionId, version);
+        } finally {
+            await loadInbox({ refresh: true });
+        }
+    }, [loadInbox]);
+
+    const reviewSuggestion = useCallback(async (
+        decision,
+        conversationId,
+        suggestionId,
+        review,
+    ) => {
+        await reviewCustomerIntelligenceReplySuggestion({
+            conversationId,
+            suggestionId,
+            decision,
+            text: review?.text,
+            version: review?.version,
+        });
+        await loadInbox({ refresh: true });
+    }, [loadInbox]);
+
     useEffect(() => {
-        load();
-    }, [load]);
+        if (isOwner) {
+            load();
+            return;
+        }
+        setModel(normalizeCustomerIntelligenceWorkspace({}));
+        setError("");
+        setLoading(false);
+    }, [isOwner, load]);
+
+    useEffect(() => {
+        if (activeTab !== "conversations") return;
+        loadInbox();
+        loadLearningStatus();
+        if (isOwner) loadInstagramSetup();
+    }, [activeTab, isOwner, loadInbox, loadInstagramSetup, loadLearningStatus]);
+
+    useEffect(() => {
+        if (isOwner || requestedTab === "conversations") return;
+        const next = new URLSearchParams(searchParams);
+        next.set("tab", "conversations");
+        setSearchParams(next, { replace: true });
+    }, [isOwner, requestedTab, searchParams, setSearchParams]);
 
     const selectTab = useCallback((tab) => {
+        if (!isOwner && tab !== "conversations") return;
+        if (tab === "conversations" && activeTab !== "conversations") {
+            setInboxLoading(true);
+        }
         const next = new URLSearchParams(searchParams);
         next.set("tab", tab);
         setSearchParams(next, { replace: true });
-    }, [searchParams, setSearchParams]);
+    }, [activeTab, isOwner, searchParams, setSearchParams]);
 
     const viewProps = useMemo(() => ({
         model,
+        inbox,
         activeTab,
         onTabChange: selectTab,
-        onRefresh: () => load({ refresh: true }),
-        loading,
-        refreshing,
+        onRefresh: () => (
+            activeTab === "conversations"
+                ? Promise.all([
+                    loadInbox({ refresh: true }),
+                    loadLearningStatus(),
+                    ...(isOwner ? [loadInstagramSetup()] : []),
+                ])
+                : load({ refresh: true })
+        ),
+        loading: activeTab === "conversations" ? inboxLoading : loading,
+        refreshing: activeTab === "conversations" ? inboxRefreshing : refreshing,
         error,
-    }), [activeTab, error, load, loading, model, refreshing, selectTab]);
+        inboxError,
+        instagramSetup,
+        learningStatus,
+        onConnectInstagram: connectInstagram,
+        isOwner,
+        onSaveTikTokPolicy: isOwner ? saveTikTokReplyPolicy : null,
+        onRegenerateTikTokSuggestion: isOwner ? regenerateSuggestion : null,
+        onCreateSuggestion: createSuggestion,
+        onReviewSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("approve", conversationId, suggestionId, review)
+        ),
+        onRejectSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("reject", conversationId, suggestionId, review)
+        ),
+        onEscalateSuggestion: (conversationId, suggestionId, review) => (
+            reviewSuggestion("escalate", conversationId, suggestionId, review)
+        ),
+    }), [
+        activeTab,
+        error,
+        inbox,
+        inboxError,
+        inboxLoading,
+        inboxRefreshing,
+        instagramSetup,
+        learningStatus,
+        isOwner,
+        regenerateSuggestion,
+        load,
+        loadInbox,
+        loadInstagramSetup,
+        loadLearningStatus,
+        loading,
+        model,
+        refreshing,
+        reviewSuggestion,
+        selectTab,
+        createSuggestion,
+        connectInstagram,
+    ]);
 
     return <CustomerIntelligenceCenterView {...viewProps} />;
 }

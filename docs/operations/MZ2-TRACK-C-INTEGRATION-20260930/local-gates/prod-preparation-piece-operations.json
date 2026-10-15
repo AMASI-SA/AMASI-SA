@@ -1,0 +1,37 @@
+{
+  "workflow": "prod-preparation-piece-operations",
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--import-mode=importlib",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "backend/tests/test_preparation_piece_operations.py",
+    "backend/tests/test_preparation_supplier_dispatch.py",
+    "backend/tests/test_preparation_piece_line_services.py",
+    "backend/tests/test_preparation_piece_stage_semantics.py",
+    "backend/tests/test_preparation_piece_execution_guard.py",
+    "backend/tests/test_preparation_file_failure_safety.py",
+    "backend/tests/test_reviewed_preparation_batches.py",
+    "backend/tests/test_preparation_file_registry.py",
+    "backend/tests/test_fulfillment_v2_contract.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\prod-preparation-piece-operations.xml"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 14.63,
+  "test_files": [
+    "backend/tests/test_preparation_piece_operations.py",
+    "backend/tests/test_preparation_supplier_dispatch.py",
+    "backend/tests/test_preparation_piece_line_services.py",
+    "backend/tests/test_preparation_piece_stage_semantics.py",
+    "backend/tests/test_preparation_piece_execution_guard.py",
+    "backend/tests/test_preparation_file_failure_safety.py",
+    "backend/tests/test_reviewed_preparation_batches.py",
+    "backend/tests/test_preparation_file_registry.py",
+    "backend/tests/test_fulfillment_v2_contract.py"
+  ]
+}

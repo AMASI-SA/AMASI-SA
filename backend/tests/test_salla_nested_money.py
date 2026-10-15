@@ -92,3 +92,30 @@ def test_order_mapper_handles_nested_item_amounts():
     assert doc["products"][0]["total"] == 150.0
     assert doc["products"][0]["product_id"] == "101"
     assert doc["products"][0]["sku"] == "SKU-101"
+
+
+def test_order_mapper_promotes_native_and_sar_totals_for_gcc_order():
+    raw = {
+        "id": 286153601,
+        "reference_id": "286153601",
+        "date": "2026-09-15T12:00:00+03:00",
+        "amounts": {
+            "total": {"amount": "302.20", "currency": "QAR"},
+        },
+        "exchange_rate": {
+            "base_currency": "SAR",
+            "exchange_currency": "QAR",
+            "rate": "1.02914116",
+        },
+    }
+
+    doc = _salla_order_to_doc(raw)
+
+    assert doc["total_amount"] == 302.20
+    assert doc["currency"] == "QAR"
+    assert doc["original_total_amount"] == 302.20
+    assert doc["original_currency"] == "QAR"
+    assert doc["exchange_rate_to_sar"] == "1.02914116"
+    assert doc["total_amount_sar"] == 311.01
+    assert doc["accounting_currency"] == "SAR"
+    assert doc["currency_conversion_status"] == "verified"

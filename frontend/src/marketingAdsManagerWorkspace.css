@@ -1,0 +1,259 @@
+/* Mezan 2 advertising workspaces — visual phase 1.
+ * Read-only presentation layer: no campaign mutations are enabled here.
+ */
+
+[data-testid="marketing-platform-workspace"] {
+  --mezan-ads-accent: #0f172a;
+  --mezan-ads-accent-soft: #f1f5f9;
+  --mezan-ads-accent-border: #cbd5e1;
+  --mezan-ads-active-underline: #fbbf24;
+}
+
+[data-testid="marketing-platform-workspace"][data-marketing-platform="snapchat"] {
+  --mezan-ads-accent: #111827;
+  --mezan-ads-accent-soft: #fffce8;
+  --mezan-ads-accent-border: #fde047;
+  --mezan-ads-active-underline: #facc15;
+}
+
+[data-testid="marketing-platform-workspace"][data-marketing-platform="meta"] {
+  --mezan-ads-accent: #1456c0;
+  --mezan-ads-accent-soft: #eff6ff;
+  --mezan-ads-accent-border: #93c5fd;
+  --mezan-ads-active-underline: #2563eb;
+}
+
+[data-testid="marketing-platform-workspace"][data-marketing-platform="tiktok"] {
+  --mezan-ads-accent: #111827;
+  --mezan-ads-accent-soft: #fdf2f8;
+  --mezan-ads-accent-border: #f9a8d4;
+  --mezan-ads-active-underline: #ec4899;
+}
+
+[data-testid="marketing-platform-workspace"][data-marketing-platform="google"] {
+  --mezan-ads-accent: #1769d2;
+  --mezan-ads-accent-soft: #eef6ff;
+  --mezan-ads-accent-border: #93c5fd;
+  --mezan-ads-active-underline: #4285f4;
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] {
+  gap: 0.85rem;
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] > header {
+  border-radius: 1rem;
+  box-shadow: 0 12px 34px rgb(15 23 42 / 10%);
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] > form {
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] > section[aria-label="مؤشرات المنصة"] article {
+  min-height: 92px;
+  border-radius: 0.85rem;
+  padding: 0.8rem;
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] > section[aria-label="مؤشرات المنصة"] article > div > div > div:nth-child(2) {
+  font-size: 1.15rem;
+  line-height: 1.45rem;
+}
+
+[data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] > nav[aria-label="أقسام تقرير المنصة"] {
+  border-radius: 0.85rem;
+  padding: 0.35rem;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] {
+  border-radius: 0.75rem;
+  border-color: #d7dee8;
+  box-shadow: 0 10px 34px rgb(15 23 42 / 8%);
+  background: #fff;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] > [data-mezan-ads-entity-tabs="true"] {
+  min-height: 62px;
+  align-items: stretch;
+  padding-inline: 1rem;
+  background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] [data-mezan-entity-tab] {
+  min-width: 92px;
+  padding: 1.1rem 0.3rem 0.9rem;
+  font-size: 0.86rem;
+  color: #475569;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] [data-mezan-entity-tab="campaigns"] {
+  color: #0f172a;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] [data-mezan-entity-tab="campaigns"] > span,
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] [data-mezan-entity-tab="campaigns"]::after {
+  background: var(--mezan-ads-active-underline) !important;
+}
+
+.mezaN-placeholder-do-not-use { display: none; }
+
+.mezan-ads-manager-primary-actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding-block: 0.65rem;
+  direction: rtl;
+}
+
+.mezan-ads-manager-primary-actions button {
+  height: 38px;
+  border-radius: 0.65rem;
+  padding-inline: 0.95rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.mezan-ads-manager-drafts {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+}
+
+.mezan-ads-manager-create {
+  border: 1px solid var(--mezan-ads-accent);
+  background: var(--mezan-ads-accent);
+  color: #fff;
+}
+
+.mezan-ads-manager-primary-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] > div:nth-child(2) {
+  min-height: 48px;
+  background: #fff;
+  padding: 0.45rem 0.7rem;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] > div:nth-child(2) button {
+  border-radius: 0.55rem;
+}
+
+[data-testid="campaign-manager-scroll"] {
+  max-height: min(66vh, 720px);
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-color: #94a3b8 #eef2f7;
+  scrollbar-width: thin;
+}
+
+[data-testid="campaign-manager-scroll"]::-webkit-scrollbar {
+  width: 11px;
+  height: 12px;
+}
+
+[data-testid="campaign-manager-scroll"]::-webkit-scrollbar-track {
+  background: #eef2f7;
+}
+
+[data-testid="campaign-manager-scroll"]::-webkit-scrollbar-thumb {
+  border: 3px solid #eef2f7;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] table {
+  font-size: 12px;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] thead {
+  top: 0;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 8%);
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] thead th {
+  height: 64px;
+  background: #f8fafc !important;
+  color: #334155;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tbody tr {
+  transition: background-color 130ms ease, box-shadow 130ms ease;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tbody tr:nth-child(even) td:not(.sticky) {
+  background-color: #fbfcfe;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tbody tr:hover td {
+  background-color: var(--mezan-ads-accent-soft) !important;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tbody td {
+  min-height: 64px;
+  border-color: #e8edf3;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] .sticky.right-0,
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] .sticky.right-12 {
+  box-shadow: -5px 0 8px -8px rgb(15 23 42 / 35%);
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tfoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 18;
+  box-shadow: 0 -3px 12px rgb(15 23 42 / 8%);
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] tfoot td {
+  background: #f8fafc !important;
+  border-top-color: #cbd5e1;
+  white-space: nowrap;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] > div:last-child {
+  min-height: 54px;
+  background: #fff;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] input[type="checkbox"] {
+  cursor: pointer;
+}
+
+[data-testid="campaign-manager-table"][data-ads-manager-design="v1"] details > div {
+  border-radius: 0.75rem;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 16%);
+}
+
+@media (min-width: 1280px) {
+  [data-testid="marketing-platform-workspace"][data-ads-manager-mode="campaigns"] {
+    margin-inline: -0.5rem;
+  }
+
+  [data-testid="campaign-manager-scroll"] {
+    max-height: min(70vh, 790px);
+  }
+}
+
+@media (max-width: 767px) {
+  .mezan-ads-manager-primary-actions {
+    display: none;
+  }
+
+  [data-testid="campaign-manager-scroll"] {
+    max-height: 64vh;
+  }
+
+  [data-testid="campaign-manager-table"][data-ads-manager-design="v1"] > [data-mezan-ads-entity-tabs="true"] {
+    min-height: 54px;
+    padding-inline: 0.5rem;
+  }
+}

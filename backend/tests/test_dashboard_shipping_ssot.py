@@ -5,6 +5,8 @@ and the same company configs.
 Goal: prove the dashboard executive summary and /api/shipping-ledger
 use the SAME math, so the user can never see different totals.
 """
+from pathlib import Path
+
 import pytest
 
 from shipping_cost_ssot import aggregate_breakdown
@@ -66,7 +68,7 @@ def test_ssot_aggregate_matches_dashboard_shape():
 def test_dashboard_shipping_row_mirrors_ssot_fields():
     """Inspect server.py to confirm the dashboard now copies SSOT
     per-unit fields into the shipping_breakdown response."""
-    with open("/app/backend/server.py", "r") as f:
+    with (Path(__file__).resolve().parents[1] / "server.py").open(encoding="utf-8") as f:
         src = f.read()
 
     # SSOT consolidation block must exist

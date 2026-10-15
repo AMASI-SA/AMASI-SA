@@ -1,0 +1,3 @@
+# Readiness endpoint correction — WIP
+
+PR1078 deployed and verified3/3 on M1c25b0ba4da818300c4fb240bbb20a5bcbbe3dda; guardinactive, previewrunning. Live button for2026-09-17 failed HTTP404 confirmed in Production ViewLogs. Backend route mounted under /api/ads-manager, while consumer omitted /ads-manager. Correct consumer URL; regression derives expected URL from backend router declarations/composition rather than another identical mock. Remove misleading owner-login diagnosis from generic error. No backend/auth/gates/writes/scheduler changes. Fresh CI pending; not yet release-ready. OverallAIreadiness unknown. Branchfix/snap-ai-readiness-route-20260918; next CI, v5newintent, cleanclone, merge/deployverify, actuallivegates.

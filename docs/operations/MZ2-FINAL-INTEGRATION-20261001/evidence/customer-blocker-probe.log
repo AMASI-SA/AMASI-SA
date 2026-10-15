@@ -1,0 +1,6 @@
+{"native_opening_verified": true, "safe_active": true, "readiness": "available"}
+{"attempt": "customer_advance_capture", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "customer_acceptance": false}
+{"attempt": "bank_transfer_receipt_approval", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "customer_acceptance": false}
+{"attempt": "daily_general_expense_rent", "status": 423, "code": "accounting_legacy_writer_disabled", "persisted_documents_unchanged": true, "customer_acceptance": false}
+{"not_exercised": ["advance_cancel", "advance_refund_payment", "bank_transfer_delivery_conversion"], "reason": "initial capture and receipt approval cannot commit; no fabricated posted provenance"}
+{"synthetic_database_removed": true}

@@ -1,0 +1,31 @@
+{
+  "workflow": "supplier-invoice-service-policy",
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--import-mode=importlib",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "backend/tests/test_supplier_receiving.py",
+    "backend/tests/test_preparation_supplier_dispatch.py",
+    "backend/tests/test_supplier_invoice_service_eligibility.py",
+    "backend/tests/test_supplier_invoice_service_candidates.py",
+    "backend/tests/test_supplier_multi_supplier_lifecycle.py",
+    "backend/tests/test_preparation_piece_operations.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\supplier-invoice-service-policy.xml"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 6.58,
+  "test_files": [
+    "backend/tests/test_supplier_receiving.py",
+    "backend/tests/test_preparation_supplier_dispatch.py",
+    "backend/tests/test_supplier_invoice_service_eligibility.py",
+    "backend/tests/test_supplier_invoice_service_candidates.py",
+    "backend/tests/test_supplier_multi_supplier_lifecycle.py",
+    "backend/tests/test_preparation_piece_operations.py"
+  ]
+}

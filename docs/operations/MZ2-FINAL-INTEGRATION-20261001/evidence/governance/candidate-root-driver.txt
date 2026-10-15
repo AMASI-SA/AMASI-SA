@@ -1,0 +1,31 @@
+.........F...................................................            [100%]
+================================== FAILURES ===================================
+_____________________ test_concurrent_accept_one_journal ______________________
+backend\tests\test_mz2_driver_payment_review.py:169: in test_concurrent_accept_one_journal
+    results = await asyncio.gather(*[review(db, assignment, accept("bank_transfer")) for _ in range(4)])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_mz2_driver_payment_review.py:52: in review
+    return await review_driver_payment(db, owner=OWNER, actor_id=OWNER, assignment_id=assignment, payload=payload)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_driver_payment_review.py:211: in review_driver_payment
+    return await atomic_owner(db, owner, commit)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:85: in atomic_owner
+    return await _owner_transaction(db, owner, callback)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:136: in _owner_transaction
+    return await session.with_transaction(
+..\mz2-final-integration-owner-20261001\.venv\Lib\site-packages\motor\core.py:473: in with_transaction
+    ret = await coro(self)
+          ^^^^^^^^^^^^^^^^
+backend\accounting_atomic.py:124: in commit_work
+    result = await callback(scoped)
+             ^^^^^^^^^^^^^^^^^^^^^^
+backend\accounting_driver_payment_review.py:107: in commit
+    fail("driver_payment_review_not_pending")
+backend\accounting_shipping_native_contract.py:20: in fail
+    raise HTTPException(status, detail={"code": code, **detail})
+E   fastapi.exceptions.HTTPException: 409: {'code': 'driver_payment_review_not_pending'}
+=========================== short test summary info ===========================
+FAILED backend/tests/test_mz2_driver_payment_review.py::test_concurrent_accept_one_journal
+1 failed, 60 passed in 38.26s

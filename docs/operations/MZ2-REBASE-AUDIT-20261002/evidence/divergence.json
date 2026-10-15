@@ -1,0 +1,23 @@
+{
+  "production": "83363097d48e034dc7140a60c290efc684e1ffde",
+  "integration": "48bb39d983fe7003bc972c624a1508655a16f570",
+  "tree": "5a898a13ade16093e55198fcd6c96027078a2eff",
+  "status": "diverged",
+  "ahead_by": 18,
+  "behind_by": 13,
+  "merge_base": {
+    "sha": "901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/commits/901568ccaaf510dc1f84d9c28f38d368d07dc64d",
+    "html_url": "https://github.com/AMASI-SA/AMASI-SA/commit/901568ccaaf510dc1f84d9c28f38d368d07dc64d"
+  },
+  "local_conflict_files": [
+    "backend/store_delivery_driver_app_routes.py",
+    "backend/tests/test_store_delivery_accounting.py"
+  ],
+  "mutations": {
+    "production": 0,
+    "force_push": false,
+    "merge": false,
+    "rebase": false
+  }
+}

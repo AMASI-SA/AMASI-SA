@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="11" time="13.236" timestamp="2026-10-01T23:27:14.033191+03:00" hostname="أماسي"><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[None-0.00]" time="0.950" /><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[None-500.00]" time="0.871"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_2bf92c83c87544709d337db1881b8ea9'))
+earlier_method = None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("chronology_db", ["0.00", "500.00"], indirect=True)
+    @pytest.mark.parametrize("earlier_method", [None, "bank_transfer", "card_terminal"])
+    async def test_noncash_or_opening_cod_cannot_authorize_cash_before_collection(chronology_db, earlier_method):
+        db = chronology_db
+        if earlier_method:
+            await delivery(db, "early-noncash", earlier_method, "2026-09-03")
+        await delivery(db, "later-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "200.00", "2026-09-04", "backdated-cash")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException) as denied:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:102: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[bank_transfer-0.00]" time="1.064"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_fc53b7cb8e5540d48a767e8847a535ff'))
+earlier_method = 'bank_transfer'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("chronology_db", ["0.00", "500.00"], indirect=True)
+    @pytest.mark.parametrize("earlier_method", [None, "bank_transfer", "card_terminal"])
+    async def test_noncash_or_opening_cod_cannot_authorize_cash_before_collection(chronology_db, earlier_method):
+        db = chronology_db
+        if earlier_method:
+            await delivery(db, "early-noncash", earlier_method, "2026-09-03")
+        await delivery(db, "later-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "200.00", "2026-09-04", "backdated-cash")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException) as denied:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:102: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[bank_transfer-500.00]" time="1.034"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_f1aaa99e232540eebdb399f645dba165'))
+earlier_method = 'bank_transfer'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("chronology_db", ["0.00", "500.00"], indirect=True)
+    @pytest.mark.parametrize("earlier_method", [None, "bank_transfer", "card_terminal"])
+    async def test_noncash_or_opening_cod_cannot_authorize_cash_before_collection(chronology_db, earlier_method):
+        db = chronology_db
+        if earlier_method:
+            await delivery(db, "early-noncash", earlier_method, "2026-09-03")
+        await delivery(db, "later-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "200.00", "2026-09-04", "backdated-cash")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException) as denied:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:102: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[card_terminal-0.00]" time="1.002"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_39cff6aae8e24faf9a1dc49746b2c17e'))
+earlier_method = 'card_terminal'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("chronology_db", ["0.00", "500.00"], indirect=True)
+    @pytest.mark.parametrize("earlier_method", [None, "bank_transfer", "card_terminal"])
+    async def test_noncash_or_opening_cod_cannot_authorize_cash_before_collection(chronology_db, earlier_method):
+        db = chronology_db
+        if earlier_method:
+            await delivery(db, "early-noncash", earlier_method, "2026-09-03")
+        await delivery(db, "later-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "200.00", "2026-09-04", "backdated-cash")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException) as denied:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:102: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_noncash_or_opening_cod_cannot_authorize_cash_before_collection[card_terminal-500.00]" time="1.060"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_72d28d5a2a524dff8e358e52f879a75e'))
+earlier_method = 'card_terminal'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("chronology_db", ["0.00", "500.00"], indirect=True)
+    @pytest.mark.parametrize("earlier_method", [None, "bank_transfer", "card_terminal"])
+    async def test_noncash_or_opening_cod_cannot_authorize_cash_before_collection(chronology_db, earlier_method):
+        db = chronology_db
+        if earlier_method:
+            await delivery(db, "early-noncash", earlier_method, "2026-09-03")
+        await delivery(db, "later-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "200.00", "2026-09-04", "backdated-cash")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException) as denied:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:102: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_valid_later_partial_full_receipts_preserve_noncash_and_fee" time="1.445" /><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_dated_cash_credits_prevent_reusing_earlier_cash_after_later_collection" time="1.467"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_65b64b1a0e4f460db70332c61fe79cd8'))
+
+    @pytest.mark.asyncio
+    async def test_dated_cash_credits_prevent_reusing_earlier_cash_after_later_collection(chronology_db):
+        db = chronology_db
+        await delivery(db, "early-noncash", "card_terminal", "2026-09-03")
+        await delivery(db, "early-cash", "cash", "2026-09-03")
+        await receive(db, await incoming(db, "300.00", "2026-09-04", "early-remittance"))
+        await delivery(db, "late-cash", "cash", "2026-09-08")
+        await receive(db, await incoming(db, "100.00", "2026-09-09", "later-remittance"))
+        # Current cash authority is600, total dated COD is700, but cash available
+        # at this remittance date is only500-300=200. Neither may fund500 here.
+        too_much = await incoming(db, "500.00", "2026-09-05", "dated-cash-over-receive")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException, match="shipping_settlement_before_liability"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:147: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_riyadh_start_of_movement_day_remains_before_same_day_noon_collection" time="1.074"><failure message="Failed: DID NOT RAISE HTTPException">chronology_db = AsyncIOMotorDatabase(Database(MongoClient(host=['127.0.0.1:27130'], document_class=dict, tz_aware=False, connect=False...fo(name='Motor', version='3.7.1', platform='asyncio')), 'mz2_driver_cash_chronology_026a6407bcca4052856d2d492babe09f'))
+
+    @pytest.mark.asyncio
+    async def test_riyadh_start_of_movement_day_remains_before_same_day_noon_collection(chronology_db):
+        db = chronology_db
+        await delivery(db, "prior-bank", "bank_transfer", "2026-09-03")
+        await delivery(db, "same-day-cash", "cash", "2026-09-05")
+        movement = await incoming(db, "100.00", "2026-09-05", "same-day-cutoff")
+        before = await snapshot(db)
+&gt;       with pytest.raises(HTTPException, match="shipping_settlement_before_liability"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE HTTPException
+
+tests\test_mz2_driver_cash_chronology.py:162: Failed</failure></testcase><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_paused_cash_settlement_remains_423_without_mutation" time="0.930" /><testcase classname="tests.test_mz2_driver_cash_chronology" name="test_valid_cash_settlement_still_rolls_back_after_actual_journal" time="0.980" /></testsuite></testsuites>

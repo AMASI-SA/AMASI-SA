@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="6" failures="0" skipped="0" tests="6" time="9.567" timestamp="2026-09-30T03:20:15.376720+03:00" hostname="أماسي"><testcase classname="" name="backend.tests.test_supplier_receiving" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_receiving.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_receiving.py:9: in &lt;module&gt;
+    import supplier_receiving_routes as supplier_receiving_routes_module
+backend\supplier_receiving_routes.py:24: in &lt;module&gt;
+    from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase><testcase classname="" name="backend.tests.test_preparation_supplier_dispatch" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_supplier_dispatch.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_supplier_dispatch.py:8: in &lt;module&gt;
+    from preparation_supplier_dispatch import (
+backend\preparation_supplier_dispatch.py:31: in &lt;module&gt;
+    from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+backend\mezan_supplier_management_routes\__init__.py:40: in &lt;module&gt;
+    _SPEC.loader.exec_module(_BASE)
+backend\mezan_supplier_management_routes.py:21: in &lt;module&gt;
+    from fulfillment_v2_routes import _actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase><testcase classname="" name="backend.tests.test_supplier_invoice_service_eligibility" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_invoice_service_eligibility.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_invoice_service_eligibility.py:8: in &lt;module&gt;
+    from preparation_piece_operations import inherit_required_services
+backend\preparation_piece_operations.py:29: in &lt;module&gt;
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase><testcase classname="" name="backend.tests.test_supplier_invoice_service_candidates" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_invoice_service_candidates.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_invoice_service_candidates.py:10: in &lt;module&gt;
+    from supplier_receiving_routes import _supplier_invoice_service_candidate_context
+backend\supplier_receiving_routes.py:24: in &lt;module&gt;
+    from fulfillment_v2_routes import _actor_context as _base_actor_context, _require_permission
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase><testcase classname="" name="backend.tests.test_supplier_multi_supplier_lifecycle" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_supplier_multi_supplier_lifecycle.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_supplier_multi_supplier_lifecycle.py:8: in &lt;module&gt;
+    from preparation_piece_operations import PIECE_STATUS_IN_PROGRESS
+backend\preparation_piece_operations.py:29: in &lt;module&gt;
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase><testcase classname="" name="backend.tests.test_preparation_piece_operations" time="0.000"><error message="collection failure">ImportError while importing test module 'C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-integration\backend\tests\test_preparation_piece_operations.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_preparation_piece_operations.py:8: in &lt;module&gt;
+    from preparation_piece_operations import (
+backend\preparation_piece_operations.py:29: in &lt;module&gt;
+    from fulfillment_v2_routes import (
+backend\fulfillment_v2_routes.py:25: in &lt;module&gt;
+    from fulfillment_batch_pdf import generate_shipping_batch_pdf
+backend\fulfillment_batch_pdf.py:8: in &lt;module&gt;
+    from reportlab.lib.colors import HexColor
+E   ModuleNotFoundError: No module named 'reportlab'</error></testcase></testsuite></testsuites>

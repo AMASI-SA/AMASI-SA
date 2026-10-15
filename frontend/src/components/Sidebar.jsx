@@ -7,7 +7,6 @@ import {
     HandCoins, Coin, Briefcase, Lightning, Cube, ChatsCircle,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { LogoIcon } from "./MezanLogo";
 import SidebarVisibilityDialog from "./SidebarVisibilityDialog";
@@ -36,6 +35,26 @@ function normalizeAr(s) {
 // in a flat list are kept as-is — only their grouping changes. No page
 // is removed.
 const SECTIONS = [
+    {
+        id: "customer_service",
+        label: "خدمة العملاء",
+        icon: ChatsCircle,
+        requiredPermission: "customer_intelligence.inbox.read",
+        items: [
+            {
+                to: "/order-tracking-notes",
+                label: "تتبع الطلب وملاحظاته",
+                icon: ClockCounterClockwise,
+                testid: "nav-order-tracking-notes",
+            },
+            {
+                to: "/customer-intelligence?tab=conversations",
+                label: "ذكاء العملاء والمبيعات",
+                icon: ChatsCircle,
+                testid: "nav-mezan-os-customer-intelligence",
+            },
+        ],
+    },
     {
         id: "finance",
         label: "العمليات المالية",
@@ -151,30 +170,6 @@ const SECTIONS = [
                     { to: "/salla-sources", label: "مقارنة مصادر البيانات", icon: ChartPieSlice, testid: "nav-salla-sources" },
                 ],
             },
-            {
-                id: "qoyod",
-                label: "قيود",
-                items: [
-                    { to: "/integrations/qoyod/settings", label: "إعدادات قيود", icon: Gear, testid: "nav-qoyod-settings" },
-                    { to: "/integrations/qoyod/first-sync-monitor", label: "🩺 مراقبة مزامنة قيود", icon: ChartLineUp, testid: "nav-qoyod-first-sync-monitor" },
-                    { to: "/integrations/qoyod/go-live", label: "🚀 جاهزية الإنتاج (QYD-GO)", icon: Lightning, testid: "nav-qoyod-go-live" },
-                    { to: "/integrations/qoyod/migration", label: "🔁 مرحلة الانتقال — قراءة/مطابقة", icon: Queue, testid: "nav-qoyod-migration" },
-                    { to: "/integrations/qoyod/invoices", label: "فواتير قيود — مراقبة", icon: Receipt, testid: "nav-qoyod-invoices" },
-                    { to: "/integrations/qoyod/products", label: "منتجات قيود", icon: Package, testid: "nav-qoyod-products" },
-                    { to: "/integrations/qoyod/customers", label: "عملاء قيود", icon: UsersThree, testid: "nav-qoyod-customers" },
-                    { to: "/integrations/qoyod/sync-log", label: "سجل المزامنة", icon: Queue, testid: "nav-qoyod-sync-log" },
-                    { to: "/integrations/qoyod/unsent-orders", label: "📮 طلبات لم تُرسل إلى قيود", icon: Queue, testid: "nav-qoyod-unsent-orders" },
-                    { to: "/admin/qoyod-manual-send", label: "🚚 إرسال يدوي إلى قيود (خطة B)", icon: Queue, testid: "nav-qoyod-manual-send" },
-                    { to: "/integrations/qoyod/reconciliation", label: "⚖️ تقرير المطابقة ميزان ↔ قيود", icon: Queue, testid: "nav-qoyod-reconciliation" },
-                    { to: "/integrations/qoyod/pending-orders", label: "🗂️ الطلبات المعلقة", icon: Queue, testid: "nav-qoyod-pending-orders" },
-                    { to: "/integrations/qoyod/eligible-orders", label: "📋 الطلبات المؤهلة (Audit)", icon: Queue, testid: "nav-qoyod-eligible-orders" },
-                    { to: "/integrations/qoyod/unallocated-receipts", label: "🧾 سندات قبض غير مربوطة", icon: Receipt, testid: "nav-qoyod-unallocated-receipts" },
-                    { to: "/integrations/qoyod/rounding-report", label: "🔬 تقرير فروق التقريب", icon: Receipt, testid: "nav-qoyod-rounding-report" },
-                    { to: "/integrations/qoyod/rounding-dry-run", label: "🧪 محاكاة Phase 2 (Dry-Run)", icon: Receipt, testid: "nav-qoyod-rounding-dry-run" },
-                    { to: "/integrations/qoyod/cod-receipts-report", label: "🧾 تقرير COD المُرحَّل كمدفوع", icon: Receipt, testid: "nav-qoyod-cod-receipts-report" },
-                    { to: "/integrations/qoyod/error-log", label: "سجل الأخطاء", icon: Receipt, testid: "nav-qoyod-error-log" },
-                ],
-            },
         ],
     },
     {
@@ -220,10 +215,10 @@ const SECTIONS = [
                 testid: "nav-mezan-os-integrations",
             },
             {
-                to: "/customer-intelligence",
-                label: "ذكاء العملاء والمبيعات",
-                icon: ChatsCircle,
-                testid: "nav-mezan-os-customer-intelligence",
+                to: "/integrations-v2/qoyod",
+                label: "قيود — التشغيل التلقائي",
+                icon: Receipt,
+                testid: "nav-mezan-os-qoyod",
             },
             {
                 to: "/ads-manager",
@@ -275,6 +270,34 @@ const SECTIONS = [
 
 const OPEN_SECTION_STORAGE_KEY = "hesab.sidebar.openSection";
 
+export function sidebarSectionsForUser(user) {
+    const visibleSections = SECTIONS.filter(
+        (section) => (
+            (!section.ownerOnly || user?.is_owner)
+            && (!section.requiredPermission
+                || user?.is_owner
+                || user?.permissions?.includes(section.requiredPermission))
+        ),
+    );
+
+    if (!user?.is_owner) return visibleSections;
+
+    return visibleSections.map((section) => {
+        if (section.id !== "operations") return section;
+
+        const items = section.items.filter((item) => item.to !== "/order-review");
+        const settingsIdx = items.findIndex((item) => item.to === "/settings");
+        const teamLink = {
+            to: "/team",
+            label: "إدارة الفريق",
+            icon: UsersThree,
+            testid: "nav-team",
+        };
+        items.splice(settingsIdx >= 0 ? settingsIdx : items.length, 0, teamLink);
+        return { ...section, items };
+    });
+}
+
 
 // Flatten any section into a flat list of items, walking subgroups when
 // present. Used by path-matching, search filtering, and the visibility
@@ -293,7 +316,8 @@ function flattenSectionItems(section) {
 function findSectionFor(pathname) {
     for (const sec of SECTIONS) {
         for (const item of flattenSectionItems(sec)) {
-            if (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to)) {
+            const itemPath = String(item.to || "").split("?")[0];
+            if (itemPath === "/" ? pathname === "/" : pathname.startsWith(itemPath)) {
                 return sec.id;
             }
         }
@@ -308,38 +332,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
 
     // Owner-only workspaces are hidden completely from non-owner users.
     // The team-management link remains inside إدارة التشغيل.
-    const sections = useMemo(() => {
-        const visibleSections = SECTIONS.filter(
-            (section) => !section.ownerOnly || user?.is_owner
-        );
-
-        if (!user?.is_owner) return visibleSections;
-
-        return visibleSections.map((section) => {
-            if (section.id !== "operations") return section;
-
-            const items = section.items.filter((item) => item.to !== "/order-review");
-            const settingsIdx = items.findIndex(
-                (item) => item.to === "/settings"
-            );
-            const teamLink = {
-                to: "/team",
-                label: "إدارة الفريق",
-                icon: UsersThree,
-                testid: "nav-team",
-            };
-
-            const insertAt =
-                settingsIdx >= 0 ? settingsIdx : items.length;
-
-            items.splice(insertAt, 0, teamLink);
-
-            return {
-                ...section,
-                items,
-            };
-        });
-    }, [user?.is_owner]);
+    const sections = useMemo(
+        () => sidebarSectionsForUser(user),
+        [user],
+    );
 
     // ── Iter-124 → Iter-141 — User-hidden pages (now cross-device) ──
     const [hiddenSet, setHiddenSet] = useState(() => loadHiddenPages());
@@ -350,28 +346,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
         return () => window.removeEventListener(SIDEBAR_VISIBILITY_EVENT, handler);
     }, []);
 
-    // ── Qoyod monitor — failure indicator dot ───────────────────────
-    // Polls the lightweight stats endpoint every 20s so the sidebar
-    // shows a red alert next to "مراقبة مزامنة قيود" the moment a
-    // DEAD_LETTER or PARTIAL_FAILURE row appears. Only the count is
-    // pulled — no payload, no PII.
-    const [qoyodFailedCount, setQoyodFailedCount] = useState(0);
-    useEffect(() => {
-        let mounted = true;
-        const API = process.env.REACT_APP_BACKEND_URL + "/api";
-        const fetchStats = async () => {
-            try {
-                const { data } = await axios.get(
-                    `${API}/integrations/qoyod/first-sync-monitor/stats/summary`);
-                if (mounted) setQoyodFailedCount(data?.stats?.failed || 0);
-            } catch {
-                /* silent — sidebar must never block on a 401/5xx */
-            }
-        };
-        fetchStats();
-        const id = setInterval(fetchStats, 20000);
-        return () => { mounted = false; clearInterval(id); };
-    }, []);
     // Iter-141 — pull the canonical list from the server on first
     // mount so a sidebar layout hidden on one device shows up
     // immediately on every other device the merchant uses.
@@ -573,12 +547,14 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             ? section.subgroups.flatMap((g) => g.items)
                             : (section.items || []);
                         const containsActive = sectionItems.some(
-                            (i) => i.to === "/" ? location.pathname === "/" : location.pathname.startsWith(i.to),
+                            (i) => {
+                                const itemPath = String(i.to || "").split("?")[0];
+                                return itemPath === "/"
+                                    ? location.pathname === "/"
+                                    : location.pathname.startsWith(itemPath);
+                            },
                         );
                         const renderItem = ({ to, label, icon: Icon, testid }) => {
-                            const showAlertDot =
-                                testid === "nav-qoyod-first-sync-monitor"
-                                && qoyodFailedCount > 0;
                             return (
                             <NavLink
                                 key={to}
@@ -597,15 +573,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                             >
                                 <Icon size={17} weight="duotone" />
                                 <span className="truncate flex-1">{label}</span>
-                                {showAlertDot && (
-                                    <span
-                                        data-testid="nav-qoyod-monitor-alert-dot"
-                                        title={`${qoyodFailedCount} سجل فاشل`}
-                                        className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold animate-pulse"
-                                    >
-                                        {qoyodFailedCount}
-                                    </span>
-                                )}
                             </NavLink>
                             );
                         };
@@ -631,13 +598,6 @@ export default function Sidebar({ mobileOpen = false, onMobileClose = () => {} }
                                     <span className="flex items-center gap-2">
                                         <SectionIcon size={20} weight="duotone" />
                                         <span>{section.label}</span>
-                                        {section.id === "integrations" && qoyodFailedCount > 0 && (
-                                            <span
-                                                data-testid="sidebar-integrations-alert-dot"
-                                                title={`${qoyodFailedCount} سجل فاشل في مراقبة قيود`}
-                                                className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse"
-                                            />
-                                        )}
                                     </span>
                                     <CaretDown
                                         size={14}

@@ -7,7 +7,11 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ai_store_operations_foundation import AI_ACTION_LOG, ROLE_ASSIGNMENTS
+from ai_store_access_contract import (
+    find_role_assignment,
+    role_assignment_owner_user_id,
+)
+from ai_store_operations_foundation import AI_ACTION_LOG
 from product_media_ai_routes import AI_MEDIA_JOBS
 from product_media_draft_routes import MEDIA_DRAFTS, media_diff, normalize_media_rows
 from product_media_upload_routes import MEDIA_UPLOADS
@@ -74,7 +78,11 @@ def make_product_media_ai_draft_router(db: Any, current_user: Callable) -> APIRo
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = str(user["id"])
-        assignment = await db[ROLE_ASSIGNMENTS].find_one({"user_id": user_id}, {"_id": 0})
+        assignment = await find_role_assignment(
+            db,
+            owner_user_id=role_assignment_owner_user_id(user),
+            user_id=user_id,
+        )
         if not _has_permission(user, assignment, "products.media.edit"):
             raise HTTPException(status_code=403, detail={"code": "products_media_edit_required"})
 

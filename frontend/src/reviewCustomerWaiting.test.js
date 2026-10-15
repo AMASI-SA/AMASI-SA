@@ -1,9 +1,21 @@
 import {
   WAITING_CUSTOMER_REVIEW_CSS,
+  loadWaiting,
   reviewQueueTabVisibility,
   waitingCustomerActionLabel,
   waitingCustomerCount,
 } from "./reviewCustomerWaiting";
+import api from "./lib/api";
+
+jest.mock("./lib/api", () => ({
+  __esModule: true,
+  default: { get: jest.fn(), post: jest.fn() },
+}));
+
+afterEach(() => {
+  document.body.innerHTML = "";
+  api.get.mockReset();
+});
 
 
 test("customer waiting action changes between queue and resume modes", () => {
@@ -39,4 +51,25 @@ test("customer waiting drawer hides edit controls but keeps complete action avai
   expect(WAITING_CUSTOMER_REVIEW_CSS).not.toContain(
     "data-review-customer-complete-action",
   );
+});
+
+test("polls only while the customer-review queue page is mounted", async () => {
+  api.get.mockResolvedValue({ data: { items: [] } });
+
+  document.body.innerHTML = "<main><h1>تسجيل الدخول</h1></main>";
+  await loadWaiting();
+  expect(api.get).not.toHaveBeenCalled();
+
+  document.body.innerHTML = "<main><h1>لوحة التحكم</h1></main>";
+  await loadWaiting();
+  expect(api.get).not.toHaveBeenCalled();
+
+  document.body.innerHTML = "<header><h1>طلبات بانتظار المراجعة</h1></header>";
+  await loadWaiting();
+  await loadWaiting();
+  expect(api.get).toHaveBeenCalledTimes(2);
+
+  document.body.innerHTML = "<main><h1>الطلبات</h1></main>";
+  await loadWaiting();
+  expect(api.get).toHaveBeenCalledTimes(2);
 });

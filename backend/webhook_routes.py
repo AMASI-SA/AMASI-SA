@@ -38,6 +38,10 @@ from report_builder import build_report
 from orders_db import upsert_order, orders_to_parsed
 from product_costs import attach_cost_to_order_doc
 from import_jobs import get_order_lock
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -276,11 +280,13 @@ def _build_router(db) -> APIRouter:
         items = body if isinstance(body, list) else [body]
         accepted = 0
         errors: list[dict] = []
+        synced_dates: set[str] = set()
         for raw in items:
             try:
                 payload = TikTokSpendIn(**raw)
             except Exception as exc:
-                errors.append({"data": raw, "error": str(exc)})
+                logger.exception("TikTok webhook payload validation failed", exc_info=exc)
+                errors.append({"data": raw, "error": "Invalid TikTok payload"})
                 continue
             # Strict date format
             import re
@@ -319,13 +325,57 @@ def _build_router(db) -> APIRouter:
                 upsert=True,
             )
             accepted += 1
+            synced_dates.add(payload.date)
 
         # Update webhook token stats for visibility on the UI
         await db.webhook_tokens.update_one(
             {"token": token},
             {"$set": {"last_sync_at": datetime.now(timezone.utc).isoformat()}},
         )
-        return {"accepted": accepted, "errors": errors}
+        # Make.com is the temporary TikTok transport, while Dashboard Advanced
+        # reads spend strictly from ad_account_ledger. Reconcile only the exact
+        # dates accepted above into the user's sole TikTok ad account. The shared
+        # sync engine applies the cumulative delta, so campaign retries/overwrites
+        # never append duplicate spend.
+        ledger_sync: dict[str, Any] = {"status": "not_requested", "results": []}
+        if synced_dates:
+            tiktok_accounts = await db.counterparties.find(
+                {"user_id": user_id, "kind": "ad_account", "ad_provider": "tiktok"},
+                {"_id": 0, "id": 1},
+            ).sort("created_at", 1).to_list(3)
+            if len(tiktok_accounts) == 1:
+                account_id = tiktok_accounts[0]["id"]
+                ledger_results: list[dict] = []
+                try:
+                    # Lazy import avoids coupling route registration order.
+                    from ad_account_routes import _run_sync_for_all
+
+                    for spend_date in sorted(synced_dates):
+                        ledger_results.extend(await _run_sync_for_all(
+                            db,
+                            user_id,
+                            spend_date,
+                            spend_date,
+                            force=True,
+                            provider_filter={"tiktok"},
+                            include_make=True,
+                            account_ids={account_id},
+                        ))
+                    ledger_sync = {"status": "synced", "results": ledger_results}
+                except Exception as exc:
+                    logger.exception("TikTok Make ledger reconciliation failed")
+                    ledger_sync = {"status": "failed", "reason": "ledger_reconciliation_failed"}
+            else:
+                ledger_sync = {
+                    "status": "skipped",
+                    "reason": (
+                        "missing_tiktok_ad_account" if not tiktok_accounts
+                        else "ambiguous_tiktok_ad_accounts"
+                    ),
+                    "accounts_found": len(tiktok_accounts),
+                }
+
+        return {"accepted": accepted, "errors": errors, "ledger_sync": ledger_sync}
 
     @router.get("/tiktok/recent")
     async def tiktok_recent(days: int = Query(30, ge=1, le=365), user: dict = Depends(current_user)):
@@ -873,6 +923,16 @@ def _build_router(db) -> APIRouter:
                 status_code=400,
                 detail=f"لا توجد طلبات بين {payload.date_from} و {payload.date_to}",
             )
+
+        attribution_query = {
+            "user_id": user["id"],
+            "order_date": {"$gte": payload.date_from, "$lte": payload.date_to},
+        }
+        attribution_rows = await db.unified_orders.find(
+            attribution_query,
+            SALLA_RAW_ATTRIBUTION_PROJECTION,
+        ).to_list(50000)
+        attach_projected_salla_attribution(orders, attribution_rows)
 
         parsed = orders_to_parsed(orders)
         settings = await ensure_user_settings(db, user["id"])

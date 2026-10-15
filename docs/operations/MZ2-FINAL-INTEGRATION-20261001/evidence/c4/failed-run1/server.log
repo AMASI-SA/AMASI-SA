@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\scripts\testing\mz2_smoke_b_acceptance\run.py", line 162, in <module>
+    child()
+    ~~~~~^^
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\scripts\testing\mz2_smoke_b_acceptance\run.py", line 68, in child
+    import server
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\server.py", line 69, in <module>
+    from exports import export_report_excel, export_report_pdf
+  File "C:\Users\amasi\mz2-c-rich-shipping-20261001\backend\exports.py", line 6, in <module>
+    import xlsxwriter
+ModuleNotFoundError: No module named 'xlsxwriter'

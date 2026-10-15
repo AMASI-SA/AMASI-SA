@@ -1,0 +1,55 @@
+/* Advanced Dashboard — requested sizing tune for the executive profit summary only. */
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+    font-size: clamp(1.3125rem, 1.875vw, 1.8375rem) !important;
+}
+
+/* Net-profit footer: reduce the overall visual footprint by 20%. */
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+    min-height: 110px !important;
+    padding: 1rem 1.12rem !important;
+}
+
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+    gap: 0.44rem !important;
+    font-size: clamp(1.6rem, 3.2vw, 2.32rem) !important;
+}
+
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-net-margin"] {
+    min-width: 3.92rem !important;
+    padding: 0.44rem 0.576rem !important;
+    font-size: 0.64rem !important;
+}
+
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child > span:last-child {
+    font-size: 0.76rem !important;
+}
+
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:first-child {
+    font-size: clamp(0.96rem, 1.84vw, 1.32rem) !important;
+}
+
+html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:last-child {
+    font-size: 0.608rem !important;
+}
+
+@media (max-width: 639px) {
+    html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+        font-size: 1.2rem !important;
+    }
+
+    html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+        min-height: 96px !important;
+        padding: 0.8rem !important;
+    }
+
+    html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+        gap: 0.32rem !important;
+        font-size: 1.44rem !important;
+    }
+
+    html body [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-net-margin"] {
+        min-width: 3.2rem !important;
+        padding: 0.36rem 0.416rem !important;
+        font-size: 0.544rem !important;
+    }
+}

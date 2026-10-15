@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
@@ -43,6 +44,13 @@ class OrderRepository(Protocol):
         order_number: str,
     ) -> Optional[OrderDiscoveryRow]: ...
 
+    async def get_salla_orders(
+        self,
+        *,
+        user_id: str,
+        order_numbers: list[str],
+    ) -> list[OrderDiscoveryRow]: ...
+
 
 _STATUS_PATTERNS: dict[str, str] = {
     "under_review": r"^(under[_ ]?review|waiting[_ ]?review|pending[_ ]?review|بإنتظار المراجعة|بانتظار المراجعة|انتظار المراجعة)$",
@@ -57,9 +65,34 @@ _STATUS_PATTERNS: dict[str, str] = {
 
 _ATTRIBUTION_FIELDS = (
     "source",
+    "source_native",
+    "order_source",
+    "traffic_source",
+    "marketing_source",
+    "ad_platform_source",
+    "source_name",
+    "channel",
+    "platform",
     "utm_source",
     "utm_medium",
     "utm_campaign",
+    "utm_content",
+    "utm_term",
+    "campaign_id",
+    "campaign_name",
+    "ad_squad_id",
+    "ad_squad_name",
+    "adset_id",
+    "adset_name",
+    "ad_id",
+    "ad_name",
+    "sc_click_id",
+    "sc_cookie1",
+    "fbclid",
+    "gclid",
+    "ttclid",
+    "source_campaign_id",
+    "source_campaign_name",
     "device",
     "is_gift",
     "gift",
@@ -76,6 +109,7 @@ _ATTRIBUTION_FIELDS = (
 # pages or mutating storage.
 _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     *_ATTRIBUTION_FIELDS,
+    CURRENT_SHIPPING,
     "customer_name",
     "customer_mobile",
     "payment_method",
@@ -88,6 +122,8 @@ _V2_CANONICAL_ROOT_FIELDS = tuple(dict.fromkeys((
     "payment_receipt_url",
     "shipping_company",
     "shipping_company_code",
+    "shipping_company_logo",
+    "salla_shipment_id",
     "shipping_method",
     "shipping_status",
     "shipment_status",
@@ -156,6 +192,10 @@ def _v2_address_fallback(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, 
 
 def _apply_v2_root_fallbacks(raw: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
     hydrated = deepcopy(raw)
+    current_shipping = projected_shipping(row)
+    if current_shipping:
+        # Projection only: archived shipments remain unchanged in storage.
+        hydrated[CURRENT_SHIPPING] = current_shipping
 
     for field in _ATTRIBUTION_FIELDS:
         _fill_missing(hydrated, field, row.get(field))
@@ -311,9 +351,71 @@ def _normalized_status_expression() -> dict[str, Any]:
     return _normalized_text_expression(_effective_status_expression())
 
 
+def _pending_review_membership_pipeline(
+    *, user_id: str, workflow_collection: str, completed_stages: set[str],
+) -> list[dict[str, Any]]:
+    """Provider candidates minus local completion, before paging or counting."""
+    return [
+        {
+            "$match": {
+                "user_id": str(user_id),
+                "raw_by_source.salla_direct": {"$type": "object"},
+                "order_number": {"$type": "string", "$ne": ""},
+                "order_date": {"$type": "string", "$ne": ""},
+                "$expr": {
+                    "$regexMatch": {
+                        "input": {"$toString": _effective_status_expression()},
+                        "regex": _STATUS_PATTERNS["under_review"],
+                        "options": "i",
+                    },
+                },
+            },
+        },
+        {
+            "$lookup": {
+                "from": workflow_collection,
+                "let": {"tenant": "$user_id", "number": "$order_number"},
+                "pipeline": [
+                    {
+                        "$match": {
+                            "stage": {"$in": sorted(completed_stages)},
+                            "$expr": {
+                                "$and": [
+                                    {"$eq": ["$user_id", "$$tenant"]},
+                                    {"$eq": ["$order_number", "$$number"]},
+                                ],
+                            },
+                        },
+                    },
+                    {"$limit": 1},
+                    {"$project": {"_id": 1}},
+                ],
+                "as": "completed_reviews",
+            },
+        },
+        {"$match": {"completed_reviews": {"$eq": []}}},
+    ]
+
+
 class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
+
+    async def financial_delivery_snapshot(self, *, user_id: str, order_number: str):
+        """Exact provider snapshot for a provenance adapter, no root fallbacks.
+
+        Storage remains operational. Financial consumers must validate/seal the
+        returned provider facts and never use mutable aggregate order balances.
+        """
+        rows = await self._collection.find({"user_id": user_id, "order_number": order_number,
+            "raw_by_source.salla_direct": {"$type": "object"}},
+            {"raw_by_source.salla_direct": 1, "g47_salla_snapshot": 1}).limit(2).to_list(2)
+        return rows[0] if len(rows) == 1 else None
+
+    async def pin_financial_delivery_snapshot(self, *, user_id: str, snapshot: dict):
+        return await self._collection.update_one({"_id": snapshot["_id"], "user_id": user_id,
+            "raw_by_source.salla_direct": {"$eq": snapshot["raw_by_source"]["salla_direct"]}},
+            {"$inc": {"mz2_shipping_source_revision": 1}})
 
     async def list_salla_orders(
         self,
@@ -386,6 +488,90 @@ class MongoOrderRepository:
                 rows.append(mapped)
         return rows
 
+    async def numbered_pending_review_order_numbers(
+        self,
+        *,
+        user_id: str,
+        page: int,
+        limit: int,
+        workflow_collection: str,
+        completed_stages: set[str],
+    ) -> tuple[list[str], int]:
+        """Page and count the same tenant-scoped review queue in one DB snapshot.
+
+        The status expression matches list_salla_orders.  Exclude workflows
+        before both the page slice and the count, so each page has the same
+        membership and the badge is the full pending-review count.
+        """
+        if page < 1 or not 1 <= limit <= 50:
+            raise ValueError("invalid review page or limit")
+
+        pipeline = _pending_review_membership_pipeline(
+            user_id=user_id, workflow_collection=workflow_collection,
+            completed_stages=completed_stages,
+        ) + [
+            {
+                "$facet": {
+                    "items": [
+                        {"$sort": {"order_date": -1, "order_number": -1}},
+                        {"$skip": (page - 1) * limit},
+                        {"$limit": limit},
+                        {"$project": {"_id": 0, "order_number": 1}},
+                    ],
+                    "count": [{"$count": "value"}],
+                },
+            },
+        ]
+        results = await self._collection.aggregate(pipeline).to_list(length=1)
+        result = results[0] if results else {}
+        numbers = [
+            str(row["order_number"])
+            for row in result.get("items", [])
+            if row.get("order_number")
+        ]
+        count = result.get("count", [])
+        total = int(count[0]["value"]) if count else 0
+        return numbers, total
+
+    async def cursor_pending_review_order_numbers(
+        self,
+        *,
+        user_id: str,
+        limit: int,
+        workflow_collection: str,
+        completed_stages: set[str],
+        before_order_date: Optional[str] = None,
+        before_order_number: Optional[str] = None,
+    ) -> tuple[list[dict[str, str]], int]:
+        """Read a keyset page and the full local pending count in one query.
+
+        The caller may request one extra row to determine whether a next page
+        exists. The count describes the entire queue, including earlier pages.
+        """
+        if not 1 <= limit <= 51:
+            raise ValueError("invalid review limit")
+        if bool(before_order_date) != bool(before_order_number):
+            raise ValueError("incomplete review cursor")
+        item_steps: list[dict[str, Any]] = []
+        if before_order_date and before_order_number:
+            item_steps.append({"$match": {"$or": [
+                {"order_date": {"$lt": before_order_date}},
+                {"order_date": before_order_date, "order_number": {"$lt": before_order_number}},
+            ]}})
+        item_steps.extend([
+            {"$sort": {"order_date": -1, "order_number": -1}},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "order_number": 1, "order_date": 1}},
+        ])
+        pipeline = _pending_review_membership_pipeline(
+            user_id=user_id, workflow_collection=workflow_collection,
+            completed_stages=completed_stages,
+        ) + [{"$facet": {"items": item_steps, "count": [{"$count": "value"}]}}]
+        results = await self._collection.aggregate(pipeline).to_list(length=1)
+        result = results[0] if results else {}
+        count = result.get("count", [])
+        return result.get("items", []), int(count[0]["value"]) if count else 0
+
     async def get_salla_order(
         self,
         *,
@@ -408,6 +594,42 @@ class MongoOrderRepository:
             },
         )
         return self._to_discovery_row(row)
+
+    async def get_salla_orders(
+        self,
+        *,
+        user_id: str,
+        order_numbers: list[str],
+    ) -> list[OrderDiscoveryRow]:
+        """Load an exact tenant-scoped order set with one Mongo query."""
+        normalized = list(dict.fromkeys(
+            str(value or "").strip()
+            for value in order_numbers
+            if str(value or "").strip()
+        ))
+        if not normalized:
+            return []
+        cursor = self._collection.find(
+            {
+                "user_id": str(user_id),
+                "order_number": {"$in": normalized},
+                "raw_by_source.salla_direct": {"$exists": True},
+            },
+            {
+                "_id": 0,
+                "order_number": 1,
+                "order_date": 1,
+                "order_status": 1,
+                "raw_by_source.salla_direct": 1,
+                **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS},
+            },
+        )
+        rows: list[OrderDiscoveryRow] = []
+        async for row in cursor:
+            mapped = self._to_discovery_row(row)
+            if mapped is not None:
+                rows.append(mapped)
+        return rows
 
     @staticmethod
     def _to_discovery_row(row: Optional[dict[str, Any]]) -> Optional[OrderDiscoveryRow]:

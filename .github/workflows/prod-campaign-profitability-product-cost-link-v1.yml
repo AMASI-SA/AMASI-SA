@@ -1,0 +1,56 @@
+name: Production Campaign Native Cost Deep Link V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/campaignProfitabilityProductNavigation.js"
+      - "frontend/src/campaignProfitabilityProductNavigation.test.js"
+      - ".github/workflows/prod-campaign-profitability-product-cost-link-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test native profitability product links
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/campaignProfitabilityProductNavigation.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+          src/lib/mezanV2CostLinks.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce native cost deep-link contract
+        working-directory: .
+        run: |
+          TABLE=frontend/src/components/marketing/CampaignManagerTable.jsx
+          NAV=frontend/src/campaignProfitabilityProductNavigation.js
+          grep -q 'فتح المنتج وإضافة التكلفة' "$TABLE"
+          grep -q 'lookup_sku' "$NAV"
+          grep -q 'listWorkspaceProducts' "$NAV"
+          grep -q 'syncRecentProductsV2' "$NAV"
+          grep -q 'searchParams.set("product"' "$NAV"
+          grep -q 'searchParams.set("focus", "cost")' "$NAV"
+          grep -q 'mutation_observer_used: false' "$NAV"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$NAV"

@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from auth import get_current_user_from_db
 from ledger_core import (
@@ -250,18 +250,28 @@ class BankTransferIn(BaseModel):
 #   (2) partial transfer + shipping cost withheld    → bank_amount + shipping_cost
 #   (3) partial transfer + COD fee                   → bank_amount + cod_fee
 #   (4) partial transfer + shipping + COD fee + ...  → all legs
+#   (5) no bank transfer; courier keeps COD against shipping/fees
 # Anything left unsettled stays on the courier's `cod_receivable`.
 class CodSettleIn(BaseModel):
     bank_amount: float = Field(0, ge=0)
     bank_account_id: Optional[str] = None
     shipping_cost: float = Field(0, ge=0)
+    # COD commission and its recoverable input VAT are separate legs.  The
+    # provider tax invoice/statement supplies the authoritative split.
     cod_fee: float = Field(0, ge=0)
+    cod_fee_vat: float = Field(0, ge=0)
     other_fees: float = Field(0, ge=0)
     other_fees_category: Optional[str] = Field(
         None, description="Required when other_fees > 0. Expense "
                           "category code (e.g. 'gateway_fees').")
     payment_date: Optional[str] = None
     notes: Optional[str] = ""
+
+    @model_validator(mode="after")
+    def _validate_cod_fee_vat(self):
+        if self.cod_fee_vat > 0 and self.cod_fee <= 0:
+            raise ValueError("cod_fee_vat requires a positive cod_fee")
+        return self
 
 
 class ExpenseRecordIn(BaseModel):
@@ -451,7 +461,7 @@ async def _account_live_balance(
     return float(res["balance"]), res.get("account") or {}
 
 
-async def _ensure_opening_balance_seeded(
+async def _seed_legacy_opening_engine(
     db, *, user_id: str, account_id: str,
 ) -> None:
     """Iter-192 — lazy backfill so the ledger becomes the single source
@@ -495,6 +505,23 @@ async def _ensure_opening_balance_seeded(
              "entry_type": "opening_balance"},
         ],
     )
+
+
+async def _ensure_opening_balance_seeded(db, *, user_id: str, account_id: str) -> None:
+    """Public callers may use an existing ledger, never seed a legacy opening.
+
+    The historical engine is retained separately without a registered caller.
+    A nonzero unseeded balance fails before the caller writes any movement.
+    """
+    from accounting_opening_quarantine import reject_alternate_opening
+    existing = await db.general_ledger.find_one({
+        "user_id": user_id, "entity_type": "bank", "entity_id": account_id, "status": "posted",
+    }, {"_id": 1})
+    if existing:
+        return
+    account = await db.accounts.find_one({"user_id": user_id, "id": account_id}, {"current_balance": 1})
+    if account and abs(float(account.get("current_balance") or 0)) >= 0.005:
+        reject_alternate_opening()
 
 
 async def _enforce_sufficient_funds(
@@ -2445,7 +2472,9 @@ def make_universal_router(db) -> APIRouter:
                     entity_id=courier_id, sub_account="cod_receivable")}
 
     # ───────────────────────────────────────────────────────────────
-    # Iter-190 — Multi-leg COD settlement with a shipping company.
+    # Iter-190 / MZ2-FIN-CUTOVER-001 — Multi-leg COD settlement with a
+    # shipping company. The bank leg may be zero when the courier nets the
+    # whole collection against shipping/fees.
     # Replaces the simple `cod-deposit` for non-trivial real-world
     # settlements (partial transfer + withheld shipping + COD fee +
     # other fees). Posts ONE balanced txn_group:
@@ -2472,8 +2501,9 @@ def make_universal_router(db) -> APIRouter:
         bank_amt = round(float(payload.bank_amount or 0), 2)
         ship_amt = round(float(payload.shipping_cost or 0), 2)
         cod_fee  = round(float(payload.cod_fee or 0), 2)
+        cod_fee_vat = round(float(payload.cod_fee_vat or 0), 2)
         other    = round(float(payload.other_fees or 0), 2)
-        total    = round(bank_amt + ship_amt + cod_fee + other, 2)
+        total    = round(bank_amt + ship_amt + cod_fee + cod_fee_vat + other, 2)
 
         if total <= 0:
             raise HTTPException(
@@ -2561,6 +2591,15 @@ def make_universal_router(db) -> APIRouter:
                 "metadata": {"leg": "cod_fee",
                               "courier_id": courier_id},
             })
+        if cod_fee_vat > 0:
+            entries.append({
+                "entity_type": "tax", "entity_id": "input_vat",
+                "sub_account": "recoverable",
+                "side": "debit", "amount": cod_fee_vat,
+                "entry_type": "courier_cod_settle",
+                "metadata": {"leg": "cod_fee_input_vat",
+                              "courier_id": courier_id},
+            })
         if other > 0:
             entries.append({
                 "entity_type": "expense",
@@ -2593,6 +2632,7 @@ def make_universal_router(db) -> APIRouter:
                 "bank_amount": bank_amt,
                 "shipping_cost": ship_amt,
                 "cod_fee": cod_fee,
+                "cod_fee_vat": cod_fee_vat,
                 "other_fees": other,
                 "other_fees_category": payload.other_fees_category,
             },
@@ -2983,7 +3023,7 @@ def make_universal_router(db) -> APIRouter:
     # Phase 4 — Financial Position (ALL from Ledger)
     # ═══════════════════════════════════════════════════════════════
     @router.get("/financial-position")
-    async def financial_position(user: dict = Depends(current_user)):
+    async def financial_position(as_of: Optional[str] = Query(None), user: dict = Depends(current_user)):
         """Iter-217 — SSOT financial position computed strictly from
         `general_ledger` (with the documented Iter-192/217 fallback
         for accounts that have ZERO ledger activity). Returns a
@@ -2992,7 +3032,27 @@ def make_universal_router(db) -> APIRouter:
         `/financial-position-ledger` (new page) can consume it.
         """
         from financial_position_ssot import compute_financial_position
-        return await compute_financial_position(db, user["id"])
+        from accounting_module_contract import accounting_owner_id, require_accounting_permission
+        if as_of is not None:
+            from accounting_write_control import fresh_actor
+            actor = await fresh_actor(db, user)
+            require_accounting_permission(actor, "accounting.journals_reports.view")
+        else:
+            # Preserve general-report access, but resolve the persisted merchant
+            # relationship rather than reading a team member's empty tenant.
+            actor = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+            if not actor or actor.get("is_active") is False or actor.get("disabled") is True:
+                raise HTTPException(403, "accounting_actor_unavailable")
+        owner = accounting_owner_id(actor)
+        if not owner:
+            raise HTTPException(403, "accounting_owner_scope_missing")
+        try:
+            result = await compute_financial_position(db, owner, as_of=as_of)
+            return {**result, "report_scope": "LEGACY", "diagnostic_only": True,
+                    "read_only": True, "mz2_authoritative": False,
+                    "mz2_report_path": "/api/financial-provider-apps/accounting-module/reports/financial-position"}
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     # ═══════════════════════════════════════════════════════════════
     # Trial Balance — unified accounting report across all entities

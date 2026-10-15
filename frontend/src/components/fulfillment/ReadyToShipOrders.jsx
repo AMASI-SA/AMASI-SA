@@ -1,183 +1,563 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
-    CheckCircle, ClipboardText, Package, Printer, SpinnerGap, Truck, WarningCircle,
+    ArrowLeft,
+    Barcode,
+    Camera,
+    CheckCircle,
+    ClipboardText,
+    DownloadSimple,
+    MagnifyingGlass,
+    Package,
+    Printer,
+    SpinnerGap,
+    Truck,
+    UserCircle,
+    WarningCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import {
-    claimReadyToShipBatch,
-    confirmFulfillmentBatchHandoff,
-    confirmFulfillmentBatchPacked,
-    listFulfillmentBatches,
+    confirmCompletedCarrierLabelPrint,
     listReadyToShipOrders,
-    printFulfillmentBatch,
 } from "../../services/fulfillmentV2";
+import {
+    markAssemblyPieceReady,
+    newAssemblyReadyRequestId,
+    searchAssemblyOrder,
+} from "../../services/preparationWorkService";
+import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
+import { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
+import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
+import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
+import { shippingScanFeedback } from "./shippingScanFeedback";
 
-const STATUS_LABELS = {
-    claimed: "تم الاستلام",
-    printed: "تمت الطباعة",
-    packed: "تم التغليف",
-    handed_off: "سُلّمت للناقل",
+const ASSEMBLY_BLOCKERS = {
+    assembly_piece_supplier_receipt_required: "استلم المنتج من المورد أولًا، ثم من موظف التجهيز",
+    assembly_piece_preparation_receipt_required: "استلم المنتج من موظف التجهيز أولًا",
+    assembly_piece_stopped: "المنتج متوقف",
+    assembly_order_not_ready: "مرحلة الطلب لا تسمح بإكمال المنتج الآن",
 };
+
+const SHIPMENT_STATE_LABELS = {
+    awaiting_assignment: "بانتظار إسناد مندوب المتجر",
+    assigned_waiting_pickup: "تم إسنادها وبانتظار استلام المندوب",
+    awaiting_carrier_handoff: "بانتظار موظف تسليم الشحن",
+    with_handoff_employee: "مع موظف تسليم الشحن",
+    carrier_in_delivery: "جاري التوصيل",
+    delivering: "جاري التوصيل",
+    delivered: "تم التوصيل",
+};
+
+function ProductImage({ piece }) {
+    if (piece.image_url) {
+        return (
+            <img
+                src={piece.image_url}
+                alt={piece.product_name || "منتج"}
+                className="h-24 w-24 shrink-0 rounded-2xl border border-slate-200 object-cover sm:h-28 sm:w-28"
+            />
+        );
+    }
+    return (
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 sm:h-28 sm:w-28">
+            <Package size={38} weight="duotone" />
+        </div>
+    );
+}
+
+export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated }) {
+    const [blockedNotice, setBlockedNotice] = useState(false);
+    const blockerMessage = ASSEMBLY_BLOCKERS[piece.assembly_blocker_code] || "المنتج غير جاهز";
+    return (
+        <article
+            className={`overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : piece.assembly_ready ? "border-emerald-300" : "border-slate-200"}`}
+            data-testid="assembly-product-card"
+        >
+            {piece.search_match && (
+                <div className="bg-violet-700 px-4 py-2 text-center text-xs font-black text-white">
+                    هذا هو المنتج الذي تم تصويره
+                </div>
+            )}
+            <div className="p-4">
+                <div className="flex items-start gap-3">
+                    <ProductImage piece={piece} />
+                    <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-black text-slate-400">القطعة {piece.unit_index || "—"}</div>
+                        <h3 className="mt-1 text-lg font-black leading-7 text-slate-950">{piece.product_name || "منتج"}</h3>
+                        {piece.sku && <div className="mt-1 break-all text-xs font-bold text-slate-500">SKU: {piece.sku}</div>}
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">
+                            <UserCircle size={15} weight="fill" /> جهّزه: {piece.responsible_employee_name || "—"}
+                        </div>
+                        <div className="mt-2 text-xs font-black text-violet-800" data-testid="assembly-piece-stage">المرحلة الحالية: {piece.current_stage_label || piece.status_label || "بانتظار التجهيز"}</div>
+                    </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+                    <div className="text-[11px] font-black text-slate-500">مواصفات العميل</div>
+                    {piece.specifications?.length ? (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                            {piece.specifications.map((spec, index) => (
+                                <div key={`${spec.name}-${spec.value}-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                    <span className="block text-[10px] font-bold text-slate-400">{spec.name}</span>
+                                    <span className="mt-0.5 block text-sm font-black text-slate-900">{spec.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="mt-1 text-sm font-bold text-slate-600">لا توجد خيارات خاصة لهذا المنتج.</div>
+                    )}
+                </div>
+
+                {!!piece.services?.length && (
+                    <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50 p-3">
+                        <div className="text-[11px] font-black text-violet-700">الخدمات المنفذة</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {piece.services.map((service, index) => (
+                                <span key={`${service.name}-${index}`} className="rounded-full bg-white px-3 py-1 text-xs font-black text-violet-950">
+                                    {service.name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" onUpdated={onUpdated} /></div>
+
+                {!!piece.route_steps?.length && (
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3" data-testid="assembly-piece-route">
+                        <div className="text-xs font-black text-slate-700">مسار تتبع المنتج</div>
+                        <ol className="mt-2 space-y-2 text-xs font-bold text-slate-600">
+                            {piece.route_steps.map((step, index) => (
+                                <li key={`${step.label}-${index}`} className="flex flex-wrap gap-1 rounded-xl bg-slate-50 px-3 py-2">
+                                    <span>{step.label}</span>{step.actor_name && <span>· {step.actor_name}</span>}
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
+                )}
+
+                {piece.can_mark_ready ? (
+                    <button
+                        type="button"
+                        onClick={() => onReady(piece)}
+                        disabled={busy}
+                        className="mt-4 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-lg font-black text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
+                        data-testid="mark-assembly-piece-ready"
+                    >
+                        {busy ? <SpinnerGap size={24} className="animate-spin" /> : <CheckCircle size={25} weight="fill" />}
+                        {busy ? "جاري الحفظ..." : "جاهز"}
+                    </button>
+                ) : piece.assembly_ready ? (
+                    <div className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-50 px-4 text-base font-black text-emerald-800">
+                        <CheckCircle size={25} weight="fill" /> تم — جاهز
+                    </div>
+                ) : (
+                    <div className="mt-4 space-y-2">
+                        <button type="button" aria-disabled="true" onClick={() => { setBlockedNotice(true); onBlocked?.(piece); }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-200 px-4 text-lg font-black text-slate-500" data-testid="mark-assembly-piece-ready-frozen">جاهز · مجمّد</button>
+                        {blockedNotice && <div role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-center text-sm font-black text-rose-900">المنتج لم يجهز بعد. {blockerMessage}</div>}
+                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-center text-sm font-black text-amber-900" role="status">
+                            <WarningCircle size={22} weight="fill" /> {blockerMessage}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </article>
+    );
+}
+
+function ReadyOrderCard({ order, onOpen }) {
+    const total = Number(order.assembly_piece_count || order.items_count || 0);
+    const ready = Number(order.assembly_ready_count || 0);
+    return (
+        <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+            <button type="button" onClick={() => onOpen(order.order_number)} className="w-full text-right">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <div className="text-xs font-black text-slate-400">طلب جاهز للتجميع</div>
+                        <div className="mt-1 text-xl font-black text-slate-950">#{order.order_number}</div>
+                        <div className="mt-1 text-sm font-bold text-slate-600">{order.customer_name || "—"} · {order.city || "—"}</div>
+                    </div>
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                        <Package size={27} weight="duotone" />
+                    </span>
+                </div>
+                <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-xs font-black">
+                    <span>{total || order.items_count} منتجات</span>
+                    <span className="text-emerald-700">جاهز {ready} من {total || order.items_count}</span>
+                </div>
+                <div className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-black text-white">
+                    عرض كل منتجات الطلب <ArrowLeft size={18} weight="bold" />
+                </div>
+            </button>
+        </article>
+    );
+}
+
+export function CompletedAssemblyOrderCard({
+    orderNumber,
+    carrierLabel,
+    historyOnly = false,
+    assemblyCompletionConfirmed = false,
+    canPrint = false,
+    onConfirmPrint,
+    onOpened,
+    canConfirmPrint = true,
+}) {
+    const [opening, setOpening] = useState(false);
+    const [openError, setOpenError] = useState("");
+    const openingLock = useRef(false);
+    const owner = useRef(null);
+    owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true };
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+    const openLabel = async () => {
+        if (!owner.current.allowed || openingLock.current) return;
+        const requestedOrder = orderNumber;
+        const isCurrent = () => mounted.current && owner.current.allowed && owner.current.orderNumber === requestedOrder;
+        openingLock.current = true;
+        setOpening(true);
+        setOpenError("");
+        try {
+            const current = await openCurrentCarrierLabel(requestedOrder, isCurrent);
+            if (current && isCurrent()) onOpened?.(current);
+        } catch (failure) {
+            if (isCurrent()) setOpenError(failure.message);
+        } finally {
+            openingLock.current = false;
+            if (mounted.current) setOpening(false);
+        }
+    };
+    const storeCourier = carrierLabel.label_type === "store_courier";
+    const storeCourierReady = Boolean(
+        carrierLabel.ready && storeCourier && carrierLabel.print_data?.qr_code,
+    );
+    const externalCarrierReady = Boolean(
+        carrierLabel.ready && !storeCourier && carrierLabel.label_url,
+    );
+    const ready = storeCourierReady || externalCarrierReady;
+    const printConfirmed = Boolean(carrierLabel.print_confirmed);
+    const readOnly = Boolean(historyOnly || printConfirmed);
+    const shipmentState = SHIPMENT_STATE_LABELS[carrierLabel.shipment_state]
+        || carrierLabel.shipment_state
+        || (storeCourier ? "بانتظار إسناد مندوب المتجر" : "بانتظار موظف تسليم الشحن");
+    const deliveryEmployee = carrierLabel.store_courier_assignee_name
+        || carrierLabel.handoff_employee_name
+        || "لم يُسند بعد";
+
+    if (assemblyCompletionConfirmed !== true) return null;
+
+    return (
+        <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50 p-5 text-center" data-testid="assembly-order-completed">
+            <CheckCircle size={44} weight="fill" className="mx-auto text-emerald-700" />
+            <h3 className="mt-2 text-xl font-black text-emerald-950">{readOnly ? "سجل الطلب" : "انتقل الطلب"} #{orderNumber} {readOnly ? "" : "إلى تم التنفيذ"}</h3>
+            <p className="mt-1 text-sm font-bold text-emerald-800">{readOnly
+                ? "اكتملت مرحلة التجميع والعنونة. المنتجات وبيانات الشحنة أدناه للعرض فقط."
+                : "اكتملت كل المنتجات. اطبع البوليصة والصقها على الطلب، ثم صوّر رمزها لتأكيد العملية."}</p>
+            {externalCarrierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-download-official-carrier-label">
+                    <DownloadSimple size={24} weight="bold" /> تحميل بوليصة {carrierLabel.courier_name || "شركة الشحن"}
+                </button>
+            )}
+            {storeCourierReady && (
+                <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-3 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-700 px-4 text-base font-black text-white" data-testid="assembly-print-store-courier-label">
+                    <Printer size={24} weight="fill" /> طباعة بوليصة مندوب المتجر
+                </button>
+            )}
+            {ready && !readOnly && (
+                <button type="button" onClick={onConfirmPrint} disabled={!canConfirmPrint} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-confirm-carrier-label-print">
+                    <Barcode size={24} weight="bold" /> {storeCourier
+                        ? "تأكيد الطباعة واللصق بتصوير QR"
+                        : "تأكيد الطباعة وتصوير باركود الشحنة"}
+                </button>
+            )}
+            {readOnly && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4 text-right" data-testid="assembly-shipment-read-only">
+                    <div className="flex items-center gap-2 text-sm font-black text-emerald-950">
+                        <Truck size={22} weight="fill" /> بيانات الشحنة
+                    </div>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">طريقة الشحن</dt><dd className="mt-0.5 font-black text-slate-900">{storeCourier ? "مندوب المتجر" : (carrierLabel.courier_name || "شركة الشحن")}</dd></div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">حالة الشحنة</dt><dd className="mt-0.5 font-black text-slate-900">{shipmentState}</dd></div>
+                        {!storeCourier && carrierLabel.tracking_number && <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">رقم التتبع</dt><dd className="mt-0.5 break-all font-black text-slate-900">{carrierLabel.tracking_number}</dd></div>}
+                        <div className="rounded-xl bg-slate-50 px-3 py-2"><dt className="text-[10px] font-black text-slate-400">المسؤول الحالي</dt><dd className="mt-0.5 font-black text-slate-900">{deliveryEmployee}</dd></div>
+                    </dl>
+                    <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-black text-emerald-900">يمكن إعادة فتح البوليصة الحالية وطباعتها دون إعادة التجميع أو التأكيد.</div>
+                </div>
+            )}
+            {!ready && (
+                <>
+                    <div className="mt-3 rounded-2xl bg-amber-50 px-3 py-3 text-sm font-black text-amber-900">
+                        {"افتح البوليصة الحالية من شركة الشحن دون إعادة تجهيز المنتجات."}
+                    </div>
+                    <button type="button" onClick={openLabel} disabled={!canPrint || opening} className="mt-2 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-base font-black text-white disabled:opacity-50" data-testid="assembly-issue-carrier-label">
+                        {opening ? <SpinnerGap size={23} className="animate-spin" /> : <Printer size={23} weight="fill" />}
+                        {opening ? "جاري فتح البوليصة..." : "تجهيز أو استعادة بوليصة الشحن"}
+                    </button>
+                </>
+            )}
+            {openError && <div role="alert" className="mt-3 text-sm font-bold text-rose-800">{openError}</div>}
+            {!readOnly && <Link to="/fulfillment-v2?stage=completed" className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-4 text-sm font-black text-emerald-900">فتح تم التنفيذ <ArrowLeft size={19} weight="bold" /></Link>}
+        </div>
+    );
+}
 
 export default function ReadyToShipOrders() {
     const [orders, setOrders] = useState([]);
-    const [batches, setBatches] = useState([]);
     const [permissions, setPermissions] = useState({});
-    const [selected, setSelected] = useState([]);
-    const [reprintReasons, setReprintReasons] = useState({});
+    const [query, setQuery] = useState("");
+    const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [searching, setSearching] = useState(false);
+    const [cameraOpen, setCameraOpen] = useState(false);
     const [busy, setBusy] = useState("");
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
+    const [labelScanner, setLabelScanner] = useState(null);
+    const [labelScannerBusy, setLabelScannerBusy] = useState(false);
+    const [labelScannerError, setLabelScannerError] = useState("");
+    const [labelScannerFeedback, setLabelScannerFeedback] = useState(null);
+    const labelScannerLock = useRef(false);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [queue, batchResult] = await Promise.all([
-                listReadyToShipOrders({ limit: 100 }),
-                listFulfillmentBatches({ limit: 50 }),
-            ]);
-            setOrders(queue.items || []);
+            const queue = await listReadyToShipOrders({ limit: 100 });
+            setOrders((queue.items || []).filter(
+                (order) => order.ready_to_ship_source === "preparation_receipt",
+            ));
             setPermissions(queue.permissions || {});
-            setBatches(batchResult.items || []);
-            setSelected((current) => current.filter((orderNumber) => (queue.items || []).some((row) => row.order_number === orderNumber && !row.claimed)));
-        } catch (error) {
-            toast.error(error.message);
+        } catch (loadError) {
+            setError(loadError.message);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => { void load(); }, [load]);
 
-    const unclaimed = useMemo(() => orders.filter((row) => !row.claimed), [orders]);
-    const allSelected = unclaimed.length > 0 && unclaimed.every((row) => selected.includes(row.order_number));
-
-    function toggle(orderNumber) {
-        setSelected((current) => current.includes(orderNumber)
-            ? current.filter((value) => value !== orderNumber)
-            : [...current, orderNumber]);
-    }
-
-    async function claim() {
-        if (!selected.length) return;
-        setBusy("claim");
+    const openOrder = useCallback(async (rawValue) => {
+        const value = String(rawValue ?? query).trim();
+        if (!value) {
+            setError("اكتب رقم الطلب أو افتح الكاميرا لتصوير المنتج.");
+            return null;
+        }
+        setQuery(value);
+        setSearching(true);
+        setError("");
+        setSuccess("");
         try {
-            const result = await claimReadyToShipBatch(selected);
-            toast.success(`تم استلام دفعة ${result.batch?.id} وفيها ${selected.length} طلب`);
-            setSelected([]);
+            const data = await searchAssemblyOrder(value);
+            setResult(data);
+            return data;
+        } catch (searchError) {
+            setResult(null);
+            setError(searchError.message);
+            return null;
+        } finally {
+            setSearching(false);
+        }
+    }, [query]);
+
+    const handleDetected = useCallback(async (value) => {
+        setCameraOpen(false);
+        await openOrder(value);
+    }, [openOrder]);
+
+    const handleReady = async (piece) => {
+        setBusy(`ready:${piece.piece_id}`);
+        setError("");
+        setSuccess("");
+        try {
+            const response = await markAssemblyPieceReady(
+                piece.piece_id,
+                newAssemblyReadyRequestId(),
+            );
+            const refreshed = await searchAssemblyOrder(result.order_number);
+            setResult({
+                ...refreshed,
+                progress: response.progress,
+                carrier_label: response.carrier_label,
+            });
+            if (response.progress?.order_completed) {
+                if (response.carrier_label?.ready) {
+                    setSuccess("اكتملت المنتجات، وتحول الطلب في سلة إلى تم التنفيذ، ووصلت البوليصة.");
+                } else if (response.carrier_label?.order_status_completed) {
+                    setSuccess("اكتملت المنتجات وتحول الطلب في سلة إلى تم التنفيذ. ننتظر رابط البوليصة من شركة الشحن.");
+                } else {
+                    setSuccess("اكتملت المنتجات داخل ميزان. افتح تم التنفيذ لإعادة ربط سلة وإصدار البوليصة.");
+                }
+            } else {
+                setSuccess(`تم تسجيل المنتج جاهزًا — المتبقي ${response.progress?.total_count - response.progress?.ready_count}.`);
+            }
             await load();
-        } catch (error) {
-            toast.error(error.message);
+        } catch (readyError) {
+            setError(readyError.message);
         } finally {
             setBusy("");
         }
-    }
+    };
 
-    async function print(batch) {
-        const isReprint = Number(batch.print_count || 0) > 0;
-        const reason = String(reprintReasons[batch.id] || "").trim();
-        if (isReprint && !reason) {
-            toast.error("اكتب سبب إعادة الطباعة أولًا.");
-            return;
-        }
-        setBusy(`print:${batch.id}`);
+    const openLabelConfirmation = useCallback(() => {
+        if (!result?.order_number) return;
+        setLabelScannerError("");
+        setLabelScannerFeedback(null);
+        setLabelScanner({
+            orderNumber: result.order_number,
+            labelType: (result.carrier_label || {}).label_type || "",
+        });
+    }, [result]);
+
+    const confirmPrintedLabel = useCallback(async (barcode) => {
+        if (!labelScanner || labelScannerLock.current) return;
+        labelScannerLock.current = true;
+        setLabelScannerBusy(true);
+        setLabelScannerError("");
         try {
-            await printFulfillmentBatch(batch.id, reason);
-            toast.success(isReprint ? "تم تسجيل إعادة الطباعة وتنزيل الملف" : "تم تنزيل ملف الدفعة");
-            setReprintReasons((current) => ({ ...current, [batch.id]: "" }));
+            const confirmation = await confirmCompletedCarrierLabelPrint(
+                labelScanner.orderNumber,
+                barcode,
+            );
+            const feedback = shippingScanFeedback({
+                mode: "confirm_print",
+                result: confirmation,
+                barcode,
+            });
+            setLabelScannerFeedback(feedback);
+            toast.success(feedback.title);
+            setResult(null);
+            setSuccess("");
             await load();
-        } catch (error) {
-            toast.error(error.message);
+        } catch (scanError) {
+            setLabelScannerError(scanError.message);
         } finally {
-            setBusy("");
+            labelScannerLock.current = false;
+            setLabelScannerBusy(false);
         }
-    }
+    }, [labelScanner, load]);
 
-    async function pack(batch) {
-        setBusy(`pack:${batch.id}`);
-        try {
-            await confirmFulfillmentBatchPacked(batch.id);
-            toast.success("تم تأكيد التغليف");
-            await load();
-        } catch (error) {
-            toast.error(error.message);
-        } finally {
-            setBusy("");
-        }
-    }
-
-    async function handoff(batch) {
-        setBusy(`handoff:${batch.id}`);
-        try {
-            await confirmFulfillmentBatchHandoff(batch.id);
-            toast.success("تم تأكيد تسليم الدفعة لشركة الشحن");
-            await load();
-        } catch (error) {
-            toast.error(error.message);
-        } finally {
-            setBusy("");
-        }
-    }
-
-    if (loading) return <div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
+    const confirmationEligible = Boolean(
+        result?.progress?.order_completed
+        || result?.summary?.all_ready,
+    );
+    const carrierLabel = result?.carrier_label || {};
 
     return (
-        <div className="space-y-5" data-testid="ready-to-ship-orders">
-            <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <h2 className="text-xl font-black text-emerald-950"><Package className="ml-1 inline" /> الطلبات الجاهزة للشحن</h2>
-                        <p className="mt-1 text-sm leading-6 text-emerald-800">وصلت تلقائيًا بعد تحقق نوع المنتج والدفع والعنوان ومخزون ميزان. لم تُرفع في ملف تجهيز المورد.</p>
-                    </div>
-                    <button type="button" disabled={!permissions.can_claim || !selected.length || busy === "claim"} onClick={claim} className="rounded-xl bg-emerald-700 px-5 py-3 font-black text-white disabled:opacity-50">{busy === "claim" ? <SpinnerGap className="ml-1 inline animate-spin" /> : <ClipboardText className="ml-1 inline" />} استلام وإنشاء دفعة ({selected.length})</button>
+        <section className="mx-auto w-full max-w-3xl space-y-4" dir="rtl" data-testid="ready-to-ship-orders">
+            <div className="overflow-hidden rounded-3xl border border-violet-200 bg-white shadow-sm">
+                <div className="bg-violet-700 px-4 py-5 text-white sm:px-6">
+                    <div className="text-xs font-black text-violet-100">المرحلة الثالثة</div>
+                    <h2 className="mt-1 text-2xl font-black">التجميع والعنونة</h2>
+                    <p className="mt-2 text-sm font-bold leading-6 text-violet-100">ابحث عن الطلب أو صوّر أي منتج؛ ستظهر كل منتجات الطلب ومراحلها حتى قبل جاهزيتها.</p>
                 </div>
-            </section>
-
-            <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b p-4">
-                    <div><h3 className="font-black">قائمة العنونة والشحن</h3><p className="text-xs text-slate-500">{orders.length} طلب ظاهر حسب فروعك وصلاحياتك</p></div>
-                    {!!unclaimed.length && <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : unclaimed.map((row) => row.order_number))} /> تحديد غير المستلم</label>}
+                <div className="grid grid-cols-3 border-b border-slate-100 bg-slate-50 text-center text-[10px] font-black sm:text-xs">
+                    <div className="px-2 py-3 text-slate-500"><CheckCircle className="mx-auto mb-1" size={18} weight="fill" />الاستلام من التجهيز</div>
+                    <div className="border-x border-violet-200 bg-violet-50 px-2 py-3 text-violet-800"><Package className="mx-auto mb-1" size={18} weight="fill" />التجميع والعنونة</div>
+                    <div className="px-2 py-3 text-slate-500"><ClipboardText className="mx-auto mb-1" size={18} weight="duotone" />تم التنفيذ</div>
                 </div>
-                {!orders.length ? <div className="p-10 text-center text-slate-400"><CheckCircle size={44} className="mx-auto mb-2 text-emerald-500" />لا توجد طلبات جاهزة في قائمتك الآن.</div> : <div className="divide-y">{orders.map((order) => (
-                    <article key={order.order_number} className={`grid gap-3 p-4 lg:grid-cols-[auto_minmax(0,1fr)_220px] lg:items-center ${order.claimed ? "bg-slate-50" : ""}`}>
-                        <input type="checkbox" disabled={order.claimed} checked={selected.includes(order.order_number)} onChange={() => toggle(order.order_number)} className="h-5 w-5" />
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2"><span className="text-lg font-black">#{order.order_number}</span>{order.claimed && <span className="rounded-full bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">ضمن دفعة {order.claim_batch_id}</span>}</div>
-                            <p className="mt-1 text-sm text-slate-600">{order.customer_name || "—"} · {order.customer_mobile || "—"} · {order.city || "—"}</p>
-                            <p className="mt-1 text-xs text-slate-400">
-                                {order.items_count} منتجات · {(order.warehouse_ids || []).length
-                                    ? `${order.warehouse_ids.length} فرع/مخزن من المخزون`
-                                    : "المخزون غير مرتبط بفرع — لا يمكن الاستلام"}
-                            </p>
+                <form onSubmit={(event) => { event.preventDefault(); void openOrder(); }} className="p-4 sm:p-5">
+                    <label htmlFor="assembly-search" className="mb-2 block text-sm font-black text-slate-900">ابحث برقم الطلب أو المنتج</label>
+                    <div className="flex gap-2">
+                        <div className="relative min-w-0 flex-1">
+                            <MagnifyingGlass size={21} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" weight="bold" />
+                            <input id="assembly-search" value={query} onChange={(event) => setQuery(event.target.value)} inputMode="search" autoComplete="off" placeholder="رقم الطلب أو باركود المنتج" className="h-14 w-full rounded-2xl border-2 border-slate-200 bg-white pr-11 pl-3 text-base font-black text-slate-950 outline-none placeholder:text-slate-400 focus:border-violet-500" />
                         </div>
-                        <div className="rounded-xl bg-white p-3 text-xs"><div className="font-black">{order.shipping_company || "شركة الشحن غير محددة"}</div><div className="mt-1 text-slate-500">{order.claimed_by_name ? `المستلم: ${order.claimed_by_name}` : "بانتظار استلام الموظف"}</div></div>
-                    </article>
-                ))}</div>}
-            </section>
+                        <button type="button" onClick={() => { setError(""); setCameraOpen(true); }} className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-700 text-white shadow-sm" aria-label="فتح الكاميرا للبحث عن منتج التجميع" data-testid="open-assembly-camera">
+                            <Camera size={27} weight="fill" />
+                        </button>
+                    </div>
+                    <button type="submit" disabled={searching} className="mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-black text-white disabled:opacity-50">
+                        {searching ? <><SpinnerGap size={20} className="animate-spin" />جاري البحث</> : <><MagnifyingGlass size={20} weight="bold" />عرض منتجات الطلب</>}
+                    </button>
+                </form>
+            </div>
 
-            <section className="space-y-3">
-                <div><h3 className="text-lg font-black">دفعاتي للطباعة والتسليم</h3><p className="text-xs text-slate-500">الطباعة الأولى محمية من التكرار؛ إعادة الطباعة تتطلب سببًا وتسجل باسم الموظف.</p></div>
-                {!batches.length && <div className="rounded-2xl border border-dashed bg-white p-8 text-center text-slate-400">لم تُنشأ دفعات شحن بعد.</div>}
-                {batches.map((batch) => {
-                    const printed = Number(batch.print_count || 0) > 0;
-                    const canReprint = printed && permissions.can_reprint;
-                    return (
-                        <article key={batch.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                                <div><div className="font-black">{batch.id}</div><div className="mt-1 text-xs text-slate-500">{(batch.order_numbers || []).length} طلب · {STATUS_LABELS[batch.status] || batch.status}</div></div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    {printed && <input value={reprintReasons[batch.id] || ""} onChange={(event) => setReprintReasons((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={!canReprint} placeholder="سبب إعادة الطباعة" className="rounded-xl border px-3 py-2 text-sm disabled:bg-slate-100" />}
-                                    <button type="button" disabled={!permissions.can_print || (printed && !canReprint) || busy === `print:${batch.id}`} onClick={() => print(batch)} className={`rounded-xl px-4 py-2 text-sm font-black ${printed ? "border border-amber-300 bg-amber-50 text-amber-900" : "bg-violet-700 text-white"} disabled:opacity-50`}><Printer className="ml-1 inline" />{printed ? `إعادة طباعة (${batch.print_count})` : "طباعة الملف"}</button>
-                                    {printed && batch.status !== "packed" && batch.status !== "handed_off" && <button type="button" disabled={!permissions.can_pack || busy === `pack:${batch.id}`} onClick={() => pack(batch)} className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><Package className="ml-1 inline" /> تأكيد التغليف</button>}
-                                    {batch.status === "packed" && <button type="button" disabled={!permissions.can_handoff || busy === `handoff:${batch.id}`} onClick={() => handoff(batch)} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-black text-white disabled:opacity-50"><Truck className="ml-1 inline" /> تسليم للناقل</button>}
-                                    {batch.status === "handed_off" && <span className="rounded-xl bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800"><CheckCircle className="ml-1 inline" /> تم التسليم</span>}
-                                </div>
-                            </div>
-                            {printed && !permissions.can_reprint && <p className="mt-3 text-xs text-amber-800"><WarningCircle className="ml-1 inline" /> إعادة الطباعة تحتاج صلاحية مستقلة من المالك.</p>}
-                        </article>
-                    );
-                })}
-            </section>
-        </div>
+            {error && <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-black leading-6 text-rose-900" role="alert"><WarningCircle size={22} className="mt-0.5 shrink-0" weight="fill" />{error}</div>}
+            {success && <div className="flex items-start gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm font-black leading-6 text-emerald-900" role="status"><CheckCircle size={22} className="mt-0.5 shrink-0" weight="fill" />{success}</div>}
+
+            {searching && <div className="flex min-h-40 items-center justify-center rounded-3xl border bg-white"><SpinnerGap size={34} className="animate-spin text-violet-700" /></div>}
+
+            {result && !searching && (
+                <div className="space-y-3" data-testid="assembly-order-products">
+                    <button
+                        type="button"
+                        onClick={() => { setResult(null); setSuccess(""); setError(""); }}
+                        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-4 text-sm font-black text-slate-800 shadow-sm"
+                    >
+                        العودة إلى الطلبات الجاهزة
+                    </button>
+                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <div><div className="text-[10px] font-black text-slate-400">الطلب</div><div className="text-xl font-black">#{result.order_number}</div></div>
+                        <div className="text-left"><div className="text-[10px] font-black text-slate-400">جاهز</div><div className="text-base font-black text-emerald-700">{result.summary?.ready || 0} من {result.summary?.total || 0}</div></div>
+                    </div>
+                    <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
+
+                    {result.assembly_completion_confirmed === true && (
+                        <CompletedAssemblyOrderCard
+                            orderNumber={result.order_number}
+                            carrierLabel={carrierLabel}
+                            historyOnly={Boolean(result.history_only)}
+                            assemblyCompletionConfirmed={result.assembly_completion_confirmed}
+                            canPrint={Boolean(permissions.can_print)}
+                            onConfirmPrint={openLabelConfirmation}
+                            onOpened={(currentLabel) => setResult((current) => current?.order_number === result.order_number ? { ...current, carrier_label: currentLabel } : current)}
+                            canConfirmPrint={Boolean(permissions.can_print) && confirmationEligible}
+                        />
+                    )}
+
+                    {result.pieces?.map((piece) => (
+                        <AssemblyProductCard key={piece.piece_id} piece={piece} busy={busy === `ready:${piece.piece_id}`} onReady={handleReady} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
+                    ))}
+                </div>
+            )}
+
+            {!result && (
+                <section className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                        <div><h3 className="text-lg font-black text-slate-950">الطلبات الجاهزة للتجميع</h3><p className="text-xs font-bold text-slate-500">تظهر هنا الطلبات التي ما زالت تحتاج تنفيذ هذه المرحلة فقط.</p></div>
+                        <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-800">{orders.length}</span>
+                    </div>
+                    {loading ? (
+                        <div className="flex min-h-36 items-center justify-center rounded-3xl border bg-white"><SpinnerGap size={32} className="animate-spin text-violet-700" /></div>
+                    ) : !orders.length ? (
+                        <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-8 text-center text-slate-500"><CheckCircle size={42} className="mx-auto mb-2 text-emerald-500" />لا توجد طلبات جاهزة للتجميع الآن.</div>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            {orders.map((order) => <ReadyOrderCard key={order.order_number} order={order} onOpen={openOrder} />)}
+                        </div>
+                    )}
+                </section>
+            )}
+
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold leading-6 text-violet-950">
+                التغليف ليس مرحلة مستقلة؛ يتم هنا فقط إذا احتاجه المنتج، ثم ينتقل الطلب إلى <strong>تم التنفيذ</strong>.
+            </div>
+
+            {cameraOpen && <CameraScanner onDetected={handleDetected} onClose={() => setCameraOpen(false)} />}
+            {labelScanner && (
+                <ShippingBarcodeScanner
+                    title={`تأكيد طباعة شحنة #${labelScanner.orderNumber}`}
+                    description={labelScanner.labelType === "store_courier"
+                        ? `صوّر QR الموجود على بوليصة مندوب المتجر. يجب أن يحمل رقم الطلب ${labelScanner.orderNumber}.`
+                        : "صوّر باركود بوليصة شركة الشحن للتأكد أنها تخص هذا الطلب."}
+                    busy={labelScannerBusy}
+                    error={labelScannerError}
+                    feedback={labelScannerFeedback}
+                    onDetected={confirmPrintedLabel}
+                    onFeedbackAction={() => {
+                        setLabelScanner(null);
+                        setLabelScannerFeedback(null);
+                    }}
+                    onClose={() => {
+                        if (labelScannerBusy) return;
+                        setLabelScanner(null);
+                        setLabelScannerFeedback(null);
+                    }}
+                />
+            )}
+        </section>
     );
 }

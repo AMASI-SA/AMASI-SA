@@ -1,7 +1,7 @@
 import api from "../lib/api";
 
 export const PROVIDER_ORDER = Object.freeze([
-    "salla", "openai", "snapchat_ads", "tiktok_ads", "meta_ads",
+    "salla", "openai", "instagram", "snapchat_ads", "tiktok_ads", "meta_ads",
     "google_analytics_4", "google_search_console", "google_merchant_center",
     "google_ads", "qoyod", "shipping_companies",
 ]);
@@ -9,6 +9,7 @@ export const PROVIDER_ORDER = Object.freeze([
 const PROVIDER_DEFAULTS = Object.freeze({
     salla: ["Salla", "سلة", "commerce"],
     openai: ["OpenAI", "OpenAI · ذكاء ميزان", "ai"],
+    instagram: ["Instagram", "إنستغرام", "customer_channel"],
     snapchat_ads: ["Snapchat Ads", "إعلانات سناب شات", "advertising"],
     tiktok_ads: ["TikTok Ads", "إعلانات تيك توك", "advertising"],
     meta_ads: ["Meta Ads", "إعلانات ميتا", "advertising"],
@@ -109,6 +110,9 @@ function normalizeAccount(account, provider, fallbackStatus, fallbackSource, fal
         external_account_id: nullableText(safe.external_account_id), store_id: nullableText(safe.store_id),
         ad_account_id: nullableText(safe.ad_account_id), display_name: nullableText(safe.display_name),
         currency: nullableText(safe.currency), timezone: nullableText(safe.timezone),
+        local_today: /^\d{4}-\d{2}-\d{2}$/.test(safe.local_today || "")
+            ? safe.local_today
+            : null,
         connection_status: text(safe.connection_status, fallbackStatus), capabilities: normalizeCapabilities(safe.capabilities),
         permissions: Array.isArray(safe.permissions) ? safe.permissions.filter((item) => typeof item === "string") : [],
         last_sync_at: nullableText(safe.last_sync_at), data_delay_minutes: safeNumber(safe.data_delay_minutes, { min: 0 }),

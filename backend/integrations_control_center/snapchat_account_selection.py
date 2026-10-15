@@ -20,8 +20,15 @@ from .snapchat_native_data_common import (
     SnapchatNativeSyncError,
     _collection,
 )
+from .snapchat_oauth_security import (
+    SNAPCHAT_CREDENTIALS_COLLECTION,
+    decrypt_snapchat_token,
+)
 
 ACCOUNT_SELECTION_SOURCE_MODE = "snapchat_marketing_account_selection_v2"
+SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE = (
+    "snapchat_scheduler_projection_recovery_v1"
+)
 
 
 class SnapchatAccountSelectionInput(BaseModel):
@@ -263,17 +270,26 @@ async def save_snapchat_account_selection(
     return await get_snapchat_account_selection(db, user_id)
 
 
-async def _load_selected_accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
+async def _selected_account_rows(
+    db: Any,
+    user_id: str,
+    *,
+    require_api_provenance: bool,
+) -> list[dict[str, Any]]:
+    query: dict[str, Any] = {
+        "user_id": user_id,
+        "provider": SNAPCHAT_PROVIDER_ID,
+        "connection_status": "connected",
+        "mezan_selected": True,
+    }
+    if require_api_provenance:
+        query["connection_provenance"] = "api_connection"
     cursor = _collection(db, "mezan_integration_accounts_v2").find(
-        {
-            "user_id": user_id,
-            "provider": SNAPCHAT_PROVIDER_ID,
-            "connection_provenance": "api_connection",
-            "connection_status": "connected",
-            "mezan_selected": True,
-        },
+        query,
         {
             "_id": 0,
+            "user_id": 1,
+            "provider": 1,
             "mezan_integration_account_id": 1,
             "external_account_id": 1,
             "ad_account_id": 1,
@@ -282,6 +298,9 @@ async def _load_selected_accounts(db: Any, user_id: str) -> list[dict[str, Any]]
             "timezone": 1,
             "organization_id": 1,
             "organization_name": 1,
+            "connection_status": 1,
+            "connection_provenance": 1,
+            "mezan_selected": 1,
             "last_sync_at": 1,
         },
     )
@@ -289,10 +308,327 @@ async def _load_selected_accounts(db: Any, user_id: str) -> list[dict[str, Any]]
         cursor = cursor.sort("display_name", 1)
     if hasattr(cursor, "limit"):
         cursor = cursor.limit(MAX_SYNC_ACCOUNTS + 1)
-    rows = (
+    return (
         await cursor.to_list(length=MAX_SYNC_ACCOUNTS + 1)
         if hasattr(cursor, "to_list")
         else [row async for row in cursor]
+    )
+
+
+def _canonical_account_id(row: dict[str, Any]) -> str | None:
+    raw_ad_account_id = row.get("ad_account_id")
+    raw_external_account_id = row.get("external_account_id")
+    if raw_ad_account_id is not None and not isinstance(raw_ad_account_id, str):
+        return None
+    if raw_external_account_id is not None and not isinstance(
+        raw_external_account_id, str
+    ):
+        return None
+    ad_account_id = (raw_ad_account_id or "").strip()
+    external_account_id = (raw_external_account_id or "").strip()
+    if ad_account_id and external_account_id and ad_account_id != external_account_id:
+        return None
+    account_id = ad_account_id or external_account_id
+    if not account_id or len(account_id) > 160:
+        return None
+    return account_id
+
+
+def _canonical_credentials_usable(credentials: Any) -> bool:
+    if not isinstance(credentials, dict):
+        return False
+    try:
+        refresh_token = decrypt_snapchat_token(
+            credentials.get("refresh_token_ciphertext")
+        )
+    except (RuntimeError, ValueError):
+        return False
+    return bool(str(refresh_token or "").strip())
+
+
+def _credential_organization_ids(credentials: dict[str, Any]) -> set[str]:
+    if "organization_ids" not in credentials:
+        return set()
+    raw_values = credentials.get("organization_ids")
+    if not isinstance(raw_values, (list, tuple, set)):
+        raise SnapchatNativeSyncError(
+            "snapchat_credential_metadata_invalid",
+            "Snapchat authorization metadata is malformed.",
+            status_code=409,
+            retryable=False,
+            result={"needs_reauth": True},
+        )
+    output: set[str] = set()
+    for value in raw_values:
+        if (
+            not isinstance(value, str)
+            or not value.strip()
+            or len(value.strip()) > 160
+        ):
+            raise SnapchatNativeSyncError(
+                "snapchat_credential_metadata_invalid",
+                "Snapchat authorization metadata is malformed.",
+                status_code=409,
+                retryable=False,
+                result={"needs_reauth": True},
+            )
+        output.add(value.strip())
+    return output
+
+
+def _validate_canonical_scheduler_accounts(
+    *,
+    user_id: str,
+    credential_rows: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if len(credential_rows) > 1:
+        raise SnapchatNativeSyncError(
+            "snapchat_credential_identity_ambiguous",
+            "Snapchat authorization identity is ambiguous.",
+            status_code=409,
+            retryable=False,
+            result={"needs_reauth": True},
+        )
+    credentials = credential_rows[0] if credential_rows else None
+    if (
+        not isinstance(credentials, dict)
+        or credentials.get("user_id") != user_id
+        or credentials.get("provider") != SNAPCHAT_PROVIDER_ID
+        or not _canonical_credentials_usable(credentials)
+    ):
+        raise SnapchatNativeSyncError(
+            "snapchat_needs_reauth",
+            "Snapchat authorization must be renewed.",
+            status_code=409,
+            retryable=False,
+            result={"needs_reauth": True},
+        )
+
+    credential_organization_ids = _credential_organization_ids(credentials)
+    credential_organization_metadata_present = "organization_ids" in credentials
+    output: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    seen_integration_ids: set[str] = set()
+    for row in rows:
+        account_id = _canonical_account_id(row)
+        raw_integration_id = row.get("mezan_integration_account_id")
+        integration_id = (
+            raw_integration_id.strip()
+            if isinstance(raw_integration_id, str)
+            else ""
+        )
+        integration_id_invalid = bool(
+            raw_integration_id is not None
+            and (
+                not isinstance(raw_integration_id, str)
+                or len(integration_id) > 160
+                or integration_id in seen_integration_ids
+            )
+        )
+        raw_organization_id = row.get("organization_id")
+        organization_id = (
+            raw_organization_id.strip()
+            if isinstance(raw_organization_id, str)
+            else ""
+        )
+        organization_invalid = (
+            raw_organization_id is not None
+            and (
+                not isinstance(raw_organization_id, str)
+                or len(organization_id) > 160
+            )
+        )
+        organization_conflict = bool(
+            organization_id
+            and credential_organization_metadata_present
+            and organization_id not in credential_organization_ids
+        )
+        row_identity_invalid = bool(
+            row.get("user_id") != user_id
+            or row.get("provider") != SNAPCHAT_PROVIDER_ID
+            or row.get("connection_status") != "connected"
+            or row.get("mezan_selected") is not True
+        )
+        if (
+            account_id is None
+            or account_id in seen
+            or organization_invalid
+            or organization_conflict
+            or row_identity_invalid
+            or integration_id_invalid
+        ):
+            raise SnapchatNativeSyncError(
+                "snapchat_selected_account_identity_invalid",
+                "Selected Snapchat account identity is missing or ambiguous.",
+                status_code=409,
+                retryable=False,
+            )
+        seen.add(account_id)
+        if integration_id:
+            seen_integration_ids.add(integration_id)
+        output.append({**row, "ad_account_id": account_id})
+    if not output:
+        raise SnapchatNativeSyncError(
+            "snapchat_accounts_not_selected",
+            "اختر حساب Snapchat واحدًا على الأقل داخل ميزان قبل التشغيل.",
+            status_code=409,
+            retryable=False,
+        )
+    if len(output) > MAX_SYNC_ACCOUNTS:
+        raise SnapchatNativeSyncError(
+            "snapchat_account_limit_exceeded",
+            f"يمكن اختيار {MAX_SYNC_ACCOUNTS} حساب Snapchat كحد أقصى.",
+            status_code=409,
+            retryable=False,
+        )
+    return output
+
+
+def _canonical_account_projection() -> dict[str, int]:
+    return {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "mezan_integration_account_id": 1,
+        "external_account_id": 1,
+        "ad_account_id": 1,
+        "display_name": 1,
+        "currency": 1,
+        "timezone": 1,
+        "organization_id": 1,
+        "organization_name": 1,
+        "connection_status": 1,
+        "connection_provenance": 1,
+        "mezan_selected": 1,
+        "last_sync_at": 1,
+    }
+
+
+def _canonical_credential_projection() -> dict[str, int]:
+    return {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "refresh_token_ciphertext": 1,
+        "organization_ids": 1,
+    }
+
+
+async def _load_canonical_scheduler_accounts(
+    db: Any,
+    user_id: str,
+    *,
+    failure_stage_observer: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Load tenant-owned accounts that the canonical scheduler may refresh.
+
+    Migrated account rows can predate ``connection_provenance``.  They are
+    eligible only when the tenant still owns a decryptable Snapchat refresh
+    credential; the canonical sync then validates that credential against the
+    provider before writing any fact or advancing freshness.
+    """
+    if failure_stage_observer is not None:
+        failure_stage_observer("integration_account_credential_proof")
+    integration = await _collection(db, "mezan_integrations_v2").find_one(
+        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        {
+            "_id": 0,
+            "user_id": 1,
+            "provider": 1,
+            "connection_status": 1,
+        },
+    )
+    integration_missing = integration is None
+    if not integration_missing and (
+        not isinstance(integration, dict)
+        or integration.get("user_id") != user_id
+        or integration.get("provider") != SNAPCHAT_PROVIDER_ID
+        or integration.get("connection_status") != "connected"
+    ):
+        raise SnapchatNativeSyncError(
+            "snapchat_integration_not_connected",
+            "Snapchat integration is not connected.",
+            status_code=409,
+            retryable=False,
+        )
+    credential_cursor = _collection(db, SNAPCHAT_CREDENTIALS_COLLECTION).find(
+        {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+        _canonical_credential_projection(),
+    )
+    if hasattr(credential_cursor, "limit"):
+        credential_cursor = credential_cursor.limit(2)
+    credential_rows = (
+        await credential_cursor.to_list(length=2)
+        if hasattr(credential_cursor, "to_list")
+        else [row async for row in credential_cursor]
+    )
+    if failure_stage_observer is not None:
+        failure_stage_observer("selected_accounts_load")
+    rows = await _selected_account_rows(
+        db,
+        user_id,
+        require_api_provenance=False,
+    )
+    if failure_stage_observer is not None:
+        failure_stage_observer("integration_account_credential_proof")
+    accounts = _validate_canonical_scheduler_accounts(
+        user_id=user_id,
+        credential_rows=credential_rows,
+        rows=rows,
+    )
+    if integration_missing:
+        now_iso = _now_iso()
+        collection = _collection(db, "mezan_integrations_v2")
+        await collection.update_one(
+            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+            {
+                "$setOnInsert": {
+                    "user_id": user_id,
+                    "provider": SNAPCHAT_PROVIDER_ID,
+                    "connection_status": "connected",
+                    "connection_provenance": "api_connection",
+                    "source_mode": SCHEDULER_PROJECTION_RECOVERY_SOURCE_MODE,
+                    "data_quality": "incomplete",
+                    "data_delay_minutes": None,
+                    "health_score": 70,
+                    "checked_at": now_iso,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "projection_recovered_at": now_iso,
+                }
+            },
+            upsert=True,
+        )
+        recovered = await collection.find_one(
+            {"user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID},
+            {
+                "_id": 0,
+                "user_id": 1,
+                "provider": 1,
+                "connection_status": 1,
+            },
+        )
+        if (
+            not isinstance(recovered, dict)
+            or recovered.get("user_id") != user_id
+            or recovered.get("provider") != SNAPCHAT_PROVIDER_ID
+            or recovered.get("connection_status") != "connected"
+        ):
+            raise SnapchatNativeSyncError(
+                "snapchat_integration_not_connected",
+                "Snapchat integration is not connected.",
+                status_code=409,
+                retryable=False,
+            )
+    return accounts
+
+
+async def _load_selected_accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
+    rows = await _selected_account_rows(
+        db,
+        user_id,
+        require_api_provenance=True,
     )
     output: list[dict[str, Any]] = []
     for row in rows:

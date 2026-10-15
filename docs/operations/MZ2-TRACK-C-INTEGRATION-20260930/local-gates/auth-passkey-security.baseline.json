@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-base-validation\\backend\\tests\\test_auth_cookie_only_browser_v1.py",
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-base-validation\\backend\\tests\\test_passkey_security_v1.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\auth-passkey-security.baseline.xml"
+  ],
+  "base": "1d9d65d8576d5bc852f52262b84af150356b9385",
+  "exit_code": 1,
+  "duration_seconds": 3.4
+}

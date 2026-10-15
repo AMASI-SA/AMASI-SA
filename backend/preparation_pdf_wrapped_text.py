@@ -29,6 +29,15 @@ MAX_BODY_FONT_SIZE = 6.6
 BODY_FONT_STEP = 0.3
 REFERENCE_TEXT = HexColor("#151515")
 REFERENCE_RED = HexColor("#D12B2B")
+# A visible physical gap below both the product image and QR. The previous
+# 4-point offset was only ~1.4 mm and made the first text baseline look glued
+# to the media. Keep this in millimetres so printed output is predictable.
+MEDIA_TO_TEXT_GAP = 4.0 * mm
+
+
+def media_text_start(media_bottom: float) -> float:
+    """Return the first text baseline below the image/QR media row."""
+    return media_bottom - MEDIA_TO_TEXT_GAP
 
 
 def _text(value: Any) -> str:
@@ -105,6 +114,8 @@ def wrap_reference_text(
 class WrappedField:
     label: str
     lines: tuple[str, ...]
+    label_lines: tuple[str, ...] = ()
+    value_below: bool = False
 
 
 @dataclass(frozen=True)
@@ -115,7 +126,10 @@ class WrappedSpecificationPlan:
 
     @property
     def physical_line_count(self) -> int:
-        return sum(len(field.lines) for field in self.fields)
+        return sum(
+            len(field.lines) + (len(field.label_lines) if field.value_below else 0)
+            for field in self.fields
+        )
 
 
 def build_wrapped_specification_plan(
@@ -125,37 +139,46 @@ def build_wrapped_specification_plan(
     font_bold: str,
     width: float,
     available_height: float,
+    max_font_size: float = MAX_BODY_FONT_SIZE,
 ) -> WrappedSpecificationPlan:
     """Choose the largest font that preserves every specification character."""
+    def make_plan(font_size: float) -> WrappedSpecificationPlan:
+        fields: list[WrappedField] = []
+        for label, value in rows:
+            label_text = f"{label} :"
+            label_width = _visual_width(label_text, font_bold, font_size)
+            # Keep enough room for the first value word. A long label gets
+            # its own line(s) instead of pushing the value into the next card.
+            value_below = label_width + 12 > width
+            label_lines = wrap_reference_text(
+                label_text, font_name=font_bold, font_size=font_size,
+                first_width=width, continuation_width=width,
+            ) if value_below else [label_text]
+            wrapped = wrap_reference_text(
+                value, font_name=font_name, font_size=font_size,
+                first_width=width if value_below else width - label_width - 2.2,
+                continuation_width=width,
+            )
+            fields.append(WrappedField(
+                label=label, lines=tuple(wrapped or [""]),
+                label_lines=tuple(label_lines), value_below=value_below,
+            ))
+        return WrappedSpecificationPlan(
+            font_size=font_size, line_height=font_size + 1.35,
+            fields=tuple(fields),
+        )
+
     sizes: list[float] = []
-    size = MAX_BODY_FONT_SIZE
+    size = min(MAX_BODY_FONT_SIZE, max_font_size)
     while size >= MIN_BODY_FONT_SIZE - 0.001:
         sizes.append(round(size, 2))
         size -= BODY_FONT_STEP
 
     chosen: WrappedSpecificationPlan | None = None
     for font_size in sizes:
-        fields: list[WrappedField] = []
-        for label, value in rows:
-            label_visual = _ar(f"{label} :")
-            label_width = pdfmetrics.stringWidth(label_visual, font_bold, font_size)
-            first_width = max(8.0, width - label_width - 2.2)
-            wrapped = wrap_reference_text(
-                value,
-                font_name=font_name,
-                font_size=font_size,
-                first_width=first_width,
-                continuation_width=width,
-            )
-            fields.append(WrappedField(label=label, lines=tuple(wrapped or [""])))
-        line_height = font_size + 1.35
-        plan = WrappedSpecificationPlan(
-            font_size=font_size,
-            line_height=line_height,
-            fields=tuple(fields),
-        )
+        plan = make_plan(font_size)
         chosen = plan
-        if plan.physical_line_count * line_height <= available_height:
+        if plan.physical_line_count * plan.line_height <= available_height:
             return plan
 
     assert chosen is not None
@@ -164,21 +187,11 @@ def build_wrapped_specification_plan(
     count = max(1, chosen.physical_line_count)
     fitted_line_height = max(3.15, available_height / count)
     fitted_font = max(2.8, fitted_line_height - 0.75)
-    fields = []
-    for label, value in rows:
-        label_width = pdfmetrics.stringWidth(_ar(f"{label} :"), font_bold, fitted_font)
-        wrapped = wrap_reference_text(
-            value,
-            font_name=font_name,
-            font_size=fitted_font,
-            first_width=max(6.0, width - label_width - 1.6),
-            continuation_width=width,
-        )
-        fields.append(WrappedField(label=label, lines=tuple(wrapped or [""])))
+    fitted = make_plan(fitted_font)
     return WrappedSpecificationPlan(
         font_size=fitted_font,
-        line_height=fitted_line_height,
-        fields=tuple(fields),
+        line_height=min(fitted_line_height, available_height / max(1, fitted.physical_line_count)),
+        fields=fitted.fields,
     )
 
 
@@ -281,17 +294,22 @@ def generate_wrapped_reference_preparation_pdf(
         for field in plan.fields:
             if not field.lines:
                 continue
-            label_visual = _ar(f"{field.label} :")
-            pdf.setFont(font_bold, plan.font_size)
-            label_width = pdfmetrics.stringWidth(
-                label_visual,
-                font_bold,
-                plan.font_size,
-            )
-            pdf.setFillColor(REFERENCE_RED)
-            pdf.drawRightString(right, cursor, label_visual)
-
-            value_right = right - label_width - 2.0
+            if field.value_below:
+                for label_line in field.label_lines:
+                    pdf.setFont(font_bold, plan.font_size)
+                    pdf.setFillColor(REFERENCE_RED)
+                    pdf.drawRightString(right, cursor, _ar(label_line))
+                    cursor -= plan.line_height
+                value_right = right
+            else:
+                label_visual = _ar(field.label_lines[0])
+                pdf.setFont(font_bold, plan.font_size)
+                label_width = pdfmetrics.stringWidth(
+                    label_visual, font_bold, plan.font_size,
+                )
+                pdf.setFillColor(REFERENCE_RED)
+                pdf.drawRightString(right, cursor, label_visual)
+                value_right = right - label_width - 2.0
             pdf.setFont(font_name, plan.font_size)
             pdf.setFillColor(REFERENCE_TEXT)
             pdf.drawRightString(value_right, cursor, _ar(field.lines[0]))
@@ -321,7 +339,9 @@ def generate_wrapped_reference_preparation_pdf(
         media_y = media_top - media_size
         qr_x = right - media_size
         image_x = left
-        qr_bytes = reference._qr_with_center_mark(line.order_number)
+        qr_bytes = reference._qr_with_center_mark(
+            line.barcode_payload or line.order_number
+        )
         pdf.drawImage(
             ImageReader(io.BytesIO(qr_bytes)),
             qr_x,
@@ -347,7 +367,8 @@ def generate_wrapped_reference_preparation_pdf(
                 mask="auto",
             )
 
-        product_cursor = media_y - 4
+        # Always begin text on a separate visual row below both media blocks.
+        product_cursor = media_text_start(media_y)
         product_size, product_lines = _wrap_product_name(
             line.product_name,
             font_name=font_bold,
@@ -427,10 +448,12 @@ def install_preparation_pdf_wrapped_text() -> None:
 
 
 __all__ = [
+    "MEDIA_TO_TEXT_GAP",
     "WrappedField",
     "WrappedSpecificationPlan",
     "build_wrapped_specification_plan",
     "generate_wrapped_reference_preparation_pdf",
     "install_preparation_pdf_wrapped_text",
+    "media_text_start",
     "wrap_reference_text",
 ]

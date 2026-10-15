@@ -7,8 +7,15 @@ from fulfillment_v2_routes import (
     _inventory_reservation_blockers,
     _inventory_consumption_targets,
     _reserve_inventory_for_line,
+    _ready_order_allowed,
     _satisfy_preparation_with_ready_stock,
     _warehouse_allowed,
+)
+from order_review_export_controls import (
+    ReviewExportControlPatch,
+    apply_export_control_patch,
+    item_export_control_view,
+    partition_review_items_for_preparation,
 )
 from product_fulfillment_rules import (
     FULFILLMENT_TYPE_INSTANT,
@@ -82,12 +89,14 @@ def test_explicit_preparation_service_overrides_instant_product():
     )
 
     assert result["resolved_type"] == FULFILLMENT_TYPE_PREPARATION
-    assert result["requires_branch_inventory"] is True
+    assert result["configured_type"] == FULFILLMENT_TYPE_PREPARATION
+    assert result["requires_branch_inventory"] is False
+    assert result["operation_choices_frozen"] is True
     assert result["forcing_services"][0]["name"] == "قص"
     assert result["supplier_export_eligible"] is True
 
 
-def test_stock_component_alone_does_not_override_instant_product():
+def test_stock_component_keeps_frozen_preparation_without_forcing_service():
     result = classify_line_fulfillment(
         profile={"fulfillment_type": "instant"},
         product_resources=[{
@@ -97,11 +106,12 @@ def test_stock_component_alone_does_not_override_instant_product():
         }],
     )
 
-    assert result["resolved_type"] == FULFILLMENT_TYPE_INSTANT
+    assert result["resolved_type"] == FULFILLMENT_TYPE_PREPARATION
+    assert result["requires_preparation"] is True
     assert result["forcing_services"] == []
 
 
-def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
+def test_product_service_metadata_is_preserved_during_operation_freeze():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -118,7 +128,7 @@ def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
     )
 
     assert classification["requires_preparation"] is True
-    assert classification["requires_branch_inventory"] is True
+    assert classification["requires_branch_inventory"] is False
     assert classification["forcing_services"] == [{
         "id": "svc-name",
         "name": "كتابة الاسم",
@@ -140,7 +150,7 @@ def test_product_service_forces_all_orders_to_prep_without_dropping_stock():
     assert "operational_inventory_not_available" not in decision["blockers"]
 
 
-def test_product_service_still_blocks_when_branch_stock_is_missing():
+def test_frozen_preparation_does_not_require_finished_goods_stock():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -164,13 +174,11 @@ def test_product_service_still_blocks_when_branch_stock_is_missing():
     )
 
     assert decision["ready_to_ship"] is False
-    assert "operational_inventory_not_available" in decision["blockers"]
-    assert decision["warehouse_resolution_source"] == (
-        "inventory_location_missing"
-    )
+    assert "operational_inventory_not_available" not in decision["blockers"]
+    assert decision["warehouse_resolution_source"] == "not_required"
 
 
-def test_preorder_product_waits_for_stock_without_becoming_ready_to_ship():
+def test_frozen_preparation_ignores_preorder_and_stock_threshold_choices():
     classification = classify_line_fulfillment(
         profile={
             "fulfillment_type": "instant",
@@ -189,12 +197,12 @@ def test_preorder_product_waits_for_stock_without_becoming_ready_to_ship():
         }],
     )
 
-    assert classification["preorder_when_out_of_stock"] is True
-    assert classification["low_stock_threshold"] == 5
+    assert classification["preorder_when_out_of_stock"] is False
+    assert classification["low_stock_threshold"] == 3
     assert decision["ready_to_ship"] is False
-    assert decision["preorder_required"] is True
-    assert decision["preorder_line_ids"] == ["item-1"]
-    assert "preorder_waiting_for_stock" in decision["blockers"]
+    assert decision["preorder_required"] is False
+    assert decision["preorder_line_ids"] == []
+    assert "preorder_waiting_for_stock" not in decision["blockers"]
     assert "operational_inventory_not_available" not in decision["blockers"]
 
 
@@ -423,6 +431,45 @@ def test_stockout_policy_and_threshold_are_bounded():
     assert normalize_low_stock_threshold("5") == 5
 
 
+def test_direct_assembly_route_skips_supplier_and_employee_custody():
+    state = apply_export_control_patch(
+        {},
+        ReviewExportControlPatch(
+            preparation_route="direct_assembly",
+            save_assignment_as_default=True,
+        ),
+        operational_items=[],
+        order_item_id="item-1",
+        actor_id="owner-1",
+    )
+
+    assert state["preparation_route"] == "direct_assembly"
+    assert state["supplier_export"] is False
+    assert state["assigned_employee_id"] is None
+    assert state["preparation_status"] == "awaiting_assembly"
+
+    partition = partition_review_items_for_preparation([state])
+    assert partition["supplier_file_items"] == []
+    assert partition["internal_preparation_items"] == []
+    assert partition["direct_assembly_items"] == [state]
+
+
+def test_product_default_exposes_direct_assembly_on_future_order():
+    view = item_export_control_view(
+        {},
+        operational_items=[],
+        order_item_id="future-item",
+        product_key="product:100",
+        default_assignment={"preparation_route": "direct_assembly"},
+    )
+
+    assert view["preparation_route"] == "direct_assembly"
+    assert view["direct_assembly"] is True
+    assert view["route_source"] == "default"
+    assert view["supplier_export"] is False
+    assert view["preparation_status"] == "awaiting_assembly"
+
+
 def test_unready_preparation_work_keeps_stock_reserved():
     assert _inventory_reservation_blockers([
         "operational_items_not_ready",
@@ -473,6 +520,22 @@ def test_employee_assignment_filters_inventory_but_never_replaces_it():
     assert _warehouse_allowed(context, ["wh-employee"]) is True
     assert _warehouse_allowed(context, ["wh-other"]) is False
     assert _warehouse_allowed(owner, ["wh-stock"]) is True
+
+
+def test_received_preparation_order_enters_assembly_without_inventory_location():
+    employee = {
+        "is_owner": False,
+        "warehouse_ids": set(),
+    }
+
+    assert _ready_order_allowed(employee, {
+        "ready_to_ship_source": "preparation_receipt",
+        "fulfillment_decision": {"warehouse_ids": []},
+    }) is True
+    assert _ready_order_allowed(employee, {
+        "ready_to_ship_source": "instant_inventory",
+        "fulfillment_decision": {"warehouse_ids": []},
+    }) is False
 
 
 def test_exact_ready_stock_marks_linked_services_as_already_completed():

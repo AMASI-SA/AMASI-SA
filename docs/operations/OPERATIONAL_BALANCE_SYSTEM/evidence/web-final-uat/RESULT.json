@@ -1,0 +1,104 @@
+{
+  "marker": "OPERATIONAL_BALANCE_WEB_FINAL_REVIEW",
+  "result": "PASS",
+  "requirements_passed": 12,
+  "failed": 0,
+  "tested_head": "0d8e4147a398a0ddd3928c5e04a66adf67a66379",
+  "tested_tree": "55ca516f0daffc851337bb4f7e84b314261c94ef",
+  "branch": "codex/operational-balance-system-20261005",
+  "pr": null,
+  "database": "operational_balance_device_uat_20261005",
+  "owner": "web-final-uat-20261005",
+  "backend": "http://127.0.0.1:8135/api",
+  "browser": "http://127.0.0.1:5178/operational-preview.html",
+  "opening_count": 1,
+  "movement_count": 2,
+  "bank_credit_count": 1,
+  "final_liquidity": "10050.00 SAR",
+  "equation": "10000 - 250 + 300 = 10050",
+  "audit_event_counts": {
+    "baseline_saved": 1,
+    "system_started": 1,
+    "movement_saved": 1,
+    "order_bank_credited": 1
+  },
+  "bank_binding": {
+    "_id": "920a98ef2c31c2ad96254d8674526cc3cf76efc5a70abd8184b67063c3197628",
+    "user_id": "web-final-uat-20261005",
+    "upstream_source": "salla.payment_method_bank",
+    "upstream_value": "مصرف UAT المرتبط",
+    "financial_account_id": "uat-bound-bank",
+    "status": "active",
+    "confirmed": true,
+    "identity_contract_version": 1,
+    "bank_account_source": "mz2_financial_accounts",
+    "currency": "SAR"
+  },
+  "banks": [
+    {
+      "user_id": "web-final-uat-20261005",
+      "id": "uat-unlinked-bank",
+      "account_type": "bank",
+      "currency": "SAR",
+      "name": "بنك غير مرتبط — اختبار",
+      "status": "active"
+    },
+    {
+      "id": "uat-bound-bank",
+      "user_id": "web-final-uat-20261005",
+      "account_type": "bank",
+      "currency": "SAR",
+      "name": "البنك المرتبط — اختبار",
+      "status": "active"
+    }
+  ],
+  "write_collections": [
+    "operational_balance_operation_claims_v1",
+    "operational_balance_states_v1"
+  ],
+  "nonoperational_write_attempts": 0,
+  "accounting_import_attempts": 0,
+  "nonloopback_connection_attempts": 0,
+  "socket_destinations": [
+    "['127.0.0.1', 13231]",
+    "['127.0.0.1', 19138]",
+    "['127.0.0.1', 19163]",
+    "['127.0.0.1', 27305]",
+    "['127.0.0.1', 37664]",
+    "['127.0.0.1', 40711]",
+    "['127.0.0.1', 46021]",
+    "['127.0.0.1', 46046]",
+    "['127.0.0.1', 47039]",
+    "['127.0.0.1', 47565]",
+    "['127.0.0.1', 8081]",
+    "['127.0.0.1', 8135]"
+  ],
+  "scoped_accounting_document_counts": {
+    "general_ledger": 0,
+    "mz2_atomic_owners": 0,
+    "mz2_ledger": 0,
+    "journal_entries": 0
+  },
+  "fixture_boundaries": "New synthetic owner; two MZ2 banks; source rows seeded directly only in fixed local test DB. Product writes guarded to operational collections. No production auth/data used.",
+  "production_changed": false,
+  "production_financial_writes": 0,
+  "android": "paused; not used",
+  "merge_deploy": "not performed",
+  "product_code_changed": false,
+  "stage_file_sha256": {
+    "opening-retry.json": "129b38fafc27e8fd57edaeda21149e7f8d988eb3a56ddc586879f952dfd9adbb",
+    "finish-retry.json": "a3c8759f003b8e0ccad1e40b03537180fda04f9c0df06e8c1ebcd85a0dcfb1af",
+    "manual-retry.json": "6664a7121c7860811b67ace26479884048dcfe06a4e635b7d594acceef2b64d1",
+    "seed-pending.json": "6f7b0ea737ef6aeac1a84749f264ddd4c96ca98447942e6607e3ea736dccb468",
+    "reviewed.json": "d5f68d49b9153a8e342775a046f92a21265e706ff680d951ce7696054e1c8cfc",
+    "in-progress.json": "4eec25b76ba20ea1005fd4d207a5223d45f1489c880df6f3b661950af8f241f4",
+    "resync.json": "d392b30b87f214f8d8ecda33e38691e97cab2ddb42e5bf5e3fbc7a254ac7de27",
+    "conflicts.json": "8ebf46097ff7ef06b92b68ddb89a556aedd804f7b269b4e80108da11cebc036e",
+    "readback.json": "55213842034e52dcd048947c218d67a0e18fa352f354a53be03683ed2e37fdf0"
+  },
+  "limits": [
+    "Synthetic local authentication; not production sign-in or deployment testing.",
+    "Resync exercises the real operational refresh against seeded canonical MZ2 order snapshots; no live Salla call.",
+    "Existing 149 backend/43 frontend PASS accepted from immutable candidate; this phase is fresh browser/API UAT, not a new regression run."
+  ]
+}

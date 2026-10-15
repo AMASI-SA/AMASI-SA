@@ -468,13 +468,16 @@ class TestReportBuilder:
             })
             r = await build_selective_send_policy_report(
                 db, user_id=uid, since_days=180)
-            # Q2 order was excluded upstream by eligible_orders, so
-            # the report only sees 3 decisions.
-            assert r["total_decisions"] == 3
+            # The requested 180-day interval is authoritative; the historic
+            # 2026-07-01 rollout date is no longer an implicit upstream
+            # filter.  The policy still explains the older row explicitly.
+            assert r["total_decisions"] == 4
             assert r["counts"]["allow"] == 2
-            assert r["counts"]["block"] == 1
+            assert r["counts"]["block"] == 2
             assert r["blocker_code_counts"].get(
                 BlockerCode.BANK_TRANSFER_ON_HOLD) == 1
+            assert r["blocker_code_counts"].get(
+                BlockerCode.BEFORE_SYNC_START_DATE) == 1
         finally:
             await self._clean(db, uid)
 

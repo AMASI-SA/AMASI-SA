@@ -1,0 +1,21 @@
+.F.........FF                                                            [100%]
+================================== FAILURES ===================================
+_______________ test_dashboard_shipping_row_mirrors_ssot_fields _______________
+backend\tests\test_dashboard_shipping_ssot.py:69: in test_dashboard_shipping_row_mirrors_ssot_fields
+    with open("/app/backend/server.py", "r") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/app/backend/server.py'
+_____ test_frontend_rebind_uses_authentication_not_duplicate_registration _____
+backend\tests\test_passkey_security_v1.py:140: in test_frontend_rebind_uses_authentication_not_duplicate_registration
+    assert 'ceremony === "renew" || ceremony === "rebind"' in login_source
+E   assert 'ceremony === "renew" || ceremony === "rebind"' in '"""Owner trusted-device WebAuthn/passkey security for Mezan.\n\nThis layer sits between the distributed password-abus...an Owner trusted-device passkeys enabled: rp_id=%s trust_days=%s",\n        _rp_id(),\n        _trust_days(),\n    )\n'
+_________ test_runtime_modules_do_not_reference_migration_collections _________
+backend\tests\test_qoyod_runtime_ssot_isolation.py:76: in test_runtime_modules_do_not_reference_migration_collections
+    assert not missing, (
+E   AssertionError: Runtime modules missing � update RUNTIME_MODULES: pipeline.py, worker.py, webhook.py, normalizer.py, business_rules.py, eligibility.py, preflight.py, product_resolver.py, customer_resolver.py, invoice_builder.py, state_machine.py, first_sync_monitor.py
+E   assert not ['pipeline.py', 'worker.py', 'webhook.py', 'normalizer.py', 'business_rules.py', 'eligibility.py', ...]
+=========================== short test summary info ===========================
+FAILED backend/tests/test_dashboard_shipping_ssot.py::test_dashboard_shipping_row_mirrors_ssot_fields
+FAILED backend/tests/test_passkey_security_v1.py::test_frontend_rebind_uses_authentication_not_duplicate_registration
+FAILED backend/tests/test_qoyod_runtime_ssot_isolation.py::test_runtime_modules_do_not_reference_migration_collections
+3 failed, 10 passed in 1.59s

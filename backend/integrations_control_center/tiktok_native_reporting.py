@@ -14,6 +14,8 @@ from typing import Any, Callable
 import httpx
 from pydantic import BaseModel, Field, model_validator
 
+from .ad_daily_close_proof import close_proof, tiktok_evidence
+
 from .tiktok_oauth_security import (
     TIKTOK_CREDENTIALS_COLLECTION,
     TIKTOK_PROVIDER_ID,
@@ -52,6 +54,7 @@ class TikTokReportingError(RuntimeError):
 
 class TikTokReportingSyncInput(BaseModel):
     days: int = Field(default=30, ge=1, le=MAX_REPORTING_DAYS)
+    include_hierarchy: bool = False
     from_date: str | None = None
     to_date: str | None = None
 
@@ -265,6 +268,7 @@ async def _fetch_day(
     metrics = (rows[0] or {}).get("metrics") if rows else {}
     metrics = metrics if isinstance(metrics, dict) else {}
     return {
+        "close_evidence": tiktok_evidence(data, account_id),
         "spend_native": float(metrics.get("spend") or 0),
         "impressions": int(float(metrics.get("impressions") or 0)),
         "clicks": int(float(metrics.get("clicks") or 0)),
@@ -344,6 +348,11 @@ async def run_tiktok_reporting_sync(
                                 "conversion_metric": "conversion",
                                 "empty_provider_row": row["empty"],
                                 "request_id": row["request_id"],
+                                "source_close_proof": close_proof(
+                                    account_id=account["ad_account_id"], business_date=day.isoformat(),
+                                    timezone=account.get("timezone"), currency=currency,
+                                    source_mode=TIKTOK_REPORTING_SOURCE_MODE, observed_at=observed_at,
+                                    **row["close_evidence"]),
                                 "source_mode": TIKTOK_REPORTING_SOURCE_MODE,
                                 "source_only": True,
                                 "accounting_eligible": False,
@@ -417,6 +426,13 @@ async def run_tiktok_reporting_sync(
     sync_status = (
         "complete" if accounts_complete == len(account_summaries) else "partial"
     )
+    hierarchy = None
+    if payload.include_hierarchy:
+        from .tiktok_native_hierarchy import sync_tiktok_hierarchy
+        hierarchy = await sync_tiktok_hierarchy(db, user_id, days, observed_at=observed_at)
+        if hierarchy["status"] != "complete":
+            sync_status = "partial"
+            error_items.extend(hierarchy["errors"])
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": TIKTOK_PROVIDER_ID},
         {
@@ -460,6 +476,7 @@ async def run_tiktok_reporting_sync(
         "items": account_summaries,
         "errors": error_items[:100],
         "provider_calls": provider_calls,
+        "hierarchy": hierarchy,
         "source_only": True,
         "provider_write_reached": False,
         "campaign_write_reached": False,
@@ -479,3 +496,4 @@ __all__ = [
     "run_tiktok_reporting_sync",
     "tiktok_reporting_enabled",
 ]
+

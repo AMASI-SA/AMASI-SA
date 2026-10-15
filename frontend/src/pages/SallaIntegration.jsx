@@ -1,26 +1,34 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
     Storefront, CheckCircle, Warning, ArrowsClockwise, LinkBreak,
     PlugsConnected, ShieldCheck, Info, ArrowSquareOut, Lock,
-    Globe, EnvelopeSimple, Hash, Clock, Plus, Package, ChartPieSlice,
+    Globe, EnvelopeSimple, Hash, Clock, Package, ChartPieSlice,
     PencilSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import api from "../lib/api";
+import {
+  isRecentServerDateTime,
+  parseServerDateTime,
+} from "../lib/serverDateTime";
+
+function riyadhTodayISO() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Riyadh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date());
+    const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${byType.year}-${byType.month}-${byType.day}`;
+}
 
 /**
- * /settings/salla — "ربط متجر سلة" (Phase 1)
+ * /settings/salla — "ربط متجر سلة"
  *
- * Phase 1 scope:
- *   - Show connection status
- *   - "ربط متجر سلة" button → starts OAuth flow at Salla
- *   - On callback success: show store info, last refresh, plan, status
- *   - "اختبار الاتصال" — live call to /store/info
- *   - "جلب بيانات المتجر" — re-fetch fresh
- *   - "إلغاء الربط" — local disconnect (no remote revoke yet)
- *
- * Phase 2 will add: webhook creation buttons + event log + monitoring.
+ * Shows connection health, direct data sync, live abandoned-cart delivery,
+ * and the four privacy-safe abandoned-cart webhook states.
  *
  * IMPORTANT: This page DOES NOT touch any other data source. Make, PDF
  * upload, and Excel upload all continue to work exactly as before.
@@ -107,8 +115,13 @@ export default function SallaIntegration() {
     const [showConfigForm, setShowConfigForm] = useState(false);
     const [cfgInputs, setCfgInputs] = useState({ client_id: "", client_secret: "", redirect_uri: "" });
     const [syncLogs, setSyncLogs] = useState([]);
-    const [syncToDate, setSyncToDate] = useState(
-        new Date().toISOString().slice(0, 10)
+    const [cartStatus, setCartStatus] = useState(null);
+    const [webhookMonitor, setWebhookMonitor] = useState(null);
+    const [syncToDate, setSyncToDate] = useState(riyadhTodayISO);
+    const hasRunningOrderSync = syncLogs.some(
+        (log) => log.kind === "orders"
+            && log.status === "running"
+            && isRecentServerDateTime(log.started_at)
     );
 
     const load = useCallback(async () => {
@@ -122,6 +135,21 @@ export default function SallaIntegration() {
             setStatus(statusRes.data);
             setConfig(cfgRes.data);
             setSyncLogs(logsRes.data?.logs || []);
+            if (statusRes.data?.connected) {
+                const [cartResult, webhookResult] = await Promise.allSettled([
+                    api.get("/salla/abandoned-carts/status"),
+                    api.get("/salla/webhook-monitor"),
+                ]);
+                if (cartResult.status === "fulfilled") {
+                    setCartStatus(cartResult.value.data);
+                }
+                if (webhookResult.status === "fulfilled") {
+                    setWebhookMonitor(webhookResult.value.data);
+                }
+            } else {
+                setCartStatus(null);
+                setWebhookMonitor(null);
+            }
             setCfgInputs((prev) => ({
                 client_id: cfgRes.data?.client_id || prev.client_id,
                 client_secret: "",
@@ -154,6 +182,19 @@ export default function SallaIntegration() {
     }, [location.search, location.pathname, navigate]);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (!hasRunningOrderSync) return undefined;
+        const timer = window.setInterval(async () => {
+            try {
+                const { data } = await api.get("/salla/sync/logs?limit=20");
+                setSyncLogs(data?.logs || []);
+            } catch (_) {
+                // Preserve the last progress snapshot; the next poll retries.
+            }
+        }, 5_000);
+        return () => window.clearInterval(timer);
+    }, [hasRunningOrderSync]);
 
     const handleConnect = async () => {
         setBusy(b => ({ ...b, connect: true }));
@@ -262,7 +303,11 @@ export default function SallaIntegration() {
             const { data } = await api.post("/salla/sync/orders", {
                 updated_since_hours: 24 * 30, // last 30 days by default
             });
-            toast.success(`مزامنة الطلبات: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`);
+            toast.success(
+                data.already_running
+                    ? "مزامنة الطلبات تعمل بالفعل في الخلفية"
+                    : "بدأت مزامنة الطلبات في الخلفية؛ سيُحدّث السجل تلقائيًا"
+            );
             await load();
         } catch (e) {
             const det = e?.response?.data?.detail;
@@ -295,7 +340,9 @@ export default function SallaIntegration() {
             });
 
             toast.success(
-                `مزامنة الفترة: ${data.created} جديد · ${data.updated} محدّث · ${data.errors_count} خطأ`
+                data.already_running
+                    ? "مزامنة الفترة تعمل بالفعل في الخلفية"
+                    : "بدأت مزامنة الفترة في الخلفية؛ سيُحدّث السجل تلقائيًا"
             );
             await load();
         } catch (e) {
@@ -303,6 +350,42 @@ export default function SallaIntegration() {
             const msg = typeof det === "string"
                 ? det
                 : (det?.message || "فشل مزامنة الفترة المحددة");
+            toast.error(msg);
+            await load();
+        } finally {
+            setBusy(b => ({ ...b, syncOrders: false }));
+        }
+    };
+
+    const handleRecoverCampaignAttribution = async () => {
+        if (!syncToDate) {
+            toast.error("حدد تاريخ النهاية أولاً");
+            return;
+        }
+
+        const recoveryStart = new Date(`${syncToDate}T12:00:00Z`);
+        recoveryStart.setUTCDate(recoveryStart.getUTCDate() - 2);
+        const recoveryFromDate = recoveryStart.toISOString().slice(0, 10);
+
+        setBusy(b => ({ ...b, syncOrders: true }));
+        try {
+            const { data } = await api.post("/salla/sync/orders", {
+                from_date: recoveryFromDate,
+                to_date: syncToDate,
+                recover_marketing_attribution: true,
+            });
+
+            toast.success(
+                data.already_running
+                    ? "مزامنة طلبات سلة تعمل بالفعل في الخلفية"
+                    : `بدأ استعادة ربط الحملات من ${recoveryFromDate} إلى ${syncToDate}`
+            );
+            await load();
+        } catch (e) {
+            const det = e?.response?.data?.detail;
+            const msg = typeof det === "string"
+                ? det
+                : (det?.message || "فشل استعادة ربط طلبات سلة بالحملات");
             toast.error(msg);
             await load();
         } finally {
@@ -350,6 +433,12 @@ export default function SallaIntegration() {
 
     const connected = status?.connected;
     const configured = status?.configured;
+    const cartsReadGranted = String(status?.scope || "")
+        .replaceAll(",", " ")
+        .split(/\s+/)
+        .includes("carts.read");
+    const cartEvents = (webhookMonitor?.events || [])
+        .filter(event => event.group === "abandoned_carts");
 
     return (
         <div className="p-4 sm:p-6 space-y-6" data-testid="salla-integration-page" style={{ fontFamily: "Tajawal" }}>
@@ -365,17 +454,17 @@ export default function SallaIntegration() {
                             {!loading && <StatusPill status={status?.status} configured={configured} />}
                         </h1>
                         <p className="text-sm text-slate-500 mt-1">
-                            ربط مباشر بين سلة والنظام المحاسبي عبر OAuth — Phase 1: الاتصال وقراءة بيانات المتجر.
+                            اتصال مباشر لقراءة المتجر والطلبات والمنتجات والسلات المتروكة ومراقبة Webhooks.
                         </p>
                     </div>
                 </div>
             </div>
 
-            {/* Phase notice + Make/PDF/Excel safety banner */}
+            {/* Make/PDF/Excel safety banner */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 flex items-start gap-2" data-testid="salla-coexist-banner">
                 <ShieldCheck size={16} weight="bold" className="flex-shrink-0 mt-0.5" />
                 <div>
-                    <span className="font-bold">Make.com و رفع PDF و رفع Excel يعملون كما هم</span> — لن يتم تعطيلهم أو إخفاؤهم. هذا الربط الجديد يعمل بالتوازي، ويبدأ بقراءة بيانات المتجر فقط في Phase 1.
+                    <span className="font-bold">Make.com ورفع PDF ورفع Excel يعملون كما هم</span> — الربط المباشر يعمل بالتوازي، والسلات تُحفظ للتحليل فقط دون اسم العميل أو بريده أو جواله أو عنوانه.
                 </div>
             </div>
 
@@ -610,6 +699,116 @@ export default function SallaIntegration() {
                 </div>
             )}
 
+            {/* Abandoned carts — historical import + live webhook coverage */}
+            {!loading && connected && (
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="salla-abandoned-carts-card">
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 px-5 py-3 flex items-start gap-2">
+                        <Storefront size={19} weight="bold" className="text-amber-700 mt-0.5" />
+                        <div className="flex-1">
+                            <h3 className="font-extrabold text-slate-900">ذاكرة السلات والعملاء V2</h3>
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                                استيراد تاريخي ومتابعة مباشرة للأحداث الأربعة. بيانات العميل وروابط الاستعادة تُحفظ مشفّرة، ولا تُخزَّن كنص صريح.
+                            </p>
+                        </div>
+                        <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-extrabold whitespace-nowrap">
+                            قراءة آمنة
+                        </span>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            {[
+                                ["إجمالي السلات", cartStatus?.total_carts || 0, "text-slate-900"],
+                                ["ما زالت متروكة", cartStatus?.active_carts || 0, "text-amber-700"],
+                                ["تحولت إلى طلب", cartStatus?.purchased_carts || 0, "text-emerald-700"],
+                                ["أحداث محفوظة", cartStatus?.webhook_events || 0, "text-indigo-700"],
+                            ].map(([label, value, color]) => (
+                                <div key={label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                    <div className="text-[11px] font-bold text-slate-500">{label}</div>
+                                    <div className={`text-2xl font-extrabold mt-1 font-mono ${color}`}>{Number(value).toLocaleString("en-US")}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3" data-testid="salla-cart-v2-memory-coverage">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                                <div>
+                                    <div className="text-xs font-extrabold text-indigo-950">تغطية ذاكرة ميزان</div>
+                                    <div className="text-[10px] text-indigo-700 mt-0.5">المخطط V{cartStatus?.schema_version || 1} · لا تعرض هذه الصفحة أي بيانات شخصية</div>
+                                </div>
+                                <span className="px-2 py-1 rounded-full bg-white border border-indigo-200 text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">
+                                    مشفّر عند الحفظ
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+                                {[
+                                    ["هويات العملاء", cartStatus?.customer_identities || 0],
+                                    ["مرتبطة بعميل", cartStatus?.identity_linked_carts || 0],
+                                    ["مرتبطة بمصدر/حملة", cartStatus?.attributed_carts || 0],
+                                    ["مرتبطة بطلب", cartStatus?.order_linked_carts || 0],
+                                    ["طلبات في ملف العميل", cartStatus?.customer_memory_orders || 0],
+                                    ["روابط/كوبونات مشفرة", cartStatus?.encrypted_private_carts || 0],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="rounded-lg bg-white border border-indigo-100 px-2.5 py-2">
+                                        <div className="text-[10px] font-bold text-slate-500 leading-tight">{label}</div>
+                                        <div className="text-lg font-extrabold text-indigo-800 font-mono mt-1">{Number(value).toLocaleString("en-US")}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-center gap-3">
+                            <CheckCircle size={22} weight="fill" className="text-emerald-600 flex-shrink-0" />
+                            <div>
+                                <div className="font-extrabold text-emerald-950 text-sm">
+                                    السلات الجديدة وتحديثاتها تعمل مباشرة
+                                </div>
+                                <div className="text-xs text-emerald-800 mt-1" data-testid="salla-cart-live-webhooks-mode">
+                                    تم إيقاف الاستيراد التاريخي حسب الإعداد المعتمد. تصل السلات الجديدة وتحديث الحالة والتحويل إلى طلب عبر Webhook فقط.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <h4 className="font-extrabold text-sm text-slate-800">حالة أحداث السلات الأربعة</h4>
+                                <span className="text-[11px] text-slate-500">
+                                    وصل {cartEvents.filter(event => event.observed).length} من {cartEvents.length || 4}
+                                </span>
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-2" data-testid="salla-cart-webhook-events">
+                                {cartEvents.map(event => (
+                                    <div key={event.event} className="rounded-lg border border-slate-200 px-3 py-2 flex items-center gap-2">
+                                        {event.observed
+                                            ? <CheckCircle size={16} weight="fill" className="text-emerald-600 flex-shrink-0" />
+                                            : <Clock size={16} weight="bold" className="text-slate-400 flex-shrink-0" />}
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-extrabold text-slate-800">{event.label}</div>
+                                            <div className="text-[10px] text-slate-500 font-mono truncate">{event.event}</div>
+                                        </div>
+                                        <div className="text-left flex-shrink-0">
+                                            <div className={`text-[10px] font-extrabold ${event.observed ? "text-emerald-700" : "text-slate-500"}`}>
+                                                {event.observed ? `وصل ${event.delivery_count || 0}` : "لم يصل بعد"}
+                                            </div>
+                                            {event.last_received_at && (
+                                                <div className="text-[9px] text-slate-400" dir="ltr">
+                                                    {new Date(event.last_received_at).toLocaleString("en-US")}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                                {cartEvents.length === 0 && (
+                                    <div className="sm:col-span-2 text-center py-4 text-xs text-slate-400">
+                                        جاري تحميل سجل Webhooks…
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Sync section + logs — shown whenever connected */}
             {!loading && connected && (
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden" data-testid="salla-sync-card">
@@ -656,16 +855,16 @@ export default function SallaIntegration() {
                             <button
                                 type="button"
                                 onClick={handleSyncOrdersRange}
-                                disabled={busy.syncOrders || !syncToDate}
+                                disabled={busy.syncOrders || hasRunningOrderSync || !syncToDate}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm"
                                 data-testid="salla-sync-date-range-btn"
                             >
                                 <ArrowsClockwise
                                     size={14}
                                     weight="bold"
-                                    className={busy.syncOrders ? "animate-spin" : ""}
+                                    className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""}
                                 />
-                                {busy.syncOrders
+                                {busy.syncOrders || hasRunningOrderSync
                                     ? "جاري مزامنة الفترة…"
                                     : "مزامنة من 01-07 إلى التاريخ المحدد"}
                             </button>
@@ -674,13 +873,26 @@ export default function SallaIntegration() {
                         <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
+                            onClick={handleRecoverCampaignAttribution}
+                            disabled={busy.syncOrders || hasRunningOrderSync || !syncToDate}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-sm"
+                            data-testid="salla-recover-campaign-attribution-btn"
+                            title="يستعيد معرّفات حملات Snapchat من تفاصيل طلبات سلة لثلاثة أيام، دون تعديل الطلبات في سلة"
+                        >
+                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""} />
+                            {busy.syncOrders || hasRunningOrderSync
+                                ? "جاري الاستعادة…"
+                                : "استعادة ربط الحملات (آخر 3 أيام)"}
+                        </button>
+                        <button
+                            type="button"
                             onClick={handleSyncOrders}
-                            disabled={busy.syncOrders}
+                            disabled={busy.syncOrders || hasRunningOrderSync}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm"
                             data-testid="salla-sync-orders-btn"
                         >
-                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders ? "animate-spin" : ""} />
-                            {busy.syncOrders ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
+                            <ArrowsClockwise size={14} weight="bold" className={busy.syncOrders || hasRunningOrderSync ? "animate-spin" : ""} />
+                            {busy.syncOrders || hasRunningOrderSync ? "جاري المزامنة…" : "مزامنة الطلبات الآن (آخر 30 يوماً)"}
                         </button>
                         <button
                             type="button"
@@ -731,18 +943,19 @@ export default function SallaIntegration() {
                                     <tbody className="divide-y divide-slate-200">
                                         {syncLogs.map((log) => (
                                             <tr key={log.id} className="hover:bg-white">
-                                                <td className="px-3 py-2 font-bold">{log.kind === "orders" ? "طلبات" : log.kind === "products" ? "منتجات" : log.kind}</td>
+                                                <td className="px-3 py-2 font-bold">{log.kind === "orders" ? "طلبات" : log.kind === "products" ? "منتجات" : log.kind === "abandoned_carts" ? "سلات متروكة" : log.kind}</td>
                                                 <td className="px-3 py-2">
                                                     {log.status === "completed" && <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">✓ مكتمل</span>}
                                                     {log.status === "running" && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">⏳ جارٍ</span>}
                                                     {log.status === "failed" && <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold" title={log.last_error || ""}>✗ فشل</span>}
+                                                    {log.status === "interrupted" && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold" title={log.last_error || ""}>■ متوقفة</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-emerald-700 font-bold">{log.created || 0}</td>
                                                 <td className="px-3 py-2 text-sky-700 font-bold">{log.updated || 0}</td>
                                                 <td className="px-3 py-2 text-rose-700 font-bold">{log.errors_count || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500">{log.pages_fetched || 0}</td>
                                                 <td className="px-3 py-2 text-slate-500 text-[11px]" dir="ltr">
-                                                    {log.started_at ? new Date(log.started_at).toLocaleString("en-US") : "—"}
+                                                    {log.started_at ? new Date(parseServerDateTime(log.started_at)).toLocaleString("en-US") : "—"}
                                                 </td>
                                             </tr>
                                         ))}
@@ -779,20 +992,6 @@ export default function SallaIntegration() {
                             {busy.reset ? "جاري الإلغاء…" : "إعادة ضبط الربط"}
                         </button>
                     </div>
-                </div>
-            )}
-
-            {/* Phase 2/3/4 preview */}
-            {!loading && connected && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4" data-testid="salla-roadmap">
-                    <h4 className="font-extrabold text-slate-900 text-sm mb-2 flex items-center gap-1">
-                        <Plus size={14} weight="bold" className="text-slate-500" /> قريباً (مراحل لاحقة)
-                    </h4>
-                    <ul className="text-xs text-slate-600 space-y-1 leading-relaxed list-disc list-inside">
-                        <li>Phase 2: إنشاء Webhooks تلقائياً + استقبال أحداث (إنشاء/تعديل/إلغاء/استرجاع) + سجل أحداث.</li>
-                        <li>Phase 3: مزامنة الطلبات القديمة + ربطها بحسابات الأرباح.</li>
-                        <li>Phase 4: شاشة مراقبة الربط + أداة مقارنة Salla مقابل النظام.</li>
-                    </ul>
                 </div>
             )}
 

@@ -30,12 +30,7 @@ def _text(value: Any) -> str:
 
 
 def preparation_file_sequence(file_number: Any) -> str:
-    """Return the human sequence suffix from a registry file number.
-
-    ``PF-20260802-0017`` becomes ``17``. The registry always emits this
-    format, while the fallback preserves a non-standard value rather than
-    hiding it.
-    """
+    """Return the human sequence suffix from a registry file number."""
     raw = _text(file_number)
     if not raw:
         return ""
@@ -58,12 +53,7 @@ def stamp_preparation_card_file_numbers(
     file_number: Any,
     card_count: int,
 ) -> bytes:
-    """Replace the serial at the top of each approved 3x5 card.
-
-    Only the small serial strip is redacted. Images, QR codes, quantities,
-    product fields, and delivery counts remain visually unchanged outside that
-    strip.
-    """
+    """Replace the serial at the top of each approved 3x5 card."""
     sequence = preparation_file_sequence(file_number)
     count = max(0, int(card_count or 0))
     if not pdf_bytes or not sequence or count <= 0:
@@ -97,9 +87,6 @@ def stamp_preparation_card_file_numbers(
                 center_x = margin_x + column * card_width + card_width / 2
                 card_top = margin_y + row * card_height
 
-                # The approved renderer places the 8.5pt serial at this exact
-                # centered baseline. Keep the redaction above the media area,
-                # which starts 13pt from the card top.
                 redact = fitz.Rect(
                     center_x - 38.0,
                     card_top + 0.2,

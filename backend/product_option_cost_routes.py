@@ -17,12 +17,21 @@ from typing import Any, Callable
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pymongo import ASCENDING
 
+from product_cost_revision import bump_product_cost_revision
+from component_status_policy import (
+    COMPONENT_STATUS_ACTIVE,
+    active_component_selector,
+    component_is_active,
+    component_status,
+    require_active_component,
+)
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
 from product_v2_routes import PRODUCTS, _number, _text
 
 RESOURCES = "mezan_cost_resources_v2"
 BINDINGS = "mezan_product_option_cost_bindings_v2"
 AUDIT = "mezan_cost_change_log_v2"
+OPTION_LEVEL_VALUE_ID = "__option__"
 
 
 def _now() -> datetime:
@@ -79,10 +88,28 @@ def _option_value(product: dict[str, Any], option_id: str, value_id: str) -> tup
     for option in product.get("options") or []:
         if str(option.get("id")) != str(option_id):
             continue
-        for value in option.get("values") or []:
+        values = option.get("values") or []
+        if not values and str(value_id) == OPTION_LEVEL_VALUE_ID:
+            return option, {
+                "id": OPTION_LEVEL_VALUE_ID,
+                "name": _text(option.get("name")) or "الخيار",
+            }
+        for value in values:
             if str(value.get("id")) == str(value_id):
                 return option, value
     raise HTTPException(status_code=422, detail={"code": "option_value_not_found"})
+
+
+def _binding_is_selected(
+    binding: dict[str, Any],
+    selected_keys: set[tuple[str, str]],
+    selected_option_ids: set[str],
+) -> bool:
+    option_id = str(binding.get("option_id"))
+    value_id = str(binding.get("value_id"))
+    if value_id == OPTION_LEVEL_VALUE_ID:
+        return option_id in selected_option_ids
+    return (option_id, value_id) in selected_keys
 
 
 async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
@@ -94,6 +121,11 @@ async def _binding_view(db: Any, binding: dict[str, Any]) -> dict[str, Any]:
             {"_id": 0},
         )
         row["resource"] = _serialize(resource)
+        row["resource_status"] = component_status(resource)
+        row["resource_inactive"] = not component_is_active(resource)
+        # Existing bindings keep their current cost while the resource is
+        # stopped. Inactive only blocks new links; it never rewrites an
+        # existing product recipe or a historical snapshot.
         unit_cost = _number((resource or {}).get("unit_cost")) or 0.0
         amount = unit_cost * (_number(row.get("quantity")) or 1.0)
     row["resolved_amount"] = amount or 0.0
@@ -177,6 +209,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "category": _text(payload.get("category")) or "other",
             "description": _text(payload.get("description")),
             "track_inventory": bool(payload.get("track_inventory")),
+            "status": COMPONENT_STATUS_ACTIVE,
             "unit_cost": _number(payload.get("unit_cost")),
             "created_at": now,
             "updated_at": now,
@@ -187,6 +220,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             if "duplicate" in str(exc).lower():
                 raise HTTPException(status_code=409, detail={"code": "component_code_exists"}) from exc
             raise
+        await bump_product_cost_revision(db, user_id)
         return {"ok": True, "resource": _serialize(row)}
 
     @router.put("/components-v2/{resource_id}/cost")
@@ -197,12 +231,12 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             raise HTTPException(status_code=422, detail={"code": "invalid_cost"})
         now = _now()
         before = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-        if not before:
-            raise HTTPException(status_code=404, detail={"code": "component_not_found"})
+        require_active_component(before)
         await db[RESOURCES].update_one(
             {"user_id": user_id, "id": resource_id},
             {"$set": {"unit_cost": amount, "updated_at": now}},
         )
+        await bump_product_cost_revision(db, user_id)
         impacted = await db[BINDINGS].count_documents({"user_id": user_id, "resource_id": resource_id})
         await db[AUDIT].insert_one({
             "id": uuid.uuid4().hex,
@@ -235,12 +269,27 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             if row.get("resource_id")
         }
         resources = []
+        bound_resource_ids = {
+            str(row.get("resource_id"))
+            for row in bindings
+            if row.get("mode") == "resource" and row.get("resource_id")
+        }
         async for raw in db[RESOURCES].find(
-            {"user_id": user_id}, {"_id": 0}
+            {
+                "user_id": user_id,
+                "$or": [
+                    active_component_selector(),
+                    {"id": {"$in": sorted(bound_resource_ids)}},
+                ],
+            },
+            {"_id": 0},
         ).sort("name", 1):
             row = _serialize(raw) or {}
             row["linked_to_product"] = str(row.get("id")) in product_resource_ids
-            row["available_for_option_link"] = not row["linked_to_product"]
+            row["status"] = component_status(row)
+            row["available_for_option_link"] = (
+                component_is_active(row) and not row["linked_to_product"]
+            )
             resources.append(row)
         return {
             "salla_product_id": salla_product_id,
@@ -266,8 +315,12 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             raise HTTPException(status_code=422, detail={"code": "invalid_quantity"})
         if mode == "resource":
             resource = await db[RESOURCES].find_one({"user_id": user_id, "id": resource_id}, {"_id": 0})
-            if not resource:
-                raise HTTPException(status_code=422, detail={"code": "component_not_found"})
+            try:
+                require_active_component(resource)
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    raise HTTPException(status_code=422, detail={"code": "component_not_found"}) from exc
+                raise
             product_conflict = await db[PRODUCT_RESOURCE_BINDINGS].find_one(
                 {
                     "user_id": user_id,
@@ -307,6 +360,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             {"$set": patch, "$setOnInsert": {"id": uuid.uuid4().hex, "created_at": now}},
             upsert=True,
         )
+        await bump_product_cost_revision(db, user_id)
         saved = await db[BINDINGS].find_one(selector, {"_id": 0})
         return {"ok": True, "binding": await _binding_view(db, saved or patch)}
 
@@ -320,6 +374,8 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
             "option_id": str(option_id),
             "value_id": str(value_id),
         })
+        if result.deleted_count:
+            await bump_product_cost_revision(db, user_id)
         return {"ok": True, "deleted": result.deleted_count}
 
     @router.post("/products-v2/{product_id}/calculate-cost")
@@ -333,6 +389,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         base_cost = _number(profile.get("base_cost")) or 0.0
         selected = payload.get("selected_options") if isinstance(payload.get("selected_options"), list) else []
         selected_keys = {(str(row.get("option_id")), str(row.get("value_id"))) for row in selected if isinstance(row, dict)}
+        selected_option_ids = {option_id for option_id, _value_id in selected_keys}
         bindings = await db[BINDINGS].find({
             "user_id": user_id,
             "salla_product_id": str(product["salla_product_id"]),
@@ -356,8 +413,7 @@ def make_product_option_cost_router(db: Any, current_user: Callable[..., Any]) -
         applied = []
         option_additional = 0.0
         for binding in bindings:
-            key = (str(binding.get("option_id")), str(binding.get("value_id")))
-            if key not in selected_keys:
+            if not _binding_is_selected(binding, selected_keys, selected_option_ids):
                 continue
             view = await _binding_view(db, binding)
             amount = _number(view.get("resolved_amount")) or 0.0

@@ -1,0 +1,14 @@
+{
+  "baseline_cutoff_at": "2026-08-30T17:59:52+03:00",
+  "campaign": {
+    "name": "صنع في السعوديهf كتلوج الوطني 96 اطفال",
+    "id": "c1bbdcb4-8280-48bb-b311-ca0856e1cfd5",
+    "ad_squad_name": "كتلوج اولاد",
+    "ad_name": "كشخة صغارنا لليوم الوطني 🇸🇦"
+  },
+  "orders": [
+    {"reference_id": "281358491", "created_at": "2026-08-30T07:30:00Z", "amount": 186.92},
+    {"reference_id": "281358507", "created_at": "2026-08-30T07:35:00Z", "amount": 186.92},
+    {"reference_id": "281367168", "created_at": "2026-08-30T08:40:00Z", "amount": 189.13}
+  ]
+}

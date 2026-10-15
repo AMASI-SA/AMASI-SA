@@ -59,7 +59,8 @@ export default function ShippingLedger() {
     const exportCSV = () => {
         const headers = [
             "Order", "Date", "Courier", "Payment Mode", "Payment Method",
-            "Status", "Shipping Cost", "Prepaid?", "COD Amount", "COD Fee",
+            "Status", "Shipping Cost", "Prepaid?", "COD Amount",
+            "COD Fee Net", "COD Fee VAT", "COD Fee Total",
             "Net Due", "Settlement",
         ];
         const lines = [headers.join(",")];
@@ -69,7 +70,8 @@ export default function ShippingLedger() {
                 r.payment_mode, `"${(r.payment_method || "").replace(/"/g, '""')}"`,
                 `"${r.order_status}"`,
                 r.shipping_cost, r.prepaid_shipping ? "yes" : "no",
-                r.cod_amount, r.cod_fee, r.net_due, r.settlement_status,
+                r.cod_amount, r.cod_fee_net, r.cod_fee_vat, r.cod_fee,
+                r.net_due, r.settlement_status,
             ].join(","));
         }
         const blob = new Blob(["\ufeff" + lines.join("\n")],
@@ -124,10 +126,16 @@ export default function ShippingLedger() {
                     <SummaryCard label="إجمالي ضريبة الشحن" value={totals.total_shipping_tax} color="violet" />
                     <SummaryCard label="إجمالي تكلفة الشحن (شامل الضريبة)" value={totals.total_shipping_cost} color="emerald" />
                     <SummaryCard label="إجمالي COD" value={totals.total_cod} color="amber" />
-                    <SummaryCard label="إجمالي رسوم COD" value={totals.total_cod_fees} color="rose" />
+                    <SummaryCard label="إجمالي رسوم COD (شامل الضريبة)" value={totals.total_cod_fees} color="rose" />
                     <SummaryCard label="إجمالي المسوى" value={totals.total_settled} color="emerald" />
                     <SummaryCard label="إجمالي المتبقي" value={totals.total_unsettled} color="amber" />
                 </div>
+
+                {Number(totals.cod_fee_rules_needing_review || 0) > 0 && (
+                    <div className="mb-4 rounded-lg border-2 border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-800" data-testid="cod-fee-tier-warning">
+                        توجد {totals.cod_fee_rules_needing_review} شحنات COD لا تغطي مبالغها أي شريحة عمولة. راجع حدود الشرائح قبل اعتماد التسوية.
+                    </div>
+                )}
 
                 {/* Warning banner — companies using Salla fallback price */}
                 {warnings && warnings.length > 0 && (
@@ -374,7 +382,11 @@ export default function ShippingLedger() {
                                         )}
                                     </td>
                                     <td className="p-2 text-left num">{fmt(r.cod_amount)}</td>
-                                    <td className="p-2 text-left num text-rose-700">{fmt(r.cod_fee)}</td>
+                                    <td className="p-2 text-left num text-rose-700">
+                                        <div className="font-extrabold">{fmt(r.cod_fee)}</div>
+                                        <div className="text-[9px] text-slate-500">عمولة {fmt(r.cod_fee_net)} + ضريبة {fmt(r.cod_fee_vat)}</div>
+                                        {r.cod_fee_rule_needs_review && <div className="text-[9px] font-bold text-rose-700">الشريحة غير مغطاة</div>}
+                                    </td>
                                     <td className="p-2 text-left num font-extrabold">{fmt(r.net_due)}</td>
                                     <td className="p-2 text-center">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${

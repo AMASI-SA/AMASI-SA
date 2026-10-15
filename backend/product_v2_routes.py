@@ -15,13 +15,18 @@ from typing import Any, Callable
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
+from product_cost_revision import bump_product_cost_revision, salla_cost_fingerprint
 from salla_integration.service import SallaError, call_salla
 
 PRODUCTS = "mezan_products_v2"
 SYNC_RUNS = "mezan_product_sync_runs_v2"
 CHANGE_LOG = "mezan_product_change_log_v2"
 PRODUCTS_PER_PAGE = 60
-MAX_PRODUCT_PAGES = 100
+# Salla may ignore the requested page size and return only 15-20 products.
+# Amasi has more than 2,000 products, so 100 pages can end a healthy sync
+# before the catalogue is exhausted.  The sync still has repeated-page and
+# empty-page guards; this limit is only the final runaway protection.
+MAX_PRODUCT_PAGES = 250
 
 
 def _now() -> datetime:
@@ -142,6 +147,7 @@ def normalize_salla_product(raw: dict[str, Any], *, user_id: str, synced_at: dat
         "categories": categories,
         "options_count": len(raw.get("options") or []) if isinstance(raw.get("options"), list) else 0,
         "variants_count": len(raw.get("variants") or raw.get("skus") or []) if isinstance(raw.get("variants") or raw.get("skus") or [], list) else 0,
+        "variants": (raw.get("variants") or raw.get("skus") or raw.get("product_variants") or []) if isinstance(raw.get("variants") or raw.get("skus") or raw.get("product_variants") or [], list) else [],
         "source": "salla",
         "source_revision": source_revision,
         "source_updated_at": raw.get("updated_at") or raw.get("date_updated"),
@@ -194,6 +200,7 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
     error_sample: list[dict[str, Any]] = []
 
     try:
+        cost_changed = False
         page = 1
         while page <= MAX_PRODUCT_PAGES:
             response = await call_salla(
@@ -218,8 +225,22 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                     seen_ids.add(doc["salla_product_id"])
                     existing = await db[PRODUCTS].find_one(
                         {"user_id": str(user_id), "salla_product_id": doc["salla_product_id"]},
-                        {"_id": 0, "source_revision": 1, "mezan_product_id": 1},
+                        {
+                            "_id": 0,
+                            "source_revision": 1,
+                            "mezan_product_id": 1,
+                            "cost_price_from_salla": 1,
+                            "variants": 1,
+                            "variants_count": 1,
+                            "details_synced_at": 1,
+                        },
                     )
+                    if not doc.get("variants") and (existing or {}).get("variants"):
+                        doc["variants"] = existing["variants"]
+                        doc["variants_count"] = int(
+                            (existing or {}).get("variants_count")
+                            or len(existing["variants"])
+                        )
                     if existing and existing.get("source_revision") == doc["source_revision"]:
                         unchanged += 1
                         await db[PRODUCTS].update_one(
@@ -253,6 +274,8 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                             "occurred_at": now,
                             "sync_run_id": run_id,
                         })
+                    if salla_cost_fingerprint(result) != salla_cost_fingerprint(doc):
+                        cost_changed = True
                 except Exception as exc:  # defensive per-row isolation
                     errors_count += 1
                     if len(error_sample) < 20:
@@ -275,6 +298,9 @@ async def run_product_v2_sync(db: Any, user_id: str) -> dict[str, Any]:
                 },
                 {"$set": {"archived": True, "archived_at": _now(), "updated_at": _now()}},
             )
+
+        if cost_changed:
+            await bump_product_cost_revision(db, str(user_id))
 
         ended_at = _now()
         await db[SYNC_RUNS].update_one(

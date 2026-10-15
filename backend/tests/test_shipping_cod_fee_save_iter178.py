@@ -149,3 +149,47 @@ def test_settings_in_accepts_companies_with_cod_fields():
     )
     assert payload.shipping_companies[0].cod_fee_percent == pytest.approx(0.05)
     assert payload.shipping_companies[0].cod_fee_fixed_per_order == 2.0
+
+
+def test_shipping_company_accepts_non_overlapping_cod_fee_tiers():
+    from server import ShippingCompany
+    company = ShippingCompany(
+        name="SMSA",
+        cost_per_order=20,
+        vat_percent=15,
+        is_deferred=True,
+        cod_fee_tiers=[
+            {
+                "min_amount": 50, "max_amount": 1000,
+                "min_inclusive": True, "max_inclusive": True,
+                "commission_percent": 0.01, "fixed_fee": 2,
+                "vat_percent": 15,
+            },
+            {
+                "min_amount": 1000, "max_amount": None,
+                "min_inclusive": False, "max_inclusive": True,
+                "commission_percent": 0.02, "fixed_fee": 5,
+                "vat_percent": 15,
+            },
+        ],
+    )
+    assert len(company.cod_fee_tiers) == 2
+    assert company.cod_fee_tiers[0].commission_percent == pytest.approx(0.01)
+
+
+def test_shipping_company_rejects_overlapping_cod_fee_tiers():
+    from server import ShippingCompany
+    with pytest.raises(ValidationError, match="overlap"):
+        ShippingCompany(
+            name="SMSA", cost_per_order=20, is_deferred=True,
+            cod_fee_tiers=[
+                {
+                    "min_amount": 0, "max_amount": 1000,
+                    "commission_percent": 0.01,
+                },
+                {
+                    "min_amount": 1000, "max_amount": None,
+                    "commission_percent": 0.02,
+                },
+            ],
+        )

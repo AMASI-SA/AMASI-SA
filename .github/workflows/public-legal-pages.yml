@@ -1,0 +1,47 @@
+name: Public Legal Pages
+
+on:
+  pull_request:
+    branches:
+      - main
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/PublicLegalApp.jsx"
+      - "frontend/src/PublicLegalApp.test.jsx"
+      - ".github/workflows/public-legal-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-build:
+    name: Public legal pages test and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Verify public entrypoint contract
+        run: |
+          grep -q 'isPublicLegalPath(window.location.pathname)' src/index.js
+          grep -q '"/privacy-policy"' src/PublicLegalApp.jsx
+          grep -q '"/data-deletion"' src/PublicLegalApp.jsx
+          grep -q '"/terms"' src/PublicLegalApp.jsx
+      - name: Run focused tests
+        run: >-
+          CI=true yarn test
+          --watchAll=false
+          --runInBand
+          src/PublicLegalApp.test.jsx
+      - name: Build production frontend
+        run: CI=false yarn build

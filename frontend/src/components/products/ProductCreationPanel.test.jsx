@@ -69,8 +69,7 @@ test("creates a service with age sizes and customer text, then previews both", a
     await change("السعر", "239");
     await change("نوع المنتج في سلة", "service");
     await change("وزن الشحن (كجم)", "0.25");
-    await change("المسار الافتراضي للتنفيذ", "requires_preparation");
-    await change("سياسة مخزون المنتج النهائي", "finished_goods_inventory_not_tracked");
+    expect(container.textContent).toContain("خيارات التشغيل والمخزون مجمّدة مؤقتًا");
     await click("إضافة قائمة اختيارات");
     expect(container.querySelector('button[type="submit"]').disabled).toBe(true);
     await click("استخدام مقاسات سنة إلى 10 سنوات");
@@ -82,7 +81,7 @@ test("creates a service with age sizes and customer text, then previews both", a
     expect(api.createProductCreationDraft).toHaveBeenCalledTimes(1);
     expect(api.createProductCreationDraft.mock.calls[0][0]).toMatchObject({
         product_type: "service",
-        weight: 0.25,
+        weight: 0.25, fulfillment_type: "requires_preparation", inventory_policy: "finished_goods_inventory_not_tracked",
         options: [
             { name: "المقاس", type: "choice", required: true, values: CHILD_SIZE_VALUES },
             { name: "الاسم المطلوب", type: "text", required: false, values: [] },
@@ -144,8 +143,6 @@ test("gift text and its help appear and become required only when the customer c
     await change("السعر", "239");
     await change("نوع المنتج في سلة", "service");
     await change("وزن الشحن (كجم)", "0.25");
-    await change("المسار الافتراضي للتنفيذ", "requires_preparation");
-    await change("سياسة مخزون المنتج النهائي", "finished_goods_inventory_not_tracked");
     await click("إضافة قائمة اختيارات");
     await change("اسم الخيار 1", "هل تريد إضافة كرت إهداء");
     await change("الوصف التوضيحي للخيار 1 (اختياري)", "اختر");

@@ -1,0 +1,86 @@
+{
+  "environment": "Disposable loopback Mongo only; no live DB use",
+  "commands": {
+    "broad": "python -B -X utf8 -m pytest -q tests/test_g47_operational_boundary.py tests/test_g47_component_lifecycle_integration.py tests/test_stock_component_consumption.py tests/test_preparation_piece_operations.py tests/test_mz2_write_control.py tests/test_mz2_order_creation_cutover.py tests/test_mz2_bank_cod_cutover.py tests/test_mz2_legacy_shipping_gate.py tests/test_accounting_ledger_v2.py tests/test_order_review_stage_one.py tests/test_fulfillment_v2_contract.py",
+    "baseline": "Same failing pagination test, detached exact Production 3368b48ab4f30cc217dbae43bd96e720f49519dd",
+    "final_focused": "python -B -X utf8 -m pytest -q tests/test_salla_paused_webhook_http.py tests/test_g47_operational_boundary.py"
+  },
+  "runs": [
+    {
+      "artifact": "hotfix-integrated.xml",
+      "sha256": "34a74e5640d2634112e701e48670526892a5104407fa270ad71c3b0ef46e54cf",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "1",
+          "skipped": "0",
+          "tests": "320",
+          "time": "167.363",
+          "timestamp": "2026-09-29T20:43:57.545898+03:00"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tests.test_order_review_stage_one",
+          "test": "test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queue",
+          "message": "AssertionError: assert {'assembly', ...', 'reviewed'} <= {'completed',...', 'reviewed'}"
+        }
+      ]
+    },
+    {
+      "artifact": "baseline-pagination.xml",
+      "sha256": "0c6df40c470e5bf73432ebba830c8d8485eb20bd313b6cb53361b7e6fdb0cd1c",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "1",
+          "skipped": "0",
+          "tests": "1",
+          "time": "2.461",
+          "timestamp": "2026-09-29T20:47:51.637918+03:00"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tests.test_order_review_stage_one",
+          "test": "test_numbered_review_route_precedes_order_detail_and_counts_full_tenant_queue",
+          "message": "AssertionError: assert {'assembly', ...', 'reviewed'} <= {'completed',...', 'reviewed'}"
+        }
+      ]
+    },
+    {
+      "artifact": "hotfix-http-coordinator.xml",
+      "sha256": "63a1f08b9e6f8fa3a88b6a4d731c8ea6624c54359f7dcfe6772b58d8c5197b40",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "2",
+          "time": "11.031",
+          "timestamp": "2026-09-29T20:59:23.232353+03:00"
+        }
+      ],
+      "failures": []
+    },
+    {
+      "artifact": "hotfix-final-focused-coordinator.xml",
+      "sha256": "e6b9eabf414306530e8741ace684e354ddb8c05951061b0b1c8dbffb5e07aefb",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "58",
+          "time": "34.915",
+          "timestamp": "2026-09-29T21:08:05.102143+03:00"
+        }
+      ],
+      "failures": []
+    }
+  ]
+}

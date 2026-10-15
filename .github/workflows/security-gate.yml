@@ -1,0 +1,181 @@
+name: Security Gate
+
+on:
+  push:
+    branches:
+      - hotfix/prod-snap-meta-final
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+      - chatgpt/mz2-ad-financial-accounts-opening-balances-20260922
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-security:
+    name: Backend security contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: backend
+      JWT_SECRET: ci-only-security-gate-secret-that-is-long-enough
+      EMAIL_OTP_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Validate backend dependency policy
+        run: |
+          if grep -Eq '^[[:space:]]*litellm([[:space:]@=<>]|$)' backend/requirements.txt; then
+            echo "Direct LiteLLM dependency is forbidden until upgraded and reviewed."
+            exit 1
+          fi
+          grep -vE '^[[:space:]]*emergentintegrations==' backend/requirements.txt > /tmp/security-requirements.txt
+          test -s /tmp/security-requirements.txt
+      - name: Install reproducible public dependency closure
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r /tmp/security-requirements.txt
+          python -m pip install pytest-asyncio==1.4.0 pip-audit==2.9.0 mongomock-motor==0.0.36 mongomock==4.3.0
+          python -m pip check
+      - name: Audit backend dependencies
+        run: python -m pip_audit -r /tmp/security-requirements.txt --strict
+      - name: Compile security-critical modules
+        run: |
+          python -m py_compile \
+            backend/auth.py \
+            backend/mobile_app_request_context.py \
+            backend/mobile_app_permissions.py \
+            backend/browser_security.py \
+            backend/email_otp_policy.py \
+            backend/email_otp_security.py \
+            backend/excel_upload_security.py \
+            scripts/frontend_release_toolchain.py
+      - name: Verify governed frontend toolchain bootstrap contracts
+        env:
+          PYTHONPATH: backend:.
+        run: python -m unittest backend.tests.test_frontend_release_toolchain
+      - name: Run security contracts
+        run: |
+          python -m pytest -q \
+            backend/tests/test_browser_security.py \
+            backend/tests/test_email_otp_security_v1.py \
+            backend/tests/test_auth_session_revocation_v1.py \
+            backend/tests/test_login_security_v1.py \
+            backend/tests/test_mfa_security_v1.py \
+            backend/tests/test_passkey_security_v1.py \
+            backend/tests/test_progressive_login_security_v1.py \
+            backend/tests/test_build37_preparation_file_permission.py \
+            backend/tests/test_customer_intelligence_instagram_provisioning.py \
+            backend/tests/test_customer_intelligence_instagram_ingress.py \
+            backend/tests/test_meta_instagram_webhook_deadline.py \
+            backend/tests/test_instagram_production_safe_diagnostics.py
+
+      - name: Run inherited security boundary regressions (offline)
+        run: |
+          python -m pytest --noconftest -q \
+            backend/tests/test_inherited_security_*.py
+
+  frontend-security:
+    name: Frontend dependency and CSP checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.2"
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Verify strict audit and local security backport contracts
+        run: |
+          node --test ../scripts/test_frontend_audit.cjs scripts/braces-security.test.cjs
+          node scripts/verify-braces-backport.cjs
+      - name: Run unmodified released braces compatibility suite
+        run: |
+          npm install --prefix "$RUNNER_TEMP/braces-tests" --ignore-scripts --no-package-lock mocha@11.7.5 bash-path@2.0.1
+          NODE_PATH="$RUNNER_TEMP/braces-tests/node_modules" node "$RUNNER_TEMP/braces-tests/node_modules/mocha/bin/mocha.js" --reporter dot 'vendor/braces/test/*.js'
+      - name: Full frontend regression against patched dependency graph
+        env:
+          CI: "true"
+        run: yarn test --watchAll=false --runInBand
+      - name: Audit production frontend dependencies
+        run: |
+          set +e
+          yarn audit --groups dependencies --json > /tmp/yarn-audit.jsonl
+          audit_status=$?
+          set -e
+          cat /tmp/yarn-audit.jsonl
+          node ../scripts/check_frontend_audit.cjs /tmp/yarn-audit.jsonl "$audit_status"
+      - name: Reject vulnerable spreadsheet runtime
+        run: |
+          node -e "const p=require('./package.json'); if (p.dependencies?.xlsx || p.devDependencies?.xlsx) process.exit(1)"
+          if rg -n "from ['\"]xlsx['\"]|require\(['\"]xlsx['\"]\)" src; then
+            exit 1
+          fi
+      - name: Verify production build and frontend security manifests
+        env:
+          CI: "false"
+        run: |
+          yarn build:release
+          python ../scripts/verify_frontend_build.py --expected-git-sha "$(git rev-parse HEAD)"
+          grep -F 'http-equiv="Content-Security-Policy"' build/index.html
+          grep -F "object-src 'none'" build/index.html
+          grep -F 'name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex"' build/index.html
+          test -f build/_headers
+          test -f build/_headers.json
+          test -f build/.well-known/security.txt
+          grep -F "X-Permitted-Cross-Domain-Policies: none" build/_headers
+          grep -F "X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex" build/_headers
+          grep -F "Canonical: https://mezansalla.com/.well-known/security.txt" build/.well-known/security.txt
+          node - <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync("build/_headers.json", "utf8"));
+          const rule = manifest?.rules?.find((candidate) => candidate?.path === "/*");
+          if (!rule || !rule.headers || typeof rule.headers !== "object") {
+            throw new Error("Emergent edge header rule for /* is missing");
+          }
+          const expected = {
+            "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests",
+            "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
+          };
+          for (const [name, value] of Object.entries(expected)) {
+            if (rule.headers[name] !== value) {
+              throw new Error(`${name} differs from the governed Emergent edge value`);
+            }
+          }
+          if (!rule.headers["Content-Security-Policy"].includes("frame-ancestors 'none'")) {
+            throw new Error("HTTP CSP must deny framing");
+          }
+          if (!rule.headers["Content-Security-Policy"].includes("connect-src 'self' https: wss:")) {
+            throw new Error("HTTP CSP must preserve API and WebSocket connections");
+          }
+          if (!rule.headers["Permissions-Policy"].startsWith("camera=(self)")) {
+            throw new Error("Barcode camera permission must remain same-origin");
+          }
+          console.log("Emergent edge security manifest passed.");
+          NODE

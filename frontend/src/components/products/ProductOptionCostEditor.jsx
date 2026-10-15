@@ -93,10 +93,13 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
 
     function openEditor(option, value) {
         const current = bindings.get(`${option.id}:${value.id}`);
+        const firstActiveResource = (data.resources || []).find((row) => (
+            row.status !== "inactive" && row.available_for_option_link !== false
+        ));
         setEditing({
             option, value,
             mode: current?.mode || "resource",
-            resource_id: current?.resource_id || data.resources?.[0]?.id || "",
+            resource_id: current?.resource_id || firstActiveResource?.id || "",
             direct_amount: current?.direct_amount ?? "",
             quantity: current?.quantity || 1,
         });
@@ -117,7 +120,11 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
             await load();
         } catch (error) {
             const code = error?.response?.data?.detail?.code;
-            toast.error(code === "resource_already_linked_to_product" ? "هذه الخدمة أو المكوّن مرتبط بالمنتج مباشرة. ألغِ ذلك الربط أولًا." : code || "تعذر حفظ التكلفة");
+            toast.error(code === "resource_already_linked_to_product"
+                ? "هذه الخدمة أو المكوّن مرتبط بالمنتج مباشرة. ألغِ ذلك الربط أولًا."
+                : code === "component_inactive"
+                    ? "المكوّن أو الخدمة موقوفة. أعد تفعيلها أولًا."
+                    : code || "تعذر حفظ التكلفة");
         } finally { setBusy(false); }
     }
 
@@ -175,13 +182,13 @@ export default function ProductOptionCostEditor({ productId, options = [], custo
                         </div>
                         {editing.mode === "resource" ? (
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id} disabled={resource.linked_to_product}>{resource.name} — {money(resource.unit_cost)}{resource.linked_to_product ? " — مرتبط بالمنتج" : ""}</option>)}</select></label>
+                                <label className="text-xs font-bold text-slate-500">المكوّن أو الخدمة<select value={editing.resource_id} onChange={(e) => setEditing((row) => ({ ...row, resource_id: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900"><option value="">اختر المكوّن</option>{(data.resources || []).map((resource) => <option key={resource.id} value={resource.id} disabled={resource.linked_to_product || resource.status === "inactive" || resource.available_for_option_link === false}>{resource.name} — {money(resource.unit_cost)}{resource.status === "inactive" ? " — موقوف" : resource.linked_to_product ? " — مرتبط بالمنتج" : ""}</option>)}</select></label>
                                 <label className="text-xs font-bold text-slate-500">الكمية<input type="number" min="0.0001" step="0.01" value={editing.quantity} onChange={(e) => setEditing((row) => ({ ...row, quantity: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>
                             </div>
                         ) : <label className="mt-4 block text-xs font-bold text-slate-500">التكلفة الإضافية<input type="number" min="0" step="0.01" value={editing.direct_amount} onChange={(e) => setEditing((row) => ({ ...row, direct_amount: e.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm text-slate-900" /></label>}
                         <div className="mt-6 flex items-center justify-between gap-3">
                             <div>{bindings.has(`${editing.option.id}:${editing.value.id}`) && <button disabled={busy} onClick={() => remove(editing.option, editing.value)} className="rounded-xl border border-rose-200 px-4 py-3 text-sm font-bold text-rose-700"><Trash className="ml-1 inline" /> حذف</button>}</div>
-                            <div className="flex gap-2"><button onClick={() => setEditing(null)} className="rounded-xl border px-4 py-3 text-sm font-bold">إلغاء</button><button disabled={busy || (editing.mode === "resource" ? !editing.resource_id : editing.direct_amount === "")} onClick={save} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy && <SpinnerGap className="ml-1 inline animate-spin" />} حفظ</button></div>
+                            <div className="flex gap-2"><button onClick={() => setEditing(null)} className="rounded-xl border px-4 py-3 text-sm font-bold">إلغاء</button><button disabled={busy || (editing.mode === "resource" ? (!editing.resource_id || (data.resources || []).some((row) => row.id === editing.resource_id && (row.status === "inactive" || row.available_for_option_link === false))) : editing.direct_amount === "")} onClick={save} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white disabled:opacity-50">{busy && <SpinnerGap className="ml-1 inline animate-spin" />} حفظ</button></div>
                         </div>
                     </div>
                 </div>

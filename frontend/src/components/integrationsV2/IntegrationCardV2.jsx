@@ -9,6 +9,9 @@ import {
 } from "@phosphor-icons/react";
 import ProviderMark from "./ProviderMark";
 import SnapchatAccountScope from "./SnapchatAccountScope";
+import MetaReportingControl from "./MetaReportingControl";
+import MetaManagementReadiness from "./MetaManagementReadiness";
+import TikTokReportingSyncControl from "./TikTokReportingSyncControl";
 import { CONNECTION_PROVENANCE_LABELS } from "../../services/integrationsV2";
 
 const STATUS = {
@@ -227,6 +230,8 @@ export default function IntegrationCard({
     const healthScore = integration.health?.score;
     const canTest = Boolean(integration.actions?.test_connection?.enabled) && !testing;
     const showSync = integration.provider === "snapchat_ads";
+    const showMetaReporting = integration.provider === "meta_ads";
+    const showTikTokReporting = integration.provider === "tiktok_ads";
     const canSync = showSync
         && Boolean(integration.actions?.sync_data?.enabled)
         && !syncing;
@@ -343,7 +348,11 @@ export default function IntegrationCard({
                                     {account.display_name || "حساب مرتبط"}
                                 </div>
                                 <div className="truncate font-mono text-[11px] text-slate-400">
-                                    {account.external_account_id || account.store_id || account.ad_account_id || "هوية غير متاحة"}
+                                    {account.external_account_id || account.store_id || account.ad_account_id || (
+                                        integration.provider === "instagram"
+                                            ? "هوية الحساب محفوظة بأمان"
+                                            : "هوية غير متاحة"
+                                    )}
                                 </div>
                             </div>
                             <div className="shrink-0 text-left font-mono text-[11px] text-slate-500">
@@ -457,6 +466,19 @@ export default function IntegrationCard({
                 <AiList title="ما يستطيع الذكاء الاصطناعي فعله" items={integration.ai?.can} positive />
                 <AiList title="ما لا يستطيع فعله الآن" items={integration.ai?.cannot} />
             </div>
+
+            {showMetaReporting && (
+                <div className="mt-4 space-y-3" data-testid="meta-reporting-control-host">
+                    <MetaManagementReadiness />
+                    <MetaReportingControl integration={integration} />
+                </div>
+            )}
+
+            {showTikTokReporting && (
+                <div className="mt-4" data-testid="tiktok-reporting-control-host">
+                    <TikTokReportingSyncControl integration={integration} />
+                </div>
+            )}
 
             <div className={`mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 ${
                 showSync ? "lg:grid-cols-5" : "lg:grid-cols-4"

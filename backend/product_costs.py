@@ -40,8 +40,13 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
+from security_public_errors import public_error
+from security_sensitive_routes import require_product_permission
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field, model_validator
+
+from excel_upload_security import read_safe_xlsx_upload
 
 logger = logging.getLogger(__name__)
 
@@ -653,22 +658,35 @@ def _build_router(db, current_user_dep) -> APIRouter:
         ),
         user: dict = Depends(current_user_dep),
     ):
-        if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
-            raise HTTPException(status_code=400,
-                                detail="الملف يجب أن يكون Excel (.xlsx أو .xls)")
+        merchant_id = await require_product_permission(db, user, "products.cost.write")
         try:
             from openpyxl import load_workbook
         except ImportError:
             raise HTTPException(status_code=500,
-                                detail="openpyxl missing — install it on the backend")
-        content = await file.read()
+                                detail=public_error("import_unavailable")) from None
+        content = await read_safe_xlsx_upload(file, max_bytes=10 * 1024 * 1024)
         try:
-            wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            wb = load_workbook(
+                io.BytesIO(content),
+                read_only=True,
+                data_only=True,
+                keep_links=False,
+            )
         except Exception as exc:
             raise HTTPException(status_code=400,
-                                detail=f"تعذر قراءة الملف: {exc}")
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
+                                detail=public_error("invalid_import_file"))
+        try:
+            ws = wb.active
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                rows.append(row)
+                if len(rows) > 50_001:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="عدد صفوف ملف Excel يتجاوز الحد المسموح.",
+                    )
+        finally:
+            wb.close()
         if not rows:
             raise HTTPException(status_code=400, detail="الملف فارغ")
         headers_raw = [str(c or "").strip() for c in rows[0]]
@@ -725,7 +743,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
             if h and h not in _MAPPED_HEADERS and i != idx_image:
                 meta_cols.append((i, headers_raw[i]))
 
-        uid = user["id"]
+        uid = merchant_id
         now = _now_iso()
         created = 0
         updated = 0
@@ -862,7 +880,7 @@ def _build_router(db, current_user_dep) -> APIRouter:
                     if product_id_norm:
                         reprocess_pids.add(product_id_norm)
             except Exception as exc:
-                errors.append({"row": row_num, "error": str(exc)[:200]})
+                errors.append({"row": row_num, "error": public_error("import_row_failed")})
 
         # Iteration 25: ONE targeted reprocess pass for all keys with real
         # cost — flips affected past orders from incomplete → complete.

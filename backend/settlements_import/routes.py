@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from auth import get_current_user_from_db
+from excel_upload_security import read_safe_xlsx_upload
 
 from .service import (
     coverage_analytics,
@@ -34,11 +35,7 @@ def attach_payment_settlements_routes(api_router: APIRouter, db) -> None:
         invoice_date: Optional[str] = Form(default=None),
         user: dict = Depends(current_user),
     ):
-        content = await file.read()
-        if not content:
-            raise HTTPException(status_code=400, detail="الملف فارغ.")
-        if len(content) > MAX_FILE_BYTES:
-            raise HTTPException(status_code=413, detail="حجم الملف يتجاوز 10 ميجابايت.")
+        content = await read_safe_xlsx_upload(file, max_bytes=MAX_FILE_BYTES)
         try:
             result = await import_file(
                 db, user["id"],

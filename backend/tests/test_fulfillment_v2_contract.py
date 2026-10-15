@@ -5,20 +5,18 @@ import inspect
 from pathlib import Path
 
 import order_review_routes
-from preparation_pdf_unit_card_expansion import expand_preparation_unit_cards
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_pending_review_queue_schedules_safe_incremental_salla_ingestion():
+def test_pending_review_queue_does_not_start_provider_sync_after_local_review():
     source = inspect.getsource(order_review_routes.make_order_review_router)
 
-    assert "schedule_salla_auto_sync(db, merchant_id)" in source
+    # Reloading the queue after local completion must not implicitly dispatch
+    # Salla traffic. Real queue/HTTP behavior is covered by local Mongo tests.
+    assert "schedule_salla_auto_sync(" not in source
     assert "run_orders_sync" not in source
-    assert source.index("schedule_salla_auto_sync(db, merchant_id)") < source.index(
-        'status_group="under_review"'
-    )
 
 
 def test_review_route_uses_safe_auto_sync_module_and_never_imports_qoyod():
@@ -95,6 +93,27 @@ def test_pending_review_table_uses_ten_row_cursor_pages_with_arrow_navigation():
     assert "append: true" not in source
 
 
+def test_pending_review_search_is_global_exact_and_read_only():
+    frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(
+        encoding="utf-8"
+    )
+    service_source = (ROOT / "frontend/src/services/orderReviewEngine.js").read_text(
+        encoding="utf-8"
+    )
+    backend_source = (ROOT / "backend/order_review_routes.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'search: Optional[str] = Query(default=None, max_length=50)' in backend_source
+    assert 'allow_auto_fulfillment=False' in backend_source
+    assert 'params.search = String(search).trim()' in service_source
+    assert 'search: query' in frontend_source
+    assert 'requestId !== latestRequestId.current' in frontend_source
+    assert 'if (searchQuery || document.hidden || !navigator.onLine) return;' in frontend_source
+    assert 'ابحث برقم الطلب في جميع طلبات انتظار المراجعة' in frontend_source
+    assert 'لا توجد نتائج في هذه الصفحة' not in frontend_source
+
+
 def test_order_review_product_cards_keep_titles_and_specs_readable():
     source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
 
@@ -134,6 +153,50 @@ def test_orders_v2_shipping_card_shows_complete_order_address():
     assert 'تفاصيل العنوان لم تصل من سلة' in source
 
 
+def test_carrier_handoff_is_barcode_governed_and_released_by_orders_page_sync():
+    backend_source = (ROOT / "backend/fulfillment_v2_routes.py").read_text(
+        encoding="utf-8"
+    )
+    salla_sync_source = (
+        ROOT / "backend/salla_integration/sync.py"
+    ).read_text(encoding="utf-8")
+    frontend_source = (
+        ROOT / "frontend/src/components/fulfillment/CompletedFulfillmentOrders.jsx"
+    ).read_text(encoding="utf-8")
+
+    assert '"/completed/{order_number}/carrier-label/confirm-print"' in backend_source
+    assert '"/carrier-handoff/scan"' in backend_source
+    assert '"carrier_handoff_state": "with_handoff_employee"' in (
+        ROOT / "backend/carrier_handoff.py"
+    ).read_text(encoding="utf-8")
+    assert "advance_carrier_handoff_from_salla_status" in salla_sync_source
+    assert 'source="mezan_orders_page_status_sync"' in salla_sync_source
+    assert '"order_status": order.status' in backend_source
+    assert "carrier_handoff_custody_is_visible(" in backend_source
+    assert 'data-testid="confirm-carrier-label-print"' in frontend_source
+    assert 'data-testid="open-carrier-handoff-scanner"' in frontend_source
+    assert "setInterval" in frontend_source
+
+
+def test_delivery_tracking_board_reads_mezan_state_and_keeps_store_courier_separate():
+    backend_source = (ROOT / "backend/fulfillment_v2_routes.py").read_text(
+        encoding="utf-8"
+    )
+    stage_source = (ROOT / "frontend/src/pages/FulfillmentV2.jsx").read_text(
+        encoding="utf-8"
+    )
+    tracking_source = (
+        ROOT / "frontend/src/components/fulfillment/DeliveryTrackingOrders.jsx"
+    ).read_text(encoding="utf-8")
+
+    assert '@router.get("/delivery-tracking")' in backend_source
+    assert '"carrier_label_type": {"$ne": "store_courier"}' in backend_source
+    assert '"sync_source": "mezan_orders_page_status_sync"' in backend_source
+    assert "activeStage.key === \"delivering\" || activeStage.key === \"delivered\"" in stage_source
+    assert "تتغير هذه المرحلة فقط بعد مزامنة الحالة من صفحة الطلبات في ميزان" in tracking_source
+    assert "طلبات مندوب المتجر لها مسار مستقل" in tracking_source
+
+
 def test_review_supports_internal_operational_items_without_supplier_export():
     backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
@@ -170,15 +233,18 @@ def test_reviewed_stage_and_salla_admin_link_are_active():
     assert 'listReviewedOrderReviews' in service_source
 
 
-def test_operational_item_starts_in_progress_and_moves_specs_out_of_supplier_export():
+def test_operational_item_waits_for_assembly_and_moves_specs_out_of_supplier_export():
     backend_source = (ROOT / "backend/order_review_routes.py").read_text(encoding="utf-8")
     frontend_source = (ROOT / "frontend/src/pages/OrderReview.jsx").read_text(encoding="utf-8")
 
-    assert '"preparation_status": "in_progress"' in backend_source
+    assert '"preparation_status": "pending"' in backend_source
+    assert 'operational_status_managed_in_assembly' in backend_source
     assert 'supplier_export_excluded_spec_keys' in backend_source
     assert 'moved_to_operational_item_ids' in backend_source
     assert 'existing_excluded.update(seen_specs)' in backend_source
-    assert '|| "قيد التجهيز"' in frontend_source
+    assert 'بانتظار التجميع والعنونة' in frontend_source
+    assert '>قيد التجهيز</button>' not in frontend_source
+    assert '>جاهز</button>' not in frontend_source
 
 
 def test_operational_item_can_be_renamed_or_unlinked_before_review_completion():
@@ -191,21 +257,3 @@ def test_operational_item_can_be_renamed_or_unlinked_before_review_completion():
     assert 'unlinkOrderReviewOperationalItem' in service_source
     assert 'order-review-operational-item-unlink' in frontend_source
     assert 'إلغاء الربط وإرجاع القيم' in frontend_source
-
-
-def test_selected_piece_quantities_expand_to_one_pdf_card_per_piece():
-    rows = [
-        {"order_number": "1", "quantity": 4, "unit_indices": [1, 2, 3, 4]},
-        {"order_number": "2", "quantity": 1, "unit_indices": [1]},
-        {"order_number": "3", "quantity": 5, "unit_indices": [1, 2, 3, 4, 5]},
-        {"order_number": "4", "quantity": 1, "unit_indices": [1]},
-    ]
-
-    cards = expand_preparation_unit_cards(rows)
-
-    assert len(cards) == 11
-    assert [card["line_number"] for card in cards] == list(range(1, 12))
-    assert {card["quantity"] for card in cards} == {1}
-    assert [card["order_number"] for card in cards].count("1") == 4
-    assert [card["order_number"] for card in cards].count("3") == 5
-    assert all(len(card["unit_indices"]) == 1 for card in cards)

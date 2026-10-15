@@ -1,0 +1,11 @@
+PASS src/pages/AmasiDeliveryApp.test.jsx (5.063 s)
+PASS src/pages/accounting/LateDeliveryEvidenceReview.test.jsx
+PASS src/components/driver/LateDeliveryEvidence.test.jsx
+PASS src/pages/accounting/AccountingShippingCod.test.jsx
+
+Test Suites: 4 passed, 4 total
+Tests:       37 passed, 37 total
+Snapshots:   0 total
+Time:        7.547 s
+Ran all test suites within paths "src/components/driver/LateDeliveryEvidence.test.jsx", "src/pages/accounting/LateDeliveryEvidenceReview.test.jsx", "src/pages/AmasiDeliveryApp.test.jsx", "src/pages/accounting/AccountingShippingCod.test.jsx".
+Test results written to: ..\..\mz2-late-evidence-proof-20261002\frontend-focused.json

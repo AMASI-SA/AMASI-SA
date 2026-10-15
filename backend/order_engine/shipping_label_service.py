@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from copy import deepcopy
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from reportlab.graphics import renderSVG
@@ -17,6 +19,10 @@ from reportlab.graphics.shapes import Drawing
 
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import resync_single_order
+from operational_atomic import operational_owner
+from salla_shipping import CURRENT_SHIPPING, extract_shipping, provider_time, same_carrier
+
+from .recipient_enrichment import recipient_is_independent, resolve_salla_recipient
 
 
 _CANCELLED = {"cancelled", "canceled", "void", "deleted"}
@@ -180,6 +186,61 @@ async def _ensure_order_completed(
     )
 
 
+async def _ensure_internal_order_completed(db, user_id, order_number, internal_id, order):
+    """Check assembly authority before the existing completion/readback path.
+
+    No provider call belongs to the assembly transaction or print read path.
+    """
+    if _text(order.get("reference_id")) != order_number or _text(order.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت تحديث الحالة.")
+    query = {"user_id": user_id, "order_number": order_number,
+             "assembly_status": "completed"}
+    workflow = await db.order_review_workflows.find_one(query)
+    if not workflow or workflow.get("assembly_status") != "completed":
+        raise ShippingLabelError("assembly_completion_required",
+                                 "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
+    if _order_is_completed(order):
+        return order, False
+    carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")}) or {}
+    if not _is_store_courier({"courier_name": carrier.get("company_name"),
+                             "meta": {"app_id": carrier.get("company_code")}}):
+        raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
+    from review_local_policy import (
+        LOCAL_COMPLETION_MODE, assembly_execution_allowed, load_local_review_workflows,
+    )
+    from .repository import MongoOrderRepository
+    from .service import get_order, OrderNotFoundError
+    try:
+        current = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=order_number)
+    except OrderNotFoundError as exc:
+        raise ShippingLabelError("assembly_order_not_ready", "تعذر إثبات أهلية الطلب؛ لم تُحدّث الحالة.") from exc
+    status = order.get("status")
+    current = current.model_copy(update={
+        "status": _status(status),
+        "status_native": _text(status.get("name")) if isinstance(status, dict) else _text(status),
+    })
+    proven = await load_local_review_workflows(
+        db, user_id=user_id, order_numbers=[order_number], workflows=[workflow],
+    ) if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE else {}
+    if not assembly_execution_allowed(current, workflow, approved_workflow=proven.get(order_number)):
+        raise ShippingLabelError("assembly_order_not_ready", "الطلب غير مؤهل لإكمال التجهيز؛ لم تُحدّث الحالة.")
+    claim = await db.order_review_workflows.update_one(
+        {**query, "store_courier_completion_attempted": {"$ne": True}},
+        {"$set": {"store_courier_completion_attempted": True}},
+    )
+    if claim.modified_count != 1:
+        raise ShippingLabelError(
+            "store_courier_completion_unconfirmed",
+            "لم تؤكد سلة «تم التنفيذ» بعد؛ الطباعة متوقفة ولن يُكرر تحديث الحالة.",
+        )
+    latest, changed = await _ensure_order_completed(db, user_id, internal_id, order)
+    if _text(latest.get("reference_id")) != order_number or _text(latest.get("id")) != internal_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ لم تُفتح البوليصة.")
+    return latest, changed
+
+
 def _url(value: Any) -> str:
     if isinstance(value, str):
         candidate = value.strip()
@@ -222,6 +283,9 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
         or row.get("documents")
     )
     tracking_number = _tracking(row)
+    # Share the structured carrier parser without deriving identity from an
+    # order envelope or from the printable label's readiness.
+    carrier = extract_shipping({"shipping": row}) or {}
     shipment_status = _status(row.get("status"))
     ready = bool(
         label_url
@@ -239,11 +303,9 @@ def _snapshot(row: dict[str, Any]) -> dict[str, Any]:
         "tracking_url": _url(
             row.get("tracking_link") or row.get("tracking_url")
         ) or None,
-        "courier_name": _text(
-            row.get("courier_name")
-            or row.get("company")
-            or row.get("shipping_company")
-        ) or None,
+        "courier_name": carrier.get("company_name"),
+        "courier_code": carrier.get("company_code"),
+        "shipment_updated_at": provider_time(row.get("updated_at")) or provider_time(row.get("created_at")),
     }
 
 
@@ -312,6 +374,85 @@ def _order_date(order: dict[str, Any]) -> str:
     return _text(value).split(" ", 1)[0]
 
 
+def _cod_balance_when_salla_omits_remaining(
+    order: dict[str, Any],
+    remaining_action: dict[str, Any],
+) -> dict[str, Any]:
+    """Derive only a provable COD balance; Salla can return null for unpaid COD."""
+    payment = order.get("payment")
+    payment = payment if isinstance(payment, dict) else {}
+    amounts = order.get("amounts")
+    amounts = amounts if isinstance(amounts, dict) else {}
+    total = amounts.get("total") or order.get("total")
+    currency = _text(_money(total).get("currency")).upper()
+
+    def fail() -> None:
+        raise ShippingLabelError(
+            "cod_balance_unavailable",
+            "تعذّر التحقق من المبلغ المتبقي للدفع عند الاستلام؛ لم نطبع بوليصة بمبلغ غير مؤكد.",
+        )
+
+    def amount(value: Any) -> Decimal:
+        raw = value.get("amount") if isinstance(value, dict) else value
+        if isinstance(value, dict):
+            source_currency = _text(value.get("currency")).upper()
+            if source_currency and source_currency != currency:
+                fail()
+        if isinstance(raw, bool) or raw in (None, ""):
+            fail()
+        try:
+            result = Decimal(str(raw)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError):
+            fail()
+        if not result.is_finite() or result < 0:
+            fail()
+        return result
+
+    if total is None:
+        fail()
+    order_total = amount(total)
+    if not currency:
+        fail()
+    paid = next(
+        (value for value in (
+            order.get("paid_amount"),
+            payment.get("paid_amount"),
+            remaining_action.get("paid_amount"),
+        ) if value is not None),
+        None,
+    )
+    collection_status = _status(
+        order.get("payment_collection_status") or payment.get("collection_status")
+    )
+    payment_status = _status(order.get("payment_status") or payment.get("status"))
+
+    if payment_status in {"refunded", "refund", "cancelled", "canceled"}:
+        fail()
+
+    if paid is None:
+        if collection_status == "unpaid" or payment_status == "unpaid":
+            paid_amount = Decimal("0.00")
+        elif collection_status == "paid" or payment_status in {"paid", "completed"}:
+            paid_amount = order_total
+        else:
+            fail()
+    else:
+        paid_amount = amount(paid)
+    if paid_amount > order_total:
+        fail()
+    if (
+        collection_status == "paid" or payment_status in {"paid", "completed"}
+    ) and paid_amount != order_total:
+        fail()
+    if (collection_status == "partial" or payment_status == "partial") and (
+        paid_amount <= 0 or paid_amount >= order_total
+    ):
+        fail()
+    if (collection_status == "unpaid" or payment_status == "unpaid") and paid_amount > 0:
+        fail()
+    return {"amount": float(order_total - paid_amount), "currency": currency}
+
+
 def _store_courier_print_data(
     order_number: str,
     order: dict[str, Any],
@@ -322,17 +463,73 @@ def _store_courier_print_data(
     ship_to = ship_to if isinstance(ship_to, dict) else {}
     customer = order.get("customer")
     customer = customer if isinstance(customer, dict) else {}
+    shipping = order.get("shipping")
+    shipping = shipping if isinstance(shipping, dict) else {}
     packages = shipment.get("packages")
     packages = packages if isinstance(packages, list) else []
-    address = {
-        key: ship_to.get(key)
-        for key in (
-            "country", "city", "block", "street_number", "short_address",
-            "building_number", "additional_number", "postal_code",
-            "address_line", "address_line_two",
+
+    recipient = resolve_salla_recipient(order, shipment=shipment)
+    independent_recipient = recipient_is_independent(order, recipient)
+    recipient_address = (
+        recipient.get("address")
+        if isinstance(recipient, dict) and isinstance(recipient.get("address"), dict)
+        else {}
+    )
+
+    if recipient:
+        delivery_name = _text(recipient.get("name"))
+        delivery_phone = _text(recipient.get("mobile") or recipient.get("phone"))
+        address_source = recipient_address
+    else:
+        delivery_name = (
+            _text(ship_to.get("name"))
+            or _text(customer.get("full_name"))
+            or _text(customer.get("name"))
         )
-        if ship_to.get(key) not in (None, "", [], {})
+        delivery_phone = (
+            _text(ship_to.get("phone"))
+            or _text(customer.get("mobile"))
+            or _text(customer.get("phone"))
+        )
+        shipping_address = shipping.get("address")
+        shipping_address = (
+            shipping_address if isinstance(shipping_address, dict) else {}
+        )
+        customer_shipping = customer.get("shipping_address")
+        customer_shipping = (
+            customer_shipping if isinstance(customer_shipping, dict) else {}
+        )
+        address_source = ship_to or shipping_address or customer_shipping
+
+    address_keys = (
+        "country",
+        "country_code",
+        "city",
+        "district",
+        "neighborhood",
+        "block",
+        "street",
+        "street_name",
+        "street_number",
+        "short_address",
+        "national_address",
+        "building_number",
+        "additional_number",
+        "postal_code",
+        "address_line",
+        "address_line1",
+        "address_line_two",
+        "formatted",
+        "latitude",
+        "longitude",
+        "map_url",
+    )
+    address = {
+        key: address_source.get(key)
+        for key in address_keys
+        if address_source.get(key) not in (None, "", [], {})
     }
+
     amounts = order.get("amounts")
     amounts = amounts if isinstance(amounts, dict) else {}
     total = shipment.get("total") or amounts.get("total") or order.get("total")
@@ -342,12 +539,18 @@ def _store_courier_print_data(
     remaining_action = (
         remaining_action if isinstance(remaining_action, dict) else {}
     )
-    remaining = remaining_action.get("remaining_amount") or {
-        "amount": 0,
-        "currency": _money(total).get("currency") or "SAR",
-    }
+    remaining = remaining_action.get("remaining_amount")
+    if remaining is None:
+        remaining = (
+            _cod_balance_when_salla_omits_remaining(order, remaining_action)
+            if _payment_method(shipment, order) == "cod"
+            else {"amount": 0, "currency": _money(total).get("currency") or "SAR"}
+        )
     ship_from = shipment.get("ship_from")
     ship_from = ship_from if isinstance(ship_from, dict) else {}
+    buyer_name = _text(customer.get("full_name")) or _text(customer.get("name"))
+    buyer_phone = _text(customer.get("mobile")) or _text(customer.get("phone"))
+
     return {
         "order_number": order_number,
         "barcode_value": order_number,
@@ -359,14 +562,19 @@ def _store_courier_print_data(
         or "المتجر",
         "store_logo": _url(store.get("avatar") or store.get("logo")) or None,
         "store_phone": _text(ship_from.get("phone")) or None,
-        "customer_name": _text(ship_to.get("name"))
-        or _text(customer.get("full_name"))
-        or _text(customer.get("name")),
-        "customer_phone": _text(ship_to.get("phone"))
-        or _text(customer.get("mobile")),
+        # Backward-compatible keys now carry the operational delivery recipient.
+        "customer_name": delivery_name or None,
+        "customer_phone": delivery_phone or None,
+        "recipient_name": delivery_name or None,
+        "recipient_phone": delivery_phone or None,
+        "recipient_independent": bool(independent_recipient),
+        "buyer_name": buyer_name or None,
+        "buyer_phone": buyer_phone or None,
         "address": address,
         "total": _money(total),
         "remaining_amount": _money(remaining),
+        # Kept in the response for compatibility; mobile print HTML no longer
+        # renders product names on the store-courier label.
         "items": [
             {
                 "name": _text(row.get("name")),
@@ -460,19 +668,65 @@ async def _shipment_rows(
     internal_order_id: str,
     embedded: Any,
 ) -> list[dict[str, Any]]:
-    response = await call_salla(
-        db,
-        user_id,
-        "GET",
-        "/shipments",
-        params={"order_id": internal_order_id, "per_page": 50},
+    embedded_rows = (
+        [dict(row) for row in embedded if isinstance(row, dict)]
+        if isinstance(embedded, list)
+        else [dict(embedded)] if isinstance(embedded, dict) else []
     )
+    response: dict[str, Any] | None = None
+    modern_error: SallaError | None = None
+    if not any(_snapshot(row)["ready"] for row in embedded_rows):
+        try:
+            response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                "/shipments",
+                params={"order_id": internal_order_id, "per_page": 50},
+            )
+        except SallaError as exc:
+            if exc.status_code not in {401, 403}:
+                raise
+            modern_error = exc
+            try:
+                # Salla's legacy order-shipment route is available to apps
+                # that can read and update orders even when the standalone
+                # shipping scope was not granted.  Existing Amasi shipping
+                # apps use this route after moving the order to completed.
+                response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/orders/{internal_order_id}/shipments",
+                    params={"per_page": 50},
+                )
+            except SallaError as legacy_exc:
+                if legacy_exc.status_code not in {401, 403}:
+                    raise
+
     listed = response.get("data") if isinstance(response, dict) else None
+    if isinstance(listed, dict):
+        nested = listed.get("shipments")
+        if isinstance(nested, list):
+            listed = nested
+        elif isinstance(nested, dict):
+            listed = [nested]
+        elif listed.get("id"):
+            listed = [listed]
+        else:
+            listed = []
     rows = (
         [dict(row) for row in listed if isinstance(row, dict)]
         if isinstance(listed, list)
-        else []
+        else embedded_rows
     )
+    # The order-details endpoint is the original permission-compatible
+    # source used by Amasi. If the standalone Shipments API is not granted,
+    # keep using the shipment embedded in order.created/order details instead
+    # of converting a read fallback into a shipping.read_write error.
+    if response is None and modern_error is not None and not rows:
+        return embedded_rows
+
     async def enrich(row: dict[str, Any]) -> dict[str, Any]:
         shipment_id = _text(row.get("id"))
         if not shipment_id:
@@ -528,6 +782,54 @@ async def _shipment_rows(
     if not rows:
         return []
     return list(await asyncio.gather(*(enrich(row) for row in rows)))
+
+
+async def _wait_for_active_outbound_shipments(
+    db: Any,
+    user_id: str,
+    internal_order_id: str,
+    embedded: Any,
+    *,
+    attempts: int = 7,
+) -> list[dict[str, Any]]:
+    """Wait briefly for a courier AWB triggered by ``completed`` status.
+
+    Salla shipping apps run asynchronously.  iMile and similar couriers may
+    attach the shipment a couple of seconds after the order status update, so
+    a single immediate list request can incorrectly report that no shipment
+    exists.  This bounded poll never creates a second shipment.
+    """
+    active: list[dict[str, Any]] = []
+    for attempt in range(attempts):
+        if attempt:
+            await asyncio.sleep(0.5)
+        latest_embedded = embedded
+        try:
+            order_response = await call_salla(
+                db,
+                user_id,
+                "GET",
+                f"/orders/{internal_order_id}",
+            )
+        except SallaError:
+            order_response = None
+        order_details = (
+            order_response.get("data")
+            if isinstance(order_response, dict)
+            else None
+        )
+        if isinstance(order_details, dict):
+            latest_embedded = order_details.get("shipments")
+        rows = await _shipment_rows(
+            db,
+            user_id,
+            internal_order_id,
+            latest_embedded,
+        )
+        active = _active_outbound(rows)
+        if active:
+            return active
+    return active
 
 
 def _location(value: Any) -> Any:
@@ -611,7 +913,9 @@ def _payment_method(
     shipment: dict[str, Any],
     order: dict[str, Any],
 ) -> str:
-    raw = shipment.get("payment_method") or order.get("payment_method")
+    payment = order.get("payment")
+    payment = payment if isinstance(payment, dict) else {}
+    raw = shipment.get("payment_method") or order.get("payment_method") or payment.get("method")
     if isinstance(raw, dict):
         raw = raw.get("slug") or raw.get("name") or raw.get("code")
     normalized = _status(raw)
@@ -692,6 +996,7 @@ async def _poll_shipment(
     seed: dict[str, Any],
     *,
     attempts: int = 12,
+    internal_order_id: str = "",
 ) -> dict[str, Any]:
     latest = dict(seed)
     for attempt in range(attempts):
@@ -722,7 +1027,7 @@ async def _poll_shipment(
                     f"/shipments/{shipment_id}/tracking",
                 )
             except SallaError:
-                continue
+                tracking_response = None
             tracking_details = (
                 tracking_response.get("data")
                 if isinstance(tracking_response, dict)
@@ -733,6 +1038,46 @@ async def _poll_shipment(
                 if isinstance(nested, dict):
                     tracking_details = {**tracking_details, **nested}
                 latest = {**latest, **tracking_details}
+        if not _snapshot(latest)["ready"] and internal_order_id:
+            try:
+                order_response = await call_salla(
+                    db,
+                    user_id,
+                    "GET",
+                    f"/orders/{internal_order_id}",
+                )
+            except SallaError:
+                order_response = None
+            order_details = (
+                order_response.get("data")
+                if isinstance(order_response, dict)
+                else None
+            )
+            embedded = (
+                order_details.get("shipments")
+                if isinstance(order_details, dict)
+                else None
+            )
+            try:
+                embedded_rows = _active_outbound(
+                    await _shipment_rows(
+                        db,
+                        user_id,
+                        internal_order_id,
+                        embedded,
+                    )
+                )
+            except SallaError:
+                embedded_rows = _active_outbound(
+                    [dict(row) for row in embedded if isinstance(row, dict)]
+                    if isinstance(embedded, list)
+                    else [dict(embedded)] if isinstance(embedded, dict) else []
+                )
+            for row in embedded_rows:
+                if _text(row.get("id")) == shipment_id or _snapshot(row)["ready"]:
+                    latest = {**latest, **row}
+                    if _snapshot(latest)["ready"]:
+                        break
     return latest
 
 
@@ -765,6 +1110,7 @@ async def _recover_created_shipment(
         shipment_id,
         source,
         attempts=6,
+        internal_order_id=internal_order_id,
     )
     if _tracking(latest) or _snapshot(latest)["ready"]:
         return latest
@@ -793,6 +1139,112 @@ async def _recover_created_shipment(
     return latest
 
 
+_LABEL_ROOT_FIELDS = (
+    "shipping_company", "shipping_company_code", "salla_shipment_id",
+    "shipping_status", "shipment_status", "tracking_number", "tracking_url",
+    "shipping_number", "shipping_label_url",
+)
+
+
+async def _label_baseline(db: Any, user_id: str, order_number: str) -> dict[str, Any] | None:
+    if db is None:
+        return None
+    return await db.unified_orders.find_one(
+        {"user_id": str(user_id), "order_number": str(order_number)},
+        {"_id": 1, CURRENT_SHIPPING: 1, **{field: 1 for field in _LABEL_ROOT_FIELDS}},
+    )
+
+
+def _label_metadata(row: dict[str, Any] | None) -> dict[str, Any]:
+    value = (row or {}).get(CURRENT_SHIPPING)
+    return value if isinstance(value, dict) else {}
+
+
+def _label_carrier(row: dict[str, Any]) -> dict[str, str]:
+    current = _label_metadata(row)
+    return {
+        "code": _text(current.get("company_code") if current else row.get("shipping_company_code")),
+        "name": _text(current.get("company_name") if current else row.get("shipping_company")),
+    }
+
+
+def _label_carriers_match(left: dict[str, str], right: dict[str, str]) -> bool | None:
+    if left["code"] and right["code"]:
+        return left["code"] == right["code"]
+    if left["name"] and right["name"]:
+        return same_carrier({"company_name": left["name"]}, {"company_name": right["name"]})
+    return None
+
+
+def _stale_label() -> ShippingLabelError:
+    return ShippingLabelError(
+        "shipping_snapshot_changed",
+        "تغيّرت جهة الشحن أو الشحنة الحالية؛ لم تُفتح البوليصة القديمة. أعد التحقق من البوليصة الحالية.",
+        status_code=409,
+    )
+
+
+def _internal_carrier(row: dict[str, Any] | None) -> bool:
+    carrier = _label_carrier(row or {})
+    return bool(carrier["name"] or carrier["code"]) and _is_store_courier({
+        "courier_name": carrier["name"], "meta": {"app_id": carrier["code"]},
+    })
+
+
+async def _internal_delivery_document(db, user_id, order_number, order, baseline):
+    """Internal delivery is not an external shipment or an external label.
+
+    Ignore old embedded shipments, including their addresses. Recheck the
+    carrier generation after provider reads; a real concurrent switch blocks.
+    Assignment is read at the same final boundary, never from an old label.
+    """
+    # Explicit order-level carrier facts take precedence over old embedded
+    # shipments. A provider read contradicting our frozen carrier is a race.
+    order_carrier = extract_shipping({"shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code")})
+    if order_carrier and _label_carriers_match(_label_carrier(baseline), {
+        "code": _text(order_carrier.get("company_code")),
+        "name": _text(order_carrier.get("company_name")),
+    }) is not True:
+        raise _stale_label()
+    store = await _store_identity(db, user_id)
+    async def document(scoped):
+        current = await _label_baseline(scoped, user_id, order_number)
+        if not _internal_carrier(current) or (
+            _label_carrier(current) != _label_carrier(baseline)
+            or _label_metadata(current).get("carrier_updated_at") !=
+                _label_metadata(baseline).get("carrier_updated_at")
+        ):
+            raise _stale_label()
+        workflow = await scoped.order_review_workflows.find_one(
+            {"user_id": str(user_id), "order_number": order_number},
+            {"_id": 0, "store_courier_assignee_id": 1, "store_courier_assignee_name": 1,
+             "store_delivery_assignment_id": 1},
+        ) or {}
+        current_order = {**order, "shipments": []}
+        data = _store_courier_print_data(order_number, current_order, {}, store)
+        data.update(courier_name=_label_carrier(current)["name"] or "مندوب المتجر",
+                    assigned_courier_id=workflow.get("store_courier_assignee_id"),
+                    assigned_courier_name=workflow.get("store_courier_assignee_name"),
+                    assignment_id=workflow.get("store_delivery_assignment_id"))
+        return {"ok": True, "source": "mezan", "ready": True, "label_type": "store_courier",
+                "shipment_id": None, "status": "store_courier", "courier_name": data["courier_name"],
+                "experiment_override": False, "label_url": None, "tracking_number": None,
+                "shipping_number": None, "order_status_completed": _order_is_completed(order),
+                "order_status_changed": False, "print_data": data,
+                "message": "تم تجهيز مستند المندوب من بيانات الطلب الحالية."}
+    return await operational_owner(db, str(user_id), document)
+
+
+def _current_outbound(rows, baseline):
+    """Prefer the canonical identity, not an unrelated ready/greater-ID label."""
+    active = _active_outbound(rows)
+    current_id = _text(_label_metadata(baseline).get("shipment_id"))
+    matching = [row for row in active if current_id and _text(row.get("id")) == current_id]
+    return matching or active
+
+
 async def _persist_verified_snapshot(
     db: Any,
     user_id: str,
@@ -800,6 +1252,9 @@ async def _persist_verified_snapshot(
     snapshot: dict[str, Any],
     *,
     clear_missing: bool = False,
+    baseline: dict[str, Any] | None = None,
+    created_replacement: bool = False,
+    persist: bool = True,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     set_fields: dict[str, Any] = {
@@ -819,6 +1274,8 @@ async def _persist_verified_snapshot(
                 "label_url": "shipping_label_url",
             }.get(field, field)
             set_fields[target] = value
+    if snapshot.get("tracking_number") not in (None, ""):
+        set_fields["shipping_number"] = snapshot["tracking_number"]
 
     update: dict[str, Any] = {"$set": set_fields}
     if clear_missing:
@@ -828,10 +1285,228 @@ async def _persist_verified_snapshot(
             "tracking_url": "",
             "shipping_number": "",
         }
-    await db.unified_orders.update_one(
-        {"user_id": str(user_id), "order_number": str(order_number)},
-        update,
-    )
+    row = await _label_baseline(db, user_id, order_number)
+    selector = {"user_id": str(user_id), "order_number": str(order_number)}
+    if not _label_metadata(row):
+        if not persist:
+            return
+        # Legacy rows retain their original behavior. The metadata condition
+        # prevents a webhook creating the new contract between this read/write
+        # from being overwritten through the legacy path.
+        legacy_selector = {**selector, CURRENT_SHIPPING: (row or {}).get(CURRENT_SHIPPING, {"$exists": False})}
+        legacy_result = await db.unified_orders.update_one(legacy_selector, update)
+        if legacy_result.matched_count or not _label_metadata(await _label_baseline(db, user_id, order_number)):
+            return
+
+    async def commit(scoped):
+        current_row = await _label_baseline(scoped, user_id, order_number)
+        current = _label_metadata(current_row)
+        if not current:
+            raise _stale_label()
+        current_id = _text(current.get("shipment_id") or current_row.get("salla_shipment_id"))
+        snapshot_id = _text(snapshot.get("shipment_id"))
+        superseded = list(current.get("superseded_shipment_ids") or [])
+        if snapshot_id and snapshot_id in superseded:
+            raise _stale_label()
+        current_carrier = _label_carrier(current_row)
+        snapshot_carrier = {"code": _text(snapshot.get("courier_code")), "name": _text(snapshot.get("courier_name"))}
+        carrier_match = _label_carriers_match(current_carrier, snapshot_carrier)
+        if carrier_match is False:
+            raise _stale_label()
+        baseline_current = _label_metadata(baseline)
+        if baseline_current:
+            if _label_carriers_match(_label_carrier(baseline), current_carrier) is not True:
+                raise _stale_label()
+            baseline_id = _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
+            if current_id and current_id not in {baseline_id, snapshot_id}:
+                raise _stale_label()
+            old_tracking = _text(baseline_current.get("tracking_number") or baseline.get("tracking_number"))
+            current_tracking = _text(current.get("tracking_number") or current_row.get("tracking_number"))
+            if current_tracking and current_tracking != old_tracking and _tracking(snapshot) != current_tracking:
+                raise _stale_label()
+        different_id = bool(snapshot_id and snapshot_id != current_id)
+        proven_replacement = bool(different_id and (
+            created_replacement and baseline_current and carrier_match is True and
+            current_id == _text(baseline_current.get("shipment_id") or baseline.get("salla_shipment_id"))
+        ))
+        if different_id and not proven_replacement:
+            # GET-only results cannot prove whether an unknown ID is a fresh
+            # replacement or an archived active row. Wait for its webhook.
+            raise _stale_label()
+        if snapshot.get("ready") and not snapshot_id:
+            raise _stale_label()
+        current_statuses = [_status(current.get("status")), _status(current_row.get("shipping_status")),
+                            _status(current_row.get("shipment_status"))]
+        current_status = next((value for value in current_statuses if value in _CANCELLED), current_statuses[0])
+        snapshot_status = _status(snapshot.get("status"))
+        snapshot_time = provider_time(snapshot.get("shipment_updated_at"))
+        current_time = provider_time(current.get("shipment_updated_at"))
+        if snapshot_time and current_time and snapshot_time < current_time:
+            raise _stale_label()
+        if current_status in _CANCELLED and snapshot_id and snapshot_status not in _CANCELLED and not proven_replacement:
+            raise _stale_label()
+        if not snapshot_id and not clear_missing:
+            raise _stale_label()
+        if not persist:
+            return
+        guarded_update = deepcopy(update)
+        metadata = deepcopy(current)
+        # This local evidence changes the metadata CAS token even when the
+        # verified operational values were already equal. Provider clocks
+        # advance only from actual provider-supplied timestamps.
+        metadata["verified_at"] = now
+        if snapshot_time:
+            metadata["shipment_updated_at"] = snapshot_time
+        if different_id or snapshot_status in _PENDING:
+            # A newly created ID may have no AWB/PDF yet. Missing facts in
+            # that replacement cannot inherit the previous shipment's label.
+            for field in ("shipping_label_url", "tracking_number", "tracking_url", "shipping_number"):
+                if field not in guarded_update["$set"]:
+                    guarded_update.setdefault("$unset", {})[field] = ""
+        if snapshot_status in _CANCELLED:
+            for field in ("shipping_label_url", "tracking_number", "tracking_url", "shipping_number"):
+                guarded_update["$set"].pop(field, None)
+            guarded_update.setdefault("$unset", {}).update({
+                "shipping_label_url": "", "tracking_number": "", "tracking_url": "", "shipping_number": "",
+            })
+        if not snapshot_id and current_status in _CANCELLED:
+            guarded_update["$set"].update(shipping_status=current_status, shipment_status=current_status)
+        for root, key in (
+            ("salla_shipment_id", "shipment_id"), ("shipping_status", "status"),
+            ("tracking_number", "tracking_number"), ("tracking_url", "tracking_url"),
+            ("shipping_label_url", "label_url"),
+        ):
+            if root in guarded_update["$set"]:
+                metadata[key] = deepcopy(guarded_update["$set"][root])
+            elif root in guarded_update.get("$unset", {}):
+                metadata[key] = None
+        if clear_missing or snapshot_status in _CANCELLED:
+            metadata.update(tracking_number=None, tracking_url=None, label_url=None)
+        if different_id and current_id:
+            metadata["superseded_shipment_ids"] = [*superseded, *([] if current_id in superseded else [current_id])]
+        guarded_update["$set"][CURRENT_SHIPPING] = metadata
+        guarded_selector = {**selector, CURRENT_SHIPPING: current}
+        for field in _LABEL_ROOT_FIELDS:
+            guarded_selector[field] = current_row[field] if field in current_row else {"$exists": False}
+        result = await scoped.unified_orders.update_one(guarded_selector, guarded_update)
+        if result.matched_count != 1:
+            raise _stale_label()
+
+    await operational_owner(db, str(user_id), commit)
+
+
+def _current_print_shipment(response: Any, internal_order_id: str) -> dict[str, Any]:
+    """Apply the same current-label boundary to either provider read surface."""
+    listed = response.get("data") if isinstance(response, dict) else None
+    if isinstance(listed, dict):
+        listed = listed.get("shipments", [listed] if listed.get("id") else [])
+        if isinstance(listed, dict) and listed.get("id"):
+            listed = [listed]
+    if not isinstance(listed, list) or any(not isinstance(row, dict) for row in listed):
+        raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+    pagination = response.get("pagination")
+    pagination = pagination if isinstance(pagination, dict) else {}
+    links = pagination.get("links")
+    if (isinstance(links, dict) and links.get("next")) or len(listed) >= 50:
+        return {}
+    # Order-scoped responses may expose page counts without links.next.
+    try:
+        pages = int(pagination.get("totalPages") or pagination.get("last_page") or 1)
+        total = int(pagination.get("total") or len(listed))
+        page = int(pagination.get("currentPage") or pagination.get("current_page") or 1)
+    except (TypeError, ValueError):
+        return {}
+    if pages > 1 or page != 1 or total > len(listed):
+        return {}
+    for row in listed:
+        nested_order = row.get("order")
+        shipment_order = row.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
+        if shipment_order is not None and _text(shipment_order) != internal_order_id:
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+    active = _active_outbound(listed)
+    # Do not infer current from numeric IDs, timestamps, or label readiness.
+    if len(active) != 1:
+        return {}
+    current = active[0]
+    return current if _text(current.get("id")) else {}
+
+
+async def _print_shipment_rows(
+    db: Any, user_id: str, internal_order_id: str,
+) -> list[dict[str, Any]]:
+    """Read current provider data, retaining the orders-scope compatibility path."""
+    async def compatible_rows(
+        expected: dict[str, Any] | None = None, observed_time: str | None = None,
+    ) -> list[dict[str, Any]]:
+        # A fresh order-scoped read, never an embedded/local or earlier list PDF.
+        response = await call_salla(
+            db, user_id, "GET", f"/orders/{internal_order_id}/shipments",
+            params={"per_page": 50},
+        )
+        current = _current_print_shipment(response, internal_order_id)
+        if not current:
+            return []
+        if expected:
+            if _text(current.get("id")) != _text(expected.get("id")):
+                raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة مختلفة؛ أوقفت الطباعة.")
+            known_time = max(provider_time(expected.get("updated_at")) or "", observed_time or "")
+            current_time = provider_time(current.get("updated_at"))
+            if known_time and current_time and current_time < known_time:
+                return []
+        return [current]
+
+    try:
+        response = await call_salla(
+            db, user_id, "GET", "/shipments",
+            params={"order_id": internal_order_id, "per_page": 50},
+        )
+    except SallaError as exc:
+        if exc.status_code not in {401, 403}:
+            raise
+        return await compatible_rows()
+    current = _current_print_shipment(response, internal_order_id)
+    if not current:
+        return []
+    # Merchant couriers have no external AWB. The existing refresh formatter
+    # consumes this validated current row without standalone detail/tracking.
+    if _is_store_courier(current):
+        return [current]
+    shipment_id = _text(current.get("id"))
+    try:
+        response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}")
+    except SallaError as exc:
+        if exc.status_code not in {401, 403}:
+            raise
+        return await compatible_rows(current)
+    details = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(details, dict) or _text(details.get("id")) != shipment_id:
+        raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+    nested_order = details.get("order")
+    shipment_order = details.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
+    if shipment_order is not None and _text(shipment_order) != internal_order_id:
+        raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+    # Some providers publish their PDF only through this same shipment's
+    # tracking endpoint. Never consult another shipment or reuse the list URL.
+    if _active_outbound([details]) and not _snapshot(details)["ready"]:
+        try:
+            response = await call_salla(db, user_id, "GET", f"/shipments/{shipment_id}/tracking")
+        except SallaError as exc:
+            if exc.status_code not in {401, 403}:
+                raise
+            return await compatible_rows(details, provider_time(current.get("updated_at")))
+        tracking = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(tracking, dict):
+            raise ShippingLabelError("salla_shipping_unavailable", "البوليصة الحالية غير متاحة", status_code=502)
+        if isinstance(tracking.get("shipment"), dict):
+            tracking = {**tracking, **tracking["shipment"]}
+        nested_order = tracking.get("order")
+        tracking_order = tracking.get("order_id") or (nested_order.get("id") if isinstance(nested_order, dict) else None)
+        if (tracking.get("id") is not None and _text(tracking["id"]) != shipment_id) or (
+            tracking_order is not None and _text(tracking_order) != internal_order_id
+        ):
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة شحنة لطلب مختلف؛ أوقفت الطباعة.")
+        details = {**details, **tracking}
+    return _active_outbound([details])
 
 
 async def refresh_shipping_label(
@@ -839,7 +1514,7 @@ async def refresh_shipping_label(
     user_id: str,
     order_number: str,
 ) -> dict[str, Any]:
-    """Verify the current Salla shipment without creating a new shipment."""
+    """Read/select/print current provider data without local writes or comparisons."""
     normalized = _text(order_number)
     if not normalized:
         raise ShippingLabelError(
@@ -852,11 +1527,21 @@ async def refresh_shipping_label(
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
-        rows = await _shipment_rows(
+        if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+        carrier = extract_shipping({
+            "shipping": order.get("shipping"),
+            "shipping_company": order.get("shipping_company"),
+            "shipping_company_code": order.get("shipping_company_code"),
+        }) or {}
+        store_courier = _is_store_courier({
+            "courier_name": carrier.get("company_name"),
+            "meta": {"app_id": carrier.get("company_code")},
+        })
+        rows = [] if store_courier else await _print_shipment_rows(
             db,
             user_id,
             internal_id,
-            order.get("shipments"),
         )
     except SallaError as exc:
         if exc.status_code == 403:
@@ -872,24 +1557,24 @@ async def refresh_shipping_label(
         ) from exc
 
     active = _active_outbound(rows)
+    if store_courier or (active and _is_store_courier(active[0])):
+        # Use the pre-guard courier formatter, without the issue path's status
+        # transition or resync. Old external shipments do not supply its data.
+        source = {} if store_courier else dict(active[0])
+        store = await _store_identity(db, user_id)
+        print_order = {**order, "shipments": []} if store_courier else order
+        print_data = _store_courier_print_data(normalized, print_order, source, store)
+        return {
+            "ok": True, "source": "mezan", "ready": True,
+            "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
+            "status": "store_courier", "courier_name": "مندوب المتجر",
+            "label_url": None, "tracking_number": None, "shipping_number": None,
+            "print_data": print_data,
+            "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
+        }
     current = active[0] if active else {}
-    for row in active:
-        if _snapshot(row)["ready"]:
-            current = row
-            break
 
     snapshot = _snapshot(current)
-    await _best_effort_resync(db, user_id, normalized)
-    # Root shipping fields are a legacy compatibility layer. Clear them only
-    # when Salla authoritatively returns no active outbound shipment. A created
-    # shipment with a number but a delayed PDF must keep its number visible.
-    await _persist_verified_snapshot(
-        db,
-        user_id,
-        normalized,
-        snapshot,
-        clear_missing=not bool(active),
-    )
 
     return {
         "ok": True,
@@ -898,9 +1583,7 @@ async def refresh_shipping_label(
         "message": (
             "تم التحقق من سلة والبوليصة الحالية جاهزة."
             if snapshot["ready"]
-            else "تم إصدار رقم الشحنة، ورابط البوليصة ما زال قيد التجهيز في سلة؛ أعد التحقق بعد لحظات."
-            if snapshot.get("tracking_number") or snapshot.get("shipping_number")
-            else "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة ومسحت الرقم القديم."
+            else "البوليصة الحالية غير متاحة"
         ),
     }
 
@@ -909,6 +1592,8 @@ async def issue_shipping_label(
     db: Any,
     user_id: str,
     order_number: str,
+    *,
+    force_store_courier: bool = False,
 ) -> dict[str, Any]:
     normalized = _text(order_number)
     if not normalized:
@@ -918,10 +1603,30 @@ async def issue_shipping_label(
             status_code=400,
         )
 
+    # Reconcile before freezing the baseline. Never advance it after provider IO:
+    # subsequent changes are concurrent changes and must still fail closed.
+    await _best_effort_resync(db, user_id, normalized)
+    label_baseline = await _label_baseline(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
             db, user_id, normalized
         )
+        if _internal_carrier(label_baseline):
+            order, changed = await _ensure_internal_order_completed(db, user_id, normalized, internal_id, order)
+            result = await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            return {**result, "order_status_changed": changed}
+        # Keep the shipment created with the order before changing status.
+        # Some Salla couriers temporarily remove it from order details during
+        # the completed transition. This snapshot is read-only and must never
+        # be submitted to POST /shipments.
+        order_created_shipments = _active_outbound(
+            [dict(row) for row in order.get("shipments", []) if isinstance(row, dict)]
+            if isinstance(order.get("shipments"), list)
+            else [dict(order["shipments"])]
+            if isinstance(order.get("shipments"), dict)
+            else []
+        )
+
         order, order_status_changed = await _ensure_order_completed(
             db,
             user_id,
@@ -947,9 +1652,31 @@ async def issue_shipping_label(
             status_code=502,
         ) from exc
 
-    active = _active_outbound(rows)
-    if active and _is_store_courier(active[0]):
-        source = active[0]
+    active = _current_outbound(rows, label_baseline)
+    if order_status_changed and not active:
+        try:
+            active = await _wait_for_active_outbound_shipments(
+                db,
+                user_id,
+                internal_id,
+                order.get("shipments"),
+            )
+        except SallaError:
+            # The normal error below remains more useful than leaking a
+            # transient provider response after Salla accepted the status.
+            active = []
+        if not active:
+            # Fall back to the immutable shipment attached at order.created.
+            # Subsequent polling refreshes it through GET /orders/{id}; it
+            # never creates or overwrites a shipment.
+            active = order_created_shipments
+    if active and (force_store_courier or _is_store_courier(active[0])):
+        source = dict(active[0])
+        if force_store_courier:
+            # Experiment-only override: reuse the authoritative Salla order
+            # address and packages, but never mutate or cancel its real AWB.
+            source["courier_name"] = "مندوب المتجر"
+            source["company"] = "مندوب المتجر"
         store = await _store_identity(db, user_id)
         print_data = _store_courier_print_data(
             normalized,
@@ -957,7 +1684,10 @@ async def issue_shipping_label(
             source,
             store,
         )
-        await _best_effort_resync(db, user_id, normalized)
+        if not force_store_courier:
+            await _persist_verified_snapshot(
+                db, user_id, normalized, _snapshot(source), baseline=label_baseline, persist=False,
+            )
         return {
             "ok": True,
             "source": "mezan",
@@ -965,6 +1695,8 @@ async def issue_shipping_label(
             "label_type": "store_courier",
             "shipment_id": _text(source.get("id")) or None,
             "status": "store_courier",
+            "courier_name": "مندوب المتجر",
+            "experiment_override": force_store_courier,
             "label_url": None,
             "tracking_number": None,
             "shipping_number": None,
@@ -972,7 +1704,11 @@ async def issue_shipping_label(
             "order_status_changed": order_status_changed,
             "print_data": print_data,
             "message": (
-                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
+                "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر للمسار التجريبي."
+                if force_store_courier and order_status_changed
+                else "تم تجهيز بوليصة مندوب المتجر للمسار التجريبي دون تغيير شحنة سلة الحقيقية."
+                if force_store_courier
+                else "تم تحويل الطلب إلى تم التنفيذ وتجهيز بوليصة مندوب المتجر."
                 if order_status_changed
                 else "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب."
             ),
@@ -981,12 +1717,12 @@ async def issue_shipping_label(
     for row in active:
         snapshot = _snapshot(row)
         if snapshot["ready"]:
-            await _best_effort_resync(db, user_id, normalized)
             await _persist_verified_snapshot(
                 db,
                 user_id,
                 normalized,
                 snapshot,
+                baseline=label_baseline,
             )
             return {
                 "ok": True,
@@ -1003,21 +1739,26 @@ async def issue_shipping_label(
         )
 
     source = active[0]
-    if _status(source.get("status")) == "creating" or _tracking(source):
+    if (
+        order_status_changed
+        or _status(source.get("status")) in _PENDING
+        or _tracking(source)
+    ):
         polled = await _poll_shipment(
             db,
             user_id,
             _text(source.get("id")),
             source,
             attempts=8,
+            internal_order_id=internal_id,
         )
         snapshot = _snapshot(polled)
-        await _best_effort_resync(db, user_id, normalized)
         await _persist_verified_snapshot(
             db,
             user_id,
             normalized,
             snapshot,
+            baseline=label_baseline,
         )
         return {
             "ok": True,
@@ -1064,12 +1805,12 @@ async def issue_shipping_label(
                 or recovered_snapshot.get("tracking_number")
                 or recovered_snapshot.get("shipping_number")
             ):
-                await _best_effort_resync(db, user_id, normalized)
                 await _persist_verified_snapshot(
                     db,
                     user_id,
                     normalized,
                     recovered_snapshot,
+                    baseline=label_baseline,
                 )
                 return {
                     "ok": True,
@@ -1091,6 +1832,7 @@ async def issue_shipping_label(
         ) from exc
 
     created = response.get("data") if isinstance(response, dict) else None
+    confirmed_created_id = _text(created.get("id")) if isinstance(created, dict) else ""
     if not isinstance(created, dict):
         created = await _recover_created_shipment(
             db,
@@ -1111,14 +1853,16 @@ async def issue_shipping_label(
         user_id,
         shipment_id,
         created,
+        internal_order_id=internal_id,
     )
     snapshot = _snapshot(latest)
-    await _best_effort_resync(db, user_id, normalized)
     await _persist_verified_snapshot(
         db,
         user_id,
         normalized,
         snapshot,
+        baseline=label_baseline,
+        created_replacement=bool(confirmed_created_id and confirmed_created_id == snapshot.get("shipment_id")),
     )
 
     return {

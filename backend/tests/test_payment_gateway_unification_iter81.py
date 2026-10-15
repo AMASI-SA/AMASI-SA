@@ -57,8 +57,10 @@ class TestCentralMetrics:
         r = session.get(f"{BASE_URL}/api/payment-gateway-metrics", timeout=30)
         rows = r.json()["rows"]
         keys = {row["key"] for row in rows}
-        canonical = {"salla", "mada", "applepay", "stcpay", "credit_card",
-                     "tamara", "tabby", "emkan", "bank_transfer", "cod", "_other"}
+        canonical = {"salla", "mada", "applepay", "googlepay", "stcpay",
+                     "visa", "mastercard", "credit_card", "debit_card",
+                     "salla_wallet", "tamara", "tabby", "emkan",
+                     "bank_transfer", "cod", "_other"}
         assert keys.issubset(canonical), f"unexpected keys: {keys - canonical}"
 
     def test_row_field_shape(self, session):
@@ -95,6 +97,9 @@ class TestArabicFolding:
         assert resolve_canonical("حوالة بنكية - الراجحي") == "bank_transfer"
         assert resolve_canonical("تمارا") == "tamara"
         assert resolve_canonical("Apple Pay") == "applepay"
+        assert resolve_canonical("Google Pay") == "googlepay"
+        assert resolve_canonical("Visa") == "visa"
+        assert resolve_canonical("MasterCard") == "mastercard"
 
 
 # ── Reconciliation uses central as expected source ───────────────────
@@ -113,7 +118,9 @@ class TestReconciliationCentral:
         central = session.get(f"{BASE_URL}/api/payment-gateway-metrics", timeout=30).json()
         recon = session.get(f"{BASE_URL}/api/reconciliation/summary", timeout=30).json()
 
-        salla_keys = {"salla", "mada", "applepay", "stcpay", "credit_card"}
+        salla_keys = {"salla", "mada", "applepay", "googlepay", "stcpay",
+                      "visa", "mastercard", "credit_card", "debit_card",
+                      "salla_wallet"}
         expected_salla = round(sum(
             r["net"] for r in central["rows"] if r["key"] in salla_keys
         ), 2)

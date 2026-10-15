@@ -6,9 +6,11 @@ def test_option_cost_route_contract_is_conditional_and_shared():
 
     assert 'RESOURCES = "mezan_cost_resources_v2"' in source
     assert 'BINDINGS = "mezan_product_option_cost_bindings_v2"' in source
-    assert 'if key not in selected_keys:' in source
+    assert 'def _binding_is_selected(' in source
+    assert 'if not _binding_is_selected(binding, selected_keys, selected_option_ids):' in source
     assert 'continue' in source
-    assert 'additional += amount' in source
+    assert 'option_additional += amount' in source
+    assert 'additional = product_additional + option_additional' in source
     assert '"total_cost": round(base_cost + additional, 4)' in source
     assert 'impacted = await db[BINDINGS].count_documents' in source
 

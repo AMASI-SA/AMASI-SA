@@ -1,0 +1,40 @@
+{
+  "source_head": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+  "evidence": [
+    {
+      "file": "bank-context-before.log",
+      "bytes": 2263,
+      "sha256": "1842666828354767e781590dd80f36bf7ce699a492bb378387f5dea448529de4"
+    },
+    {
+      "file": "bank-context-after.log",
+      "bytes": 115,
+      "sha256": "1f2f104f42de0a41cfaf3069467dc1a87e4826a52fbb5812c01843666cfb6344"
+    },
+    {
+      "file": "bank-context-ui-before.log",
+      "bytes": 4291,
+      "sha256": "dd3739aa37a8420344879cb5e4078412fb7f5b32dc0abd5915c4c9f6713ea640"
+    },
+    {
+      "file": "bank-context-ui-after.log",
+      "bytes": 1653,
+      "sha256": "a1679a905d42f63e2c600c3b5c27531bbe1c82984cccfb57a75dd56eddfe0c14"
+    },
+    {
+      "file": "bank-context-shipping-accounting.log",
+      "bytes": 370,
+      "sha256": "7cbcbc21326df7df7bee043d31cb870cc553e83ce1f2941d2c6c5c45bfccc936"
+    },
+    {
+      "file": "bank-context-h2-full.log",
+      "bytes": 573,
+      "sha256": "8322de319d81a192e1d4bc558743dac19fee1af0ac5c1d66313f09e8d2690d5f"
+    },
+    {
+      "file": "customer-blocker-probe.log",
+      "bytes": 837,
+      "sha256": "aacc49adf5bf12fa2d409202fdd8685756e979e6a6fd6ae27b0599eeccdb7c93"
+    }
+  ]
+}

@@ -1,17 +1,34 @@
 import api from "../lib/api";
 import {
     CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS,
+    connectInstagramCustomerIntelligence,
+    createCustomerIntelligenceReplySuggestion,
     customerIntelligenceWritesLocked,
+    getCustomerIntelligenceInbox,
+    getCustomerLearningStatus,
     getCustomerIntelligenceWorkspace,
+    getInstagramCustomerIntelligenceSetup,
+    normalizeCustomerIntelligenceInbox,
+    normalizeCustomerLearningStatus,
     normalizeCustomerIntelligenceWorkspace,
+    normalizeInstagramCustomerIntelligenceSetup,
+    reviewCustomerIntelligenceReplySuggestion,
+    saveTikTokReplyPolicy,
+    regenerateTikTokReplySuggestion,
 } from "./customerIntelligence";
 
 jest.mock("../lib/api", () => ({
     __esModule: true,
     default: {
         get: jest.fn(),
+        post: jest.fn(),
+        put: jest.fn(),
     },
 }));
+
+beforeEach(() => {
+    jest.clearAllMocks();
+});
 
 const backendPayload = {
     schema_version: 1,
@@ -280,4 +297,511 @@ test("loads only the canonical owner preview endpoint", async () => {
 
     expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/workspace");
     expect(model.schema_version).toBe(1);
+});
+
+const liveInboxPayload = {
+    schema_version: 1,
+    generated_at: "2026-08-12T00:30:00Z",
+    mode: "live_receive_only",
+    data_origin: "whatsapp_webhook",
+    connection: {
+        provider: "whatsapp",
+        status: "connected",
+        connected_channels: 1,
+        receiving_channels: 1,
+        access_token: "must-never-render",
+    },
+    conversation_count: 1,
+    message_count: 2,
+    content_unavailable_count: 1,
+    has_more: true,
+    next_offset: 20,
+    conversations: [{
+        conversation_id: "conv-safe-1",
+        customer_id: "cust-safe-1",
+        customer_name: "عميل واتساب",
+        customer_mobile: "+966500000000",
+        external_conversation_key: "hidden-hmac",
+        channel: "whatsapp",
+        status: "open",
+        last_message: "اختبار ربط ميزان 2",
+        last_message_at: "2026-08-12T00:29:00Z",
+        message_count: 2,
+        content_unavailable_count: 1,
+        messages: [{
+            message_id: "msg-safe-1",
+            direction: "inbound",
+            sender: "customer",
+            kind: "text",
+            body: "اختبار ربط ميزان 2",
+            occurred_at: "2026-08-12T00:28:00Z",
+            delivery_state: "received",
+            content_available: true,
+            content_ciphertext: "hidden-ciphertext",
+        }, {
+            message_id: "msg-safe-2",
+            direction: "inbound",
+            sender: "customer",
+            kind: "image",
+            caption: "صورة المنتج",
+            mime_type: "image/jpeg",
+            occurred_at: "2026-08-12T00:29:00Z",
+            delivery_state: "received",
+            content_available: true,
+            provider_media_id: "hidden-provider-id",
+        }],
+        reply_suggestion: {
+            suggestion_id: "suggestion-safe-1",
+            status: "pending_approval",
+            text: "أهلًا بك، اللون متوفر.",
+            version: 2,
+            requires_human_approval: true,
+            send_allowed: false,
+            created_at: "2026-08-12T00:29:30Z",
+            provider_token: "hidden-suggestion-secret",
+        },
+    }],
+    safety_policy: {
+        mode: "manage",
+        receive_only: false,
+        writes_allowed: true,
+        whatsapp_send_allowed: true,
+        ai_auto_reply_allowed: true,
+        commerce_mutation_allowed: true,
+    },
+};
+
+test("normalizes the live receive-only inbox and drops unapproved sensitive fields", () => {
+    const inbox = normalizeCustomerIntelligenceInbox(liveInboxPayload);
+
+    expect(inbox).toMatchObject({
+        mode: "live_receive_only",
+        data_origin: "whatsapp_webhook",
+        conversation_count: 1,
+        message_count: 2,
+        content_unavailable_count: 1,
+        has_more: true,
+        next_offset: 20,
+        connection: {
+            status: "connected",
+            connected_channels: 1,
+            receiving_channels: 1,
+        },
+        safety_policy: {
+            mode: "observe_only",
+            receive_only: true,
+            writes_allowed: false,
+            whatsapp_send_allowed: false,
+            instagram_send_allowed: false,
+            instagram_comment_reply_allowed: false,
+            ai_auto_reply_allowed: false,
+            commerce_mutation_allowed: false,
+        },
+    });
+    expect(inbox.conversations[0]).toMatchObject({
+        id: "conv-safe-1",
+        customer_name: "عميل واتساب",
+        channel: "whatsapp",
+        status: "open",
+        content_unavailable_count: 1,
+        reply_suggestion: {
+            id: "suggestion-safe-1",
+            conversation_id: "conv-safe-1",
+            status: "pending_approval",
+            text: "أهلًا بك، اللون متوفر.",
+            version: 2,
+            requires_human_approval: true,
+            send_allowed: false,
+        },
+    });
+    expect(inbox.conversations[0].messages[1]).toMatchObject({
+        id: "msg-safe-2",
+        kind: "image",
+        caption: "صورة المنتج",
+    });
+
+    const serialized = JSON.stringify(inbox);
+    expect(serialized).not.toContain("+966500000000");
+    expect(serialized).not.toContain("hidden-hmac");
+    expect(serialized).not.toContain("hidden-ciphertext");
+    expect(serialized).not.toContain("hidden-provider-id");
+    expect(serialized).not.toContain("must-never-render");
+    expect(serialized).not.toContain("hidden-suggestion-secret");
+});
+
+test("keeps Instagram public comments distinct from private messages in the unified inbox", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        data_origin: "channel_webhooks",
+        connections: [
+            liveInboxPayload.connection,
+            {
+                provider: "instagram",
+                status: "connected",
+                connected_channels: 1,
+                receiving_channels: 1,
+            },
+        ],
+        conversation_count: 2,
+        message_count: 3,
+        conversations: [
+            ...liveInboxPayload.conversations,
+            {
+                conversation_id: "conv-instagram-comment",
+                customer_name: "instagram_customer",
+                channel: "instagram",
+                surface: "comment",
+                status: "open",
+                last_message: "هل يتوفر لون آخر؟",
+                last_message_at: "2026-08-12T00:31:00Z",
+                message_count: 1,
+                messages: [{
+                    message_id: "ig-comment-1",
+                    direction: "inbound",
+                    sender: "customer",
+                    kind: "text",
+                    surface: "comment",
+                    body: "هل يتوفر لون آخر؟",
+                    occurred_at: "2026-08-12T00:31:00Z",
+                    delivery_state: "received",
+                    content_available: true,
+                }],
+                reply_suggestion: {
+                    suggestion_id: "suggestion-instagram-comment",
+                    status: "pending_approval",
+                    text: "أهلًا، راسلنا على الخاص بالتفاصيل.",
+                    version: 1,
+                    surface: "comment",
+                    requires_human_approval: true,
+                    send_allowed: false,
+                    created_at: "2026-08-12T00:31:30Z",
+                },
+            },
+        ],
+    });
+
+    expect(inbox.data_origin).toBe("channel_webhooks");
+    expect(inbox.connections).toHaveLength(2);
+    expect(inbox.connection).toMatchObject({
+        status: "connected",
+        connected_channels: 2,
+        receiving_channels: 2,
+    });
+    expect(inbox.conversations[1]).toMatchObject({
+        channel: "instagram",
+        surface: "comment",
+        reply_suggestion: { surface: "comment", send_allowed: false },
+    });
+    expect(inbox.conversations[1].messages[0].surface).toBe("comment");
+    expect(inbox.safety_policy.instagram_send_allowed).toBe(false);
+    expect(inbox.safety_policy.instagram_comment_reply_allowed).toBe(false);
+});
+
+test("normalizes Instagram setup without exposing provider identifiers or enabling send", async () => {
+    const raw = {
+        schema_version: 1,
+        state: "ready",
+        candidates: [{
+            candidate_ref: "instagram_candidate_opaque",
+            display_name: "amasi_store",
+            external_asset_id: "17841400000000001",
+        }],
+        required_permissions_ready: true,
+        receive_only: false,
+        send_allowed: true,
+        comment_reply_allowed: true,
+        ai_auto_reply_allowed: true,
+    };
+    api.get.mockResolvedValueOnce({ data: raw });
+
+    const normalized = normalizeInstagramCustomerIntelligenceSetup(raw);
+    const fetched = await getInstagramCustomerIntelligenceSetup();
+
+    expect(api.get).toHaveBeenCalledWith(
+        "/customer-intelligence/v1/channels/instagram/setup",
+    );
+    expect(fetched).toEqual(normalized);
+    expect(normalized).toMatchObject({
+        state: "ready",
+        required_permissions_ready: true,
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    });
+    expect(JSON.stringify(normalized)).not.toContain("17841400000000001");
+});
+
+test("Instagram connection requires an opaque candidate and fixed receive-only confirmation", async () => {
+    api.post.mockResolvedValueOnce({ data: { status: "connected", send_allowed: true } });
+
+    const result = await connectInstagramCustomerIntelligence("instagram_candidate_opaque");
+
+    expect(api.post).toHaveBeenCalledWith(
+        "/customer-intelligence/v1/channels/instagram/setup",
+        {
+            candidate_ref: "instagram_candidate_opaque",
+            confirmation: "CONNECT_RECEIVE_ONLY_INSTAGRAM",
+        },
+    );
+    expect(result).toMatchObject({
+        status: "connected",
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    });
+});
+
+test("live inbox normalization is idempotent so the container cannot drop a suggestion", () => {
+    const first = normalizeCustomerIntelligenceInbox(liveInboxPayload);
+    const second = normalizeCustomerIntelligenceInbox(first);
+
+    expect(second.conversations[0].reply_suggestion).toEqual(
+        first.conversations[0].reply_suggestion,
+    );
+    expect(second.conversations[0].messages).toEqual(first.conversations[0].messages);
+});
+
+test("only exposes an explicit pending human-approval reply suggestion", () => {
+    const baseConversation = liveInboxPayload.conversations[0];
+    const invalidSuggestions = [
+        null,
+        { ...baseConversation.reply_suggestion, status: "approved_locked" },
+        { ...baseConversation.reply_suggestion, requires_human_approval: false },
+        { ...baseConversation.reply_suggestion, send_allowed: true },
+        { ...baseConversation.reply_suggestion, text: "" },
+        { ...baseConversation.reply_suggestion, text: 123 },
+        { ...baseConversation.reply_suggestion, version: "2" },
+        [baseConversation.reply_suggestion],
+    ];
+
+    invalidSuggestions.forEach((replySuggestion) => {
+        const inbox = normalizeCustomerIntelligenceInbox({
+            ...liveInboxPayload,
+            conversations: [{
+                ...baseConversation,
+                reply_suggestion: replySuggestion,
+                suggested_reply: "must not become a suggestion",
+            }],
+        });
+        expect(inbox.conversations[0].reply_suggestion).toBeNull();
+        expect(JSON.stringify(inbox)).not.toContain("must not become a suggestion");
+    });
+});
+
+test("never converts an outbound employee echo into an AI reply suggestion", () => {
+    const sourceConversation = liveInboxPayload.conversations[0];
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        conversations: [{
+            ...sourceConversation,
+            reply_suggestion: undefined,
+            messages: [
+                ...sourceConversation.messages,
+                {
+                    message_id: "employee-echo-1",
+                    direction: "outbound",
+                    sender: "employee",
+                    kind: "text",
+                    body: "هذا رد موظف في واتساب وليس اقتراح ذكاء",
+                    occurred_at: "2026-08-12T00:30:00Z",
+                    delivery_state: "delivered",
+                    content_available: true,
+                },
+            ],
+        }],
+    });
+
+    expect(inbox.conversations[0].reply_suggestion).toBeNull();
+    expect(inbox.conversations[0].messages).toHaveLength(3);
+    expect(inbox.conversations[0].messages[2]).toMatchObject({
+        id: "employee-echo-1",
+        direction: "outbound",
+        sender: "employee",
+        delivery_state: "delivered",
+        body: "هذا رد موظف في واتساب وليس اقتراح ذكاء",
+    });
+});
+
+test("rejects conversations unless the response declares the live webhook contract", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        mode: "preview_fixture",
+    });
+
+    expect(inbox.mode).toBeNull();
+    expect(inbox.connection.status).toBe("not_connected");
+    expect(inbox.content_unavailable_count).toBe(0);
+    expect(inbox.next_offset).toBeNull();
+    expect(inbox.conversations).toEqual([]);
+});
+
+test("accepts governed employee echoes and drops every other outbound shape", () => {
+    const inbox = normalizeCustomerIntelligenceInbox({
+        ...liveInboxPayload,
+        conversations: [
+            {
+                ...liveInboxPayload.conversations[0],
+                messages: [
+                    ...liveInboxPayload.conversations[0].messages,
+                    {
+                        message_id: "employee-echo-valid",
+                        direction: "outbound",
+                        sender: "employee",
+                        kind: "text",
+                        body: "رد موظف يجب عرضه",
+                        occurred_at: "2026-08-12T00:30:00Z",
+                        delivery_state: "delivered",
+                        content_available: true,
+                    },
+                    {
+                        message_id: "unexpected-outbound-sender",
+                        direction: "outbound",
+                        sender: "assistant",
+                        kind: "text",
+                        body: "must not render sender",
+                        occurred_at: "2026-08-12T00:31:00Z",
+                        delivery_state: "delivered",
+                        content_available: true,
+                    },
+                    {
+                        message_id: "unexpected-outbound-state",
+                        direction: "outbound",
+                        sender: "employee",
+                        kind: "text",
+                        body: "must not render state",
+                        occurred_at: "2026-08-12T00:32:00Z",
+                        delivery_state: "received",
+                        content_available: true,
+                    },
+                ],
+            },
+            {
+                ...liveInboxPayload.conversations[0],
+                conversation_id: "unexpected-channel",
+                channel: "telegram",
+            },
+        ],
+    });
+
+    expect(inbox.conversations).toHaveLength(1);
+    expect(inbox.conversations[0].messages).toHaveLength(3);
+    expect(JSON.stringify(inbox)).toContain("رد موظف يجب عرضه");
+    expect(JSON.stringify(inbox)).not.toContain("must not render sender");
+    expect(JSON.stringify(inbox)).not.toContain("must not render state");
+    expect(JSON.stringify(inbox)).not.toContain("unexpected-channel");
+});
+
+test("loads the live inbox from its single read-only endpoint", async () => {
+    api.get.mockResolvedValueOnce({ data: liveInboxPayload });
+
+    const inbox = await getCustomerIntelligenceInbox();
+
+    expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
+    expect(inbox.conversations[0].messages).toHaveLength(2);
+});
+
+test("normalizes content-free Mezan learning coverage and keeps execution locked", async () => {
+    const payload = {
+        schema_version: 1,
+        generated_at: "2026-08-13T11:00:00Z",
+        state: "processing",
+        runtime_configured: true,
+        worker_enabled: true,
+        inbound_customer_messages: 10,
+        employee_responses: 2,
+        total_evidence_events: 12,
+        queued_for_analysis: 10,
+        analyzed_messages: 8,
+        pending_messages: 2,
+        failed_messages: 0,
+        queue_coverage_percent: 100,
+        analysis_completion_percent: 80,
+        signals_detected: 14,
+        open_problems: 3,
+        proposed_decisions: 4,
+        metadata_only_media_events: 2,
+        customer_content: "must-not-pass",
+        automatic_execution_allowed: true,
+    };
+    api.get.mockResolvedValueOnce({ data: payload });
+
+    const direct = normalizeCustomerLearningStatus(payload);
+    const fetched = await getCustomerLearningStatus();
+
+    expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/learning/status");
+    expect(fetched).toEqual(direct);
+    expect(fetched).toMatchObject({
+        state: "processing",
+        total_evidence_events: 12,
+        queue_coverage_percent: 100,
+        analysis_completion_percent: 80,
+        automatic_execution_allowed: false,
+        customer_content_exposed: false,
+        metadata_only_media_events: 2,
+    });
+    expect(JSON.stringify(fetched)).not.toContain("must-not-pass");
+});
+
+test("uses explicit suggestion lifecycle endpoints and never calls a send route", async () => {
+    api.post
+        .mockResolvedValueOnce({ data: { status: "pending_approval" } })
+        .mockResolvedValueOnce({ data: { status: "approved_locked" } });
+
+    await createCustomerIntelligenceReplySuggestion("conversation/1");
+    await reviewCustomerIntelligenceReplySuggestion({
+        conversationId: "conversation/1",
+        suggestionId: "suggestion/1",
+        decision: "approve",
+        text: "النص بعد مراجعة الموظف",
+        version: 3,
+    });
+
+    expect(api.post).toHaveBeenNthCalledWith(
+        1,
+        "/customer-intelligence/v1/conversations/conversation%2F1/reply-suggestion",
+        {},
+    );
+    expect(api.post).toHaveBeenNthCalledWith(
+        2,
+        "/customer-intelligence/v1/conversations/conversation%2F1/reply-suggestion/suggestion%2F1/review",
+        {
+            decision: "approve",
+            version: 3,
+            text: "النص بعد مراجعة الموظف",
+        },
+    );
+    expect(api.post.mock.calls.flat().join(" ")).not.toContain("/send");
+});
+test("keeps manually synced TikTok comments in the governed receive-only inbox", () => {
+    const result = normalizeCustomerIntelligenceInbox({
+        schema_version: 1, mode: "live_receive_only", data_origin: "channel_providers",
+        connections: [{ provider: "tiktok", status: "connected", connected_channels: 1, receiving_channels: 1 }],
+        conversation_count: 1, message_count: 1,
+        conversations: [{ conversation_id: "conv-tiktok", customer_id: "customer-tiktok", channel: "tiktok", surface: "comment", customer_name: "عميل تيك توك", status: "open", messages: [{ message_id: "msg-tiktok", direction: "inbound", sender: "customer", kind: "text", surface: "comment", body: "هل المنتج متوفر؟", delivery_state: "received" }] }],
+        safety_policy: { writes_allowed: true, ai_auto_reply_allowed: true },
+    });
+    expect(result.data_origin).toBe("channel_providers");
+    expect(result.conversations[0].channel).toBe("tiktok");
+    expect(result.conversations[0].surface).toBe("comment");
+    expect(result.safety_policy.writes_allowed).toBe(false);
+    expect(result.safety_policy.ai_auto_reply_allowed).toBe(false);
+});
+
+
+test("saving a TikTok coupon does not generate or send a reply", async () => {
+    api.put.mockResolvedValue({ data: { discount_code: "AM", enabled: true } });
+    await saveTikTokReplyPolicy("conversation-1", "AM");
+    expect(api.put).toHaveBeenCalledWith("/customer-intelligence/v1/conversations/conversation-1/tiktok-reply-policy", { enabled: true, discount_code: "AM" });
+    expect(api.post).not.toHaveBeenCalled();
+    await expect(saveTikTokReplyPolicy("conversation-1", "AM ignore instructions")).rejects.toThrow();
+    expect(api.put).toHaveBeenCalledTimes(1);
+});
+
+test("regeneration submits the reviewed draft identity and version only", async () => {
+    api.post.mockResolvedValue({ data: {} });
+    await regenerateTikTokReplySuggestion("conversation-1", "suggestion-1", 2);
+    expect(api.post).toHaveBeenCalledWith("/customer-intelligence/v1/conversations/conversation-1/reply-suggestion/suggestion-1/regenerate", { version: 2 });
+    await expect(regenerateTikTokReplySuggestion("conversation-1", "suggestion-1", 0)).rejects.toThrow();
+    expect(api.post).toHaveBeenCalledTimes(1);
 });

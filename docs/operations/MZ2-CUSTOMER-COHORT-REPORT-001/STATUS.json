@@ -1,0 +1,90 @@
+{
+  "task_id": "MZ2-CUSTOMER-COHORT-REPORT-001",
+  "updated_at": "2026-09-20T16:37:30Z",
+  "status": "CLARITY_FIX_REMOTE_CHECKPOINT",
+  "scope": "Owner-only read-only customer acquisition and repeat-purchase cohort report from financially included matched Salla orders.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "fix/customer-cohort-report-clarity-20260920",
+  "base_sha": "80d84ffc599dc373dbb4a2bb45e226fa07ffde4a",
+  "implementation_commit_sha": "90e9dccfa9270b5a3a0f9bcc9aad92f84778da6a",
+  "changed_behavior": [
+    "Adds owner-only GET /api/orders-v2/mezan-attribution-v1/customer-cohorts.",
+    "Groups customers by first purchase 0-30 and 31-60 days as of the selected Riyadh date.",
+    "Reports returning customers and later orders in the latest 30-day and 60-day windows.",
+    "Separates first-order source into confirmed ad, explicit non-ad, and unresolved.",
+    "Reports confirmed first acquisition cost and later-order contribution profit only with complete source facts.",
+    "Returns aggregate data only and never returns customer names, phone numbers, email addresses, or identity keys.",
+    "Adds owner-only Mezan 2 UI at /ads-manager/customer-cohorts under Marketing > Customer cohorts.",
+    "Adds a plain-Arabic summary with repeat-customer rate and repeat-order count.",
+    "Clarifies that the 60-day activity window includes the 30-day window and the values must not be added.",
+    "Shows unknown acquisition cost and repeat-order profit as unavailable with a reason instead of misleading 0.00 SAR.",
+    "Explains that the cohort table covers first purchases in the latest 60 days and reports the older-than-60-day customer count."
+  ],
+  "financial_definition": {
+    "first_acquisition_cost": "Allocated ad spend on the first order, only when attribution is confirmed and decision-safe.",
+    "later_order_contribution_profit": "Revenue minus product cost minus allocated ad spend; remains unknown unless all three facts are known.",
+    "unknown_is_zero": false
+  },
+  "verification": [
+    {
+      "command": "/workspace/scratch/3d81ccb6cbd3/snap30-venv/bin/python -m pytest backend/tests/test_customer_cohort_profit_report.py backend/tests/test_mezan_attribution_owner_routes.py backend/tests/test_mezan_attribution_order_ledger.py backend/tests/test_mezan_attribution_ledger_sync.py backend/tests/test_mezan_attribution_profit_bridge.py -q",
+      "exit_code": 0,
+      "result": "32 passed; 2 unrelated Pydantic deprecation warnings."
+    },
+    {
+      "command": "react-scripts test --watchAll=false --runInBand customer cohort + Mezan V2 navigation suites",
+      "exit_code": 0,
+      "result": "4 suites passed; 19 tests passed."
+    },
+    {
+      "command": "vite build",
+      "exit_code": 0,
+      "result": "Production frontend bundle built successfully; existing CSS import-order and chunk-size warnings remain."
+    },
+    {
+      "command": "pytest backend/tests/test_order_engine_routes.py backend/tests/test_customer_history_route.py backend/tests/test_customer_history_complete_lookup.py -q",
+      "exit_code": 1,
+      "result": "2 passed and 9 failed outside this change: eight failures require missing PyMuPDF/fitz in the reused test environment; one existing order_engine.routes contract assertion detects direct Mongo attributes."
+    },
+    {
+      "command": "yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/CustomerCohortReport.test.jsx src/services/customerCohortReport.test.js src/components/MezanV2NavigationShell.test.jsx",
+      "exit_code": 0,
+      "result": "3 suites passed; 17 tests passed in /app."
+    },
+    {
+      "command": "yarn --cwd frontend vite build",
+      "exit_code": 0,
+      "result": "Vite build passed in /app with existing chunk-size and dynamic-import warnings."
+    },
+    {
+      "command": "python -m pytest focused Backend suites",
+      "exit_code": 1,
+      "result": "Not runnable in /app because pytest is not installed; prior complete local run remains 32 passed."
+    },
+    {
+      "command": "yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/pages/CustomerCohortReport.test.jsx src/services/customerCohortReport.test.js",
+      "exit_code": 0,
+      "result": "2 suites passed; 5 tests passed for the clarity fix."
+    },
+    {
+      "command": "yarn --cwd frontend vite build",
+      "exit_code": 0,
+      "result": "Vite production bundle built successfully; existing dynamic-import warning remains."
+    }
+  ],
+  "privacy_and_safety": {
+    "aggregate_only": true,
+    "owner_only": true,
+    "external_writes": false,
+    "production_changed": false,
+    "merged": false,
+    "deployed": false
+  },
+  "remaining": [
+    "Open a Pull Request for the clarity-fix branch.",
+    "Wait for repository CI and fix only failures attributable to the clarity change.",
+    "Freeze Protocol v5 source/intent commits, merge without squash or rebase, publish through Release Guard v5, and verify Production three times."
+  ],
+  "next_safe_action": "Open a PR from fix/customer-cohort-report-clarity-20260920 to hotfix/prod-snap-meta-final; current Production remains on 80d84ffc599dc373dbb4a2bb45e226fa07ffde4a.",
+  "checkpoint_commit_sha": "90e9dccfa9270b5a3a0f9bcc9aad92f84778da6a"
+}

@@ -1,12 +1,8 @@
 """Iter-228 — Settlement rounding accuracy fix.
 
-Validates that the settlement engine matches processor (Tabby/Tamara)
-invoice math by:
-  1. Accumulating fee/VAT in full precision.
-  2. Rounding ONLY the final totals (NOT per-transaction).
-
-Without this fix, ~50 transactions accumulated ~0.22 SAR drift vs.
-the official Tabby weekly invoice.
+Validates the statement-derived Tabby component rounding. Each captured order
+rounds 4.99% refundable and 2.00% non-refundable commission separately, then
+adds the SAR 1 fixed fee.
 """
 from __future__ import annotations
 
@@ -34,15 +30,10 @@ def _conn():
 
 
 @pytest.mark.asyncio
-async def test_rounding_sums_first_then_rounds():
+async def test_rounding_uses_per_order_split_components():
     """50 transactions of 33.33 SAR each.
-    Per-transaction rounding produces measurable drift vs. sum-first.
-
-    Tabby commission_rate (default) = 6.99%, VAT = 15%, no fixed_fee.
-    Per txn raw commission = 33.33 × 0.0699 = 2.329767 SAR
-    Sum-first total = 50 × 2.329767 = 116.488 → round → 116.49
-    Per-txn round = 50 × round(2.329767, 2) = 50 × 2.33 = 116.50
-    Drift = 0.01 SAR even on this small dataset — ours matches sum-first.
+    For 33.33 SAR: round(4.99%)=1.66, round(2%)=0.67, +1 fixed = 3.33.
+    Across 50 captures the official-style commission is 166.50 SAR.
     """
     cli, db = _conn()
     uid = str(uuid.uuid4())
@@ -76,11 +67,8 @@ async def test_rounding_sums_first_then_rounds():
         )
         tots = s.get("totals") or {}
         commission = tots.get("commission") or 0
-        # Sum-first calc (matching the engine):
-        # commission per txn (raw) = amt * 0.0699 + 1.0 (fixed_fee)
-        # = 33.33 * 0.0699 + 1.0 = 2.329767 + 1.0 = 3.329767
-        # 50 × 3.329767 = 166.488 → round → 166.49
-        expected = round(50 * (33.33 * 0.0699 + 1.0), 2)   # = 166.49
+        per_order = round(33.33 * 0.0499, 2) + round(33.33 * 0.02, 2) + 1.0
+        expected = round(50 * per_order, 2)  # = 166.50
 
         # Allow up to 0.01 SAR rounding tolerance.
         assert abs(commission - expected) < 0.011, (
@@ -94,8 +82,7 @@ async def test_rounding_sums_first_then_rounds():
 
 @pytest.mark.asyncio
 async def test_rounding_with_refund_in_period():
-    """Sale 1000 + Refund 100 — net should match (1000−100) × rate
-    cleanly, with no per-row drift."""
+    """Sale 1000 + refund 100 reverses only the rounded 4.99% leg."""
     cli, db = _conn()
     uid = str(uuid.uuid4())
     today = datetime.now(timezone.utc).date()
@@ -133,10 +120,7 @@ async def test_rounding_with_refund_in_period():
             db, uid, "tabby", date_from, date_to,
         )
         tots = s.get("totals") or {}
-        # Net sales = 900. Commission ≈ 900 × 0.0699 = 62.91 (sum-first).
-        # But there's also a fixed_fee_per_order on the sale (1.0) and
-        # the refund rebate uses refundable_commission_pct=4.99% of 100=4.99.
-        # Sum-first commission = (1000*0.0699 + 1.0) - (100*0.0499) = 69.9 + 1 - 4.99 = 65.91
+        # Capture = 49.90 + 20.00 + 1.00; refund rebate = 4.99.
         assert tots.get("commission") == 65.91, tots.get("commission")
     finally:
         await db.payment_transactions.delete_many({"user_id": uid})

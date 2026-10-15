@@ -1,0 +1,503 @@
+backend/tests/test_accounting_currency.py
+  .github/workflows/mz2-accounting-ui-h2.yml:54 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_cutoffs_iter149.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_ledger_v2.py
+  .github/workflows/mz2-accounting-module.yml:169 actual run step
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_onboarding.py
+  .github/workflows/mz2-accounting-module.yml:169 actual run step
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_onboarding_ad_binding.py
+  .github/workflows/mz2-accounting-module.yml:180 actual run step
+  .github/workflows/mz2-advertising-v2.yml:53 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_onboarding_domains.py
+  .github/workflows/mz2-accounting-ui-h2.yml:54 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_opening_categories.py
+  .github/workflows/mz2-accounting-ui-h2.yml:54 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_opening_quarantine.py
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_accounting_source_files.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_ad_daily_close_proof.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_auth_cookie_only_browser_v1.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Auth Passkey
+backend/tests/test_component_workspace_derivation.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_counterparty_phone.py
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_dashboard_shipping_ssot.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_emergent_deployment_adapter_v5.py
+  .github/workflows/mz2-onboarding-integration.yml:32 actual run step
+backend/tests/test_employee_payroll_v2_cutover.py
+  .github/workflows/mz2-accounting-module.yml:146 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_employee_salary_contract_management.py
+  .github/workflows/mz2-accounting-module.yml:146 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_accounts.py
+  .github/workflows/mz2-accounting-module.yml:169 actual run step
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  .github/workflows/mz2-accounting-ui-h2.yml:54 actual run step
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_accounts_real_mongo.py
+  .github/workflows/mz2-accounting-module.yml:169 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_identity_foundation.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_ledger_identity.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_provider_apps_v2.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_financial_provider_binding_identity.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_frontend_build_identity.py
+  .github/workflows/mz2-onboarding-integration.yml:32 actual run step
+backend/tests/test_frontend_release_toolchain.py
+  .github/workflows/mz2-onboarding-integration.yml:32 actual run step
+backend/tests/test_fulfillment_v2_contract.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_component_lifecycle_integration.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_opening_inventory.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_operational_boundary.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_purchase_approval_integration.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_purchase_receiving.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_g47_supplier_payment_integration.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_google_ads_reporting_v1.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_legacy_opening_quarantine.py
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_meta_native_reporting.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mezan_supplier_management.py
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_accounting_module.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_automation.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_native_reports.py
+  .github/workflows/mz2-advertising-v2.yml:53 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_policy_review.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_v2.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_wallet.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_advertising_zero_opening.py
+  .github/workflows/mz2-advertising-v2.yml:53 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_atomic_recovery.py
+  .github/workflows/mz2-accounting-module.yml:130 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_bank_cod_cutover.py
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_bank_evidence_adapters.py
+  .github/workflows/mz2-advertising-v2.yml:53 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_bank_transfer_receipts.py
+  .github/workflows/mz2-accounting-module.yml:154 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_closed_periods.py
+  .github/workflows/mz2-accounting-module.yml:160 actual run step
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_courier_bank_bindings_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_customer_advances.py
+  .github/workflows/mz2-accounting-module.yml:160 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_daily_movements.py
+  .github/workflows/mz2-accounting-module.yml:144 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_daily_refunds.py
+  .github/workflows/mz2-accounting-module.yml:134 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_driver_bank_evidence.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_driver_payment_review.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_employee_finance.py
+  .github/workflows/mz2-accounting-module.yml:148 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_employee_outgoing_reports.py
+  .github/workflows/mz2-accounting-module.yml:180 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_financial_identity_consumers.py
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_historical_position.py
+  .github/workflows/mz2-accounting-module.yml:160 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_legacy_shipping_gate.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_opening_balances.py
+  .github/workflows/mz2-accounting-module.yml:142 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_order_creation_cutover.py
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_order_recognition.py
+  .github/workflows/mz2-accounting-module.yml:152 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_order_refunds.py
+  .github/workflows/mz2-accounting-module.yml:140 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_receipt_intake.py
+  .github/workflows/mz2-accounting-module.yml:132 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_receivable_workflow.py
+  .github/workflows/mz2-accounting-module.yml:128 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_recognition_cutover.py
+  .github/workflows/mz2-accounting-module.yml:180 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_refund_entitlements.py
+  .github/workflows/mz2-accounting-module.yml:138 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_report_dates.py
+  .github/workflows/mz2-accounting-module.yml:160 actual run step
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_report_isolation.py
+  .github/workflows/mz2-accounting-module.yml:167 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_sales_tax.py
+  .github/workflows/mz2-accounting-module.yml:126 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_sales_tax_policy.py
+  .github/workflows/mz2-accounting-module.yml:126 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_salla_order_evidence.py
+  .github/workflows/mz2-accounting-module.yml:150 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_bank_match_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_currency_guard_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_evidence_guard_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_identity_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_import_guard_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_native_audit.py
+  .github/workflows/mz2-accounting-module.yml:180 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlement_register_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_settlements_p01.py
+  .github/workflows/mz2-accounting-module.yml:238 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_bank_port.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_calculator.py
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_contract_isolation.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_contracts.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_native.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_p02.py
+  .github/workflows/mz2-accounting-module.yml:158 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_payment_evidence.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_shipping_readiness_metadata.py
+  current MZ2 suite
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_supplier_financial_port_integration.py
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_supplier_identity.py
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_supplier_payments_v2.py
+  .github/workflows/mz2-supplier-payments-v2.yml:58 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_tabby_signed_credits.py
+  .github/workflows/mz2-accounting-module.yml:160 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_write_balance_isolation.py
+  .github/workflows/mz2-accounting-module.yml:176 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_mz2_write_control.py
+  .github/workflows/mz2-accounting-module.yml:136 actual run step
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  current MZ2 suite
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_onboarding_inventory_draft.py
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_onboarding_ssot_contracts.py
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_order_engine_mapper.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_order_engine_repository.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_passkey_security_v1.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Auth Passkey
+backend/tests/test_preparation_file_failure_safety.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_preparation_file_registry.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_preparation_piece_execution_guard.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_preparation_piece_line_services.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_preparation_piece_operations.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+backend/tests/test_preparation_piece_stage_semantics.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_preparation_supplier_dispatch.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+backend/tests/test_production_release_guard.py
+  .github/workflows/mz2-onboarding-integration.yml:32 actual run step
+backend/tests/test_qoyod_runtime_ssot_isolation.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_release_identity.py
+  .github/workflows/mz2-onboarding-integration.yml:32 actual run step
+backend/tests/test_reviewed_preparation_batches.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Production Preparation
+backend/tests/test_shipping_cost_ssot.py
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_snapchat_reporting_v2_foundation.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_snapchat_reporting_v2_resilience.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_snapchat_reporting_v2_salla_timezone_alignment.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_stock_component_consumption.py
+  .github/workflows/g47-focused-integration.yml:73 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_store_delivery_accounting.py
+  .github/workflows/mz2-onboarding-integration.yml:72 actual run step -> Track A TEST_RESULTS.suites
+backend/tests/test_store_delivery_driver_app_v2_contract.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_store_delivery_operational_v2_contract.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_store_delivery_payment_evidence.py
+  .github/workflows/mz2-track-f-contract.yml:60 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_supplier_debit_identity_v2.py
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_supplier_debit_setup_atomic.py
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_supplier_invoice_financial_integrity.py
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_supplier_invoice_service_candidates.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+backend/tests/test_supplier_invoice_service_eligibility.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+backend/tests/test_supplier_multi_supplier_lifecycle.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+backend/tests/test_supplier_native_invoice_v2.py
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_supplier_receiving.py
+  .github/workflows/mz2-onboarding-integration.yml:173 actual run step -> compatibility Supplier Policy
+  .github/workflows/mz2-supplier-native-invoice-v2.yml:55 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_tiktok_native_reporting.py
+  .github/workflows/mz2-advertising-v2.yml:49 actual run step
+  prior 129-file inventory; retained unless absent isolated harness
+backend/tests/test_track_g_native_reports.py
+  .github/workflows/mz2-track-g-ssot.yml:41 actual run step
+  existing cutover-accounting-g47 selection
+  prior 129-file inventory; retained unless absent isolated harness

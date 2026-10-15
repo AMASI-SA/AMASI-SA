@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useOptionalAuth } from "../context/AuthContext";
 import {
     ArrowClockwise,
     CaretLeft,
@@ -36,6 +37,7 @@ const PLATFORM_OPTIONS = [
     { value: "snapchat", label: "سناب شات" },
     { value: "tiktok", label: "تيك توك" },
     { value: "meta", label: "ميتا" },
+    { value: "google", label: "إعلانات جوجل" },
 ];
 
 const FRESHNESS_LABELS = {
@@ -555,6 +557,7 @@ function ProviderFreshnessCard({ provider }) {
                 />
             )}
             <ReconciliationNotice provider={provider} />
+            {provider.provider === "google" && <div className="mt-3 grid grid-cols-2 gap-2"><a href="/ads-manager?provider=google&tab=campaigns" className="rounded-xl bg-emerald-700 px-3 py-2 text-center text-xs font-bold text-white">إدارة حملات جوجل</a><a href="/ads-manager?provider=google&tab=ai" className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-center text-xs font-bold text-violet-800">ذكاء ميزان لجوجل</a></div>}
         </article>
     );
 }
@@ -631,6 +634,15 @@ function SpendChart({ points }) {
                                 dataKey="meta"
                                 name="ميتا"
                                 stroke="#2563eb"
+                                strokeWidth={2}
+                                connectNulls={false}
+                                dot={false}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="google"
+                                name="إعلانات جوجل"
+                                stroke="#059669"
                                 strokeWidth={2}
                                 connectNulls={false}
                                 dot={false}
@@ -842,6 +854,7 @@ export function AdsManagerView({
     onApply = () => {},
     onRefresh = () => {},
     onPageChange = () => {},
+    platformOptions = PLATFORM_OPTIONS,
 }) {
     const metrics = overview.metrics;
     const roasExcludedProviders = overview.providers.filter(
@@ -936,7 +949,7 @@ export function AdsManagerView({
                             className="h-[46px] w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                             data-testid="ads-filter-provider"
                         >
-                            {PLATFORM_OPTIONS.map((option) => (
+                            {platformOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
                                     {option.label}
                                 </option>
@@ -1031,7 +1044,7 @@ export function AdsManagerView({
                     </h2>
                 </div>
                 {overview.providers.length ? (
-                    <div className="grid gap-3 lg:grid-cols-3">
+                    <div className="grid gap-3 lg:grid-cols-3 xl:grid-cols-4">
                         {overview.providers.map((provider) => (
                             <ProviderFreshnessCard key={provider.provider} provider={provider} />
                         ))}
@@ -1077,19 +1090,22 @@ function errorMessage(error) {
     return "تعذر تحميل مدير الإعلانات. تحقق من الاتصال ثم أعد المحاولة.";
 }
 
-function initialFilters() {
+function initialFilters(provider = "all") {
     return {
         dateFrom: monthStartSA(),
         dateTo: todaySA(),
-        provider: "all",
+        provider,
         campaignQuery: "",
     };
 }
 
 export default function AdsManager() {
-    const [filters, setFilters] = useState(initialFilters);
+    const { user } = useOptionalAuth() || {};
+    const isMetaReviewer = user?.role === "meta_reviewer";
+    const startingProvider = isMetaReviewer ? "meta" : "all";
+    const [filters, setFilters] = useState(() => initialFilters(startingProvider));
     const [request, setRequest] = useState(() => ({
-        ...initialFilters(),
+        ...initialFilters(startingProvider),
         page: 1,
         limit: 25,
         revision: 0,
@@ -1177,6 +1193,9 @@ export default function AdsManager() {
                 onApply={handleApply}
                 onRefresh={handleRefresh}
                 onPageChange={handlePageChange}
+                platformOptions={isMetaReviewer
+                    ? PLATFORM_OPTIONS.filter((option) => option.value === "meta")
+                    : PLATFORM_OPTIONS}
             />
         </>
     );

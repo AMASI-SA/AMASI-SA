@@ -1,0 +1,9 @@
+/*
+ * The legacy dashboard UI is retired.  The compatibility routes remain only
+ * to redirect old bookmarks to the advanced dashboard, so obsolete controls
+ * must not invite operators back into the removed screen.
+ */
+[data-testid="advanced-dashboard-page"] > header a[href="/dashboard-v2"],
+[data-testid="nav-dashboard"] {
+    display: none !important;
+}

@@ -1,0 +1,42 @@
+[data-mezan-profit-product-persistent-link="true"] {
+  position: relative;
+  cursor: pointer;
+  padding-bottom: 3.35rem !important;
+}
+
+[data-mezan-profit-product-persistent-link="true"]::after {
+  content: attr(data-mezan-profit-product-persistent-label);
+  position: absolute;
+  right: 1rem;
+  bottom: 0.75rem;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(191 219 254);
+  border-radius: 0.6rem;
+  background: rgb(239 246 255);
+  padding: 0.35rem 0.75rem;
+  color: rgb(29 78 216);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+[data-mezan-profit-product-persistent-link="true"][data-mezan-profit-product-persistent-label="فتح المنتج وإضافة التكلفة"]::after {
+  border-color: rgb(252 211 77);
+  background: rgb(255 251 235);
+  color: rgb(146 64 14);
+}
+
+[data-mezan-profit-product-persistent-link="true"]:focus-visible {
+  outline: 3px solid rgb(147 197 253);
+  outline-offset: -3px;
+}
+
+[data-mezan-profit-product-persistent-link="true"]:has([data-mezan-profit-product-link])::after {
+  display: none;
+}

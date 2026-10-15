@@ -1,0 +1,140 @@
+[data-mezan-snapchat-account-switcher="true"] {
+  border: 1px solid #dbe4ef;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 0.9rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+}
+
+.mezan-snapchat-account-switcher__title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.mezan-snapchat-account-switcher__title > div {
+  display: grid;
+  gap: 0.2rem;
+  color: #0f172a;
+}
+
+.mezan-snapchat-account-switcher__title strong {
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.mezan-snapchat-account-switcher__title span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.mezan-snapchat-account-switcher__policy {
+  max-width: 25rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  padding: 0.45rem 0.75rem;
+  color: #1e40af !important;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.mezan-snapchat-account-switcher__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.65rem;
+}
+
+.mezan-snapchat-account-card {
+  display: grid;
+  gap: 0.35rem;
+  min-height: 5.9rem;
+  border: 1px solid #dbe4ef;
+  border-radius: 0.9rem;
+  background: #f8fafc;
+  padding: 0.75rem 0.85rem;
+  text-align: right;
+  color: #334155;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.mezan-snapchat-account-card:hover {
+  border-color: #94a3b8;
+  background: #fff;
+}
+
+.mezan-snapchat-account-card[data-active="true"] {
+  border-color: #10b981;
+  background: #ecfdf5;
+  box-shadow: 0 0 0 2px rgb(16 185 129 / 0.12);
+}
+
+.mezan-snapchat-account-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.mezan-snapchat-account-card__header strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 900;
+  color: #0f172a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mezan-snapchat-account-card__header > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.2rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.67rem;
+  font-weight: 900;
+  color: #475569;
+}
+
+.mezan-snapchat-account-card__timezone {
+  direction: ltr;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.mezan-snapchat-account-card__today {
+  font-size: 0.72rem;
+  font-weight: 900;
+  color: #0369a1;
+}
+
+[data-mezan-snapchat-campaign-coverage="true"] {
+  border: 1px solid #fde68a;
+  border-radius: 0.9rem;
+  background: #fffbeb;
+  padding: 0.8rem 1rem;
+  color: #92400e;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.65;
+}
+
+@media (max-width: 720px) {
+  .mezan-snapchat-account-switcher__title {
+    display: grid;
+  }
+
+  .mezan-snapchat-account-switcher__policy {
+    max-width: none;
+    border-radius: 0.75rem;
+  }
+
+  .mezan-snapchat-account-switcher__cards {
+    grid-template-columns: 1fr;
+  }
+}

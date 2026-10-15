@@ -1,13 +1,32 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 
+let mockAuthUser = { is_owner: true, permissions: [] };
+let mockSearchParams = new URLSearchParams();
+const mockSetSearchParams = jest.fn();
+
 jest.mock("react-router-dom", () => ({
-    useSearchParams: () => [new URLSearchParams(), jest.fn()],
+    useSearchParams: () => [mockSearchParams, mockSetSearchParams],
+}), { virtual: true });
+
+jest.mock("../context/AuthContext", () => ({
+    useAuth: () => ({ user: mockAuthUser, loading: false }),
+}));
+
+jest.mock("../lib/api", () => ({
+    __esModule: true,
+    default: {
+        get: jest.fn(),
+    },
 }));
 
 import {
     CUSTOMER_INTELLIGENCE_TABS,
     CustomerIntelligenceCenterView,
+    default as CustomerIntelligenceCenter,
 } from "./CustomerIntelligenceCenter";
+import api from "../lib/api";
 
 const previewPayload = {
     schema_version: 1,
@@ -236,14 +255,118 @@ const previewPayload = {
     },
 };
 
-function renderTab(activeTab) {
+const liveInboxPayload = {
+    schema_version: 1,
+    generated_at: "2026-08-12T00:30:00Z",
+    mode: "live_receive_only",
+    data_origin: "whatsapp_webhook",
+    connection: {
+        provider: "whatsapp",
+        status: "connected",
+        connected_channels: 1,
+        receiving_channels: 1,
+    },
+    conversation_count: 2,
+    message_count: 4,
+    content_unavailable_count: 1,
+    has_more: false,
+    next_offset: null,
+    conversations: [{
+        conversation_id: "conversation-live-1",
+        customer_id: "customer-live-1",
+        customer_name: "عميل واتساب",
+        channel: "whatsapp",
+        status: "open",
+        last_message: "اختبار ربط ميزان 2",
+        last_message_at: "2026-08-12T00:29:00Z",
+        message_count: 3,
+        content_unavailable_count: 0,
+        messages: [{
+            message_id: "message-live-text",
+            direction: "inbound",
+            sender: "customer",
+            kind: "text",
+            body: "اختبار ربط ميزان 2",
+            occurred_at: "2026-08-12T00:28:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }, {
+            message_id: "message-live-employee-echo",
+            direction: "outbound",
+            sender: "employee",
+            kind: "text",
+            body: "رد الموظف السابق من تطبيق واتساب",
+            occurred_at: "2026-08-12T00:28:30Z",
+            delivery_state: "read",
+            content_available: true,
+        }, {
+            message_id: "message-live-image",
+            direction: "inbound",
+            sender: "customer",
+            kind: "image",
+            caption: "صورة المنتج",
+            mime_type: "image/jpeg",
+            occurred_at: "2026-08-12T00:29:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }],
+        reply_suggestion: {
+            suggestion_id: "reply-suggestion-live-1",
+            status: "pending_approval",
+            text: "أهلًا بك، سأتأكد من توفر المنتج.",
+            version: 1,
+            requires_human_approval: true,
+            send_allowed: false,
+            created_at: "2026-08-12T00:29:30Z",
+        },
+    }, {
+        conversation_id: "conversation-live-2",
+        customer_id: "customer-live-2",
+        customer_name: "عميل واتساب 2",
+        channel: "whatsapp",
+        status: "needs_human",
+        last_message: "أحتاج مساعدة",
+        last_message_at: "2026-08-11T22:00:00Z",
+        message_count: 1,
+        content_unavailable_count: 1,
+        messages: [{
+            message_id: "message-live-audio",
+            direction: "inbound",
+            sender: "customer",
+            kind: "audio",
+            mime_type: "audio/ogg",
+            occurred_at: "2026-08-11T22:00:00Z",
+            delivery_state: "received",
+            content_available: true,
+        }],
+    }],
+    safety_policy: {
+        mode: "observe_only",
+        receive_only: true,
+        writes_allowed: false,
+        whatsapp_send_allowed: false,
+        ai_auto_reply_allowed: false,
+        commerce_mutation_allowed: false,
+    },
+};
+
+function renderTab(activeTab, props = {}) {
     return renderToStaticMarkup(
         <CustomerIntelligenceCenterView
             model={previewPayload}
+            inbox={liveInboxPayload}
             activeTab={activeTab}
+            {...props}
         />,
     );
 }
+
+beforeEach(() => {
+    mockAuthUser = { is_owner: true, permissions: [] };
+    mockSearchParams = new URLSearchParams();
+    mockSetSearchParams.mockClear();
+    api.get.mockReset();
+});
 
 test("renders the owner preview shell with exactly thirteen governed tabs", () => {
     const markup = renderTab("overview");
@@ -260,16 +383,228 @@ test("renders the owner preview shell with exactly thirteen governed tabs", () =
     });
 });
 
-test("shows synthetic text, audio, and image messages without a send control", () => {
+test("forces a permitted employee into conversations without loading the owner workspace", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    mockAuthUser = {
+        is_owner: false,
+        permissions: ["customer_intelligence.inbox.read"],
+    };
+    mockSearchParams = new URLSearchParams("tab=overview");
+    api.get.mockImplementation((path) => {
+        if (path === "/customer-intelligence/v1/inbox") {
+            return Promise.resolve({ data: liveInboxPayload });
+        }
+        if (path === "/customer-intelligence/v1/learning/status") {
+            return Promise.resolve({ data: {
+                schema_version: 1,
+                state: "healthy",
+                runtime_configured: true,
+                worker_enabled: true,
+                inbound_customer_messages: 4,
+                employee_responses: 1,
+                total_evidence_events: 5,
+                queued_for_analysis: 4,
+                analyzed_messages: 4,
+                pending_messages: 0,
+                failed_messages: 0,
+                queue_coverage_percent: 100,
+                analysis_completion_percent: 100,
+                signals_detected: 3,
+                open_problems: 1,
+                proposed_decisions: 1,
+                metadata_only_media_events: 0,
+            } });
+        }
+        return Promise.reject(new Error(`Unexpected owner request: ${path}`));
+    });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(<CustomerIntelligenceCenter />);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(api.get).toHaveBeenCalledTimes(2);
+        expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/inbox");
+        expect(api.get).toHaveBeenCalledWith("/customer-intelligence/v1/learning/status");
+        expect(container.querySelectorAll(
+            '[data-testid^="customer-intelligence-tab-"]',
+        )).toHaveLength(1);
+        expect(container.querySelector(
+            '[data-testid="customer-intelligence-tab-conversations"]',
+        )).not.toBeNull();
+        expect(container.querySelector(
+            '[data-testid="customer-intelligence-tab-overview"]',
+        )).toBeNull();
+        expect(container.querySelector(
+            '[data-testid="customer-intelligence-panel-conversations"]',
+        )).not.toBeNull();
+        expect(mockSetSearchParams).toHaveBeenCalledTimes(1);
+        const [redirectedParams, options] = mockSetSearchParams.mock.calls[0];
+        expect(redirectedParams.get("tab")).toBe("conversations");
+        expect(options).toEqual({ replace: true });
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("shows a pending employee-approved suggestion while keeping channel send locked", () => {
     const markup = renderTab("conversations");
 
-    expect(markup).toContain('data-testid="customer-intelligence-text-message"');
-    expect(markup).toContain('data-testid="customer-intelligence-audio-message"');
-    expect(markup).toContain('data-testid="customer-intelligence-image-message"');
-    expect(markup).toContain("تفريغ تجريبي للصوت");
-    expect(markup).toContain("صورة تجريبية");
-    expect(markup).toContain("معاينة رد مقترح — غير قابل للإرسال");
-    expect(markup).not.toContain('data-testid="customer-intelligence-send"');
+    expect(markup).toContain('data-preview-only="false"');
+    expect(markup).toContain('data-live-inbox="true"');
+    expect(markup).toContain('data-testid="customer-intelligence-live-conversation-list"');
+    expect(markup).toContain('data-testid="customer-intelligence-live-message-stream"');
+    expect(markup.match(/data-testid="customer-intelligence-live-message"/g) || []).toHaveLength(3);
+    expect(markup).toContain("اختبار ربط ميزان 2");
+    expect(markup).toContain("صورة المنتج");
+    expect(markup).toContain("رد الموظف من القناة");
+    expect(markup).toContain("رد الموظف السابق من تطبيق واتساب");
+    expect(markup).toContain('data-message-direction="outbound"');
+    expect(markup).toContain("تمت القراءة");
+    expect(markup).toContain("واتساب · متصل");
+    expect(markup).toContain('data-testid="customer-intelligence-content-unavailable-warning"');
+    expect(markup).toContain("تعذر عرض محتوى");
+    expect(markup).not.toContain("WhatsApp وهمي");
+    expect(markup).not.toContain("بيانات مصطنعة");
+    expect(markup).toContain('data-testid="customer-intelligence-pending-reply-suggestion"');
+    expect(markup).toContain("اقتراح رد من ذكاء ميزان");
+    expect(markup).toContain("يحتاج اعتماد موظف");
+    expect(markup).toContain("أهلًا بك، سأتأكد من توفر المنتج.");
+    expect(markup).toContain('data-testid="customer-intelligence-approve-and-send"');
+    expect(markup.match(/<button[^>]*data-testid="customer-intelligence-approve-and-send"[^>]*>/)?.[0])
+        .toContain('disabled=""');
+    expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
+    expect(markup).toContain("<textarea");
+    expect(markup).not.toContain("<form");
+});
+
+test("shows measurable learning coverage without exposing customer content or execution", () => {
+    const markup = renderTab("conversations", {
+        learningStatus: {
+            state: "processing",
+            queue_coverage_percent: 100,
+            analyzed_messages: 3,
+            inbound_customer_messages: 4,
+            employee_responses: 1,
+            total_evidence_events: 5,
+            pending_messages: 1,
+            failed_messages: 0,
+            open_problems: 2,
+            proposed_decisions: 1,
+            metadata_only_media_events: 0,
+        },
+    });
+
+    expect(markup).toContain('data-testid="customer-intelligence-learning-status"');
+    expect(markup).toContain('data-learning-state="processing"');
+    expect(markup).toContain("تغطية طابور الذكاء");
+    expect(markup).toContain("100%");
+    expect(markup).toContain("مقترحات التنفيذ خاضعة للمراجعة البشرية");
+    expect(markup).toContain("تعليقات تيك توك تُستورد يدويًا ولا تُرسل");
+    expect(markup).not.toContain("إرسال تلقائي مفعل");
+});
+
+test.each([
+    ["instagram", "إنستغرام", "channel_webhooks"],
+    ["tiktok", "تيك توك", "channel_providers"],
+])("labels %s comments as public and displays the privacy guardrail", (provider, providerName, origin) => {
+    const instagramInbox = {
+        ...liveInboxPayload,
+        data_origin: origin,
+        connections: [{
+            provider,
+            status: "connected",
+            connected_channels: 1,
+            receiving_channels: 1,
+        }],
+        connection: {
+            provider: "whatsapp",
+            status: "not_connected",
+            connected_channels: 0,
+            receiving_channels: 0,
+        },
+        conversation_count: 1,
+        message_count: 1,
+        conversations: [{
+            conversation_id: "conversation-instagram-comment",
+            customer_id: "customer-instagram-comment",
+            customer_name: `عميل ${providerName}`,
+            channel: provider,
+            surface: "comment",
+            status: "open",
+            last_message: "هل يتوفر لون آخر؟",
+            last_message_at: "2026-08-12T00:31:00Z",
+            message_count: 1,
+            content_unavailable_count: 0,
+            messages: [{
+                message_id: "message-instagram-comment",
+                direction: "inbound",
+                sender: "customer",
+                kind: "text",
+                surface: "comment",
+                body: "هل يتوفر لون آخر؟",
+                occurred_at: "2026-08-12T00:31:00Z",
+                delivery_state: "received",
+                content_available: true,
+            }],
+            reply_suggestion: {
+                suggestion_id: "reply-suggestion-instagram-comment",
+                status: "pending_approval",
+                text: "أهلًا، راسلنا على الخاص بالتفاصيل.",
+                version: 1,
+                surface: "comment",
+                requires_human_approval: true,
+                send_allowed: false,
+                created_at: "2026-08-12T00:31:30Z",
+            },
+        }],
+    };
+
+    const markup = renderTab("conversations", { inbox: instagramInbox });
+
+    expect(markup).toContain(`${providerName} · تعليق عام`);
+    expect(markup).toContain(`تعليق ${providerName} وارد`);
+    expect(markup).toContain('data-testid="customer-intelligence-public-comment-warning"');
+    expect(markup).toContain("لا تعرض بيانات الطلب أو الجوال أو العنوان");
+    expect(markup).toContain(`هذا رد عام على تعليق ${providerName}`);
+    if (provider === "tiktok") {
+        expect(markup).not.toContain("تعليق إنستغرام وارد");
+        expect(markup).toContain("تعليقات تيك توك المستوردة يدويًا");
+    }
+    expect(markup).toContain("اعتماد وإرسال — الإرسال مقفل حاليًا");
+});
+
+test("mobile inbox starts with the list, then offers a clear back control", () => {
+    const markup = renderTab("conversations");
+
+    expect(markup).toContain('data-testid="customer-intelligence-responsive-inbox"');
+    expect(markup).toMatch(/<div class="block"[^>]*>.*?<section[^>]*data-testid="customer-intelligence-live-conversation-list"/);
+    expect(markup).toMatch(/<div class="hidden lg:block"[^>]*>.*?<button[^>]*data-testid="customer-intelligence-back-to-conversations"/);
+    expect(markup).toContain("رجوع إلى المحادثات");
+    expect(markup).toContain("lg:grid-cols-[minmax(300px,.75fr)_minmax(0,1.25fr)]");
+});
+
+test("makes a truncated live message window explicit", () => {
+    const truncatedInbox = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            message_count: 45,
+        }],
+    };
+
+    const markup = renderTab("conversations", { inbox: truncatedInbox });
+
+    expect(markup).toContain('data-testid="customer-intelligence-message-window-notice"');
+    expect(markup).toContain("يعرض أحدث");
+    expect(markup).toContain("45");
 });
 
 test("renders a conversation cart and a visibly fake non-clickable payment URL", () => {
@@ -297,13 +632,309 @@ test("shows an error without substituting local business fixtures", () => {
     const markup = renderToStaticMarkup(
         <CustomerIntelligenceCenterView
             model={{}}
-            activeTab="conversations"
+            activeTab="overview"
             error="Backend unavailable"
         />,
     );
 
     expect(markup).toContain('data-testid="customer-intelligence-error"');
-    expect(markup).toContain("لم تُستخدم بيانات محلية بديلة");
-    expect(markup).toContain("لا توجد محادثات في المعاينة");
+    expect(markup).toContain("لم تُعرض بيانات بديلة");
     expect(markup).not.toContain("عميلة تجريبية");
+});
+
+test("escapes live customer text and exposes no send or provider-secret fields", () => {
+    const unsafeInbox = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            customer_name: "<script>name</script>",
+            messages: [{
+                ...liveInboxPayload.conversations[0].messages[0],
+                body: "<script>alert('x')</script>",
+                provider_media_id: "provider-secret-1",
+                content_ciphertext: "ciphertext-secret-1",
+            }],
+        }],
+    };
+    const markup = renderTab("conversations", { inbox: unsafeInbox });
+
+    expect(markup).toContain("&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;");
+    expect(markup).not.toContain("<script>");
+    expect(markup).not.toContain("provider-secret-1");
+    expect(markup).not.toContain("ciphertext-secret-1");
+    expect(markup.match(/<button[^>]*data-testid="customer-intelligence-approve-and-send"[^>]*>/)?.[0])
+        .toContain('disabled=""');
+    expect(markup).not.toContain("<form");
+});
+
+test("shows a connected empty state without synthetic conversation fallback", () => {
+    const markup = renderTab("conversations", {
+        inbox: {
+            ...liveInboxPayload,
+            conversation_count: 0,
+            message_count: 0,
+            content_unavailable_count: 0,
+            conversations: [],
+        },
+    });
+
+    expect(markup).toContain("لا توجد رسائل واردة حتى الآن");
+    expect(markup).not.toContain("عميلة تجريبية");
+});
+
+test("shows a live inbox error without falling back to preview conversations", () => {
+    const markup = renderTab("conversations", {
+        inbox: {},
+        inboxError: "Inbox unavailable",
+    });
+
+    expect(markup).toContain('data-testid="customer-intelligence-error"');
+    expect(markup.match(/data-testid="customer-intelligence-error"/g) || []).toHaveLength(1);
+    expect(markup).toContain("تعذر تحميل تفاعلات قنوات العملاء");
+    expect(markup).toContain("لم تُعرض بيانات بديلة");
+    expect(markup).not.toContain("عميلة تجريبية");
+});
+
+test("editing or pressing Enter never reviews or sends until the employee clicks review", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onReviewSuggestion = jest.fn().mockResolvedValue({});
+    const onRejectSuggestion = jest.fn().mockResolvedValue({});
+    const onEscalateSuggestion = jest.fn().mockResolvedValue({});
+
+    try {
+        await act(async () => {
+            root.render(
+                <CustomerIntelligenceCenterView
+                    model={previewPayload}
+                    inbox={liveInboxPayload}
+                    activeTab="conversations"
+                    onReviewSuggestion={onReviewSuggestion}
+                    onRejectSuggestion={onRejectSuggestion}
+                    onEscalateSuggestion={onEscalateSuggestion}
+                />,
+            );
+        });
+
+        const editor = container.querySelector(
+            '[data-testid="customer-intelligence-reply-suggestion-editor"]',
+        );
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(
+                HTMLTextAreaElement.prototype,
+                "value",
+            ).set.call(editor, "النص بعد تعديل الموظف\nسطر ثانٍ");
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            editor.dispatchEvent(new KeyboardEvent("keydown", {
+                key: "Enter",
+                bubbles: true,
+            }));
+        });
+
+        expect(onReviewSuggestion).not.toHaveBeenCalled();
+        expect(onRejectSuggestion).not.toHaveBeenCalled();
+        expect(onEscalateSuggestion).not.toHaveBeenCalled();
+        expect(container.querySelector("form")).toBeNull();
+        expect(container.querySelector(
+            '[data-testid="customer-intelligence-approve-and-send"]',
+        ).disabled).toBe(true);
+
+        await act(async () => {
+            container.querySelector('[data-testid="customer-intelligence-review-suggestion"]')
+                .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+
+        expect(onReviewSuggestion).toHaveBeenCalledTimes(1);
+        expect(onReviewSuggestion).toHaveBeenCalledWith(
+            "conversation-live-1",
+            "reply-suggestion-live-1",
+            { text: "النص بعد تعديل الموظف\nسطر ثانٍ", version: 1 },
+        );
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("creates one AI suggestion only on an explicit employee click", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    let finishCreate;
+    const onCreateSuggestion = jest.fn(() => new Promise((resolve) => {
+        finishCreate = resolve;
+    }));
+    const withoutSuggestion = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            reply_suggestion: null,
+        }],
+    };
+
+    try {
+        await act(async () => {
+            root.render(
+                <CustomerIntelligenceCenterView
+                    model={previewPayload}
+                    inbox={withoutSuggestion}
+                    activeTab="conversations"
+                    onCreateSuggestion={onCreateSuggestion}
+                />,
+            );
+        });
+
+        expect(onCreateSuggestion).not.toHaveBeenCalled();
+        const createButton = container.querySelector(
+            '[data-testid="customer-intelligence-create-suggestion"]',
+        );
+        await act(async () => {
+            createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(onCreateSuggestion).toHaveBeenCalledTimes(1);
+        expect(onCreateSuggestion).toHaveBeenCalledWith("conversation-live-1");
+        expect(createButton.disabled).toBe(true);
+
+        createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(onCreateSuggestion).toHaveBeenCalledTimes(1);
+
+        await act(async () => finishCreate({ status: "pending_approval" }));
+        expect(createButton.disabled).toBe(false);
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("conversation selection swaps list and thread on mobile, with a working back action", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    try {
+        await act(async () => {
+            root.render(
+                <CustomerIntelligenceCenterView
+                    model={previewPayload}
+                    inbox={liveInboxPayload}
+                    activeTab="conversations"
+                />,
+            );
+        });
+
+        const list = container.querySelector(
+            '[data-testid="customer-intelligence-live-conversation-list"]',
+        );
+        const stream = container.querySelector(
+            '[data-testid="customer-intelligence-live-message-stream"]',
+        );
+        expect(list.parentElement.className).toBe("block");
+        expect(stream.parentElement.className).toBe("hidden lg:block");
+
+        await act(async () => {
+            container.querySelectorAll(
+                '[data-testid="customer-intelligence-live-conversation"]',
+            )[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(list.parentElement.className).toBe("hidden lg:block");
+        expect(stream.parentElement.className).toBe("block");
+        expect(stream.textContent).toContain("عميل واتساب 2");
+
+        await act(async () => {
+            container.querySelector(
+                '[data-testid="customer-intelligence-back-to-conversations"]',
+            ).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        expect(list.parentElement.className).toBe("block");
+        expect(stream.parentElement.className).toBe("hidden lg:block");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+test("failed AI suggestion creation shows one local error and never sends", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onCreateSuggestion = jest.fn().mockRejectedValue(new Error("AI unavailable"));
+    const withoutSuggestion = {
+        ...liveInboxPayload,
+        conversations: [{
+            ...liveInboxPayload.conversations[0],
+            reply_suggestion: null,
+        }],
+    };
+
+    try {
+        await act(async () => {
+            root.render(
+                <CustomerIntelligenceCenterView
+                    model={previewPayload}
+                    inbox={withoutSuggestion}
+                    activeTab="conversations"
+                    onCreateSuggestion={onCreateSuggestion}
+                />,
+            );
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="customer-intelligence-create-suggestion"]')
+                .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+
+        expect(container.querySelectorAll(
+            '[data-testid="customer-intelligence-create-suggestion-error"]',
+        )).toHaveLength(1);
+        expect(container.textContent).toContain("لم يُرسل أي رد للعميل");
+        expect(container.querySelector("form")).toBeNull();
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
+
+test("TikTok owner tools separate coupon saving from explicit OpenAI regeneration", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onSaveTikTokPolicy = jest.fn().mockResolvedValue({ discount_code: "AM" });
+    const onRegenerateTikTokSuggestion = jest.fn().mockResolvedValue({});
+    const inbox = { ...liveInboxPayload, data_origin: "channel_providers", conversations: [{
+        ...liveInboxPayload.conversations[0], channel: "tiktok", surface: "comment",
+        reply_suggestion: { ...liveInboxPayload.conversations[0].reply_suggestion, surface: "comment" },
+    }] };
+    try {
+        await act(async () => root.render(<CustomerIntelligenceCenterView model={previewPayload} inbox={inbox} activeTab="conversations" onSaveTikTokPolicy={onSaveTikTokPolicy} onRegenerateTikTokSuggestion={onRegenerateTikTokSuggestion} />));
+        expect(onSaveTikTokPolicy).not.toHaveBeenCalled();
+        expect(onRegenerateTikTokSuggestion).not.toHaveBeenCalled();
+        const field = container.querySelector("#tiktok-reply-coupon");
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, "AM");
+            field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        const buttons = () => Array.from(container.querySelectorAll("button"));
+        await act(async () => buttons().find(b => b.textContent === "اعتماد كود الخصم").click());
+        expect(onSaveTikTokPolicy).toHaveBeenCalledWith("conversation-live-1", "AM");
+        expect(onRegenerateTikTokSuggestion).not.toHaveBeenCalled();
+        expect(container.textContent).toContain("8000");
+        await act(async () => buttons().find(b => b.textContent === "إرسال السياق إلى OpenAI وإعادة التوليد").click());
+        expect(onRegenerateTikTokSuggestion).toHaveBeenCalledWith("conversation-live-1", "reply-suggestion-live-1", 1);
+        expect(container.querySelector('[data-testid="customer-intelligence-approve-and-send"]')).toBeNull();
+        expect(container.textContent).toContain("معاينة الرد على تيك توك");
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
 });

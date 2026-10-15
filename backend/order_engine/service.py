@@ -6,6 +6,9 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from salla_marketing_attribution import canonical_order_source
+from .attribution import build_attribution_projection
+
 from .mapper import OrderMappingError, map_salla_order
 from .models import OrderDTO
 from .repository import OrderRepository
@@ -240,91 +243,22 @@ def _is_gift_label(value: Any) -> bool:
     }
 
 
-def _dict_value(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
 def _provider_marketing_source(raw: dict[str, Any]) -> dict[str, Optional[str]]:
-    source_obj = _dict_value(raw.get("source"))
-    utm_obj = _dict_value(raw.get("utm"))
-    marketing_obj = _dict_value(raw.get("marketing"))
-    attribution_obj = _dict_value(raw.get("attribution"))
-
-    utm_source = _text(
-        raw.get("utm_source")
-        or utm_obj.get("source")
-        or marketing_obj.get("utm_source")
-        or attribution_obj.get("utm_source")
-    )
-    utm_medium = _text(
-        raw.get("utm_medium")
-        or utm_obj.get("medium")
-        or marketing_obj.get("utm_medium")
-        or attribution_obj.get("utm_medium")
-    )
-    utm_campaign = _text(
-        raw.get("utm_campaign")
-        or utm_obj.get("campaign")
-        or marketing_obj.get("utm_campaign")
-        or attribution_obj.get("utm_campaign")
-    )
-
-    source_native = _text(
-        utm_source
-        or source_obj.get("source")
-        or source_obj.get("channel")
-        or source_obj.get("platform")
-        or source_obj.get("name")
-        or (raw.get("source") if isinstance(raw.get("source"), str) else None)
-        or raw.get("traffic_source")
-        or raw.get("marketing_source")
-        or raw.get("source_name")
-    )
-
-    normalized = " ".join(str(source_native or "").replace("_", " ").strip().casefold().split())
-    canonical_source: Optional[str] = None
-    platform: Optional[str] = None
-
-    if "snap" in normalized:
-        canonical_source = "snapchat"
-        platform = "snapchat"
-    elif normalized in {"ig", "insta"} or "instagram" in normalized:
-        canonical_source = "meta"
-        platform = "instagram"
-    elif normalized in {"fb"} or "facebook" in normalized:
-        canonical_source = "meta"
-        platform = "facebook"
-    elif "meta" in normalized:
-        canonical_source = "meta"
-        platform = "meta"
-    elif "tiktok" in normalized or "tik tok" in normalized:
-        canonical_source = "tiktok"
-        platform = "tiktok"
-    elif "google" in normalized or "adwords" in normalized or "gads" in normalized:
-        canonical_source = "google"
-        platform = "google"
-    elif normalized in {"direct", "direct visit", "زيارة مباشرة", "زياره مباشره", "store", "website"}:
-        canonical_source = "direct"
-        platform = "store"
-    elif normalized:
-        canonical_source = normalized
-
-    return {
-        "source": canonical_source,
-        "channel": canonical_source,
-        "platform": platform,
-        "source_native": source_native,
-        "utm_source": utm_source,
-        "utm_medium": utm_medium,
-        "utm_campaign": utm_campaign,
-        "device": _text(raw.get("device") or source_obj.get("device")),
-    }
+    return canonical_order_source(raw)
 
 
 def _map_row(raw: dict[str, Any], *, current_status: Optional[str] = None) -> OrderDTO:
     dto = map_salla_order(raw)
     customer = dto.customer.model_copy(update={"avatar_url": _customer_avatar(raw), "gender": _customer_gender(raw)})
-    source = dto.source.model_copy(update=_provider_marketing_source(raw))
+    marketing = _provider_marketing_source(raw)
+    marketing.update(build_attribution_projection(
+        raw,
+        created_at=dto.created_at,
+        provider=marketing.get("source"),
+        campaign_id=marketing.get("campaign_id"),
+        campaign_name=marketing.get("campaign_name"),
+    ))
+    source = dto.source.model_copy(update=marketing)
     return dto.model_copy(
         update={
             "status_native": _provider_status_native(raw, current_status=current_status) or dto.status_native,
@@ -398,3 +332,33 @@ async def get_order(repository: OrderRepository, *, user_id: str, order_number: 
         return _map_row(row.salla_raw, current_status=row.current_status)
     except OrderMappingError as exc:
         raise OrderNotFoundError(f"order payload invalid: {normalized_order_number}") from exc
+
+
+async def get_orders(
+    repository: OrderRepository,
+    *,
+    user_id: str,
+    order_numbers: list[str],
+) -> dict[str, OrderDTO]:
+    """Return exact orders by number without an N+1 database read path."""
+    normalized = list(dict.fromkeys(
+        str(value or "").strip()
+        for value in order_numbers
+        if str(value or "").strip()
+    ))
+    if not normalized:
+        return {}
+    rows = await repository.get_salla_orders(
+        user_id=str(user_id),
+        order_numbers=normalized,
+    )
+    result: dict[str, OrderDTO] = {}
+    for row in rows:
+        try:
+            result[row.order_number] = _map_row(
+                row.salla_raw,
+                current_status=row.current_status,
+            )
+        except OrderMappingError:
+            continue
+    return result

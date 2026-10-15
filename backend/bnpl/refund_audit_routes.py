@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from security_public_errors import public_error
+
 from fastapi import APIRouter, Depends
 
 
@@ -344,7 +346,7 @@ def attach_bnpl_refund_audit_routes(parent_router, *, db, get_current_user):
                 ),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/diagnose/{provider}")
     async def diagnose_provider(
@@ -363,6 +365,6 @@ def attach_bnpl_refund_audit_routes(parent_router, *, db, get_current_user):
                 **(await _diagnose_provider_delta(db, uid, provider)),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     parent_router.include_router(router)

@@ -23,6 +23,8 @@ state (page, last order_id). The UI reads this to render a log feed.
 """
 from __future__ import annotations
 
+from salla_shipping import extract_shipping, outbound_shipment, shipping_root_fields
+
 import asyncio
 import logging
 import uuid
@@ -30,6 +32,11 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from pymongo.errors import DuplicateKeyError
+
+from carrier_handoff import advance_carrier_handoff_from_salla_status
+from order_currency import salla_order_currency_fields
+
+from salla_marketing_attribution import promoted_salla_attribution
 
 from .service import SallaError, call_salla
 
@@ -45,6 +52,15 @@ logger = logging.getLogger(__name__)
 # 15; we ask for the max (50) for fewer round-trips.
 ORDERS_PER_PAGE = 50
 MAX_PAGES_PER_RUN = 40  # 50 * 40 = 2000 orders / run — protects against runaway pulls
+# Explicit date-range imports are operator-requested historical jobs. Salla
+# currently caps `/orders` at 30 rows even when `per_page=50`, so the normal
+# 40-page ceiling silently stopped a 2026-07-01 import after only 1,200 rows.
+# The route runs these longer imports in the background; keep a separate hard
+# ceiling that covers the approved tax period without allowing an unbounded
+# crawl.
+MAX_RANGE_PAGES_PER_RUN = 120
+MAX_ATTRIBUTION_RECOVERY_DAYS = 3
+MAX_ATTRIBUTION_RECOVERY_ORDERS = 500
 PRODUCTS_PER_PAGE = 60
 MAX_PRODUCT_PAGES = 20
 
@@ -150,6 +166,26 @@ async def _refresh_plan_b_status_snapshot(
             "reason": "missing_order_or_status",
         }
 
+    carrier_handoff_transition = {
+        "advanced": False,
+        "reason": "evaluation_failed",
+    }
+    try:
+        carrier_handoff_transition = (
+            await advance_carrier_handoff_from_salla_status(
+                db,
+                user_id=str(user_id),
+                order_number=order_number,
+                status_slug=status_slug,
+                status_name=status_native,
+                source="mezan_orders_page_status_sync",
+            )
+        )
+    except Exception as exc:
+        # Status snapshots must remain available even when the local
+        # fulfillment workflow has not been initialized yet.
+        carrier_handoff_transition["error"] = str(exc)[:300]
+
     latest = await db.integration_inbox.find_one(
         {
             "user_id": {"$in": [user_id, "main"]},
@@ -188,6 +224,7 @@ async def _refresh_plan_b_status_snapshot(
     # and reduce a named bank transfer back to the generic value `bank`.
     for canonical_key in (
         "payment_method", "receiving_bank_name", "payment_receipt_url",
+        "customer_name", "customer_mobile", "customer_email",
     ):
         value = order_doc.get(canonical_key)
         if value not in (None, ""):
@@ -251,6 +288,7 @@ async def _refresh_plan_b_status_snapshot(
             "status_slug": status_slug,
             "status_native": status_native,
             "no_qoyod_send": True,
+            "carrier_handoff_transition": carrier_handoff_transition,
         }
 
     return {
@@ -264,6 +302,7 @@ async def _refresh_plan_b_status_snapshot(
         "status_slug": status_slug,
         "status_native": status_native,
         "no_qoyod_send": True,
+        "carrier_handoff_transition": carrier_handoff_transition,
     }
 
 
@@ -272,6 +311,27 @@ def _str(v: Any) -> str:
     if v is None:
         return ""
     return str(v).strip()
+
+
+def _salla_customer_name(customer: Any) -> str:
+    """Return the complete Salla customer name without inventing a value."""
+    if not isinstance(customer, dict):
+        return ""
+    direct = _str(
+        customer.get("full_name")
+        or customer.get("name")
+        or customer.get("display_name")
+    )
+    if direct:
+        return direct
+    return " ".join(
+        part
+        for part in (
+            _str(customer.get("first_name")),
+            _str(customer.get("last_name")),
+        )
+        if part
+    )
 
 
 def _money(v: Any, *, _depth: int = 0) -> float:
@@ -518,28 +578,10 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     if isinstance(payment_method, dict):
         payment_method = payment_method.get("name") or payment_method.get("code") or ""
 
-    shipping_company = ""
-    first_shipment: dict = {}
-    shipment = salla_order.get("shipments") or []
-    if shipment and isinstance(shipment, list):
-        first_shipment = shipment[0] or {}
-        if not isinstance(first_shipment, dict):
-            first_shipment = {}
-        shipping_company = (
-            (first_shipment.get("courier") or {}).get("name")
-            or first_shipment.get("courier_name")
-            or ""
-        )
-    shipping_label_url = _media_url(
-        first_shipment.get("label_url")
-        or first_shipment.get("label")
-        or first_shipment.get("awb_url")
-        or first_shipment.get("waybill_url")
-    )
-    if not shipping_company:
-        shipping = salla_order.get("shipping") or {}
-        if isinstance(shipping, dict):
-            shipping_company = (shipping.get("company") or {}).get("name") or shipping.get("company_name") or ""
+    shipping_observation = extract_shipping(salla_order)
+    first_shipment = outbound_shipment(salla_order, shipping_observation)
+    shipping_company = (shipping_observation or {}).get("company_name") or ""
+    shipping_label_url = (shipping_observation or {}).get("label_url")
 
     status_obj = salla_order.get("status") or {}
     if isinstance(status_obj, dict):
@@ -716,6 +758,7 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
 
     order_date_raw = (salla_order.get("date") or {}).get("date") if isinstance(salla_order.get("date"), dict) else salla_order.get("date")
     order_date = _normalize_date(salla_order.get("date") or salla_order.get("created_at"))
+    currency_fields = salla_order_currency_fields(salla_order)
 
     return {
         "order_id": _str(salla_order.get("id")),
@@ -729,13 +772,21 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "paid_amount": paid_amount,
         "remaining_amount": remaining_amount,
         "has_remaining_amount": has_remaining_amount,
+        "is_pending_payment": (
+            salla_order.get("is_pending_payment")
+            if isinstance(salla_order.get("is_pending_payment"), bool)
+            else None
+        ),
         "payment_collection_status": payment_collection_status,
         "payment_checkout_url": checkout_url,
         "receiving_bank_name": receiving_bank_name,
         "receiving_bank_id": _store_bank_id(salla_order),
         "payment_receipt_url": payment_receipt_url,
-        "customer_name": _str(customer.get("full_name") or customer.get("first_name") or ""),
+        "customer_name": _salla_customer_name(customer),
         "customer_mobile": _str(customer.get("mobile") or customer.get("phone") or ""),
+        "customer_email": _str(
+            customer.get("email") or customer.get("email_address") or ""
+        ),
         "payment_method": _str(payment_method),
         "shipping_company": _str(shipping_company),
         "shipping_label_url": shipping_label_url,
@@ -744,9 +795,15 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
         "discount": _money(discount_obj),
         "tax": _money(tax_obj),
         "total_amount": _money(total_obj),
-        "currency": _str(total_obj.get("currency") if isinstance(total_obj, dict) else "") or "SAR",
+        "currency": currency_fields["original_currency"],
+        **currency_fields,
         "source": _str(salla_order.get("source") or "salla_direct"),
+        # Keep Salla's raw payload for audit while promoting only the stable
+        # marketing fields needed by ad attribution.  This does not change the
+        # order, accounting, fulfilment or Qoyod source of truth.
+        **promoted_salla_attribution(salla_order),
         "products": products,
+        **(shipping_root_fields(shipping_observation) if shipping_observation else {}),
     }
 
 
@@ -799,6 +856,8 @@ async def run_orders_sync(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     updated_since_hours: Optional[int] = None,
+    log_id: Optional[str] = None,
+    recover_marketing_attribution: bool = False,
 ) -> dict:
     """Pull orders from Salla and upsert into unified_orders.
 
@@ -810,7 +869,23 @@ async def run_orders_sync(
         N hours (uses the `updated_at_gt` filter). Convenient for cron-style
         incremental syncs.
     """
-    log_id = await create_sync_log(db, user_id, "orders")
+    if recover_marketing_attribution:
+        if not from_date or not to_date:
+            raise ValueError(
+                "marketing attribution recovery requires from_date and to_date"
+            )
+        try:
+            recovery_start = datetime.strptime(from_date, "%Y-%m-%d").date()
+            recovery_end = datetime.strptime(to_date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise ValueError("invalid attribution recovery date range") from exc
+        recovery_days = (recovery_end - recovery_start).days + 1
+        if recovery_days < 1 or recovery_days > MAX_ATTRIBUTION_RECOVERY_DAYS:
+            raise ValueError(
+                "marketing attribution recovery is limited to three calendar days"
+            )
+
+    log_id = log_id or await create_sync_log(db, user_id, "orders")
 
     created = 0
     updated = 0
@@ -818,10 +893,19 @@ async def run_orders_sync(
     errors_count = 0
     errors_sample: list[dict] = []
     pages_fetched = 0
+    last_total_pages = 0
+    attribution_details_fetched = 0
+    attribution_orders_recovered = 0
+    attribution_recovery_errors = 0
 
     try:
         page = 1
-        while page <= MAX_PAGES_PER_RUN:
+        max_pages = (
+            MAX_RANGE_PAGES_PER_RUN
+            if from_date and to_date
+            else MAX_PAGES_PER_RUN
+        )
+        while page <= max_pages:
             params: dict = {"page": page, "per_page": ORDERS_PER_PAGE, "format": "light"}
             if from_date:
                 params["from_date"] = from_date
@@ -851,6 +935,38 @@ async def run_orders_sync(
 
             for raw in data:
                 try:
+                    if (
+                        recover_marketing_attribution
+                        and attribution_details_fetched
+                        < MAX_ATTRIBUTION_RECOVERY_ORDERS
+                    ):
+                        internal_id = _str(raw.get("id"))
+                        if internal_id:
+                            attribution_details_fetched += 1
+                            try:
+                                details_response = await call_salla(
+                                    db,
+                                    user_id,
+                                    "GET",
+                                    f"/orders/{internal_id}",
+                                )
+                                details = (
+                                    details_response.get("data")
+                                    if isinstance(details_response, dict)
+                                    else None
+                                )
+                                if isinstance(details, dict):
+                                    raw = details
+                                    recovered = promoted_salla_attribution(details)
+                                    if (
+                                        recovered.get("campaign_id")
+                                        or recovered.get("utm_campaign")
+                                        or recovered.get("campaign_name")
+                                    ):
+                                        attribution_orders_recovered += 1
+                            except Exception:
+                                attribution_recovery_errors += 1
+                            await asyncio.sleep(0.1)
                     raw = await _enrich_order_receiving_bank(
                         db, user_id, raw)
                     doc = _salla_order_to_doc(raw)
@@ -888,6 +1004,7 @@ async def run_orders_sync(
                 or pagination.get("last_page")
                 or 0
             )
+            last_total_pages = max(last_total_pages, total_pages)
             current_page = int(
                 pagination.get("currentPage")
                 or pagination.get("current_page")
@@ -900,13 +1017,31 @@ async def run_orders_sync(
 
             page += 1
             # Be polite to Salla's rate limiter
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(0.25 if from_date and to_date else 0.15)
 
+        truncated = bool(last_total_pages and last_total_pages > max_pages)
         await finish_sync_log(db, log_id, "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
+            "source_total_pages": last_total_pages,
+            "truncated": truncated,
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
         })
+    except asyncio.CancelledError:
+        await finish_sync_log(db, log_id, "interrupted", extra={
+            "created": created, "updated": updated, "skipped": skipped,
+            "errors_count": errors_count,
+            "errors_sample": errors_sample[:20],
+            "pages_fetched": pages_fetched,
+            "last_error": "sync_task_cancelled_before_completion",
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
+        })
+        raise
     except Exception as exc:
         await finish_sync_log(db, log_id, "failed", extra={
             "created": created, "updated": updated, "skipped": skipped,
@@ -914,6 +1049,9 @@ async def run_orders_sync(
             "errors_sample": (errors_sample + [{"error": str(exc)[:300]}])[:20],
             "pages_fetched": pages_fetched,
             "last_error": str(exc)[:500],
+            "attribution_details_fetched": attribution_details_fetched,
+            "attribution_orders_recovered": attribution_orders_recovered,
+            "attribution_recovery_errors": attribution_recovery_errors,
         })
         raise
 
@@ -924,6 +1062,11 @@ async def run_orders_sync(
         "skipped": skipped,
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
+        "source_total_pages": last_total_pages,
+        "truncated": bool(last_total_pages and last_total_pages > max_pages),
+        "attribution_details_fetched": attribution_details_fetched,
+        "attribution_orders_recovered": attribution_orders_recovered,
+        "attribution_recovery_errors": attribution_recovery_errors,
     }
 
 
@@ -963,6 +1106,86 @@ async def _fetch_salla_order_items(
         for row in rows
         if isinstance(row, dict)
     ]
+
+
+def _order_item_sku(item: dict) -> str:
+    product = item.get("product") or {}
+    variant = item.get("variant") or {}
+    return _str(
+        item.get("sku")
+        or (product.get("sku") if isinstance(product, dict) else None)
+        or (variant.get("sku") if isinstance(variant, dict) else None)
+    )
+
+
+async def _enrich_missing_order_item_skus(
+    db, user_id: str, items: list[dict],
+) -> list[dict]:
+    """Resolve omitted order-item SKUs from Salla's read-only catalogue.
+
+    Order Items can carry only a variant/product id. Qoyod requires the real
+    merchant SKU, so query Salla's documented variant/product detail endpoint
+    rather than inventing an accounting identity. Failed or blank lookups stay
+    blank and are refused by the existing Qoyod SKU guard.
+    """
+    cache: dict[str, str] = {}
+    enriched: list[dict] = []
+    for original in items:
+        item = dict(original)
+        if _order_item_sku(item):
+            enriched.append(item)
+            continue
+
+        product = item.get("product") or {}
+        variant = item.get("variant") or {}
+        variant_id = _str(
+            item.get("product_sku_id")
+            or item.get("variant_id")
+            or (variant.get("id") if isinstance(variant, dict) else None)
+        )
+        product_id = _str(
+            item.get("product_id")
+            or (product.get("id") if isinstance(product, dict) else None)
+        )
+        candidates = []
+        if variant_id:
+            candidates.append((
+                f"/products/variants/{variant_id}", "variant_details"))
+        if product_id:
+            candidates.append((f"/products/{product_id}", "product_details"))
+
+        for endpoint, source in candidates:
+            sku = cache.get(endpoint)
+            if sku is None:
+                try:
+                    response = await call_salla(
+                        db, user_id, "GET", endpoint)
+                    payload = (
+                        response.get("data")
+                        if isinstance(response, dict)
+                        else None
+                    )
+                    sku = _str(
+                        payload.get("sku")
+                        if isinstance(payload, dict)
+                        else None
+                    )
+                except Exception as exc:  # keep the hard SKU guard closed
+                    logger.warning(
+                        "Could not resolve Salla SKU from %s: %s",
+                        endpoint, exc,
+                    )
+                    sku = ""
+                cache[endpoint] = sku
+            if sku:
+                item["sku"] = sku
+                item["_mezan_sku_resolution"] = {
+                    "source": source,
+                    "endpoint": endpoint,
+                }
+                break
+        enriched.append(item)
+    return enriched
 
 
 _SHIPMENT_CLEARABLE_FIELDS = {
@@ -1113,19 +1336,42 @@ async def _fetch_salla_shipment_details(
 
     return list(await asyncio.gather(*(enrich(row) for row in rows)))
 
-async def _fetch_salla_order_details(
+async def _stored_salla_order_id(
     db,
     user_id: str,
     order_number: str,
-) -> dict | None:
-    """Resolve the internal Salla id, then fetch authoritative details."""
+) -> str:
+    """Return the internal Salla id retained by the ingestion boundary."""
+    collection = getattr(db, "unified_orders", None)
+    if collection is None:
+        return ""
+    row = await collection.find_one(
+        {
+            "user_id": str(user_id),
+            "order_number": str(order_number),
+        },
+        {"_id": 0, "order_id": 1},
+    )
+    return _str((row or {}).get("order_id"))
+
+
+async def _resolve_salla_order_id(
+    db,
+    user_id: str,
+    order_number: str,
+) -> str:
+    """Prefer the ingested Salla id; search by reference only as fallback."""
+    internal_id = await _stored_salla_order_id(db, user_id, order_number)
+    if internal_id:
+        return internal_id
+
     search_resp = await call_salla(
         db,
         user_id,
         "GET",
         "/orders",
         params={
-            "keyword": order_number,
+            "reference_id": order_number,
             "format": "light",
             "per_page": 10,
         },
@@ -1147,13 +1393,27 @@ async def _fetch_salla_order_details(
     if match is None and len(rows) == 1 and isinstance(rows[0], dict):
         match = rows[0]
     if match is None:
-        return None
+        return ""
 
     internal_id = str(match.get("id") or "").strip()
     if not internal_id:
         raise RuntimeError(
             f"Salla search result missing internal id: {order_number}"
         )
+    return internal_id
+
+
+async def _fetch_salla_order_details(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict | None:
+    """Resolve the internal Salla id, then fetch authoritative details."""
+    internal_id = await _resolve_salla_order_id(
+        db, user_id, order_number
+    )
+    if not internal_id:
+        return None
 
     details_resp = await call_salla(
         db,
@@ -1170,7 +1430,7 @@ async def _fetch_salla_order_details(
     actual_reference = str(
         details.get("reference_id") or details.get("order_number") or ""
     ).strip()
-    if actual_reference and actual_reference != order_number:
+    if actual_reference != order_number:
         raise RuntimeError(
             "Salla Order Details reference mismatch: "
             f"expected={order_number} actual={actual_reference}"
@@ -1189,6 +1449,7 @@ async def _fetch_salla_order_details(
             details.get("shipments"),
         ),
     )
+    items = await _enrich_missing_order_item_skus(db, user_id, items)
 
     enriched_details = dict(details)
     enriched_details = await _enrich_order_receiving_bank(
@@ -1199,6 +1460,146 @@ async def _fetch_salla_order_details(
     enriched_details["shipments"] = shipments
 
     return enriched_details
+
+
+async def fetch_single_order_status(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict:
+    """Read the current Salla order/payment facts without persisting them.
+
+    This is the shared narrow network boundary for both the guarded sender and
+    the operator's read-only payment check. It never writes to MongoDB and it
+    never calls Qoyod.
+    """
+    order_number = str(order_number or "").strip()
+    if not order_number:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "missing_order_number",
+            "stage": "validate_order_number",
+        }
+
+    stage = "search_order"
+    try:
+        internal_id = await _resolve_salla_order_id(
+            db, user_id, order_number
+        )
+        if not internal_id:
+            return {
+                "ok": True,
+                "found": False,
+                "error": "not_found_in_salla",
+                "stage": stage,
+            }
+
+        stage = "fetch_order_status"
+        details_resp = await call_salla(
+            db,
+            user_id,
+            "GET",
+            f"/orders/{internal_id}",
+        )
+        details = (
+            details_resp.get("data")
+            if isinstance(details_resp, dict)
+            else None
+        )
+        if not isinstance(details, dict):
+            raise RuntimeError(
+                f"Salla Order Details returned invalid payload: {order_number}"
+            )
+
+        actual_reference = str(
+            details.get("reference_id")
+            or details.get("order_number")
+            or ""
+        ).strip()
+        if actual_reference != order_number:
+            raise RuntimeError(
+                "Salla Order Details reference mismatch: "
+                f"expected={order_number} actual={actual_reference}"
+            )
+
+        stage = "map_order_status"
+        doc = _salla_order_to_doc(details)
+        current_slug = str(
+            doc.get("order_status_slug")
+            or doc.get("order_status")
+            or ""
+        ).strip().lower()
+        if not current_slug:
+            raise RuntimeError(
+                f"Salla Order Details missing status: {order_number}"
+            )
+
+        return {
+            "ok": True,
+            "found": True,
+            "order_number": order_number,
+            "order": doc,
+            "status_slug": current_slug,
+            "status_native": doc.get("order_status"),
+        }
+    except SallaError as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": str(exc),
+            "stage": stage,
+            "exception_type": type(exc).__name__,
+            "needs_reauth": exc.needs_reauth,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "status_refresh_stage_failed",
+            "stage": stage,
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)[:300],
+            "order_number": order_number,
+        }
+
+
+async def refresh_single_order_status(
+    db,
+    user_id: str,
+    order_number: str,
+) -> dict:
+    """Refresh the persisted Plan-B snapshot used by the guarded sender."""
+    result = await fetch_single_order_status(db, user_id, order_number)
+    if not result.get("ok") or not result.get("found"):
+        return result
+
+    doc = result.get("order") or {}
+    try:
+        snapshot = await _refresh_plan_b_status_snapshot(
+            db,
+            user_id,
+            str(order_number).strip(),
+            doc,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "found": False,
+            "error": "status_refresh_stage_failed",
+            "stage": "plan_b_status_snapshot",
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)[:300],
+            "order_number": str(order_number).strip(),
+        }
+
+    return {
+        "ok": True,
+        "found": True,
+        "plan_b_status_snapshot": snapshot,
+        "status_slug": snapshot.get("status_slug") or result.get("status_slug"),
+        "status_native": snapshot.get("status_native"),
+    }
 
 
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:

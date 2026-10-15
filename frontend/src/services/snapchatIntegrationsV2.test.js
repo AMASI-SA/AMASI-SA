@@ -3,6 +3,7 @@ import api from "../lib/api";
 import IntegrationActivityPanel from "../components/integrationsV2/IntegrationActivityPanel";
 import IntegrationCard from "../components/integrationsV2/IntegrationCard";
 import {
+    assertCanonicalSnapchatSyncResult,
     findTerminalSnapchatSyncRun,
     pollSnapchatAsyncSyncJob,
     recoverSnapchatSyncAfterTransportFailure,
@@ -27,6 +28,39 @@ const syncConfig = {
 };
 
 describe("Snapchat Integrations V2 client", () => {
+    test("routes the custom 47-day V2 range to its account-bound background job", () => {
+        const config = {
+            method: "post",
+            url: "/integrations-v2/snapchat-v2/sync",
+            data: {
+                ad_account_id: "usd-account",
+                date_from: "2026-08-01",
+                date_to: "2026-09-16",
+                action_report_time: "conversion",
+                run_type: "manual",
+            },
+        };
+        const rewritten = rewriteSnapchatSyncRequest(config);
+        expect(rewritten).toMatchObject({
+            url: "/integrations-v2/snapchat_ads/sync-async",
+            data: { ad_account_id: "usd-account", from_date: "2026-08-01", to_date: "2026-09-16" },
+            _mezanSnapchatCanonicalSync: true,
+            _mezanSnapchatAsyncSync: true,
+        });
+        expect(rewriteSnapchatSyncRequest(rewritten)).toEqual(rewritten);
+        expect(shouldRecoverSnapchatSyncFailure({
+            config: rewritten,
+            code: "ERR_NETWORK",
+        })).toBe(false);
+        const otherMode = { ...config, data: { ...config.data, action_report_time: "impression" } };
+        expect(rewriteSnapchatSyncRequest(otherMode)).toBe(otherMode);
+        expect(shouldRecoverSnapchatSyncFailure({ config: otherMode, code: "ERR_NETWORK" })).toBe(false);
+        expect(() => assertCanonicalSnapchatSyncResult(rewritten, {
+            status: "failed", error: { code: "coverage_incomplete", message: "التغطية غير مكتملة" },
+        })).toThrow("التغطية غير مكتملة");
+        expect(() => assertCanonicalSnapchatSyncResult(rewritten, { status: "complete" })).not.toThrow();
+    });
+
     beforeEach(() => {
         api.get.mockReset();
         api.post.mockReset();

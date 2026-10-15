@@ -72,6 +72,26 @@ LEGACY_PROJECTIONS: dict[str, dict[str, int]] = {
         "errors_count": 1,
         "pages_fetched": 1,
     },
+    "mezan_customer_channels_v1": {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "status": 1,
+        "ingress_enabled": 1,
+        "egress_mode": 1,
+        "send_allowed": 1,
+        "ai_auto_reply_allowed": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    },
+    "mezan_meta_oauth_credentials_v2": {
+        "_id": 0,
+        "user_id": 1,
+        "provider": 1,
+        "scope": 1,
+        "created_at": 1,
+        "updated_at": 1,
+    },
     "snapchat_connections": {
         "_id": 0,
         "user_id": 1,
@@ -216,6 +236,9 @@ LEGACY_PROJECTIONS: dict[str, dict[str, int]] = {
         "production_writes_locked": 1,
         "selective_live_send_enabled": 1,
         "legacy_pipeline_frozen": 1,
+        "plan_b_auto_send_disabled_reason": 1,
+        "plan_b_auto_send_disabled_at": 1,
+        "plan_b_auto_send_last_error": 1,
         "last_verified_at": 1,
         "updated_at": 1,
     },
@@ -350,6 +373,23 @@ async def _credential_present(
     collection = _collection(db, collection_name)
     doc = await collection.find_one(query, {"_id": 1})
     return bool(doc)
+
+
+async def _qoyod_verification_state(db: Any, user_id: str) -> dict:
+    """Read internal rotation metadata without putting it in an API snapshot."""
+    collection = _collection(db, "qoyod_credentials")
+    doc = await collection.find_one(
+        {"user_id": user_id},
+        {
+            "_id": 0,
+            "credential_version": 1,
+            "last_verified_credential_version": 1,
+            "last_verified_at": 1,
+            "rotated_at": 1,
+            "updated_at": 1,
+        },
+    )
+    return dict(doc or {})
 
 
 async def _find_many(
@@ -1014,6 +1054,81 @@ async def _read_meta(db: Any, user_id: str, definition: ProviderDefinition) -> d
     )
 
 
+async def _read_instagram(
+    db: Any,
+    user_id: str,
+    definition: ProviderDefinition,
+) -> dict:
+    channel = await _find_one(
+        db,
+        "mezan_customer_channels_v1",
+        {"user_id": user_id, "provider": "instagram"},
+        sort=[("updated_at", -1)],
+    )
+    safe_channel = await _find_one(
+        db,
+        "mezan_customer_channels_v1",
+        {
+            "user_id": user_id,
+            "provider": "instagram",
+            "status": "connected",
+            "ingress_enabled": True,
+            "egress_mode": "disabled",
+            "send_allowed": False,
+            "ai_auto_reply_allowed": False,
+            "plaintext_credentials_stored": False,
+        },
+        sort=[("updated_at", -1)],
+    )
+    credential = await _find_one(
+        db,
+        "mezan_meta_oauth_credentials_v2",
+        {"user_id": user_id, "provider": "meta_ads"},
+        sort=[("updated_at", -1)],
+    )
+    permissions = _split_permissions((credential or {}).get("scope"))
+
+    if safe_channel:
+        status = "connected"
+        provenance = "api_connection"
+        latest_error = None
+    elif channel:
+        status = "error"
+        provenance = "unknown"
+        latest_error = _safe_legacy_error(
+            provider_label=definition.name,
+            code="instagram_receive_only_policy_invalid",
+            occurred_at=channel.get("updated_at"),
+            source_mode="customer_channel",
+        )
+    else:
+        status = "not_connected"
+        provenance = "disconnected"
+        latest_error = None
+
+    accounts = []
+    if safe_channel:
+        accounts.append(
+            _account(
+                user_id,
+                definition.provider,
+                display_name="Instagram · استقبال الرسائل والتعليقات",
+            )
+        )
+    return _snapshot(
+        definition,
+        connection_status=status,
+        connection_provenance=provenance,
+        source_mode="customer_channel",
+        accounts=accounts,
+        current_permissions=permissions,
+        permissions_observed=credential is not None,
+        last_sync_at=(safe_channel or channel or {}).get("updated_at"),
+        latest_error=latest_error,
+        has_data=False,
+    )
+
+
 async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> dict:
     # The current Qoyod connector intentionally uses the legacy singleton
     # tenant "main".  Prefer a user-scoped row and only then inspect that
@@ -1032,11 +1147,7 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
         )
         if credential_present:
             legacy_tenant = "main"
-    credential = await _find_one(
-        db,
-        "qoyod_credentials",
-        {"user_id": legacy_tenant},
-    )
+    credential = await _qoyod_verification_state(db, legacy_tenant)
     settings = await _find_one(
         db,
         "qoyod_settings",
@@ -1050,11 +1161,20 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
     )
     verified_at = _parse_datetime((credential or {}).get("last_verified_at"))
     rotated_at = _parse_datetime((credential or {}).get("rotated_at"))
-    credential_verified = bool(
-        credential_present
-        and verified_at
-        and (rotated_at is None or verified_at >= rotated_at)
-    )
+    credential_version = (credential or {}).get("credential_version")
+    if credential_version:
+        credential_verified = bool(
+            credential_present
+            and verified_at
+            and (credential or {}).get("last_verified_credential_version")
+            == credential_version
+        )
+    else:
+        credential_verified = bool(
+            credential_present
+            and verified_at
+            and (rotated_at is None or verified_at >= rotated_at)
+        )
     status = (
         "connected"
         if credential_verified
@@ -1062,10 +1182,28 @@ async def _read_qoyod(db: Any, user_id: str, definition: ProviderDefinition) -> 
         if credential_present
         else "not_connected"
     )
+    breaker_tripped = (
+        str((settings or {}).get("plan_b_auto_send_disabled_reason") or "")
+        == "circuit_breaker"
+    )
+    if breaker_tripped:
+        status = "error"
     invoice_status = str((invoice or {}).get("status") or "").lower()
     invoice_stage = str((invoice or {}).get("pipeline_stage") or "").lower()
     latest_error = None
-    if (invoice or {}).get("error_code") or invoice_status in {
+    if breaker_tripped:
+        breaker_error = (settings or {}).get("plan_b_auto_send_last_error") or {}
+        latest_error = _safe_legacy_error(
+            provider_label=definition.name,
+            code=breaker_error.get("code") or "qoyod_auto_send_stopped",
+            occurred_at=(
+                breaker_error.get("at")
+                or (settings or {}).get("plan_b_auto_send_disabled_at")
+                or (settings or {}).get("updated_at")
+            ),
+            source_mode="legacy_connection",
+        )
+    elif (invoice or {}).get("error_code") or invoice_status in {
         "error",
         "failed",
         "dead_letter",
@@ -1121,6 +1259,8 @@ async def read_provider_snapshot(
     provider = definition.provider
     if provider == "salla":
         result = await _read_salla(db, user_id, definition)
+    elif provider == "instagram":
+        result = await _read_instagram(db, user_id, definition)
     elif provider == "snapchat_ads":
         result = await _read_snapchat(db, user_id, definition)
     elif provider == "tiktok_ads":

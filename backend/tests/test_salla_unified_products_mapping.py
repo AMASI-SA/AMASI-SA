@@ -86,3 +86,27 @@ def test_unified_products_preserve_authoritative_salla_item_data():
     assert item["custom_fields"] == [
         {"url": "https://example.com/customer-file.jpg"},
     ]
+
+
+def test_unified_products_preserve_plural_customer_option_values():
+    doc = _salla_order_to_doc({
+        "id": 13070,
+        "reference_id": "AMS13070-test",
+        "date": "2026-08-27T12:00:00+03:00",
+        "items": [{
+            "id": 1,
+            "product_id": 653374677,
+            "sku": "AMS13070",
+            "name": "أناقة طفلك في احتفالات الوطن",
+            "quantity": 1,
+            "options": [{
+                "name": "نوع الطلب",
+                "values": [{"name": "فستان", "value": ""}],
+            }],
+        }],
+    })
+
+    assert doc["products"][0]["options"] == [{
+        "name": "نوع الطلب",
+        "value": ["فستان"],
+    }]

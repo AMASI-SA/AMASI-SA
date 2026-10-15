@@ -1,0 +1,13 @@
+diff --git a/frontend/src/features/operational/OperationalMovementsScreen.tsx b/frontend/src/features/operational/OperationalMovementsScreen.tsx
+index 93ab3d2..b758cfd 100644
+--- a/frontend/src/features/operational/OperationalMovementsScreen.tsx
++++ b/frontend/src/features/operational/OperationalMovementsScreen.tsx
+@@ -170,7 +170,7 @@ export default function OperationalMovementsScreen() {
+   }
+   const options = (rows: Entity[]) => rows.map(r => ({ id: r.id, name: `${r.name} · ${r.currency}`, disabled: r.ready === false || r.settings_complete === false }));
+   const field = (key: "amount" | "order_number" | "reference" | "note" | "actual_fee_amount", label: string, numeric = false) => <View><Text style={s.label}>{label}</Text><TextInput accessibilityLabel={label} style={s.input} editable={!locked} value={draft[key]} onChangeText={v => update({ [key]: v })} keyboardType={numeric ? "decimal-pad" : "default"} maxLength={key === "note" ? 1000 : key === "amount" || key === "actual_fee_amount" ? 30 : 160}/></View>;
+-  return <SafeAreaView edges={["left", "right"]} style={s.root}><ScreenHeader title="الحركات المالية اليومية" subtitle="النموذج التشغيلي الموحد"/><KeyboardAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
++  return <SafeAreaView edges={["top", "left", "right"]} style={s.root}><ScreenHeader title="الحركات المالية اليومية" subtitle="النموذج التشغيلي الموحد"/><KeyboardAwareScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+     {loading || busy || entityLoading ? <ActivityIndicator color={palette.primary}/> : null}
+     {!!message && <Text accessibilityRole="alert" style={s.notice}>{message}</Text>}
+     {!loading && !canCreate && <Text style={s.notice}>{context?.status !== "active" ? "تبدأ الحركات بعد حفظ وإنهاء الأرصدة الافتتاحية في ميزان 2." : "الحفظ غير متاح: يلزم إذن إنشاء الحركات وتفعيلها في هذه البيئة."}</Text>}

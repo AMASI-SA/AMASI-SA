@@ -1,0 +1,172 @@
+{
+  "environment": {
+    "mongo": "8.0.12 replica set confirmation, loopback only",
+    "python": "3.13",
+    "os": "Windows",
+    "cpu": "Intel Core Ultra 7 155H, 22 logical processors",
+    "provider_latency_ms": 50,
+    "samples_per_path": 80,
+    "warmups_excluded": 3
+  },
+  "limitations": [
+    "Synthetic fresh-database fixture, not Production or a saturation benchmark.",
+    "CPU means Python process CPU time, not whole-machine utilization.",
+    "Visibility means completion plus first successful reviewed-products API query, not browser paint.",
+    "DB count includes createIndexes and transaction commands.",
+    "Event-loop statistic is the distribution of each requests own p99 lag, not a pooled sample percentile.",
+    "Local loop-lag p99/max worsened from one scheduler outlier; no claim of uniformly improved tail scheduling.",
+    "Baseline commit has exactly the Production base TREE. Later candidate commits only correct test harness/fixtures and add evidence; executable application files remain identical to the measured application commit."
+  ],
+  "baseline": {
+    "head": "55ba3347848a1662497475c401fcd88514bd4e0e",
+    "tree": "79eac270c957cbc4e8a455e09591a441d64cc374",
+    "tracked_source_dirty": false,
+    "mongo_version": "8.0.12",
+    "samples": 80,
+    "warmups_excluded": 3,
+    "provider_latency_ms_per_request": 50.0,
+    "environment": "synthetic loopback replica set; simulated provider latency; not production",
+    "http_ms": {
+      "p50": 982.5965499985614,
+      "p95": 1265.098444999603,
+      "p99": 1349.2403029976408,
+      "max": 1392.6068000000669
+    },
+    "cpu_ms": {
+      "p50": 296.875,
+      "p95": 485.15624999999994,
+      "p99": 617.4999999999989,
+      "max": 765.625
+    },
+    "visible_products_ms": {
+      "p50": 1020.9658999956446,
+      "p95": 1316.2227950007943,
+      "p99": 1391.8734809960004,
+      "max": 1425.5954999971436
+    },
+    "salla_calls": {
+      "p50": 8.0,
+      "p95": 8.0,
+      "p99": 8.0,
+      "max": 8
+    },
+    "db_commands": {
+      "p50": 255.0,
+      "p95": 255.0,
+      "p99": 255.0,
+      "max": 255
+    },
+    "transaction_count": {
+      "p50": 13.0,
+      "p95": 13.0,
+      "p99": 13.0,
+      "max": 13
+    },
+    "transaction_ms": {
+      "p50": 15.08060000196565,
+      "p95": 73.57384999559143,
+      "p99": 105.75149799609778,
+      "max": 259.763699999894
+    },
+    "event_loop_lag_p99_ms": {
+      "p50": 13.724893992766738,
+      "p95": 17.773680688522276,
+      "p99": 24.58442152374189,
+      "max": 28.034440001356387
+    },
+    "full_result_sha256": "c4086c3b5e76aa8b5b52241cd5a7b3709cdb1a6a809ee98b761cabddf4a123fa",
+    "transaction_total_per_request_ms": {
+      "p50": 360.2664999998524,
+      "p95": 550.907234995975,
+      "p99": 620.6107819933094,
+      "max": 638.120500036166
+    },
+    "write_collections_first_sample": {
+      "mz2_atomic_owners": 13,
+      "order_review_acceptance_config_versions": 6,
+      "unified_orders": 8,
+      "order_review_completion_operations": 14,
+      "mezan_inventory_reservations_v2": 2,
+      "mezan_fulfillment_decisions_v2": 2,
+      "mezan_component_order_lifecycle_v1": 2,
+      "order_review_workflows": 1,
+      "order_review_events": 1
+    }
+  },
+  "local": {
+    "head": "e8435fe9f049a18ae2d8d81b421060db93a6de61",
+    "tree": "21283ae0cddd9e33fcf37aef8883a35f481bd361",
+    "tracked_source_dirty": false,
+    "mongo_version": "8.0.12",
+    "samples": 80,
+    "warmups_excluded": 3,
+    "provider_latency_ms_per_request": 50.0,
+    "environment": "synthetic loopback replica set; simulated provider latency; not production",
+    "http_ms": {
+      "p50": 247.02500000421423,
+      "p95": 290.67171999922715,
+      "p99": 375.406429012218,
+      "max": 465.5730000085896
+    },
+    "cpu_ms": {
+      "p50": 140.625,
+      "p95": 187.5,
+      "p99": 257.3437499999993,
+      "max": 343.75
+    },
+    "visible_products_ms": {
+      "p50": 284.9332499972661,
+      "p95": 324.3981649975467,
+      "p99": 424.23596200547706,
+      "max": 497.82620000769384
+    },
+    "salla_calls": {
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0
+    },
+    "db_commands": {
+      "p50": 107.0,
+      "p95": 107.0,
+      "p99": 107.0,
+      "max": 107
+    },
+    "transaction_count": {
+      "p50": 1.0,
+      "p95": 1.0,
+      "p99": 1.0,
+      "max": 1
+    },
+    "transaction_ms": {
+      "p50": 134.0307499995106,
+      "p95": 157.31730000698005,
+      "p99": 225.5903369969737,
+      "max": 346.8709000007948
+    },
+    "event_loop_lag_p99_ms": {
+      "p50": 11.182038995830226,
+      "p95": 13.57494820235297,
+      "p99": 40.25707530226714,
+      "max": 136.709763999097
+    },
+    "full_result_sha256": "197b88b64052bfca22737ebefc49a4c653ecfeabb9b868cdaa3fa0208639c670",
+    "transaction_total_per_request_ms": {
+      "p50": 134.0307499995106,
+      "p95": 157.31730000698005,
+      "p99": 225.5903369969737,
+      "max": 346.8709000007948
+    },
+    "write_collections_first_sample": {
+      "mz2_atomic_owners": 1,
+      "order_review_acceptance_config_versions": 2,
+      "unified_orders": 3,
+      "order_review_completion_operations": 2,
+      "mezan_inventory_reservations_v2": 1,
+      "mezan_fulfillment_decisions_v2": 1,
+      "mezan_component_order_lifecycle_v1": 1,
+      "order_review_workflows": 1,
+      "order_review_events": 1
+    }
+  }
+}

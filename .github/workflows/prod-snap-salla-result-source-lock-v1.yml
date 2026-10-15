@@ -1,0 +1,54 @@
+name: Production Snapchat Salla Result Source Lock V1
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingCampaignSelectedSourceGuard.js"
+      - "frontend/src/marketingCampaignSelectedSourceGuard.test.js"
+      - ".github/workflows/prod-snap-salla-result-source-lock-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test selected Salla result source
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignSelectedSourceGuard.test.js
+          src/marketingCampaignResultSource.test.js
+          src/marketingCampaignProfitabilityHydration.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce selected-source contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          GUARD=frontend/src/marketingCampaignSelectedSourceGuard.js
+          grep -q 'marketingCampaignSelectedSourceGuard' "$INDEX"
+          grep -q 'salla_results.created_orders' "$GUARD"
+          grep -q 'salla_results.sales_sar' "$GUARD"
+          grep -q 'retries_stale_platform_response_once' "$GUARD"
+          grep -q 'selected_result_source_guard' "$GUARD"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$GUARD"

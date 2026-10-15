@@ -1,0 +1,5 @@
+{
+  "database": "mz2_pos_manual_5ec1c0dbc2394700a3af889fc361f8f5",
+  "test_database_dropped": true,
+  "mongo_host": "127.0.0.1:27130"
+}

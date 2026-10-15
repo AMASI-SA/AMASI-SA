@@ -1,0 +1,115 @@
+{
+  "head": "9b451cc03b4f8159483cbf58ef0fd128d24530e1",
+  "tree": "1756c44f0f631c4f72dc24525c694601e0ee8011",
+  "status": "ACCEPTANCE_PROBE_PASS",
+  "production_verified": false,
+  "environment": {
+    "kind": "isolated_acceptance",
+    "base_url": "http://127.0.0.1:18769",
+    "mongo_uri": "mongodb://127.0.0.1:27130/?replicaSet=mz2c",
+    "database": "mz2_smoke_b_acceptance_1e7cf213e19f4bb89d1544f809b6dcd7",
+    "owner": "acceptance-owner-1e7cf213e19f4bb89d1544f809b6dcd7"
+  },
+  "replica_identity": {
+    "hosts": [
+      "127.0.0.1:27130"
+    ],
+    "setName": "mz2c",
+    "isWritablePrimary": true,
+    "primary": "127.0.0.1:27130",
+    "me": "127.0.0.1:27130"
+  },
+  "source_unchanged": true,
+  "database_unchanged": true,
+  "control_before": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "control_after": {
+    "paused": true,
+    "revision": 1,
+    "changed_at": null,
+    "changed_by": null,
+    "reason": "Synthetic isolated Acceptance baseline; never unpause",
+    "can_manage": true,
+    "pending_events": 0
+  },
+  "fingerprint": "ebf3f358cfffadc73d3860d8d77f7d559081d35c36a754b9f3565213086c14a3",
+  "collections": 119,
+  "documents": 8,
+  "transcript": [
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 202,
+      "mfa_setup_required": true,
+      "secrets": "redacted"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/verify",
+      "status": 200,
+      "secrets": "redacted"
+    },
+    {
+      "event": "authenticated_owner",
+      "owner": "acceptance-owner-1e7cf213e19f4bb89d1544f809b6dcd7",
+      "real_password_and_mfa": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/financial-provider-apps/accounting-module/write-control",
+      "status": 200,
+      "body": {
+        "paused": true,
+        "revision": 1,
+        "changed_at": null,
+        "changed_by": null,
+        "reason": "Synthetic isolated Acceptance baseline; never unpause",
+        "can_manage": true,
+        "pending_events": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/accounting-module/onboarding/sessions/acceptance-nonexistent-63635aae19c14af9b8a63fae03df32e9",
+      "status": 404,
+      "body": {
+        "detail": {
+          "code": "onboarding_session_not_found"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/accounting-module/onboarding/sessions/acceptance-nonexistent-63635aae19c14af9b8a63fae03df32e9/opening-draft",
+      "payload": {
+        "version": 1,
+        "idempotency_key": "acceptance-smoke-b-bf4cfa6a7b34444197361cce1e47abbd",
+        "note": "Isolated Acceptance paused barrier probe on nonexistent session"
+      },
+      "status": 423,
+      "body": {
+        "detail": {
+          "code": "mz2_writes_paused",
+          "message": "كتابات ميزان 2 متوقفة؛ القراءة متاحة"
+        }
+      }
+    }
+  ],
+  "cleanup": {
+    "task_pid_stopped": true,
+    "database": "mz2_smoke_b_acceptance_1e7cf213e19f4bb89d1544f809b6dcd7",
+    "database_absent": true
+  },
+  "artifact_sha256": {
+    "result.json": "7faeedcf27eadeae950e94f88dbf3e2c3bd0c9aa5985e2b736b7b89b9f3c16ad",
+    "runtime-source-before.json": "15587651059b5d72d26672b67e4f03d2dc24ce49e743c546be83e92012249295",
+    "server.log": "028ac60208f026c8dd8d2d6a40505b28b725e9cb66ab6afb545c339b8cdf453c"
+  }
+}

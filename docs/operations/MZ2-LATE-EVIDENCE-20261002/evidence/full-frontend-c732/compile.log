@@ -1,0 +1,31 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.js:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+[36mvite v8.2.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[33m[vite:css][postcss] @import must precede all other statements (besides @charset or empty @layer)
+4  |  
+5  |  /* Arabic fonts */
+6  |  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=Cairo:wght@300;400;500;...
+   |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+7  |  
+8  |  /* Defensive — hide the "Made with Emergent" platform badge on every page.[39m
+✓ 7582 modules transformed.
+rendering chunks...
+computing gzip size...
+../../mz2-late-evidence-proof-20261002/final-frontend-c732/dist/index.html                             3.28 kB │ gzip:     1.22 kB
+../../mz2-late-evidence-proof-20261002/final-frontend-c732/dist/assets/index-DfHCvk1H.css            211.66 kB │ gzip:    34.87 kB
+../../mz2-late-evidence-proof-20261002/final-frontend-c732/dist/assets/ChartDashboard-BY2FtKNP.js     19.08 kB │ gzip:     6.80 kB
+../../mz2-late-evidence-proof-20261002/final-frontend-c732/dist/assets/esm-Ca61H3iQ.js               435.69 kB │ gzip:   115.13 kB
+../../mz2-late-evidence-proof-20261002/final-frontend-c732/dist/assets/index-C3RppM0X.js           6,725.77 kB │ gzip: 1,636.51 kB
+
+[33m[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/lib/sidebarVisibility.js is dynamically imported by src/components/Sidebar.jsx but also statically imported by src/components/Sidebar.jsx, src/components/SidebarVisibilityDialog.jsx, dynamic import will not move module into another chunk.
+[39m
+[33m[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[33m[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/components/fulfillment/SupplierReceivingWorkspace.jsx is dynamically imported by src/components/fulfillment/PreparationSupplierDispatchWorkspace.jsx but also statically imported by src/pages/FulfillmentV2.jsx, dynamic import will not move module into another chunk.
+[39m
+[32m✓ built in 8.44s[39m

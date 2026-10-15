@@ -1,0 +1,736 @@
+# MZ2-FIN-CUTOVER-001 — Mezan 2 clean financial cutover
+
+Status: **implementation in progress**
+
+Owner: AMASI / Mezan owner
+
+Started: 2026-08-23
+
+Production source branch: `hotfix/prod-snap-meta-final`
+
+## Purpose
+
+Replace the untrusted financial position and sales history in legacy Mezan
+with a clean, evidence-based accounting start in Mezan 2. Legacy Mezan remains
+read-only archive material and must never feed Mezan 2 balances, sales,
+profit, tax, settlement, or financial-position reports.
+
+This operation ID is the stable handoff reference for every later session:
+
+> `MZ2-FIN-CUTOVER-001`
+
+## Decisions already approved
+
+1. Do not migrate historical sales, balances, journals, or the legacy
+   financial position.
+2. Trusted sources only: Salla, real Qoyod invoices, bank statements,
+   provider settlement statements, provider tax invoices, courier statements,
+   physical inventory count, employee contracts/payments, supplier evidence,
+   and advertising-platform facts.
+3. Salla, Tamara, Tabby, Emkan, and every shipping company are independent
+   financial provider accounts/apps in Mezan 2.
+4. A provider tax invoice is evidence attached to the provider account; it is
+   not a separate account and does not post a journal merely because it was
+   saved.
+5. Merchant fee settings are estimates. A verified provider invoice or
+   settlement statement is authoritative and overrides the estimate for the
+   covered transaction/period.
+6. All manual financial activity starts from **New unified financial
+   movement**. The selected operation determines the canonical double-entry
+   workflow; not every cash movement is a generic transfer.
+7. The cutover date and signed opening-balance sheet are not yet approved.
+   No production opening balance may be posted before that approval.
+8. Each provider has one **current settlement bank**. The accountant changes
+   that bank before recording a settlement; the change applies immediately to
+   the next unposted settlement and requires no date range. Posted settlements
+   keep their original bank.
+9. A newly observed payment method is attached to Salla only when the gateway
+   or settlement evidence identifies Salla as the settler. Unknown methods are
+   held as unclassified with an unapproved fee rule; the system must not guess
+   the provider or commission.
+
+## Provider account model
+
+Each provider account owns separate accounting dimensions where applicable:
+
+- receivable from provider;
+- payable to provider;
+- provider fees;
+- VAT on provider fees;
+- settlements/transfers;
+- refunds and adjustments;
+- attached provider tax invoices and statements.
+
+Provider groups:
+
+| Provider | Account behavior | Authoritative evidence |
+|---|---|---|
+| Salla and its payment methods | One Salla provider account with method-level fee rules | Salla tax invoice / settlement statement |
+| Tamara | Independent BNPL receivable and settlement account | Tamara invoice and settlement |
+| Tabby | Independent BNPL receivable and settlement account | Tabby invoice and settlement |
+| Emkan | Independent BNPL receivable and settlement account | Emkan invoice and settlement |
+| Each shipping company | COD receivable plus shipping/fee payable | Courier invoice and COD statement |
+
+### Store-delivery drivers (مندوب المتجر)
+
+- ``مندوب المتجر`` is a presentation group only and never owns an aggregate
+  accounting balance.
+- Every active store driver keeps the existing ``store_drivers.id`` as the
+  accounting identity. Do not duplicate the person in counterparties.
+- The delivery fee is configured per driver and snapshotted on assignment, so
+  a later price change cannot rewrite a delivered shipment.
+- On successful delivery, cash COD is debited to that driver's
+  ``cod_receivable`` and the snapshotted delivery fee is credited to that
+  driver's ``delivery_fee_payable``. Prepaid/non-cash orders do not create COD
+  custody on the driver.
+- The driver screen must show, per individual: **عليه لنا (COD)**, **له علينا
+  (أجرة التوصيل)**, and the signed net balance. Driver 1 and Driver 2 may never
+  be netted together.
+- A normal COD remittance and a fee payment are separate movements. Explicit
+  net settlement is allowed as one balanced journal that preserves the gross
+  COD cleared, fee offset, and bank/cash amount. No silent auto-netting.
+- SMSA, Aramex, iMile, and other external couriers remain one account per
+  company; they are not children of the store-driver group.
+- This bridge posts only new canonical delivered/settlement events. It does
+  not scan or backfill old orders or legacy Mezan balances.
+- Delivery posting fails closed until tenant setting
+  ``mezan2_financial_cutover`` carries this operation ID, ``status=active``,
+  and the approved timezone-aware ``cutover_at``. This implementation does not
+  activate that setting or invent the timestamp.
+
+### Courier COD commission tiers and netting
+
+- A courier may retain all or part of COD proceeds against shipping charges,
+  COD commission, commission VAT, and other evidenced adjustments. Therefore
+  a valid courier settlement may have **zero bank transfer**.
+- Never record only the net. Keep gross COD receivable, shipping cost,
+  commission before VAT, commission input VAT, other adjustments, and bank
+  transfer as separate legs of one balanced settlement.
+- COD commission tiers are calculated per delivered COD shipment amount, not
+  on the aggregate courier balance, unless the signed provider contract says
+  otherwise.
+- Each tier stores: lower bound/operator, upper bound/operator, percentage,
+  fixed fee, and VAT percentage. Shared boundaries must be unambiguous.
+- Any COD amount not covered by a configured tier is flagged for review and is
+  never silently assigned a zero commission.
+- Merchant-stated SMSA example awaiting invoice/contract confirmation:
+
+| Per-shipment COD amount | Commission before VAT | Boundary behavior |
+|---|---:|---|
+| SAR 50 to SAR 1,000 | 1% + SAR 2 | includes 50 and 1,000 |
+| Above SAR 1,000 to SAR 3,000 | 2% + SAR 5 | excludes 1,000; includes 3,000 |
+| Above SAR 3,000 | 3% | fixed component not stated; confirm from evidence |
+
+Commission VAT is calculated separately on the commission result for the
+matched tier. The official courier invoice/statement remains authoritative.
+
+## Movement routing contract
+
+| Real event | Canonical operation | Accounting meaning |
+|---|---|---|
+| Bank/cash account A to bank/cash account B | Internal account transfer | Debit destination, credit source; no revenue or expense |
+| Salla pays the bank | Salla provider settlement | Debit bank, credit Salla receivable; fees/VAT use statement facts |
+| Tamara/Tabby/Emkan pays the bank | BNPL provider settlement | Debit bank, debit fees/VAT/adjustments, credit provider receivable |
+| Courier remits COD and/or withholds shipping/fees | Courier COD settlement | Debit bank (possibly zero), shipping/fee legs and fee input VAT; credit courier COD receivable |
+| Merchant pays courier invoice | Courier payment | Debit courier payable, credit bank/cash |
+| Bank charges a fee | General expense / bank fees | Debit bank-fee expense, credit bank |
+| Salary is earned after cutover | Salary accrual | Debit salary expense, credit salary payable |
+| Salary is paid | Salary settlement | Debit salary payable, credit bank/cash |
+
+Direct bank/cash transfers into Tamara or Tabby accounts are prohibited
+because they bypass the canonical BNPL settlement bridge. COD and generic
+bank-transfer labels are also not transferable wallets.
+
+## Opening-balance rules
+
+Opening balances are a separate, signed cutover operation and are never
+derived from legacy Mezan.
+
+### Employees
+
+- Opening salary liability = earned and unpaid salary **as of the cutover
+  instant**, per employee.
+- Do not carry historical gross salary or amounts already paid.
+- Open employee advances and custody balances are separate opening assets and
+  require employee-level evidence and confirmation.
+- After cutover, salary expense/payable accrues through normal journals and
+  payment clears the payable.
+
+### Orders at cutover
+
+- Unpaid/unprepared order or undelivered COD: no journal.
+- Prepaid but unfulfilled order: customer advance and VAT treatment according
+  to the verified tax point.
+- Delivered but unsettled order: opening receivable from the payment provider
+  or shipping company.
+- Order created before cutover but delivered after cutover: normal journal at
+  the post-cutover recognition event.
+- Existing real Qoyod invoice before cutover: link/reclassify only; do not
+  duplicate the invoice.
+
+### Other balances
+
+- Bank: statement closing balance at the cutover timestamp.
+- Providers: official unsettled statement at cutover.
+- Couriers: signed COD receivable and shipping payable reconciliation.
+- Inventory: approved physical count multiplied by approved unit cost.
+- Suppliers, annual obligations, rent, and other liabilities: only open,
+  evidenced amounts as of cutover.
+
+## VAT control
+
+The Saudi standard VAT rate is 15%. Tax timing must be checked against the
+actual supply/invoice/payment event; do not infer VAT solely from order status.
+Implementation references:
+
+- https://zatca.gov.sa/ar/RulesRegulations/Taxes/Pages/VATImplementingRegulations.aspx
+- https://zatca.gov.sa/ar/RulesRegulations/VAT/Pages/default.aspx
+
+## Salla payment-fee evidence — 2026-08-23
+
+Seven Salla payment-detail invoices were analysed: `6585798`, `6610174`,
+`6613353`, `6616833`, `6620818`, `6640541`, and `6643529`.  They contain 528
+transaction rows: 516 positive sales and 12 negative refund rows.  Aggregate
+evidence totals are SAR 107,099.16 gross, SAR 2,014.93 fees before VAT, SAR
+302.23 fee VAT, and SAR 104,782.00 net after fee VAT.
+
+Observed positive rows reproduce exactly with these per-order rules:
+
+| Salla invoice label | Positive rows | Commission before VAT | Evidence status |
+|---|---:|---:|---|
+| مدى | 359 | 1.00% of order + SAR 1.00 | Verified 359/359 |
+| البطاقة الائتمانية | 149 | 2.20% of order + SAR 1.00 | Verified 149/149 |
+| أس تي سي باي | 8 | 1.30% of order + SAR 1.00 | Verified 8/8 |
+
+Salla first calculates the unrounded per-order fee. The displayed fee is that
+value rounded to halalas, while fee VAT is 15% of the **unrounded** fee and is
+then rounded independently. This matters on half-halala boundaries; VAT must
+not be calculated from the already rounded displayed fee. The 12 negative
+refund rows in this evidence set carry zero new fee and zero fee VAT.
+
+Apple Pay, Google Pay, Visa, MasterCard, and generic bank card did not appear
+as separate invoice labels. They use the observed generic credit-card rule
+(2.20% + SAR 1.00, VAT 15%) only as an editable fallback estimate. It must not
+be described as a directly verified rail-specific rate. A later invoice row
+with one of those explicit labels supersedes the fallback.
+
+The Salla component was first introduced as settings version
+`salla-invoices-2026-08-v1`. Missing Google Pay was added as a Salla
+sub-method. Fee estimates use per-order rounding when individual orders are
+available and retain aggregate calculation only for legacy aggregate-only
+callers.
+
+The combined payment-fee settings version is now
+`salla-tamara-tabby-emkan-statements-2026-08-v4`; this version bump safely
+upgrades only untouched legacy Tamara/Tabby/Emkan rows while retaining the
+previously verified Salla rules and merchant edits.
+
+## Tamara fee and statement evidence — 2026-08-23
+
+Eight uploaded workbooks reduce to five unique Tamara statements; the copies
+for `20260731`, `20260807`, and `20260814` are byte-identical duplicates and
+were ignored. The unique statements are:
+
+| Statement ID | Covered period | Captures | Refunds | Cancellations | Fees | Fee VAT | Net payable |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `P0420741SA260725` | 18/07/2026–24/07/2026 | 21 | 1 | 0 | 367.15 | 55.07 | 4,151.97 |
+| `P0420741SA260801` | 25/07/2026–31/07/2026 | 37 | 2 | 0 | 637.05 | 95.55 | 7,254.18 |
+| `P0420741SA260808` | 01/08/2026–07/08/2026 | 50 | 0 | 1 | 803.66 | 120.58 | 9,478.66 |
+| `P0420741SA260815` | 08/08/2026–14/08/2026 | 111 | 1 | 1 | 1,576.21 | 236.52 | 18,167.17 |
+| `P0420741SA260822` | 15/08/2026–21/08/2026 | 79 | 3 | 3 | 1,069.13 | 160.52 | 11,945.82 |
+| **Total** | five weeks | **298** | **7** | **5** | **4,453.20** | **668.24** | **50,997.80** |
+
+Aggregate captured amount is SAR 57,205.33; refunds are SAR 1,086.09. The
+canceled event amounts total SAR 1,181.76 but are not captured sales. All 310
+event rows use `PAY_BY_INSTALMENTS`; observed installment counts range from 2
+to 12 and do not change the fee rule.
+
+Verified Tamara treatment:
+
+1. **Captured order:** variable fee is 6.99% of the captured amount, rounded
+   to halalas per order, then SAR 1.50 fixed fee is added.
+2. **Fee VAT:** 15% of the displayed rounded total fee, rounded per event.
+   This is different from Salla, whose VAT evidence uses the unrounded fee.
+3. **Refund:** the refund row carries zero new fee and zero fee VAT. Tamara
+   does not rebate the commission already charged on the capture; the refund
+   amount is deducted separately.
+4. **Cancellation:** variable fee is zero; Tamara charges SAR 1.50 fixed plus
+   SAR 0.23 VAT, producing a SAR 1.73 deduction. Cancellation is a fee
+   adjustment and must not inflate captured gross.
+5. **Statement fee:** zero in all five statements.
+6. **Cycle/cutoff:** every statement covers Saturday through Friday and is
+   issued on Saturday. The workbooks do not contain a time-of-day cutoff, so
+   Mezan uses Asia/Riyadh date boundaries and must not invent an exact hour.
+
+The official uploaded statement remains authoritative. These defaults estimate
+fees only when no official statement row exists.
+
+## Tabby fee and settlement evidence — 2026-08-23
+
+The four uploaded workbooks are unique weekly settlement reports:
+
+| Statement ID | Covered period | Sales | Full refunds | Partial refunds | Gross sales | Net fees | Net fee VAT | Net transfer |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `Tabby20260727SAR` | 20/07/2026–26/07/2026 | 19 | 1 | 0 | 4,848.93 | 349.01 | 52.34 | 4,268.71 |
+| `Tabby20260803SAR` | 27/07/2026–02/08/2026 | 52 | 0 | 0 | 13,221.95 | 976.26 | 146.49 | 12,099.20 |
+| `Tabby20260810SAR` | 03/08/2026–09/08/2026 | 103 | 2 | 1 | 19,752.30 | 1,449.50 | 217.47 | 17,399.51 |
+| `Tabby20260817SAR` | 10/08/2026–16/08/2026 | 51 | 0 | 2 | 9,133.62 | 663.33 | 99.53 | 7,846.87 |
+| **Total** | four weeks | **225** | **3** | **3** | **46,956.80** | **3,438.10** | **515.83** | **41,614.29** |
+
+Total refunds are SAR 1,388.58. Before refund rebates, capture fees are SAR
+3,507.40 and fee VAT is SAR 526.22. Tabby rebates SAR 69.30 of fees and SAR
+10.39 of their VAT, leaving the net values in the table. The reports contain
+225 sales and six refunds (three full, three partial), for 231 event rows.
+Every sale and refund row reconciles exactly to the following rules:
+
+1. **Captured order:** calculate and round the 4.99% refundable commission and
+   the 2.00% non-refundable commission separately, then add SAR 1.00 fixed.
+   The displayed total rate is 6.99%, but calculating one combined 6.99% leg
+   can differ by one halala and is therefore not authoritative.
+2. **Fee VAT:** calculate 15% VAT separately on each displayed fee leg
+   (4.99% leg, 2% leg, and SAR 1 fixed), using half-even halala rounding, then
+   sum the VAT legs.
+3. **Full or partial refund:** reverse only 4.99% of the refunded amount and
+   the VAT on that reversed fee. The 2% fee, SAR 1 fixed fee, and their VAT
+   remain charged. The report's `Type` column is authoritative for full versus
+   partial refund; transferred net must not be used for that classification.
+4. **Payout fee:** none of the four reports charges one. The report note says
+   it is conditional when the transferred total is below an unstated threshold
+   and a non-monthly payout cycle is used. Mezan therefore defaults it to zero
+   and applies it only when an explicit provider statement row supplies it.
+5. **Cycle/cutoff:** each report covers Monday through Sunday, is issued on
+   Monday, and its `Transfer Date` is Monday. Adjacent report timestamps are
+   consistent with a 00:00 Asia/Riyadh boundary (21:00 UTC Sunday), but the
+   file does not label the timezone; the exact cutoff remains marked inferred,
+   not provider-verified.
+6. **Tax evidence:** these workbooks explicitly state that they are not the
+   official tax invoice. The official Tabby tax invoice arrives after month
+   end and must be attached separately without double-posting the settlements.
+
+Only two- and three-month installment product labels appear in this evidence;
+both use the same fee rule. The official report remains authoritative for its
+covered cycle.
+
+## Emkan fee and settlement evidence — 2026-08-23
+
+The four uploaded workbooks are unique Emkan settlement reports. Each contains
+one captured order and an explicit statement date, but no covered weekly
+period:
+
+| Statement date | Order date | Gross | Reported fee | Fee VAT | Total deduction | Net settlement |
+|---|---|---:|---:|---:|---:|---:|
+| 22/07/2026 | 12/07/2026 | 286.47 | 21.52 | 3.23 | 24.75 | 261.72 |
+| 26/07/2026 | 17/07/2026 | 273.32 | 20.61 | 3.09 | 23.70 | 249.62 |
+| 13/08/2026 | 05/08/2026 | 219.32 | 16.83 | 2.52 | 19.36 | 199.96 |
+| 18/08/2026 | 12/08/2026 | 239.84 | 18.26 | 2.74 | 21.00 | 218.84 |
+| **Total** | four captures | **1,018.95** | **77.22** | **11.58** | **88.81** | **930.14** |
+
+Verified Emkan treatment:
+
+1. **Captured order:** commission is 6.99% of the net bill amount plus SAR
+   1.50 fixed fee.
+2. **Fee VAT:** 15% is applied to the raw percentage commission plus fixed fee
+   before the final settlement net is rounded.
+3. **Halala balance:** the workbook stores sub-halala values but displays two
+   decimals. Independently rounded displayed fee, VAT, and net leave a SAR
+   0.01 aggregate residual. Mezan preserves all source values and assigns the
+   residual to the fee leg, producing balanced accounting amounts: SAR 77.23
+   fee + SAR 11.58 VAT + SAR 930.14 net = SAR 1,018.95 gross.
+4. **Refund:** none of the four reports contains a refund. Refund commission
+   treatment is therefore not verified and must come from the actual report
+   row; the system must not invent a rebate.
+5. **Statement fee:** the header fee is zero in all four reports. Any future
+   non-zero header fee remains explicit evidence requiring review because its
+   VAT split is not identified in these samples.
+6. **Cycle/cutoff:** observed order-to-statement lag is 6–10 calendar days,
+   while statement dates occur on different weekdays. No weekly cycle or
+   time-of-day cutoff is inferred. Each uploaded statement is its own period.
+7. **Order matching:** the report exposes an Emkan UUID, not the Salla order
+   number. Import resolves it through `payment_transactions.provider_id` to
+   the merchant order reference; unresolved UUIDs remain auditable unmatched
+   entries rather than being guessed.
+
+The uploaded statement is authoritative. The 6.99% + SAR 1.50 default is an
+estimate only for captured orders that do not yet have an official row.
+
+## Implemented in this change
+
+- Added tenant-scoped endpoint `GET /api/financial-provider-apps`.
+- Added provider cards for Salla, Tamara, Tabby, Emkan, and configured shipping
+  companies.
+- Added tax-invoice evidence endpoints under
+  `/api/financial-provider-apps/{provider_id}/tax-invoices`.
+- Enforced invoice arithmetic and verified-document evidence references.
+- Rejected migration-shaped invoice payloads, including `opening_balance`.
+- Marked all provider cards `legacy_financial_data_included=false`.
+- Kept provider invoices `unposted_evidence`; no automatic ledger write.
+- Routed each provider to its existing canonical settlement flow.
+- Added Mezan 2 workspace **Accounts for shipping and payment** under Apps.
+- Added deep-link support to the unified movement screen for courier COD
+  settlement.
+- Added a visible transfer-vs-settlement rule to the unified movement screen.
+- Added per-shipment courier COD commission tiers with explicit inclusive/
+  exclusive boundaries, percentage, fixed fee, and VAT rate.
+- Added uncovered-tier review protection and tier-aware courier ledgers.
+- Split courier COD commission from recoverable input VAT in the settlement
+  journal and financial position.
+- Kept courier settlement valid when the bank leg is zero because the courier
+  retained the whole COD amount against shipping/fees.
+- Added backend/frontend regression tests for provider grouping, invoice
+  guards, routing, navigation, and absence of legacy balances.
+- Connected successful store-driver delivery to the general ledger per
+  individual driver: cash COD receivable plus snapshotted delivery-fee payable.
+- Connected driver COD remittance, fee payment, and explicit net settlement to
+  balanced bank/driver journals with idempotency metadata.
+- Added separate store-driver COD assets and delivery-fee liabilities to the
+  financial position, plus a per-driver debit/credit settlement view.
+- Reconstructed Salla payment fees from seven merchant invoices and replaced
+  the old STC Pay/card estimates with the verified per-order rules above.
+- Added Google Pay as a Salla sub-method and made Apple Pay/Google Pay/card
+  rails inherit the documented generic-card fallback until direct evidence is
+  available.
+- Added versioned default migration that upgrades untouched legacy defaults,
+  appends missing methods, and preserves merchant-edited fee rows.
+- Changed fee estimation to Salla's per-order fee/VAT rounding semantics and
+  prevented one known card rail from silently taking another rail's rule.
+- Routed the central gateway metrics, Salla reconciliation rollup, and Salla
+  settlement classifier through the expanded rail set, with estimates loaded
+  from the unified payment-method settings instead of their old hardcoded
+  Mada/card/STC rates.
+- Reconciled five unique Tamara statements and ignored three byte-identical
+  duplicates.
+- Changed the unified Tamara default to 6.99% + SAR 1.50, VAT 15%, while
+  preserving merchant-edited settings through the versioned migration.
+- Applied Tamara's own per-capture rounding: fee first, then VAT on the rounded
+  displayed fee.
+- Preserved Tamara commission on refunds, represented cancellations as fixed
+  fee adjustments instead of sales, and kept the per-statement fee at zero.
+- Corrected the default Tamara statement cycle to Saturday issue after a
+  Saturday–Friday covered period; exact cutoff time remains unverified.
+- Reconciled all four Tabby reports: 225/225 sales and 6/6 refunds match the
+  split-fee and VAT rules above to the halala.
+- Changed the unified Tabby default to 6.99% + SAR 1.00, with a 4.99%
+  refundable slice and 2.00% non-refundable slice.
+- Corrected Tabby's parser so `Type` no longer binds to `Product Type`, full
+  and partial refunds use Order Amount rather than transferred net, and signed
+  fee/VAT rebates remain in the official totals.
+- Replaced Tabby's old sum-first estimate with per-order component rounding,
+  including half-even VAT per displayed fee leg.
+- Removed the unconditional SAR 6 weekly payout-fee estimate; explicit payout
+  fee rows remain supported and authoritative when a provider charges one.
+- Corrected Tabby's default cycle to Monday–Sunday with Monday issue/transfer,
+  while preserving merchant-custom schedules through a versioned migration.
+- Allowed deduplicated Tabby official file totals to override computed weekly
+  estimates for the exact covered cycle.
+- Reconciled all four Emkan reports and introduced the verified 6.99% + SAR
+  1.50 default with 15% VAT on the raw total fee.
+- Added automatic Emkan report detection/parsing, including recovery from the
+  workbook's incorrect declared `A1` dimension.
+- Preserved report values while allocating the one-halalah display residual to
+  the fee leg so every imported statement remains balanced.
+- Resolved Emkan UUIDs through canonical payment transactions before matching
+  merchant orders; unresolved IDs remain reviewable unmatched evidence.
+- Added Emkan to the BNPL settlement register and official-file override, with
+  one period per statement date and no invented weekly cycle or cutoff.
+- Added Emkan sale/refund receivable support to the idempotent BNPL ledger
+  bridge for post-cutover events. It stays blocked with
+  `missing_bridge_cutoff` until the owner approves an explicit cutoff, so the
+  catch-up scan cannot post historical Emkan sales.
+- Kept refund handling statement-authoritative because the four samples contain
+  no refunds, and kept bank selection changeable before accountant approval.
+
+## Approved accounting UI architecture — 2026-08-23
+
+Design status: **approved product plan and reference mockups; implementation is
+still pending unless a screen is explicitly listed in “Implemented in this
+change” above.** The mockups must never be used as evidence that a route has
+already shipped.
+
+### One top-level module, not scattered pages
+
+All accounting work belongs under exactly one Mezan 2 navigation entry named
+**`المحاسبة`**. It must not be distributed across unrelated Mezan pages. The
+accounting module owns these eight pages:
+
+1. `الرئيسية المحاسبية`
+2. `التسويات`
+3. `الشحن والتحصيل`
+4. `المخزون والمشتريات`
+5. `الحركات المالية`
+6. `الرواتب والالتزامات`
+7. `الأرصدة الافتتاحية`
+8. `القيود والتقارير`
+
+The financial position is a generated report under `القيود والتقارير`; it is
+not a form where a user types assets, liabilities, or equity totals.
+
+### Shared simplicity and layout contract
+
+- Arabic RTL layout throughout. Page titles and field text start on the right;
+  supporting icons/actions sit on the left where the component allows it.
+- Display financial values using English digits, consistent with the existing
+  merchant preference.
+- Each task page has one visually dominant primary action. Secondary actions
+  are limited to `حفظ كمسودة`, attachment, or cancel/back.
+- An ordinary user records the real business event. Mezan derives the debit,
+  credit, fee, VAT, and counterparty accounts and shows a readable preview.
+- Account codes, debit/credit mechanics, fee-rule editing, and other expert
+  controls stay behind `تفاصيل إضافية` or accountant permissions.
+- Posted journals cannot be edited or deleted. Corrections use a linked
+  reversal or adjustment journal.
+- New pages and sensitive actions are denied to employees by default. The
+  owner/admin assigns permission per accounting subpage and per sensitive
+  action; access to one page never grants the whole module.
+- Operators may enter and save assigned drafts. Accountants may reconcile and
+  post. Opening-balance approval, manual journals, reversal, and financial-rule
+  changes require explicit elevated permission.
+
+### Page 1 — `الرئيسية المحاسبية`
+
+Purpose: one command center for the accountant and a simple task launcher for
+other permitted users.
+
+- Summary cards: bank balances, unsettled provider amounts, courier balances,
+  and items requiring review.
+- `جاهزية المركز المالي` shows which cutover/reconciliation requirements are
+  incomplete; it must not invent readiness from missing data.
+- Four daily shortcuts: `تسوية دفعات`, `حركة مالية`, `فاتورة شراء`, and
+  `راتب أو التزام`.
+- `مهام اليوم` lists only actionable exceptions and opens the relevant page.
+
+Reference: [01-accounting-center.png](../assets/mz2-accounting-ui/01-accounting-center.png)
+
+### Page 2 — `التسويات`
+
+Purpose: import, reconcile, and post official Salla, Tamara, Tabby, Emkan, and
+supported courier statements without asking the user to build a journal.
+
+- Three steps only: `ارفع الملف` → `راجع الفروقات` → `اعتمد القيد`.
+- Provider selector: Salla, Tamara, Tabby, Emkan, or shipping company.
+- The provider’s current settlement bank is preselected. The accountant may
+  change it before posting; no settlement date range is required for the bank
+  change, and posted settlements keep the snapshotted bank.
+- Review shows gross sales, fee, fee VAT, adjustments/refunds, net settlement,
+  matching percentage, and unresolved rows.
+- Official statement values override editable estimated fee rules for the
+  statement’s covered transactions/period.
+- A newly observed payment method may be proposed under Salla only when the
+  evidence identifies Salla as settler. Otherwise it remains unclassified and
+  cannot silently inherit an approved fee.
+- Primary action: `اعتماد وإنشاء القيد`.
+
+Reference: [02-settlements.png](../assets/mz2-accounting-ui/02-settlements.png)
+
+### Page 3 — `الشحن والتحصيل`
+
+Purpose: keep external couriers, COD custody, and individual store drivers
+auditable without netting unrelated people or companies.
+
+- Tabs: `شركات الشحن`, `مندوبي المتجر`, and `قواعد العمولات`.
+- Each external courier card shows `لنا`, `علينا`, pending settlement, and
+  exceptions. Settlement keeps gross COD, shipping, commission, commission
+  VAT, adjustments, and bank transfer as separate legs.
+- Courier commission rules support amount tiers, percentage, fixed fee, VAT,
+  and explicit inclusive/exclusive boundaries. Uncovered amounts stop for
+  review instead of receiving a zero fee.
+- `مندوب المتجر` is a presentation group only. Each driver has an independent
+  COD receivable, delivery-fee payable, shipment list, and signed net balance.
+- Primary action per selected company/person: `سجل التسوية` or `سجل القيد`.
+
+Reference: [03-shipping-cod.png](../assets/mz2-accounting-ui/03-shipping-cod.png)
+
+### Page 4 — `المخزون والمشتريات`
+
+Purpose: record purchase evidence and update inventory quantity/cost through a
+business form rather than a manual journal.
+
+- Tabs: `المخزون`, `فواتير الشراء`, and `الجرد والافتتاح`.
+- Essential invoice fields: supplier, invoice number/date, paid or credit,
+  invoice attachment, product, quantity, unit cost, VAT, and total.
+- Posting a purchase invoice updates inventory and supplier/bank balances and
+  displays a balanced readable journal preview.
+- Default costing design is weighted average, subject to final accounting
+  approval before production use.
+- A sale recognition event posts cost of goods sold and reduces stock once;
+  no cost is inferred from Salla selling price.
+- Opening inventory uses approved physical count and approved cost evidence at
+  the exact cutover instant. Damaged/obsolete stock is reviewed separately.
+- Primary action: `حفظ الفاتورة وتحديث المخزون`.
+
+Reference: [04-inventory-purchases.png](../assets/mz2-accounting-ui/04-inventory-purchases.png)
+
+### Page 5 — `الحركات المالية`
+
+Purpose: provide the single entry point for ordinary money movement while
+routing the event to its canonical workflow.
+
+- First choice has only three tiles: `دخل مبلغ`, `خرج مبلغ`, or
+  `تحويل بين حسابين`.
+- Essential fields: source, destination, amount, movement date, reference or
+  description, and optional attachment.
+- A provider settlement is not reduced to a generic transfer. When `هذه
+  تسوية` is selected, provider-specific reconciliation and bank snapshot rules
+  apply.
+- The user does not select a settlement period merely to change the receiving
+  bank; the actual movement/statement date is sufficient.
+- The preview uses readable labels such as `خصم من سلة` and `إضافة إلى بنك
+  الإنماء`; accountant-only details may expose ledger lines.
+- Primary action: `تسجيل الحركة`.
+
+Reference: [05-financial-movement.png](../assets/mz2-accounting-ui/05-financial-movement.png)
+
+### Page 6 — `الرواتب والالتزامات`
+
+Purpose: manage current payroll and evidenced recurring/annual liabilities
+without reposting historical expenses.
+
+- Tabs: `رواتب الموظفين`, `التزامات دورية`, and `الأرصدة الافتتاحية`.
+- Payroll list shows salary, additions/deductions, net, payment status, and a
+  simple multi-select payment action.
+- Recurring obligations cover rent, subscriptions, VAT/tax, and annual
+  commitments with due date, amount, evidence, and `سجل السداد`.
+- Earned unpaid pre-cutover salaries are entered once per employee as opening
+  salary liabilities. They are not a new post-cutover salary expense.
+- Primary action: `تسجيل الرواتب المحددة`; each obligation has `سجل السداد`.
+
+Reference: [06-payroll-obligations.png](../assets/mz2-accounting-ui/06-payroll-obligations.png)
+
+### Page 7 — `الأرصدة الافتتاحية`
+
+Purpose: a one-time, controlled cutover wizard, never a recurring data-entry
+screen.
+
+- The first mandatory field is the exact timezone-aware `توقيت القطع`.
+- Checklist: banks/cash, Salla/payment methods, couriers/COD, inventory,
+  suppliers, salaries/obligations, and capital/equity reconciliation.
+- Every row requires an evidence reference and the same cutover instant.
+- The preview shows total debit, total credit, and difference. Approval stays
+  disabled until all required evidence is present and the batch balances.
+- Historical sales, historical paid salaries, and the legacy financial
+  position are not re-entered; reviewed pre-cutover net history is represented
+  through opening equity/retained result.
+- Primary action: `اعتماد الرصيد الافتتاحي`, protected by owner/accountant
+  approval and one idempotent operation key.
+
+Reference: [07-opening-balances.png](../assets/mz2-accounting-ui/07-opening-balances.png)
+
+### Page 8 — `القيود والتقارير`
+
+Purpose: accountant audit, reconciliation, and reporting after business-event
+screens have produced journals.
+
+- Tabs: `القيود اليومية`, `المركز المالي`, `قائمة الدخل`, and `دفتر الأستاذ`.
+- Journal rows show number, date, source, description, amount, status,
+  attachments, and expandable debit/credit details.
+- Sources are visibly classified, for example Salla settlement, purchase
+  invoice, salary, or shipping company.
+- `قيد يدوي جديد` is accountant-only and should be exceptional, not the normal
+  workflow.
+- Posted entries offer `عكس القيد` with reason/evidence; no destructive edit.
+- The financial position is reproduced from journals and visibly verifies
+  `الأصول = الالتزامات + حقوق الملكية`.
+
+Reference: [08-journals-reports.png](../assets/mz2-accounting-ui/08-journals-reports.png)
+
+### Mockup interpretation rule
+
+The eight PNG files are product-direction references. Exact sample amounts,
+dates, logos, and decorative placement are not accounting requirements. The
+Arabic labels, route grouping, workflow order, permission boundaries, and
+accounting controls in this document are authoritative when a mockup detail
+conflicts with the written plan.
+
+Primary files:
+
+- `backend/financial_provider_apps.py`
+- `frontend/src/pages/FinancialProviderAppsWorkspace.jsx`
+- `frontend/src/services/financialProviderApps.js`
+- `frontend/src/pages/UnifiedEntryScreen.jsx`
+- `frontend/src/lib/integrationWorkspaces.js`
+- `frontend/src/components/MezanV2NavigationShell.jsx`
+- `backend/tests/test_financial_provider_apps_v2.py`
+- `backend/store_delivery_accounting.py`
+- `backend/store_delivery_driver_app_routes.py`
+- `backend/store_delivery_settlement_routes.py`
+- `backend/tests/test_store_delivery_accounting.py`
+- `frontend/src/pages/StoreDeliverySettlements.jsx`
+- `frontend/src/services/financialProviderApps.test.js`
+- `backend/payment_methods.py`
+- `backend/excel_parser.py`
+- `backend/payment_gateway_metrics.py`
+- `backend/reconciliation_routes.py`
+- `backend/tests/test_salla_payment_fee_defaults.py`
+- `backend/settlements_import/parsers/tabby.py`
+- `backend/settlements_import/parsers/emkan.py`
+- `backend/bnpl/config_store.py`
+- `backend/bnpl/settlements_service.py`
+- `backend/bnpl/ledger_bridge.py`
+- `backend/tests/test_tabby_payment_fee_defaults.py`
+- `backend/tests/test_emkan_payment_fee_defaults.py`
+
+## Remaining work, in order
+
+### Gate 1 — approve cutover evidence
+
+1. Select the exact Riyadh cutover timestamp.
+2. Export and archive trusted bank/provider/courier/Qoyod/inventory/payroll
+   evidence at that timestamp.
+3. Prepare an opening-balance worksheet with source reference per row.
+4. Reconcile debit total to credit total and obtain owner approval.
+
+### Gate 2 — post opening balances
+
+1. Add a dedicated preview/approve/post workflow with idempotency key tied to
+   this operation ID.
+2. Post bank, provider, courier, inventory, supplier, employee, tax, and equity
+   opening entries as one controlled cutover batch.
+3. Block legacy Mezan collections from all Mezan 2 financial readers.
+4. Run trial-balance and financial-position reconciliation.
+
+### Gate 3 — event journals after cutover
+
+1. Journal trusted Salla order/payment/fulfilment/refund events once each.
+2. Complete Salla settlement posting from official files.
+3. Keep Tamara/Tabby/Emkan on their idempotent settlement bridge; add Emkan
+   connector coverage where official data is available.
+4. Journal courier COD receivable, shipping payable, fees, VAT, remittances,
+   and payments from the canonical shipping workflow.
+5. Complete payroll accrual schedule and payment clearing after cutover.
+
+### Gate 4 — production acceptance
+
+1. Trial balance is balanced.
+2. Provider subledgers reconcile to official statements.
+3. Bank balances reconcile to statements.
+4. Employee salary payable, advances, and custody reconcile per employee.
+5. Inventory reconciles to approved count/cost.
+6. No legacy sales or financial-position numbers appear in Mezan 2.
+7. Financial position contains assets, liabilities, VAT, equity, retained
+   result/current result, and the result is reproducible from journals.
+
+## Safety constraints for future sessions
+
+- Do not post production financial data from this document alone.
+- Do not guess a cutover date or an opening balance.
+- Do not convert every provider movement into a generic transfer.
+- Do not let saving a tax invoice double-post a settlement.
+- Do not delete or rewrite posted journals; use reversal/adjustment workflows.
+- Follow `AGENTS.md` and the production release guard before deployment.
+
+## Handoff prompt for the next conversation
+
+Use this exact message:
+
+> Continue GitHub operation `MZ2-FIN-CUTOVER-001` in repository
+> `AMASI-SA/AMASI-SA` from the Production source branch
+> `hotfix/prod-snap-meta-final`. First read
+> `docs/operations/MZ2-FIN-CUTOVER-001.md` completely and inspect the eight UI
+> mockups under `docs/assets/mz2-accounting-ui/`. All eight accounting pages
+> belong under one top-level Mezan 2 section named `المحاسبة`; do not scatter
+> them across the application. Treat the images as design references and the
+> written workflow/permissions as authoritative. Inspect the latest merged
+> commit and tests, report what is implemented versus design-only and identify
+> the current cutover gate before changing code. Continue only the next
+> incomplete approved item. Do not import legacy Mezan balances or sales, do
+> not guess the cutover timestamp or opening values, and do not post production
+> opening entries without the signed evidence sheet and explicit approval.

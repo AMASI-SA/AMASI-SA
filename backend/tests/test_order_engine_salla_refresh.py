@@ -34,8 +34,24 @@ class _DB:
         self.unified_orders = _UnifiedOrders(row)
 
 
+@pytest.fixture
+def local_refresh_collaborators(monkeypatch):
+    """These unit cases verify provider/address projection, not transactions.
+
+    The real source fence and lifecycle run against Mongo in
+    test_g47_component_lifecycle_integration.py; retain the local persistence
+    callback here so all existing canonical/raw/upsert assertions still run.
+    """
+    async def persist_snapshot(db, *, persist, **_kwargs):
+        return await persist(db)
+
+    monkeypatch.setattr("fulfillment_v2_routes.persist_component_source_snapshot", persist_snapshot)
+    monkeypatch.setattr("fulfillment_v2_routes.auto_route_instant_order", AsyncMock(return_value={"promoted": False}))
+    monkeypatch.setattr("order_engine.service.get_order", AsyncMock(return_value=SimpleNamespace(order_number="unit-test")))
+
+
 @pytest.mark.asyncio
-async def test_refresh_reads_shipping_from_order_details_and_items_only():
+async def test_refresh_reads_shipping_from_order_details_and_items_only(local_refresh_collaborators):
     db = _DB({
         "user_id": "owner-1",
         "order_number": "274682897",
@@ -95,14 +111,16 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
 
     captured = {}
 
-    async def fake_upsert(_db, user_id, order_number, doc, source, raw=None):
+    async def fake_upsert(_db, user_id, order_number, doc, source, raw=None, shipping_snapshot=None):
         captured.update({
             "user_id": user_id,
             "order_number": order_number,
             "doc": doc,
             "source": source,
             "raw": raw,
+            "shipping_snapshot": shipping_snapshot,
         })
+        _db.unified_orders.row.update({key: doc[key] for key in ("shipping_company", "shipping_company_code") if key in doc})
         return {"created": False, "doc": doc}
 
     async def passthrough_bank(_db, _user_id, order):
@@ -130,6 +148,7 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
     doc = captured["doc"]
     assert captured["source"] == "salla_direct"
     assert doc["shipping_company"] == "iMile"
+    assert captured["shipping_snapshot"]["company_name"] == "iMile"
     assert doc["shipping_city"] == "الرياض"
     assert doc["shipping_country"] == "السعودية"
     assert doc["shipping_address"] == "حي العليا، طريق الملك فهد"
@@ -148,7 +167,7 @@ async def test_refresh_reads_shipping_from_order_details_and_items_only():
 
 
 @pytest.mark.asyncio
-async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it():
+async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it(local_refresh_collaborators):
     db = _DB({
         "user_id": "owner-1",
         "order_number": "274724433",
@@ -182,8 +201,9 @@ async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it(
             return {"data": []}
         raise AssertionError(path)
 
-    async def fake_upsert(_db, _user_id, _order_number, doc, source, raw=None):
+    async def fake_upsert(_db, _user_id, _order_number, doc, source, raw=None, shipping_snapshot=None):
         captured["raw"] = raw
+        captured["shipping_snapshot"] = shipping_snapshot
         return {"created": False, "doc": doc}
 
     async def passthrough_bank(_db, _user_id, order):
@@ -197,6 +217,7 @@ async def test_refresh_preserves_richer_existing_raw_when_light_details_omit_it(
         result = await refresh_order_from_salla(db, "owner-1", "274724433", force=True)
 
     assert result["ok"] is True
+    assert captured["shipping_snapshot"] == {}
     assert captured["raw"]["shipping_address"]["city"] == "جدة"
     assert captured["raw"]["shipping_address"]["district"] == "الروضة"
     assert captured["raw"]["shipping_address"]["street"] == "شارع الأمير"

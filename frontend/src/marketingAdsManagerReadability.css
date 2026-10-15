@@ -1,0 +1,103 @@
+/* Ads Manager readability: match the denser-but-legible provider table scale. */
+[data-mezan-adsquad-sort-controls] {
+  display: none !important;
+}
+
+[data-testid="campaign-manager-table"] table,
+[data-testid="ad-squad-manager-table"] table {
+  font-size: 15px !important;
+  line-height: 1.45;
+  color: #0f172a;
+}
+
+[data-testid="campaign-manager-table"] thead th,
+[data-testid="ad-squad-manager-table"] thead th {
+  min-width: 150px !important;
+  padding: 17px 22px !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  color: #334155 !important;
+  white-space: nowrap;
+}
+
+[data-testid="campaign-manager-table"] tbody td,
+[data-testid="ad-squad-manager-table"] tbody td {
+  min-width: 150px !important;
+  padding: 20px 22px !important;
+  font-size: 15px !important;
+  vertical-align: middle;
+}
+
+[data-testid="campaign-manager-table"] tfoot td,
+[data-testid="ad-squad-manager-table"] tfoot td {
+  padding: 16px 22px !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+}
+
+[data-testid="campaign-manager-table"] thead th:first-child,
+[data-testid="campaign-manager-table"] tbody td:first-child,
+[data-testid="campaign-manager-table"] tfoot td:first-child,
+[data-testid="ad-squad-manager-table"] thead th:first-child,
+[data-testid="ad-squad-manager-table"] tbody td:first-child,
+[data-testid="ad-squad-manager-table"] tfoot td:first-child {
+  width: 52px !important;
+  min-width: 52px !important;
+  padding-inline: 14px !important;
+}
+
+[data-testid="campaign-manager-table"] thead th:nth-child(2),
+[data-testid="campaign-manager-table"] tbody td:nth-child(2),
+[data-testid="campaign-manager-table"] tfoot td:nth-child(2),
+[data-testid="ad-squad-manager-table"] thead th:nth-child(2),
+[data-testid="ad-squad-manager-table"] tbody td:nth-child(2),
+[data-testid="ad-squad-manager-table"] tfoot td:nth-child(2) {
+  width: 360px !important;
+  min-width: 360px !important;
+}
+
+[data-testid="ad-squad-manager-table"] thead th:nth-child(3),
+[data-testid="ad-squad-manager-table"] tbody td:nth-child(3) {
+  width: 285px !important;
+  min-width: 285px !important;
+}
+
+[data-testid="campaign-manager-table"] tbody .font-extrabold,
+[data-testid="ad-squad-manager-table"] tbody .font-extrabold {
+  font-size: 16px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+}
+
+[data-testid="campaign-manager-table"] tbody .font-mono > div:first-child,
+[data-testid="ad-squad-manager-table"] tbody .font-mono > div:first-child {
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.01em;
+}
+
+[data-testid="campaign-manager-table"] tbody .text-\[10px\],
+[data-testid="ad-squad-manager-table"] tbody .text-\[10px\] {
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+
+[data-testid="campaign-manager-table"] input[type="checkbox"],
+[data-testid="ad-squad-manager-table"] input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+@media (max-width: 900px) {
+  [data-testid="campaign-manager-table"] table,
+  [data-testid="ad-squad-manager-table"] table {
+    font-size: 14px !important;
+  }
+
+  [data-testid="campaign-manager-table"] thead th,
+  [data-testid="campaign-manager-table"] tbody td,
+  [data-testid="ad-squad-manager-table"] thead th,
+  [data-testid="ad-squad-manager-table"] tbody td {
+    padding-inline: 16px !important;
+  }
+}

@@ -7,14 +7,11 @@ import pytest
 
 from integrations_control_center import snapchat_native_async_routes as async_routes
 from integrations_control_center.snapchat_native_data_common import (
-    ATTRIBUTION_MODEL,
-    SNAPCHAT_ENTITY_COLLECTION,
     SNAPCHAT_PERFORMANCE_COLLECTION,
     SnapchatNativeSyncError,
     SnapchatNativeSyncInput,
 )
 from integrations_control_center.snapchat_native_selected_reads import (
-    selected_snapchat_campaign_report,
     selected_snapchat_performance_summary,
 )
 
@@ -185,7 +182,6 @@ def _db():
             ],
             "mezan_integration_sync_runs_v2": [],
             SNAPCHAT_PERFORMANCE_COLLECTION: [],
-            SNAPCHAT_ENTITY_COLLECTION: [],
         }
     )
 
@@ -265,130 +261,146 @@ async def test_selected_summary_excludes_unselected_historical_rows():
 
 
 @pytest.mark.asyncio
-async def test_selected_campaign_report_aggregates_verified_campaign_metrics():
+async def test_dashboard_sync_maps_30_days_to_canonical_v2_range():
     db = _db()
-    db.rows[SNAPCHAT_PERFORMANCE_COLLECTION] = [
-        {
-            "user_id": "owner-1",
-            "provider": "snapchat_ads",
-            "ad_account_id": "sar-second",
-            "entity_type": "campaign",
-            "external_id": "campaign-a",
-            "campaign_id": "campaign-a",
-            "date": "2026-07-30",
-            "currency": "SAR",
-            "attribution_model": ATTRIBUTION_MODEL,
-            "metrics": {
-                "conversion_purchases": 4,
-                "impressions": 1000,
-                "swipes": 50,
-                "video_views": 700,
-            },
-            "spend_sar": 100,
-            "purchase_value_sar": 400,
-            "updated_at": "2026-07-30T19:50:00+00:00",
-        },
-        {
-            "user_id": "owner-1",
-            "provider": "snapchat_ads",
-            "ad_account_id": "sar-second",
-            "entity_type": "campaign",
-            "external_id": "campaign-b",
-            "campaign_id": "campaign-b",
-            "date": "2026-07-30",
-            "currency": "SAR",
-            "attribution_model": ATTRIBUTION_MODEL,
-            "metrics": {
-                "conversion_purchases": 1,
-                "impressions": 500,
-                "swipes": 20,
-                "video_views": 300,
-            },
-            "spend_sar": 50,
-            "purchase_value_sar": 100,
-            "updated_at": "2026-07-30T19:50:00+00:00",
-        },
-        {
-            "user_id": "owner-1",
-            "provider": "snapchat_ads",
-            "ad_account_id": "old-account",
-            "entity_type": "campaign",
-            "external_id": "excluded-campaign",
-            "campaign_id": "excluded-campaign",
-            "date": "2026-07-30",
-            "currency": "USD",
-            "attribution_model": ATTRIBUTION_MODEL,
-            "metrics": {
-                "conversion_purchases": 99,
-                "impressions": 9999,
-                "swipes": 999,
-            },
-            "spend_sar": 9999,
-            "purchase_value_sar": 99999,
-        },
-    ]
-    db.rows[SNAPCHAT_ENTITY_COLLECTION] = [
-        {
-            "user_id": "owner-1",
-            "provider": "snapchat_ads",
-            "ad_account_id": "sar-second",
-            "entity_type": "campaign",
-            "external_id": "campaign-a",
-            "campaign_id": "campaign-a",
-            "display_name": "حملة أغسطس الرئيسية",
-            "status": "ACTIVE",
-            "delivery_status": "ACTIVE",
-            "objective": "WEB_CONVERSIONS",
-            "daily_budget_micro": 700_000_000,
-            "last_observed_at": "2026-07-30T19:50:00+00:00",
-        },
-        {
-            "user_id": "owner-1",
-            "provider": "snapchat_ads",
-            "ad_account_id": "sar-second",
-            "entity_type": "campaign",
-            "external_id": "campaign-b",
-            "campaign_id": "campaign-b",
-            "display_name": "حملة إعادة الاستهداف",
-            "status": "ACTIVE",
-            "delivery_status": "ACTIVE",
-            "objective": "WEB_CONVERSIONS",
-            "daily_budget_micro": 300_000_000,
-            "last_observed_at": "2026-07-30T19:50:00+00:00",
-        },
-    ]
+    fixed_now = lambda: datetime(
+        2026, 9, 16, 18, 0, tzinfo=timezone.utc
+    )
+    calls = []
 
-    result = await selected_snapchat_campaign_report(
+    class FakePipeline:
+        def __init__(self, db_value, *, now):
+            assert db_value is db
+            assert now is fixed_now
+
+        async def run(self, user_id, **kwargs):
+            calls.append((user_id, kwargs))
+            return {
+                "status": "complete",
+                "sync_run_id": "canonical-30d",
+                "summary": {
+                    "rows_saved": 720,
+                    "warnings": [],
+                },
+            }
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
         db,
         "owner-1",
-        from_date="2026-07-30",
-        to_date="2026-07-30",
-        now=lambda: datetime(
-            2026, 7, 30, 20, 0, tzinfo=timezone.utc
-        ),
+        SnapchatNativeSyncInput(days=30),
+        now=fixed_now,
+        pipeline_factory=FakePipeline,
     )
 
-    assert result["totals"]["spend_sar"] == 150
-    assert result["totals"]["sales_sar"] == 500
-    assert result["totals"]["orders"] == 5
-    assert result["totals"]["roas"] == 3.33
-    assert result["totals"]["cpa_sar"] == 30
-    assert result["totals"]["ctr_pct"] == 4.67
-    assert result["campaign_pagination"]["total"] == 2
-    assert result["campaigns"][0]["campaign_name"] == "حملة أغسطس الرئيسية"
-    assert result["campaigns"][0]["budget"]["daily_native"] == 700
-    assert result["source"]["selected_account_ids"] == [
-        "sar-second",
-        "usd-main",
+    assert calls == [(
+        "owner-1",
+        {
+            "date_from": datetime(2026, 8, 18).date(),
+            "date_to": datetime(2026, 9, 16).date(),
+            "action_report_time": "conversion",
+            "run_type": "manual",
+        },
+    )]
+    assert result == {
+        "run_id": "canonical-30d",
+        "provider": "snapchat_ads",
+        "status": "complete",
+        "date_from": "2026-08-18",
+        "date_to": "2026-09-16",
+        "accounts_attempted": 1,
+        "accounts_complete": 1,
+        "rows_saved": 720,
+        "errors_count": 0,
+        "source_only": True,
+        "accounting_write_reached": False,
+        "qoyod_write_reached": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_dashboard_sync_preserves_explicit_30_day_account_range():
+    fixed_now = lambda: datetime(2026, 9, 16, 20, 0, tzinfo=timezone.utc)
+    calls = []
+
+    class FakePipeline:
+        def __init__(self, db, *, now):
+            pass
+
+        async def run(self, user_id, **kwargs):
+            calls.append((user_id, kwargs))
+            return {"status": "complete", "sync_run_id": "canonical-30d", "summary": {"rows_saved": 720}}
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        _db(), "owner-1",
+        SnapchatNativeSyncInput(from_date="2026-08-18", to_date="2026-09-16", ad_account_id="usd-main"),
+        now=fixed_now, pipeline_factory=FakePipeline,
+    )
+    assert calls == [("owner-1", {
+        "ad_account_id": "usd-main",
+        "date_from": datetime(2026, 8, 18).date(),
+        "date_to": datetime(2026, 9, 16).date(),
+        "action_report_time": "conversion", "run_type": "manual",
+    })]
+    assert result["date_from"] == "2026-08-18"
+    assert result["date_to"] == "2026-09-16"
+    assert result["run_id"] == "canonical-30d"
+
+
+@pytest.mark.asyncio
+async def test_same_range_other_account_cannot_join_canonical_job():
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"] = [{
+        "user_id": "owner-1", "provider": "snapchat_ads", "run_id": "other-account-job",
+        "run_type": async_routes.ASYNC_SYNC_RUN_TYPE, "status": "running",
+        "summary": {"date_from": "2026-08-01", "date_to": "2026-09-16", "ad_account_id": "other-account"},
+    }]
+    with pytest.raises(SnapchatNativeSyncError) as exc:
+        await async_routes._assert_no_active_sync(
+            db, "owner-1", requested_date_from="2026-08-01", requested_date_to="2026-09-16",
+            requested_ad_account_id="usd-main",
+        )
+    assert exc.value.run_id is None
+
+
+@pytest.mark.asyncio
+async def test_dashboard_sync_retries_a_busy_canonical_lease():
+    db = _db()
+    fixed_now = lambda: datetime(
+        2026, 9, 16, 18, 0, tzinfo=timezone.utc
+    )
+    results = [
+        {"status": "skipped", "reason": "lease_unavailable"},
+        {
+            "status": "complete",
+            "sync_run_id": "canonical-after-wait",
+            "summary": {"rows_saved": 24, "warnings": []},
+        },
     ]
-    assert result["source"]["identity_coverage_pct"] == 100
-    assert result["ai_readiness"]["ai_analysis_ready"] is True
-    assert result["ai_readiness"]["campaign_creation_enabled"] is False
-    assert result["ai_readiness"]["campaign_management_enabled"] is False
-    assert result["provider_network_called"] is False
-    assert result["campaign_write_reached"] is False
-    assert result["accounting_write_reached"] is False
-    assert result["qoyod_write_reached"] is False
+    waits = []
+
+    class FakePipeline:
+        def __init__(self, db_value, *, now):
+            assert db_value is db
+            assert now is fixed_now
+
+        async def run(self, _user_id, **_kwargs):
+            return results.pop(0)
+
+    async def fake_sleep(delay):
+        waits.append(delay)
+
+    result = await async_routes.execute_snapchat_dashboard_sync(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=fixed_now,
+        pipeline_factory=FakePipeline,
+        sleep=fake_sleep,
+    )
+
+    assert waits == [async_routes.CANONICAL_SYNC_RETRY_DELAY_SECONDS]
+    assert result["run_id"] == "canonical-after-wait"
+    assert result["status"] == "complete"
 
 
 @pytest.mark.asyncio
@@ -416,12 +428,19 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert accepted["selected_accounts"] == 2
     assert accepted["accounts_attempted"] == 0
 
-    async def fake_execute(db_value, user_id, payload, *, now):
+    async def fake_execute(
+        db_value,
+        user_id,
+        payload,
+        *,
+        now,
+    ):
         assert db_value is db
         assert user_id == "owner-1"
         assert payload.days == 2
+        assert now is fixed_now
         return {
-            "run_id": "child-run-1",
+            "run_id": "canonical-run-1",
             "provider": "snapchat_ads",
             "status": "complete",
             "accounts_attempted": 2,
@@ -435,7 +454,7 @@ async def test_async_job_returns_queued_then_records_child_result(
 
     monkeypatch.setattr(
         async_routes,
-        "execute_snapchat_native_sync",
+        "execute_snapchat_dashboard_sync",
         fake_execute,
     )
     await async_routes.execute_snapchat_native_sync_job(
@@ -456,8 +475,14 @@ async def test_async_job_returns_queued_then_records_child_result(
     assert final["accounts_attempted"] == 2
     assert final["accounts_complete"] == 2
     assert final["rows_saved"] == 15604
-    assert final["child_run_id"] == "child-run-1"
+    assert final["child_run_id"] == "canonical-run-1"
     assert final["error"] is None
+    parent = next(
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] == accepted["run_id"]
+    )
+    assert parent["worker_heartbeat_at"] == "2026-07-30T18:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -471,7 +496,13 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
             "run_type": async_routes.ASYNC_SYNC_RUN_TYPE,
             "status": "running",
             "started_at": "2026-07-30T17:00:00+00:00",
+            "worker_started_at": "2026-07-30T17:00:00+00:00",
+            "worker_heartbeat_at": "2026-07-30T17:59:00+00:00",
             "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            "summary": {
+                "date_from": "2026-07-30",
+                "date_to": "2026-07-30",
+            },
         }
     )
     monkeypatch.setattr(
@@ -493,3 +524,162 @@ async def test_async_job_rejects_a_second_active_sync(monkeypatch):
     assert exc.value.code == "snapchat_analytics_sync_in_progress"
     assert exc.value.status_code == 409
     assert exc.value.run_id == "already-running"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_async_worker_with_stale_heartbeat(
+    monkeypatch,
+):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].extend(
+        [
+            {
+                "run_id": "orphaned-parent",
+                "user_id": "owner-1",
+                "provider": "snapchat_ads",
+                "run_type": async_routes.ASYNC_SYNC_RUN_TYPE,
+                "status": "running",
+                "started_at": "2026-07-30T17:00:00+00:00",
+                "worker_started_at": "2026-07-30T17:00:00+00:00",
+                "worker_heartbeat_at": "2026-07-30T17:10:00+00:00",
+                "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            },
+            {
+                "run_id": "orphaned-child",
+                "user_id": "owner-1",
+                "provider": "snapchat_ads",
+                "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+                "status": "running",
+                "started_at": "2026-07-30T17:00:00+00:00",
+                "worker_started_at": "2026-07-30T17:00:00+00:00",
+                "worker_heartbeat_at": "2026-07-30T17:10:00+00:00",
+                "lock_expires_at": "2026-07-30T22:00:00+00:00",
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    stale_rows = [
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] in {"orphaned-parent", "orphaned-child"}
+    ]
+    assert {row["status"] for row in stale_rows} == {"failed"}
+    assert {
+        row["error"]["code"] for row in stale_rows
+    } == {
+        "snapchat_async_sync_stale",
+        "snapchat_scheduler_sync_stale",
+    }
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_orphaned_scheduler_run(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "orphaned-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-30T17:00:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    stale = next(
+        row
+        for row in db.rows["mezan_integration_sync_runs_v2"]
+        if row["run_id"] == "orphaned-scheduler-run"
+    )
+    assert stale["status"] == "failed"
+    assert stale["error"]["code"] == "snapchat_scheduler_sync_stale"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_preserves_recent_scheduler_run(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "live-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-30T17:50:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    with pytest.raises(SnapchatNativeSyncError) as exc:
+        await async_routes.create_snapchat_native_sync_job(
+            db,
+            "owner-1",
+            SnapchatNativeSyncInput(days=1),
+            now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+        )
+
+    assert exc.value.code == "snapchat_analytics_sync_in_progress"
+    assert exc.value.run_id is None
+    assert exc.value.result["date_from"] == "2026-07-30"
+    assert exc.value.result["date_to"] == "2026-07-30"
+    assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_manual_job_recovers_far_future_scheduler_timestamp(monkeypatch):
+    db = _db()
+    db.rows["mezan_integration_sync_runs_v2"].append(
+        {
+            "run_id": "future-scheduler-run",
+            "user_id": "owner-1",
+            "provider": "snapchat_ads",
+            "run_type": async_routes.SCHEDULER_SYNC_RUN_TYPE,
+            "status": "running",
+            "started_at": "2026-07-31T18:00:00+00:00",
+        }
+    )
+    monkeypatch.setattr(
+        async_routes,
+        "snapchat_native_sync_enabled",
+        lambda: True,
+    )
+
+    accepted = await async_routes.create_snapchat_native_sync_job(
+        db,
+        "owner-1",
+        SnapchatNativeSyncInput(days=1),
+        now=lambda: datetime(2026, 7, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert accepted["status"] == "queued"
+    assert db.rows["mezan_integration_sync_runs_v2"][0]["status"] == "failed"

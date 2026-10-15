@@ -1,0 +1,57 @@
+[
+  {
+    "file": "frontend/src/pages/AmasiDeliveryApp.jsx",
+    "hash": "16467e0e76e2ad17597540f4c45fd1cac2faef22a1401d00964ac4fed73d3da4",
+    "currentHash": "16467e0e76e2ad17597540f4c45fd1cac2faef22a1401d00964ac4fed73d3da4"
+  },
+  {
+    "file": "frontend/src/components/driver/DriverPhysicalCash.jsx",
+    "hash": "572d0f93adfb787c2609feeefdfea8b61fc5d75ee6bb135af696e007b18d48c7",
+    "currentHash": "572d0f93adfb787c2609feeefdfea8b61fc5d75ee6bb135af696e007b18d48c7"
+  },
+  {
+    "file": "frontend/src/pages/accounting/h2/DriverCashReconciliation.jsx",
+    "hash": "77645b06ddc3ffcb16bd72a8e5cf8cfe2c3f99e12d96122deae8248713049b76",
+    "currentHash": "77645b06ddc3ffcb16bd72a8e5cf8cfe2c3f99e12d96122deae8248713049b76"
+  },
+  {
+    "file": "frontend/src/pages/accounting/AccountingUI.jsx",
+    "hash": "45967fdf44fe5114b50e37be6a0477d146ec805d2f8eba1282abaf2fb71c7689",
+    "currentHash": "45967fdf44fe5114b50e37be6a0477d146ec805d2f8eba1282abaf2fb71c7689"
+  },
+  {
+    "file": "frontend/src/pages/accounting/accountingUI.css",
+    "hash": "f668fcc323e54c0efa4072603f8b3c38212d5502396f5927c1a88fe85a6b50ff",
+    "currentHash": "f668fcc323e54c0efa4072603f8b3c38212d5502396f5927c1a88fe85a6b50ff"
+  },
+  {
+    "file": "frontend/src/pages/accounting/h2/h2.css",
+    "hash": "1b49e264bbb3d63ff54aadee4e9b4c01d2ec9da79ab03e5c4da3fb6a7b771b96",
+    "currentHash": "1b49e264bbb3d63ff54aadee4e9b4c01d2ec9da79ab03e5c4da3fb6a7b771b96"
+  },
+  {
+    "file": "backend/store_delivery_cash_evidence.py",
+    "hash": "4f7e7a94612224db4c13e63f0833897a92f09258be446d5115f04d2f1012f939",
+    "currentHash": "4f7e7a94612224db4c13e63f0833897a92f09258be446d5115f04d2f1012f939"
+  },
+  {
+    "file": "backend/store_delivery_delivery_commit.py",
+    "hash": "0064bfbc0f7f3185ff4fa26b795612bcccfd35ca7ccebad110a5b192f4047523",
+    "currentHash": "0064bfbc0f7f3185ff4fa26b795612bcccfd35ca7ccebad110a5b192f4047523"
+  },
+  {
+    "file": "backend/store_delivery_driver_app_routes.py",
+    "hash": "aae1849c33a820f0fdbabe973f0c91746efc756dc5f048b57c5bd393b8f6f506",
+    "currentHash": "aae1849c33a820f0fdbabe973f0c91746efc756dc5f048b57c5bd393b8f6f506"
+  },
+  {
+    "file": "backend/accounting_shipping_native_routes.py",
+    "hash": "169e97fa57a704f1d230b92cac830a6bd538453c675e8dde16305adc8ada2507",
+    "currentHash": "169e97fa57a704f1d230b92cac830a6bd538453c675e8dde16305adc8ada2507"
+  },
+  {
+    "file": "backend/operational_atomic.py",
+    "hash": "1b434bafa18ada536f6200b2f10b77a321c317595260614ec4abaae59caa31b8",
+    "currentHash": "1b434bafa18ada536f6200b2f10b77a321c317595260614ec4abaae59caa31b8"
+  }
+]

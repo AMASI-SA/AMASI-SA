@@ -6,6 +6,8 @@ import api, { formatApiErrorDetail } from "../lib/api";
 import { todayISO } from "../lib/format";
 import DateInput from "../components/DateInput";
 
+const MAX_ANALYSIS_FILE_BYTES = 15 * 1024 * 1024;
+
 const EMPTY_ILL = "https://static.prod-images.emergentagent.com/jobs/ab0374e5-2a04-4e34-b24c-447b0238a858/images/80b8ed57e8b03ecce86ccb201f79210f057fc21e43eab9fd1aa0648fc95c6bb3.png";
 
 export default function UploadExcel() {
@@ -19,11 +21,28 @@ export default function UploadExcel() {
     const [date, setDate] = useState(todayISO());
     const [productCosts, setProductCosts] = useState("");
 
+    const selectFile = (selected) => {
+        if (!selected) {
+            setFile(null);
+            return;
+        }
+        if (!selected.name.toLowerCase().endsWith(".xlsx")) {
+            toast.error("الصيغة المدعومة هي .xlsx فقط");
+            setFile(null);
+            return;
+        }
+        if (selected.size > MAX_ANALYSIS_FILE_BYTES) {
+            toast.error("حجم الملف يتجاوز الحد المسموح (15 ميجابايت)");
+            setFile(null);
+            return;
+        }
+        setFile(selected);
+    };
+
     const onDrop = (e) => {
         e.preventDefault();
         setDragOver(false);
-        const f = e.dataTransfer.files?.[0];
-        if (f) setFile(f);
+        selectFile(e.dataTransfer.files?.[0]);
     };
 
     const submit = async (e) => {
@@ -81,9 +100,9 @@ export default function UploadExcel() {
                         <input
                             ref={inputRef}
                             type="file"
-                            accept=".xlsx,.xls,.xlsm"
+                            accept=".xlsx"
                             className="hidden"
-                            onChange={(e) => setFile(e.target.files?.[0] || null)}
+                            onChange={(e) => selectFile(e.target.files?.[0])}
                             data-testid="file-input"
                         />
                         {file ? (
@@ -107,7 +126,7 @@ export default function UploadExcel() {
                                 <img src={EMPTY_ILL} alt="upload" className="w-32 h-32 object-contain opacity-90" />
                                 <UploadSimple size={28} className="text-brand" />
                                 <div className="text-lg font-bold text-foreground">اسحب الملف هنا أو انقر للاختيار</div>
-                                <div className="text-sm text-muted-foreground">صيغ مدعومة: .xlsx, .xls, .xlsm</div>
+                                <div className="text-sm text-muted-foreground">الصيغة المدعومة: .xlsx (بحد أقصى 15 ميجابايت)</div>
                             </div>
                         )}
                     </div>

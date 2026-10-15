@@ -16,6 +16,24 @@ const RESPONSIBILITY_LABELS = {
     stock_preparation: "تجهيز مخزون جاهز",
 };
 
+export const SUPPLIER_RECEIVING_PERMISSION_OPTIONS = [
+    {
+        key: "supplier_receiving.product_price.edit",
+        label: "تعديل سعر المنتج في فاتورة المورد",
+        help: "يعدّل سعر الفاتورة الحالية فقط ولا يغيّر السعر الأساسي للمنتج.",
+    },
+    {
+        key: "supplier_receiving.service_price.edit",
+        label: "تعديل سعر الخدمة في فاتورة المورد",
+        help: "يعدّل سعر الفاتورة الحالية فقط ولا يغيّر سعر الخدمة المحفوظ.",
+    },
+    {
+        key: "supplier_receiving.service.add",
+        label: "إضافة خدمة موجودة إلى المنتج أثناء الاستلام",
+        help: "تُسجّل الإضافة باسم الموظف وتطبّق على المنتج والطلبات الجديدة.",
+    },
+];
+
 function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTypes, onSave }) {
     const assignment = user.assignment || {};
     const [roleKey, setRoleKey] = useState(assignment.role_key || (user.is_owner ? "owner" : "product_operator"));
@@ -54,6 +72,7 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
     }
 
     const effective = user.effective_permissions || [];
+    const selectedRolePermissions = new Set(roleCatalog?.[roleKey] || []);
     const toggleWarehouse = (value) => {
         const next = warehouseIds.includes(value)
             ? warehouseIds.filter((item) => item !== value)
@@ -123,6 +142,17 @@ function RoleCard({ user, roleLabels, roleCatalog, warehouses, responsibilityTyp
                         <input type="checkbox" checked={extraPermissions.includes("fulfillment.labels.reprint")} onChange={() => toggle(extraPermissions, "fulfillment.labels.reprint", setExtraPermissions)} />
                         <span>السماح بإعادة الطباعة<span className="mt-1 block font-normal">تظل بحاجة إلى سبب، وتسجل باسم الموظف.</span></span>
                     </label>
+                    <div className="mt-4 border-t border-slate-200 pt-3">
+                        <div className="text-xs font-black text-slate-700">صلاحيات فاتورة المورد</div>
+                        <div className="mt-2 space-y-2">
+                            {SUPPLIER_RECEIVING_PERMISSION_OPTIONS.map((permission) => (
+                                <label key={permission.key} className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${selectedRolePermissions.has(permission.key) || extraPermissions.includes(permission.key) ? "border-violet-400 bg-violet-50 text-violet-950" : "bg-white"}`}>
+                                    <input type="checkbox" checked={selectedRolePermissions.has(permission.key) || extraPermissions.includes(permission.key)} disabled={selectedRolePermissions.has(permission.key)} onChange={() => toggle(extraPermissions, permission.key, setExtraPermissions)} />
+                                    <span>{permission.label}{selectedRolePermissions.has(permission.key) && <span className="mr-1 text-[10px] text-violet-700">(مضمنة في الدور)</span>}<span className="mt-1 block font-normal text-slate-600">{permission.help}</span></span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
                 </section>
             </div>
         </article>

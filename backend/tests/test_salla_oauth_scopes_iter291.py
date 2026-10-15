@@ -23,6 +23,43 @@ from salla_integration import service as svc  # noqa: E402
 
 # ── Scope hygiene ─────────────────────────────────────────────────────
 class TestScopeHygiene:
+    def test_pending_carts_scope_is_not_requested_before_partner_approval(self):
+        """Deploying the dormant cart reader must not break today's OAuth."""
+        assert "carts.read" not in svc.DEFAULT_SCOPES.split()
+
+    def test_partner_approval_flag_adds_carts_scope(self, monkeypatch):
+        """After approval, one environment flag prepares the next reconnect."""
+        import importlib
+        import salla_integration.service as svc_reload
+
+        monkeypatch.delenv("SALLA_OAUTH_SCOPES", raising=False)
+        monkeypatch.setenv("SALLA_CARTS_READ_APPROVED", "true")
+        importlib.reload(svc_reload)
+        try:
+            assert "carts.read" in svc_reload.DEFAULT_SCOPES.split()
+        finally:
+            monkeypatch.delenv("SALLA_CARTS_READ_APPROVED", raising=False)
+            importlib.reload(svc_reload)
+
+    def test_partner_approval_flag_also_extends_custom_scope_override(
+        self, monkeypatch
+    ):
+        import importlib
+        import salla_integration.service as svc_reload
+
+        monkeypatch.setenv(
+            "SALLA_OAUTH_SCOPES",
+            "offline_access orders.read settings.read",
+        )
+        monkeypatch.setenv("SALLA_CARTS_READ_APPROVED", "true")
+        importlib.reload(svc_reload)
+        try:
+            assert svc_reload.DEFAULT_SCOPES.endswith(" carts.read")
+        finally:
+            monkeypatch.delenv("SALLA_OAUTH_SCOPES", raising=False)
+            monkeypatch.delenv("SALLA_CARTS_READ_APPROVED", raising=False)
+            importlib.reload(svc_reload)
+
     def test_default_scopes_does_not_include_customers(self):
         """`customers.read` must NOT be in the default scope set — it
         is not enabled in our Salla Partners App and causes the whole

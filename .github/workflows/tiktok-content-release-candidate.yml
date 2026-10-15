@@ -1,0 +1,96 @@
+name: TikTok Creator Release Candidate
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/integrations_control_center/tiktok_*.py"
+      - "backend/tests/test_tiktok*.py"
+      - "frontend/src/components/marketing/TikTokContentWorkspace*"
+      - "frontend/src/pages/MarketingPlatformWorkspace*"
+      - "docs/operations/TIKTOK-CONTENT-CI-20261011/**"
+      - "release/release-intent-v5.json"
+      - ".github/workflows/tiktok-content-release-candidate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-candidate:
+    if: github.head_ref == 'codex/tiktok-content-ci-20261011' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      REACT_APP_BACKEND_URL: "https://mezansalla.com"
+      PR_SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      # Last exact reviewed A/B pair. Approved PR1333 changed the later
+      # Production requirements without a new intent. This candidate binds
+      # all those retained changes and this task through the v5 manifests.
+      SOURCE_BASE_GIT_SHA: "200e66c7a6e60f04bd58fae716b3981ad07ce3d1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check inactive guard and immutable source candidate
+        id: classify
+        run: |
+          python -B - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          from scripts.emergent_deployment_adapter import (
+              DeploymentAdapterError, _assert_candidate_source_transition,
+              load_release_intent,
+          )
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert head == os.environ['PR_SOURCE_GIT_SHA']
+          guard = json.loads(subprocess.check_output(['python', '-B', 'scripts/production_release_guard.py', 'status'], text=True))
+          assert guard['active'] is False
+          try:
+              intent = load_release_intent()
+          except DeploymentAdapterError:
+              base = os.environ['SOURCE_BASE_GIT_SHA']
+              _assert_candidate_source_transition(source_git_sha=head, source_base_git_sha=base)
+              prior = Path(os.environ['RUNNER_TEMP']) / 'tiktok-reviewed-source-base'
+              subprocess.run(['git', 'clone', '--local', '--no-hardlinks', '.', str(prior)], check=True)
+              subprocess.run(['git', 'checkout', '--detach', base], cwd=prior, check=True)
+              subprocess.run(['python', '-B', '-c', 'from scripts.emergent_deployment_adapter import load_release_intent; load_release_intent()'], cwd=prior, check=True)
+              candidate = 'true'
+          else:
+              print('Reviewed intent already validates source', intent['source_git_sha'])
+              candidate = 'false'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as handle:
+              handle.write('candidate=' + candidate + '\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as handle:
+              handle.write('SOURCE_GIT_SHA=' + head + '\n')
+          PY
+      - name: Bootstrap exact governed frontend toolchain
+        if: steps.classify.outputs.candidate == 'true'
+        run: python -B scripts/frontend_release_toolchain.py ensure
+      - name: Install frozen dependencies
+        if: steps.classify.outputs.candidate == 'true'
+        run: python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Build clean A and B and verify retained artifact
+        if: steps.classify.outputs.candidate == 'true'
+        run: |
+          python -B scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build:release
+          python -B scripts/frontend_release_toolchain.py exec -- python -B scripts/verify_frontend_build.py --expected-git-sha "$SOURCE_GIT_SHA"
+      - name: Freeze complete governed source and runtime manifests
+        if: steps.classify.outputs.candidate == 'true'
+        run: |
+          python -B scripts/emergent_deployment_adapter.py freeze-intent \
+            --source-git-sha "$SOURCE_GIT_SHA" \
+            --source-base-git-sha "$SOURCE_BASE_GIT_SHA" \
+            --branch hotfix/prod-snap-meta-final \
+            --output "$RUNNER_TEMP/tiktok-content-release-intent-v5.json"
+          test -z "$(git status --porcelain --untracked-files=no)"
+      - uses: actions/upload-artifact@v4
+        if: steps.classify.outputs.candidate == 'true'
+        with:
+          name: tiktok-content-reviewed-intent-${{ env.SOURCE_GIT_SHA }}
+          path: ${{ runner.temp }}/tiktok-content-release-intent-v5.json
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,91 @@
+name: Auth Passkey Security
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/auth.py"
+      - "backend/passkey_security.py"
+      - "backend/requirements.txt"
+      - "backend/tests/test_auth_cookie_only_browser_v1.py"
+      - "backend/tests/test_passkey_security_v1.py"
+      - "frontend/src/App.js"
+      - "frontend/src/components/AuthLoadingScreen.jsx"
+      - "frontend/src/components/AuthRecoveryScreen.jsx"
+      - "frontend/src/components/ProtectedRoute.jsx"
+      - "frontend/src/components/ProtectedRoute.test.jsx"
+      - "frontend/src/context/AuthContext.jsx"
+      - "frontend/src/context/AuthContext.test.jsx"
+      - "frontend/src/context/authBootstrap.js"
+      - "frontend/src/context/authBootstrap.test.js"
+      - "frontend/src/lib/api.js"
+      - "frontend/src/lib/api.authRefresh.test.js"
+      - "frontend/src/pages/Login.jsx"
+      - "frontend/src/spaRuntimeRecovery.js"
+      - "frontend/src/spaRuntimeRecovery.test.js"
+      - ".github/workflows/auth-passkey-security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  trusted-device-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+      - name: Install focused auth dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "pytest==9.0.3" \
+            "openpyxl==3.1.5" \
+            "webauthn==2.7.1" \
+            "cryptography==48.0.0" \
+            "pymongo==4.5.0" \
+            "fastapi==0.110.1" \
+            "starlette==0.37.2" \
+            "PyJWT==2.13.0"
+      - name: Import passkey security module
+        env:
+          JWT_SECRET: ci-only-auth-secret
+          FRONTEND_URL: https://salla-analytics.emergent.host
+        run: PYTHONPATH=backend python -c "import passkey_security; print(passkey_security._rp_id())"
+      - name: Run trusted-device security contracts
+        env:
+          JWT_SECRET: ci-only-auth-secret
+          FRONTEND_URL: https://salla-analytics.emergent.host
+        run: >-
+          PYTHONPATH=backend python -m pytest -q
+          backend/tests/test_auth_cookie_only_browser_v1.py
+          backend/tests/test_passkey_security_v1.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --non-interactive
+      - name: Run bounded browser-auth tests
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/context/authBootstrap.test.js
+          src/context/AuthContext.test.jsx
+          src/components/ProtectedRoute.test.jsx
+          src/lib/api.authRefresh.test.js
+          src/metaReviewerMetaPageContract.test.js
+          src/spaRuntimeRecovery.test.js
+      - name: Build production frontend
+        working-directory: frontend
+        env:
+          CI: "false"
+        run: yarn build

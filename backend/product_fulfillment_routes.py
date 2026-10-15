@@ -8,10 +8,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo import ASCENDING
 
+from component_status_policy import (
+    active_component_selector,
+    component_is_active,
+    component_status,
+    require_active_component,
+)
 from product_fulfillment_rules import (
     DEFAULT_LOW_STOCK_THRESHOLD,
+    FROZEN_FULFILLMENT_TYPE,
+    FROZEN_INVENTORY_POLICY,
     FULFILLMENT_TYPES,
     INVENTORY_POLICIES,
+    PRODUCT_OPERATION_CHOICES_FROZEN,
     PRODUCT_OPERATION_PROFILES,
     PRODUCT_RESOURCE_BINDINGS,
     STOCKOUT_POLICIES,
@@ -50,6 +59,7 @@ class ProductOperationProfileRequest(BaseModel):
 class ProductResourceLinkRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     quantity: float = Field(default=1.0, gt=0, le=100000)
+    supplier_invoice_required: bool | None = None
 
 
 async def ensure_product_fulfillment_indexes(db: Any) -> None:
@@ -111,6 +121,11 @@ async def _operations_view(
         {"user_id": user_id, "salla_product_id": salla_id},
         {"_id": 0},
     ).sort("created_at", 1).to_list(length=1000)
+    linked_resource_ids = {
+        str(row.get("resource_id"))
+        for row in product_links
+        if row.get("resource_id")
+    }
     option_links = await db[BINDINGS].find(
         {
             "user_id": user_id,
@@ -120,8 +135,19 @@ async def _operations_view(
         },
         {"_id": 0},
     ).to_list(length=5000)
+    preserved_resource_ids = linked_resource_ids | {
+        str(row.get("resource_id"))
+        for row in option_links
+        if row.get("mode") == "resource" and row.get("resource_id")
+    }
     resources = await db[RESOURCES].find(
-        {"user_id": user_id},
+        {
+            "user_id": user_id,
+            "$or": [
+                active_component_selector(),
+                {"id": {"$in": sorted(preserved_resource_ids)}},
+            ],
+        },
         {"_id": 0},
     ).sort("name", 1).to_list(length=2000)
     product_by_resource = {
@@ -144,6 +170,8 @@ async def _operations_view(
         product_link = product_by_resource.get(resource_id)
         option_conflicts = option_by_resource.get(resource_id, [])
         row.update({
+            "status": component_status(row),
+            "is_active": component_is_active(row),
             "linked_to_product": bool(product_link),
             "product_quantity": (
                 _number(product_link.get("quantity"))
@@ -151,8 +179,12 @@ async def _operations_view(
                 else None
             ),
             "option_links": option_conflicts,
-            "available_for_product_link": not bool(option_conflicts),
-            "available_for_option_link": not bool(product_link),
+            "available_for_product_link": (
+                component_is_active(row) and not bool(option_conflicts)
+            ),
+            "available_for_option_link": (
+                component_is_active(row) and not bool(product_link)
+            ),
         })
         resource_rows.append(row)
 
@@ -190,6 +222,15 @@ async def _operations_view(
     # Legacy product-level warehouse values are intentionally hidden and
     # ignored. Warehouse resolution belongs to inventory/order-item routing.
     serialized_profile.pop("warehouse_id", None)
+    if PRODUCT_OPERATION_CHOICES_FROZEN:
+        serialized_profile.update({
+            "fulfillment_type": FROZEN_FULFILLMENT_TYPE,
+            "inventory_policy": FROZEN_INVENTORY_POLICY,
+            "stockout_policy": STOCKOUT_POLICY_CLOSE,
+            "low_stock_threshold": DEFAULT_LOW_STOCK_THRESHOLD,
+            "configured": True,
+            "operation_choices_frozen": True,
+        })
 
     return {
         "product": {
@@ -210,6 +251,9 @@ async def _operations_view(
             "component_alone_requires_preparation": False,
             "service_can_force_preparation": True,
             "default_when_unconfigured": "requires_preparation",
+            "operation_choices_frozen": (
+                PRODUCT_OPERATION_CHOICES_FROZEN
+            ),
             "inventory_and_preparation_are_independent": True,
             "stockout_policy_applies_to_tracked_products_only": True,
             "product_service_applies_to_every_order": True,
@@ -253,6 +297,17 @@ def make_product_fulfillment_router(
         await ensure_product_fulfillment_indexes(db)
         user_id = str(user["id"])
         product = await _product(db, user_id, product_id)
+        if PRODUCT_OPERATION_CHOICES_FROZEN:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "product_operation_choices_frozen",
+                    "message": (
+                        "خيارات تشغيل المنتج مجمّدة مؤقتًا؛ "
+                        "جميع المنتجات تحتاج تجهيزًا."
+                    ),
+                },
+            )
         try:
             fulfillment_type = normalize_fulfillment_type(
                 payload.fulfillment_type
@@ -363,11 +418,7 @@ def make_product_fulfillment_router(
             {"user_id": user_id, "id": resource_id},
             {"_id": 0},
         )
-        if not resource:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "component_not_found"},
-            )
+        require_active_component(resource)
         salla_id = _product_key(product)
         option_conflict = await db[BINDINGS].find_one(
             {
@@ -408,6 +459,15 @@ def make_product_fulfillment_router(
             "quantity": float(payload.quantity),
             "updated_at": now,
         }
+        if payload.supplier_invoice_required is not None:
+            patch.update({
+                "supplier_invoice_required_manual": bool(
+                    payload.supplier_invoice_required
+                ),
+                "supplier_invoice_required": bool(
+                    payload.supplier_invoice_required
+                ),
+            })
         await db[PRODUCT_RESOURCE_BINDINGS].update_one(
             selector,
             {
@@ -426,6 +486,11 @@ def make_product_fulfillment_router(
             "salla_product_id": salla_id,
             "resource_id": resource_id,
             "quantity": float(payload.quantity),
+            "supplier_invoice_required": (
+                bool(payload.supplier_invoice_required)
+                if payload.supplier_invoice_required is not None
+                else None
+            ),
             "created_at": now,
         })
         return {

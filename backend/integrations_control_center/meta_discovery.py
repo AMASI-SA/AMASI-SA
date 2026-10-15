@@ -92,6 +92,7 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
     pixels: list[dict[str, Any]] = []
     catalogs: list[dict[str, Any]] = []
     instagram_accounts: list[dict[str, Any]] = []
+    instagram_account_ids: set[str] = set()
     errors: list[dict[str, str]] = []
 
     async with httpx.AsyncClient(timeout=25.0) as client:
@@ -127,6 +128,37 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                     "primary_page": item.get("primary_page"),
                 }
             )
+
+        # Messaging and comment webhooks are attached to the professional
+        # Instagram account linked to a Facebook Page. Discover that canonical
+        # relationship independently from advertising-account access.
+        try:
+            page_rows = await _get_all(
+                client,
+                "me/accounts",
+                access_token=access_token,
+                fields="id,name,instagram_business_account{id,username}",
+                limit=200,
+            )
+            for page in page_rows:
+                instagram = page.get("instagram_business_account")
+                if not isinstance(instagram, dict):
+                    continue
+                ig_id = str(instagram.get("id") or "").strip()
+                if not ig_id or ig_id in instagram_account_ids:
+                    continue
+                instagram_account_ids.add(ig_id)
+                instagram_accounts.append(
+                    {
+                        "external_asset_id": ig_id,
+                        "instagram_account_id": ig_id,
+                        "display_name": instagram.get("username") or ig_id,
+                        "page_id": str(page.get("id") or "").strip() or None,
+                        "discovery_source": "facebook_page",
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"asset": "instagram_pages", "code": str(exc)})
 
         # Keep the required account-discovery call limited to broadly available
         # account metadata. Financial fields are requested separately below so
@@ -244,13 +276,15 @@ async def discover_meta_assets(access_token: str) -> dict[str, Any]:
                 )
                 for item in ig_rows:
                     ig_id = str(item.get("id") or "").strip()
-                    if ig_id:
+                    if ig_id and ig_id not in instagram_account_ids:
+                        instagram_account_ids.add(ig_id)
                         instagram_accounts.append(
                             {
                                 "external_asset_id": ig_id,
                                 "instagram_account_id": ig_id,
                                 "display_name": item.get("username") or ig_id,
                                 "ad_account_id": account_id,
+                                "discovery_source": "ad_account",
                             }
                         )
             except Exception as exc:  # noqa: BLE001

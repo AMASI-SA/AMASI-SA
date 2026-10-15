@@ -12,6 +12,12 @@ import {
     publishProductCreationDraft,
     updateProductCreationDraft,
 } from "../../services/mezanProductsV2";
+import {
+    FROZEN_FULFILLMENT_TYPE,
+    FROZEN_INVENTORY_POLICY,
+    PRODUCT_OPERATION_CHOICES_ENABLED,
+    applyFrozenProductOperationDefaults,
+} from "../../lib/productOperationFreeze";
 import ProductCreationOptionsEditor from "./ProductCreationOptionsEditor";
 import ProductCreationOptionsPreview from "./ProductCreationOptionsPreview";
 import {
@@ -28,8 +34,8 @@ const EMPTY_FORM = {
     weight: "",
     options: [],
     image_url: "",
-    fulfillment_type: "",
-    inventory_policy: "",
+    fulfillment_type: FROZEN_FULFILLMENT_TYPE,
+    inventory_policy: FROZEN_INVENTORY_POLICY,
     stockout_policy: "close_when_out_of_stock",
     low_stock_threshold: 3,
 };
@@ -92,17 +98,22 @@ export default function ProductCreationPanel({ onCreated }) {
         form.name.trim().length >= 2
         && form.sku.trim()
         && form.price !== ""
-        && form.fulfillment_type
-        && form.inventory_policy
         && PRODUCT_TYPE_LABELS[form.product_type]
         && (form.product_type !== "service" || Number(form.weight) > 0)
         && !optionsError
         && (
-            form.inventory_policy !== "branch_stock_required"
+            !PRODUCT_OPERATION_CHOICES_ENABLED
             || (
-                form.stockout_policy
-                && Number.isInteger(Number(form.low_stock_threshold))
-                && Number(form.low_stock_threshold) >= 0
+                form.fulfillment_type
+                && form.inventory_policy
+                && (
+                    form.inventory_policy !== "branch_stock_required"
+                    || (
+                        form.stockout_policy
+                        && Number.isInteger(Number(form.low_stock_threshold))
+                        && Number(form.low_stock_threshold) >= 0
+                    )
+                )
             )
         )
     ), [form, optionsError]);
@@ -116,7 +127,7 @@ export default function ProductCreationPanel({ onCreated }) {
         if (!canSave) return;
         setBusy(true);
         try {
-            const payload = {
+            const payload = applyFrozenProductOperationDefaults({
                 name: form.name,
                 sku: form.sku,
                 price: Number(form.price),
@@ -130,7 +141,7 @@ export default function ProductCreationPanel({ onCreated }) {
                 inventory_policy: form.inventory_policy,
                 stockout_policy: form.stockout_policy,
                 low_stock_threshold: Number(form.low_stock_threshold),
-            };
+            });
             const result = editingDraftId
                 ? await updateProductCreationDraft(editingDraftId, payload)
                 : await createProductCreationDraft(payload);
@@ -179,14 +190,17 @@ export default function ProductCreationPanel({ onCreated }) {
         if (!activeDraft) return;
         const inventoryNotice = activeDraft.inventory_policy === "branch_stock_required"
             ? activeDraft.stockout_policy === "allow_preorder"
-                ? "سيُنشأ بحالة نفد المخزون، ويحفظ ميزان سياسة الحجز المسبق حتى تُدخل مخزون فرع. عرض الحجز للعميل في سلة ليس نشرًا تلقائيًا بعد."
+                ? "سيُنشأ بحالة نفد المخزون، ويحفظ ميزان سياسة الحجز المسبق حتى تُدخل مخزون فرع."
                 : "سيُنشأ بحالة نفد المخزون حتى تُدخل كمية في أحد الفروع."
             : "سيُنشأ دون تتبع مخزون للمنتج النهائي.";
         const preparationNotice = activeDraft.fulfillment_type === "requires_preparation"
             ? "مساره الافتراضي يحتاج تجهيزًا."
             : "مساره الافتراضي مباشر، وأي خدمة مرتبطة به يمكن أن تدخله التجهيز.";
+        const operationNotice = PRODUCT_OPERATION_CHOICES_ENABLED
+            ? `${inventoryNotice} ${preparationNotice}`
+            : "سيكون مساره يحتاج تجهيزًا.";
         const confirmed = window.confirm(
-            `سيتم الآن إنشاء المنتج "${activeDraft.name}" في سلة. ${inventoryNotice} ${preparationNotice} هل تريد المتابعة؟`,
+            `سيتم الآن إنشاء المنتج "${activeDraft.name}" في سلة، ${operationNotice} هل تريد المتابعة؟`,
         );
         if (!confirmed) return;
         setBusy(true);
@@ -299,6 +313,15 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <span className="block text-xs font-normal text-slate-500">اختر النوع قبل الإنشاء؛ لا يمكن تغييره في سلة لاحقًا.</span>
                             </label>
                             <label className="space-y-1 text-sm font-bold">
+                                <span>وزن الشحن (كجم)</span>
+                                <input type="number" min="0.001" max="1000000" step="0.001" value={form.weight} onChange={(event) => update("weight", event.target.value)} required={form.product_type === "service"} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
+                                <span className="block text-xs font-normal text-slate-500">أدخل الوزن الفعلي؛ مطلوب للخدمة حسب الطلب التي تُشحن للعميل.</span>
+                            </label>
+                            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold leading-6 text-violet-950">
+                                خيارات التشغيل والمخزون مجمّدة مؤقتًا؛ كل منتج جديد يدخل مسار التجهيز تلقائيًا.
+                            </div>
+                            {PRODUCT_OPERATION_CHOICES_ENABLED && <>
+                                <label className="space-y-1 text-sm font-bold">
                                 <span>المسار الافتراضي للتنفيذ</span>
                                 <select value={form.fulfillment_type} onChange={(event) => update("fulfillment_type", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
                                     <option value="" disabled>اختر نوع التنفيذ</option>
@@ -306,13 +329,8 @@ export default function ProductCreationPanel({ onCreated }) {
                                     <option value="instant">مباشر للشحن ما لم توجد خدمة</option>
                                 </select>
                                 <span className="block text-xs font-normal leading-5 text-slate-500">الخدمة المرتبطة بالمنتج كله تُدخل جميع طلباته التجهيز، والخدمة المرتبطة بخيار تُطبق عند اختياره.</span>
-                            </label>
-                            <label className="space-y-1 text-sm font-bold">
-                                <span>وزن الشحن (كجم)</span>
-                                <input type="number" min="0.001" max="1000000" step="0.001" value={form.weight} onChange={(event) => update("weight", event.target.value)} required={form.product_type === "service"} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
-                                <span className="block text-xs font-normal text-slate-500">أدخل الوزن الفعلي؛ مطلوب للخدمة حسب الطلب التي تُشحن للعميل.</span>
-                            </label>
-                            <label className="space-y-1 text-sm font-bold">
+                                </label>
+                                <label className="space-y-1 text-sm font-bold">
                                 <span>سياسة مخزون المنتج النهائي</span>
                                 <select value={form.inventory_policy} onChange={(event) => update("inventory_policy", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
                                     <option value="" disabled>اختر سياسة المخزون</option>
@@ -320,11 +338,11 @@ export default function ProductCreationPanel({ onCreated }) {
                                     <option value="finished_goods_inventory_not_tracked">لا يتتبع مخزون المنتج النهائي</option>
                                 </select>
                                 <span className="block text-xs font-normal leading-5 text-slate-500">تتبع المخزون مستقل عن التجهيز؛ يمكن حجز السلسال من المخزون ثم إرساله لخدمة كتابة الاسم.</span>
-                            </label>
-                            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-6 text-sky-950">
+                                </label>
+                                <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-6 text-sky-950">
                                 لا تُدخل الكمية هنا. بعد إنشاء المنتج، تُسجل كل كمية من صفحة المخزون داخل الفرع الذي توجد فيه فعليًا.
-                            </div>
-                            {form.inventory_policy === "branch_stock_required" && (
+                                </div>
+                                {form.inventory_policy === "branch_stock_required" && (
                                 <>
                                     <label className="space-y-1 text-sm font-bold">
                                         <span>عند نفاد المخزون</span>
@@ -340,7 +358,8 @@ export default function ProductCreationPanel({ onCreated }) {
                                         <span className="block text-xs font-normal leading-5 text-slate-500">مثال: 3 يعني يبدأ التحذير عندما يصبح المتاح 3 قطع أو أقل.</span>
                                     </label>
                                 </>
-                            )}
+                                )}
+                            </>}
                             <label className="space-y-1 text-sm font-bold lg:col-span-2">
                                 <span>رابط صورة HTTPS (اختياري)</span>
                                 <input value={form.image_url} onChange={(event) => update("image_url", event.target.value)} dir="ltr" className="h-11 w-full rounded-xl border px-3 text-left outline-none focus:border-indigo-400" placeholder="https://…" />
@@ -367,9 +386,12 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <div><div className="text-xs text-slate-500">نوع المنتج</div><div className="font-black">{PRODUCT_TYPE_LABELS[activeDraft.product_type || "product"]}</div></div>
                                 <div><div className="text-xs text-slate-500">SKU</div><div className="font-black">{activeDraft.sku}</div></div>
                                 <div><div className="text-xs text-slate-500">السعر</div><div className="font-black">{activeDraft.price} ر.س</div></div>
-                                <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">{activeDraft.fulfillment_type === "instant" ? "مباشر افتراضيًا" : "يحتاج تجهيز"}</div></div>
-                                <div><div className="text-xs text-slate-500">المخزون</div><div className="font-black">{activeDraft.inventory_policy === "branch_stock_required" ? "يتتبع الفروع" : "لا يتتبع النهائي"}</div></div>
-                                <div><div className="text-xs text-slate-500">عند النفاد</div><div className="font-black">{activeDraft.inventory_policy !== "branch_stock_required" ? "غير مطبق" : activeDraft.stockout_policy === "allow_preorder" ? "حجز مسبق" : "إيقاف البيع"}</div></div>
+                                {!PRODUCT_OPERATION_CHOICES_ENABLED && <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">يحتاج تجهيز (ثابت مؤقتًا)</div></div>}
+                                {PRODUCT_OPERATION_CHOICES_ENABLED && <>
+                                    <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">{activeDraft.fulfillment_type === "instant" ? "مباشر افتراضيًا" : "يحتاج تجهيز"}</div></div>
+                                    <div><div className="text-xs text-slate-500">المخزون</div><div className="font-black">{activeDraft.inventory_policy === "branch_stock_required" ? "يتتبع الفروع" : "لا يتتبع النهائي"}</div></div>
+                                    <div><div className="text-xs text-slate-500">عند النفاد</div><div className="font-black">{activeDraft.inventory_policy !== "branch_stock_required" ? "غير مطبق" : activeDraft.stockout_policy === "allow_preorder" ? "حجز مسبق" : "إيقاف البيع"}</div></div>
+                                </>}
                                 <div><div className="text-xs text-slate-500">الحالة</div><div className="font-black">{STATUS_LABELS[activeDraft.status] || activeDraft.status}</div></div>
                             </div>
 
@@ -380,7 +402,8 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
                                     <div className="flex items-center gap-2 font-black"><CheckCircle /> المعاينة سليمة ولم تُجرِ أي كتابة خارجية</div>
                                     <div className="mt-2">
-                                        {activeDraft.inventory_policy === "branch_stock_required"
+                                        {!PRODUCT_OPERATION_CHOICES_ENABLED && <>سينشأ المنتج قابلًا للبيع، ومساره <b>يحتاج تجهيزًا</b>.</>}
+                                        {PRODUCT_OPERATION_CHOICES_ENABLED && <>{activeDraft.inventory_policy === "branch_stock_required"
                                             ? activeDraft.stockout_policy === "allow_preorder"
                                                 ? <>سينشأ بحالة <b>نفد المخزون</b>، ويحفظ ميزان سياسة <b>الحجز المسبق</b> لمسار الطلب. عرض الحجز للعميل في سلة يحتاج خطوة نشر مستقلة ولم تنفذها هذه المعاينة.</>
                                                 : <>سينشأ المنتج بحالة <b>نفد المخزون</b>، ولن يُباع حتى تُدخل مخزونًا في أحد الفروع.</>
@@ -389,6 +412,7 @@ export default function ProductCreationPanel({ onCreated }) {
                                         {activeDraft.fulfillment_type === "requires_preparation"
                                             ? <>مساره الافتراضي <b>يحتاج تجهيزًا</b>.</>
                                             : <>مساره الافتراضي <b>مباشر للشحن</b>، لكن الخدمات المرتبطة به تظل قادرة على إدخاله التجهيز.</>}
+                                        </>}
                                         {!activeDraft.image_urls?.length && <> سيبقى مخفيًا في سلة حتى تُضاف له صورة.</>}
                                     </div>
                                 </div>

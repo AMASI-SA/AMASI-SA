@@ -30,6 +30,7 @@ const TYPE_LABEL = {
     high_courier_balance: "رصيد شحن مرتفع",
     unmatched_order: "طلب غير مطابق",
     high_ad_debt: "مديونية إعلانات مرتفعة",
+    fulfillment_stop: "إيقاف تجهيز طلب",
 };
 
 

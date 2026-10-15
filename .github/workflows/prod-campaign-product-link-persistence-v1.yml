@@ -1,0 +1,57 @@
+name: Production Campaign Native Product Links V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/components/marketing/CampaignManagerTable.jsx"
+      - "frontend/src/components/marketing/CampaignManagerTable.test.jsx"
+      - "frontend/src/campaignProfitabilityProductNavigation.js"
+      - "frontend/src/campaignProfitabilityProductNavigation.test.js"
+      - ".github/workflows/prod-campaign-product-link-persistence-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test native campaign product navigation
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/campaignProfitabilityProductNavigation.test.js
+          src/components/marketing/CampaignManagerTable.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce React product-link contract
+        working-directory: .
+        run: |
+          TABLE=frontend/src/components/marketing/CampaignManagerTable.jsx
+          NAV=frontend/src/campaignProfitabilityProductNavigation.js
+          INDEX=frontend/src/index.js
+          grep -q 'campaign-profitability-product-link' "$TABLE"
+          grep -q 'فتح المنتج وإضافة التكلفة' "$TABLE"
+          grep -q 'rememberSnapchatRangeBeforeProductNavigation' "$TABLE"
+          grep -q 'rendered_by_react: true' "$NAV"
+          grep -q 'mutation_observer_used: false' "$NAV"
+          ! grep -q 'campaignProfitabilityProductLinkPersistence' "$INDEX"
+          ! grep -q 'campaignProfitabilityProductCostLink' "$INDEX"
+          ! grep -Eq 'general_ledger|qoyod|campaign.*(update|pause|activate)' "$TABLE" "$NAV"

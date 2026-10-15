@@ -34,6 +34,12 @@ from integrations.qoyod.eligible_orders import (
     QOYOD_SYNC_START_DATE, _parse_iso_date,
 )
 from integrations.qoyod.unsent_orders import _is_real
+from integrations.qoyod.candidate_orders import (
+    build_candidate_audit,
+    load_qoyod_reference_evidence,
+    reference_set_sha256,
+    resolve_candidate_date_range,
+)
 from integrations.qoyod_manual.missing_diagnostics import (
     _status_key_from_unified, _unified_salla_date,
 )
@@ -107,7 +113,7 @@ async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
     projection = {
         "_id": 0, "order_number": 1, "order_id": 1,
         "order_status": 1, "order_status_slug": 1,
-        "order_date": 1, "created_at": 1,
+        "order_date": 1, "order_date_inferred": 1, "created_at": 1,
         "payment_method": 1, "total_amount": 1, "currency": 1,
         "customer_name": 1, "customer_mobile": 1,
     }
@@ -116,6 +122,8 @@ async def _load_eligible_unified(db, *, user_id: str) -> dict[str, dict]:
     async for u in cursor:
         on = str(u.get("order_number") or "").strip()
         if not on:
+            continue
+        if u.get("order_date_inferred"):
             continue
         d = _unified_salla_date(u)
         if d is None or d < _FLOOR_DATE:
@@ -168,63 +176,213 @@ async def _load_local_qoyod_invoices(
     return out
 
 
-async def _has_marker_in_inbox(
-    db, *, markers_user_id: str, order_number: str,
-) -> tuple[bool, Optional[str], Optional[str]]:
-    """Helper signal ONLY. Is there ANY inbox trace for this order
-    that carries a real Plan-B / legacy marker?
+def _normalize_marker_user_ids(marker_user_ids: list[str]) -> list[str]:
+    """Return unique, non-empty inbox owner ids without changing order."""
+    normalized_user_ids = list(dict.fromkeys(
+        str(value).strip() for value in marker_user_ids
+        if str(value).strip()
+    ))
+    return normalized_user_ids
 
-    Returns (has_marker, invoice_marker_id, payment_marker_id).
+
+def _marker_owner_query(normalized_user_ids: list[str]) -> str | dict:
+    """Build the tenant-isolated owner part of the inbox query."""
+    owner_query: str | dict = normalized_user_ids[0]
+    if len(normalized_user_ids) > 1:
+        owner_query = {"$in": normalized_user_ids}
+    return owner_query
+
+
+async def _load_inbox_marker_rows(
+    db, *, marker_user_ids: list[str], order_numbers: list[str],
+) -> dict[str, list[dict]]:
+    """Bulk-load helper marker rows for exact Salla order numbers.
+
+    Reconciliation can contain thousands of eligible orders.  Loading the
+    inbox once keeps this helper signal O(1) database round-trips instead of
+    issuing one query per matched invoice.  The query remains strictly scoped
+    to the authenticated Qoyod/settings owner and current Salla orders owner.
     """
+    normalized_user_ids = _normalize_marker_user_ids(marker_user_ids)
+    normalized_order_numbers = list(dict.fromkeys(
+        str(value).strip() for value in order_numbers
+        if str(value).strip()
+    ))
+    if not normalized_user_ids or not normalized_order_numbers:
+        return {}
+
     cursor = db.integration_inbox.find(
         {
-            "user_id": markers_user_id,
-            "salla_order_number": order_number,
+            "user_id": _marker_owner_query(normalized_user_ids),
+            "salla_order_number": {"$in": normalized_order_numbers},
             "$or": [
-                {"manual_qoyod_invoice_id": {"$nin": [None, ""]}},
-                {"manual_qoyod_payment_id": {"$nin": [None, ""]}},
-                {"qoyod_invoice_id":        {"$nin": [None, ""]}},
+                {"manual_qoyod_invoice_id": {
+                    "$exists": True, "$nin": [None, ""]}},
+                {"manual_qoyod_payment_id": {
+                    "$exists": True, "$nin": [None, ""]}},
+                {"qoyod_invoice_id": {
+                    "$exists": True, "$nin": [None, ""]}},
             ],
         },
-        {"_id": 0, "manual_qoyod_invoice_id": 1,
+        {"_id": 0, "salla_order_number": 1,
+         "manual_qoyod_invoice_id": 1,
          "manual_qoyod_payment_id": 1, "qoyod_invoice_id": 1},
     )
+
+    rows_by_order: dict[str, list[dict]] = {}
+    allowed_order_numbers = set(normalized_order_numbers)
+    async for row in cursor:
+        order_number = str(row.get("salla_order_number") or "").strip()
+        if order_number not in allowed_order_numbers:
+            continue
+        rows_by_order.setdefault(order_number, []).append(row)
+    return rows_by_order
+
+
+def _resolve_inbox_marker_rows(
+    rows: list[dict], *, expected_invoice_id: Any = None,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Resolve one order's preloaded rows using exact invoice-id semantics."""
     inv_marker: Optional[str] = None
     pay_marker: Optional[str] = None
-    async for r in cursor:
-        if inv_marker is None:
-            mid = r.get("manual_qoyod_invoice_id")
-            if mid and _is_real(mid):
-                inv_marker = str(mid)
-            else:
-                lid = r.get("qoyod_invoice_id")
-                if lid and _is_real(lid):
-                    inv_marker = str(lid)
-        if pay_marker is None:
-            pid = r.get("manual_qoyod_payment_id")
-            if pid and _is_real(pid):
-                pay_marker = str(pid)
-        if inv_marker and pay_marker:
+    expected_id = (
+        str(expected_invoice_id).strip()
+        if expected_invoice_id not in (None, "") else None
+    )
+    for r in rows:
+        row_invoice_ids = [
+            str(value)
+            for value in (
+                r.get("manual_qoyod_invoice_id"),
+                r.get("qoyod_invoice_id"),
+            )
+            if value and _is_real(value)
+        ]
+        row_invoice_id: Optional[str] = None
+        if expected_id is not None and expected_id in row_invoice_ids:
+            row_invoice_id = expected_id
+        elif expected_id is None and row_invoice_ids:
+            row_invoice_id = row_invoice_ids[0]
+        # A stale marker for another Qoyod invoice must not satisfy the
+        # reconciliation row merely because it shares an order number.
+        if row_invoice_id is None:
+            continue
+        inv_marker = row_invoice_id
+        pid = r.get("manual_qoyod_payment_id")
+        if pay_marker is None and pid and _is_real(pid):
+            pay_marker = str(pid)
+        if inv_marker and (pay_marker or expected_id is not None):
             break
     return (inv_marker is not None), inv_marker, pay_marker
+
+
+async def _has_marker_in_inbox(
+    db, *, marker_user_ids: list[str], order_number: str,
+    expected_invoice_id: Any = None,
+) -> tuple[bool, Optional[str], Optional[str]]:
+    """Helper signal ONLY. Is there ANY real marker for this order?
+
+    Kept as a single-order compatibility helper for focused diagnostics and
+    tests.  The reconciliation report itself uses `_load_inbox_marker_rows`
+    once for all matched orders.
+    """
+    order_number = str(order_number or "").strip()
+    rows_by_order = await _load_inbox_marker_rows(
+        db,
+        marker_user_ids=marker_user_ids,
+        order_numbers=[order_number],
+    )
+    return _resolve_inbox_marker_rows(
+        rows_by_order.get(order_number, []),
+        expected_invoice_id=expected_invoice_id,
+    )
 
 
 def _fmt(v):
     return None if v is None else round(float(v), 2)
 
 
+def _invoice_row_in_range(inv: dict, *, start: date, end: date) -> bool:
+    issue_date = _parse_iso_date(inv.get("issue_date"))
+    return issue_date is not None and start <= issue_date <= end
+
+
 async def run_reconciliation_v2(
     db, *,
     orders_user_id: str,
     markers_user_id: Optional[str] = None,
+    from_date: Any = None,
+    to_date: Any = None,
+    days: int = 90,
+    now: Optional[datetime] = None,
 ) -> dict:
     """The reconciliation report itself. Read-only."""
     if markers_user_id is None:
         markers_user_id = orders_user_id
+    marker_user_ids = list(dict.fromkeys(
+        value for value in (
+            str(markers_user_id or "").strip(),
+            str(orders_user_id or "").strip(),
+        ) if value
+    ))
 
-    unified = await _load_eligible_unified(db, user_id=orders_user_id)
-    local_inv = await _load_local_qoyod_invoices(
-        db, markers_user_id=markers_user_id)
+    date_range = resolve_candidate_date_range(
+        from_date=from_date,
+        to_date=to_date,
+        days=days,
+        now=now,
+    )
+    audit = await build_candidate_audit(
+        db,
+        orders_user_id=str(orders_user_id),
+        markers_user_id=str(markers_user_id),
+        marker_user_ids=marker_user_ids,
+        from_date=date_range.from_date,
+        to_date=date_range.to_date,
+        days=days,
+        now=now,
+    )
+    unified = {
+        row["order_number"]: {
+            **(row.get("unified_order") or {}),
+            "order_number": row["order_number"],
+            "order_date": row.get("order_date"),
+            "order_status": row.get("current_status"),
+            "total_amount": row.get("total_amount"),
+            "customer_name": row.get("customer_name"),
+        }
+        for row in audit["orders"]
+    }
+    invoice_evidence = await load_qoyod_reference_evidence(
+        db, markers_user_id=str(markers_user_id)
+    )
+    local_inv: dict[str, dict] = {}
+    for reference, invoice_rows in invoice_evidence["by_reference"].items():
+        if not invoice_rows:
+            continue
+        invoice = dict(invoice_rows[0])
+        invoice["_match_key"] = reference
+        invoice["_match_source"] = invoice.get(
+            "reference_match_provenance", "qoyod.reference"
+        )
+        local_inv[reference] = invoice
+    for invoice in invoice_evidence["unreferenced"]:
+        key = f"__ORPHAN__:{invoice.get('qoyod_invoice_id')}"
+        orphan = dict(invoice)
+        orphan["_match_key"] = None
+        orphan["_match_source"] = invoice.get(
+            "reference_match_provenance", "orphan"
+        )
+        local_inv[key] = orphan
+
+    # The candidate audit already bulk-loaded every inbox trace for the exact
+    # eligible set. Reuse that evidence instead of issuing a second query or
+    # falling back to a per-invoice lookup.
+    inbox_marker_rows = {
+        proof["order_number"]: list(proof.get("inbox_rows") or [])
+        for proof in audit["orders"]
+        if proof["order_number"] in local_inv
+    }
 
     counts: dict[str, int] = {k: 0 for k in _ALL_STATUSES}
     rows: list[dict] = []
@@ -282,8 +440,10 @@ async def run_reconciliation_v2(
 
         # Marker check — helper signal only. If invoice exists in
         # قيود but NO marker in inbox → Mezan needs a Repair Marker.
-        has_marker, inv_marker, pay_marker = await _has_marker_in_inbox(
-            db, markers_user_id=markers_user_id, order_number=on)
+        has_marker, inv_marker, pay_marker = _resolve_inbox_marker_rows(
+            inbox_marker_rows.get(on, []),
+            expected_invoice_id=qoyod_invoice_id,
+        )
 
         # Debug bag (user directive 2026-07-09): STRICT match by
         # `order_number == reference` — proves the match without
@@ -343,6 +503,10 @@ async def run_reconciliation_v2(
         if ref.startswith("__ORPHAN__:") or ref not in claimed_refs:
             if not ref.startswith("__ORPHAN__:") and ref in claimed_refs:
                 continue
+            if not _invoice_row_in_range(
+                inv, start=date_range.from_date, end=date_range.to_date
+            ):
+                continue
             counts[QOYOD_ONLY] += 1
             match_key = inv.get("_match_key")
             match_source = inv.get("_match_source", "orphan")
@@ -391,15 +555,70 @@ async def run_reconciliation_v2(
     all_matched = all(counts[k] == 0 for k in _ALL_STATUSES
                        if k != MATCHED)
 
+    eligible_refs = set(unified)
+    exact_invoice_refs = set(invoice_evidence["references"])
+    sent_refs = eligible_refs & exact_invoice_refs
+    unsent_refs = eligible_refs - exact_invoice_refs
+    qoyod_only_refs = {
+        reference
+        for reference, invoice_rows in invoice_evidence[
+            "by_reference"
+        ].items()
+        if reference not in eligible_refs
+        and invoice_rows
+        and _invoice_row_in_range(
+            invoice_rows[0],
+            start=date_range.from_date,
+            end=date_range.to_date,
+        )
+    }
     return {
         "ok":                    True,
         "run_at":                datetime.now(timezone.utc).isoformat(),
         "sync_start_date":       _FLOOR_DATE.isoformat(),
+        "from_date":             date_range.from_date.isoformat(),
+        "to_date":               date_range.to_date.isoformat(),
+        "source_authority":      "unified_orders",
+        "match_contract":        audit["match_contract"],
+        "captured_at":           audit["captured_at"],
+        "snapshot_fingerprint":  audit["snapshot_fingerprint"],
+        "status_counts":         audit["status_counts"],
+        "status_display_counts": audit["status_display_counts"],
+        "worker_candidate_status_counts": audit[
+            "worker_candidate_status_counts"
+        ],
+        "worker_candidate_status_display_counts": audit[
+            "worker_candidate_status_display_counts"
+        ],
         "counts":                counts,
         "salla_orders_total":    len(unified),
         "qoyod_invoices_total":  len(local_inv),
+        "set_counts": {
+            "eligible": len(eligible_refs),
+            "sent_exact": len(sent_refs),
+            "needs_plan_b_send": len(unsent_refs),
+            "qoyod_only": len(qoyod_only_refs),
+        },
+        "reference_sets": {
+            "eligible": sorted(eligible_refs),
+            "sent_exact": sorted(sent_refs),
+            "needs_plan_b_send": sorted(unsent_refs),
+            "qoyod_only": sorted(qoyod_only_refs),
+        },
+        "reference_hashes": {
+            "eligible": reference_set_sha256(eligible_refs),
+            "sent_exact": reference_set_sha256(sent_refs),
+            "needs_plan_b_send": reference_set_sha256(unsent_refs),
+            "qoyod_only": reference_set_sha256(qoyod_only_refs),
+        },
+        "duplicate_qoyod_references": {
+            ref: len(rows) for ref, rows in
+            invoice_evidence["duplicate_references"].items()
+        },
+        "invariant_holds": len(eligible_refs) == (
+            len(sent_refs) + len(unsent_refs)
+        ),
         "all_matched":           all_matched,
         "rows":                  rows,
         "outcome_labels":        list(_ALL_STATUSES),
     }
-

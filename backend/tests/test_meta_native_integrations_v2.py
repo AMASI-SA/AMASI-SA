@@ -213,6 +213,21 @@ class GraphClient:
                     ]
                 }
             )
+        if url.endswith("/me/accounts"):
+            return FakeResponse(
+                {
+                    "data": [
+                        {
+                            "id": "page_1",
+                            "name": "Amasi Page",
+                            "instagram_business_account": {
+                                "id": "ig_1",
+                                "username": "amasi.sa",
+                            },
+                        }
+                    ]
+                }
+            )
         if url.endswith("/act_1/adspixels"):
             return FakeResponse(
                 {
@@ -313,6 +328,7 @@ async def test_meta_start_url_is_signed_one_time_and_requests_business_scopes(
     ]
     assert "ads_management" in query["scope"][0]
     assert "business_management" in query["scope"][0]
+    assert "pages_messaging" in query["scope"][0]
     state = query["state"][0]
     assert oauth._decode_state(state)["user_id"] == "owner-1"
     await oauth._consume_state(db, state)
@@ -353,6 +369,8 @@ async def test_meta_discovery_reads_accounts_pixels_catalogs_and_uses_proof(
     assert discovery["pixels"][0]["pixel_id"] == "pixel_1"
     assert discovery["catalogs"][0]["catalog_id"] == "catalog_1"
     assert discovery["instagram_accounts"][0]["instagram_account_id"] == "ig_1"
+    assert discovery["instagram_accounts"][0]["page_id"] == "page_1"
+    assert discovery["instagram_accounts"][0]["discovery_source"] == "facebook_page"
     assert all(call[1].get("appsecret_proof") for call in GraphClient.calls)
 
 

@@ -127,8 +127,9 @@ class FakeDB:
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload, status_code=200, *, headers=None):
         self.payload, self.status_code, self.text = payload, status_code, repr(payload)
+        self.headers = dict(headers or {})
 
     def json(self):
         return deepcopy(self.payload)
@@ -208,6 +209,30 @@ class UnauthorizedClient(ProviderClient):
     async def get(self, url, **kwargs):
         type(self).calls.append((url, deepcopy(kwargs)))
         return FakeResponse({"request_status": "FAILURE"}, status_code=401)
+
+    async def post(self, url, **kwargs):
+        type(self).calls.append((url, deepcopy(kwargs)))
+        return FakeResponse({
+            "access_token": "refreshed-access",
+            "refresh_token": "refreshed-refresh",
+            "expires_in": 3600,
+        })
+
+
+class SevenDayWindowClient(ProviderClient):
+    async def get(self, url, **kwargs):
+        path = urlsplit(url).path
+        if path.endswith("/stats"):
+            type(self).calls.append((url, deepcopy(kwargs)))
+            params = kwargs["params"]
+            start = datetime.fromisoformat(params["start_time"])
+            end = datetime.fromisoformat(params["end_time"])
+            assert timedelta(0) < end - start <= timedelta(days=7)
+            return FakeResponse({
+                "request_status": "SUCCESS",
+                "timeseries_stats": [],
+            })
+        return await super().get(url, **kwargs)
 
 
 def _db():
@@ -291,13 +316,59 @@ async def test_account_aggregate_keeps_missing_conversions_unknown(monkeypatch):
     monkeypatch.setattr(native.httpx, "AsyncClient", ProviderClient)
     db = _db()
     await native.SnapchatNativeDataSync(db, now=lambda: NOW).run(
-        "owner-1", native.SnapchatNativeSyncInput(days=1)
+        "owner-1",
+        native.SnapchatNativeSyncInput(
+            from_date="2026-07-29",
+            to_date="2026-07-29",
+        ),
     )
-    account = next(row for row in db.rows["mezan_snapchat_performance_daily_v2"] if row["entity_type"] == "ad_account")
+    account = next(
+        row
+        for row in db.rows["mezan_snapchat_performance_daily_v2"]
+        if row["entity_type"] == "ad_account"
+    )
     assert account["metrics"]["spend"] == 6_000_000
     assert account["metrics"]["conversion_purchases"] is None
     assert account["metrics"]["conversion_purchases_value"] is None
     assert account["computed"]["roas"] is None
+
+
+@pytest.mark.asyncio
+async def test_thirty_day_hourly_sync_uses_adjacent_seven_day_windows(
+    monkeypatch,
+):
+    _configure(monkeypatch)
+    SevenDayWindowClient.calls = []
+    monkeypatch.setattr(native.httpx, "AsyncClient", SevenDayWindowClient)
+
+    result = await native.SnapchatNativeDataSync(
+        _db(),
+        now=lambda: NOW,
+    ).run(
+        "owner-1",
+        native.SnapchatNativeSyncInput(
+            from_date="2026-07-01",
+            to_date="2026-07-30",
+        ),
+    )
+
+    stats_calls = [
+        kwargs["params"]
+        for url, kwargs in SevenDayWindowClient.calls
+        if urlsplit(url).path.endswith("/stats")
+    ]
+    assert result["sync_status"] == "complete"
+    assert result["provider_calls"] == 9
+    assert [
+        (params["start_time"], params["end_time"])
+        for params in stats_calls
+    ] == [
+        ("2026-07-01T00:00:00+03:00", "2026-07-08T00:00:00+03:00"),
+        ("2026-07-08T00:00:00+03:00", "2026-07-15T00:00:00+03:00"),
+        ("2026-07-15T00:00:00+03:00", "2026-07-22T00:00:00+03:00"),
+        ("2026-07-22T00:00:00+03:00", "2026-07-29T00:00:00+03:00"),
+        ("2026-07-29T00:00:00+03:00", "2026-07-31T00:00:00+03:00"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -310,11 +381,15 @@ async def test_executor_audits_native_provenance_and_safe_contract(monkeypatch):
         db, "owner-1",
         native.SnapchatNativeSyncInput(from_date="2026-07-29", to_date="2026-07-29"),
         now=lambda: NOW,
+        parent_run_id="parent-run-1",
     )
     SnapchatAnalyticsSyncResponse.model_validate(result)
     assert result["status"] == "complete"
     assert result["source_only"] is True
     run = db.rows["mezan_integration_sync_runs_v2"][0]
+    assert run["parent_run_id"] == "parent-run-1"
+    assert run["worker_started_at"] == NOW.isoformat()
+    assert run["worker_heartbeat_at"] == NOW.isoformat()
     assert run["summary"]["legacy_collection_read"] is False
     assert run["summary"]["legacy_collection_write"] is False
     assert run["summary"]["campaign_write_reached"] is False
@@ -370,3 +445,131 @@ def test_native_route_has_exact_sync_contract(monkeypatch):
     attach_snapchat_native_data_routes(router, _db(), current_user, require_owner)
     route = next(row for row in router.routes if row.name == "sync_snapchat_native_data")
     assert route.path == "/integrations-v2/snapchat_ads/sync"
+
+
+class _RateLimitClient:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    async def get(self, url, *, headers, params):
+        self.calls.append({"url": url, "headers": headers, "params": params})
+        return self.responses.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_get_json_paces_and_retries_429_without_changing_payload(monkeypatch):
+    sleeps = []
+
+    async def no_sleep(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(common.asyncio, "sleep", no_sleep)
+    client = _RateLimitClient([
+        FakeResponse(
+            {"error": {"code": "rate_limited"}},
+            429,
+            headers={"Retry-After": "0.5"},
+        ),
+        FakeResponse({"request_status": "SUCCESS", "value": 7}),
+    ])
+    context = common.SnapchatSyncContext(object(), "owner-1")
+
+    payload = await context.get_json(
+        client,
+        "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+        headers={"Authorization": "Bearer token"},
+        params={"granularity": "HOUR"},
+    )
+
+    assert payload == {"request_status": "SUCCESS", "value": 7}
+    assert context.provider_calls == 2
+    assert len(client.calls) == 2
+    assert any(delay == 0.5 for delay in sleeps)
+
+
+@pytest.mark.asyncio
+async def test_exhausted_429_is_retryable_and_never_leaks_provider_secret(
+    monkeypatch,
+):
+    async def no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(common.asyncio, "sleep", no_sleep)
+    secret = "Bearer provider-secret-must-not-leak"
+    client = _RateLimitClient([
+        FakeResponse(
+            {"error": {"code": "rate_limited", "message": secret}},
+            429,
+        )
+        for _ in range(common.SNAPCHAT_HTTP_429_MAX_RETRIES + 1)
+    ])
+    context = common.SnapchatSyncContext(object(), "owner-1")
+
+    with pytest.raises(common.SnapchatNativeSyncError) as raised:
+        await context.get_json(
+            client,
+            "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats",
+            headers={"Authorization": "Bearer token"},
+            params=None,
+        )
+
+    error = raised.value
+    assert error.code == "snapchat_provider_http_429"
+    assert error.retryable is True
+    assert context.provider_calls == common.SNAPCHAT_HTTP_429_MAX_RETRIES + 1
+    assert secret not in error.message
+    assert secret not in repr(error.result)
+
+
+class _RefreshAwareClient:
+    def __init__(self):
+        self.authorization_headers = []
+
+    async def get(self, _url, **kwargs):
+        authorization = kwargs["headers"]["Authorization"]
+        self.authorization_headers.append(authorization)
+        if authorization == "Bearer stale-access":
+            return FakeResponse(
+                {"request_status": "FAILURE"},
+                status_code=401,
+            )
+        assert authorization == "Bearer refreshed-access"
+        return FakeResponse({
+            "request_status": "SUCCESS",
+            "value": 7,
+        })
+
+
+@pytest.mark.asyncio
+async def test_refreshed_access_token_is_reused_across_request_headers(
+    monkeypatch,
+):
+    client = _RefreshAwareClient()
+    context = common.SnapchatSyncContext(object(), "owner-1")
+    refresh_forces = []
+
+    async def refresh_access_token(*, force_refresh=False):
+        refresh_forces.append(force_refresh)
+        return "refreshed-access"
+
+    monkeypatch.setattr(context, "access_token", refresh_access_token)
+    endpoint = "https://adsapi.snapchat.com/v1/adaccounts/account-1/stats"
+
+    await context.get_json(
+        client,
+        endpoint,
+        headers={"Authorization": "Bearer stale-access"},
+    )
+    await context.get_json(
+        client,
+        endpoint,
+        headers={"Authorization": "Bearer stale-access"},
+    )
+
+    assert refresh_forces == [True]
+    assert client.authorization_headers == [
+        "Bearer stale-access",
+        "Bearer refreshed-access",
+        "Bearer refreshed-access",
+    ]

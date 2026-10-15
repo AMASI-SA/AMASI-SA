@@ -21,6 +21,8 @@ from typing import Any, Optional
 
 import httpx
 
+from integrations.qoyod.base_url import normalize_qoyod_api_base
+
 from integrations.qoyod.write_lock import (
     WRITE_METHODS,
     QoyodWriteLockedError,
@@ -35,7 +37,6 @@ from integrations.qoyod.write_lock import (
 # Bump whenever the Qoyod payload contract changes — helps trace the
 # exact Mezan build that produced a payload in case of incident.
 MEZAN_VERSION = os.environ.get("MEZAN_VERSION", "1.0.0-qoyod-mvp")
-
 
 class QoyodAPIError(Exception):
     """Raised for any non-2xx response. Carries the parsed body so the
@@ -146,7 +147,8 @@ class QoyodAPIClient:
         if not api_key:
             raise ValueError("Qoyod API key is required")
         self._api_key = api_key
-        self._base_url = (base_url or os.environ.get("QOYOD_API_BASE", "")).rstrip("/")
+        configured_base = base_url or os.environ.get("QOYOD_API_BASE", "")
+        self._base_url = normalize_qoyod_api_base(configured_base)
         if not self._base_url:
             raise RuntimeError(
                 "QOYOD_API_BASE is not set in backend/.env")
@@ -312,19 +314,19 @@ class QoyodAPIClient:
         return await self._request("GET", "/taxes")
 
     async def list_product_categories(self) -> Any:
-        """Iter-290i — Qoyod product categories (`/product_categories`).
+        """Iter-290i — Qoyod product categories (`/categories`).
 
         Read-only — used by the Reference-Lists picker so operators
         can choose categories by name instead of typing numeric ids.
         """
-        return await self._request("GET", "/product_categories")
+        return await self._request("GET", "/categories")
 
     async def list_product_units(self) -> Any:
-        """Iter-290i — Qoyod product units (`/product_units`).
+        """Iter-290i — Qoyod product units (`/product_unit_types`).
 
         Read-only — same purpose as `list_product_categories`.
         """
-        return await self._request("GET", "/product_units")
+        return await self._request("GET", "/product_unit_types")
 
     async def list_products(self, *, page: int = 1, limit: int = 50) -> Any:
         """GET /products — used by Go-Live Readiness to estimate how many

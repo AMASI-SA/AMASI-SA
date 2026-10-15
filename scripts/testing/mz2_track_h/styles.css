@@ -1,0 +1,4 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body{margin:0;background:#f4f7f5;font-family:Tahoma,Arial,sans-serif;color:#234235}main{max-width:1320px;margin:auto;padding:24px;min-width:0}.fixture-banner{padding:10px 20px;background:#fdf3d9;color:#705827;font-size:12px}.fixture-nav{display:flex;gap:8px;flex-wrap:wrap;padding:16px 24px;background:#173f34;color:white}.fixture-nav a{padding:8px 12px;border:1px solid #648779;border-radius:8px;font-size:12px}@media(max-width:640px){main{padding:12px}.fixture-nav{padding:12px}}

@@ -1,0 +1,195 @@
+{
+  "task_id": "TIKTOK-NATIVE-AI-EVIDENCE-20261010",
+  "scope": "Ordered Phase3A: exact native campaign identities in Salla attribution ingestion; one-campaign AI analysis using existing key and bounded projected ledger evidence, with no media or provider mutations.",
+  "phase": "source_verified_ready_for_v5_build",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-native-ai-evidence-20261010",
+  "base_production_sha": "094d0ef7fa001d3b3794f2600c77795190ddb1a8",
+  "production_changed": false,
+  "guard_active": false,
+  "previous_status": "codex/tiktok-native-smartplus-handoff-20261010@3dc20ac0611357e3712f164351dc87baac23cc09",
+  "acceptance": [
+    "Native exact campaign ID confirms owner-scoped attribution without manual product association",
+    "Foreign/disconnected/ambiguous campaigns fail closed",
+    "Identity query filters inside MongoDB; no full catalog in Python",
+    "One AI generation at a time with immediate resource refusal, limited context and bounded cache",
+    "Only server-verified single campaign metadata/metrics and aggregate ledger record evidence sent to existing OpenAI runtime",
+    "Unknown financial orders/sales/profit remain null; no edits or auto-spend",
+    "UI result tied to selected campaign/date; stale responses cannot overwrite later selections"
+  ],
+  "credential_decision": "User explicitly directed reuse of existing key. Live integrations card runtime_configured and health100%; no plaintext inspected or copied to Preview.",
+  "limits": {
+    "native_identity_candidates_per_order": 20,
+    "ai_campaigns_per_request": 1,
+    "ledger_records_max": 500,
+    "ai_context_bytes_max": 8000,
+    "ai_cache_entries_max": 32,
+    "ai_generation_slots": 1,
+    "media_downloads": false,
+    "ai_admission_scope": "One complete analysis per worker including source reads; immediate refusal without queued work"
+  },
+  "verification": {
+    "baseline": {
+      "head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
+      "passed": 1,
+      "failed": 1,
+      "exit_code": 1,
+      "reason": "Expected exact native ID confirmation failed as unattributed; environment healthy and foreign-tenant test passed."
+    },
+    "tests": "confirmed",
+    "live": "pending",
+    "native_identity": {
+      "head": "e55b4f6c79ac59bf0857eec3100fcf2c4f5270ff",
+      "passed": 48,
+      "failed": 0,
+      "exit_code": 0,
+      "seconds": 2.54,
+      "real_mongo": true,
+      "performance": {
+        "catalogue_size": 5000,
+        "matches_transported": 1,
+        "full_catalogue_arrays": 0,
+        "python_peak_bytes": 21042
+      }
+    },
+    "ai_baseline": {
+      "head": "916b48a98eb122dbba439b1aa16c4541fc63431e",
+      "backend": {
+        "failed": 5,
+        "exit_code": 1,
+        "reason": "New owner-only endpoint absent (404)."
+      },
+      "frontend": {
+        "failed": 1,
+        "skipped": 4,
+        "exit_code": 1,
+        "reason": "New per-campaign AI button absent."
+      },
+      "dependency_install_exit_code": 0
+    },
+    "focused": {
+      "head": "6805d11b7b6fe2c8e8fe9a7332c9d43d41d22d78",
+      "backend": {
+        "passed": 69,
+        "failed": 0,
+        "exit_code": 0,
+        "seconds": 2.42,
+        "warnings": 1
+      },
+      "frontend": {
+        "passed": 7,
+        "failed": 1,
+        "exit_code": 1,
+        "suites": 2,
+        "cause": "Date change triggered second child effect request before parent unmounted panel. New selection key prevents render under mismatched filters."
+      },
+      "native_identity_python_peak_bytes": 25570
+    },
+    "integrated": {
+      "head": "d683983b342ad3744112fb83a710bc34f171296a",
+      "focused_backend": {
+        "passed": 70,
+        "exit_code": 0,
+        "seconds": 2.83
+      },
+      "focused_frontend": {
+        "passed": 8,
+        "suites": 2,
+        "exit_code": 0
+      },
+      "backend": {
+        "passed": 132,
+        "failed": 0,
+        "warnings": 1,
+        "exit_code": 0,
+        "seconds": 6.69
+      },
+      "frontend": {
+        "passed": 34,
+        "suites": 10,
+        "failed": 0,
+        "exit_code": 0
+      },
+      "native_isolation_exit_code": 0,
+      "diff_check_exit_code": 0,
+      "real_mongo": true
+    },
+    "performance": {
+      "page_read": {
+        "catalogue_campaigns": 5000,
+        "daily_facts": 150000,
+        "returned_entities": 25,
+        "transported_fact_rows": 750,
+        "catalogue_arrays_transported": 0,
+        "response_bytes": 24778,
+        "python_peak_bytes": 593940,
+        "seconds": 0.1152
+      },
+      "hierarchy_sync": {
+        "entities_per_level": 5000,
+        "daily_facts": 30000,
+        "sequential_provider_calls": 90,
+        "python_peak_bytes": 11757593,
+        "seconds": 2.5618
+      },
+      "native_identity": {
+        "catalogue_size": 5000,
+        "matches_transported": 1,
+        "full_catalogue_arrays": 0,
+        "python_peak_bytes": 21586
+      },
+      "boundary": "Isolated local Mongo/Python measurements, not Production RSS or latency."
+    },
+    "ci": {
+      "head": "d683983b342ad3744112fb83a710bc34f171296a",
+      "checks": 17,
+      "success": 12,
+      "skipped": 5,
+      "failed": 0,
+      "pending": 0,
+      "rehearsal": "expected skipped before frozen intent B"
+    }
+  },
+  "next_action": "Fetch final source checkpoint as A into isolated worktree. Run governed clean two-build frontend release and freeze schema-2 v5 intent with source_base_git_sha094d0ef7fa001d3b3794f2600c77795190ddb1a8. Commit B intent file only. Require full-head CI and clean adapter rehearsal before merge or publish.",
+  "preserved": [
+    "deployer-agent-docs/",
+    "Verified Production Smart+ release and frozen A/B pair"
+  ],
+  "updated_at": "2026-10-10T21:11:17.243989+00:00",
+  "secrets_included": false,
+  "baseline_head": "590a721d074367a100e0f3d82f2e2cd20760ff2e",
+  "changed_files": [
+    "backend/tests/test_tiktok_native_attribution_mongo.py",
+    "backend/integrations_control_center/tiktok_native_attribution.py",
+    "backend/mezan_attribution_ledger_sync.py",
+    "backend/integrations_control_center/tiktok_native_insights.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_hierarchy.py",
+    "backend/tests/test_tiktok_native_insights.py",
+    "backend/tests/test_tiktok_native_insights_routes.py",
+    "frontend/src/components/marketing/TikTokCampaignAnalysis.jsx",
+    "frontend/src/components/marketing/TikTokCampaignAnalysis.test.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokEntityWorkspace.test.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml"
+  ],
+  "owned_mongo_fixture": {
+    "pid": 146563,
+    "port": 27475,
+    "dbpath": "/tmp/mezan-tiktok-native-ai-mongo",
+    "running": false,
+    "isolated_loopback": true
+  },
+  "checkpoint_parent_sha": "d683983b342ad3744112fb83a710bc34f171296a",
+  "pr": {
+    "number": 1324,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1324",
+    "draft": true,
+    "merged": false
+  },
+  "review": {
+    "reviews": 0,
+    "blocking_findings": 0,
+    "scope": "14 scoped files, reviewed combined diff and fail-closed source guard"
+  }
+}

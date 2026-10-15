@@ -6,7 +6,10 @@ Qoyod pipeline.  The existing Qoyod settings switches are the control plane:
 
 * ``enabled`` and ``auto_send`` must be true;
 * ``dry_run_mode`` must be false;
-* only the canonical ``completed`` (تم التنفيذ) trigger is accepted;
+* new automatic work may start from the three approved Salla states:
+  ``completed``, ``in_delivery``/``delivering``, or ``delivered``;
+* the final live Salla check revalidates the same closed three-state policy
+  immediately before every external write;
 * the legacy pipeline must remain frozen;
 * a successful closed canary must exist before the settings can arm it.
 
@@ -16,10 +19,11 @@ Safety properties:
 * the manual sender's per-order lock and Qoyod reference lookup provide the
   duplicate barrier;
 * COD keeps the manual sender invariant (invoice only, never a receipt);
-* an order-specific total mismatch is isolated for manual review while later
+* every order-specific failure is isolated for manual review while later
   orders continue;
-* infrastructure and unknown errors still trip the circuit breaker by turning
-  ``auto_send`` off;
+* infrastructure and unknown errors never turn ``auto_send`` off; a failure
+  with an order number is quarantined, while a round-level failure is retried
+  on the next worker tick;
 * every mutating run is written to ``qoyod_manual_auto_runs`` before the first
   external request.
 """
@@ -33,9 +37,20 @@ from typing import Any, Optional
 
 from pymongo.errors import DuplicateKeyError
 
+from integrations.qoyod.credentials import get_api_key
+from integrations.qoyod.candidate_orders import (
+    API_STATUS_TO_KEY,
+    UNIFIED_CANDIDATE_AUTO_FLAG,
+    build_candidate_audit,
+)
+from integrations.qoyod.eligible_orders import QOYOD_SYNC_START_DATE
 from integrations.qoyod_manual.canary_batch import SAFE_ALREADY_SENT_CODES
-from integrations.qoyod_manual.pending import list_pending_orders
-from integrations.qoyod_manual.send import ManualSendRefused, manual_send_one
+from integrations.qoyod_manual.send import (
+    ManualSendRefused,
+    begin_shared_manual_qoyod_client,
+    end_shared_manual_qoyod_client,
+    manual_send_one,
+)
 from salla_integration.sync import resync_single_order
 
 logger = logging.getLogger(__name__)
@@ -46,20 +61,35 @@ _LAST_RUN_AT: Optional[datetime] = None
 _LAST_RUN_OK = True
 _LAST_ROUND: dict[str, Any] = {}
 
-# This refusal is emitted only after send.py has persisted the real Qoyod
-# invoice id and before it creates a payment.  The persisted invoice marker is
-# the duplicate barrier on later scans, while the full outstanding balance in
-# Qoyod leaves the order available for an operator to review and pay manually.
-# Keep this allow-list deliberately narrow: authentication, network, unknown,
-# and other possibly systemic failures must continue to stop the worker.
-_PER_ORDER_MANUAL_REVIEW_CODES = frozenset({
-    "qoyod_actual_total_mismatch",
-    "qoyod_payload_precision_unsupported",
-    "qoyod_preflight_total_mismatch",
-    "qoyod_preflight_payload_invalid",
-    "totals_mismatch",
-    "rounding_adjustment_product_missing",
-})
+# Settings store the exact Salla slug selected by the operator.  Salla can
+# expose the in-delivery state under more than one equivalent slug, so map the
+# closed approved list to the three keys used to partition the single unified
+# candidate snapshot. Nothing outside these aliases can arm the worker.
+_TRIGGER_TO_PENDING_STATUS = {
+    "completed": "completed",
+    "تم التنفيذ": "completed",
+    "تم التجهيز": "completed",
+    "in_delivery": "in_delivery",
+    "in delivery": "in_delivery",
+    "shipping": "in_delivery",
+    "delivering": "in_delivery",
+    "جاري_التوصيل": "in_delivery",
+    "جاري التوصيل": "in_delivery",
+    "جارٍ التوصيل": "in_delivery",
+    "delivered": "delivered",
+    "تم التوصيل": "delivered",
+}
+
+_PENDING_STATUS_NATIVE_VALUES = {
+    "completed": frozenset({"completed", "تم التنفيذ", "تم التجهيز"}),
+    "in_delivery": frozenset({
+        "in_delivery", "in delivery", "shipping", "delivering",
+        "جاري التوصيل", "جارٍ التوصيل",
+    }),
+    "delivered": frozenset({"delivered", "تم التوصيل"}),
+}
+
+_CANONICAL_PENDING_STATUSES = ("completed", "in_delivery", "delivered")
 
 
 def _now() -> datetime:
@@ -71,11 +101,51 @@ def _capabilities(settings: dict) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _configured_pending_statuses(settings: dict) -> list[str]:
+    """Resolve saved Salla trigger slugs to the closed Plan-B status keys."""
+    resolved: list[str] = []
+    for raw in list(settings.get("invoice_trigger_statuses") or []):
+        if not isinstance(raw, str):
+            continue
+        value = raw.strip().lower()
+        status_key = _TRIGGER_TO_PENDING_STATUS.get(value)
+        if status_key and status_key not in resolved:
+            resolved.append(status_key)
+    # Settings may validate safety, but they cannot silently narrow the
+    # canonical candidate definition. Rollout authorization is handled by the
+    # independent, default-off UNIFIED_CANDIDATE_AUTO_FLAG.
+    return list(_CANONICAL_PENDING_STATUSES) if resolved else []
+
+
+def _trigger_statuses_are_safe(settings: dict) -> bool:
+    raw = list(settings.get("invoice_trigger_statuses") or [])
+    if not raw:
+        return False
+    valid_count = sum(
+        isinstance(value, str)
+        and value.strip().lower() in _TRIGGER_TO_PENDING_STATUS
+        for value in raw
+    )
+    return (
+        valid_count == len(raw)
+        and bool(_configured_pending_statuses(settings))
+    )
+
+
+def _pending_row_matches_status(row: dict[str, Any], status_key: str) -> bool:
+    canonical_status = API_STATUS_TO_KEY.get(status_key)
+    if row.get("current_status_key") and canonical_status:
+        return row.get("current_status_key") == canonical_status
+    native = str(row.get("salla_status") or "").strip().lower()
+    return native in _PENDING_STATUS_NATIVE_VALUES.get(status_key, frozenset())
+
+
 def activation_issues(
     settings: dict,
     *,
     credentials_configured: bool,
     canary_succeeded: bool,
+    salla_connected: bool = True,
 ) -> list[dict[str, str]]:
     """Return the closed list of reasons that block live Plan-B auto-send."""
     issues: list[dict[str, str]] = []
@@ -85,10 +155,19 @@ def activation_issues(
 
     if not credentials_configured:
         add("credentials_missing", "مفتاح قيود غير محفوظ")
+    if not salla_connected:
+        add(
+            "salla_connection_required",
+            "يجب ربط متجر سلة بحساب مالك المتجر قبل تشغيل الإرسال التلقائي",
+        )
     if not settings.get("legacy_pipeline_frozen"):
         add("legacy_pipeline_not_frozen", "يجب إبقاء مسار قيود القديم مجمداً")
-    if list(settings.get("invoice_trigger_statuses") or []) != ["completed"]:
-        add("completed_only_required", "الإرسال التلقائي يقبل حالة تم التنفيذ فقط")
+    if not _trigger_statuses_are_safe(settings):
+        add(
+            "completed_trigger_required",
+            "حالات الإرسال التلقائي المسموحة فقط: تم التنفيذ، جاري التوصيل، "
+            "تم التوصيل",
+        )
     if settings.get("trigger_once_only") is not True:
         add("trigger_once_required", "يجب تفعيل إنشاء الفاتورة مرة واحدة فقط")
     if settings.get("auto_receipt") is not True:
@@ -114,26 +193,144 @@ def is_live_requested(settings: dict) -> bool:
     )
 
 
+def durable_auto_send_desired(settings: dict) -> bool:
+    """Return the merchant's durable intent independently of runtime health.
+
+    Older settings documents predate auto_send_desired. For those rows, the
+    visible master switches are the only trustworthy evidence of an explicit
+    opt-in. Once written, the durable field is authoritative so a temporary
+    credential pause cannot be mistaken for an operator opt-out.
+    """
+    explicit = settings.get("auto_send_desired")
+    if isinstance(explicit, bool):
+        return explicit
+    return bool(settings.get("enabled") and settings.get("auto_send"))
+
+
+_CREDENTIAL_PAUSE_REASONS = frozenset({
+    "credentials_removed",
+    "credentials_invalid_or_expired",
+    "credentials_unverified",
+})
+
+
+def credential_pause_patch(
+    settings: dict,
+    *,
+    reason: str,
+    now_iso: str,
+    error: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build the fail-closed runtime pause without erasing operator intent."""
+    return {
+        "auto_send_desired": durable_auto_send_desired(settings),
+        "enabled": False,
+        "auto_send": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: False,
+        "plan_b_auto_send_armed_at": None,
+        "plan_b_auto_send_disabled_at": now_iso,
+        "plan_b_auto_send_disabled_reason": reason,
+        "plan_b_auto_send_last_error": error,
+        "updated_at": now_iso,
+    }
+
+
+def credential_recovery_plan(
+    settings: dict,
+    *,
+    readiness_issues: list[dict[str, str]],
+    orders_user_id: str,
+    actor: str,
+    canary_run_id: Optional[str],
+    now_iso: str,
+) -> dict[str, Any]:
+    """Plan a credential-triggered resume; never mutate or bypass readiness."""
+    desired = durable_auto_send_desired(settings)
+    if not desired:
+        return {
+            "requested": False,
+            "resumed": False,
+            "reason": "operator_intent_disabled",
+            "issues": [],
+            "settings_patch": {},
+        }
+
+    issues = list(readiness_issues)
+    if settings.get("dry_run_mode") is True:
+        issues.append({
+            "code": "dry_run_enabled",
+            "message": "يجب إيقاف الوضع التجريبي قبل استئناف الإرسال التلقائي",
+        })
+    if issues:
+        return {
+            "requested": True,
+            "resumed": False,
+            "reason": "readiness_failed",
+            "issues": issues,
+            "settings_patch": {},
+        }
+
+    patch = {
+        "auto_send_desired": True,
+        "enabled": True,
+        "auto_send": True,
+        "dry_run_mode": False,
+        UNIFIED_CANDIDATE_AUTO_FLAG: True,
+        "plan_b_auto_send_armed_at": now_iso,
+        "plan_b_auto_send_orders_user_id": str(orders_user_id),
+        "plan_b_auto_send_actor": str(actor),
+        "plan_b_auto_send_canary_run_id": canary_run_id,
+        "plan_b_auto_send_disabled_at": None,
+        "plan_b_auto_send_disabled_reason": None,
+        "plan_b_auto_send_last_error": None,
+        "plan_b_auto_send_last_recovery": {
+            "reason": "credentials_verified",
+            "recovered_at": now_iso,
+        },
+        "updated_at": now_iso,
+    }
+    candidate = {**settings, **patch}
+    if not is_live_requested(candidate):
+        raise ValueError("credential recovery produced a non-live state")
+    return {
+        "requested": True,
+        "resumed": True,
+        "reason": "credentials_verified",
+        "issues": [],
+        "settings_patch": patch,
+    }
+
+
 def is_armed(settings: dict) -> bool:
     """Cheap runtime gate. Full validation happens when settings are saved."""
     return bool(
         is_live_requested(settings)
+        and settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is True
         and settings.get("plan_b_auto_send_armed_at")
         and settings.get("plan_b_auto_send_orders_user_id")
         and settings.get("legacy_pipeline_frozen")
-        and list(settings.get("invoice_trigger_statuses") or []) == ["completed"]
+        and _trigger_statuses_are_safe(settings)
         and settings.get("trigger_once_only") is True
     )
 
 
 def status_snapshot(settings: dict) -> dict[str, Any]:
+    desired = durable_auto_send_desired(settings)
+    armed = is_armed(settings)
+    disabled_reason = settings.get("plan_b_auto_send_disabled_reason")
     return {
+        "desired": desired,
         "requested": is_live_requested(settings),
-        "armed": is_armed(settings),
+        "armed": armed,
+        "credential_paused": disabled_reason in _CREDENTIAL_PAUSE_REASONS,
+        "resume_pending": bool(desired and not armed),
         "armed_at": settings.get("plan_b_auto_send_armed_at"),
         "armed_by": settings.get("plan_b_auto_send_actor"),
         "last_error": settings.get("plan_b_auto_send_last_error"),
         "disabled_reason": settings.get("plan_b_auto_send_disabled_reason"),
+        "unified_candidate_auto_enabled": (
+            settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is True
+        ),
         "worker": liveness(),
     }
 
@@ -142,6 +339,117 @@ async def _current_settings(db) -> dict:
     return await db.qoyod_settings.find_one(
         {"user_id": _TENANT}, {"_id": 0},
     ) or {}
+
+
+async def _recover_legacy_circuit_breaker(
+    db, settings: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Re-arm any circuit breaker persisted by an older worker.
+
+    The current policy never disables the Qoyod application for an order
+    failure.  An old deployment may still have persisted a global breaker,
+    so recover it atomically after re-validating the same credential, canary,
+    Salla-owner and settings contract used by the activation endpoint.
+    """
+    last_error = settings.get("plan_b_auto_send_last_error") or {}
+    error_code = str(last_error.get("code") or "").strip()
+    if not (
+        settings.get("enabled") is True
+        and settings.get("auto_send") is False
+        and settings.get("dry_run_mode") is not True
+        and settings.get("plan_b_auto_send_disabled_reason")
+        == "circuit_breaker"
+        and bool(error_code)
+    ):
+        return None
+
+    orders_user_id = str(
+        settings.get("plan_b_auto_send_orders_user_id") or ""
+    ).strip()
+    if not orders_user_id:
+        return None
+
+    try:
+        key = await get_api_key(db, _TENANT)
+        canary = await db.qoyod_manual_canary_runs.find_one(
+            {"status": "succeeded"},
+            {"_id": 0, "run_id": 1, "finished_at": 1},
+            sort=[("finished_at", -1)],
+        )
+        salla_integration = await db.salla_integrations.find_one(
+            {"user_id": orders_user_id, "status": "connected"},
+            {"_id": 0, "user_id": 1},
+        )
+    except Exception:
+        logger.exception(
+            "Plan-B legacy breaker readiness check failed"
+        )
+        return None
+
+    candidate = {
+        **settings,
+        "auto_send": True,
+        "plan_b_auto_send_armed_at": _now().isoformat(),
+    }
+    issues = activation_issues(
+        candidate,
+        credentials_configured=bool(key),
+        canary_succeeded=bool(canary),
+        salla_connected=bool(salla_integration),
+    )
+    if issues or not is_armed(candidate):
+        logger.warning(
+            "Plan-B legacy breaker remains stopped issues=%s",
+            [issue.get("code") for issue in issues],
+        )
+        return None
+
+    now = _now()
+    recovered_at = now.isoformat()
+    recovery_audit = {
+        "reason": "legacy_global_breaker_removed",
+        "previous_error_code": error_code,
+        "previous_run_id": last_error.get("run_id"),
+        "previous_error_at": last_error.get("at"),
+        "recovered_at": recovered_at,
+    }
+    result = await db.qoyod_settings.update_one(
+        {
+            "user_id": _TENANT,
+            "enabled": True,
+            "auto_send": False,
+            "dry_run_mode": {"$ne": True},
+            "plan_b_auto_send_disabled_reason": "circuit_breaker",
+            "plan_b_auto_send_last_error.code": error_code,
+            "plan_b_auto_send_orders_user_id": orders_user_id,
+        },
+        {
+            "$set": {
+                "auto_send": True,
+                "plan_b_auto_send_armed_at": recovered_at,
+                "plan_b_auto_send_disabled_at": None,
+                "plan_b_auto_send_disabled_reason": None,
+                "plan_b_auto_send_last_error": None,
+                "plan_b_auto_send_last_recovery": recovery_audit,
+                "updated_at": now,
+            },
+            "$inc": {"plan_b_auto_send_recovery_count": 1},
+        },
+    )
+    if result.modified_count != 1:
+        return None
+
+    logger.warning(
+        "Plan-B automatic sender recovered legacy global breaker"
+    )
+    return {
+        **candidate,
+        "plan_b_auto_send_armed_at": recovered_at,
+        "plan_b_auto_send_disabled_at": None,
+        "plan_b_auto_send_disabled_reason": None,
+        "plan_b_auto_send_last_error": None,
+        "plan_b_auto_send_last_recovery": recovery_audit,
+    }
 
 
 async def _acquire_lease(db, *, seconds: int = 45) -> Optional[str]:
@@ -194,14 +502,68 @@ async def _release_lease(db, owner: Optional[str]) -> None:
         logger.exception("Plan-B auto-send lease release failed")
 
 
-async def _still_exactly_completed(
+_LIVE_STATUS_NATIVE_BY_SLUG = {
+    "completed": frozenset({"", "completed", "تم التنفيذ", "تم التجهيز"}),
+    "in_delivery": frozenset({
+        "", "in_delivery", "in delivery", "shipping",
+        "جاري التوصيل", "جارٍ التوصيل",
+    }),
+    "delivered": frozenset({"", "delivered", "تم التوصيل"}),
+}
+_LIVE_STATUS_SLUG_ALIASES = {
+    "completed": "completed",
+    "تم التنفيذ": "completed",
+    "in_delivery": "in_delivery",
+    "in delivery": "in_delivery",
+    "shipping": "in_delivery",
+    "delivering": "in_delivery",
+    "جاري_التوصيل": "in_delivery",
+    "جاري التوصيل": "in_delivery",
+    "delivered": "delivered",
+    "تم التوصيل": "delivered",
+}
+
+
+def _live_salla_status_is_eligible(canonical: dict[str, Any]) -> bool:
+    """Return whether the authoritative Salla status is Qoyod-eligible.
+
+    A non-empty canonical slug is authoritative.  ``تم التجهيز`` is a custom
+    native label that is accepted only when Salla classifies it as
+    ``completed``; the same label without that trusted slug stays blocked.
+    This explicit pair mapping also prevents a cancelled/refunded native state
+    from being accepted because of a stale or conflicting slug.
+    """
+    slug = str(canonical.get("order_status") or "").strip().lower()
+    native = str(canonical.get("order_status_native") or "").strip()
+    native_normalized = native.lower()
+
+    if slug:
+        canonical_slug = _LIVE_STATUS_SLUG_ALIASES.get(slug)
+        allowed_native = _LIVE_STATUS_NATIVE_BY_SLUG.get(canonical_slug or "")
+        return bool(
+            allowed_native is not None
+            and native_normalized in allowed_native
+        )
+
+    # Older snapshots can legitimately lack a canonical slug.  Keep this
+    # fallback closed to the three exact statuses; notably, تم التجهيز is not
+    # present here and therefore still requires a trusted completed slug.
+    return native_normalized in {
+        "completed", "تم التنفيذ",
+        "in_delivery", "in delivery", "shipping",
+        "جاري التوصيل", "جارٍ التوصيل",
+        "delivered", "تم التوصيل",
+    }
+
+
+async def _still_qoyod_eligible(
     db, order_number: str, *, orders_user_id: str,
 ) -> bool:
     """Re-read the newest trace immediately before the external mutation.
 
-    Arabic aliases such as ``مكتمل`` are intentionally not accepted for the
-    automatic path.  The native value must be ``تم التنفيذ``.  Older rows
-    without a native value may use the canonical ``completed`` slug.
+    Only the three approved Qoyod statuses are accepted.  This function is
+    shared by the manual route and automatic worker through
+    :func:`_refresh_and_verify_salla_status` so their final gate cannot drift.
     """
     # Direct Salla resync snapshots are written under the authenticated
     # Orders owner id, while historical webhook traces use the MVP tenant.
@@ -219,22 +581,18 @@ async def _still_exactly_completed(
     if not row:
         return False
     canonical = row.get("canonical_payload") or {}
-    native = str(canonical.get("order_status_native") or "").strip()
-    slug = str(canonical.get("order_status") or "").strip().lower()
-    if native:
-        return native == "تم التنفيذ"
-    return slug == "completed"
+    return _live_salla_status_is_eligible(canonical)
 
 
 async def _refresh_and_verify_salla_status(
     db, *, orders_user_id: str, order_number: str,
 ) -> tuple[bool, dict[str, Any]]:
-    """Refresh the order from Salla, then apply the exact status gate.
+    """Refresh the order from Salla, then apply the shared status gate.
 
     Automatic accounting must never rely only on a cached row: an operator
-    may move the order away from ``تم التنفيذ`` in Salla between two worker
-    scans.  A failed authoritative refresh is a real preflight error and the
-    caller trips the circuit breaker before any Qoyod mutation.
+    may move the order to a cancelled/refunded state in Salla between two
+    worker scans.  A failed authoritative refresh is a real preflight error
+    and the caller quarantines only that order before any Qoyod mutation.
     """
     refresh = await resync_single_order(
         db,
@@ -252,51 +610,210 @@ async def _refresh_and_verify_salla_status(
                 "needs_reauth": bool(refresh.get("needs_reauth")),
             },
         )
-    return await _still_exactly_completed(
+    return await _still_qoyod_eligible(
         db,
         order_number,
         orders_user_id=orders_user_id,
     ), refresh
 
 
-async def _trip_circuit_breaker(
-    db, *, code: str, message: str, run_id: str,
-) -> None:
-    now = _now()
-    await db.qoyod_settings.update_one(
-        {"user_id": _TENANT},
-        {"$set": {
-            "auto_send": False,
-            "plan_b_auto_send_armed_at": None,
-            "plan_b_auto_send_disabled_at": now,
-            "plan_b_auto_send_disabled_reason": "circuit_breaker",
-            "plan_b_auto_send_last_error": {
-                "code": code,
-                "message": message,
-                "run_id": run_id,
-                "at": now,
-            },
-        }},
-    )
-
-
 async def _open_quarantined_order_numbers(
-    db, order_numbers: list[str],
+    db, order_numbers: Optional[list[str]] = None,
 ) -> set[str]:
-    if not order_numbers:
-        return set()
+    query: dict[str, Any] = {"user_id": _TENANT, "status": "open"}
+    if order_numbers is not None:
+        normalized = [str(value) for value in order_numbers if str(value)]
+        if not normalized:
+            return set()
+        query["order_number"] = {"$in": normalized}
     result: set[str] = set()
     cursor = db.qoyod_manual_auto_quarantines.find(
-        {
-            "user_id": _TENANT,
-            "order_number": {"$in": order_numbers},
-            "status": "open",
-        },
-        {"_id": 0, "order_number": 1},
+        query,
+        {"_id": 0, "order_number": 1, "code": 1},
     )
     async for row in cursor:
+        # A failed Salla status refresh is transient. It must never become a
+        # permanent backlog exclusion; the next cycle rechecks it before any
+        # Qoyod write.
+        if row.get("code") == "salla_status_refresh_failed":
+            continue
         result.add(str(row.get("order_number") or ""))
     return result
+
+
+async def _load_candidate_rows(
+    db, *, settings: dict[str, Any], orders_user_id: str,
+    batch_limit: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Load one unified snapshot and select a fair, bounded worker batch.
+
+    A round performs exactly one ``build_candidate_audit`` call for its Orders
+    owner.  The three status groups, every counter, and the persisted run-audit
+    metadata are derived from that same in-memory result.  No Salla request is
+    made here; the selected order alone is refreshed immediately before its
+    existing ``manual_send_one`` path is allowed to POST.
+    """
+    snapshot = await build_candidate_audit(
+        db,
+        orders_user_id=str(orders_user_id),
+        markers_user_id=_TENANT,
+        marker_user_ids=(_TENANT, str(orders_user_id)),
+        from_date=QOYOD_SYNC_START_DATE,
+    )
+    all_candidates = [
+        row for row in (snapshot.get("orders") or [])
+        if row.get("worker_candidate") is True
+    ]
+    quarantined = await _open_quarantined_order_numbers(
+        db,
+        [str(row.get("order_number") or "") for row in all_candidates],
+    )
+    runnable_candidates = [
+        row for row in all_candidates
+        if str(row.get("order_number") or "") not in quarantined
+    ]
+    pending_statuses = _configured_pending_statuses(settings)
+    candidate_groups = [
+        [
+            row for row in runnable_candidates
+            if _pending_row_matches_status(row, pending_status)
+        ]
+        for pending_status in pending_statuses
+    ]
+
+    candidates: list[dict[str, Any]] = []
+    seen_order_numbers: set[str] = set()
+    max_group_size = max((len(group) for group in candidate_groups), default=0)
+    for index in range(max_group_size):
+        for group in candidate_groups:
+            if index >= len(group):
+                continue
+            row = group[index]
+            order_number = str(row.get("order_number") or "")
+            if not order_number or order_number in seen_order_numbers:
+                continue
+            seen_order_numbers.add(order_number)
+            candidates.append(row)
+            if len(candidates) >= max(1, int(batch_limit)):
+                break
+        if len(candidates) >= max(1, int(batch_limit)):
+            break
+
+    authoritative_status_counts = {
+        API_STATUS_TO_KEY[pending_status]: sum(
+            _pending_row_matches_status(row, pending_status)
+            for row in all_candidates
+        )
+        for pending_status in pending_statuses
+    }
+    runnable_status_counts = {
+        API_STATUS_TO_KEY[pending_status]: len(group)
+        for pending_status, group in zip(pending_statuses, candidate_groups)
+    }
+    snapshot_captured_at = snapshot.get("captured_at") or _now().isoformat()
+    snapshot_fingerprint = (
+        snapshot.get("snapshot_fingerprint")
+        or (snapshot.get("reference_hashes") or {}).get("worker_candidates")
+    )
+    return candidates, {
+        "authoritative_backlog_count": len(all_candidates),
+        "runnable_candidate_count": len(runnable_candidates),
+        "open_quarantined_candidate_count": max(
+            0, len(all_candidates) - len(runnable_candidates)
+        ),
+        "status_candidate_count": sum(runnable_status_counts.values()),
+        "batch_candidate_count": len(candidates),
+        "candidate_snapshot": {
+            "source_authority": snapshot.get("source_authority"),
+            "orders_user_id": str(orders_user_id),
+            "from_date": snapshot.get("from_date"),
+            "to_date": snapshot.get("to_date"),
+            "captured_at": snapshot_captured_at,
+            "snapshot_fingerprint": snapshot_fingerprint,
+            "status_counts": (
+                snapshot.get("worker_candidate_status_counts")
+                or authoritative_status_counts
+            ),
+            "status_display_counts": snapshot.get(
+                "worker_candidate_status_display_counts"
+            ) or {},
+            "runnable_status_counts": runnable_status_counts,
+        },
+    }
+
+
+def _qoyod_status_codes(value: Any) -> set[int]:
+    """Extract provider HTTP status codes from nested safe error details."""
+    result: set[int] = set()
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key == "status_code":
+                try:
+                    result.add(int(nested))
+                except (TypeError, ValueError):
+                    pass
+            else:
+                result.update(_qoyod_status_codes(nested))
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            result.update(_qoyod_status_codes(nested))
+    return result
+
+
+def is_transient_qoyod_failure(exc: ManualSendRefused) -> bool:
+    """Return True only for network, throttle, or Qoyod 5xx failures."""
+    statuses = _qoyod_status_codes(exc.extra or {})
+    return any(
+        status_code == 0
+        or status_code == 429
+        or status_code >= 500
+        for status_code in statuses
+    )
+
+
+def is_credential_failure(exc: ManualSendRefused) -> bool:
+    """Classify only missing/unauthorized credentials as a global pause."""
+    if exc.code == "qoyod_credentials_missing":
+        return True
+    if exc.code != "qoyod_http_error":
+        return False
+    try:
+        status_code = int((exc.extra or {}).get("status_code") or 0)
+    except (TypeError, ValueError):
+        return False
+    return status_code in {401, 403}
+
+
+async def _pause_for_credential_failure(
+    db,
+    *,
+    settings: dict[str, Any],
+    exc: ManualSendRefused,
+    run_id: str,
+) -> None:
+    """Pause the runtime once; keep backlog rows eligible for later resume."""
+    now_iso = _now().isoformat()
+    status_code = (exc.extra or {}).get("status_code")
+    safe_error = {
+        "code": (
+            "qoyod_credentials_missing"
+            if exc.code == "qoyod_credentials_missing"
+            else "qoyod_credentials_invalid_or_expired"
+        ),
+        "status_code": status_code,
+        "run_id": run_id,
+        "at": now_iso,
+    }
+    await db.qoyod_settings.update_one(
+        {"user_id": _TENANT},
+        {"$set": credential_pause_patch(
+            settings,
+            reason="credentials_invalid_or_expired",
+            now_iso=now_iso,
+            error=safe_error,
+        )},
+        upsert=True,
+    )
 
 
 async def _quarantine_order(
@@ -330,6 +847,20 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
     """Run one bounded, sequential automatic-send round."""
     global _LAST_RUN_AT, _LAST_RUN_OK, _LAST_ROUND
     settings = await _current_settings(db)
+    if settings.get(UNIFIED_CANDIDATE_AUTO_FLAG) is not True:
+        result = {
+            "ok": True,
+            "status": "unified_auto_rollout_disabled",
+            "sent_count": 0,
+            "candidate_count": 0,
+        }
+        _LAST_RUN_OK = True
+        _LAST_ROUND = result
+        _LAST_RUN_AT = _now()
+        return result
+    recovered = await _recover_legacy_circuit_breaker(db, settings)
+    if recovered is not None:
+        settings = recovered
     if not is_armed(settings):
         result = {"ok": True, "status": "not_armed", "sent_count": 0}
         _LAST_RUN_OK = True
@@ -345,6 +876,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         _LAST_RUN_AT = _now()
         return result
 
+    client_scope_token = None
     try:
         # Re-read after the lease. A save/disable may have happened while the
         # worker was waiting.
@@ -356,31 +888,23 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             return result
 
         orders_user_id = str(settings["plan_b_auto_send_orders_user_id"])
-        pending = await list_pending_orders(
+        candidates, candidate_counts = await _load_candidate_rows(
             db,
-            user_id=_TENANT,
+            settings=settings,
             orders_user_id=orders_user_id,
-            days=60,
-            limit=max(25, batch_limit * 5),
-            status="completed",
+            batch_limit=batch_limit,
         )
-        eligible_candidates = [
-            row for row in (pending.get("orders") or [])
-            if str(row.get("salla_status") or "").strip()
-            in {"تم التنفيذ", "completed"}
-        ]
-        quarantined = await _open_quarantined_order_numbers(
-            db,
-            [str(row.get("order_number") or "")
-             for row in eligible_candidates],
-        )
-        candidates = [
-            row for row in eligible_candidates
-            if str(row.get("order_number") or "") not in quarantined
-        ][:max(1, int(batch_limit))]
 
         if not candidates:
-            result = {"ok": True, "status": "idle", "sent_count": 0}
+            result = {
+                "ok": True,
+                "status": "idle",
+                "sent_count": 0,
+                "candidate_count": candidate_counts[
+                    "authoritative_backlog_count"
+                ],
+                **candidate_counts,
+            }
             _LAST_RUN_OK = True
             _LAST_ROUND = result
             return result
@@ -394,21 +918,24 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "order_numbers": [str(r["order_number"]) for r in candidates],
             "started_at": started_at,
             "settings_armed_at": settings.get("plan_b_auto_send_armed_at"),
+            **candidate_counts,
         }
         # Audit exists before the first external write.
         await db.qoyod_manual_auto_runs.insert_one(audit)
 
+        # The loop is sequential. Keep one task-local client (and therefore
+        # one complete Qoyod invoice-reference snapshot) for this batch only.
+        client_scope_token = begin_shared_manual_qoyod_client()
         results: list[dict[str, Any]] = []
-        stopped = False
         for row in candidates:
             order_number = str(row["order_number"])
             try:
-                still_completed, refresh = await _refresh_and_verify_salla_status(
+                still_eligible, refresh = await _refresh_and_verify_salla_status(
                     db,
                     orders_user_id=orders_user_id,
                     order_number=order_number,
                 )
-                if not still_completed:
+                if not still_eligible:
                     snapshot = refresh.get("plan_b_status_snapshot") or {}
                     results.append({
                         "order_number": order_number,
@@ -423,6 +950,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     orders_user_id=orders_user_id,
                     order_number=order_number,
                     actor=f"auto-plan-b:{run_id}",
+                    allow_historical_positive_total=True,
                 )
                 results.append({
                     "order_number": order_number,
@@ -432,6 +960,46 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     "payment_id": payload.get("payment_id"),
                 })
             except ManualSendRefused as exc:
+                if is_credential_failure(exc):
+                    await _pause_for_credential_failure(
+                        db,
+                        settings=settings,
+                        exc=exc,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "credentials_paused",
+                        "code": exc.code,
+                    })
+                    # A credential failure is global, not order-local. Stop
+                    # this bounded round without quarantining any backlog row.
+                    break
+                if is_transient_qoyod_failure(exc):
+                    status_codes = sorted(_qoyod_status_codes(exc.extra or {}))
+                    retryable = ManualSendRefused(
+                        "qoyod_transient_error",
+                        "تعذر تأكيد نتيجة قيود مؤقتاً؛ ستسبق أي محاولة "
+                        "لاحقة مصالحة المرجع لمنع التكرار.",
+                        {
+                            "source_code": exc.code,
+                            "status_codes": status_codes,
+                        },
+                    )
+                    await _quarantine_order(
+                        db,
+                        order_number=order_number,
+                        exc=retryable,
+                        run_id=run_id,
+                    )
+                    results.append({
+                        "order_number": order_number,
+                        "outcome": "retry_later",
+                        "code": retryable.code,
+                        "message": retryable.message,
+                        "detail": retryable.extra,
+                    })
+                    continue
                 if exc.code in SAFE_ALREADY_SENT_CODES:
                     results.append({
                         "order_number": order_number,
@@ -446,7 +1014,10 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                         "code": exc.code,
                     })
                     continue
-                if exc.code in _PER_ORDER_MANUAL_REVIEW_CODES:
+                if exc.code == "salla_status_refresh_failed":
+                    # Persist the transient failure through the installed
+                    # bounded retry scheduler. Without this write the same
+                    # oldest row consumes every later worker batch forever.
                     await _quarantine_order(
                         db,
                         order_number=order_number,
@@ -455,44 +1026,50 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                     )
                     results.append({
                         "order_number": order_number,
-                        "outcome": "manual_review",
+                        "outcome": "retry_later",
                         "code": exc.code,
                         "message": exc.message,
                         "detail": exc.extra,
                     })
                     continue
+                await _quarantine_order(
+                    db,
+                    order_number=order_number,
+                    exc=exc,
+                    run_id=run_id,
+                )
                 results.append({
                     "order_number": order_number,
-                    "outcome": "failed",
+                    "outcome": "manual_review",
                     "code": exc.code,
                     "message": exc.message,
                     "detail": exc.extra,
                 })
-                await _trip_circuit_breaker(
-                    db, code=exc.code, message=exc.message, run_id=run_id,
-                )
-                stopped = True
-                break
+                continue
             except Exception as exc:  # noqa: BLE001
                 error_reference = uuid.uuid4().hex[:8]
                 logger.exception(
                     "Plan-B auto-send unhandled order=%s run=%s ref=%s",
                     order_number, run_id, error_reference,
                 )
+                isolated = ManualSendRefused(
+                    "unhandled_exception",
+                    f"خطأ غير متوقع (مرجع {error_reference})",
+                    {"error_reference": error_reference},
+                )
+                await _quarantine_order(
+                    db,
+                    order_number=order_number,
+                    exc=isolated,
+                    run_id=run_id,
+                )
                 results.append({
                     "order_number": order_number,
-                    "outcome": "failed_unhandled",
+                    "outcome": "manual_review",
                     "code": "unhandled_exception",
                     "error_reference": error_reference,
                 })
-                await _trip_circuit_breaker(
-                    db,
-                    code="unhandled_exception",
-                    message=f"خطأ غير متوقع (مرجع {error_reference})",
-                    run_id=run_id,
-                )
-                stopped = True
-                break
+                continue
 
         finished_at = _now()
         sent_count = sum(r["outcome"] == "sent" for r in results)
@@ -500,13 +1077,29 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         manual_review_count = sum(
             r["outcome"] == "manual_review" for r in results
         )
+        retry_later_count = sum(
+            r["outcome"] == "retry_later" for r in results
+        )
+        credential_paused_count = sum(
+            r["outcome"] == "credentials_paused" for r in results
+        )
         result = {
-            "ok": not stopped,
-            "status": "stopped_on_error" if stopped else "succeeded",
+            "ok": True,
+            "status": (
+                "credentials_paused"
+                if credential_paused_count
+                else "succeeded"
+            ),
             "run_id": run_id,
             "sent_count": sent_count,
             "already_sent_count": already_count,
             "manual_review_count": manual_review_count,
+            "retry_later_count": retry_later_count,
+            "credential_paused_count": credential_paused_count,
+            "candidate_count": candidate_counts[
+                "authoritative_backlog_count"
+            ],
+            **candidate_counts,
             "results": results,
             "started_at": started_at.isoformat(),
             "finished_at": finished_at.isoformat(),
@@ -519,7 +1112,7 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
                 "result": result,
             }},
         )
-        _LAST_RUN_OK = not stopped
+        _LAST_RUN_OK = True
         _LAST_ROUND = result
         return result
     except Exception as exc:  # failure before an audited external mutation
@@ -529,16 +1122,8 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
             "Plan-B auto-send round failed before completion ref=%s",
             error_reference,
         )
-        # Fail closed. An operator must review and save the settings again.
-        try:
-            await _trip_circuit_breaker(
-                db,
-                code="auto_round_failed",
-                message=f"تعذر تشغيل جولة الإرسال (مرجع {error_reference})",
-                run_id=f"preflight-{error_reference}",
-            )
-        except Exception:
-            logger.exception("Plan-B circuit breaker persistence failed")
+        # Keep the application armed.  No order was selected safely enough to
+        # quarantine here, so the next 15-second tick retries the round.
         result = {
             "ok": False,
             "status": "round_failed",
@@ -549,6 +1134,8 @@ async def run_once(db, *, batch_limit: int = 5) -> dict[str, Any]:
         return result
     finally:
         _LAST_RUN_AT = _now()
+        if client_scope_token is not None:
+            end_shared_manual_qoyod_client(client_scope_token)
         await _release_lease(db, owner)
 
 
@@ -559,9 +1146,12 @@ async def _loop(db, *, interval_sec: float, batch_limit: int) -> None:
     )
     while True:
         try:
-            await run_once(db, batch_limit=batch_limit)
+            from .recovery_campaign import tick as recovery_tick
+            from .recovery_adapter import ProductionPorts
+            if not await recovery_tick(db, ProductionPorts):
+                await run_once(db, batch_limit=batch_limit)
         except Exception:
-            # run_once is already fail-closed; this protects task liveness.
+            # run_once already isolates failures; this protects task liveness.
             logger.exception("Plan-B Qoyod auto-send worker tick escaped")
         await asyncio.sleep(interval_sec)
 

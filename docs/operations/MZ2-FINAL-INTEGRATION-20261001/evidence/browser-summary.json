@@ -1,0 +1,58 @@
+{
+  "source_checkpoint": "fb688621c99cdf413604f514beffa274e58d73ea",
+  "results": [
+    {
+      "name": "UI create persists a new backend session; list/get use same ID",
+      "status": "PASS"
+    },
+    {
+      "name": "UI cutover save persists and reload restores it",
+      "status": "PASS"
+    },
+    {
+      "name": "section save / reload restores explicit zero",
+      "status": "PASS"
+    },
+    {
+      "name": "identical retry is idempotent; stale CAS returns 409",
+      "status": "PASS"
+    },
+    {
+      "name": "N/A requires reason and evidence and round-trips without inferred zero",
+      "status": "PASS"
+    },
+    {
+      "name": "UI provider/bank binding persists exact IDs",
+      "status": "PASS"
+    },
+    {
+      "name": "UI per-account inventory valuation round-trip excludes physical quantities",
+      "status": "PASS"
+    },
+    {
+      "name": "server preview contains bank mapping and per-account inventory reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "review locks server session and UI edits",
+      "status": "PASS"
+    },
+    {
+      "name": "readiness exposes Smoke B hold and live-post false, not physical approval",
+      "status": "PASS"
+    },
+    {
+      "name": "all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zero unexpected browser errors or external requests; zero financial effects",
+      "status": "PASS"
+    }
+  ],
+  "browser_errors": [],
+  "external_requests": [],
+  "scope": "Synthetic loopback only; 16-stage navigation is not complete business acceptance",
+  "financial_effects": 0,
+  "smoke_b": "BLOCKED_BY_ENVIRONMENT"
+}

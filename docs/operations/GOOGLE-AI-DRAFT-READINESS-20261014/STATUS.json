@@ -1,0 +1,43 @@
+{
+  "task_id": "GOOGLE-AI-DRAFT-READINESS-20261014",
+  "status": "WIP_UPDATED_PRODUCTION_BASE_NOT_PUBLISHED",
+  "updated_at_utc": "2026-10-14T16:09:33.476Z",
+  "base_sha": "5516a450cc971654f7159616c11afccd50f571d8",
+  "base_tree": "d6cfa9df06dfe7fee11abdfa3f9dd258c3a67767",
+  "branch": "codex/google-ai-draft-readiness-current-prod-20261014",
+  "production_changed": false,
+  "superseded": {
+    "pr": 1361,
+    "source_sha": "62d354b3d09eea58aefb4dc698af75190566d8bc",
+    "intent_sha": "5c809dfd20f62e6561c6d53730ef578c33f43b52",
+    "reason": "Production advanced through reviewed PR1360 inventory and PR1362 campaign research while paused. Original frozen A/B preserved; cannot merge/publish an old-base intent over newer governed source.",
+    "clean_B_adapter_exit_code": 0,
+    "clean_B_adapter_seconds": 52.18
+  },
+  "scope": [
+    "Narrow requested campaign type in model schema.",
+    "Search RSA/DSA variants with format-specific counts/headline limits; exclude foreign family/group targeting/ad names and unsupported page-feed linkage.",
+    "Retain full canonical ownership/reference/budget/readiness and approval checks."
+  ],
+  "preserved": [
+    "All reviewed inventory/research and other current production source, unchanged.",
+    "Latest production tracked release intent remains unchanged until a fresh governed source build freezes new intent-only B.",
+    "Other worktrees, caches, leases and business data."
+  ],
+  "verification": {
+    "baseline_regression": "Fails before original fix",
+    "old_source_tests": "62 AI PASS1.25s;219 affected offline PASS2.75s;17 source CI checks passed/skipped, separate CodeQL success0 annotations",
+    "updated_base_tests": "PENDING",
+    "live_updated_source": "UNVERIFIED"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "paid_project_chat_requests": 0,
+  "remaining": [
+    "Fresh combined-base source CI/CodeQL and governed two-clean-build/freeze.",
+    "Fresh immutable intent B and clean adapter/package validation.",
+    "Require inactive actual guard before workspace handoff; preserve any other owner's lease.",
+    "Exact merge and separately authorized toolbar publication,3 public probes and live Mezan AI draft/readiness acceptance."
+  ],
+  "next_safe_action": "Create draft PR for the updated-base source and run combined-base checks. Confirm actual guard inactive before a new independent clean source clone/build. Do not publish superseded PR1361 identity."
+}

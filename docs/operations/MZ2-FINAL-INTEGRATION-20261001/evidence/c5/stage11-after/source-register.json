@@ -1,0 +1,20 @@
+{
+  "schema": "mz2.c5.synthetic-business-sources.v1",
+  "provenance": "Declared synthetic Acceptance dataset; no real customer, bank, employee or stock balance",
+  "cutover": "2026-10-01T00:00:00+03:00",
+  "currency": "SAR",
+  "banks_cash": {"c5-bank": "1000.00", "c5-cash": "0.00", "c5-overdraft": "40.00"},
+  "providers": {"tabby_receivable": "17.00", "settlement_bank": "c5-bank", "fee_percentage": "2.5", "fee_fixed": "1.00", "fee_vat": "exclusive", "effective_from": "2026-01-01", "applicability": {"tabby": "Only provider configured in this synthetic business; positive receivable17.00", "salla": "No settlement relationship/balance in this explicit synthetic dataset", "tamara": "No settlement relationship/balance in this explicit synthetic dataset", "emkan": "No settlement relationship/balance in this explicit synthetic dataset"}},
+  "employees": {"id": "c5-employee", "salary_payable": "30.00", "advance": "10.00", "custody": "5.00"},
+  "suppliers": {"id": "c5-supplier", "payable": "25.00", "advance": "10.00"},
+  "external_person": {"name": "C5 Synthetic Person", "phone": "0500000001", "receivable": "12.00"},
+  "courier": {"id": "c5-courier", "cod_receivable": "150.00", "payable": "20.00", "contract": {"payment_mode": "postpaid", "shipping_cost": "20.00", "shipping_vat_percent": "15", "shipping_cost_vat_inclusive": false, "commission_vat_percent": "15", "commission_vat_inclusive": true, "effective_from": "2020-01-01T00:00:00+03:00", "cod_fee_tiers": [{"min_amount": "0", "max_amount": null, "min_inclusive": true, "max_inclusive": false, "commission_percent": "0.01", "fixed_fee": "2.00"}]}},
+  "driver": {"id": "c5-driver", "cod_receivable": "100.00", "fee_payable": "15.00"},
+  "inventory": {"provenance": "Synthetic planned valuation; no physical approval", "rows": [{"variant_id": "black-54", "quantity": "2", "unit_cost": "50.00", "total": "100.00"}, {"variant_id": "blue-54", "quantity": "3", "unit_cost": "60.00", "total": "180.00"}, {"resource_id": "fabric", "quantity": "1.5", "unit_cost": "10.00", "total": "15.00"}], "account_totals": {"inventory-products": "280.00", "inventory-components": "15.00"}, "total_sar": "295.00"},
+  "advertising": {"integration": "c5-meta", "wallet_id": "c5-wallet", "payable_id": "c5-ad-payable", "wallet_amount": "40.00", "payable_amount": "15.00", "mode": "hybrid", "policy": "explicit_split"},
+  "prepaid": {"obligation": "c5-subscription", "invoice": "c5-invoice", "paid_date": "2026-08-21", "coverage_start": "2026-08-21", "coverage_end": "2027-08-21", "paid_amount": "3660.00", "inclusive_days": 366, "consumed_days": 41, "remaining_days": 325, "remaining_prepaid": "3250.00"},
+  "obligations": [{"category": "accrued_expense", "reference": "c5-accrual", "amount": "10.00", "entity_type": "liability", "sub_account": "accrued_expense", "side": "credit"}, {"category": "other_payable", "reference": "c5-other-payable", "amount": "20.00", "entity_type": "liability", "sub_account": "other_payable", "side": "credit"}, {"category": "other_receivable", "reference": "c5-other-receivable", "amount": "30.00", "entity_type": "asset", "sub_account": "other_receivable", "side": "debit"}, {"category": "sales_vat_payable", "reference": "c5-sales-vat", "amount": "25.00", "entity_type": "tax", "sub_account": "sales_vat_payable", "side": "credit"}, {"category": "input_vat", "reference": "c5-input-vat", "amount": "10.00", "entity_type": "tax", "sub_account": "input_vat", "side": "debit"}],
+  "independent_expected": {"debits_before_equity": "4929.00", "credits_before_equity": "200.00", "existing_equity_counterpart_credit": "4729.00", "balanced_total": "4929.00", "zero_account_id": "c5-cash", "native_journals": 0, "opening_posts": 0, "activation": false},
+  "held": ["actual physical stock approval", "Opening Post", "Activation", "Production Smoke B", "production financial writes"],
+  "not_applicable": {"deposits": "No deposit exists in this explicit synthetic dataset; unsupported deposit classification must still reject"}
+}

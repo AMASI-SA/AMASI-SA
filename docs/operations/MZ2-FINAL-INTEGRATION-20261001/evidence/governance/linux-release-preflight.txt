@@ -1,0 +1,7 @@
+Exact HEAD: a58624ccb13c1e24319be6d1cac27c8558489ada
+Job: https://github.com/AMASI-SA/AMASI-SA/actions/runs/36864406108/job/110376225155
+Backend preflight SUCCESS; all five identity/toolchain/adapter/production-guard suites executed on Linux. No platform source or assertions changed afterward.
+2026-10-01T12:50:04.3348466Z ##[group]Run python -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity
+2026-10-01T12:50:04.3350365Z [36;1mpython -m unittest backend.tests.test_emergent_deployment_adapter_v5 backend.tests.test_frontend_release_toolchain backend.tests.test_frontend_build_identity backend.tests.test_production_release_guard backend.tests.test_release_identity[0m
+2026-10-01T12:50:07.5965277Z Ran 156 tests in 2.956s
+2026-10-01T12:50:07.5965653Z OK

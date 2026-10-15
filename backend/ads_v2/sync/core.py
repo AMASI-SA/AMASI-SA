@@ -243,6 +243,14 @@ async def run_sync_for_account(
         return {"ok": False, "error": "account_not_found",
                 "sync_run_id": sync_run_id}
 
+    if account.get("provider") == "snapchat":
+        return {
+            "ok": False,
+            "error": "snapchat_legacy_frozen",
+            "redirect_to": "/integrations-v2?provider=snapchat_ads",
+            "sync_run_id": sync_run_id,
+        }
+
     if not account.get("sync_enabled"):
         return {"ok": False, "error": "sync_disabled",
                 "sync_run_id": sync_run_id}
@@ -830,6 +838,13 @@ async def auto_reconcile_for_day(
     )
     if not account:
         return {"ok": False, "error": "account_not_found"}
+
+    if account.get("provider") == "snapchat":
+        return {
+            "ok": False,
+            "error": "snapchat_legacy_frozen",
+            "redirect_to": "/integrations-v2?provider=snapchat_ads",
+        }
 
     # ── Resolve token & call provider (READ-ONLY) ──
     token, token_status = await _resolve_access_token(db, account)

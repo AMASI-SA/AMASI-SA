@@ -1,0 +1,8 @@
+PASS src/services/accountingOnboarding.test.js
+PASS src/pages/accounting/h2/DriverPanel.test.jsx
+
+Test Suites: 2 passed, 2 total
+Tests:       30 passed, 30 total
+Snapshots:   0 total
+Time:        1.448 s, estimated 2 s
+Ran all test suites matching /src\\pages\\accounting\\h2\\DriverPanel.test.jsx|src\\services\\accountingOnboarding.test.js/i.

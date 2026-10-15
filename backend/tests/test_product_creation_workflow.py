@@ -104,6 +104,9 @@ def test_draft_preview_approval_publish_and_readback(monkeypatch, drop_options):
                 return {"data": deepcopy(remote)}
             if method == "GET" and path == "/products/123":
                 return {"data": {**deepcopy(remote), **({"options": []} if drop_options else {})}}
+            if method == "POST" and path == "/products/quantities/bulk":
+                assert kwargs["json"]["products"][0]["unlimited_quantity"] is True
+                return {"success": True}
             raise AssertionError(f"Unexpected provider call: {method} {path}")
 
         async def save(db, *, merchant_id, draft, raw, actor_id):
@@ -113,6 +116,8 @@ def test_draft_preview_approval_publish_and_readback(monkeypatch, drop_options):
         monkeypatch.setattr(creation, "call_salla", provider)
         monkeypatch.setattr(creation, "_save_created_product", save)
         result = await routes["create_draft"](request(), OWNER)
+        assert result["draft"]["fulfillment_type"] == "requires_preparation"
+        assert result["draft"]["inventory_policy"] == "finished_goods_inventory_not_tracked"
         draft_id = result["draft"]["id"]
         preview = await routes["preview_draft"](draft_id, OWNER)
         assert preview["salla_payload"]["options"][1]["type"] == "text"

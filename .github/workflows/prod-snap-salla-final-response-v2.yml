@@ -1,0 +1,58 @@
+name: Production Snapchat Final Salla Response V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingCampaignSelectedSourceGuard.js"
+      - "frontend/src/marketingCampaignSelectedSourceGuard.test.js"
+      - ".github/workflows/prod-snap-salla-final-response-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test final Salla response contract
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingCampaignSelectedSourceGuard.test.js
+          src/marketingCampaignStaleResponseGuard.test.js
+          src/marketingCampaignProfitabilityHydration.test.js
+          src/services/marketingPerformance.test.js
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce final response order and source boundary
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          GUARD=frontend/src/marketingCampaignSelectedSourceGuard.js
+          STALE_LINE=$(grep -n 'marketingCampaignStaleResponseGuard' "$INDEX" | cut -d: -f1)
+          SALLA_LINE=$(grep -n 'marketingCampaignSelectedSourceGuard' "$INDEX" | cut -d: -f1)
+          test -n "$STALE_LINE"
+          test -n "$SALLA_LINE"
+          test "$SALLA_LINE" -gt "$STALE_LINE"
+          grep -q 'getCampaignReportSnapshot' "$GUARD"
+          grep -q '_mezanSallaSourceFinalized' "$GUARD"
+          grep -q 'runs_after_stale_response_guard: true' "$GUARD"
+          grep -q 'hydrates_raw_snapshot_after_final_response: true' "$GUARD"
+          ! grep -Eq 'provider.*(post|put|patch|delete)|accounting_write_reached.*true|qoyod_write_reached.*true' "$GUARD"

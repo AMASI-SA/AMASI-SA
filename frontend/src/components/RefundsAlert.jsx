@@ -16,6 +16,7 @@ const PERIOD_CHIPS = [
 ];
 
 function fmtMoney(n) {
+    if (n == null) return "—";
     return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         .format(Number(n) || 0);
 }
@@ -153,6 +154,11 @@ export default function RefundsAlert() {
             )}
 
             {/* Summary cards */}
+            {s?.currency_conversion_complete === false && (
+                <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900" data-testid="refunds-currency-warning">
+                    مبالغ الاسترجاع موقوفة مؤقتاً لوجود طلب أجنبي بلا سعر صرف موثّق من سلة.
+                </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4 bg-white/40" data-testid="refunds-summary">
                 <SummaryCell
                     label="طلبات مرتجعة"
@@ -162,18 +168,18 @@ export default function RefundsAlert() {
                 />
                 <SummaryCell
                     label="إجمالي مبلغ الاسترجاع"
-                    value={fmtMoney(s?.total_refund_amount || 0)}
+                    value={fmtMoney(s?.total_refund_amount)}
                     sub="ر.س"
                 />
                 <SummaryCell
                     label="استرجاع جزئي"
-                    value={fmtMoney(s?.total_refund_partial || 0)}
+                    value={fmtMoney(s?.total_refund_partial)}
                     sub="ر.س"
                     accent="text-amber-700"
                 />
                 <SummaryCell
                     label="استرجاع كامل"
-                    value={fmtMoney(s?.total_refund_full || 0)}
+                    value={fmtMoney(s?.total_refund_full)}
                     sub="ر.س"
                     accent="text-rose-700"
                 />
@@ -269,10 +275,10 @@ export default function RefundsAlert() {
                                                     {o.actual_payment_method || o.payment_method || "—"}
                                                 </span>
                                             </td>
-                                            <td className="px-3 py-2 font-mono">{fmtMoney(o.total_amount || o.actual_gross_amount || 0)}</td>
-                                            <td className="px-3 py-2 font-mono text-amber-700 font-bold">{fmtMoney(o.actual_partial_refund_amount || 0)}</td>
-                                            <td className="px-3 py-2 font-mono text-rose-700 font-bold">{fmtMoney(o._effective_refund_full || o.actual_refund_amount || 0)}</td>
-                                            <td className="px-3 py-2 font-mono text-emerald-700">{fmtMoney(o.actual_net_amount || 0)}</td>
+                                            <td className="px-3 py-2 font-mono">{fmtMoney(o.total_amount ?? o.actual_gross_amount)}</td>
+                                            <td className="px-3 py-2 font-mono text-amber-700 font-bold">{fmtMoney(o.actual_partial_refund_amount ?? 0)}</td>
+                                            <td className="px-3 py-2 font-mono text-rose-700 font-bold">{fmtMoney(o._effective_refund_full ?? o.actual_refund_amount)}</td>
+                                            <td className="px-3 py-2 font-mono text-emerald-700">{fmtMoney(o.actual_net_amount)}</td>
                                             <td className="px-3 py-2 text-slate-500 text-[11px]">{fmtDate(o.settlement_date)}</td>
                                             <td className="px-3 py-2 text-[10px] text-slate-500">
                                                 {o._is_status_refund && !o.settlement_source ? (

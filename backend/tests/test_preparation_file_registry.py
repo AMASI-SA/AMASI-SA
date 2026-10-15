@@ -1,8 +1,10 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from preparation_file_registry import (
     PreparationFileDraftRequest,
+    _assignable_employees,
     make_preparation_file_registry_router,
     normalize_file_title,
     preparation_file_name,
@@ -62,6 +64,47 @@ def test_draft_requires_name_employee_and_expected_counts():
     )
     assert payload.expected_quantity == 30
     assert payload.selected_product_count == 2
+
+
+
+class _KeywordOnlyCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    async def to_list(self, *, length):
+        return self.rows[:length]
+
+
+class _FindCollection:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def find(self, *_args, **_kwargs):
+        return _KeywordOnlyCursor(self.rows)
+
+
+class _EmployeeDb:
+    def __init__(self):
+        self.users = _FindCollection([{
+            "id": "owner-1",
+            "name": "خالد",
+            "email": "khaled@example.com",
+            "role": "owner",
+            "is_active": True,
+        }])
+        self.empty = _FindCollection([])
+
+    def __getitem__(self, _name):
+        return self.empty
+
+
+def test_assignable_employees_supports_keyword_only_motor_cursor_limits():
+    employees = asyncio.run(_assignable_employees(
+        _EmployeeDb(),
+        user_id="owner-1",
+        reviewer={"id": "owner-1", "role": "owner"},
+    ))
+    assert [row["id"] for row in employees] == ["owner-1"]
 
 
 def test_router_registers_employee_draft_finalize_and_history_routes():

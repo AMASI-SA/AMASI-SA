@@ -1,0 +1,177 @@
+4b3c397a72c7d50c73cc79fd0d72dcc1c3ef9bb9 docs(mz2): checkpoint financial accounts dependency stop [skip ci]
+ab3ef10c5aedfe5e2190bc57bb8ed26afc1347f2 docs(mz2): complete approved financial accounts and opening specification [skip ci]
+406e4cf45c8856dbb1edcb7226b9227c3f0b08f7 docs(mz2): add FX and opening rules with read-only core recommendation [skip ci]
+29e4cd940b195df0164fe7bc74b07c77a0a02bfc docs(mz2): fix page scope permissions evidence and V2 transition contract [skip ci]
+e8818bb67d84ccd0487e126a06f5e9c3e09702c7 fix(p01): isolate write decisions on approved transactional MZ2 balances
+711e50f222184c7721e5eab8f62f189eac4ed71b fix(accounting): keep P02 shipping financial writes locked
+eb0c559d95a1123bf266e09670e84ddfaed8d5ce fix(accounting): guard P02 driver settlement routes
+82131e8a702701683fb4baa0ff5bdb6e9e2c5cfb test(accounting): prove P02 shipping writers fail closed
+a46a03f0663b420508258403d912437e556d8696 ci(store-delivery): execute accounting phase-lock tests
+a1fe9dd6e8c769fa399b472212e12569d310b070 ci(store-delivery): install pytest asyncio plugin
+87e19a582539820d9a44b5d02d1329058245de23 feat(accounting): add MZ2 opening balance workflow
+984f2f943087df5175cf0583e00591c87234a644 feat(accounting): register opening balance routes
+e0d0242bd0f286f1475f0b5fee36a1f654744481 test(accounting): cover MZ2 opening balance lifecycle
+420ce92c0c9c35ea1e12a34c857f667ab8612a2f ci(accounting): verify MZ2 opening balance lifecycle
+5c9a758c3603c1cd93b3f13916565bad7c94784f feat(accounting): mark guarded opening workflow implemented
+06628eeb278000ba6eb425d37a587e216855a584 feat(accounting): expose safe opening-balance selectors
+5cc56aebd9f9ee82a51a5d62718cd7503f926751 feat(accounting): add opening balance client
+ba041d44490aa937a7a83ce06d599fa37474b8c8 feat(accounting): add MZ2 opening balance workspace
+003f8696e02fa2b3a24d5746ab5ca2d7c532c5e7 feat(accounting): expose opening balance workspace
+36384a01a5a1df54ec42b87364561100174cddad feat(accounting): mark opening balances implemented
+13db76b56e707040714a53690bc2b4f72dfd83f6 test(accounting): expect opening balance workspace
+1289b410959faf98da183f08c1cbb20ff43dccfe chore(accounting): remove unused opening preview state
+9769fedf2ee4eb1f5d95ca5d14edf6aa1e61cfc9 test(accounting): lock MZ2 opening balance UX boundary
+f319510d8475ff30577d5b9406554723d02a59a8 ci(accounting): run opening balance UI contract
+d01058f6a37fa041e142a103874f1c66179be172 test(accounting): require opening balance routes
+58f584ca4fca7c5588c577d3d60eacfd88a64b6b feat(accounting): add MZ2 daily movement import
+14c2e62c2adef4dc24f84ffb4fa65b447c99688e feat(accounting): add daily movement import permission
+d63bfcfd4d54196293b6123d95322dbbab6f0dbb feat(accounting): register daily movement routes
+39c797b8bf917f9128416e8aa412ef30e925f560 fix(accounting): parse movement uploads before owner transaction
+7c64b9fd2433b099580738e77a6024811a033780 fix(accounting): fail closed on incomplete bank statement rows
+56e8d7ae60e936d2bef52c28d929c65fdb618855 test(accounting): cover MZ2 daily movement import
+cdb2a8faab5ab059d81ebfb7e6b3eae765020478 ci(accounting): verify daily movement intake
+c5ab99cfd45156d6d400e1fa780e936e746bd151 test(accounting): require daily movement routes
+590e9804c0182530c9aaece94d30906034714768 feat(accounting): expose bank statement import permission
+ccbe5a82adbd420adc3458cded00eb2f2a63ea10 feat(accounting): add daily movement import client
+ffb159e8106685bcf4ceb9bdb20bef8a820a358f feat(accounting): add MZ2 bank statement import UI
+6c6852543b8ed54a88c86a29a595f7ac5a4c0c80 feat(accounting): add bank statement import to movement workspace
+619e27ba8b2b48f101ea67cdf1f3f75e611fc8c0 test(accounting): lock daily movement evidence boundary
+e938e2a195c256aebfef7c71ad621ac019f24294 test(accounting): require movement import action permission
+9f92401839fb7353fa9f09741d7ad4780e6ffa75 ci(accounting): run daily movement UI contract
+4cc680735bb5620d7d1cdb00bcca86ca5bfb3a77 fix(accounting): preserve zero values in bank statement parser
+d94e6959c0c6f3cbf75b46b65cda077704b32301 feat(accounting): bind employee zero openings explicitly
+ce48919087310ad8c31e6ed1fb4e96ebdda00e81 feat(accounting): accept approved employee zero evidence
+3860a8d9f1c471b0cf43ae6bca47f86228c39f2a feat(accounting): add MZ2 payroll and employee cash flows
+03d6e17796a7e8930e6ef246b77ac93e992549be feat(accounting): register MZ2 employee finance routes
+4e3e8a9e6c330e4e259f184981b75b4f40f767e9 feat(accounting): admit reviewed MZ2 payroll producers
+5e72e1e564b4d48c1a7775dd3b18728acd056123 test(accounting): cover MZ2 payroll advance and custody flows
+e472345312e14a393014719ab4a6d526000e82f0 ci(accounting): verify MZ2 employee finance
+910ef5ac44782682d3b7b05e6ae1ed17ea35f11a test(accounting): require MZ2 payroll routes
+5fa1703cdb9ae4b9f5ca1f3978df4bdae064b27c feat(accounting): add MZ2 payroll client
+83e2b5b9bd4c939b39ebf9154e34a867663caa9e feat(accounting): add MZ2 payroll workspace
+306282857ec274deb1f2bdb72fee175eec854779 feat(accounting): expose MZ2 payroll workspace
+c345f7f41c76b8690fb01607723056574259cc80 fix(accounting): use source-day timing and skip zero-salary rows
+f5d57028af0a7e2aacbf0358d8334b8505fdd0e3 test(accounting): keep payroll event inside current source day
+e21e3e168c0f4b00704261c4d2f64f8e32ca26d7 fix(accounting): accrue payroll on selected Saudi accounting day
+716bbe758b17728f892ed3c76665922b96419077 feat(accounting): mark MZ2 payroll workspace implemented
+2113e1d290e3c7f54e99dd0696f68256f88adfe3 feat(accounting): mark native payroll implemented
+09a387c860ef874a96c9133dc35149e0477a390e test(accounting): expect native payroll workspace
+62049c38fe45ae5f9a59768acb1c293765c74247 test(accounting): lock MZ2 payroll UX boundary
+0a793e3af9646c364f5c955b3ad703f28d86aa9a ci(accounting): run MZ2 payroll UI contract
+7f6c41060b9218946b87a8d1bfa3e3249ef81b62 feat(accounting): add Salla order evidence intake
+fb4f224a9d7fe807eaaf2942589778b74404ed12 feat(accounting): register Salla order evidence routes
+09dc58c20b70f6571ced6b1485eea7fee9d3e137 test(accounting): cover Salla order evidence intake
+32ee7005837c31ca7e3b4c1b20ab77f465b193d7 ci(accounting): verify Salla order evidence intake
+20719f0eb5068085443fa77325d1d0f52625da79 test(accounting): require Salla order evidence routes
+90289bc9c70d36e4a0ce475bf2bdd04b2e221e9c feat(accounting): retain Salla source tax for review only
+52c0d922fecf07f8d67a4811c0576722c8df8e54 feat(accounting): recognize safe Salla order evidence
+7b2c813c6c0c7475fcbf09c0baf97c2e89ff4826 feat(accounting): register order recognition routes
+15c7090c51a537bbd74f45abe8e349dc122e06a1 fix(accounting): preserve recognition retry idempotency
+d635e550c9641eb93780c1078019d6fba2d99828 fix(accounting): preserve recognized sales across daily Salla uploads
+1ad77326caab650378f494172edd6bb8c913b9bb fix(accounting): retain same-version conflicts after recognition
+b16ad7628d1d4558851bebe2082d0133088e7d2e test(accounting): cover Salla evidence sale recognition
+cdfa37d5912f239fc4a1c76b69a9a8a91ad5fe7a ci(accounting): verify Salla evidence recognition
+f79c0545fedddbb9c484b46cf84278964e07faf6 test(accounting): require order recognition routes
+efd035b050feeae30593b2adcc26f5dc9d977544 fix(accounting): revalidate order evidence before posting
+d3bd19bf71ac8c5a7c134ca89571146aadc5f618 feat(accounting): add isolated MZ2 shipping COD accounting
+39bf4f4e50ce68406adff7f82605dc67e35785ee feat(accounting): register isolated shipping P02 routes
+cf926eed195671172feafb631721737c60657d55 feat(accounting): add native P02 ledger entry types
+4154106f55b092556b6a58063a2477b121926e6b feat(accounting): admit native P02 producers and zero evidence
+e5da1bffcf88b5bb7332a68c3da465c8fde9b706 feat(accounting): include P02 counterparties in opening zero scope
+b0b97f186b7a662b01a0aaac70cb0e437e4ba2fc fix(accounting): make store driver COD retries idempotent
+438037cc4c95217706b34a26341caa81173d03d8 fix(accounting): detect changed COD facts on retry
+ee754328c7f6a2488a7105cf8bae618e8f0e2320 test(accounting): cover isolated MZ2 shipping COD accounting
+a77d145cfd7e884b2cafc4fc8ec2a7ecf525b002 ci(accounting): verify isolated shipping COD accounting
+ea3a3bbac3bb334e49c16fd9e974212c9a3952e9 test(accounting): require isolated shipping P02 routes
+23bdde7fb6810357306b016e56615f96101d9454 fix(accounting): isolate shipping module from driver routers
+9245ea5e298aa2b9d5300bff226f92562a5df8b3 feat(accounting): settle shipping balances from bank evidence
+cdb16d3ebd75def97bb660d166e1736bf97b5f9f fix(accounting): require bank identity for shipping settlement
+6a6842cd7c8e374282131df21c11fc404f8740e7 feat(accounting): register shipping settlement routes
+8ff85dc55f370b7ab847919238b785e1928e76b5 feat(accounting): add shipping settlement entry type
+364be53703fc6fdadc54c1bccff4ac455c15bc4d feat(accounting): admit shipping settlement journals
+9404ec0fa6039d26a332ce4c2778edc1e9d8b1fb test(accounting): cover bank-evidenced shipping settlements
+5d9b412f8f6ac99b215db855b08ec7acda50b2d9 ci(accounting): compile shipping settlement service
+1628947b44ef0d90bb6e6b1b6374cee6c94137c8 test(accounting): require shipping settlement routes
+fde96bbcd2a723fd958ea4aa1f98fc0980b551eb fix(accounting): report reused shipping bank evidence explicitly
+9805c3f06243839a5cadeabe086d2d39f886b7b7 feat(accounting): add order evidence and recognition clients
+716d85893d05652040cc99cf2d1acff842d00446 feat(accounting): scope automatic recognition to uploaded file
+a22cfc76498c92c33df1d8343e6392eb64490eda test(accounting): scope auto recognition to one Salla upload
+1d6ae21af183b2213c8d40b90e6c428db1082019 feat(accounting): integrate full UAT daily workspace
+c13f3e0675653b74f7deab37d5fc11b6bf9d49ae refactor(accounting): make integrated daily workspace primary
+f851a8711db712840edc1dc8133e5d7661f353ce chore(accounting): align navigation with integrated daily UAT
+55f0b4f9e31098c96ac11ecaec9283cc29eee69d test(accounting): expect integrated daily navigation
+2850520c84e6232944441a8ae987f1c73b25a72a test(accounting): lock integrated UAT daily workspace
+cbf37ab22ff2e1c05edb0b7ed7a8e23bab91b9ca test(accounting): cover integrated daily workspace navigation
+fcbfb44770fe26dc2d7258f6c33b09b577b0a903 ci(accounting): run integrated daily workspace contract
+4b0d94481c43804647619ff3ab3d3d32c78700e3 test(accounting): assert integrated order automation endpoints
+da93001e098f36c0dfef2ded4cab96d6e4d8018b feat(accounting): add MZ2 customer bank transfer receipt review
+c822086cfdf93d33f45e392126b8efaa130c070e feat(accounting): add MZ2 bank transfer entry types
+3173a27a220d498d70d3447aca6c62ece33ede90 feat(accounting): admit reviewed customer bank transfer journals
+7583c08fd3272451d63aa1160eb5cbe9167e082b refactor(accounting): approve bank transfers against actual bank movements
+6771a33d6fbddd852473eb884375d0fee78feaaf feat(accounting): register customer bank transfer review
+1317f1ed0c2dbd5aa7283a319331938565d91d32 fix(accounting): preserve bank transfer review across Salla reuploads
+f3600007693ad20682a1636cd42ba2830a989135 feat(accounting): add customer bank transfer review client
+ed62dba8f127b7b3ac0d405c35ec417468e28eca feat(accounting): add bank transfer receipt review workspace
+956de317c35f45ee7bca6ce73503004b643e6765 feat(accounting): add bank transfer review to movements page
+e7c51fa7b22ef03ae0123d8908181b48770ae841 feat(accounting): expose bank transfer receipt review on daily workspace
+80b09d4112867302d9536da04c89180698a05baa fix(accounting): commit receipt upload atomically
+6b93a0ede8b1ef92f4260bf608310dc0ff882e7c test(accounting): cover customer bank transfer receipt review
+f79b6a5f08d01a173ad8332b4c3140693d1bc60e ci(accounting): verify bank transfer receipt review
+8bb17b2bd294d26836078de63dcff30c11fb2810 test(accounting): require bank transfer review routes
+cfd3e0617c7d62ed14558c2b8cfe1b3f0e06e3de feat(accounting): settle delivered approved bank transfers on Salla refresh
+dbc9477dffa620b71defe6e7763e7b7ca584589d test(accounting): lock bank transfer receipt review UX
+be1a3a8b896d3a780459c3d7aedccc23a7546007 test(accounting): cover bank transfer review on daily workspace
+d4368839ce54c98f445a7694dbe75573485eff28 fix(accounting): prove customer advance receipt before sale conversion
+7ffff55189c1ec8684654a81444e347d5a2a356c fix(accounting): show bank amount mismatches without allowing approval
+76332171190c7615ca093e512adfe1478af34562 fix(accounting): keep bank transfer queue available on bad source rows
+c9ff951c4cd855f87f8e91ac8c6129a02a502641 ux(accounting): make bank transfer approval action explicit
+4e65199710cac5be0e4df5c4a8c3109303fc71bf feat(accounting): add manual incoming bank movements
+83856bd074714ed04a0aebc98e98a8a9867c3be4 feat(accounting): add manual incoming movement client
+fd24b04fa3589b4a6442ce35943a347d619e20fc feat(accounting): add accountant manual bank transfer form
+c4625341332e9a9eabcef365ac28c0c82659096a ux(accounting): make generic manual bank movement primary
+f1716aadd2abf44788ea419ebc0dbeeb35d15e91 test(accounting): cover manual incoming bank movements
+3086429a7861396d14182c86ef8c95100eb7e0ec test(accounting): require manual incoming movement route
+b94132ab7e438907720dfe228d28a6cfe8a35ecd test(accounting): cover manual incoming transfer UI
+b761002e68cab10073dfe4577b04d313adc46f8b test(accounting): expect generic manual movement action
+82feb6a9a72cebe961323dc9ab8eec8e22b7b991 fix(accounting): assert no debit-credit choice in manual movement form
+89f64b80cd9dfa3cfdc24ce42d7588f6db437f22 test(accounting): align navigation label with daily workspace
+656af320baedad14d23f2cf84b2abc3cbcd3da8f feat(accounting): add MZ2 outgoing expenses and supplier payments
+5970b94356314464cb93cfb435851993c804a8a4 test(accounting): cover outgoing expense and supplier payment flows
+00b4e2fa8c37881fb1db2213b97f6bb5382378ef test(accounting): register outgoing movement routes
+f8942b0b51201ea5a5a92cec1cacba4affaa1ed6 feat(accounting): expose outgoing movement APIs
+6d094f9d7d754cc94a9b5fad9c9a1db9f84d5531 feat(accounting): add accountant outgoing movement workflow
+0e25e5949bf7d5b1f4cd590e0483bc8f3b29d4d4 test(accounting): cover outgoing accountant workflow
+647f49d92937ca53b7cac903e79e5c0b907eba06 feat(accounting): expose MZ2 shipping COD work queue
+cf6d8cd757c1f024d5f2b00f623df993a8225bbf test(accounting): cover shipping COD accountant work queue
+6b9bab465af6551264bd8b6ed8879a0b7c659979 test(accounting): register shipping COD workspace route
+5bf6603b408d2ebb1875c8f23677c6832f2c6091 feat(accounting): expose MZ2 shipping COD workspace APIs
+1ac7e6832d9bee14e6c365186c29bba1c54584c0 feat(accounting): add native shipping COD accountant workspace
+04775cf9172da2e46f9ffc59bdfc309311d89a57 feat(accounting): wire native shipping COD workspace
+acd0cb6d020d994875df73aa98a085067241f14f feat(accounting): mark shipping COD workspace implemented
+f81eb1979547ccb3d79c3d3998687b77ba9e50f0 test(accounting): mark native shipping COD page implemented
+2dfb4274fe80e44c0aab7f8c757036ec4d31d700 test(accounting): align manual movement heading
+b29ddd3ca960292b29758a5321c5e972f71f3fb6 test(accounting): cover native shipping COD workspace
+2109b361981ad8e39b1bb065b0e04445888727d7 ci(accounting): run shipping COD workspace contract
+a3a29d172488a54a0c6f3eb8e23f0be255b276cf fix(accounting): separate outgoing posting permissions
+1d2488ffc8bb99dd5753c231b27c935683730c4b fix(accounting): gate outgoing posting by financial permissions
+b6a94491a6e866484186c7523c31e9be25442800 fix(accounting): align outgoing UI with posting permissions
+63793e399ec6fd36e8e33e157e73f86cdc337633 fix(accounting): keep shipping COD UI free of debit-credit jargon
+5292a87a476a140ae8c3c78e88dfba7d8c83f035 fix(accounting): admit verified outgoing producers into MZ2 balances
+a847e82c51b8374e13806f086b91ad7c9376bd0e chore(p02): prepare isolated source inspection artifact (temporary)
+9fe9eb43b7862a1458a3efb876d270ddaac9eb54 chore(p02): provision disposable offline test dependencies only (temporary)
+2b501dd97c218a718d88e162d292e744db16dd34 chore(p02): match isolated test tools to local Python ABI (temporary)
+20400fffb03594af8a38d6b4750c170233bd5f37 fix(p02): preserve inclusive COD gross with shared Decimal tax split (WIP checkpoint)
+37a5ab60a8c42736c63be37457ae9e7019e82415 feat(accounting): isolate shipping contracts and evidence
+e5232feec7f52b381ea4012b6dac063ad49b3305 merge: rebase P07 scope on accepted P02 head
+65faa965d6dc506d90226796b80e020e0749f3af feat(accounting): add V2 financial accounts and openings
+6f28e65772810231b1d0b6f3d7f53cfb233efbea test(accounting): align module contract with V2 grants
+652d3ed1f37266c0d10e7356451d5b457252afa6 docs(mz2): checkpoint PR1131 implementation and CI fix
+c7bec61e923f6571c865a72317a3dac002cd85de feat(accounting): complete V2 financial accounts and openings
+dadf4d8c43acf4181e298e8fc251d1cdafe8a3e0 test(accounting): run delivery writer on real Mongo
+abb97d412eb0753f573a6f693c2c0d0aa271b419 fix(accounting): order transition validation atomically
+6f777f22c06fc9a7a96f131b7a8b3fd0aaf67a9c fix(accounting): close PR 1131 retry and review gaps
+c537c66176e5174bc9918e5ff16a0ee3756419eb WIP G47 isolated purchase approval and component lifecycle checkpoint
+c54053cde20b841fdb9b145fbcb518c2c6500e5f G47 checkpoint: verify atomic purchases and fence component intake
+08b65b53713720ce97eafcc3fd6fbce0c229850e Close G47 intake, execution and manufactured-stock retry races
+7b6ab1800f6c4a2ed6d6ef1741db545273def1e4 G47: close supplier V2 payments and initialize opening inventory
+f2431282c3728a8d2fe618dbbe7a8616196f068d G47: make shared opening test fixture import independent of runner cwd

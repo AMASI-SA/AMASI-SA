@@ -171,13 +171,10 @@ def _matches(doc, q):
 
 
 class _FakeDB:
-    def __init__(self, inbox=None, invoices=None):
+    def __init__(self, inbox=None, invoices=None, orders=None):
         self.integration_inbox = _FakeColl(inbox or [])
         self.qoyod_invoices = _FakeColl(invoices or [])
-        # The production repository checks the canonical order store
-        # before falling back to integration_inbox. These fixtures
-        # intentionally exercise the fallback path.
-        self.unified_orders = _FakeColl([])
+        self.unified_orders = _FakeColl(orders or [])
 
 
 def _run(coro):
@@ -212,11 +209,31 @@ def _inbox(order_number, *, status_native, status_slug, received_at,
     }
 
 
+def _unified(order_number, *, status="in_delivery"):
+    return {
+        "user_id": "main",
+        "order_number": order_number,
+        "order_id": f"salla-{order_number}",
+        "order_date": "2026-08-01",
+        "order_status": status,
+        "order_status_slug": status,
+        "order_status_native": (
+            "جاري التوصيل" if status == "in_delivery" else "تم التنفيذ"
+        ),
+        "payment_method": "mada",
+        "payment_status": "paid",
+        "payment_collection_status": "paid",
+        "paid_amount": 100.0,
+        "remaining_amount": 0.0,
+        "has_remaining_amount": False,
+        "total_amount": 100.0,
+        "currency": "SAR",
+    }
+
+
 # ── The regression test ────────────────────────────────────────────
-def test_older_completed_trace_hides_newer_in_delivery_trace():
-    """Same order_number: older `completed` trace was sent (has real
-    qoyod_invoice_id); newer `in_delivery` trace has no markers.
-    Plan-B `in_delivery` tab MUST NOT surface this order."""
+def test_exact_qoyod_reference_hides_newer_in_delivery_trace():
+    """Inbox marker history is evidence; the exact Qoyod ref is authority."""
     from integrations.qoyod_manual.pending import list_pending_orders
     older = _inbox(
         "ORD-XT",
@@ -234,15 +251,25 @@ def test_older_completed_trace_hides_newer_in_delivery_trace():
         received_at=datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
         # no marker on this newer row
     )
-    db = _FakeDB(inbox=[older, newer])
+    db = _FakeDB(
+        inbox=[older, newer],
+        orders=[_unified("ORD-XT")],
+        invoices=[{
+            "user_id": "main",
+            "qoyod_invoice_id": "12345",
+            "reference": "ORD-XT",
+            "qoyod_official_reference": "ORD-XT",
+            "reference_provenance": "qoyod.reference",
+        }],
+    )
 
     res = _run(list_pending_orders(
         db, user_id="main", days=90, status="in_delivery"))
 
     order_numbers = [o["order_number"] for o in res["orders"]]
     assert "ORD-XT" not in order_numbers, (
-        "Expected the order to be HIDDEN because an older trace "
-        "already carries a real قيود invoice id. Actual list: "
+        "Expected the order to be HIDDEN by its exact Qoyod reference. "
+        "Actual list: "
         + repr(res["orders"])
     )
     assert res["counts"]["excluded_already_sent"] >= 1
@@ -261,11 +288,13 @@ def test_qoyod_invoices_collection_also_hides_the_row():
     )
     db = _FakeDB(
         inbox=[row],
+        orders=[_unified("ORD-Q")],
         invoices=[{
             "user_id": "main",
-            "salla_order_number": "ORD-Q",
-            "salla_order_id":     "salla-ORD-Q",
             "qoyod_invoice_id":   "77777",
+            "reference": "ORD-Q",
+            "qoyod_official_reference": "ORD-Q",
+            "reference_provenance": "qoyod.reference",
         }],
     )
     res = _run(list_pending_orders(
@@ -292,7 +321,10 @@ def test_dry_ids_do_not_hide_the_row():
         status_slug="in_delivery",
         received_at=datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
     )
-    db = _FakeDB(inbox=[older, newer])
+    db = _FakeDB(
+        inbox=[older, newer],
+        orders=[_unified("ORD-DRY")],
+    )
     res = _run(list_pending_orders(
         db, user_id="main", days=90, status="in_delivery"))
     order_numbers = [o["order_number"] for o in res["orders"]]
@@ -311,7 +343,7 @@ def test_no_cross_trace_history_still_surfaces_order():
         status_slug="in_delivery",
         received_at=datetime(2026, 8, 5, 12, tzinfo=timezone.utc),
     )
-    db = _FakeDB(inbox=[row])
+    db = _FakeDB(inbox=[row], orders=[_unified("ORD-FRESH")])
     res = _run(list_pending_orders(
         db, user_id="main", days=90, status="in_delivery"))
     order_numbers = [o["order_number"] for o in res["orders"]]

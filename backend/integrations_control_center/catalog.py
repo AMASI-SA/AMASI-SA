@@ -103,6 +103,7 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
             "orders.read",
             "products.read",
             "customers.read_from_orders",
+            "abandoned_carts.read",
         ),
         capability_permissions=(
             ("store.read", ("settings.read",)),
@@ -112,14 +113,58 @@ PROVIDERS: Final[tuple[ProviderDefinition, ...]] = (
                 "customers.read_from_orders",
                 ("orders.read", "orders.read_write"),
             ),
+            ("abandoned_carts.read", ("carts.read",)),
         ),
         ai_can_when_ready=(
             "قراءة بيانات المتجر والطلبات المتاحة محليًا",
+            "تحليل السلات المتروكة بعد منح صلاحية القراءة",
             "ربط نتائج التسويق بالمنتجات بعد اكتمال هوية المنتج",
         ),
         ai_cannot_phase_one=(
             "تغيير بيانات المتجر أو الطلبات من مركز التكاملات",
             "استخدام صلاحية كتابة دون دورة اعتماد",
+        ),
+    ),
+    ProviderDefinition(
+        provider="instagram",
+        name="Instagram",
+        name_ar="إنستغرام",
+        category="customer_channel",
+        legacy_sources=(
+            "mezan_customer_channels_v1",
+            "mezan_meta_oauth_credentials_v2",
+        ),
+        required_permissions=(
+            "instagram_basic",
+            "instagram_manage_comments",
+            "instagram_manage_messages",
+            "pages_manage_metadata",
+            "pages_messaging",
+        ),
+        native_capabilities=(
+            "account.read",
+            "messages.receive",
+            "comments.receive",
+        ),
+        capability_permissions=(
+            ("account.read", ("instagram_basic",)),
+            (
+                "messages.receive",
+                (
+                    "instagram_manage_messages",
+                    "pages_manage_metadata",
+                    "pages_messaging",
+                ),
+            ),
+            ("comments.receive", ("instagram_manage_comments",)),
+        ),
+        ai_can_when_ready=(
+            "قراءة رسائل إنستغرام الواردة داخل ذكاء العملاء",
+            "قراءة التعليقات الواردة وتحليل احتياجات العملاء",
+        ),
+        ai_cannot_phase_one=(
+            "إرسال رسائل من إنستغرام أو الرد على التعليقات",
+            "تشغيل ردود تلقائية أو نشر محتوى دون اعتماد بشري",
         ),
     ),
     ProviderDefinition(

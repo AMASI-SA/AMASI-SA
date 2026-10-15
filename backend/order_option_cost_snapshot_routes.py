@@ -50,15 +50,39 @@ def selected_option_tokens(item: Any) -> set[tuple[str, str]]:
         if not isinstance(row, dict):
             continue
         option = row.get("option") if isinstance(row.get("option"), dict) else {}
-        value = row.get("value") if isinstance(row.get("value"), dict) else {}
+        raw_value = row.get("value")
+        value = raw_value if isinstance(raw_value, dict) else {}
         option_id = row.get("option_id") or row.get("id") or option.get("id")
         value_id = row.get("value_id") or value.get("id")
         option_name = row.get("option_name") or row.get("name") or option.get("name")
-        value_name = row.get("value_name") or value.get("name") or row.get("value")
+        value_name = row.get("value_name") or value.get("name") or raw_value
         if option_id not in (None, "") and value_id not in (None, ""):
             tokens.add((f"id:{option_id}", f"id:{value_id}"))
-        if option_name not in (None, "") and value_name not in (None, "", {}):
-            tokens.add((f"name:{_norm(option_name)}", f"name:{_norm(value_name)}"))
+        if option_name in (None, ""):
+            continue
+        # The legacy Salla order projection intentionally preserves plural
+        # ``values`` as a list.  Treat every selected value as its own token;
+        # stringifying the whole list (for example ``['فستان']``) prevents a
+        # binding stored as ``فستان`` from matching and silently drops its
+        # additional cost from both product cards and executive totals.
+        selected_values = (
+            value_name
+            if isinstance(value_name, (list, tuple, set))
+            else [value_name]
+        )
+        for selected_value in selected_values:
+            if isinstance(selected_value, dict):
+                selected_value = (
+                    selected_value.get("name")
+                    or selected_value.get("value")
+                    or selected_value.get("label")
+                    or selected_value.get("text")
+                )
+            if selected_value not in (None, "", {}):
+                tokens.add((
+                    f"name:{_norm(option_name)}",
+                    f"name:{_norm(selected_value)}",
+                ))
 
     normalized = _item_value(item, "options_normalized") or {}
     if isinstance(normalized, dict):
@@ -123,16 +147,62 @@ def resolve_base_unit_cost(
         same_sku = sku and str(variant.get("sku") or "").strip().casefold() == sku
         if not (same_variant or same_sku):
             continue
-        if variant.get("cost_price_from_salla") not in (None, ""):
-            parsed = _number(variant.get("cost_price_from_salla"))
+        for cost_key in ("cost_price_from_salla", "cost_price", "cost"):
+            if variant.get(cost_key) in (None, ""):
+                continue
+            parsed = _number(variant.get(cost_key))
             if parsed is not None:
                 return parsed, "salla_variant_fallback"
 
-    if product.get("cost_price_from_salla") not in (None, ""):
-        parsed = _number(product.get("cost_price_from_salla"))
+    for cost_key in ("cost_price_from_salla", "cost_price", "cost"):
+        if product.get(cost_key) in (None, ""):
+            continue
+        parsed = _number(product.get(cost_key))
         if parsed is not None:
             return parsed, "salla_product_fallback"
     return None, "missing"
+
+
+MEZAN_V2_COST_SOURCES = frozenset({"mezan_v2_variant", "mezan_v2_base"})
+SALLA_FALLBACK_COST_SOURCES = frozenset({
+    "salla_variant_fallback",
+    "salla_product_fallback",
+})
+COST_SEMANTICS_VERSION = "mezan-cost-semantics-v1"
+
+
+def classify_base_unit_cost(
+    item: Any,
+    profile: dict[str, Any] | None,
+    product: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Describe both calculation availability and Mezan V2 completeness.
+
+    Salla remains a valid temporary fallback for profitability calculations,
+    but it never marks the product as having an explicit Mezan V2 cost.  This
+    distinction drives the actionable dashboard warning and product filter.
+    """
+    unit_cost, source = resolve_base_unit_cost(item, profile, product)
+    calculation_cost_available = unit_cost is not None
+    mezan_cost_complete = source in MEZAN_V2_COST_SOURCES
+    uses_salla_fallback = source in SALLA_FALLBACK_COST_SOURCES
+    return {
+        "semantics_version": COST_SEMANTICS_VERSION,
+        "unit_cost": unit_cost,
+        "source": source,
+        # Product setup completeness is deliberately Mezan-only.  A Salla
+        # fallback must never hide a product from "missing Mezan cost".
+        "mezan_cost_complete": mezan_cost_complete,
+        "mezan_cost_missing": not mezan_cost_complete,
+        # Profitability/campaign calculations may use Salla when Mezan has no
+        # explicit cost.  Keep this axis separate from setup completeness.
+        "calculation_cost_available": calculation_cost_available,
+        "calculation_cost_source": source,
+        "calculation_uses_salla_fallback": uses_salla_fallback,
+        # Compatibility aliases for existing dashboard and snapshot callers.
+        "cost_available": calculation_cost_available,
+        "uses_salla_fallback": uses_salla_fallback,
+    }
 
 
 async def ensure_indexes(db: Any) -> None:
@@ -201,11 +271,13 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
         product_id = str(item.parent_product_id or item.product_id or "").strip()
         quantity = float(item.quantity or 1)
         profile = profile_map.get(product_id, {})
-        resolved_base_cost, base_cost_source = resolve_base_unit_cost(
+        base_status = classify_base_unit_cost(
             item,
             profile,
             product_map.get(product_id),
         )
+        resolved_base_cost = base_status["unit_cost"]
+        base_cost_source = base_status["source"]
         base_unit_cost = resolved_base_cost if resolved_base_cost is not None else 0.0
         applied_product_resources = []
         product_resource_unit_cost = 0.0
@@ -284,6 +356,11 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             "base_unit_cost": round(base_unit_cost, 4),
             "base_cost_source": base_cost_source,
             "cost_complete": resolved_base_cost is not None,
+            "mezan_cost_complete": base_status["mezan_cost_complete"],
+            "mezan_cost_missing": base_status["mezan_cost_missing"],
+            "calculation_cost_available": base_status["calculation_cost_available"],
+            "uses_salla_fallback": base_status["calculation_uses_salla_fallback"],
+            "cost_semantics_version": base_status["semantics_version"],
             "product_resource_unit_cost": round(
                 product_resource_unit_cost,
                 4,

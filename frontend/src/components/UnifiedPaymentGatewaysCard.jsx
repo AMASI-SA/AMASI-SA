@@ -47,6 +47,8 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
     const rows = (data?.rows || []).filter((r) => r.key !== "_other");
     if (!data) return null;
     const t = data.totals || {};
+    const conversionComplete = t.currency_conversion_complete !== false;
+    const displayMoney = (value) => value == null ? "—" : formatMoney(value);
 
     if (rows.length === 0) {
         return (
@@ -87,16 +89,22 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                 <div className="text-end shrink-0">
                     <div className="text-[11px] text-muted-foreground">الصافي المؤكَّد (ر.س)</div>
                     <div className="num text-2xl sm:text-3xl font-extrabold text-brand" data-testid={`${testid}-net-total`}>
-                        {formatMoney(t.net)}
+                        {displayMoney(t.net)}
                     </div>
                     {Number(t.pending_gross || 0) > 0 && (
                         <div className="text-[11px] text-amber-700 mt-1 inline-flex items-center gap-1 justify-end" data-testid={`${testid}-pending-hint`}>
                             <Hourglass size={11} weight="duotone" />
-                            معلَّق إضافي: <span className="num font-bold">{formatMoney(t.pending_gross)}</span> ({formatInt(t.pending_orders_count)} طلب)
+                            معلَّق إضافي: <span className="num font-bold">{displayMoney(t.pending_gross)}</span> ({formatInt(t.pending_orders_count)} طلب)
                         </div>
                     )}
                 </div>
             </div>
+
+            {!conversionComplete && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900" data-testid={`${testid}-currency-warning`}>
+                    الأرقام المالية موقوفة مؤقتاً: يوجد {formatInt(t.unverified_orders_count)} طلب بعملة أجنبية من دون سعر صرف موثّق من سلة.
+                </div>
+            )}
 
             <div className="overflow-x-auto">
                 <table
@@ -129,16 +137,16 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                 <tr key={r.key} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors" data-testid={`${testid}-row-${r.key}`}>
                                     <td className="py-2.5 font-semibold">{r.name_ar}</td>
                                     <td className="py-2.5 num">{formatInt(r.orders_count)}</td>
-                                    <td className="py-2.5 num font-bold">{formatMoney(r.gross)}</td>
-                                    <td className="py-2.5 num text-rose-700">{formatMoney(r.fees)}</td>
-                                    <td className="py-2.5 num text-rose-700/70">{formatMoney(r.fees_vat)}</td>
+                                    <td className="py-2.5 num font-bold">{displayMoney(r.gross)}</td>
+                                    <td className="py-2.5 num text-rose-700">{displayMoney(r.fees)}</td>
+                                    <td className="py-2.5 num text-rose-700/70">{displayMoney(r.fees_vat)}</td>
                                     <td className={`py-2.5 num ${r.refund_total > 0 ? "text-amber-700" : "text-muted-foreground"}`}>
-                                        {formatMoney(r.refund_total)}
+                                        {displayMoney(r.refund_total)}
                                     </td>
                                     <td className={`py-2.5 num ${pending > 0 ? "text-amber-700" : "text-muted-foreground"}`} title={pending > 0 ? `${pendingCount} طلب بحالة معلَّقة` : ""}>
-                                        {formatMoney(pending)}
+                                        {displayMoney(r.pending_gross)}
                                     </td>
-                                    <td className="py-2.5 num font-extrabold text-emerald-700">{formatMoney(r.net)}</td>
+                                    <td className="py-2.5 num font-extrabold text-emerald-700">{displayMoney(r.net)}</td>
                                     <td className="py-2.5">
                                         {isActual ? (
                                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800" title={`${cov.toFixed(1)}% من الطلبات تم مطابقتها بملف تسوية`}>
@@ -167,15 +175,15 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                             "منصة سلة تعرض جميع الطلبات المنشأة (" +
                                             formatInt(t.salla_reference_orders_count) +
                                             " طلب بقيمة " +
-                                            formatMoney(t.salla_reference_gross) +
+                                            displayMoney(t.salla_reference_gross) +
                                             " ر.س).\n\n" +
                                             "النظام المحاسبي يعتمد فقط الطلبات الداخلة في التقارير المالية (" +
                                             formatInt(t.orders_count) + " طلب بقيمة " +
-                                            formatMoney(t.gross) + " ر.س).\n\n" +
+                                            displayMoney(t.gross) + " ر.س).\n\n" +
                                             "الفرق:\n" +
                                             formatInt(t.excluded_orders_count) +
                                             " طلب معلَّق أو ملغى بقيمة " +
-                                            formatMoney(t.excluded_gross) + " ر.س.\n\n" +
+                                            displayMoney(t.excluded_gross) + " ر.س.\n\n" +
                                             "🔍 اضغط لعرض تفاصيل الطلبات المستثناة"
                                         }
                                     >
@@ -183,12 +191,12 @@ export default function UnifiedPaymentGatewaysCard({ qs = "", testid = "unified-
                                     </button>
                                 )}
                             </td>
-                            <td className="py-2.5 num">{formatMoney(t.gross)}</td>
-                            <td className="py-2.5 num text-rose-700">{formatMoney(t.fees)}</td>
-                            <td className="py-2.5 num text-rose-700/70">{formatMoney(t.fees_vat)}</td>
-                            <td className="py-2.5 num text-amber-700">{formatMoney(t.refund_total)}</td>
-                            <td className="py-2.5 num text-amber-700">{formatMoney(t.pending_gross)}</td>
-                            <td className="py-2.5 num text-emerald-700">{formatMoney(t.net)}</td>
+                            <td className="py-2.5 num">{displayMoney(t.gross)}</td>
+                            <td className="py-2.5 num text-rose-700">{displayMoney(t.fees)}</td>
+                            <td className="py-2.5 num text-rose-700/70">{displayMoney(t.fees_vat)}</td>
+                            <td className="py-2.5 num text-amber-700">{displayMoney(t.refund_total)}</td>
+                            <td className="py-2.5 num text-amber-700">{displayMoney(t.pending_gross)}</td>
+                            <td className="py-2.5 num text-emerald-700">{displayMoney(t.net)}</td>
                             <td className="py-2.5" />
                         </tr>
                     </tbody>

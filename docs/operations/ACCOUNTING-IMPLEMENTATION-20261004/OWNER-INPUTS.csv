@@ -1,0 +1,18 @@
+group,mz2_account_entity_id,identity_contract,value_or_zero,source_document,approver,reconciliation
+البنوك,PENDING_OWNER_INPUT,bank / exact financial account id / main,PENDING_OWNER_INPUT,كشف البنك عند القطع وFX عند اللزوم,OWNER,كشف البنك والتفصيل يساويان الرصيد
+الصناديق,PENDING_OWNER_INPUT,bank / exact cash account id / main,PENDING_OWNER_INPUT,محضر عد نقدي موقع عند القطع,OWNER,العد والتوريدات المثبتة يطابقان النقد
+مزودو الدفع,PENDING_OWNER_INPUT,payment_gateway / approved provider / receivable,PENDING_OWNER_INPUT,كشف المزود والتحصيلات والتسويات,OWNER,الرصيد والتحصيل والتسوية والرسوم منفصلة
+BNPL,PENDING_OWNER_INPUT,payment_gateway / tamara-tabby-emkan exact approved identity / receivable,PENDING_OWNER_INPUT,كشف كل مزود وأوامره وتسوياته,OWNER,مطابقة كل مزود مستقلا دون قيد تحصيل ثان
+COD,PENDING_OWNER_INPUT,courier / exact approved identity / cod_receivable,PENDING_OWNER_INPUT,كشف COD والطلبات والتحويلات,OWNER,كل طلب محصل وتوريد مربوط مرة واحدة
+مستحقات الشحن,PENDING_OWNER_INPUT,courier / exact approved identity / payable,PENDING_OWNER_INPUT,فواتير الأجرة والسداد,OWNER,الأجرة مستقلة عن COD ولا netting
+المندوبون,PENDING_OWNER_INPUT,driver / exact id / cod_receivable and delivery_fee_payable separately,PENDING_OWNER_INPUT,عهدة وتوريدات وCOD وأجرة موثقة,OWNER,فصل النقد والأجرة وPOS ومنع التكرار
+POS,PENDING_OWNER_INPUT,asset / explicitly documented exact receivable identity / other_receivable,PENDING_OWNER_INPUT,عمليات معتمدة يدويا وتسويات البنك,OWNER,اعتماد POS لا يساوي وصول البنك
+الموردون,PENDING_OWNER_INPUT,supplier / native mezan_suppliers_v2 id / payable and advance separately,PENDING_OWNER_INPUT,كشوف وفواتير ودفعات المورد,OWNER,تفصيل الفواتير والدفعات يساوي الرصيد
+العملاء والحقوق,PENDING_OWNER_INPUT,external_person / exact native id / receivable,PENDING_OWNER_INPUT,مستند كل حق ومدفوعه والمتبقي,OWNER,لا دين مستنتج من Legacy
+الدفعات المقدمة,PENDING_OWNER_INPUT,PENDING_CONTRACT_MAPPING where opening category is not proven,PENDING_OWNER_INPUT,أصل التحصيل وفترة الاستحقاق والتغطية,OWNER,مقدم العميل والدفعة المدفوعة مقدما منفصلان
+الاستردادات,PENDING_OWNER_INPUT,PENDING_CONTRACT_MAPPING where opening liability category is not proven,PENDING_OWNER_INPUT,قرار الاسترداد وأصل التحصيل وأي سداد,OWNER,الالتزام المفتوح لا يعيد عكس الإيراد أو التحصيل
+المخزون,PENDING_OWNER_INPUT,asset / exact inventory account / inventory with native product-variant-component identities,PENDING_OWNER_INPUT,ورقة العد والتكلفة والوحدة والموقع والتوزيع,OWNER,كمية كل هوية حسب المواقع وقيمتها دون ازدواج
+الموظفون,PENDING_OWNER_INPUT,employee / exact native id / salary_payable-advance-custody separately,PENDING_OWNER_INPUT,العقود والاستحقاق والدفعات والسلف والعهد,OWNER,ثلاثة أرصدة منفصلة دون مقاصة
+الإعلانات,PENDING_OWNER_INPUT,exact Track E platform-account-binding ids by funding mode,PENDING_OWNER_INPUT,كشف المنصة والفواتير والتمويل والسداد,OWNER,wallet-payable-receivable حسب العقد لا external_ref وحده
+الضرائب والالتزامات,PENDING_OWNER_INPUT,exact approved tax and liability identities by category,PENDING_OWNER_INPUT,مستند الفترة والسياسة والاستحقاق والمدفوع,OWNER,تفصيل input-output والالتزامات مستقل ولا مقاصة آلية
+حقوق الملكية والأرصدة الأخرى,PENDING_OWNER_INPUT,documented opening counterpart and exact approved other/prepaid/deposit identities,PENDING_OWNER_INPUT,رأس المال والمساهمات والسحوبات والمدفوع مقدم والتأمينات وأي حق آخر,OWNER,تفسير حقوق الملكية والفروق دون حساب plug مخترع

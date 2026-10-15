@@ -1,9 +1,11 @@
 """Shared primitives for the native, read-only Snapchat V2 data plane."""
 from __future__ import annotations
 
+import asyncio
+import latency_evidence
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -22,10 +24,17 @@ from .snapchat_oauth_security import (
 
 SNAPCHAT_API_BASE = "https://adsapi.snapchat.com/v1"
 BUSINESS_TIMEZONE = "Asia/Riyadh"
-MAX_SYNC_DAYS = 62
+MAX_SYNC_DAYS = 30
+MAX_READ_DAYS = 62
 MAX_SYNC_ACCOUNTS = 20
 MAX_PROVIDER_CALLS = 250
 MAX_PAGES = 10
+SNAPCHAT_PROVIDER_REQUESTS_PER_SECOND = 6.0
+SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS = (
+    1.0 / SNAPCHAT_PROVIDER_REQUESTS_PER_SECOND
+)
+SNAPCHAT_HTTP_429_MAX_RETRIES = 2
+SNAPCHAT_HTTP_429_MAX_RETRY_AFTER_SECONDS = 8.0
 MAX_ENTITY_ROWS_PER_TYPE = 5000
 DEFAULT_USD_TO_SAR = 3.75
 ATTRIBUTION_MODEL = "swipe_28d_view_1d_conversion_time"
@@ -35,6 +44,8 @@ SNAPCHAT_ENTITY_COLLECTION = "mezan_snapchat_entities_v2"
 SNAPCHAT_PERFORMANCE_COLLECTION = "mezan_snapchat_performance_daily_v2"
 SNAPCHAT_NATIVE_SYNC_LOCK_TTL = timedelta(hours=4)
 SNAPCHAT_NATIVE_SYNC_IDEMPOTENCY_WINDOW = timedelta(minutes=5)
+SNAPCHAT_SYNC_HEARTBEAT_INTERVAL_SECONDS = 15.0
+SNAPCHAT_SYNC_HEARTBEAT_STALE_AFTER = timedelta(minutes=2)
 NATIVE_RESPONSE_KEYS = (
     "run_id", "provider", "status", "date_from", "date_to",
     "accounts_attempted", "accounts_complete", "rows_saved", "errors_count",
@@ -42,11 +53,16 @@ NATIVE_RESPONSE_KEYS = (
 )
 
 
-class SnapchatNativeSyncInput(BaseModel):
-    days: int = Field(default=30, ge=1, le=MAX_SYNC_DAYS)
+class SnapchatNativeReadInput(BaseModel):
+    days: int = Field(default=30, ge=1, le=MAX_READ_DAYS)
     from_date: str | None = None
     to_date: str | None = None
+    ad_account_id: str | None = Field(default=None, min_length=1, max_length=128)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class SnapchatNativeSyncInput(SnapchatNativeReadInput):
+    days: int = Field(default=30, ge=1, le=MAX_SYNC_DAYS)
 
 
 class SnapchatNativeSyncError(Exception):
@@ -73,6 +89,48 @@ def _collection(db: Any, name: str) -> Any:
         return db[name]
     except (KeyError, TypeError, AttributeError):
         return getattr(db, name)
+
+
+async def _sync_run_heartbeat(
+    collection: Any,
+    query: dict[str, Any],
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> None:
+    """Keep an in-process sync lease observable across worker restarts."""
+    while True:
+        await asyncio.sleep(SNAPCHAT_SYNC_HEARTBEAT_INTERVAL_SECONDS)
+        heartbeat_at = now().astimezone(timezone.utc)
+        await collection.update_one(
+            {**query, "status": "running"},
+            {
+                "$set": {
+                    "worker_heartbeat_at": _iso(heartbeat_at),
+                    "lock_expires_at": _iso(
+                        heartbeat_at + SNAPCHAT_NATIVE_SYNC_LOCK_TTL
+                    ),
+                }
+            },
+        )
+
+
+def _start_sync_run_heartbeat(
+    collection: Any,
+    query: dict[str, Any],
+    *,
+    now: Callable[[], datetime] = _utcnow,
+) -> asyncio.Task:
+    return asyncio.create_task(
+        _sync_run_heartbeat(collection, query, now=now)
+    )
+
+
+async def _stop_sync_run_heartbeat(task: asyncio.Task) -> None:
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -128,7 +186,7 @@ def _parse_date(value: str, field_name: str) -> date:
         ) from exc
 
 
-def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date) -> list[date]:
+def enumerate_native_read_dates(payload: SnapchatNativeReadInput, *, today: date) -> list[date]:
     has_from, has_to = bool(payload.from_date), bool(payload.to_date)
     if has_from != has_to:
         raise SnapchatNativeSyncError(
@@ -143,14 +201,30 @@ def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date
                 "invalid_date_range", "to_date must be on or after from_date.", status_code=400
             )
         days = (end - start).days + 1
-        if days > MAX_SYNC_DAYS:
+        if days > MAX_READ_DAYS:
             raise SnapchatNativeSyncError(
-                "date_range_too_wide", f"Date range cannot exceed {MAX_SYNC_DAYS} days.",
+                "date_range_too_wide", f"Date range cannot exceed {MAX_READ_DAYS} days.",
                 status_code=400,
             )
         return [start + timedelta(days=offset) for offset in range(days)]
     start = today - timedelta(days=payload.days - 1)
     return [start + timedelta(days=offset) for offset in range(payload.days)]
+
+
+def enumerate_native_sync_dates(payload: SnapchatNativeSyncInput, *, today: date) -> list[date]:
+    dates = enumerate_native_read_dates(payload, today=today)
+    if len(dates) > MAX_SYNC_DAYS:
+        raise SnapchatNativeSyncError(
+            "date_range_too_wide", f"Date range cannot exceed {MAX_SYNC_DAYS} days.",
+            status_code=400,
+        )
+    if dates[0] < today - timedelta(days=MAX_SYNC_DAYS - 1) or dates[-1] > today:
+        raise SnapchatNativeSyncError(
+            "date_range_outside_sync_window",
+            f"Snapchat sync is limited to the latest {MAX_SYNC_DAYS} Riyadh dates.",
+            status_code=400,
+        )
+    return dates
 
 
 def snapchat_native_sync_enabled() -> bool:
@@ -180,6 +254,68 @@ async def ensure_snapchat_native_sync_indexes(db: Any) -> None:
     )
 
 
+
+def _safe_provider_text(value: Any, *, limit: int) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    if any(
+        secret in lowered
+        for secret in (
+            "authorization",
+            "bearer ",
+            "access_token",
+            "refresh_token",
+            "client_secret",
+        )
+    ):
+        return ""
+    return text[:limit]
+
+
+def _safe_provider_error_detail(payload: Any) -> dict[str, str]:
+    """Extract only allow-listed, bounded Snapchat error metadata."""
+    if not isinstance(payload, dict):
+        return {}
+    candidates: list[dict[str, Any]] = [payload]
+    nested_error = payload.get("error")
+    if isinstance(nested_error, dict):
+        candidates.append(nested_error)
+    nested_errors = payload.get("errors")
+    if isinstance(nested_errors, list):
+        candidates.extend(
+            item for item in nested_errors[:3] if isinstance(item, dict)
+        )
+    code = ""
+    message = ""
+    for item in candidates:
+        if not code:
+            for key in ("error_code", "code", "request_status", "status"):
+                code = _safe_provider_text(item.get(key), limit=80)
+                if code:
+                    break
+        if not message:
+            for key in (
+                "error_message",
+                "debug_message",
+                "message",
+                "description",
+            ):
+                message = _safe_provider_text(item.get(key), limit=240)
+                if message:
+                    break
+        if code and message:
+            break
+    return {
+        key: value
+        for key, value in (
+            ("provider_error_code", code),
+            ("provider_error_message", message),
+        )
+        if value
+    }
+
 @dataclass
 class SnapchatSyncContext:
     db: Any
@@ -187,12 +323,50 @@ class SnapchatSyncContext:
     now: Callable[[], datetime] = _utcnow
     provider_calls: int = 0
     usd_rate_cache: float | None = None
+    failure_stage_observer: Callable[[str], None] | None = None
+    defer_financial_fact_writes: bool = False
+    deferred_financial_fact_writes: list[dict[str, Any]] = field(
+        default_factory=list,
+        repr=False,
+    )
+    # Optional run identity threaded through by the ads auto-sync scheduler
+    # so ``_upsert_performance`` can stamp facts with the exact run that
+    # produced them.  The dashboard reader binds financial spend to this
+    # marker instead of the "latest" run, preserving previously-published
+    # facts across unrelated later runs (running or failed).
+    run_id: str | None = None
+    _provider_request_lock: asyncio.Lock | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _provider_request_last_started: float | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _access_token_cache: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def now_iso(self) -> str:
         return _iso(self.now())
 
-    async def get_json(self, client: httpx.AsyncClient, url: str, *,
-                       headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
+    def observe_failure_stage(self, stage: str) -> None:
+        if self.failure_stage_observer is not None:
+            self.failure_stage_observer(stage)
+
+    async def _provider_get(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, Any] | None,
+    ) -> httpx.Response:
+        self.observe_failure_stage("provider_refresh")
         self.provider_calls += 1
         if self.provider_calls > MAX_PROVIDER_CALLS:
             raise SnapchatNativeSyncError(
@@ -200,23 +374,112 @@ class SnapchatSyncContext:
                 f"Snapchat sync exceeded the {MAX_PROVIDER_CALLS} call budget.",
                 status_code=400,
             )
+        if self._provider_request_lock is None:
+            self._provider_request_lock = asyncio.Lock()
+        async with self._provider_request_lock:
+            loop = asyncio.get_running_loop()
+            if self._provider_request_last_started is not None:
+                delay = SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS - (
+                    loop.time() - self._provider_request_last_started
+                )
+                if delay > 0:
+                    await asyncio.sleep(delay)
+            self._provider_request_last_started = loop.time()
         try:
-            response = await client.get(url, headers=headers, params=params)
+            with latency_evidence.phase("provider_http_await"):
+                return await client.get(url, headers=headers, params=params)
         except httpx.HTTPError as exc:
             raise SnapchatNativeSyncError(
-                "snapchat_provider_network_error", "Snapchat provider request failed.",
-                status_code=502, retryable=True,
+                "snapchat_provider_network_error",
+                "Snapchat provider request failed.",
+                status_code=502,
+                retryable=True,
             ) from exc
-        if response.status_code in {401, 403}:
-            raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
+
+    @staticmethod
+    def _http_429_retry_delay(response: httpx.Response, attempt: int) -> float:
+        raw = str(response.headers.get("Retry-After") or "").strip()
+        try:
+            parsed = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            parsed = float(2 ** attempt)
+        if not math.isfinite(parsed):
+            parsed = float(2 ** attempt)
+        return min(
+            max(parsed, SNAPCHAT_PROVIDER_MIN_REQUEST_INTERVAL_SECONDS),
+            SNAPCHAT_HTTP_429_MAX_RETRY_AFTER_SECONDS,
+        )
+
+    async def get_json(self, client: httpx.AsyncClient, url: str, *,
+                       headers: dict[str, str], params: dict[str, Any] | None = None) -> dict:
+        request_headers = dict(headers)
+        if self._access_token_cache:
+            request_headers["Authorization"] = (
+                f"Bearer {self._access_token_cache}"
             )
+        response = await self._provider_get(
+            client,
+            url,
+            headers=request_headers,
+            params=params,
+        )
+        if response.status_code == 401:
+            fresh_access = await self.access_token(force_refresh=True)
+            self._access_token_cache = fresh_access
+            headers["Authorization"] = f"Bearer {fresh_access}"
+            retry_headers = dict(headers)
+            request_headers = retry_headers
+            response = await self._provider_get(
+                client,
+                url,
+                headers=request_headers,
+                params=params,
+            )
+
+        for retry_index in range(SNAPCHAT_HTTP_429_MAX_RETRIES):
+            if response.status_code != 429:
+                break
+            await asyncio.sleep(
+                self._http_429_retry_delay(response, retry_index)
+            )
+            response = await self._provider_get(
+                client,
+                url,
+                headers=request_headers,
+                params=params,
+            )
+
+        if response.status_code == 401:
+            raise SnapchatNativeSyncError(
+                "snapchat_needs_reauth",
+                "Snapchat authorization must be renewed.",
+                status_code=409,
+                result={"needs_reauth": True},
+            )
+
         if response.status_code >= 400:
+            try:
+                provider_payload = response.json() or {}
+            except (TypeError, ValueError):
+                provider_payload = {}
+            detail = _safe_provider_error_detail(provider_payload)
+            provider_code = detail.get("provider_error_code", "")
+            provider_message = detail.get("provider_error_message", "")
+            safe_suffix = ": ".join(
+                part for part in (provider_code, provider_message) if part
+            )
+            message = "Snapchat rejected a read-only data request."
+            if safe_suffix:
+                message = f"{message} Provider: {safe_suffix}"
             raise SnapchatNativeSyncError(
                 f"snapchat_provider_http_{response.status_code}",
-                "Snapchat rejected a read-only data request.", status_code=502,
-                retryable=response.status_code >= 500,
+                message,
+                status_code=502,
+                retryable=(
+                    response.status_code == 429
+                    or response.status_code >= 500
+                ),
+                result=detail,
             )
         try:
             payload = response.json() or {}
@@ -238,7 +501,10 @@ class SnapchatSyncContext:
             )
         return payload
 
-    async def access_token(self) -> str:
+    async def access_token(self, *, force_refresh: bool = False) -> str:
+        self.observe_failure_stage("credential_decrypt_or_refresh")
+        if not force_refresh and self._access_token_cache:
+            return self._access_token_cache
         credentials = await _collection(self.db, SNAPCHAT_CREDENTIALS_COLLECTION).find_one(
             {"user_id": self.user_id, "provider": SNAPCHAT_PROVIDER_ID},
             {"_id": 0, "access_token_ciphertext": 1, "refresh_token_ciphertext": 1,
@@ -265,9 +531,14 @@ class SnapchatSyncContext:
         expires_at = credentials.get("access_token_expires_at")
         if isinstance(expires_at, str):
             expires_at = _parse_datetime(expires_at)
-        if (access and isinstance(expires_at, datetime)
-                and expires_at.astimezone(timezone.utc)
-                > self.now().astimezone(timezone.utc) + timedelta(seconds=120)):
+        if (
+            not force_refresh
+            and access
+            and isinstance(expires_at, datetime)
+            and expires_at.astimezone(timezone.utc)
+            > self.now().astimezone(timezone.utc) + timedelta(seconds=120)
+        ):
+            self._access_token_cache = access
             return access
 
         client_id = os.environ.get("SNAPCHAT_MARKETING_CLIENT_ID", "").strip()
@@ -293,16 +564,82 @@ class SnapchatSyncContext:
                 "snapchat_token_refresh_failed", "Snapchat token refresh failed.",
                 status_code=502, retryable=True,
             ) from exc
-        if response.status_code in {400, 401, 403}:
-            raise SnapchatNativeSyncError(
-                "snapchat_needs_reauth", "Snapchat authorization must be renewed.",
-                status_code=409, result={"needs_reauth": True},
-            )
         if response.status_code >= 400:
-            raise SnapchatNativeSyncError(
-                "snapchat_token_refresh_rejected", "Snapchat rejected the token refresh.",
-                status_code=502, retryable=response.status_code >= 500,
+            try:
+                error_payload = response.json() or {}
+            except (TypeError, ValueError):
+                error_payload = {}
+
+            oauth_error = str(
+                error_payload.get("error") or ""
+            ).strip().lower()
+            oauth_description = str(
+                error_payload.get("error_description") or ""
+            ).strip().lower()
+            combined_error = (
+                f"{oauth_error} {oauth_description} "
+                f"{(response.text or '').lower()}"
             )
+
+            if "invalid_grant" in combined_error:
+                latest = await _collection(
+                    self.db, SNAPCHAT_CREDENTIALS_COLLECTION
+                ).find_one(
+                    {
+                        "user_id": self.user_id,
+                        "provider": SNAPCHAT_PROVIDER_ID,
+                    },
+                    {"_id": 0, "refresh_token_ciphertext": 1},
+                )
+
+                try:
+                    latest_refresh = decrypt_snapchat_token(
+                        (latest or {}).get("refresh_token_ciphertext")
+                    )
+                except ValueError:
+                    latest_refresh = ""
+
+                if latest_refresh and latest_refresh != refresh:
+                    refresh = latest_refresh
+                    data["refresh_token"] = refresh
+                    try:
+                        async with httpx.AsyncClient(timeout=25.0) as client:
+                            response = await client.post(
+                                SNAPCHAT_TOKEN_URL, data=data
+                            )
+                    except httpx.HTTPError as exc:
+                        raise SnapchatNativeSyncError(
+                            "snapchat_token_refresh_failed",
+                            "Snapchat token refresh failed.",
+                            status_code=502,
+                            retryable=True,
+                        ) from exc
+
+                if response.status_code >= 400:
+                    raise SnapchatNativeSyncError(
+                        "snapchat_needs_reauth",
+                        "Snapchat authorization must be renewed.",
+                        status_code=409,
+                        result={"needs_reauth": True},
+                    )
+
+            elif "invalid_client" in combined_error:
+                raise SnapchatNativeSyncError(
+                    "snapchat_oauth_not_configured",
+                    "Snapchat OAuth client credentials were rejected.",
+                    status_code=503,
+                )
+
+            else:
+                raise SnapchatNativeSyncError(
+                    "snapchat_token_refresh_rejected",
+                    "Snapchat temporarily rejected the token refresh.",
+                    status_code=502,
+                    retryable=(
+                        response.status_code >= 500
+                        or response.status_code == 429
+                    ),
+                )
         try:
             payload = response.json() or {}
         except (TypeError, ValueError) as exc:
@@ -327,9 +664,11 @@ class SnapchatSyncContext:
                 "access_token_expires_at": now + timedelta(seconds=expires_in),
                 "scope": payload.get("scope") or credentials.get("scope")
                          or list(SNAPCHAT_REQUESTED_SCOPES),
+                "last_refresh_success_at": now,
                 "updated_at": now,
             }},
         )
+        self._access_token_cache = access
         return access
 
     async def to_sar(self, value: float | None, currency: str) -> float | None:

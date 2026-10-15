@@ -21,6 +21,8 @@ make.com webhooks. The integration is entirely additive.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -29,6 +31,10 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+
+from customer_identity import CUSTOMER_IDENTITY_COLLECTION
 
 from .service import (
     DEFAULT_SCOPES,
@@ -55,10 +61,107 @@ from .config_store import (
 )
 from .sync import (
     compute_sources_comparison,
+    create_sync_log,
     ensure_sync_indexes,
     run_orders_sync,
     run_products_sync,
 )
+from .abandoned_carts import (
+    ABANDONED_CART_COLLECTION,
+    ABANDONED_CART_EVENT_COLLECTION,
+    ABANDONED_CART_EVENTS,
+    ABANDONED_CART_SCHEMA_VERSION,
+    ensure_abandoned_cart_indexes,
+    split_scopes,
+)
+
+
+HISTORICAL_ABANDONED_CART_IMPORT_ENABLED = False
+HISTORICAL_ABANDONED_CART_STOP_REASON = (
+    "historical_import_disabled_live_webhooks_only"
+)
+
+
+logger = logging.getLogger(__name__)
+_MANUAL_ORDER_SYNC_TASKS: dict[str, asyncio.Task] = {}
+_ORDER_SYNC_LEASE_SECONDS = 30 * 60
+
+
+async def _acquire_order_sync_lease(db, user_id: str) -> tuple[Optional[str], Optional[dict]]:
+    now = datetime.now(timezone.utc)
+    lease_id = f"salla-orders:{user_id}"
+    lease_token = secrets.token_urlsafe(18)
+    try:
+        lease = await db.salla_sync_leases.find_one_and_update(
+            {
+                "_id": lease_id,
+                "$or": [
+                    {"lease_until": {"$lte": now}},
+                    {"lease_until": {"$exists": False}},
+                ],
+            },
+            {"$set": {
+                "user_id": str(user_id),
+                "kind": "orders",
+                "lease_token": lease_token,
+                "lease_until": now + timedelta(seconds=_ORDER_SYNC_LEASE_SECONDS),
+                "acquired_at": now,
+            }},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError:
+        lease = None
+    if lease and lease.get("lease_token") == lease_token:
+        return lease_token, None
+    active = await db.salla_sync_leases.find_one(
+        {"_id": lease_id}, {"_id": 0, "log_id": 1, "lease_until": 1}
+    )
+    return None, active
+
+
+async def _release_order_sync_lease(db, user_id: str, lease_token: str) -> None:
+    await db.salla_sync_leases.update_one(
+        {
+            "_id": f"salla-orders:{user_id}",
+            "lease_token": lease_token,
+        },
+        {"$set": {"lease_until": datetime.now(timezone.utc)}, "$unset": {"log_id": ""}},
+    )
+
+
+async def close_running_historical_cart_imports(
+    db,
+    user_id: str,
+    *,
+    now: Optional[datetime] = None,
+) -> int:
+    """Close legacy backfills after switching the tenant to live webhooks only.
+
+    A background import can be killed between page requests while its durable
+    log remains ``running``.  The Salla settings page used that flag to disable
+    its own action forever.  Historical cart ingestion is intentionally
+    disabled now, so terminalise every orphaned run without touching saved
+    carts or the live webhook collections.
+    """
+    ended_at = now or datetime.now(timezone.utc)
+    result = await db.salla_sync_logs.update_many(
+        {
+            "user_id": user_id,
+            "kind": "abandoned_carts",
+            "status": "running",
+        },
+        {
+            "$set": {
+                "status": "cancelled",
+                "stopped_reason": HISTORICAL_ABANDONED_CART_STOP_REASON,
+                "ended_at": ended_at,
+                "updated_at": ended_at,
+                "last_error": None,
+            }
+        },
+    )
+    return int(getattr(result, "modified_count", 0) or 0)
 
 
 # Where the frontend wants to land after the callback completes
@@ -103,6 +206,43 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
     from server import current_user  # type: ignore  # circular by design
 
     router = APIRouter(prefix="/salla", tags=["salla"])
+
+    async def run_orders_sync_background(
+        *,
+        user_id: str,
+        lease_token: str,
+        log_id: str,
+        from_date: Optional[str],
+        to_date: Optional[str],
+        updated_since_hours: Optional[int],
+        recover_marketing_attribution: bool,
+    ) -> None:
+        task_key = str(user_id)
+        try:
+            await run_orders_sync(
+                db,
+                task_key,
+                from_date=from_date,
+                to_date=to_date,
+                updated_since_hours=updated_since_hours,
+                log_id=log_id,
+                recover_marketing_attribution=recover_marketing_attribution,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Background Salla order sync failed user_id=%s log_id=%s",
+                task_key,
+                log_id,
+            )
+        finally:
+            try:
+                await _release_order_sync_lease(db, task_key, lease_token)
+            finally:
+                current = _MANUAL_ORDER_SYNC_TASKS.get(task_key)
+                if current is asyncio.current_task():
+                    _MANUAL_ORDER_SYNC_TASKS.pop(task_key, None)
 
     # ── 0. Easy Mode webhook (PUBLIC — gated by HMAC) ─────────────────
     # Iter-292 — Salla Easy Mode delivers tokens via webhook instead of
@@ -301,6 +441,8 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
             "source": (
                 "env:SALLA_OAUTH_SCOPES"
                 if os.environ.get("SALLA_OAUTH_SCOPES")
+                else "env:SALLA_CARTS_READ_APPROVED"
+                if "carts.read" in DEFAULT_SCOPES.split()
                 else "code_default"
             ),
             "note": (
@@ -538,22 +680,74 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         }
 
     # ── 8. Manual sync — orders / products ────────────────────────────
-    @router.post("/sync/orders")
+    @router.post("/sync/orders", status_code=202)
     async def sync_orders(payload: Optional[dict] = None, user: dict = Depends(current_user)):
         payload = payload or {}
+        user_id = str(user["id"])
+        now = datetime.now(timezone.utc)
+        await db.salla_sync_logs.update_many(
+            {
+                "user_id": user_id,
+                "kind": "orders",
+                "status": "running",
+                "started_at": {"$lt": now - timedelta(minutes=30)},
+            },
+            {"$set": {
+                "status": "interrupted",
+                "ended_at": now,
+                "last_error": "stale_running_sync_recovered",
+            }},
+        )
+
+        lease_token, active = await _acquire_order_sync_lease(db, user_id)
+        if not lease_token:
+            return {
+                "ok": True,
+                "accepted": True,
+                "already_running": True,
+                "log_id": (active or {}).get("log_id"),
+            }
+
         try:
-            result = await run_orders_sync(
-                db, user["id"],
-                from_date=payload.get("from_date"),
-                to_date=payload.get("to_date"),
-                updated_since_hours=payload.get("updated_since_hours"),
+            log_id = await create_sync_log(db, user_id, "orders")
+            await db.salla_sync_leases.update_one(
+                {
+                    "_id": f"salla-orders:{user_id}",
+                    "lease_token": lease_token,
+                },
+                {"$set": {"log_id": log_id}},
             )
-        except SallaError as e:
-            raise HTTPException(
-                status_code=e.status_code if e.status_code != 200 else 400,
-                detail={"message": str(e), "needs_reauth": e.needs_reauth},
+        except Exception:
+            await _release_order_sync_lease(db, user_id, lease_token)
+            raise
+        try:
+            task = asyncio.create_task(
+                run_orders_sync_background(
+                    user_id=user_id,
+                    lease_token=lease_token,
+                    log_id=log_id,
+                    from_date=payload.get("from_date"),
+                    to_date=payload.get("to_date"),
+                    updated_since_hours=payload.get("updated_since_hours"),
+                    recover_marketing_attribution=(
+                        payload.get("recover_marketing_attribution") is True
+                    ),
+                ),
+                name=f"salla-manual-order-sync:{user_id}",
             )
-        return {"ok": True, **result}
+            _MANUAL_ORDER_SYNC_TASKS[user_id] = task
+        except Exception:
+            await db.salla_sync_logs.update_one(
+                {"id": log_id},
+                {"$set": {
+                    "status": "failed",
+                    "ended_at": datetime.now(timezone.utc),
+                    "last_error": "failed_to_schedule_background_sync",
+                }},
+            )
+            await _release_order_sync_lease(db, user_id, lease_token)
+            raise
+        return {"ok": True, "accepted": True, "log_id": log_id}
 
     @router.post("/sync/products")
     async def sync_products(user: dict = Depends(current_user)):
@@ -565,6 +759,171 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
                 detail={"message": str(e), "needs_reauth": e.needs_reauth},
             )
         return {"ok": True, **result}
+
+    def _public_cart_sync_log(row: Optional[dict]) -> Optional[dict]:
+        if not row:
+            return None
+        allowed = (
+            "id",
+            "kind",
+            "status",
+            "created",
+            "updated",
+            "errors_count",
+            "pages_fetched",
+            "rows_seen",
+            "rows_saved",
+            "stopped_reason",
+            "started_at",
+            "ended_at",
+            "updated_at",
+            "last_error",
+            "provider_write_reached",
+            "pii_stored",
+            "plaintext_pii_stored",
+            "schema_version",
+            "identity_linked",
+            "attributed",
+            "order_linked",
+            "private_context_encrypted",
+            "customer_orders_linked",
+        )
+        public = {key: row.get(key) for key in allowed if key in row}
+        for key in ("started_at", "ended_at", "updated_at"):
+            value = public.get(key)
+            if hasattr(value, "isoformat"):
+                public[key] = value.isoformat()
+        return public
+
+    @router.get("/abandoned-carts/status")
+    async def abandoned_carts_status(user: dict = Depends(current_user)):
+        """Privacy-safe progress and coverage summary for the current tenant."""
+        user_id = user["id"]
+        closed_historical_runs = await close_running_historical_cart_imports(
+            db, user_id
+        )
+        integration = await get_integration(db, user_id)
+        scope_granted = bool(
+            integration
+            and "carts.read" in split_scopes(integration.get("scope"))
+        )
+        carts = getattr(db, ABANDONED_CART_COLLECTION)
+        events = getattr(db, ABANDONED_CART_EVENT_COLLECTION)
+        identities = getattr(db, CUSTOMER_IDENTITY_COLLECTION)
+        total_carts = await carts.count_documents({"user_id": user_id})
+        purchased_carts = await carts.count_documents(
+            {"user_id": user_id, "purchased": True}
+        )
+        webhook_events = await events.count_documents({"user_id": user_id})
+        identity_linked_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "customer_identity_id": {"$exists": True, "$ne": None},
+            }
+        )
+        attributed_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"attribution.platform": {"$exists": True, "$ne": None}},
+                    {"attribution.campaign_id": {"$exists": True, "$ne": None}},
+                    {"attribution.utm_source": {"$exists": True, "$ne": None}},
+                ],
+            }
+        )
+        order_linked_carts = await carts.count_documents(
+            {
+                "user_id": user_id,
+                "$or": [
+                    {"order_id": {"$exists": True, "$ne": None}},
+                    {"order_number": {"$exists": True, "$ne": None}},
+                ],
+            }
+        )
+        encrypted_private_carts = await carts.count_documents(
+            {"user_id": user_id, "private_cart_context_encrypted": True}
+        )
+        customer_identities = await identities.count_documents({"user_id": user_id})
+        customer_memory_orders = await db.unified_orders.count_documents(
+            {
+                "user_id": user_id,
+                "customer_identity_id": {"$exists": True, "$ne": None},
+            }
+        )
+        event_counts = {
+            event_name: await events.count_documents(
+                {"user_id": user_id, "event": event_name}
+            )
+            for event_name in sorted(ABANDONED_CART_EVENTS)
+        }
+        latest_cart = await carts.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "updated_at": 1, "cart_updated_at": 1},
+            sort=[("updated_at", -1)],
+        )
+        latest_event = await events.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "last_received_at": 1},
+            sort=[("last_received_at", -1)],
+        )
+        latest_sync = await db.salla_sync_logs.find_one(
+            {"user_id": user_id, "kind": "abandoned_carts"},
+            {"_id": 0},
+            sort=[("started_at", -1)],
+        )
+
+        def iso(value):
+            return value.isoformat() if hasattr(value, "isoformat") else value
+
+        return {
+            "ok": True,
+            "scope_granted": scope_granted,
+            "total_carts": total_carts,
+            "active_carts": max(total_carts - purchased_carts, 0),
+            "purchased_carts": purchased_carts,
+            "webhook_events": webhook_events,
+            "schema_version": ABANDONED_CART_SCHEMA_VERSION,
+            "customer_identities": customer_identities,
+            "customer_memory_orders": customer_memory_orders,
+            "identity_linked_carts": identity_linked_carts,
+            "attributed_carts": attributed_carts,
+            "order_linked_carts": order_linked_carts,
+            "encrypted_private_carts": encrypted_private_carts,
+            "event_counts": event_counts,
+            "latest_cart_at": iso(
+                (latest_cart or {}).get("cart_updated_at")
+                or (latest_cart or {}).get("updated_at")
+            ),
+            "latest_event_at": iso((latest_event or {}).get("last_received_at")),
+            "last_sync": _public_cart_sync_log(latest_sync),
+            "import_running": False,
+            "historical_import_enabled": (
+                HISTORICAL_ABANDONED_CART_IMPORT_ENABLED
+            ),
+            "live_webhooks_only": True,
+            "closed_historical_runs": closed_historical_runs,
+            "provider_write_reached": False,
+            "pii_stored": False,
+            "plaintext_pii_stored": False,
+            "private_data_encrypted_at_rest": True,
+        }
+
+    @router.post("/sync/abandoned-carts", status_code=410)
+    async def sync_abandoned_carts(user: dict = Depends(current_user)):
+        """Reject historical imports; new carts arrive through live webhooks."""
+        user_id = user["id"]
+        await close_running_historical_cart_imports(db, user_id)
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "historical_abandoned_cart_import_disabled",
+                "message": (
+                    "تم إيقاف الاستيراد التاريخي. تصل السلات الجديدة "
+                    "وتحديثاتها مباشرة عبر Webhook."
+                ),
+                "live_webhooks_only": True,
+            },
+        )
 
     # ── 9. Sync logs ──────────────────────────────────────────────────
     @router.get("/sync/logs")
@@ -606,6 +965,7 @@ async def ensure_salla_indexes(db) -> None:
     # Auto-expire stale OAuth states after 10 min so the collection
     # doesn't grow forever.
     await db.salla_oauth_states.create_index("expires_at", expireAfterSeconds=0)
+    await ensure_abandoned_cart_indexes(db)
     # Phase 2 — sync indexes
     await ensure_sync_indexes(db)
     # Warm up the credentials cache from DB so the very first OAuth

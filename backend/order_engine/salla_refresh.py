@@ -4,9 +4,8 @@ The service deliberately reads shipping/customer facts from Order Details itself
 and retrieves line items from List Order Items.  It never calls Shipments APIs,
 Qoyod, legacy Mezan routes, or page-specific persistence.
 
-Order Details is requested without ``format=light`` so Salla can return the
-complete delivery facts available on the order itself, including ``ship_to``,
-``block`` and ``street_number``. Order items are retrieved separately through
+Only delivery facts actually present in Order Details are observed. Sparse
+responses preserve the current carrier received from webhooks. Items use
 ``/orders/items``. Embedded shipment objects may be read from Order Details, but
 this service never calls a Shipments API endpoint.
 """
@@ -17,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from orders_db import upsert_order
+from salla_shipping import SHIPPING_FIELDS, extract_shipping, shipping_root_fields
 from salla_integration.service import SallaError, call_salla
 from salla_integration.sync import (
     _enrich_order_receiving_bank,
@@ -320,18 +320,9 @@ def extract_order_details_shipping_fields(order: dict[str, Any]) -> tuple[dict[s
     """Return normalized root fields plus provider-shaped address/shipping objects."""
     address, source_path = extract_order_details_address(order)
     fields = _address_fields(address, source_path)
-    shipping = _dict(order.get("shipping"))
-    company = _named(
-        shipping.get("company")
-        or shipping.get("company_name")
-        or order.get("shipping_company")
-        or order.get("delivery_method")
-    )
-    method = _named(shipping.get("method") or order.get("shipping_method"))
-    if company:
-        fields["shipping_company"] = company
-    if method:
-        fields["shipping_method"] = method
+    observation = extract_shipping(order)
+    if observation:
+        fields.update(shipping_root_fields(observation))
     return fields, address, source_path
 
 
@@ -407,6 +398,7 @@ async def refresh_order_from_salla(
     *,
     force: bool = False,
     minimum_fresh_seconds: int = 120,
+    allow_auto_fulfillment: bool = True,
 ) -> dict[str, Any]:
     """Refresh one Order Engine V2 order from Salla Order Details and Items."""
     normalized = str(order_number or "").strip()
@@ -524,15 +516,6 @@ async def refresh_order_from_salla(
         doc["order_id"] = str(internal_id)
         doc["order_number"] = normalized
 
-        result = await upsert_order(
-            db,
-            str(user_id),
-            normalized,
-            doc,
-            source="salla_direct",
-            raw=merged_raw,
-        )
-
         now = datetime.now(timezone.utc)
         canonical_updates: dict[str, Any] = {
             REFRESH_TIMESTAMP_FIELD: now.isoformat(),
@@ -545,36 +528,65 @@ async def refresh_order_from_salla(
         # facts returned by Order Details. Persist them at the canonical root so
         # a later light list sync cannot make the address disappear again.
         for key, value in shipping_fields.items():
-            if key == "shipping_address_found" or _present(value):
+            if key not in SHIPPING_FIELDS and (key == "shipping_address_found" or _present(value)):
                 canonical_updates[key] = deepcopy(value)
 
-        await db.unified_orders.update_one(
-            {"user_id": str(user_id), "order_number": normalized},
-            {"$set": canonical_updates},
+        from fulfillment_v2_routes import persist_component_source_snapshot
+        async def persist_snapshot(scoped):
+            result = await upsert_order(scoped, str(user_id), normalized, doc, source="salla_direct", raw=merged_raw,
+                                        shipping_snapshot=extract_shipping(details) or {})
+            await scoped.unified_orders.update_one(
+                {"user_id": str(user_id), "order_number": normalized}, {"$set": canonical_updates},
+            )
+            return result
+        result = await persist_component_source_snapshot(
+            db, user_id=str(user_id), order_number=normalized, payload=details, persist=persist_snapshot,
+            authoritative_refresh=True,
         )
+        if result.get("blocked"):
+            return {"ok": False, "found": True, "updated": False, "order_number": normalized, **result}
+        if result.get("stale"):
+            return {"ok": True, "found": True, "updated": False, "skipped": True,
+                    "reason": "stale_salla_snapshot", "order_number": normalized,
+                    "no_shipments_api_calls": True, "no_qoyod_calls": True}
         auto_fulfillment = {
-            "attempted": True,
+            "attempted": False,
             "promoted": False,
-            "reason": "evaluation_failed",
+            "reason": "disabled_for_read_only_lookup",
         }
-        try:
-            from fulfillment_v2_routes import auto_route_instant_order
-            from order_engine.repository import MongoOrderRepository
-            from order_engine.service import get_order
+        if allow_auto_fulfillment:
+            auto_fulfillment = {
+                "attempted": True,
+                "promoted": False,
+                "reason": "evaluation_failed",
+            }
+            try:
+                from fulfillment_v2_routes import auto_route_instant_order, component_provider_version
+                from order_engine.repository import MongoOrderRepository
+                from order_engine.service import get_order
 
-            canonical_order = await get_order(
-                MongoOrderRepository(db),
-                user_id=str(user_id),
-                order_number=normalized,
-            )
-            auto_fulfillment = await auto_route_instant_order(
-                db,
-                user_id=str(user_id),
-                order=canonical_order,
-            )
-            auto_fulfillment["attempted"] = True
-        except Exception as exc:
-            auto_fulfillment["error"] = str(exc)[:300]
+                canonical_order = await get_order(
+                    MongoOrderRepository(db),
+                    user_id=str(user_id),
+                    order_number=normalized,
+                )
+                auto_fulfillment = await auto_route_instant_order(
+                    db,
+                    user_id=str(user_id),
+                    order=canonical_order,
+                    source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
+                )
+                auto_fulfillment["attempted"] = True
+            except Exception as exc:
+                from fulfillment_v2_routes import record_component_intake_failure, component_provider_version
+                await record_component_intake_failure(
+                    db, user_id=str(user_id), order_number=normalized,
+                    source_updated_at=component_provider_version(details),
+                    source_revision=result.get("snapshot_revision"),
+                )
+                auto_fulfillment.update({"accepted": False, "retry_required": True,
+                                         "error_code": "component_intake_retry_required"})
 
         return {
             "ok": True,

@@ -41,6 +41,26 @@ def test_normalized_option_names_support_legacy_orders():
     }, tokens)
 
 
+def test_plural_salla_option_values_match_each_customer_choice():
+    item = {
+        "options": [{
+            "name": "نوع الطلب",
+            "value": ["فستان"],
+        }],
+    }
+
+    tokens = selected_option_tokens(item)
+
+    assert binding_matches({
+        "option_name": "نوع الطلب",
+        "value_name": "فستان",
+    }, tokens)
+    assert not binding_matches({
+        "option_name": "نوع الطلب",
+        "value_name": "سديري",
+    }, tokens)
+
+
 def test_cost_contract_is_base_plus_selected_options_only():
     base = 22.0
     selected_option_amounts = [10.0, 3.0]

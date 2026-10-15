@@ -30,6 +30,7 @@ from order_review_routes import (
 
 SUPPLIER_FILE_ROUTE = "supplier_file"
 INTERNAL_PREPARATION_ROUTE = "internal_preparation"
+DIRECT_ASSEMBLY_ROUTE = "direct_assembly"
 ASSIGNMENT_DEFAULTS = "order_review_preparation_assignment_defaults"
 PREPARATION_MANAGE_DEFAULT_ROLES = {"owner", "admin", "operations"}
 
@@ -42,7 +43,7 @@ class ReviewExportControlPatch(BaseModel):
         max_length=60,
     )
     preparation_route: Optional[
-        Literal["supplier_file", "internal_preparation"]
+        Literal["supplier_file", "internal_preparation", "direct_assembly"]
     ] = None
     assigned_employee_id: Optional[str] = Field(default=None, max_length=120)
     # The requested behavior is persistent by default. A reviewer may explicitly
@@ -168,13 +169,29 @@ def item_export_control_view(
     )
     operational = operational_excluded_keys(operational_items, order_item_id)
     hidden = sorted(set(manual) | set(operational))
-    route = _text(state.get("preparation_route")) or SUPPLIER_FILE_ROUTE
-    if route not in {SUPPLIER_FILE_ROUTE, INTERNAL_PREPARATION_ROUTE}:
+    default_route = (
+        _text((default_assignment or {}).get("preparation_route"))
+        or (
+            INTERNAL_PREPARATION_ROUTE
+            if _text((default_assignment or {}).get("assigned_employee_id"))
+            else ""
+        )
+    )
+    route = (
+        _text(state.get("preparation_route"))
+        or default_route
+        or SUPPLIER_FILE_ROUTE
+    )
+    if route not in {
+        SUPPLIER_FILE_ROUTE,
+        INTERNAL_PREPARATION_ROUTE,
+        DIRECT_ASSEMBLY_ROUTE,
+    }:
         route = SUPPLIER_FILE_ROUTE
     supplier_export = (
         bool(state.get("supplier_export"))
         if "supplier_export" in state
-        else route != INTERNAL_PREPARATION_ROUTE
+        else route == SUPPLIER_FILE_ROUTE
     )
 
     state_employee_id = _text(state.get("assigned_employee_id")) or None
@@ -186,7 +203,11 @@ def item_export_control_view(
         if default_employee_id and default_employee_id in employees_by_id
         else None
     )
-    assigned_employee_id = state_employee_id or usable_default_id
+    assigned_employee_id = (
+        state_employee_id or usable_default_id
+        if route == INTERNAL_PREPARATION_ROUTE
+        else None
+    )
     assigned_employee = employees_by_id.get(assigned_employee_id or "")
     default_employee = employees_by_id.get(usable_default_id or "")
 
@@ -198,11 +219,22 @@ def item_export_control_view(
         "hidden_spec_keys": hidden,
         "preparation_route": route,
         "supplier_export": supplier_export,
+        "direct_assembly": route == DIRECT_ASSEMBLY_ROUTE,
+        "route_source": (
+            "order"
+            if _text(state.get("preparation_route"))
+            else "default"
+            if default_route
+            else "system"
+        ),
+        "default_preparation_route": default_route or SUPPLIER_FILE_ROUTE,
         "preparation_status": (
             _text(state.get("preparation_status"))
             or (
                 "in_progress"
                 if route == INTERNAL_PREPARATION_ROUTE
+                else "awaiting_assembly"
+                if route == DIRECT_ASSEMBLY_ROUTE
                 else "pending_file"
             )
         ),
@@ -255,6 +287,10 @@ def apply_export_control_patch(
         if route == INTERNAL_PREPARATION_ROUTE:
             state["supplier_export"] = False
             state["preparation_status"] = "in_progress"
+        elif route == DIRECT_ASSEMBLY_ROUTE:
+            state["supplier_export"] = False
+            state["preparation_status"] = "awaiting_assembly"
+            state["assigned_employee_id"] = None
         else:
             state["supplier_export"] = True
             state["preparation_status"] = "pending_file"
@@ -277,16 +313,20 @@ def partition_review_items_for_preparation(
     """Canonical split used by the future preparation-file generator."""
     supplier_items: list[dict[str, Any]] = []
     internal_items: list[dict[str, Any]] = []
+    direct_assembly_items: list[dict[str, Any]] = []
     for row in items or []:
         route = _text(row.get("preparation_route")) or SUPPLIER_FILE_ROUTE
         supplier_export = row.get("supplier_export") is not False
-        if route == INTERNAL_PREPARATION_ROUTE or not supplier_export:
+        if route == DIRECT_ASSEMBLY_ROUTE:
+            direct_assembly_items.append(row)
+        elif route == INTERNAL_PREPARATION_ROUTE or not supplier_export:
             internal_items.append(row)
         else:
             supplier_items.append(row)
     return {
         "supplier_file_items": supplier_items,
         "internal_preparation_items": internal_items,
+        "direct_assembly_items": direct_assembly_items,
     }
 
 
@@ -466,6 +506,7 @@ def make_order_review_export_controls_router(
         target_route = (
             payload.preparation_route
             or _text(current.get("preparation_route"))
+            or _text(default_assignment.get("preparation_route"))
             or SUPPLIER_FILE_ROUTE
         )
         responsible_employee_id = resolve_responsible_employee_id(
@@ -483,7 +524,10 @@ def make_order_review_export_controls_router(
         effective_values = payload.model_dump(exclude_unset=True)
         if target_route == INTERNAL_PREPARATION_ROUTE:
             effective_values["assigned_employee_id"] = responsible_employee_id
-        elif payload.preparation_route == SUPPLIER_FILE_ROUTE:
+        elif payload.preparation_route in {
+            SUPPLIER_FILE_ROUTE,
+            DIRECT_ASSEMBLY_ROUTE,
+        }:
             effective_values["assigned_employee_id"] = None
         effective_payload = ReviewExportControlPatch(**effective_values)
 
@@ -536,8 +580,7 @@ def make_order_review_export_controls_router(
 
         default_updated = False
         if (
-            target_route == INTERNAL_PREPARATION_ROUTE
-            and responsible_employee_id
+            payload.preparation_route is not None
             and payload.save_assignment_as_default
         ):
             await _ensure_assignment_default_indexes()
@@ -548,7 +591,12 @@ def make_order_review_export_controls_router(
                 },
                 {
                     "$set": {
-                        "assigned_employee_id": responsible_employee_id,
+                        "preparation_route": target_route,
+                        "assigned_employee_id": (
+                            responsible_employee_id
+                            if target_route == INTERNAL_PREPARATION_ROUTE
+                            else None
+                        ),
                         "updated_at": now,
                         "updated_by": actor_id,
                     },
@@ -560,7 +608,12 @@ def make_order_review_export_controls_router(
                 upsert=True,
             )
             default_assignment = {
-                "assigned_employee_id": responsible_employee_id,
+                "preparation_route": target_route,
+                "assigned_employee_id": (
+                    responsible_employee_id
+                    if target_route == INTERNAL_PREPARATION_ROUTE
+                    else None
+                ),
             }
             default_updated = True
 

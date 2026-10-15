@@ -1,6 +1,7 @@
 """Hesab — accounting backend for Salla-platform analytics."""
 from dotenv import load_dotenv
 from pathlib import Path
+from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH, validate_account_password
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -8,6 +9,7 @@ load_dotenv(ROOT_DIR / ".env")
 import os
 import uuid
 import logging
+import asyncio as _asyncio
 from datetime import datetime, timezone, timedelta
 from tz_utils import riyadh_date_from_utc, riyadh_today_iso
 from typing import List, Optional, Dict
@@ -36,26 +38,50 @@ def _local_today_date():
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
+from browser_security import BrowserSecurityMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from mongo_observability import mongo_metrics
+from runtime_mongo import (
+    TRANSIENT_MONGO_ERRORS,
+    main_client_options,
+)
 from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 
 from auth import (
     hash_password,
+    validate_bcrypt_secret,
     verify_password,
+    account_is_disabled,
     create_access_token,
     create_refresh_token,
     set_auth_cookies,
     clear_auth_cookies,
+    refresh_browser_session,
+    raise_auth_dependency_unavailable,
     get_current_user_from_db,
     seed_admin,
+    install_process_local_auth_security,
     ensure_user_settings,
     DEFAULT_PAYMENT_METHODS,
     DEFAULT_SHIPPING_COMPANIES,
 )
 from excel_parser import parse_salla_excel, match_settings
+from excel_upload_security import read_safe_xlsx_upload
 from exports import export_report_excel, export_report_pdf
+from release_identity import release_health_payload
+from resource_governor import StageMetric, governor, memory_snapshot
+from runtime_diagnostics import start_lag_monitor
+from runtime_diagnostics_routes import (
+    attach_diagnostics_routes as attach_runtime_diagnostics_routes,
+)
+from boot_runtime import (
+    cancel_deferred_task, is_ready, process_local_readiness_event,
+    readiness_traffic_gate, start_deferred_task,
+)
+from startup_guard import (
+    new_owner_id, replica_jitter, run_release_startup, verified_release_key,
+)
 from report_builder import build_report as _build_report
-from snapchat_routes import attach_snapchat_routes
 from meta_routes import attach_meta_routes
 from shipping_accounts import attach_shipping_accounts_routes
 from webhook_routes import attach_webhook_routes
@@ -65,18 +91,45 @@ from salla_integration import attach_salla_routes, ensure_salla_indexes
 from settlements_import import attach_payment_settlements_routes, ensure_settlements_indexes as ensure_payment_settlements_indexes
 from refunds_alert_routes import attach_refunds_alert_routes
 from payment_gateway_metrics import attach_payment_gateway_metrics_routes
+from financial_provider_apps import (
+    ensure_financial_provider_app_indexes,
+    make_financial_provider_apps_router,
+)
+from courier_cod_fee_rules import (
+    CourierCodFeeTier,
+    validate_courier_cod_fee_tiers,
+)
 from order_status_policy import attach_order_status_policy_routes
+from order_currency import (
+    SALLA_RAW_CURRENCY_PROJECTION,
+    hydrate_order_currency_fields,
+    order_total_sar,
+    summarize_orders_sar,
+)
 from shipping_ledger_routes import attach_shipping_ledger_routes
 from orders_explorer_routes import attach_orders_explorer_routes
+from salla_marketing_attribution import (
+    SALLA_RAW_ATTRIBUTION_PROJECTION,
+    attach_projected_salla_attribution,
+)
 from order_engine.routes import make_order_engine_router
+from order_activity_routes import make_order_activity_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
 from mezan_mcp import make_mezan_mcp_router
+from first_party_attribution import (
+    ensure_first_party_attribution_indexes,
+    make_first_party_attribution_router,
+)
 from settlement_cycle import attach_settlement_cycle_routes
 from expenses_routes import (
     attach_operating_expenses_routes,
     compute_operating_expenses_for_range,
+)
+from recurring_obligations_routes import (
+    ensure_recurring_obligation_indexes,
+    make_recurring_obligations_router,
 )
 from settlements_routes import (
     attach_settlements_routes,
@@ -97,8 +150,11 @@ from bnpl import attach_bnpl_routes, ensure_bnpl_indexes, attach_bnpl_webhook_ro
 from bnpl.auto_sync_service import run_tamara_attribution_sweep
 from transfers_routes import attach_transfers_routes, ensure_transfers_indexes
 from reconciliation_routes import attach_reconciliation_routes
-from diagnostics_routes import attach_diagnostics_routes
-from orders_db import upsert_order, orders_to_parsed
+from diagnostics_routes import (
+    attach_diagnostics_routes as attach_order_diagnostics_routes,
+)
+from copy import deepcopy as _dashboard_deepcopy
+from orders_db import upsert_order, orders_to_parsed, orders_to_parsed_cooperative
 from import_jobs import (
     attach_import_jobs_routes,
     ensure_import_jobs_indexes,
@@ -137,31 +193,104 @@ def _parse_date_or(s: Optional[str], fallback):
 
 # ── Database ──────────────────────────────────────────────────────────────────
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+client = AsyncIOMotorClient(
+    mongo_url,
+    **main_client_options(event_listener=mongo_metrics),
+)
+from review_acceptance_config_guard import AcceptanceConfigDatabase
+db = AcceptanceConfigDatabase(client[os.environ["DB_NAME"]])
 
 
 # ── App / Router ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hesab — Salla Accounting API")
+from observability_middleware import DiagnosticsMiddleware
+app.add_middleware(DiagnosticsMiddleware)
 api = APIRouter(prefix="/api")
+app.state.readiness = "starting"
+app.state.startup_phase = "import_complete"
+attach_runtime_diagnostics_routes(
+    app,
+    mongo_client=client,
+    state=lambda: {
+        "readiness": getattr(app.state, "readiness", "starting"),
+        "startup_phase": getattr(app.state, "startup_phase", "unknown"),
+    },
+)
+
+
+app.middleware("http")(readiness_traffic_gate)
 
 
 @app.get("/health", include_in_schema=False)
-async def health_check():
+@api.get("/health", include_in_schema=False)
+async def health_check(response: Response):
     """Deployment health probe; no database or external API calls."""
-    return {"ok": True, "service": "backend"}
+    response.status_code = 200 if is_ready(app) else 503
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return release_health_payload()
+
+
+@app.get("/live", include_in_schema=False)
+@api.get("/live", include_in_schema=False)
+async def liveness_check(response: Response):
+    """ASGI process liveness only; never touches Mongo, providers or locks."""
+    response.headers["Cache-Control"] = "no-store"
+    return {"live": True, "service": "backend"}
+
+
+@app.get("/ready", include_in_schema=False)
+@api.get("/ready", include_in_schema=False)
+async def readiness_check(response: Response):
+    """Readiness is local state only: no Mongo, provider, or heavy-lock wait."""
+    ready = is_ready(app)
+    response.status_code = 200 if ready else 503
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "ready": ready,
+        "phase": getattr(app.state, "startup_phase", "unknown"),
+    }
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 async def current_user(request: Request) -> dict:
-    return await get_current_user_from_db(request, db)
+    user = await get_current_user_from_db(request, db)
+    # Native employees authenticate as themselves, but Mezan's historical data
+    # remains tenant-scoped by the merchant owner id. Bridge those identities
+    # only for an explicit native-route allow-list and only after checking the
+    # matching independent app-page permission. Browser sessions are unchanged.
+    from mobile_app_request_context import mobile_app_request_user
+
+    return await mobile_app_request_user(
+        db,
+        user,
+        path=request.url.path,
+        method=request.method,
+    )
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+MIN_PASSWORD_LENGTH = 12
+
+
+def _public_registration_enabled() -> bool:
+    """Public signup is closed unless deployment explicitly opts in."""
+    return os.environ.get("AUTH_PUBLIC_REGISTRATION_ENABLED", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def _security_question_recovery_enabled() -> bool:
+    """Legacy knowledge-based recovery is disabled unless explicitly enabled."""
+    return os.environ.get("AUTH_SECURITY_QUESTION_RESET_ENABLED", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class LoginIn(BaseModel):
@@ -172,7 +301,8 @@ class LoginIn(BaseModel):
 # iter-51 — Profile/account management schemas
 class ChangePasswordIn(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ChangeEmailIn(BaseModel):
@@ -189,7 +319,8 @@ class SecurityQuestionIn(BaseModel):
     The answer is hashed on the server before storage."""
     current_password: str = Field(min_length=1)
     question: str = Field(min_length=4, max_length=200)
-    answer: str = Field(min_length=2, max_length=200)
+    answer: str = Field(min_length=8, max_length=200)
+    _answer_utf8_limit = validator("answer", allow_reuse=True)(validate_bcrypt_secret)
 
 
 class ForgotPasswordCheckIn(BaseModel):
@@ -199,7 +330,8 @@ class ForgotPasswordCheckIn(BaseModel):
 class ForgotPasswordResetIn(BaseModel):
     email: EmailStr
     answer: str = Field(min_length=1, max_length=200)
-    new_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 # iter-51 — Multi-user / RBAC schemas
@@ -238,6 +370,7 @@ PERMISSIONS_CATALOGUE: dict[str, str] = {
 # Default permissions per role. Override on the user document via
 # `extra_permissions` (add) and `denied_permissions` (subtract).
 ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
+    "meta_reviewer": [],
     "owner": list(PERMISSIONS_CATALOGUE.keys()),  # owner = all
     "admin": [k for k in PERMISSIONS_CATALOGUE if k != "users.manage"],
     "accountant": [
@@ -266,10 +399,16 @@ ROLE_DEFAULT_PERMS: dict[str, list[str]] = {
 class TeamUserCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=128)
     role: str = Field(default="viewer")
     extra_permissions: list[str] = Field(default_factory=list)
     denied_permissions: list[str] = Field(default_factory=list)
+    _password_utf8_limit = validator("password", allow_reuse=True)(validate_bcrypt_secret)
+
+
+class EmployeeTeamUserCreateIn(TeamUserCreateIn):
+    employee_id: str = Field(min_length=1)
+    password: str = Field(min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
 
 
 class TeamUserUpdateIn(BaseModel):
@@ -277,7 +416,8 @@ class TeamUserUpdateIn(BaseModel):
     role: Optional[str] = None
     extra_permissions: Optional[list[str]] = None
     denied_permissions: Optional[list[str]] = None
-    new_password: Optional[str] = Field(default=None, min_length=6, max_length=128)
+    new_password: Optional[str] = Field(default=None, min_length=EMPLOYEE_PASSWORD_MIN_LENGTH, max_length=128)
+    _password_utf8_limit = validator("new_password", allow_reuse=True)(validate_bcrypt_secret)
 
 
 def _effective_perms(user_doc: dict) -> set[str]:
@@ -286,17 +426,18 @@ def _effective_perms(user_doc: dict) -> set[str]:
     Formula:  role_defaults ∪ extra_permissions  −  denied_permissions
     The owner ALWAYS has every permission and cannot be downgraded.
     """
-    role = (user_doc.get("role") or "viewer").lower()
+    role = str(user_doc.get("role") or "").strip().casefold()
     if role == "owner":
         return set(PERMISSIONS_CATALOGUE.keys())
-    base = set(ROLE_DEFAULT_PERMS.get(role, ROLE_DEFAULT_PERMS["viewer"]))
+    # Unknown/missing roles fail closed. They must never inherit viewer access.
+    base = set(ROLE_DEFAULT_PERMS.get(role, []))
     base |= set(user_doc.get("extra_permissions") or [])
     base -= set(user_doc.get("denied_permissions") or [])
     return base
 
 
 def _is_owner(user_doc: dict) -> bool:
-    return (user_doc.get("role") or "").lower() == "owner"
+    return str(user_doc.get("role") or "").strip().casefold() == "owner"
 
 
 class PaymentMethod(BaseModel):
@@ -326,6 +467,12 @@ class ShippingCompany(BaseModel):
     # weren't declared here.
     cod_fee_percent: Optional[float] = Field(default=0.0, ge=0, le=1)
     cod_fee_fixed_per_order: Optional[float] = Field(default=0.0, ge=0)
+    # MZ2-FIN-CUTOVER-001 — optional per-shipment COD brackets. When at
+    # least one tier exists it takes priority over the legacy flat fields.
+    # The VAT percentage belongs to the collection commission itself and is
+    # kept separate from the normal shipping-service VAT.
+    cod_fee_vat_percent: float = Field(default=15.0, ge=0, le=100)
+    cod_fee_tiers: List[CourierCodFeeTier] = Field(default_factory=list)
 
     @root_validator(pre=False, skip_on_failure=True)
     def _sync_payment_mode(cls, values):  # noqa: N805
@@ -344,6 +491,10 @@ class ShippingCompany(BaseModel):
         else:
             values["payment_mode"] = (
                 "deferred" if values.get("is_deferred") else "prepaid")
+        try:
+            validate_courier_cod_fee_tiers(values.get("cod_fee_tiers") or [])
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         return values
 
 
@@ -508,8 +659,10 @@ class AnalysisCreate(BaseModel):
 
 
 # ── Auth Routes ───────────────────────────────────────────────────────────────
-@api.post("/auth/register")
+@api.post("/auth/register", include_in_schema=_public_registration_enabled())
 async def register(payload: RegisterIn, response: Response):
+    if not _public_registration_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     email = payload.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="هذا البريد الإلكتروني مسجل بالفعل")
@@ -533,7 +686,11 @@ async def register(payload: RegisterIn, response: Response):
 async def login(payload: LoginIn, response: Response):
     email = payload.email.lower()
     user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user.get("password_hash", "")):
+    if (
+        not user
+        or account_is_disabled(user)
+        or not verify_password(payload.password, user.get("password_hash", ""))
+    ):
         raise HTTPException(status_code=401, detail="البريد الإلكتروني أو كلمة المرور غير صحيحة")
     await ensure_user_settings(db, user["id"])
     access = create_access_token(user["id"], user["email"])
@@ -548,16 +705,42 @@ async def logout(response: Response, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
+@api.post("/auth/refresh")
+async def refresh_session(request: Request, response: Response):
+    return await refresh_browser_session(request, response, db)
+
+
 @api.get("/auth/me")
 async def me(user: dict = Depends(current_user)):
+    # Employee OS V2 is the authority for operational roles.  Merge its
+    # effective permissions into the session payload so the UI and the API
+    # make the same Customer Intelligence decision.  Legacy Admin does not
+    # inherit these capabilities merely from its broad legacy role.
+    from ai_store_access_contract import merged_session_permissions
+
+    try:
+        permissions = await merged_session_permissions(
+            db,
+            user,
+            _effective_perms(user),
+        )
+        # Native-app permissions remain a separate namespace and are never
+        # merged into Mezan's browser/operational ``permissions`` list.
+        from mobile_app_permissions import mobile_app_access_for_user
+        mobile_app_access = await mobile_app_access_for_user(db, user)
+    except TRANSIENT_MONGO_ERRORS as exc:
+        raise_auth_dependency_unavailable(exc)
     return {
         "id": user["id"], "name": user.get("name"), "email": user["email"],
         "role": user.get("role", "user"),
         # iter-51 — surface effective permissions + Salla owner flag so the
         # frontend can drive RBAC navigation without an extra round-trip.
-        "permissions": sorted(_effective_perms(user)),
+        "permissions": permissions,
+        "mobile_app_access": mobile_app_access,
         "is_owner": _is_owner(user),
         "has_security_question": bool(user.get("security_question")),
+        "review_scopes": user.get("review_scopes") or [],
+        "review_access_expires_at": user.get("review_access_expires_at"),
     }
 
 
@@ -580,6 +763,7 @@ async def change_my_password(payload: ChangePasswordIn, user: dict = Depends(cur
     """Change own password. Requires the current password for security."""
     # `current_user` strips password_hash for safety; re-fetch the full doc.
     full = await db.users.find_one({"id": user["id"]})
+    await validate_account_password(db, full or {}, payload.new_password, default_minimum=MIN_PASSWORD_LENGTH)
     if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
     if payload.current_password == payload.new_password:
@@ -615,8 +799,15 @@ async def change_my_email(payload: ChangeEmailIn, user: dict = Depends(current_u
 
 @api.put("/auth/profile/security-question")
 async def set_security_question(payload: SecurityQuestionIn, user: dict = Depends(current_user)):
-    """Set/update the security question used for password recovery. The
-    answer is normalised (trim + lower) and bcrypt-hashed before storage."""
+    """Legacy knowledge-based recovery is unavailable by default."""
+    if not _security_question_recovery_enabled():
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "security_question_recovery_disabled",
+                "message": "سؤال الأمان متوقف. استخدم استرداداً يوافق عليه مالك النظام.",
+            },
+        )
     full = await db.users.find_one({"id": user["id"]})
     if not full or not verify_password(payload.current_password, full.get("password_hash", "")):
         raise HTTPException(status_code=400, detail="كلمة المرور الحالية غير صحيحة")
@@ -635,21 +826,30 @@ async def set_security_question(payload: SecurityQuestionIn, user: dict = Depend
 # ── iter-51 — Password recovery via security question (no email needed) ────
 @api.post("/auth/forgot-password/check")
 async def forgot_password_check(payload: ForgotPasswordCheckIn):
-    """Step 1 — given an email, return that user's security question
-    (if any). We intentionally DO NOT reveal whether the email exists,
-    to avoid email enumeration: return a generic question if not found
-    or no security question is set."""
+    """Return no account-specific data while legacy recovery is disabled."""
+    if not _security_question_recovery_enabled():
+        return {
+            "question": "الاسترداد الذاتي متوقف. تواصل مع مالك النظام.",
+            "has_question": False,
+            "recovery_method": "contact_owner",
+        }
     user = await db.users.find_one({"email": payload.email.lower()})
     if user and user.get("security_question"):
         return {"question": user["security_question"], "has_question": True}
-    # Generic placeholder — prevents enumeration. Frontend should still
-    # collect an answer but the next call will fail.
-    return {"question": "سؤال الاسترداد غير مضبوط لهذا الحساب.", "has_question": False}
+    return {"question": "تعذّر بدء الاسترداد الذاتي.", "has_question": False}
 
 
 @api.post("/auth/forgot-password/reset")
 async def forgot_password_reset(payload: ForgotPasswordResetIn):
-    """Step 2 — verify the answer + reset the password in one shot."""
+    """Legacy reset remains unavailable until purpose-bound email OTP lands."""
+    if not _security_question_recovery_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "security_question_recovery_disabled",
+                "message": "الاسترداد الذاتي متوقف. تواصل مع مالك النظام.",
+            },
+        )
     user = await db.users.find_one({"email": payload.email.lower()})
     if not user or not user.get("security_answer_hash"):
         # Same generic message → no enumeration.
@@ -697,6 +897,8 @@ def _public_user_view(u: dict) -> dict:
         "denied_permissions": sorted(u.get("denied_permissions") or []),
         "effective_permissions": sorted(_effective_perms(u)),
         "is_owner": _is_owner(u),
+        "disabled": u.get("disabled") is True,
+        "is_active": u.get("is_active") is not False,
         "created_at": u.get("created_at"),
         "updated_at": u.get("updated_at"),
         "last_login_at": u.get("last_login_at"),
@@ -748,6 +950,20 @@ async def create_team_user(payload: TeamUserCreateIn, user: dict = Depends(curre
     return _public_user_view(new_doc)
 
 
+@api.post("/team/users/employee")
+async def create_employee_team_user(payload: EmployeeTeamUserCreateIn, user: dict = Depends(current_user)):
+    """MZ2 employee entry point; retain the existing account creation rules."""
+    _require_owner(user)
+    employee = await db.mezan_employees_v2.find_one({
+        "user_id": user["id"], "id": payload.employee_id,
+    })
+    if not employee:
+        raise HTTPException(status_code=404, detail={"code": "employee_v2_not_found"})
+    if employee.get("account_user_id"):
+        raise HTTPException(status_code=409, detail={"code": "employee_account_already_linked"})
+    return await create_team_user(payload, user)
+
+
 @api.put("/team/users/{user_id}")
 async def update_team_user(
     user_id: str,
@@ -760,6 +976,8 @@ async def update_team_user(
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     if _is_owner(target) and user_id != user["id"]:
         raise HTTPException(status_code=403, detail="لا يمكن تعديل Owner")
+    if payload.new_password is not None:
+        await validate_account_password(db, target, payload.new_password, default_minimum=MIN_PASSWORD_LENGTH)
     set_ops: dict = {}
     if payload.name is not None:
         new_name = payload.name.strip()
@@ -1644,11 +1862,7 @@ async def create_analysis(
     upsert loop runs in an `asyncio.create_task` so Make.com webhook
     ingestion is never blocked by a long upload.
     """
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
 
     job = await create_import_job(
         db,
@@ -1722,11 +1936,7 @@ async def reprocess_analysis(
     if not existing:
         raise HTTPException(status_code=404, detail="التحليل غير موجود")
 
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls", ".xlsm")):
-        raise HTTPException(status_code=400, detail="يرجى رفع ملف Excel بصيغة .xlsx")
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="الملف فارغ")
+    content = await read_safe_xlsx_upload(file, max_bytes=15 * 1024 * 1024)
     try:
         parsed = parse_salla_excel(content)
     except ValueError as e:
@@ -1877,6 +2087,15 @@ async def dashboard(
     all_orders = await db.unified_orders.find(
         orders_q, {"_id": 0, "raw_by_source": 0}
     ).to_list(100000)
+    if all_orders:
+        raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
+        raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
+        projected_rows = await db.unified_orders.find(
+            orders_q,
+            raw_projection,
+        ).to_list(100000)
+        hydrate_order_currency_fields(all_orders, projected_rows)
+        attach_projected_salla_attribution(all_orders, projected_rows)
 
     # Iteration 31: data_source self-heal. Past orders whose data_source
     # was demoted to "excel" by Excel re-imports (pre-iteration-31 bug)
@@ -1942,16 +2161,17 @@ async def dashboard(
     # status filter so the UI can render a transparency badge:
     #   "+X طلب معلَّق/ملغى بقيمة Y ر.س"
     salla_ref_orders_count = len(all_orders)
-    salla_ref_gross = round(
-        sum(float(o.get("total_amount") or 0) for o in all_orders), 2,
-    )
+    salla_ref_currency = summarize_orders_sar(all_orders)
+    salla_ref_gross = salla_ref_currency["total_sar"]
     if included_statuses:
         all_orders = [
             o for o in all_orders
             if _matches_any(o.get("order_status", ""), included_statuses)
         ]
 
-    parsed_all = orders_to_parsed(all_orders)
+    parsed_all = await orders_to_parsed_cooperative(all_orders)
+    currency_conversion = parsed_all["currency_conversion"]
+    currency_conversion_complete = currency_conversion["complete"] is True
     matched_all = match_settings(
         parsed_all,
         settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
@@ -2079,7 +2299,12 @@ async def dashboard(
             electronic_orders_included.append(o)
 
     if electronic_orders_included or electronic_orders_excluded:
-        parsed_elec = orders_to_parsed(electronic_orders_included)
+        parsed_elec = (
+            _dashboard_deepcopy(parsed_all)
+            if len(electronic_orders_included) == len(all_orders)
+            and all(a is b for a, b in zip(electronic_orders_included, all_orders))
+            else await orders_to_parsed_cooperative(electronic_orders_included)
+        )
         matched_elec = match_settings(
             parsed_elec,
             settings.get("payment_methods", DEFAULT_PAYMENT_METHODS),
@@ -2375,18 +2600,30 @@ async def dashboard(
     # ── Monthly trend from unified orders + legacy analyses ─────────────────
     from collections import defaultdict
     monthly_sales = defaultdict(float)
+    monthly_unverified_currency: set[str] = set()
     for o in all_orders:
         d = (o.get("order_date") or "")[:7]
         if not d:
             continue
-        monthly_sales[d] += float(o.get("total_amount") or 0)
+        monthly_sales[d] += 0.0
+        amount_sar = order_total_sar(o)
+        if amount_sar is None:
+            monthly_unverified_currency.add(d)
+        else:
+            monthly_sales[d] += amount_sar
     for a in legacy_analyses:
         d = (a.get("date") or a.get("created_at") or "")[:7]
         if not d:
             continue
         monthly_sales[d] += float(((a.get("report") or {}).get("summary") or {}).get("total_sales") or 0)
     monthly = sorted([
-        {"month": k, "sales": round(v, 2), "profit": 0}
+        {
+            "month": k,
+            "sales": None if k in monthly_unverified_currency else round(v, 2),
+            "known_sales_sar": round(v, 2),
+            "currency_conversion_complete": k not in monthly_unverified_currency,
+            "profit": 0,
+        }
         for k, v in monthly_sales.items()
     ], key=lambda x: x["month"])
 
@@ -2499,6 +2736,17 @@ async def dashboard(
 
     from payment_methods import PARENT_LABELS
     payment_breakdown_merged = _rollup_payment_breakdown(payment_breakdown_merged)
+    if not currency_conversion_complete:
+        for payment_row in payment_breakdown_merged:
+            for field in ("total_sales", "fee_amount", "vat_amount"):
+                payment_row[f"known_{field}_sar"] = payment_row.get(field)
+                payment_row[field] = None
+            payment_row["currency_conversion_complete"] = False
+            for sub_method in payment_row.get("sub_methods") or []:
+                for field in ("total_sales", "fee_amount"):
+                    sub_method[f"known_{field}_sar"] = sub_method.get(field)
+                    sub_method[field] = None
+                sub_method["currency_conversion_complete"] = False
 
     # ── Iter-44: Cross-platform ROAS + Average Cost Per Order ────────────
     # ROAS (Return On Ad Spend) — how many SAR of revenue each SAR of ad
@@ -2575,24 +2823,40 @@ async def dashboard(
     return {
         "range": {"from_date": from_date, "to_date": to_date},
         "totals": {
-            "total_sales": round(total_sales, 2),
-            "net_sales": round(net_sales, 2),
+            "total_sales": (
+                round(total_sales, 2) if currency_conversion_complete else None
+            ),
+            "net_sales": (
+                round(net_sales, 2) if currency_conversion_complete else None
+            ),
+            "accounting_currency": "SAR",
+            "sales_currency_conversion_complete": currency_conversion_complete,
+            "unverified_currency_orders_count": currency_conversion[
+                "unverified_orders_count"
+            ],
             "total_orders": int(total_orders),
             # iter-44 — cross-platform marketing KPIs
-            "overall_roas": overall_roas,
+            "overall_roas": overall_roas if currency_conversion_complete else None,
             "avg_cost_per_order": avg_cost_per_order,
-            "total_payment_fees": round(total_fees, 2),
-            "bnpl_fees": round(bnpl_fees, 2),
-            "tamara_fees": round(tamara_fees, 2),
-            "tabby_fees": round(tabby_fees, 2),
-            "emkan_fees": round(emkan_fees, 2),
-            "other_payment_fees": round(other_payment_fees, 2),
-            # iter-56 — electronic_net now subtracts Salla settlements too
-            "electronic_net": round(
-                other_payment_sales - other_payment_fees - salla_adj, 2,
+            "total_payment_fees": (
+                round(total_fees, 2) if currency_conversion_complete else None
             ),
-            "electronic_net_before_settlements": round(
-                other_payment_sales - other_payment_fees, 2,
+            "bnpl_fees": round(bnpl_fees, 2) if currency_conversion_complete else None,
+            "tamara_fees": round(tamara_fees, 2) if currency_conversion_complete else None,
+            "tabby_fees": round(tabby_fees, 2) if currency_conversion_complete else None,
+            "emkan_fees": round(emkan_fees, 2) if currency_conversion_complete else None,
+            "other_payment_fees": (
+                round(other_payment_fees, 2)
+                if currency_conversion_complete else None
+            ),
+            # iter-56 — electronic_net now subtracts Salla settlements too
+            "electronic_net": (
+                round(other_payment_sales - other_payment_fees - salla_adj, 2)
+                if currency_conversion_complete else None
+            ),
+            "electronic_net_before_settlements": (
+                round(other_payment_sales - other_payment_fees, 2)
+                if currency_conversion_complete else None
             ),
             # iter-45 — visible filtering metadata for the UI
             "electronic_net_breakdown": electronic_net_breakdown,
@@ -2602,17 +2866,28 @@ async def dashboard(
             "settlements_by_provider": settlements_by_provider,
             "salla_settlements_inside_14d": round(salla_settle_inside, 2),
             "salla_settlements_outside_14d": round(salla_settle_outside, 2),
-            "bnpl_net": round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2),
+            "bnpl_net": (
+                round(bnpl_sales - bnpl_fees - tamara_adj - tabby_adj - emkan_adj, 2)
+                if currency_conversion_complete else None
+            ),
             # iter-47 — Bank transfer is now a dedicated KPI; the figures
             # below give the UI everything it needs to render the new card.
-            "bank_sales": round(bank_sales, 2),
-            "bank_fees": round(bank_fees, 2),
-            "bank_net": round(bank_sales - bank_fees - bank_adj, 2),
+            "bank_sales": round(bank_sales, 2) if currency_conversion_complete else None,
+            "bank_fees": round(bank_fees, 2) if currency_conversion_complete else None,
+            "bank_net": (
+                round(bank_sales - bank_fees - bank_adj, 2)
+                if currency_conversion_complete else None
+            ),
             "total_shipping_cost": round(total_shipping, 2),
             "deferred_shipping_cost": round(deferred_shipping, 2),
             "regular_shipping_cost": round(total_shipping - deferred_shipping, 2),
-            "expected_salla_transfer": round(
-                total_sales - total_fees - (total_shipping - deferred_shipping), 2
+            "expected_salla_transfer": (
+                round(
+                    total_sales - total_fees
+                    - (total_shipping - deferred_shipping),
+                    2,
+                )
+                if currency_conversion_complete else None
             ),
             "total_ads_cost": round(daily_ads_total, 2),
             "total_product_cost": round(product_cost_effective, 2),
@@ -2630,14 +2905,21 @@ async def dashboard(
             # render a badge "+X معلَّق/ملغى بقيمة Y ر.س" next to the main
             # orders count, and a tooltip explaining the methodology.
             "salla_reference_orders_count": int(salla_ref_orders_count),
-            "salla_reference_gross": float(salla_ref_gross),
+            "salla_reference_gross": salla_ref_gross,
             "excluded_orders_count": int(
                 max(0, salla_ref_orders_count - total_orders)),
-            "excluded_gross": round(
-                max(0.0, salla_ref_gross - float(total_sales)), 2),
+            "excluded_gross": (
+                round(max(0.0, float(salla_ref_gross) - float(total_sales)), 2)
+                if salla_ref_gross is not None and currency_conversion_complete
+                else None
+            ),
             "daily_expenses_total": round(daily_products_total, 2),
-            "net_profit": round(net_profit_adjusted, 2),
-            "total_vat": round(total_vat, 2),
+            "net_profit": (
+                round(net_profit_adjusted, 2)
+                if currency_conversion_complete
+                else None
+            ),
+            "total_vat": round(total_vat, 2) if currency_conversion_complete else None,
             "daily_costs_total": round(daily_totals, 2),
             "daily_ads_total": round(daily_ads_total, 2),
             "daily_products_total": round(daily_products_total, 2),
@@ -2676,6 +2958,7 @@ async def dashboard(
         },
         "net_sales_config": cfg,
         "hide_inferred_date_orders": bool(settings.get("hide_inferred_date_orders")),
+        "currency_conversion": currency_conversion,
         "monthly": monthly,
         "payment_breakdown": payment_breakdown_merged,
         "shipping_breakdown": shipping_breakdown_merged,
@@ -2728,6 +3011,12 @@ async def excluded_orders_list(
     all_orders = await db.unified_orders.find(
         q, {"_id": 0, "raw_by_source": 0},
     ).to_list(50000)
+    if all_orders:
+        projected_rows = await db.unified_orders.find(
+            q,
+            SALLA_RAW_CURRENCY_PROJECTION,
+        ).to_list(50000)
+        hydrate_order_currency_fields(all_orders, projected_rows)
 
     excluded: list = []
     for o in all_orders:
@@ -2759,9 +3048,15 @@ async def excluded_orders_list(
     # Slim payload — only fields the modal needs to render the table.
     rows = []
     total_value = 0.0
+    unverified_currency_orders: list[str] = []
     for o in excluded:
-        amt = float(o.get("total_amount") or 0)
-        total_value += amt
+        amt = order_total_sar(o)
+        if amt is None:
+            unverified_currency_orders.append(
+                str(o.get("order_number") or "unknown")
+            )
+        else:
+            total_value += amt
         rows.append({
             "order_number": str(o.get("order_number") or ""),
             "order_date": o.get("order_date") or "",
@@ -2772,7 +3067,12 @@ async def excluded_orders_list(
                                 or "—",
             "customer_name": (o.get("customer_name") or "").strip()
                              or (o.get("customer") or {}).get("name") or "",
-            "total_amount": round(amt, 2),
+            "total_amount": round(amt, 2) if amt is not None else None,
+            "accounting_currency": "SAR",
+            "original_total_amount": o.get("original_total_amount")
+                                     or o.get("total_amount"),
+            "original_currency": o.get("original_currency")
+                                 or o.get("currency") or "SAR",
         })
     rows.sort(key=lambda x: (x["order_date"], x["order_number"]))
     return {
@@ -2780,7 +3080,13 @@ async def excluded_orders_list(
         "to_date": to_date,
         "included_statuses": included_statuses,
         "orders_count": len(rows),
-        "total_amount": round(total_value, 2),
+        "total_amount": (
+            round(total_value, 2) if not unverified_currency_orders else None
+        ),
+        "known_total_amount_sar": round(total_value, 2),
+        "accounting_currency": "SAR",
+        "currency_conversion_complete": not unverified_currency_orders,
+        "unverified_currency_order_numbers": unverified_currency_orders[:100],
         "orders": rows,
     }
 
@@ -3092,8 +3398,10 @@ async def electronic_net_sync_to_salla(user: dict = Depends(current_user)):
 async def _attributed_orders_from_store(
     db, uid: str, source_aliases: tuple, start: str, end: str,
 ) -> tuple[int, float]:
-    """Count orders + revenue in `unified_orders` whose `utm_source`
-    matches any of `source_aliases` (case-insensitive, partial-match).
+    """Count orders + revenue using normalized and raw Salla source paths.
+
+    Source matching includes the current ``source_details.utm_source`` shape
+    as well as durable normalized fields (case-insensitive, partial-match).
     Date filter uses `order_date` BETWEEN start and end (inclusive).
 
     Returns (orders, revenue).
@@ -3102,11 +3410,27 @@ async def _attributed_orders_from_store(
         return 0, 0.0
     # Build case-insensitive regex matching ANY alias substring.
     pattern = "|".join(source_aliases)
+    source_paths = (
+        "utm_source",
+        "source_native",
+        "traffic_source",
+        "marketing_source",
+        "ad_platform_source",
+        "raw_by_source.salla_direct.utm_source",
+        "raw_by_source.salla_direct.source_details.utm_source",
+        "raw_by_source.salla_direct.utm.source",
+        "raw_by_source.salla_direct.marketing.utm_source",
+        "raw_by_source.salla_direct.attribution.utm_source",
+        "raw_by_source.salla_direct.campaign.source",
+    )
     pipeline = [
         {"$match": {
             "user_id": uid,
             "order_date": {"$gte": start, "$lte": end},
-            "utm_source": {"$regex": pattern, "$options": "i"},
+            "$or": [
+                {path: {"$regex": pattern, "$options": "i"}}
+                for path in source_paths
+            ],
         }},
         {"$group": {"_id": None,
                     "orders": {"$sum": 1},
@@ -3908,23 +4232,32 @@ async def root():
 
 
 # ── App wiring ────────────────────────────────────────────────────────────────
-attach_snapchat_routes(api, db)
 attach_meta_routes(api, db)
 attach_shipping_accounts_routes(api, db)
 attach_webhook_routes(api, db)
 attach_operating_expenses_routes(api, db)
+api.include_router(make_recurring_obligations_router(db, current_user))
+from operational_balance_routes import make_operational_balance_router
+api.include_router(make_operational_balance_router(db, current_user))
 attach_settlements_routes(api, db)
 attach_accounts_routes(api, db)
 attach_transfers_routes(api, db)
 attach_reconciliation_routes(api, db)
-attach_diagnostics_routes(api, db)
+attach_order_diagnostics_routes(api, db)
 attach_import_jobs_routes(api, db)
 attach_product_costs_routes(api, db, current_user)
 attach_preparation_routes(api, db)
 attach_salla_routes(api, db)
+from salla_orders_v3.probe_routes import make_salla_orders_v3_probe_router
+api.include_router(make_salla_orders_v3_probe_router(db, current_user))
+from order_revision_console_routes import make_order_revision_console_router
+api.include_router(make_order_revision_console_router(db, current_user))
 attach_payment_settlements_routes(api, db)
 attach_refunds_alert_routes(api, db)
 attach_payment_gateway_metrics_routes(api, db)
+api.include_router(make_financial_provider_apps_router(db, current_user))
+from accounting_advertising_routes import make_advertising_accounting_router
+api.include_router(make_advertising_accounting_router(db, current_user))
 attach_order_status_policy_routes(api, db)
 attach_shipping_ledger_routes(api, db, current_user)
 attach_orders_explorer_routes(api, db)
@@ -3933,15 +4266,24 @@ api.include_router(
     make_dashboard_v2_router(db, current_user, dashboard, _require_owner)
 )
 api.include_router(make_order_engine_router(db, current_user))
+api.include_router(make_order_activity_router(db, current_user))
+api.include_router(make_first_party_attribution_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)
 )
+from employees_v2_routes import (
+    ensure_employee_v2_indexes,
+    make_employees_v2_router,
+)
+api.include_router(make_employees_v2_router(db, current_user))
 api.include_router(make_order_review_router(db, current_user))
 api.include_router(make_return_decision_router(db, current_user))
 attach_settlement_cycle_routes(api, db)
 attach_liabilities_routes(api, db)
 attach_counterparties_routes(api, db)
 attach_purchase_invoice_routes(api, db)
+from opening_inventory_routes import make_opening_inventory_router
+api.include_router(make_opening_inventory_router(db, current_user))
 attach_custom_app_routes(api, db)
 attach_ad_account_routes(api, db)
 attach_bnpl_routes(api, db)
@@ -4012,9 +4354,24 @@ api.include_router(make_integrations_control_center_router(db, current_user))
 from ads_manager import make_ads_manager_router
 api.include_router(make_ads_manager_router(db, current_user))
 
-# ── Customer Intelligence Phase 1 (owner-only synthetic preview) ───
-from customer_intelligence import make_customer_intelligence_router
-api.include_router(make_customer_intelligence_router(current_user))
+# ── Customer Intelligence Phase 1 preview + channel-neutral memory core ──
+from customer_intelligence import (
+    make_customer_intelligence_router,
+)
+from customer_intelligence.foundation import (
+    ensure_customer_intelligence_foundation_indexes,
+)
+from customer_intelligence.whatsapp import make_whatsapp_inbound_router
+from customer_intelligence.instagram import make_instagram_inbound_router
+from customer_intelligence.whatsapp_360dialog import make_360dialog_inbound_router
+from customer_intelligence.temporary_whatsapp_provisioning import (
+    make_temporary_whatsapp_provisioning_router,
+)
+api.include_router(make_customer_intelligence_router(current_user, db=db))
+api.include_router(make_whatsapp_inbound_router(db))
+api.include_router(make_instagram_inbound_router(db))
+api.include_router(make_360dialog_inbound_router(db))
+api.include_router(make_temporary_whatsapp_provisioning_router(db, current_user))
 
 # ── Qoyod Invoice MVP — Day 2 (Settings + Catalogs + Health) ───────
 # Pipeline (webhook, normalization, push) lands in Day 3-4. Today we
@@ -4264,25 +4621,53 @@ api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 app.include_router(make_mezan_mcp_router(db))
 app.include_router(api)
 
-# CORS
+# CORS — production origins are explicit and never fall back to wildcard.
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 extra = os.environ.get("CORS_ORIGINS", "").split(",")
-origins = list({o.strip() for o in [frontend_url, "http://localhost:3000"] + extra if o and o.strip() and o.strip() != "*"})
+_localhost_origins = (
+    ["http://localhost:3000"]
+    if os.environ.get("CORS_ALLOW_LOCALHOST", "").strip().lower() in {"1", "true", "yes", "on"}
+    else []
+)
+origins = list({o.strip() for o in [
+    frontend_url,
+    "https://amasi-sa.com",
+    "https://www.amasi-sa.com",
+] + _localhost_origins + extra if o and o.strip() and o.strip() != "*"})
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# CORS controls response sharing; this separate guard blocks cross-site browser
+# mutations that carry Mezan's HttpOnly session cookies.
+app.add_middleware(
+    BrowserSecurityMiddleware,
+    trusted_origins={
+        frontend_url,
+        "https://mezansalla.com",
+        "https://www.mezansalla.com",
+        "https://amasi-sa.com",
+        "https://www.amasi-sa.com",
+    },
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-@app.on_event("startup")
-async def on_startup():
+async def _global_startup() -> None:
+    """Run release-keyed indexes, migrations and cleanup exactly once."""
+    app.state.startup_phase = "required_initialization"
+    before = memory_snapshot()
+    logger.info(
+        "startup_phase required_initialization memory_current=%s memory_max=%s rss=%s",
+        before.current_bytes, before.max_bytes, before.process_rss_bytes,
+    )
     await db.users.create_index("email", unique=True)
     await db.settings.create_index("user_id", unique=True)
     await db.daily_costs.create_index([("user_id", 1), ("date", 1)], unique=True)
@@ -4295,12 +4680,17 @@ async def on_startup():
     await ensure_transfers_indexes(db)
     await ensure_accounts_indexes(db)
     await ensure_liabilities_indexes(db)
+    await ensure_recurring_obligation_indexes(db)
     await ensure_counterparties_indexes(db)
     await ensure_purchase_invoices_indexes(db)
     await ensure_custom_app_indexes(db)
     await ensure_ad_account_indexes(db)
+    await ensure_financial_provider_app_indexes(db)
     await ensure_bnpl_indexes(db)
     await ensure_alerts_indexes(db)
+    # Employees V2 — canonical employee identity and read-only salary-contract
+    # shadow.  These indexes do not migrate or recalculate legacy payroll.
+    await ensure_employee_v2_indexes(db)
     # Iter-160 — Universal Ledger + Audit Log indexes
     from ledger_core import ensure_indexes as ensure_ledger_indexes
     await ensure_ledger_indexes(db)
@@ -4309,6 +4699,39 @@ async def on_startup():
     # Apps & Integrations V2 — isolated metadata, health, activity,
     # errors, and future campaign↔product identity links.
     await ensure_integrations_control_center_indexes(db)
+    await ensure_first_party_attribution_indexes(db)
+    # Five-hour Snapchat + Meta campaign monitoring. The worker only refreshes
+    # analytical facts and persists recommendations; provider changes remain
+    # behind the separate owner-only approval endpoint.
+    from campaign_ai_monitor import (
+        ensure_campaign_ai_indexes as _ensure_campaign_ai_indexes,
+        start_campaign_ai_worker as _start_campaign_ai_worker,
+    )
+    await _ensure_campaign_ai_indexes(db)
+    # Production stability: long-running provider/AI analysis must not run
+    # inside the FastAPI web process. Interactive API availability wins.
+    app.state.campaign_ai_monitor_task = None
+    logger.warning(
+        "production stability: campaign AI background worker disabled in web process"
+    )
+    # Customer Intelligence conversation core.  This creates only Mongo
+    # indexes and reuses the encrypted customer identity vault; it does not
+    # connect a channel, send a message or expose any mutation endpoint.
+    await ensure_customer_intelligence_foundation_indexes(db)
+    # Every inbound customer-authored channel event is queued by the gateway.
+    # Reuse the already-configured Mezan OpenAI runtime to turn that queue into
+    # encrypted, evidence-linked signals, problems and decision proposals.
+    # The worker contains no channel-send or commerce-mutation capability.
+    from customer_intelligence.learning_worker import (
+        queue_existing_channel_evidence as _queue_existing_customer_evidence,
+        start_worker as _start_customer_learning_worker,
+    )
+    # Production stability: AI learning is deferred to a separate worker.
+    # Inbound channel/webhook ingestion remains enabled.
+    app.state.customer_learning_task = None
+    logger.warning(
+        "production stability: customer AI learning worker disabled in web process"
+    )
     # ── Qoyod Invoice MVP (Day 1) — create indexes on the 5 new
     # `qoyod_*` collections. Idempotent — safe to call on every boot.
     # See ADR-001 (architecture principles) and integrations/qoyod/models.py.
@@ -4381,7 +4804,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(AD_ACCOUNT_SYNC_INTERVAL_SECONDS)
 
-    _asyncio.create_task(_ad_account_halfhour_sync())
+    logger.warning(
+        "production stability: ad-account background sync disabled in web process"
+    )
 
     # ── Iter-215 — Ad-spend AM/PM window posting (Snap/Meta) ─────────
     # The half-hour cron (above) is now FETCH-ONLY for Snap/Meta. The
@@ -4538,7 +4963,9 @@ async def on_startup():
                 )
             await _asyncio.sleep(300)  # 5-minute heartbeat
 
-    _asyncio.create_task(_ad_spend_window_post_loop())
+    logger.warning(
+        "production stability: ad-spend catch-up worker disabled in web process"
+    )
 
     # ── Iter-117 — Hourly BNPL auto-sync (Tabby + Tamara) ────────
     # Runs every hour to fetch new/updated payments and refunds
@@ -4569,7 +4996,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
-    _asyncio.create_task(_bnpl_hourly_auto_sync())
+    logger.warning(
+        "production stability: BNPL hourly scheduler disabled in web process"
+    )
 
     # ── Iter-147 — Daily Tamara attribution sweep ───────────────────
     # Re-derives `effective_settlement_date` + `settlement_source` for
@@ -4599,7 +5028,9 @@ async def on_startup():
                 continue
             await _asyncio.sleep(DAILY_SECONDS)
 
-    _asyncio.create_task(_tamara_attribution_daily_sweep())
+    logger.warning(
+        "production stability: Tamara daily sweep disabled in web process"
+    )
 
     # ── Iter-147 — One-shot startup migration ────────────────────────
     # Backfills `effective_settlement_date` + `settlement_source` on
@@ -4657,31 +5088,9 @@ async def on_startup():
         except Exception as e:
             logger.exception("iter-147: startup migration failed: %s", e)
 
-    _asyncio.create_task(_tamara_attribution_startup_migration())
-
-    # iter-262 — Qoyod Pipeline Worker. Auto-advances `integration_inbox`
-    # rows from NORMALIZED → CUSTOMER_RESOLVED → INVOICE_CREATED →
-    # RECEIPT_CREATED. Without this, the webhook handler stops at
-    # NORMALIZED and nothing reaches Qoyod.
-    try:
-        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
-        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
-        logger.info("iter-262: qoyod pipeline worker started")
-    except Exception as e:
-        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", e)
-
-    # Validated Plan-B automatic sender. Starting the task on every deploy is
-    # safe: it is a no-op until the existing Qoyod settings switches arm it
-    # after the closed canary succeeds.
-    try:
-        from integrations.qoyod_manual.auto_send import (
-            start_worker as _qoyod_plan_b_auto_start,
-        )
-        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
-        logger.info("Plan-B Qoyod automatic sender started")
-    except Exception as e:
-        logger.exception(
-            "Plan-B Qoyod automatic sender failed to start: %s", e)
+    logger.warning(
+        "production stability: Tamara startup sweep disabled in web process"
+    )
 
     await ensure_settlements_indexes(db)
     _bf = await backfill_settlement_provenance(db)
@@ -4694,21 +5103,9 @@ async def on_startup():
     if _uo.get("updated"):
         logger.info("iter-72: scrubbed %d/%d shipping_company values in unified_orders",
                     _uo["updated"], _uo["scanned"])
-    await db.snapchat_connections.create_index("user_id", unique=True)
-    # Multi-account Snapchat selection (iteration 15) — one doc per
-    # (user_id, ad_account_id). `enabled` toggles whether the account
-    # participates in /sync-all-accounts and /accounts-summary.
-    await db.snapchat_ad_accounts.create_index(
-        [("user_id", 1), ("ad_account_id", 1)], unique=True,
-    )
-    # Per-account, per-day spend rows. Stores BOTH native and SAR amounts +
-    # fx_rate so accounting traces are auditable.
-    await db.snapchat_account_daily.create_index(
-        [("user_id", 1), ("ad_account_id", 1), ("date", 1)], unique=True,
-    )
-    await db.snapchat_account_daily.create_index(
-        [("user_id", 1), ("date", -1)],
-    )
+    # Legacy Snapchat V1 collections are intentionally left untouched as an
+    # archive. Their router and writers are frozen; Mezan 2 owns the only live
+    # Snapchat credential and reporting data plane.
     # ── Product cost catalogue (iteration 19) ──────────────────────────────
     # One doc per (user_id, sku_normalized). Provides the cost lookup table
     # used by webhook ingestion + dashboard's total_product_cost field.
@@ -4743,14 +5140,6 @@ async def on_startup():
     # Indexes for the "تجهيز المنتجات" feature (iteration 34).
     await ensure_preparation_indexes(db)
     await ensure_salla_indexes(db)
-    # OAuth access tokens last 14 days and Salla refresh tokens rotate on
-    # every use.  Refresh connected stores one day early in a background
-    # loop; the Mongo lease in salla_integration.service makes this safe even
-    # when the deployment runs multiple backend workers.
-    from salla_integration.service import salla_token_maintenance_loop
-    app.state.salla_token_maintenance_task = _asyncio.create_task(
-        salla_token_maintenance_loop(db)
-    )
     await ensure_payment_settlements_indexes(db)
     # Backfill: older salaries created before the country column existed are
     # treated as Saudi by default (most common merchant home country).
@@ -4920,11 +5309,138 @@ async def on_startup():
         logger.info(f"Tagged {tt_legacy.modified_count} legacy tiktok_ads_daily rows with campaign_id='_default'.")
 
     await seed_admin(db)
+
+
+async def _local_startup() -> None:
+    """Finish process-local readiness after global release work completes."""
+    # Middleware stacks live in one Python process. The release-global leader
+    # installs these guards through seed_admin, but every follower must install
+    # them too before it can advertise readiness. Installers are app-idempotent;
+    # their identical Mongo create_index calls are safe to repeat per replica.
+    await install_process_local_auth_security(db)
+    # Each process restart needs a new optional observer task, even when the
+    # release-global initialization record was completed by an earlier process.
+    from salla_orders_v3.worker import start_salla_orders_v3_shadow_runtime
+    app.state.salla_orders_v3_shadow_task = (
+        await start_salla_orders_v3_shadow_runtime(db)
+    )
+    try:
+        from integrations.qoyod.worker import start_worker as _qoyod_worker_start
+        _qoyod_worker_start(db, interval_sec=5.0, batch_limit=25)
+        logger.info("iter-262: qoyod pipeline worker started")
+    except Exception as exc:
+        logger.exception("iter-262: qoyod pipeline worker failed to start: %s", exc)
+    try:
+        from integrations.qoyod_manual.auto_send import (
+            start_worker as _qoyod_plan_b_auto_start,
+        )
+        _qoyod_plan_b_auto_start(db, interval_sec=15.0, batch_limit=5)
+        logger.info("Plan-B Qoyod automatic sender started")
+    except Exception as exc:
+        logger.exception("Plan-B Qoyod automatic sender failed to start: %s", exc)
+    from salla_integration.service import salla_token_maintenance_loop
+    app.state.salla_token_maintenance_task = _asyncio.create_task(
+        salla_token_maintenance_loop(db)
+    )
+    from operational_balance_worker import run as run_operational_balances
+    app.state.operational_balance_task = _asyncio.create_task(run_operational_balances(db))
+    from order_review_resume_worker import start_worker as start_review_resume
+    app.state.review_completion_resume_task = await start_review_resume(db)
+    app.state.startup_phase = "ready"
+    app.state.readiness = "ready"
+    process_local_readiness_event.set()
+    after = memory_snapshot()
+    logger.info(
+        "startup_phase ready memory_current=%s memory_max=%s peak=%s rss=%s",
+        after.current_bytes, after.max_bytes, after.peak_bytes,
+        after.process_rss_bytes,
+    )
     logger.info("Hesab backend started successfully.")
+
+
+@app.on_event("startup")
+async def on_startup():
+    """Return promptly so liveness is served before deferred initialization."""
+    app.state.readiness = "starting"
+    app.state.startup_phase = "post_liveness_delay"
+    process_local_readiness_event.clear()
+    app.state.event_loop_lag_task = start_lag_monitor()
+
+    async def delayed() -> None:
+        # Fixed delay plus per-replica jitter prevents a synchronized boot wave.
+        delay = max(0.0, float(os.environ.get("BACKEND_STARTUP_DELAY_SECONDS", "5")))
+        jitter_max = max(0.0, float(os.environ.get("BACKEND_STARTUP_JITTER_SECONDS", "15")))
+        jitter = replica_jitter(jitter_max)
+        await _asyncio.sleep(delay + jitter)
+        owner_id = new_owner_id()
+        app.state.startup_phase = "waiting_for_release_startup"
+        try:
+            release_key = verified_release_key(release_health_payload())
+            metric = StageMetric("deferred_startup", concurrency=1)
+            try:
+                role = await run_release_startup(
+                    db,
+                    release_key=release_key,
+                    owner_id=owner_id,
+                    governor=governor,
+                    global_initialization=_global_startup,
+                    local_initialization=_local_startup,
+                    wait_timeout=float(
+                        os.environ.get("BACKEND_STARTUP_WAIT_TIMEOUT_SECONDS", "180")
+                    ),
+                    ttl_seconds=int(
+                        os.environ.get("BACKEND_STARTUP_LEASE_TTL_SECONDS", "30")
+                    ),
+                )
+            except BaseException as exc:
+                metric.finish(status="failed", reason=type(exc).__name__)
+                raise
+            else:
+                metric.finish(status="complete", role=role)
+        except _asyncio.CancelledError:
+            raise
+        except Exception:
+            app.state.readiness = "failed"
+            app.state.startup_phase = "initialization_failed"
+            logger.exception("deferred backend initialization failed")
+
+    start_deferred_task(app, delayed)
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    process_local_readiness_event.clear()
+    from order_review_resume_worker import stop_worker as stop_review_resume
+    await stop_review_resume(getattr(app.state, "review_completion_resume_task", None))
+    await cancel_deferred_task(app)
+    from salla_orders_v3.worker import stop_salla_orders_v3_shadow_worker
+    await stop_salla_orders_v3_shadow_worker(
+        getattr(app.state, "salla_orders_v3_shadow_task", None)
+    )
+    for task_name in ("event_loop_lag_task", "operational_balance_task"):
+        task = getattr(app.state, task_name, None)
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except _asyncio.CancelledError:
+                pass
+    campaign_ai_monitor_task = getattr(
+        app.state, "campaign_ai_monitor_task", None
+    )
+    if campaign_ai_monitor_task is not None:
+        campaign_ai_monitor_task.cancel()
+        try:
+            await campaign_ai_monitor_task
+        except _asyncio.CancelledError:
+            pass
+    customer_learning_task = getattr(app.state, "customer_learning_task", None)
+    if customer_learning_task is not None:
+        customer_learning_task.cancel()
+        try:
+            await customer_learning_task
+        except _asyncio.CancelledError:
+            pass
     maintenance_task = getattr(
         app.state, "salla_token_maintenance_task", None
     )

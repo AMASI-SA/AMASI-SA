@@ -1,0 +1,411 @@
+{
+  "width": 390,
+  "scrollWidth": 600,
+  "elements": [
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "03منصات الدفع وأرصدتهامكتمل",
+      "width": 192,
+      "left": -235,
+      "right": -43,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "03",
+      "width": 15.09375,
+      "left": -70.09375,
+      "right": -55,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "مكتمل",
+      "width": 168,
+      "left": -223,
+      "right": -55,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "04الموظفون: رواتب وسلف وعهدلا ينطبق",
+      "width": 192,
+      "left": -435,
+      "right": -243,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "04",
+      "width": 15.09375,
+      "left": -270.09375,
+      "right": -255,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -423,
+      "right": -255,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "05الموردون وأرصدتهم الافتتاحيةلا ينطبق",
+      "width": 192,
+      "left": -635,
+      "right": -443,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "05",
+      "width": 15.09375,
+      "left": -470.09375,
+      "right": -455,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -623,
+      "right": -455,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "06الديون الخارجية: أموال لنا عند الناسلا ينطبق",
+      "width": 192,
+      "left": -835,
+      "right": -643,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "06",
+      "width": 15.09375,
+      "left": -670.09375,
+      "right": -655,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -823,
+      "right": -655,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full bg-emerald-100 font-bold text-emerald-950",
+      "text": "07شركات الشحن: العقود وشرائح CODعقود محفوظة ومراجعة مستقلة",
+      "width": 192,
+      "left": -1035,
+      "right": -843,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "07",
+      "width": 16.109375,
+      "left": -871.109375,
+      "right": -855,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "عقود محفوظة ومراجعة مستقلة",
+      "width": 168,
+      "left": -1023,
+      "right": -855,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "08شركات الشحن: الأرصدة الافتتاحيةلا ينطبق",
+      "width": 192,
+      "left": -1235,
+      "right": -1043,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "08",
+      "width": 15.09375,
+      "left": -1070.09375,
+      "right": -1055,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -1223,
+      "right": -1055,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "09موصلو المتجرلا ينطبق",
+      "width": 192,
+      "left": -1435,
+      "right": -1243,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "09",
+      "width": 15.09375,
+      "left": -1270.09375,
+      "right": -1255,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -1423,
+      "right": -1255,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "10المخزون والتكلفة ومواقع التخزينمكتمل",
+      "width": 192,
+      "left": -1635,
+      "right": -1443,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "10",
+      "width": 15.09375,
+      "left": -1470.09375,
+      "right": -1455,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "مكتمل",
+      "width": 168,
+      "left": -1623,
+      "right": -1455,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "11عمولات طرق الدفع والضرائبناقص · دليل ناقص",
+      "width": 192,
+      "left": -1835,
+      "right": -1643,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "11",
+      "width": 15.09375,
+      "left": -1670.09375,
+      "right": -1655,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "ناقص · دليل ناقص",
+      "width": 168,
+      "left": -1823,
+      "right": -1655,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "12الحسابات والمحافظ الإعلانيةمكتمل",
+      "width": 192,
+      "left": -2035,
+      "right": -1843,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "12",
+      "width": 15.09375,
+      "left": -1870.09375,
+      "right": -1855,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "مكتمل",
+      "width": 168,
+      "left": -2023,
+      "right": -1855,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "13المصروفات المدفوعة مقدمًالا ينطبق",
+      "width": 192,
+      "left": -2235,
+      "right": -2043,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "13",
+      "width": 15.09375,
+      "left": -2070.09375,
+      "right": -2055,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -2223,
+      "right": -2055,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "14المستحقات والودائع والالتزامات الأخرىلا ينطبق",
+      "width": 192,
+      "left": -2435,
+      "right": -2243,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "14",
+      "width": 15.09375,
+      "left": -2270.09375,
+      "right": -2255,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "لا ينطبق",
+      "width": 168,
+      "left": -2423,
+      "right": -2255,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "15المراجعة النهائية والأدلةملخص الأقسام",
+      "width": 192,
+      "left": -2635,
+      "right": -2443,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "15",
+      "width": 15.09375,
+      "left": -2470.09375,
+      "right": -2455,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "ملخص الأقسام",
+      "width": 168,
+      "left": -2623,
+      "right": -2455,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "min-w-48 rounded-xl p-3 text-right text-sm lg:w-full hover:bg-slate-50",
+      "text": "16الاعتماد النهائي وفتح المحاسبةمقفل",
+      "width": 192,
+      "left": -2835,
+      "right": -2643,
+      "scroll": 192
+    },
+    {
+      "tag": "SPAN",
+      "cls": "me-2 text-slate-500",
+      "text": "16",
+      "width": 15.09375,
+      "left": -2670.09375,
+      "right": -2655,
+      "scroll": 0
+    },
+    {
+      "tag": "SPAN",
+      "cls": "mt-1 block text-xs text-slate-500",
+      "text": "مقفل",
+      "width": 168,
+      "left": -2823,
+      "right": -2655,
+      "scroll": 168
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "",
+      "text": "سحب اعتماد الدليل 69f811a45afda31c1e928fecee27e2125877f749e520e50064c67380dbdc5493",
+      "width": 532.515625,
+      "left": -188.515625,
+      "right": 344,
+      "scroll": 533
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "",
+      "text": "سحب اعتماد الدليل 2a952df5247d7f3c497c6349891c7e8c57fe41ec53fda6f5196bb3b93d2974dd",
+      "width": 533.125,
+      "left": -189.125,
+      "right": 344,
+      "scroll": 533
+    },
+    {
+      "tag": "BUTTON",
+      "cls": "",
+      "text": "سحب اعتماد الدليل 0f72e01b4e03576db796750aa356e3d635986b420bb8ad1c17b89b8e2e8d8b25",
+      "width": 553.84375,
+      "left": -209.84375,
+      "right": 344,
+      "scroll": 554
+    }
+  ]
+}

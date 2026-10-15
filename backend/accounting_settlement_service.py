@@ -1,0 +1,593 @@
+"""P01 settlement accounting service for MZ2-FIN-CUTOVER-001.
+
+Pure amount/reconciliation helpers plus the only ledger bridge used by the
+unified accounting settlements page. Legacy balances are never read here.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
+
+from fastapi import HTTPException
+
+from accounting_financial_identity import find_financial_account
+from accounting_module_contract import OPERATION_ID
+from accounting_recognition_native import native_rows, post_recognition_journal
+from accounting_mz2_balances import read_mz2_write_balances
+
+MONEY = Decimal("0.01")
+PROVIDERS = ("salla", "tamara", "tabby", "emkan")
+PROVIDER_ALIASES = {
+    "salla": "salla",
+    "tamara": "tamara",
+    "tabby": "tabby",
+    "emkan": "emkan",
+    "imkan": "emkan",
+}
+PROVIDER_LABELS = {
+    "salla": "سلة",
+    "tamara": "تمارا",
+    "tabby": "تابي",
+    "emkan": "إمكان",
+}
+BLOCKING_REASON_CODES = frozenset({
+    "statement_required", "bank_receipt_required", "receipt_link_invalid",
+    "receipt_scope_conflict", "receipt_amount_difference",
+    "missing_bank",
+    "missing_statement_reference",
+    "unmatched_rows",
+    "statement_equation_difference",
+    "statement_rows_difference",
+    "source_requires_review",
+    "negative_bank_net",
+    "zero_receivable_close",
+})
+
+
+def _money(value: Any) -> float:
+    return float(
+        Decimal(str(value or 0)).quantize(MONEY, rounding=ROUND_HALF_UP)
+    )
+
+
+def canonical_provider(value: str | None) -> str:
+    provider = PROVIDER_ALIASES.get(str(value or "").strip().lower())
+    if not provider:
+        raise ValueError("المزود غير مدعوم في مرحلة التسويات")
+    return provider
+
+
+def provider_label(provider: str) -> str:
+    return PROVIDER_LABELS[canonical_provider(provider)]
+
+
+def statement_reference_from_file(file_doc: dict[str, Any]) -> str:
+    header = file_doc.get("header") or {}
+    for key in (
+        "invoice_number",
+        "statement_id",
+        "settlement_reference",
+        "statement_number",
+        "po_reference",
+    ):
+        value = str(header.get(key) or "").strip()
+        if value:
+            return value
+    for key in ("invoice_number", "statement_reference"):
+        value = str(file_doc.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _iso_date(value: Any) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    match = re.search(r"\d{4}-\d{2}-\d{2}", raw)
+    if match:
+        return match.group(0)
+    for pattern in (r"(\d{2})/(\d{2})/(\d{4})", r"(\d{2})-(\d{2})-(\d{4})"):
+        match = re.search(pattern, raw)
+        if match:
+            day, month, year = match.groups()
+            try:
+                return datetime(int(year), int(month), int(day)).date().isoformat()
+            except ValueError:
+                return None
+    return None
+
+
+def period_from_file(file_doc: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    header = file_doc.get("header") or {}
+    statement_date = (
+        _iso_date(header.get("settlement_date"))
+        or _iso_date(header.get("statement_date"))
+        or _iso_date(header.get("statement_date_raw"))
+        or _iso_date(file_doc.get("settlement_date"))
+    )
+    period_from = _iso_date(header.get("period_start"))
+    period_to = _iso_date(header.get("period_end"))
+    if not (period_from and period_to):
+        raw_period = str(header.get("statement_period") or "").strip()
+        found = re.findall(
+            r"(?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})",
+            raw_period,
+        )
+        if len(found) >= 2:
+            period_from = period_from or _iso_date(found[0])
+            period_to = period_to or _iso_date(found[1])
+    return period_from, period_to, statement_date
+
+
+def amounts_from_settlement_file(file_doc: dict[str, Any]) -> dict[str, float]:
+    totals = file_doc.get("totals") or {}
+    return normalize_amounts({
+        "gross_sales": totals.get("gross"),
+        "refund_full": totals.get("refund_full"),
+        "refund_partial": totals.get("refund_partial"),
+        "commission": totals.get("fees"),
+        "commission_vat": totals.get("fees_vat"),
+        "commission_credit": totals.get("fee_credits"),
+        "commission_vat_credit": totals.get("fee_vat_credits"),
+        "settlement_fee": totals.get("settlement_fee"),
+        "settlement_fee_vat": totals.get("settlement_fee_vat"),
+        "wallet_purchases": totals.get("salla_purchases_total"),
+        "cancellation_amount": totals.get("canceled_amount"),
+        "cancellation_fees": totals.get("canceled_fees"),
+        "cancellation_fees_vat": totals.get("canceled_fees_vat"),
+        "other_deductions": totals.get("other_deductions"),
+        "rebates": totals.get("rebates"),
+        "reported_net": totals.get("net"),
+        "rounding_adjustment": totals.get("rounding_adjustment"),
+        "statement_net_difference": totals.get("statement_net_difference"),
+    })
+
+
+_AMOUNT_KEYS = (
+    "gross_sales",
+    "refund_full",
+    "refund_partial",
+    "commission",
+    "commission_vat",
+    "commission_credit",
+    "commission_vat_credit",
+    "settlement_fee",
+    "settlement_fee_vat",
+    "wallet_purchases",
+    "cancellation_amount",
+    "cancellation_fees",
+    "cancellation_fees_vat",
+    "other_deductions",
+    "rebates",
+    "reported_net",
+    "rounding_adjustment",
+    "statement_net_difference",
+)
+
+
+def normalize_amounts(values: dict[str, Any] | None) -> dict[str, float]:
+    source = values or {}
+    normalized = {key: _money(source.get(key)) for key in _AMOUNT_KEYS}
+    nonnegative = set(_AMOUNT_KEYS) - {
+        "commission", "commission_vat",
+        "commission_credit", "commission_vat_credit",
+        "reported_net",
+        "rounding_adjustment",
+        "statement_net_difference",
+    }
+    for key in nonnegative:
+        if normalized[key] < 0:
+            raise ValueError(f"{key} لا يقبل قيمة سالبة")
+    for key in ("commission_credit", "commission_vat_credit"):
+        if normalized[key] > 0:
+            raise ValueError(f"{key} must retain the provider credit sign")
+    return normalized
+
+
+def calculate_settlement_totals(amounts: dict[str, Any]) -> dict[str, float]:
+    a = normalize_amounts(amounts)
+    refunds = _money(a["refund_full"] + a["refund_partial"])
+    deductions = _money(
+        refunds
+        + a["commission"]
+        + a["commission_vat"]
+        + a["settlement_fee"]
+        + a["settlement_fee_vat"]
+        + a["wallet_purchases"]
+        + a["other_deductions"]
+    )
+    calculated_net = _money(a["gross_sales"] - deductions + a["rebates"])
+    difference = _money(a["reported_net"] - calculated_net)
+    receivable_close = _money(
+        a["reported_net"]
+        + a["commission"]
+        + a["commission_vat"]
+        + a["settlement_fee"]
+        + a["settlement_fee_vat"]
+        + a["wallet_purchases"]
+        + a["other_deductions"]
+        - a["rebates"]
+    )
+    return {
+        **a,
+        "refunds_total": refunds,
+        "deductions_total": deductions,
+        "calculated_net": calculated_net,
+        "equation_difference": difference,
+        "provider_receivable_close": receivable_close,
+    }
+
+
+def build_review_reasons(
+    *,
+    file_doc: dict[str, Any],
+    amounts: dict[str, Any],
+    bank_account_id: str | None,
+    source_review_count: int = 0,
+) -> list[dict[str, str]]:
+    calc = calculate_settlement_totals(amounts)
+    reasons: list[dict[str, str]] = []
+    if not str(bank_account_id or "").strip():
+        reasons.append({"code": "missing_bank", "message": "لم يُحدد بنك التسوية"})
+    if not statement_reference_from_file(file_doc):
+        reasons.append({
+            "code": "missing_statement_reference",
+            "message": "مرجع كشف/فاتورة المزود مفقود",
+        })
+    unmatched = int(file_doc.get("unmatched") or 0)
+    if unmatched:
+        reasons.append({
+            "code": "unmatched_rows",
+            "message": f"{unmatched} صف غير مطابق لطلب معروف",
+        })
+    if abs(calc["equation_difference"]) > 0.01:
+        reasons.append({
+            "code": "statement_equation_difference",
+            "message": (
+                "فرق معادلة التسوية "
+                f"{calc['equation_difference']:.2f} SAR"
+            ),
+        })
+    if abs(calc.get("statement_net_difference") or 0) > 0.01:
+        reasons.append({
+            "code": "statement_rows_difference",
+            "message": (
+                "صافي رأس كشف المزود لا يطابق مجموع صفوفه "
+                f"({calc['statement_net_difference']:.2f} SAR)"
+            ),
+        })
+    if source_review_count:
+        reasons.append({
+            "code": "source_requires_review",
+            "message": f"{source_review_count} بند في الملف يحتاج مراجعة صريحة",
+        })
+    if calc["reported_net"] < 0:
+        reasons.append({
+            "code": "negative_bank_net",
+            "message": "صافي الكشف سالب؛ لا يمكن اعتباره تحويلًا واردًا للبنك",
+        })
+    if calc["provider_receivable_close"] <= 0:
+        reasons.append({
+            "code": "zero_receivable_close",
+            "message": "لا يوجد مبلغ موجب لإقفال ذمة المزود",
+        })
+    unique: dict[str, dict[str, str]] = {}
+    for reason in reasons:
+        unique.setdefault(reason["code"], reason)
+    return list(unique.values())
+
+
+def has_blocking_reasons(reasons: list[dict[str, Any]] | None) -> bool:
+    return any(
+        str(item.get("code") or "") in BLOCKING_REASON_CODES
+        for item in (reasons or [])
+    )
+
+
+def settlement_idempotency_key(
+    *, user_id: str, provider: str, statement_reference: str, source_hash: str = ""
+) -> str:
+    reference = str(statement_reference or "").strip().lower()
+    file_hash = str(source_hash or "").strip().lower()
+    identity = f"reference:{reference}" if reference else f"hash:{file_hash or 'missing'}"
+    raw = "|".join((
+        OPERATION_ID,
+        str(user_id or "").strip(),
+        canonical_provider(provider),
+        identity,
+    ))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def build_journal_preview(
+    *,
+    provider: str,
+    bank_account_id: str,
+    bank_account_name: str,
+    amounts: dict[str, Any],
+) -> dict[str, Any]:
+    provider = canonical_provider(provider)
+    calc = calculate_settlement_totals(amounts)
+    if not str(bank_account_id or "").strip():
+        raise ValueError("بنك التسوية مطلوب")
+    if calc["reported_net"] < 0:
+        raise ValueError("صافي التحويل البنكي لا يقبل قيمة سالبة")
+    if calc["provider_receivable_close"] <= 0:
+        raise ValueError("مبلغ إقفال ذمة المزود يجب أن يكون موجبًا")
+
+    entries: list[dict[str, Any]] = []
+    if calc["reported_net"] > 0:
+        entries.append({
+            "role": "bank_net",
+            "label": f"المبلغ الواصل إلى {bank_account_name}",
+            "entity_type": "bank",
+            "entity_id": bank_account_id,
+            "sub_account": "main",
+            "side": "debit",
+            "amount": calc["reported_net"],
+            "entry_type": "settlement",
+        })
+
+    if provider != "tabby" and any(calc[k] < 0 for k in (
+            "commission", "commission_vat", "commission_credit", "commission_vat_credit")):
+        raise ValueError("documented_tabby_fee_credit_required")
+
+    expense_legs = (
+        ("commission", "provider_commission", "عمولة المزود"),
+        ("commission_vat", "provider_commission_vat", "ضريبة عمولة المزود"),
+        ("settlement_fee", "provider_settlement_fee", "رسم التسوية"),
+        ("settlement_fee_vat", "provider_settlement_fee_vat", "ضريبة رسم التسوية"),
+        ("wallet_purchases", "salla_wallet_purchases", "مشتريات محفظة سلة"),
+        ("other_deductions", "provider_other_deductions", "خصومات أخرى موثقة"),
+    )
+    for key, entity_id, label in expense_legs:
+        amount = calc[key]
+        if key in {"commission", "commission_vat"}:
+            credit = calc[key + "_credit"]
+            # Older signed-net documents retain their direction as a credit.
+            if not credit and amount < 0:
+                credit = amount
+            amount = _money(amount - credit)
+            if amount < 0:
+                raise ValueError("fee_credit_components_conflict")
+            if credit < 0:
+                entries.append({
+                    "role": key + "_credit", "label": "رد موثق: " + label,
+                    "entity_type": "expense", "entity_id": entity_id,
+                    "sub_account": provider, "side": "credit",
+                    "amount": -credit, "source_signed_amount": credit,
+                    "entry_type": "settlement",
+                })
+        if amount <= 0:
+            continue
+        entries.append({
+            "role": key,
+            "label": label,
+            "entity_type": "expense",
+            "entity_id": entity_id,
+            "sub_account": provider,
+            "side": "debit",
+            "amount": amount,
+            "entry_type": "settlement",
+        })
+
+    entries.append({
+        "role": "provider_receivable",
+        "label": f"إقفال ذمة {provider_label(provider)}",
+        "entity_type": "payment_gateway",
+        "entity_id": provider,
+        "sub_account": "receivable",
+        "side": "credit",
+        "amount": calc["provider_receivable_close"],
+        "entry_type": "settlement",
+    })
+    if calc["rebates"] > 0:
+        entries.append({
+            "role": "rebates",
+            "label": "رد/خصم رسوم لصالح المتجر",
+            "entity_type": "expense",
+            "entity_id": "provider_fee_rebates",
+            "sub_account": provider,
+            "side": "credit",
+            "amount": calc["rebates"],
+            "entry_type": "settlement",
+        })
+
+    debit_total = _money(sum(row["amount"] for row in entries if row["side"] == "debit"))
+    credit_total = _money(sum(row["amount"] for row in entries if row["side"] == "credit"))
+    return {
+        "entries": entries,
+        "debit_total": debit_total,
+        "credit_total": credit_total,
+        "balanced": abs(debit_total - credit_total) <= 0.01,
+        "amounts": calc,
+    }
+
+
+async def post_reviewed_settlement(
+    db,
+    *,
+    owner_id: str,
+    actor: dict[str, Any],
+    draft: dict[str, Any],
+ ) -> dict[str, Any]:
+    from accounting_atomic import atomic_owner
+    async def commit_settlement(scoped):
+        return await _post_reviewed_settlement_transaction(
+            scoped, owner_id=owner_id, actor=actor, draft=draft)
+    return await atomic_owner(db, owner_id, commit_settlement)
+
+
+async def _post_reviewed_settlement_transaction(db, *, owner_id, actor, draft):
+    if draft.get("receipt_workflow_version") == 2 or draft.get("bank_receipt_id"):
+        from accounting_receipt_service import receipt_reasons
+        pending = await receipt_reasons(db, owner_id, draft)
+        if pending:
+            raise HTTPException(409, {"code": "settlement_receipt_blocked", "reasons": pending})
+    if draft.get("status") != "reviewed":
+        raise HTTPException(409, "يجب مراجعة المسودة قبل الترحيل")
+    if has_blocking_reasons(draft.get("review_reasons")):
+        raise HTTPException(409, "لا يمكن ترحيل مسودة تحتوي أسباب مراجعة مفتوحة")
+
+    from accounting_order_refunds import refund_review_reasons
+    refund_reasons = await refund_review_reasons(db, owner_id, draft)
+    if refund_reasons:
+        raise HTTPException(409, {"code": "refund_reconciliation_required", "reasons": refund_reasons})
+
+    provider = canonical_provider(draft.get("provider"))
+    bank_id = str(draft.get("bank_account_id") or "").strip()
+    bank = await find_financial_account(
+        db, owner_id, bank_id, account_types=("bank",), currency="SAR",
+    )
+    if not bank:
+        raise HTTPException(400, "الحساب البنكي غير موجود أو لا يتبع المتجر")
+
+    idempotency_key = str(draft.get("idempotency_key") or "").strip()
+    existing = next((r for r in await native_rows(db, owner_id)
+        if r.get("idempotency_key") == idempotency_key), None)
+    if existing:
+        raise HTTPException(
+            409,
+            f"التسوية مرحّلة مسبقًا ضمن القيد {existing.get('txn_group_id')}",
+        )
+
+    fee_credit_evidence = []
+    signed_keys = ("commission", "commission_vat", "commission_credit", "commission_vat_credit")
+    signed_amounts = normalize_amounts(draft.get("amounts"))
+    source = None
+    source_amounts = {}
+    if provider == "tabby" and draft.get("source_file_id"):
+        source = await db.settlement_files.find_one({
+            "user_id": owner_id, "id": draft["source_file_id"], "provider": "tabby"})
+        if source:
+            source_amounts = amounts_from_settlement_file(source)
+    if any(signed_amounts[key] < 0 or source_amounts.get(key, 0) < 0 for key in signed_keys):
+        if not source or provider != "tabby" or not draft.get("statement_date"):
+            raise HTTPException(409, "documented_tabby_fee_credit_required")
+        rows = await db.settlement_entries.find({
+            "user_id": owner_id, "file_id": source["id"]}).to_list(10001)
+        if len(rows) > 10000:
+            raise HTTPException(409, "fee_credit_evidence_limit")
+        fee_credit_evidence = [{key: row.get(key) for key in (
+            "id", "order_number", "event_date", "settlement_date", "source_event_type",
+            "actual_payment_fee", "actual_payment_vat", "settlement_reference")}
+            for row in rows if _money(row.get("actual_payment_fee")) < 0
+            or _money(row.get("actual_payment_vat")) < 0]
+        if not fee_credit_evidence:
+            raise HTTPException(409, "documented_tabby_fee_credit_required")
+        if any(signed_amounts[key] != source_amounts[key] for key in signed_keys):
+            raise HTTPException(409, "tabby_fee_credit_source_conflict")
+
+    preview = build_journal_preview(
+        provider=provider,
+        bank_account_id=bank["id"],
+        bank_account_name=bank.get("name") or "",
+        amounts=draft.get("amounts") or {},
+    )
+    if not preview["balanced"]:
+        raise HTTPException(400, "معاينة القيد غير متوازنة")
+
+    balances = await read_mz2_write_balances(db, owner=owner_id,
+        required_accounts=[("payment_gateway", provider, "receivable")])
+    balance = balances.net_balance(entity_type="payment_gateway", entity_id=provider, sub_account="receivable")
+    available = _money(max(balance, 0))
+    required = preview["amounts"]["provider_receivable_close"]
+    if required > available + 0.01:
+        raise HTTPException(
+            409,
+            (
+                f"ذمة {provider_label(provider)} غير كافية: "
+                f"المتاح {available:.2f} SAR والمطلوب {required:.2f} SAR"
+            ),
+        )
+
+    statement_reference = str(draft.get("statement_reference") or "").strip()
+    bank_snapshot = {
+        "id": bank["id"],
+        "name": bank.get("name") or "",
+        "account_type": bank.get("account_type"),
+    }
+    metadata = {
+        "operation_id": OPERATION_ID,
+        "source": "accounting_settlement_p01",
+        "settlement_draft_id": draft.get("id"),
+        "idempotency_key": idempotency_key,
+        "provider": provider,
+        "provider_label": provider_label(provider),
+        "statement_reference": statement_reference,
+        "period_from": draft.get("period_from"),
+        "period_to": draft.get("period_to"),
+        "statement_date": draft.get("statement_date"),
+        "accounting_at": (datetime.fromisoformat(draft["statement_date"])
+            .replace(tzinfo=ZoneInfo("Asia/Riyadh")).astimezone(timezone.utc).isoformat()
+            if draft.get("statement_date") else datetime.now(timezone.utc).isoformat()),
+        "source_file_id": draft.get("source_file_id"),
+        "source_file_hash": draft.get("source_file_hash"),
+        "bank_snapshot": bank_snapshot,
+        "amounts": preview["amounts"],
+        "refunds_are_statement_evidence_only": True,
+        "fee_credit_evidence": fee_credit_evidence,
+        "bank_receipt_id": draft.get("bank_receipt_id"),
+    }
+    entries = [
+        {
+            "entity_type": row["entity_type"],
+            "entity_id": row["entity_id"],
+            "sub_account": row.get("sub_account"),
+            "side": row["side"],
+            "amount": row["amount"],
+            "entry_type": row["entry_type"],
+            "metadata": {"role": row["role"], "label": row["label"],
+                **({"source_signed_amount": row["source_signed_amount"]}
+                   if "source_signed_amount" in row else {})},
+        }
+        for row in preview["entries"]
+    ]
+    result = await post_recognition_journal(
+        db,
+        user_id=owner_id,
+        actor_id=str(actor.get("id") or ""),
+        actor_name=actor.get("name") or actor.get("email") or "",
+        entries=entries,
+        txn_type="provider_settlement_v2",
+        idempotency_key=idempotency_key, effective_at=metadata["accounting_at"],
+        permission="accounting.settlements.post",
+        reason_code="accounting_settle",
+        notes=(
+            f"تسوية {provider_label(provider)} — {statement_reference}"
+        )[:500],
+        metadata=metadata,
+    )
+    if draft.get("bank_receipt_id"):
+        from accounting_receipt_service import consume_receipt
+        await consume_receipt(db, owner_id, draft, result["txn_group_id"])
+    # The sealed V2 journal records its immutable audit in this same transaction.
+    return {
+        **result,
+        "bank_snapshot": bank_snapshot,
+        "preview": preview,
+    }
+
+
+__all__ = [
+    "PROVIDERS",
+    "PROVIDER_LABELS",
+    "BLOCKING_REASON_CODES",
+    "amounts_from_settlement_file",
+    "build_journal_preview",
+    "build_review_reasons",
+    "calculate_settlement_totals",
+    "canonical_provider",
+    "has_blocking_reasons",
+    "period_from_file",
+    "post_reviewed_settlement",
+    "provider_label",
+    "settlement_idempotency_key",
+    "statement_reference_from_file",
+]
+

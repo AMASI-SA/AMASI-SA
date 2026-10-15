@@ -1,0 +1,378 @@
+======================================================================
+ERROR: test_bootstrap_does_not_change_system_node_path_or_git_status (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_bootstrap_does_not_change_system_node_path_or_git_status)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 908, in test_bootstrap_does_not_change_system_node_path_or_git_status
+    toolchain.ensure_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        cache_root=fixture_root / "cache",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        downloader=self._downloader(payload),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        runner=_FixtureRunner(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_cached_node_or_yarn_version_mismatch_fails_closed (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_cached_node_or_yarn_version_mismatch_fails_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 606, in test_cached_node_or_yarn_version_mismatch_fails_closed
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=correct,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_checksum_mismatch_prevents_extract_and_any_subprocess (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_checksum_mismatch_prevents_extract_and_any_subprocess)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 215, in test_checksum_mismatch_prevents_extract_and_any_subprocess
+    toolchain._install_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        spec,
+        ^^^^^
+    ...<3 lines>...
+        runner,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1068, in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 756, in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_cold_then_warm_cache_downloads_only_once (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_cold_then_warm_cache_downloads_only_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 387, in test_cold_then_warm_cache_downloads_only_once
+    first = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload, downloads),
+        runner=runner,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_corrupt_metadata_is_not_used_and_forces_reinstall (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_corrupt_metadata_is_not_used_and_forces_reinstall)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 442, in test_corrupt_metadata_is_not_used_and_forces_reinstall
+    first = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload, downloads),
+        runner=runner,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_corrupt_or_incomplete_archive_is_never_published (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_corrupt_or_incomplete_archive_is_never_published)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 245, in test_corrupt_or_incomplete_archive_is_never_published
+    toolchain._install_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        spec,
+        ^^^^^
+    ...<3 lines>...
+        runner,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1068, in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 756, in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_corrupt_retained_archive_is_not_executed_and_is_reinstalled (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_corrupt_retained_archive_is_not_executed_and_is_reinstalled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 412, in test_corrupt_retained_archive_is_not_executed_and_is_reinstalled
+    first = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload, downloads),
+        runner=runner,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_default_cache_honors_xdg_and_remains_outside_repo (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_default_cache_honors_xdg_and_remains_outside_repo)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 839, in test_default_cache_honors_xdg_and_remains_outside_repo
+    result = toolchain.ensure_toolchain(
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_exec_preserves_local_tools_inside_bash_login_shell (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_exec_preserves_local_tools_inside_bash_login_shell)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 801, in test_exec_preserves_local_tools_inside_bash_login_shell
+    toolchain.ensure_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        cache_root=cache_root,
+        ^^^^^^^^^^^^^^^^^^^^^^
+        downloader=self._downloader(payload),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        runner=_FixtureRunner(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_exec_version_mismatch_never_runs_user_command (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_exec_version_mismatch_never_runs_user_command)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 774, in test_exec_version_mismatch_never_runs_user_command
+    toolchain.ensure_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        cache_root=cache_root,
+        ^^^^^^^^^^^^^^^^^^^^^^
+        downloader=self._downloader(payload),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        runner=good,
+        ^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_execute_sanitizes_hostile_process_and_shell_environment (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_execute_sanitizes_hostile_process_and_shell_environment)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 699, in test_execute_sanitizes_hostile_process_and_shell_environment
+    status = toolchain.execute(
+        ["python", "-c", "print('environment is governed')"],
+    ...<2 lines>...
+        runner=runner,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1293, in execute
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_execute_uses_local_env_without_mutating_parent_process (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_execute_uses_local_env_without_mutating_parent_process)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 650, in test_execute_uses_local_env_without_mutating_parent_process
+    status = toolchain.execute(
+        ["python", "-c", "print('fixture')"],
+    ...<2 lines>...
+        runner=runner,
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1293, in execute
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_group_writable_cached_directory_is_rejected_before_execution (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_group_writable_cached_directory_is_rejected_before_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 530, in test_group_writable_cached_directory_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_install_is_atomic_and_validation_failure_cleans_stage (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_install_is_atomic_and_validation_failure_cleans_stage)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 308, in test_install_is_atomic_and_validation_failure_cleans_stage
+    toolchain._install_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        spec,
+        ^^^^^
+    ...<3 lines>...
+        runner,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1068, in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 756, in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_intermediate_symlink_escape_is_rejected_before_execution (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_intermediate_symlink_escape_is_rejected_before_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 472, in test_intermediate_symlink_escape_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_non_launcher_corepack_tamper_is_rejected_before_execution (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_non_launcher_corepack_tamper_is_rejected_before_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 499, in test_non_launcher_corepack_tamper_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_successful_install_publishes_only_after_exact_versions (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_successful_install_publishes_only_after_exact_versions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 347, in test_successful_install_publishes_only_after_exact_versions
+    toolchain._install_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        spec,
+        ^^^^^
+    ...<3 lines>...
+        runner_spy,
+        ^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1068, in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 756, in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_verified_archive_missing_node_is_rejected_before_execution (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_verified_archive_missing_node_is_rejected_before_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 273, in test_verified_archive_missing_node_is_rejected_before_execution
+    toolchain._install_toolchain(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        spec,
+        ^^^^^
+    ...<3 lines>...
+        runner,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1068, in _install_toolchain
+    cache_root = _validated_real_directory(cache_root, "toolchain install root")
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 756, in _validated_real_directory
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_world_writable_cached_file_is_rejected_before_execution (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_world_writable_cached_file_is_rejected_before_execution)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 554, in test_world_writable_cached_file_is_rejected_before_execution
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+======================================================================
+ERROR: test_yarn_corepack_marker_must_match_pinned_sha512 (backend.tests.test_frontend_release_toolchain.FrontendReleaseToolchainTests.test_yarn_corepack_marker_must_match_pinned_sha512)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\backend\tests\test_frontend_release_toolchain.py", line 578, in test_yarn_corepack_marker_must_match_pinned_sha512
+    installed = toolchain.ensure_toolchain(
+        cache_root=cache_root,
+        downloader=self._downloader(payload),
+        runner=_FixtureRunner(),
+    )
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 1269, in ensure_toolchain
+    root = _prepare_cache_root(cache_root)
+  File "C:\Users\amasi\.codex\visualizations\2026\09\30\01a0efa3-b9b5-7280-89e8-2043e918fe5c\mz2-base-validation\scripts\frontend_release_toolchain.py", line 162, in _prepare_cache_root
+    if info.st_uid != os.geteuid():
+                      ^^^^^^^^^^
+AttributeError: module 'os' has no attribute 'geteuid'. Did you mean: 'getpid'?
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.940s
+
+FAILED (errors=20)

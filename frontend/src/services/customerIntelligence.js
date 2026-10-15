@@ -4,6 +4,8 @@ const READ_ONLY_KEYS = [
     "writes_allowed",
     "external_calls_allowed",
     "whatsapp_send_allowed",
+    "instagram_send_allowed",
+    "instagram_comment_reply_allowed",
     "order_creation_allowed",
     "discount_creation_allowed",
     "payment_link_creation_allowed",
@@ -11,6 +13,59 @@ const READ_ONLY_KEYS = [
     "campaign_mutation_allowed",
     "ai_execution_allowed",
 ];
+
+const LIVE_INBOX_MESSAGE_KINDS = new Set([
+    "text",
+    "image",
+    "audio",
+    "document",
+    "interactive",
+]);
+
+const LIVE_INBOX_CONVERSATION_STATUSES = new Set([
+    "open",
+    "needs_human",
+    "follow_up_due",
+    "resolved",
+    "closed",
+]);
+
+const LIVE_INBOX_EMPLOYEE_DELIVERY_STATES = new Set([
+    "sent",
+    "delivered",
+    "read",
+    "failed",
+]);
+
+const EMPTY_LIVE_INBOX = {
+    schema_version: null,
+    generated_at: null,
+    mode: null,
+    data_origin: null,
+    connection: {
+        provider: "whatsapp",
+        status: "not_connected",
+        connected_channels: 0,
+        receiving_channels: 0,
+    },
+    connections: [],
+    conversation_count: 0,
+    message_count: 0,
+    content_unavailable_count: 0,
+    has_more: false,
+    next_offset: null,
+    conversations: [],
+    safety_policy: {
+        mode: "observe_only",
+        receive_only: true,
+        writes_allowed: false,
+        whatsapp_send_allowed: false,
+        instagram_send_allowed: false,
+        instagram_comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+        commerce_mutation_allowed: false,
+    },
+};
 
 const EMPTY_SAFE_WORKSPACE = {
     schema_version: null,
@@ -126,6 +181,125 @@ function finite(value) {
     return Number.isFinite(numeric) ? numeric : null;
 }
 
+function nonNegativeInteger(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : 0;
+}
+
+function optionalNonNegativeInteger(value) {
+    if (value == null || value === "") return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : null;
+}
+
+function timestamp(value) {
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+function normalizeLiveInboxMessage(message, index) {
+    const source = object(message);
+    const kind = text(source.kind);
+    const employeeEcho = source.direction === "outbound" && source.sender === "employee";
+    return {
+        id: text(source.message_id || source.id) || `live-message-${index + 1}`,
+        // An outbound employee echo is history received from a channel, not a
+        // UI send capability and never a substitute for reply_suggestion.
+        direction: employeeEcho ? "outbound" : "inbound",
+        sender: employeeEcho ? "employee" : "customer",
+        kind: LIVE_INBOX_MESSAGE_KINDS.has(kind) ? kind : "interactive",
+        body: text(source.body),
+        caption: text(source.caption),
+        filename: text(source.filename),
+        mime_type: text(source.mime_type),
+        occurred_at: timestamp(source.occurred_at),
+        delivery_state: employeeEcho ? text(source.delivery_state) : "received",
+        surface: ["direct_message", "comment", "unknown"].includes(source.surface)
+            ? source.surface
+            : "direct_message",
+        content_available: source.content_available === true,
+    };
+}
+
+function normalizePendingReplySuggestion(value, conversationId) {
+    if (!isObject(value)) return null;
+    const source = object(value);
+    const rawSuggestionId = source.suggestion_id ?? source.id;
+    const suggestionId = typeof rawSuggestionId === "string"
+        ? rawSuggestionId.trim()
+        : "";
+    const suggestionText = typeof source.text === "string" ? source.text.trim() : "";
+    const version = Number.isInteger(source.version) && source.version >= 1
+        ? source.version
+        : 0;
+
+    // A reply suggestion is a separate, explicit approval object. Never infer
+    // one from an outbound/employee message echo or from arbitrary text fields.
+    if (
+        source.status !== "pending_approval"
+        || source.requires_human_approval !== true
+        || source.send_allowed !== false
+        || !suggestionId
+        || !suggestionText
+        || version < 1
+    ) {
+        return null;
+    }
+
+    return {
+        id: suggestionId,
+        conversation_id: conversationId,
+        status: "pending_approval",
+        text: suggestionText,
+        version,
+        requires_human_approval: true,
+        send_allowed: false,
+        surface: ["direct_message", "comment", "unknown"].includes(source.surface)
+            ? source.surface
+            : "direct_message",
+        created_at: timestamp(source.created_at),
+    };
+}
+
+function normalizeLiveInboxConversation(conversation, index) {
+    const source = object(conversation);
+    const status = text(source.status);
+    const messages = array(source.messages)
+        .filter((message) => {
+            const row = object(message);
+            const inboundCustomer = row.direction === "inbound"
+                && row.sender === "customer"
+                && row.delivery_state === "received";
+            const outboundEmployee = row.direction === "outbound"
+                && row.sender === "employee"
+                && LIVE_INBOX_EMPLOYEE_DELIVERY_STATES.has(row.delivery_state);
+            return inboundCustomer || outboundEmployee;
+        })
+        .map(normalizeLiveInboxMessage);
+    const id = text(source.conversation_id || source.id) || `live-conversation-${index + 1}`;
+    const channel = ["whatsapp", "instagram", "tiktok"].includes(source.channel)
+        ? source.channel
+        : "whatsapp";
+    const surface = ["direct_message", "comment", "unknown"].includes(source.surface)
+        ? source.surface
+        : (messages[messages.length - 1]?.surface || "direct_message");
+    return {
+        id,
+        customer_name: text(source.customer_name)
+            || ({ instagram: "عميل إنستغرام", tiktok: "عميل تيك توك" }[channel] || "عميل واتساب"),
+        channel,
+        surface,
+        status: LIVE_INBOX_CONVERSATION_STATUSES.has(status) ? status : "open",
+        last_message: text(source.last_message),
+        last_message_at: timestamp(source.last_message_at),
+        message_count: nonNegativeInteger(source.message_count),
+        content_unavailable_count: nonNegativeInteger(
+            source.content_unavailable_count,
+        ),
+        messages,
+        reply_suggestion: normalizePendingReplySuggestion(source.reply_suggestion, id),
+    };
+}
+
 function normalizeMessage(message, index) {
     const source = object(message);
     const media = object(source.media_analysis);
@@ -151,11 +325,14 @@ function normalizeMessage(message, index) {
 function normalizeConversation(conversation, index) {
     const source = object(conversation);
     const messages = array(source.messages).map(normalizeMessage);
-    const suggestedReply = messages.find(
-        (message) => message.direction === "outbound" && message.body,
-    )?.body || "";
+    const conversationId = text(source.conversation_id || source.id)
+        || `conversation-${index + 1}`;
+    const replySuggestion = normalizePendingReplySuggestion(
+        source.reply_suggestion,
+        conversationId,
+    );
     return {
-        id: text(source.conversation_id || source.id) || `conversation-${index + 1}`,
+        id: conversationId,
         customer_id: text(source.customer_id),
         customer_name: text(source.customer_label || source.customer_name),
         channel: text(source.channel),
@@ -169,7 +346,8 @@ function normalizeConversation(conversation, index) {
         ai_summary: text(source.ai_summary || source.last_message),
         next_best_action: text(source.next_best_action)
             || (source.assigned_to ? `مراجعة بواسطة: ${text(source.assigned_to)}` : ""),
-        suggested_reply: text(source.suggested_reply) || suggestedReply,
+        suggested_reply: replySuggestion?.text || "",
+        reply_suggestion: replySuggestion,
         last_message_at: source.last_message_at || null,
         messages,
     };
@@ -557,6 +735,244 @@ export function customerIntelligenceWritesLocked(policy = {}) {
 export async function getCustomerIntelligenceWorkspace() {
     const response = await api.get("/customer-intelligence/v1/workspace");
     return normalizeCustomerIntelligenceWorkspace(response.data);
+}
+
+export function normalizeCustomerIntelligenceInbox(payload = {}) {
+    const source = object(payload);
+    const connection = object(source.connection);
+    const conversations = array(source.conversations)
+        .filter((conversation) => ["whatsapp", "instagram", "tiktok"].includes(
+            object(conversation).channel,
+        ))
+        .map(normalizeLiveInboxConversation);
+    const suppliedConnections = array(source.connections).length
+        ? array(source.connections)
+        : (connection.provider ? [connection] : []);
+    const connections = suppliedConnections
+        .filter((item) => ["whatsapp", "instagram", "tiktok"].includes(object(item).provider))
+        .map((item) => {
+            const row = object(item);
+            const receivingChannels = nonNegativeInteger(row.receiving_channels);
+            return {
+                provider: row.provider,
+                status: row.status === "connected" && receivingChannels > 0
+                    ? "connected"
+                    : "not_connected",
+                connected_channels: nonNegativeInteger(row.connected_channels),
+                receiving_channels: receivingChannels,
+            };
+        });
+    const connectedChannels = connections.reduce(
+        (total, item) => total + item.connected_channels,
+        0,
+    );
+    const receivingChannels = connections.reduce(
+        (total, item) => total + item.receiving_channels,
+        0,
+    );
+    const supportedOrigin = ["whatsapp_webhook", "channel_webhooks", "channel_providers"].includes(
+        source.data_origin,
+    );
+    const liveContract = Number(source.schema_version) === 1
+        && source.mode === "live_receive_only"
+        && supportedOrigin
+        && connections.length > 0;
+
+    return {
+        ...EMPTY_LIVE_INBOX,
+        connection: {
+            ...EMPTY_LIVE_INBOX.connection,
+            status: liveContract && receivingChannels > 0
+                ? "connected"
+                : "not_connected",
+            connected_channels: connectedChannels,
+            receiving_channels: receivingChannels,
+        },
+        connections: liveContract ? connections : [],
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        generated_at: timestamp(source.generated_at),
+        mode: liveContract ? "live_receive_only" : null,
+        data_origin: liveContract ? source.data_origin : null,
+        conversation_count: liveContract ? nonNegativeInteger(source.conversation_count) : 0,
+        message_count: liveContract ? nonNegativeInteger(source.message_count) : 0,
+        content_unavailable_count: liveContract
+            ? nonNegativeInteger(source.content_unavailable_count)
+            : 0,
+        has_more: liveContract && source.has_more === true,
+        next_offset: liveContract && source.has_more === true
+            ? optionalNonNegativeInteger(source.next_offset)
+            : null,
+        conversations: liveContract ? conversations : [],
+        // These values are intentionally client-enforced, like the preview
+        // policy above. A malformed response cannot enable a write control.
+        safety_policy: { ...EMPTY_LIVE_INBOX.safety_policy },
+    };
+}
+
+export async function getCustomerIntelligenceInbox() {
+    const response = await api.get("/customer-intelligence/v1/inbox");
+    return normalizeCustomerIntelligenceInbox(response.data);
+}
+
+const CUSTOMER_LEARNING_STATES = new Set([
+    "not_configured",
+    "no_data",
+    "healthy",
+    "processing",
+    "attention_required",
+]);
+
+export function normalizeCustomerLearningStatus(payload = {}) {
+    const source = object(payload);
+    return {
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        generated_at: timestamp(source.generated_at),
+        state: CUSTOMER_LEARNING_STATES.has(source.state)
+            ? source.state
+            : "not_configured",
+        runtime_configured: source.runtime_configured === true,
+        worker_enabled: source.worker_enabled === true,
+        inbound_customer_messages: nonNegativeInteger(source.inbound_customer_messages),
+        employee_responses: nonNegativeInteger(source.employee_responses),
+        total_evidence_events: nonNegativeInteger(source.total_evidence_events),
+        queued_for_analysis: nonNegativeInteger(source.queued_for_analysis),
+        analyzed_messages: nonNegativeInteger(source.analyzed_messages),
+        pending_messages: nonNegativeInteger(source.pending_messages),
+        failed_messages: nonNegativeInteger(source.failed_messages),
+        queue_coverage_percent: Math.min(100, finite(source.queue_coverage_percent) ?? 0),
+        analysis_completion_percent: Math.min(
+            100,
+            finite(source.analysis_completion_percent) ?? 0,
+        ),
+        signals_detected: nonNegativeInteger(source.signals_detected),
+        open_problems: nonNegativeInteger(source.open_problems),
+        proposed_decisions: nonNegativeInteger(source.proposed_decisions),
+        metadata_only_media_events: nonNegativeInteger(source.metadata_only_media_events),
+        // Status is content-free and cannot grant execution authority.
+        customer_content_exposed: false,
+        automatic_execution_allowed: false,
+    };
+}
+
+export async function getCustomerLearningStatus() {
+    const response = await api.get("/customer-intelligence/v1/learning/status");
+    return normalizeCustomerLearningStatus(response.data);
+}
+
+const INSTAGRAM_SETUP_STATES = new Set([
+    "ready",
+    "connected",
+    "meta_reauthorization_required",
+    "no_instagram_account",
+    "store_not_ready",
+]);
+
+export function normalizeInstagramCustomerIntelligenceSetup(payload = {}) {
+    const source = object(payload);
+    const state = INSTAGRAM_SETUP_STATES.has(source.state) ? source.state : null;
+    return {
+        schema_version: Number(source.schema_version) === 1 ? 1 : null,
+        state,
+        candidates: state === "ready"
+            ? array(source.candidates).map((candidate) => {
+                const row = object(candidate);
+                return {
+                    candidate_ref: text(row.candidate_ref),
+                    display_name: text(row.display_name) || "حساب إنستغرام",
+                };
+            }).filter((candidate) => candidate.candidate_ref)
+            : [],
+        required_permissions_ready: source.required_permissions_ready === true,
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    };
+}
+
+export async function getInstagramCustomerIntelligenceSetup() {
+    const response = await api.get(
+        "/customer-intelligence/v1/channels/instagram/setup",
+    );
+    return normalizeInstagramCustomerIntelligenceSetup(response.data);
+}
+
+export async function connectInstagramCustomerIntelligence(candidateRef) {
+    const candidate = text(candidateRef);
+    if (!candidate) throw new Error("instagram candidate is required");
+    const response = await api.post(
+        "/customer-intelligence/v1/channels/instagram/setup",
+        {
+            candidate_ref: candidate,
+            confirmation: "CONNECT_RECEIVE_ONLY_INSTAGRAM",
+        },
+    );
+    return {
+        status: ["connected", "no_change"].includes(response.data?.status)
+            ? response.data.status
+            : null,
+        provider: "instagram",
+        receive_only: true,
+        send_allowed: false,
+        comment_reply_allowed: false,
+        ai_auto_reply_allowed: false,
+    };
+}
+
+function replySuggestionPath(conversationId) {
+    const id = text(conversationId);
+    if (!id) throw new Error("conversation_id is required");
+    return `/customer-intelligence/v1/conversations/${encodeURIComponent(id)}/reply-suggestion`;
+}
+
+export async function saveTikTokReplyPolicy(conversationId, discountCode) {
+    const id = text(conversationId);
+    const code = text(discountCode);
+    if (!id || !/^[A-Za-z0-9_-]{1,32}$/.test(code)) throw new Error("invalid coupon policy");
+    const response = await api.put(`/customer-intelligence/v1/conversations/${encodeURIComponent(id)}/tiktok-reply-policy`, {
+        enabled: true, discount_code: code,
+    });
+    return response.data;
+}
+
+export async function regenerateTikTokReplySuggestion(conversationId, suggestionId, version) {
+    if (!text(suggestionId) || !Number.isInteger(version) || version < 1) throw new Error("invalid suggestion version");
+    const response = await api.post(`${replySuggestionPath(conversationId)}/${encodeURIComponent(suggestionId)}/regenerate`, { version });
+    return response.data;
+}
+
+export async function createCustomerIntelligenceReplySuggestion(conversationId) {
+    const response = await api.post(replySuggestionPath(conversationId), {});
+    return response.data;
+}
+
+export async function reviewCustomerIntelligenceReplySuggestion({
+    conversationId,
+    suggestionId,
+    decision,
+    text: reviewedText = "",
+    version,
+    note = "",
+}) {
+    const id = text(suggestionId);
+    const allowedDecision = ["approve", "reject", "escalate"].includes(decision);
+    if (!id) throw new Error("suggestion_id is required");
+    if (!allowedDecision) throw new Error("unsupported reply suggestion decision");
+    const normalizedVersion = nonNegativeInteger(version);
+    if (normalizedVersion < 1) throw new Error("suggestion version is required");
+
+    const response = await api.post(
+        `${replySuggestionPath(conversationId)}/${encodeURIComponent(id)}/review`,
+        {
+            decision,
+            version: normalizedVersion,
+            ...(decision === "approve" && text(reviewedText)
+                ? { text: text(reviewedText) }
+                : {}),
+            ...(text(note) ? { note: text(note) } : {}),
+        },
+    );
+    return response.data;
 }
 
 export const CUSTOMER_INTELLIGENCE_WRITE_POLICY_KEYS = [...READ_ONLY_KEYS];

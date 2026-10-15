@@ -1,4 +1,6 @@
-import api from "../lib/api";
+import api, { API_BASE } from "../lib/api";
+import { confirmReviewUnitSplit } from "../reviewUnitSplitGuard";
+import { LEGACY_REVIEW_RESOLUTION_MESSAGE } from "../reviewConfirmation";
 
 function message(error, fallback) {
     const detail = error?.response?.data?.detail;
@@ -6,9 +8,17 @@ function message(error, fallback) {
     if (detail?.message) return detail.message;
     if (detail?.code === "review_revision_conflict") return "تم تعديل الطلب من موظف آخر. حدّث البيانات ثم أعد المحاولة.";
     if (detail?.code === "review_already_completed") return "تم اعتماد مراجعة هذا الطلب سابقًا.";
+    if (detail?.code === "review_completion_legacy_operation_requires_resolution") return LEGACY_REVIEW_RESOLUTION_MESSAGE;
+    if (detail?.code?.startsWith("review_") || detail?.code?.startsWith("component_") || detail?.code === "salla_review_status_sync_failed") {
+        return `${fallback} (${detail.code}${detail.reason ? `: ${detail.reason}` : ""})`;
+    }
     if (detail?.code === "preparation_quantity_exceeds_remaining") return "الكمية المختارة أكبر من الكمية المتبقية.";
     if (detail?.code === "preparation_units_already_allocated") return "حجز موظف آخر بعض القطع. حدّث الصفحة وأعد الاختيار.";
     if (detail?.code === "reviewed_product_not_available") return "المنتج لم يعد متاحًا في هذه المرحلة. حدّث الصفحة.";
+    if (detail?.code === "reviewed_line_changed_reload_required") return "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف.";
+    if (detail?.code === "reviewed_line_no_longer_exportable") return "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة ثم أعد الاختيار. لم يتم إنشاء ملف.";
+    if (detail?.code === "reviewed_product_allocation_incomplete") return "تعذّر توزيع الكمية على الطلبات الحالية. حدّث الصفحة ثم أعد تحديد الكمية. لم يتم إنشاء ملف.";
+    if (detail?.code === "preparation_batch_build_in_progress") return "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.";
     if (detail?.code === "reviewed_catalog_truncated") return "لا يمكن إنشاء ملف من قائمة ناقصة. راجع تنبيه الحد التشغيلي.";
     if (detail?.code === "preparation_batch_generation_failed") return "تعذّر إنشاء ملف التجهيز ولم تُخصم أي قطعة.";
     if (detail?.code === "responsible_employee_unavailable") return "اختر موظفًا مسؤولًا نشطًا يملك صلاحية إدارة التجهيز.";
@@ -17,12 +27,17 @@ function message(error, fallback) {
     return error?.message || fallback;
 }
 
-export async function listPendingOrderReviews({ limit = 15, cursor = null } = {}) {
+export async function listPendingOrderReviews({ limit = 15, cursor = null, search = "" } = {}) {
     try {
         const params = { limit };
         if (cursor) params.cursor = cursor;
+        if (String(search || "").trim()) params.search = String(search).trim();
         const { data } = await api.get("/order-reviews-v1", { params });
-        return { items: Array.isArray(data?.items) ? data.items : [], nextCursor: data?.next_cursor || null };
+        return {
+            items: Array.isArray(data?.items) ? data.items : [],
+            nextCursor: data?.next_cursor || null,
+            totalCount: Number.isInteger(data?.total_count) && data.total_count >= 0 ? data.total_count : null,
+        };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات بانتظار المراجعة.")); }
 }
 
@@ -33,14 +48,29 @@ export async function listReviewedOrderReviews({ limit = 50 } = {}) {
     } catch (error) { throw new Error(message(error, "تعذّر تحميل الطلبات التي تمت مراجعتها.")); }
 }
 
-export async function listReviewedProductCatalog({ limit = 500 } = {}) {
+export async function previewAms11353IncidentRecovery() {
+    const { data } = await api.get("/preparation-recovery-v1/incidents/ams11353-lost-11-20260825");
+    return data;
+}
+
+export async function applyAms11353IncidentRecovery() {
+    const { data } = await api.post("/preparation-recovery-v1/incidents/ams11353-lost-11-20260825/apply");
+    return data;
+}
+
+export async function listReviewedProductCatalog({ limit = 500, reviewedDate = "" } = {}) {
     try {
-        const { data } = await api.get("/reviewed-products-v1/catalog", { params: { limit } });
+        const params = { limit };
+        if (String(reviewedDate || "").trim()) params.reviewed_date = String(reviewedDate).trim();
+        const { data } = await api.get("/reviewed-products-v1/catalog", { params });
         return {
             products: Array.isArray(data?.products) ? data.products : [],
             categories: Array.isArray(data?.categories) ? data.categories : [],
             summary: data?.summary || {},
             truncated: Boolean(data?.truncated),
+            historical: Boolean(data?.historical),
+            reviewedDate: data?.reviewed_date || "",
+            selectionGrain: data?.selection_grain || "",
         };
     } catch (error) { throw new Error(message(error, "تعذّر تحميل منتجات مرحلة تمت المراجعة.")); }
 }
@@ -79,6 +109,24 @@ export async function listPreparationFiles({ limit = 30 } = {}) {
     }
 }
 
+export async function recoverStalePreparationFiles() {
+    try {
+        return (await api.post("/preparation-file-safety-v1/recover-stale")).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّرت استعادة ملفات التجهيز المتعثرة."));
+    }
+}
+
+export async function repairPreparationBatchCustomerOptions(batchId) {
+    try {
+        return (await api.post(
+            `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/repair-customer-options`,
+        )).data;
+    } catch (error) {
+        throw new Error(message(error, "تعذّر إصلاح خيارات العميل في ملف التجهيز."));
+    }
+}
+
 export async function createReviewedPreparationBatch({ clientRequestId, selections }) {
     try {
         const metadata = typeof window !== "undefined"
@@ -98,7 +146,11 @@ export async function createReviewedPreparationBatch({ clientRequestId, selectio
             client_request_id: clientRequestId,
             selections,
         });
-        const registered = await finalizePreparationFile(clientRequestId);
+        const registered = data?.file_registered === true
+            && data?.registry_status === "ready"
+            && data?.piece_registry_status === "ready"
+            ? data
+            : await finalizePreparationFile(clientRequestId);
         if (typeof window !== "undefined") {
             delete window.__mezanPreparationFileMetadata;
             window.dispatchEvent(new CustomEvent("mezan:preparation-file-created", {
@@ -108,7 +160,10 @@ export async function createReviewedPreparationBatch({ clientRequestId, selectio
         return { ...data, ...registered, batch_id: registered.batch_id || data.batch_id };
     } catch (error) {
         if (error instanceof Error && !error?.response) throw error;
-        throw new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
+        const wrapped = new Error(message(error, "تعذّر إنشاء ملف التجهيز."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        wrapped.detail = error?.response?.data?.detail;
+        throw wrapped;
     }
 }
 
@@ -121,37 +176,35 @@ export async function listReviewedPreparationBatches({ limit = 20 } = {}) {
     }
 }
 
+export function reviewedPreparationBatchPdfUrl(batchId) {
+    return `${API_BASE}/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/pdf`;
+}
+
 export async function downloadReviewedPreparationBatchPdf(batchId, fileName = "") {
     try {
-        const { data, headers } = await api.get(
-            `/reviewed-preparation-batches-v1/batches/${encodeURIComponent(batchId)}/pdf`,
-            { responseType: "blob" },
-        );
-        const blob = data instanceof Blob
-            ? data
-            : new Blob([data], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
-        anchor.href = url;
+        anchor.href = reviewedPreparationBatchPdfUrl(batchId);
         anchor.download = fileName || `preparation-${batchId}.pdf`;
         anchor.style.display = "none";
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
         return {
             ok: true,
             batchId,
             fileName: anchor.download,
-            contentType: headers?.["content-type"] || "application/pdf",
+            contentType: "application/pdf",
         };
     } catch (error) {
         throw new Error(message(error, "تم إنشاء الدفعة، لكن تعذّر تحميل ملف PDF."));
     }
 }
 
-export async function getOrderReview(orderNumber) {
-    try { return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`)).data; }
+export async function getOrderReview(orderNumber, { localOnly = false } = {}) {
+    try {
+        return (await api.get(`/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+            localOnly ? { params: { local_only: true } } : undefined)).data;
+    }
     catch (error) { throw new Error(message(error, "تعذّر تحميل بيانات المراجعة.")); }
 }
 
@@ -161,8 +214,22 @@ export async function updateOrderReviewItem(orderNumber, orderItemId, payload) {
 }
 
 export async function completeOrderReview(orderNumber, expectedRevision) {
-    try { return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, { expected_revision: expectedRevision })).data; }
-    catch (error) { throw new Error(message(error, "تعذّر اعتماد مراجعة الطلب.")); }
+    try {
+        // Validate the durable local snapshot without refreshing the provider
+        // as a side effect of completing a Mezan review.
+        const detail = await getOrderReview(orderNumber, { localOnly: true });
+        if (!confirmReviewUnitSplit(detail)) {
+            throw new Error("تم إلغاء اعتماد المراجعة. افصل المنتج يدويًا أو راجع الكمية ثم اضغط «تمت المراجعة» مرة أخرى.");
+        }
+        return (await api.post(`/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`, {
+            expected_revision: expectedRevision,
+        })).data;
+    } catch (error) {
+        if (error instanceof Error && !error?.response) throw error;
+        const wrapped = new Error(message(error, "تعذّر اعتماد مراجعة الطلب."));
+        wrapped.code = error?.response?.data?.detail?.code;
+        throw wrapped;
+    }
 }
 
 export async function createOrderReviewOperationalItem(orderNumber, payload) {

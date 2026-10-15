@@ -146,7 +146,10 @@ class QoyodSettings(BaseModel):
 
     # ─── Master switches ────────────────────────────────────────────
     enabled:           bool = False     # ADR-001 #3 — connector master toggle
-    auto_send:         bool = True      # pipeline runs automatically on inbox
+    auto_send:         bool = True      # runtime switch; may pause on auth loss
+    # Durable merchant intent is separate from runtime health. None marks a
+    # legacy row; readers derive it once from the visible master switches.
+    auto_send_desired: Optional[bool] = None
     auto_receipt:      bool = True      # create receipt right after invoice
     # Day 5 safety net — when True the pipeline goes through every step,
     # builds the EXACT Qoyod payload, but skips the final POST. The
@@ -259,7 +262,9 @@ class QoyodCredentials(BaseModel):
     user_id:        str = "main"
     api_key_enc:    bytes                          # opaque ciphertext
     fingerprint:    str                            # short hash for UI ("abc…123")
+    credential_version: Optional[str] = None
     last_verified_at: Optional[datetime] = None
+    last_verified_credential_version: Optional[str] = None
     rotated_at:     Optional[datetime] = None
     created_at:     datetime = Field(default_factory=_now)
     updated_at:     datetime = Field(default_factory=_now)
@@ -479,6 +484,11 @@ async def ensure_qoyod_indexes(db) -> None:
     await db.integration_inbox.create_index(
         [("salla_order_id", pymongo.ASCENDING)],
         name="integration_inbox_order_lookup", sparse=True,
+    )
+    await db.integration_inbox.create_index(
+        [("user_id", pymongo.ASCENDING),
+         ("salla_order_number", pymongo.ASCENDING)],
+        name="integration_inbox_owner_order_number", sparse=True,
     )
 
     # --- qoyod_invoices ---

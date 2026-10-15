@@ -1,0 +1,324 @@
+{
+  "source_head": "9d0c41b1d0d6f5e51c337dc51e3dddea1e31a25c",
+  "source_tree": "19202613ca73903a603da4a1a6259f41760c7855",
+  "captured_at": "2026-10-01 04:39:18 UTC",
+  "summary": {
+    "total": 36,
+    "success": 31,
+    "failure": 5,
+    "pending": 0
+  },
+  "scope": "Exact source checkpoint; later evidence-only commit not independently represented.",
+  "workflows": [
+    {
+      "name": "G47 Focused Integration",
+      "id": 36815562601,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562601"
+    },
+    {
+      "name": "Security Gate",
+      "id": 36815562439,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562439"
+    },
+    {
+      "name": "Products V2",
+      "id": 36815562541,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562541"
+    },
+    {
+      "name": "Fulfillment V2",
+      "id": 36815562429,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562429"
+    },
+    {
+      "name": "MZ2 Accounting UI H2",
+      "id": 36815562292,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562292"
+    },
+    {
+      "name": "Qoyod Payment Freshness",
+      "id": 36815562264,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562264"
+    },
+    {
+      "name": "Supplier Invoice Service Policy",
+      "id": 36815562377,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562377"
+    },
+    {
+      "name": "Production Campaign AI Subprocess Worker V1",
+      "id": 36815562440,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562440"
+    },
+    {
+      "name": "Production Fulfillment 278 Port",
+      "id": 36815562263,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562263"
+    },
+    {
+      "name": "Store Delivery V1",
+      "id": 36815562271,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562271"
+    },
+    {
+      "name": "Components Required Category and Group Picker V2",
+      "id": 36815562330,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562330"
+    },
+    {
+      "name": "Production Preparation Piece Operations",
+      "id": 36815562348,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562348"
+    },
+    {
+      "name": "Ads Auto Sync 5 Minutes V2",
+      "id": 36815562362,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562362"
+    },
+    {
+      "name": "Production Dashboard V2 Salla Ads Executive",
+      "id": 36815562466,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562466"
+    },
+    {
+      "name": "MZ2 Track G SSOT contracts",
+      "id": 36815562350,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562350"
+    },
+    {
+      "name": "Snapchat Reporting V2 Shadow",
+      "id": 36815562462,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562462"
+    },
+    {
+      "name": "MZ2 Accounting UI Phase 2",
+      "id": 36815562346,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562346"
+    },
+    {
+      "name": "Production Dashboard Four Platform Spend V1",
+      "id": 36815562534,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562534"
+    },
+    {
+      "name": "Build20 supplier scan recovery (no deployment)",
+      "id": 36815562411,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562411"
+    },
+    {
+      "name": "Snapchat Settings Management V2",
+      "id": 36815562399,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562399"
+    },
+    {
+      "name": "Salla Order Revision P0 contracts",
+      "id": 36815562415,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562415"
+    },
+    {
+      "name": "Mezan MCP Gateway security tests",
+      "id": 36815562443,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562443"
+    },
+    {
+      "name": "Salla Orders V3 acceptance",
+      "id": 36815562375,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562375"
+    },
+    {
+      "name": "Mezan Release Readiness",
+      "id": 36815562396,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562396"
+    },
+    {
+      "name": "Warehouse Location Engine",
+      "id": 36815562402,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562402"
+    },
+    {
+      "name": "MZ2 Supplier Native Invoice V2",
+      "id": 36815562476,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562476"
+    },
+    {
+      "name": "MZ2 Track F native shipping",
+      "id": 36815562512,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562512"
+    },
+    {
+      "name": "MZ2 Supplier Payments V2",
+      "id": 36815562535,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562535"
+    },
+    {
+      "name": "Build20 supplier invoice integrity (no deployment)",
+      "id": 36815562427,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562427"
+    },
+    {
+      "name": "MZ2 advertising V2 native accounting",
+      "id": 36815562361,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562361"
+    },
+    {
+      "name": "MZ2 A+B source integration",
+      "id": 36815562328,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562328"
+    },
+    {
+      "name": "Employees V2 Foundation",
+      "id": 36815562364,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562364"
+    },
+    {
+      "name": "MZ2 Accounting Module",
+      "id": 36815562390,
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562390"
+    },
+    {
+      "name": "Runtime Stability",
+      "id": 36815562477,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562477"
+    },
+    {
+      "name": "Snapchat Integrations V2",
+      "id": 36815562576,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562576"
+    },
+    {
+      "name": "CodeQL",
+      "id": 36815562341,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/36815562341"
+    }
+  ],
+  "failures": [
+    {
+      "run": 36815562350,
+      "name": "MZ2 Track G SSOT contracts",
+      "jobs": [
+        {
+          "id": 110219732657,
+          "name": "contracts"
+        }
+      ],
+      "excerpt": "2026-10-01T04:33:03.3273622Z E   AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:33:03.3312523Z FAILED backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels - AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:33:03.3313617Z 1 failed, 158 passed, 9 warnings in 32.67s"
+    },
+    {
+      "run": 36815562396,
+      "name": "Mezan Release Readiness",
+      "jobs": [
+        {
+          "id": 110219733499,
+          "name": "Frontend build"
+        }
+      ],
+      "excerpt": "2026-10-01T04:34:02.7190721Z scripts.emergent_deployment_adapter.DeploymentAdapterError: frontend source differs from reviewed intent: src/pages/EmployeesV2Management.jsx\n2026-10-01T04:34:02.8974745Z scripts.emergent_deployment_adapter.DeploymentAdapterError: source A must change governed source without changing intent"
+    },
+    {
+      "run": 36815562476,
+      "name": "MZ2 Supplier Native Invoice V2",
+      "jobs": [
+        {
+          "id": 110219733444,
+          "name": "native-contract"
+        }
+      ],
+      "excerpt": "2026-10-01T04:33:57.3324264Z E   AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:33:57.3326795Z FAILED backend/tests/test_mz2_closed_periods.py::ClosedPeriodTests::test_closed_entitlement_and_payment_no_partial_or_automatic_redating - AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:33:57.3328425Z 1 failed, 203 passed, 7 subtests passed in 52.34s"
+    },
+    {
+      "run": 36815562328,
+      "name": "MZ2 A+B source integration",
+      "jobs": [
+        {
+          "id": 110219732433,
+          "name": "connected-source"
+        }
+      ],
+      "excerpt": "2026-10-01T04:34:14.7551656Z E   AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7559424Z E   AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7563701Z E   AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7593757Z FAILED backend/tests/test_mz2_report_isolation.py::ReportIsolationTests::test_actual_refund_month_end_partial_and_final_payment_with_legacy_sentinels - AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7596436Z FAILED backend/tests/test_mz2_receivable_workflow.py::WorkflowTests::test_new_sale_to_existing_settlement_service_and_balance_guard - AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7598508Z FAILED backend/tests/test_mz2_receivable_workflow.py::WorkflowTests::test_partial_full_refund_uses_original_rate - AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:14.7599577Z 3 failed, 254 passed, 6 warnings, 237 subtests passed in 53.26s"
+    },
+    {
+      "run": 36815562390,
+      "name": "MZ2 Accounting Module",
+      "jobs": [
+        {
+          "id": 110219733818,
+          "name": "Manual tax and atomic recovery (real isolated Mongo)"
+        }
+      ],
+      "excerpt": "2026-10-01T04:34:15.1041928Z Ran 11 tests in 0.021s\n2026-10-01T04:34:18.8221781Z FAIL: test_new_sale_to_existing_settlement_service_and_balance_guard (test_mz2_receivable_workflow.WorkflowTests.test_new_sale_to_existing_settlement_service_and_balance_guard)\n2026-10-01T04:34:18.8237119Z AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:18.8238598Z FAIL: test_partial_full_refund_uses_original_rate (test_mz2_receivable_workflow.WorkflowTests.test_partial_full_refund_uses_original_rate)\n2026-10-01T04:34:18.8246129Z AssertionError: 423 != 200 : {\"detail\":{\"code\":\"accounting_legacy_writer_disabled\",\"message\":\"الكاتب القديم مقفل بعد تفعيل ميزان 2\"}}\n2026-10-01T04:34:18.8247077Z Ran 18 tests in 3.034s\n2026-10-01T04:34:18.8247294Z FAILED (failures=2)"
+    }
+  ]
+}
+

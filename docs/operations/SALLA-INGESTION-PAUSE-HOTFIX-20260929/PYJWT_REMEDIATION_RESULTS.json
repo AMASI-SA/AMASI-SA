@@ -1,0 +1,72 @@
+{
+  "checkpoint": {
+    "previous_source": "9b838d9dd6b9ab60c3513323edc1d26f550cc0b9",
+    "dependency_delta": "PyJWT 2.13.0 -> 2.14.0 only in identical backend and release requirements",
+    "production_source_and_test_bytes": "UNCHANGED",
+    "source_gate": "pending new exact-HEAD CI; no B candidate yet",
+    "local_hotfix": {
+      "passed": 23,
+      "subtests_passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "local_g47": {
+      "passed": 125,
+      "subtests_passed": 64,
+      "failed": 0,
+      "skipped": 0
+    },
+    "local_oauth_state": {
+      "passed": 68,
+      "failed": 0,
+      "skipped": 0,
+      "PyJWT": "2.14.0"
+    },
+    "local_salla_oauth": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "PyJWT": "2.14.0",
+      "oauthlib": "4.0.0"
+    },
+    "auth_mcp_passkey": "artifact-only verification in progress; results to follow in Issue1006",
+    "oauth_contract_notes": [
+      "Native Snapchat/Meta/TikTok/Google V2 states use custom HMAC with one-time tenant nonce, not JWT",
+      "Legacy Snapchat and Ads V2 JWT states retain existing signature, expiry and purpose checks; no configured issuer contract or decoder replay guard is claimed"
+    ],
+    "workflow_dependency_note": "Auth Passkey Security focused workflow pins PyJWT2.13.0; additional local actual2.14 regression required and run without workflow/source edits",
+    "live_database_access": {
+      "production_reads": 0,
+      "production_writes": 0,
+      "preview_reads": 0,
+      "preview_writes": 0
+    },
+    "guard": "fresh /app status active:false; no lease created"
+  },
+  "artifacts": {
+    "source-hotfix-focused.xml": {
+      "bytes": 4261,
+      "sha256": "9b6d4cfc1049f9282ca3bc89de6543d06bb6aaa2aa7a8746953189f3754a0400"
+    },
+    "source-g47-full.xml": {
+      "bytes": 21777,
+      "sha256": "d7b00e70558281bc8d976f760f40b20b85fd41ee47217989ae5f169dc0fddb72"
+    },
+    "oauth-state/oauth-state-regression.xml": {
+      "bytes": 14540,
+      "sha256": "cd2e646aceb22d03ec117e151fdda8051b0ef206ffccda2d80f553f1fd9b9fb8"
+    },
+    "oauth-state/oauth-state-result.json": {
+      "bytes": 1693,
+      "sha256": "cf729c9d28e1c322a561adc60e40e723465f186abf0f3ca5b7317c19c02dfe64"
+    },
+    "oauth-state/oauth4-regression.xml": {
+      "bytes": 8849,
+      "sha256": "78a3903a0640a1d9f029bd4cb755872541dd0bf246ed1f055a1db5da109dcbc6"
+    },
+    "oauth-state/oauth4-result.json": {
+      "bytes": 2746,
+      "sha256": "fc67dcf4e5f236de7657a75b89ff268fe41c5ec5a43b26e8203ba443e969209c"
+    }
+  }
+}

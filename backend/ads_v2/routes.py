@@ -35,6 +35,12 @@ from .sync.core import (
 
 logger = logging.getLogger(__name__)
 
+SNAPCHAT_LEGACY_FROZEN_DETAIL = {
+    "code": "snapchat_legacy_frozen",
+    "message": "تم تجميد ربط سناب القديم. استخدم ربط Snapchat داخل ميزان 2.",
+    "redirect_to": "/integrations-v2?provider=snapchat_ads",
+}
+
 
 # ── Request models ─────────────────────────────────────────────────────
 class AccountCreateIn(BaseModel):
@@ -78,8 +84,11 @@ def make_ads_v2_router(db, current_user_dep):
         snap = await settings_dl.get_settings_snapshot(db, user["id"])
         # Augment each account with a lightweight token health check
         for acct in snap["accounts"]:
-            health = await settings_dl.check_v1_token_health(
-                db, user["id"], acct)
+            if acct.get("provider") == "snapchat":
+                health = {"ok": False, **SNAPCHAT_LEGACY_FROZEN_DETAIL}
+            else:
+                health = await settings_dl.check_v1_token_health(
+                    db, user["id"], acct)
             acct["_v1_token_health"] = health
         return {"ok": True, "data": snap}
 
@@ -127,6 +136,8 @@ def make_ads_v2_router(db, current_user_dep):
                                    "google_ads"):
             raise HTTPException(status_code=400,
                                  detail="invalid_provider")
+        if body.provider == "snapchat":
+            raise HTTPException(status_code=410, detail=SNAPCHAT_LEGACY_FROZEN_DETAIL)
         payload = body.model_dump()
         result = await settings_dl.create_or_link_account(
             db, user["id"], payload, actor_email=user.get("email"))
@@ -167,6 +178,8 @@ def make_ads_v2_router(db, current_user_dep):
             {"user_id": user["id"], "id": account_id}, {"_id": 0})
         if not acct:
             raise HTTPException(status_code=404, detail="account_not_found")
+        if acct.get("provider") == "snapchat":
+            raise HTTPException(status_code=410, detail=SNAPCHAT_LEGACY_FROZEN_DETAIL)
         health = await settings_dl.check_v1_token_health(
             db, user["id"], acct)
         # Log event (read-only check, but useful for audit timeline)
@@ -194,6 +207,14 @@ def make_ads_v2_router(db, current_user_dep):
         the "تشخيص" button on the settings page so the merchant sees
         the real reason instead of a bare "خطأ".
         """
+        acct = await db.ads_accounts.find_one(
+            {"user_id": user["id"], "id": account_id},
+            {"_id": 0, "provider": 1},
+        )
+        if not acct:
+            raise HTTPException(status_code=404, detail="account_not_found")
+        if acct.get("provider") == "snapchat":
+            raise HTTPException(status_code=410, detail=SNAPCHAT_LEGACY_FROZEN_DETAIL)
         res = await diagnose_account(db, user["id"], account_id)
         if not res.get("ok"):
             raise HTTPException(404, res.get("error") or "diagnose_failed")
@@ -384,11 +405,5 @@ def make_ads_v2_router(db, current_user_dep):
             date_iso=date_iso, actor_email=user.get("email"),
         )
         return {"ok": res.get("ok", False), "data": res}
-
-    # ── Mount the Snapchat re-link sub-router (safe, V1-preserving) ──
-    from .relink import build_relink_router
-    router.include_router(
-        build_relink_router(db, current_user_dep=current_user_dep)
-    )
 
     return router

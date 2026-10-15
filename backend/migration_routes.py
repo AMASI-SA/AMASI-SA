@@ -538,7 +538,6 @@ def make_migration_router(db) -> APIRouter:
         return {"cutoff": cm, "completed": bool(cm)}
 
     # ── POST /run — dry-run or apply ─────────────────────────────────
-    @router.post("/run")
     async def run_migration(
         payload: MigrationRunIn,
         user: dict = Depends(current_user),
@@ -1154,5 +1153,13 @@ def make_migration_router(db) -> APIRouter:
             "match": match,
             "all_match": all(match.values()),
         }
+
+    @router.post("/run")
+    async def guarded_run_migration(payload: MigrationRunIn, user: dict = Depends(current_user)):
+        from accounting_opening_quarantine import reject_alternate_opening
+        if not payload.dry_run:
+            reject_alternate_opening()
+        result = await run_migration(payload, user=user)
+        return {**result, "report_scope": "LEGACY", "diagnostic_only": True, "read_only": True}
 
     return router

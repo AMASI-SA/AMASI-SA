@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
+from integrations.qoyod.base_url import normalize_qoyod_api_base
 from integrations.qoyod.credentials import get_api_key
 
 
@@ -167,10 +168,10 @@ async def run_identity_diagnostics(db, user_id: str) -> dict:
     """
     queried_at = _now_iso()
     base_url = os.environ.get("QOYOD_API_BASE", "")
-
     api_key = await get_api_key(db, user_id)
     mezan = {
         "base_url":            base_url,
+        "effective_base_url":  normalize_qoyod_api_base(base_url),
         "user_id":             user_id,
         "api_key_present":     bool(api_key),
         "api_key_fingerprint": _key_fingerprint(api_key) if api_key else None,

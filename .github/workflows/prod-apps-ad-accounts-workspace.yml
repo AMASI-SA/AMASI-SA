@@ -1,0 +1,59 @@
+name: Production Apps and Advertising Accounts
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/pages/AppsIntegrationsControlCenter.jsx"
+      - "frontend/src/components/MezanV2NavigationShell.jsx"
+      - "frontend/src/lib/integrationWorkspaces.js"
+      - "frontend/src/lib/integrationWorkspaces.test.js"
+      - ".github/workflows/prod-apps-ad-accounts-workspace.yml"
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+
+      - name: Test applications and accounts workspace
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/lib/integrationWorkspaces.test.js
+          src/components/MezanV2NavigationShell.test.jsx
+
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+
+      - name: Enforce separation contract
+        working-directory: .
+        run: |
+          PAGE=frontend/src/pages/AppsIntegrationsControlCenter.jsx
+          NAV=frontend/src/components/MezanV2NavigationShell.jsx
+          CONTRACT=frontend/src/lib/integrationWorkspaces.js
+
+          grep -q 'الحسابات الإعلانية المرتبطة' "$PAGE"
+          grep -q 'فصل واضح بين الربط والمحاسبة' "$PAGE"
+          grep -q '/integrations-v2?workspace=accounts' "$NAV"
+          grep -q 'ADVERTISING_PROVIDER_IDS' "$CONTRACT"
+          ! grep -q 'api.post("/ad-accounts' "$PAGE"
+          ! grep -q 'accounting_write' "$PAGE"

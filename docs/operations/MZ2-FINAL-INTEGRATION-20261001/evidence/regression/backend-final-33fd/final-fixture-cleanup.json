@@ -1,0 +1,43 @@
+{
+  "result": "PASS",
+  "fixtures": [
+    {
+      "pid": 4972,
+      "port": 27130,
+      "creation_identity_verified": true,
+      "server_pid_verified": true,
+      "loopback_shutdown": true,
+      "port_closed": true,
+      "data_directory_preserved": true
+    },
+    {
+      "pid": 25320,
+      "port": 27131,
+      "creation_identity_verified": true,
+      "server_pid_verified": true,
+      "loopback_shutdown": true,
+      "port_closed": true,
+      "data_directory_preserved": true
+    },
+    {
+      "pid": 20732,
+      "port": 27132,
+      "creation_identity_verified": true,
+      "server_pid_verified": true,
+      "loopback_shutdown": true,
+      "port_closed": true,
+      "data_directory_preserved": true
+    },
+    {
+      "pid": 13692,
+      "port": 27133,
+      "creation_identity_verified": true,
+      "server_pid_verified": true,
+      "loopback_shutdown": true,
+      "port_closed": true,
+      "data_directory_preserved": true
+    }
+  ],
+  "production_access": false,
+  "production_writes": 0
+}

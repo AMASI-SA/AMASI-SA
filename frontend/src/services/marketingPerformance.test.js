@@ -1,7 +1,54 @@
 import {
+    adaptAdsManager,
+    clampSnapchatRangeToAccountToday,
     isMarketingPerformanceProvider,
     normalizeSnapchatMarketingWorkspace,
+    normalizeGoogleMarketingWorkspace,
+    snapchatAccountLocalToday,
+    getMarketingPerformance,
 } from "./marketingPerformance";
+import api from "../lib/api";
+
+jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn() } }));
+
+test("Google report reads the same explicit account as native management", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/workspace")
+        ? { account_id: "222", accounts: [{ account_id: "222", currency: "SAR" }], items: [], totals: {} }
+        : { providers: [] } }));
+    const result = await getMarketingPerformance({ platform: "google", accountId: "222", dateFrom: "2026-10-13", dateTo: "2026-10-13" });
+    const request = api.get.mock.calls.find(([url]) => url.endsWith("/workspace"));
+    expect(request[1].params.account_id).toBe("222");
+    expect(result.account_id).toBe("222");
+});
+
+test("a Google report awaiting account selection has no proven aggregate totals", () => {
+    const result = normalizeGoogleMarketingWorkspace({ account_selection_required: true, accounts: [{ account_id: "111" }, { account_id: "222" }], totals: {}, complete: false });
+    expect(result.account_selection_required).toBe(true);
+    expect(result.account_id).toBeNull();
+    expect(result.totals.spend_sar).toBeNull();
+});
+
+test("selected Google account totals never populate another linked account", () => {
+    const result = normalizeGoogleMarketingWorkspace({ account_id: "222", accounts: [{ account_id: "111", currency: "SAR" }, { account_id: "222", currency: "SAR" }], totals: { spend_native: "12.50" } });
+    expect(result.accounts[0].spend_native).toBeNull();
+    expect(result.accounts[1].spend_native).toBe(12.50);
+});
+
+test("native Google reporting preserves account currency without relabeling it as SAR or Salla sales", () => {
+    const result = normalizeGoogleMarketingWorkspace({ currency_code: "USD", range: { date_from: "2026-10-01", date_to: "2026-10-13", timezone: "America/New_York" },
+        accounts: [{ account_id: "123", name: "أماسي", currency_code: "USD", time_zone: "America/New_York", metrics: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" } }],
+        items: [{ id: "456", account_id: "123", name: "Gift", status: "ENABLED", campaign_type: "SEARCH", currency_code: "USD", budget_native: "50", budget_mode: "DAILY", metrics: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" } }],
+        totals: { spend_native: "45.50", conversions: "4", conversion_value_native: "180" }, permissions: { can_execute: true } });
+    expect(result.accounts[0]).toMatchObject({ currency: "USD", spend_native: 45.50, spend_sar: null, orders: null, sales_sar: null, conversions: 4 });
+    expect(result.campaigns[0]).toMatchObject({ campaign_id: "456", campaign_name: "Gift", spend_sar: null, sales_sar: null, orders: null, spend_native: 45.50 });
+    expect(result.native_totals).toMatchObject({ currency: "USD", spend_native: 45.50 }); expect(result.totals.spend_sar).toBeNull(); expect(result.totals.sales_sar).toBeNull();
+    expect(result.policy.mutations_allowed).toBe(true); expect(result.range.timezone).toBe("America/New_York");
+});
+
+test("mixed native Google currencies are not summed or substituted with zero", () => {
+    const result = normalizeGoogleMarketingWorkspace({ accounts: [{ account_id: "123", currency_code: "USD", metrics: {} }, { account_id: "456", currency_code: "SAR", metrics: {} }], totals: {} });
+    expect(result.native_totals.currency).toBeNull(); expect(result.totals.spend_sar).toBeNull(); expect(result.totals.sales_sar).toBeNull(); expect(result.totals.orders).toBeNull();
+});
 
 test("Snapchat report normalization preserves verified performance and blocks writes", () => {
     const result = normalizeSnapchatMarketingWorkspace(
@@ -15,6 +62,13 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 orders: 5,
                 impressions: 1500,
                 swipes: 70,
+                view_content: 80,
+                add_to_cart: 20,
+                start_checkout: 10,
+                add_billing: 8,
+                paid_reach: 1000,
+                paid_frequency: 1.5,
+                reach_frequency_scope: "exact_one_day_total",
                 roas: 3.33,
                 cpa_sar: 30,
                 ctr_pct: 4.67,
@@ -45,6 +99,11 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 identity_matches: 1,
                 identity_coverage_pct: 100,
                 row_limit_reached: false,
+                platform_total_snapshot_ready: true,
+                platform_direct_account_total_ready: true,
+                platform_action_report_time: "impression",
+                account_spend_source: "direct_ad_account_total",
+                account_commercial_totals_source: "complete_campaign_breakdown_sum",
             },
             ai_readiness: {
                 report_ready: true,
@@ -53,6 +112,7 @@ test("Snapchat report normalization preserves verified performance and blocks wr
                 orders_ready: true,
                 sales_ready: true,
                 ratios_ready: true,
+                funnel_ready: true,
                 ai_analysis_ready: true,
                 campaign_creation_enabled: true,
                 campaign_management_enabled: true,
@@ -80,6 +140,13 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         orders: 5,
         roas: 3.33,
         cpa_sar: 30,
+        view_content: 80,
+        add_to_cart: 20,
+        start_checkout: 10,
+        add_billing: 8,
+        paid_reach: 1000,
+        paid_frequency: 1.5,
+        reach_frequency_scope: "exact_one_day_total",
     });
     expect(result.campaigns[0]).toMatchObject({
         campaign_id: "campaign-1",
@@ -88,12 +155,47 @@ test("Snapchat report normalization preserves verified performance and blocks wr
         sales_sar: 500,
         orders: 5,
     });
+    expect(result.source).toMatchObject({
+        platform_total_snapshot_ready: true,
+        platform_direct_account_total_ready: true,
+        platform_action_report_time: "impression",
+        account_spend_source: "direct_ad_account_total",
+        account_commercial_totals_source: "complete_campaign_breakdown_sum",
+    });
     expect(result.ai_readiness.ai_analysis_ready).toBe(true);
+    expect(result.ai_readiness.funnel_ready).toBe(true);
     expect(result.ai_readiness.campaign_creation_enabled).toBe(false);
     expect(result.ai_readiness.campaign_management_enabled).toBe(false);
     expect(result.policy).toEqual({
         mode: "observe_only",
         mutations_allowed: false,
+    });
+});
+
+test("Snapchat report dates are capped at the earliest account-local day", () => {
+    const integration = {
+        accounts: [
+            { local_today: "2026-08-08" },
+            { local_today: "2026-08-07" },
+            { local_today: "invalid" },
+        ],
+    };
+    const accountLocalToday = snapchatAccountLocalToday(integration);
+
+    expect(accountLocalToday).toBe("2026-08-07");
+    expect(clampSnapchatRangeToAccountToday(
+        { dateFrom: "2026-08-08", dateTo: "2026-08-08" },
+        accountLocalToday,
+    )).toEqual({
+        dateFrom: "2026-08-07",
+        dateTo: "2026-08-07",
+    });
+    expect(clampSnapchatRangeToAccountToday(
+        { dateFrom: "2026-08-01", dateTo: "2026-08-06" },
+        accountLocalToday,
+    )).toEqual({
+        dateFrom: "2026-08-01",
+        dateTo: "2026-08-06",
     });
 });
 
@@ -103,5 +205,68 @@ test("marketing performance route identifiers stay separate from integration IDs
     });
     ["snapchat_ads", "tiktok_ads", "meta_ads", "google_ads"].forEach((provider) => {
         expect(isMarketingPerformanceProvider(provider)).toBe(false);
+    });
+});
+
+
+test("Meta Ads Manager adapter preserves campaign status objective and budget", () => {
+    const result = adaptAdsManager("meta", {
+        range: { date_from: "2026-08-01", date_to: "2026-08-01", timezone: "Asia/Riyadh" },
+        providers: [
+            {
+                provider: "meta",
+                connection_status: "connected",
+                connection_provenance: "api_connection",
+                last_sync_at: "2026-08-01T17:00:00+00:00",
+                health_status: "healthy",
+                health_score: 100,
+                freshness: { data_delay_minutes: 5, observed_days: 1 },
+                performance_coverage: { status: "complete", eligible_for_ratios: true },
+                campaign_coverage: { status: "available", source_rows: 1 },
+                metrics: {
+                    provider_reported_spend_sar: 375,
+                    platform_attributed_revenue_sar: 1125,
+                    platform_reported_purchases: 5,
+                    platform_reported_impressions: 10000,
+                    platform_reported_clicks: 500,
+                    platform_roas: 3,
+                },
+            },
+        ],
+        daily_spend: [{ date: "2026-08-01", meta: 375 }],
+        campaigns: [
+            {
+                provider: "meta",
+                account_id: "act-selected",
+                campaign_id: "campaign-sales",
+                campaign_name: "Sales Riyadh",
+                status: "ACTIVE",
+                delivery_status: "ACTIVE",
+                objective: "OUTCOME_SALES",
+                start_time: "2026-07-01T00:00:00+00:00",
+                end_time: "2026-08-31T23:59:59+00:00",
+                budget: { currency: "USD", daily_native: 250, lifetime_native: 1000 },
+                spend_sar_equivalent: 375,
+                revenue_sar_equivalent: 1125,
+                purchases: 5,
+                impressions: 10000,
+                clicks: 500,
+            },
+        ],
+        campaign_pagination: { page: 1, limit: 25, total: 1, pages: 1 },
+        insights: [],
+        coverage: { source_row_limit_reached: [] },
+    });
+
+    expect(result.campaigns[0]).toMatchObject({
+        campaign_id: "campaign-sales",
+        campaign_name: "Sales Riyadh",
+        status: "ACTIVE",
+        delivery_status: "ACTIVE",
+        objective: "OUTCOME_SALES",
+        budget: { currency: "USD", daily_native: 250, lifetime_native: 1000 },
+        spend_sar: 375,
+        sales_sar: 1125,
+        orders: 5,
     });
 });

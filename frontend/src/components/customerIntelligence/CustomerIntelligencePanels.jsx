@@ -1,4 +1,6 @@
+import { useRef, useState } from "react";
 import {
+    ArrowRight,
     ChartLineUp,
     ChatCircleDots,
     CheckCircle,
@@ -15,6 +17,9 @@ import {
     UsersThree,
     WarningCircle,
 } from "@phosphor-icons/react";
+
+import { formatRiyadhDateTime } from "../../lib/tzUtils";
+import TikTokReplyDelivery, { TikTokReplyHistory } from "./TikTokReplyDelivery";
 
 import {
     Confidence,
@@ -43,92 +48,461 @@ function percent(value) {
     return `${Math.round(numeric * 100)}%`;
 }
 
-function MessagePreview({ message }) {
-    if (message.type === "audio") {
-        return (
-            <article
-                className="rounded-xl border border-blue-200 bg-blue-50 p-4"
-                data-testid="customer-intelligence-audio-message"
-            >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 font-extrabold text-blue-950">
-                        <ChatCircleDots size={21} weight="duotone" />
-                        رسالة صوتية تجريبية
-                    </div>
-                    <span className="rounded-full bg-white px-2.5 py-1 font-mono text-xs font-bold text-blue-700">
-                        {message.duration_seconds || 0} ثانية
-                    </span>
-                </div>
-                <div className="my-3 flex h-8 items-center gap-1 overflow-hidden rounded-lg bg-white/70 px-3" aria-hidden="true">
-                    {[14, 22, 10, 26, 18, 30, 12, 24, 16, 28, 13, 21, 9, 18].map((height, index) => (
-                        <span
-                            key={`${height}-${index}`}
-                            className="w-1 rounded-full bg-blue-400"
-                            style={{ height }}
-                        />
-                    ))}
-                </div>
-                <div className="rounded-lg bg-white p-3">
-                    <div className="text-[11px] font-extrabold text-blue-600">تفريغ تجريبي للصوت</div>
-                    <p className="mt-1 text-sm leading-6 text-slate-800">{message.transcript || "لا يوجد تفريغ."}</p>
-                </div>
-                {message.analysis && (
-                    <p className="mt-3 text-xs font-semibold leading-5 text-blue-800">
-                        نتيجة التحليل التجريبية: {message.analysis}
-                    </p>
-                )}
-            </article>
-        );
+function liveMessageLabel(message, provider) {
+    const commentProvider = provider === "tiktok" ? "تيك توك" : "إنستغرام";
+    if (message.direction === "outbound" && message.sender === "employee") {
+        return message.surface === "comment"
+            ? `رد الموظف على تعليق ${commentProvider}`
+            : "رد الموظف من القناة";
     }
+    if (message.surface === "comment") return `تعليق ${commentProvider} وارد`;
+    const labels = {
+        text: "رسالة نصية واردة",
+        image: "صورة واردة",
+        audio: "رسالة صوتية واردة",
+        document: "مستند وارد",
+        interactive: "تفاعل وارد",
+    };
+    return labels[message.kind] || "رسالة واردة";
+}
 
-    if (message.type === "image") {
-        return (
-            <article
-                className="grid gap-4 rounded-xl border border-violet-200 bg-violet-50 p-4 sm:grid-cols-[150px_minmax(0,1fr)]"
-                data-testid="customer-intelligence-image-message"
-            >
-                <div
-                    className="flex min-h-36 items-center justify-center rounded-xl border border-violet-200 bg-gradient-to-br from-slate-900 via-blue-950 to-violet-900 text-white"
-                    role="img"
-                    aria-label="صورة منتج تجريبية غير حقيقية"
-                >
-                    <div className="text-center">
-                        <ImageSquare size={38} weight="duotone" className="mx-auto" />
-                        <div className="mt-2 text-[11px] font-extrabold">صورة تجريبية</div>
-                    </div>
-                </div>
-                <div className="min-w-0">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-extrabold text-violet-950">
-                            {message.caption || "صورة أرسلها العميل"}
-                        </div>
-                        <StatusPill status="preview_only" />
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-violet-950">
-                        {message.analysis || "لا توجد نتيجة تحليل."}
-                    </p>
-                    <div className="mt-4">
-                        <Confidence value={message.confidence} label="ثقة المطابقة التجريبية" />
-                    </div>
-                    <p className="mt-3 text-[11px] font-bold text-violet-700">
-                        لا تُستخدم النتيجة كإثبات تطابق، ولا ينشأ منها منتج.
-                    </p>
-                </div>
-            </article>
-        );
-    }
+function liveMessageDeliveryLabel(message) {
+    if (message.direction !== "outbound") return "مستلمة";
+    const labels = {
+        sent: "أُرسل",
+        delivered: "تم التسليم",
+        read: "تمت القراءة",
+        failed: "تعذر الإرسال",
+    };
+    return labels[message.delivery_state] || "رد موظف";
+}
 
+function liveMessageBody(message) {
+    if (!message.content_available) return "تعذر عرض محتوى الرسالة المشفّر.";
+    if (message.body) return message.body;
+    if (message.caption) return message.caption;
+    if (message.kind === "document" && message.filename) return message.filename;
+    const placeholders = {
+        image: "تم حفظ مرجع الصورة بأمان، والمعاينة غير متاحة في هذه المرحلة.",
+        audio: "تم حفظ مرجع الرسالة الصوتية بأمان، والتشغيل غير متاح في هذه المرحلة.",
+        document: "تم حفظ مرجع المستند بأمان، والتنزيل غير متاح في هذه المرحلة.",
+        interactive: "تم استلام تفاعل من قناة العميل.",
+        text: "لا يوجد نص قابل للعرض.",
+    };
+    return placeholders[message.kind] || "لا يوجد محتوى قابل للعرض.";
+}
+
+function LiveInboxMessage({ message, provider }) {
+    const isMedia = ["image", "audio", "document"].includes(message.kind);
+    const employeeEcho = message.direction === "outbound" && message.sender === "employee";
     return (
         <article
-            className="max-w-3xl rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-            data-testid="customer-intelligence-text-message"
+            className={`max-w-[88%] rounded-xl border p-4 sm:max-w-3xl ${
+                employeeEcho
+                    ? "mr-auto border-violet-200 bg-violet-50"
+                    : "ml-auto border-emerald-200 bg-emerald-50"
+            }`}
+            data-testid="customer-intelligence-live-message"
+            data-message-kind={message.kind}
+            data-message-direction={message.direction}
         >
-            <div className="mb-2 flex items-center gap-2 text-xs font-extrabold text-emerald-700">
-                <ChatCircleDots size={18} weight="duotone" />
-                رسالة نصية تجريبية واردة
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className={`flex items-center gap-2 text-xs font-extrabold ${
+                    employeeEcho ? "text-violet-800" : "text-emerald-800"
+                }`}>
+                    {message.kind === "image"
+                        ? <ImageSquare size={18} weight="duotone" />
+                        : <ChatCircleDots size={18} weight="duotone" />}
+                    {liveMessageLabel(message, provider)}
+                </div>
+                <StatusPill
+                    status={message.delivery_state === "failed" ? "blocked" : "open"}
+                    label={liveMessageDeliveryLabel(message)}
+                />
             </div>
-            <p className="text-sm leading-7 text-emerald-950">{message.body || "—"}</p>
+            <p
+                className={`mt-3 whitespace-pre-wrap break-words text-sm leading-7 ${
+                    employeeEcho ? "text-violet-950" : "text-emerald-950"
+                }`}
+                dir="auto"
+            >
+                {liveMessageBody(message)}
+            </p>
+            {isMedia && message.mime_type && (
+                <div className={`mt-2 font-mono text-[11px] ${
+                    employeeEcho ? "text-violet-700" : "text-emerald-700"
+                }`} dir="ltr">
+                    {message.mime_type}
+                </div>
+            )}
+            <time
+                className={`num mt-3 block text-[11px] font-bold ${
+                    employeeEcho ? "text-violet-700" : "text-emerald-700"
+                }`}
+                dateTime={message.occurred_at || undefined}
+            >
+                {formatRiyadhDateTime(message.occurred_at)}
+            </time>
         </article>
+    );
+}
+
+function TikTokReplyPolicy({ conversationId, onSave }) {
+    const [code, setCode] = useState("");
+    const [feedback, setFeedback] = useState("");
+    const [busy, setBusy] = useState(false);
+    const lock = useRef(false);
+    const save = async () => {
+        if (lock.current || !/^[A-Za-z0-9_-]{1,32}$/.test(code.trim())) return;
+        lock.current = true;
+        setBusy(true);
+        setFeedback("");
+        try {
+            const saved = await onSave(conversationId, code.trim());
+            setFeedback(`تم اعتماد كود ${saved.discount_code} لمسودات تعليقات تيك توك لهذا المتجر. المسودة القديمة لا تتغير تلقائيًا.`);
+        } catch (_error) {
+            setFeedback("تعذر حفظ كود الخصم. تحقق من صلاحية المالك وأعد المحاولة.");
+        } finally {
+            lock.current = false;
+            setBusy(false);
+        }
+    };
+    return <section className="mt-4 rounded-xl border border-violet-200 p-4" aria-label="إعداد كود الخصم لتعليقات تيك توك">
+        <label htmlFor="tiktok-reply-coupon" className="block font-bold">كود الخصم المعتمد لهذا المتجر</label>
+        <p className="my-2 text-sm">يستخدمه الذكاء عند طلب الخصم بصياغة متنوعة تناسب العميل. الحفظ لا يرسل بيانات إلى OpenAI ولا ينشر ردًا.</p>
+        <input id="tiktok-reply-coupon" value={code} maxLength={32} dir="ltr" className="rounded border p-2" onChange={event => setCode(event.target.value)} />
+        <button type="button" className="m-2 rounded bg-violet-700 p-2 text-white" disabled={busy || !/^[A-Za-z0-9_-]{1,32}$/.test(code.trim())} onClick={save}>{busy ? "جارٍ الحفظ…" : "اعتماد كود الخصم"}</button>
+        {feedback && <p role="status">{feedback}</p>}
+    </section>;
+}
+
+function PendingReplySuggestion({
+    provider,
+    suggestion,
+    onReview = null,
+    onReject = null,
+    onEscalate = null,
+    onRegenerate = null,
+}) {
+    const [draft, setDraft] = useState(suggestion.text);
+    const [busyAction, setBusyAction] = useState("");
+    const [feedback, setFeedback] = useState("");
+    const actionLock = useRef(false);
+
+    const runAction = async (action, callback) => {
+        if (typeof callback !== "function" || actionLock.current) return;
+        actionLock.current = true;
+        setBusyAction(action);
+        setFeedback("");
+        try {
+            await callback(suggestion.conversation_id, suggestion.id, {
+                text: draft.trim(),
+                version: suggestion.version,
+            });
+            setFeedback(action === "regenerate"
+                ? "تمت إعادة توليد المسودة دون إرسال رد للعميل."
+                : action === "review"
+                ? "تم حفظ مراجعة الموظف دون إرسال الرسالة."
+                : action === "reject"
+                    ? "تم رفض الاقتراح دون إرسال الرسالة."
+                    : "تم تصعيد المحادثة لمراجعة بشرية دون إرسال الرسالة.");
+        } catch (_error) {
+            setFeedback("تعذر حفظ الإجراء. لم يُرسل أي رد للعميل.");
+        } finally {
+            actionLock.current = false;
+            setBusyAction("");
+        }
+    };
+
+    return (
+        <section
+            className="mt-5 rounded-xl border-2 border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-pending-reply-suggestion"
+            data-suggestion-status="pending_approval"
+        >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div className="font-black text-violet-950">اقتراح رد من ذكاء ميزان</div>
+                    <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
+                        يحتاج اعتماد موظف. راجع النص وعدّله قبل أي اعتماد مستقبلي.
+                    </p>
+                    {suggestion.surface === "comment" && (
+                        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                            هذا رد عام على تعليق {provider === "tiktok" ? "تيك توك" : "إنستغرام"}: لا تذكر بيانات طلب أو جوال أو عنوان،
+                            وانقل التفاصيل الحساسة إلى الرسائل الخاصة.
+                        </p>
+                    )}
+                </div>
+                <StatusPill status="needs_review" label="بانتظار اعتماد الموظف" />
+            </div>
+
+            <label
+                className="mt-4 block text-xs font-extrabold text-slate-700"
+                htmlFor={`reply-suggestion-${suggestion.id}`}
+            >
+                نص الرد المقترح
+            </label>
+            <textarea
+                id={`reply-suggestion-${suggestion.id}`}
+                value={draft}
+                disabled={busyAction !== ""}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={5}
+                className="mt-2 w-full resize-y rounded-xl border border-violet-200 bg-white p-3 text-sm leading-7 text-slate-950 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
+                dir="auto"
+                data-testid="customer-intelligence-reply-suggestion-editor"
+            />
+            <p className="mt-2 text-[11px] font-bold leading-5 text-slate-500">
+                تعديل النص لا يرسله، وضغط Enter يضيف سطرًا فقط.
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <button
+                    type="button"
+                    onClick={() => runAction("review", onReview)}
+                    disabled={busyAction !== "" || !draft.trim() || typeof onReview !== "function"}
+                    className="min-h-11 rounded-lg border border-emerald-300 bg-white px-3 text-sm font-extrabold text-emerald-800 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-review-suggestion"
+                >
+                    {busyAction === "review" ? "جارٍ الحفظ…" : "حفظ المراجعة"}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => runAction("reject", onReject)}
+                    disabled={busyAction !== "" || typeof onReject !== "function"}
+                    className="min-h-11 rounded-lg border border-rose-300 bg-white px-3 text-sm font-extrabold text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-reject-suggestion"
+                >
+                    {busyAction === "reject" ? "جارٍ الرفض…" : "رفض الاقتراح"}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => runAction("escalate", onEscalate)}
+                    disabled={busyAction !== "" || typeof onEscalate !== "function"}
+                    className="min-h-11 rounded-lg border border-amber-300 bg-white px-3 text-sm font-extrabold text-amber-900 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="customer-intelligence-escalate-suggestion"
+                >
+                    {busyAction === "escalate" ? "جارٍ التصعيد…" : "تصعيد لموظف"}
+                </button>
+            </div>
+
+            {provider === "tiktok" && typeof onRegenerate === "function" && <div className="mt-3 rounded border border-violet-200 p-3">
+                <p className="text-xs leading-6">إعادة التوليد ترسل نص أحدث 12 رسالة بحد 8000 حرف وتعليمات الرد وكود المتجر إلى OpenAI، دون حقول الاسم والمعرفات ومع تعطيل حفظ حالة الاستجابة. راجع نص المحادثة أعلاه قبل الطلب. ستُستبدل المسودة دون إرسالها إلى العميل.</p>
+                <button type="button" disabled={busyAction !== ""} className="mt-2 rounded bg-violet-700 p-2 text-white"
+                    onClick={() => runAction("regenerate", (conversationId, suggestionId, review) => onRegenerate(conversationId, suggestionId, review.version))}>
+                    {busyAction === "regenerate" ? "جارٍ إعادة التوليد…" : "إرسال السياق إلى OpenAI وإعادة التوليد"}
+                </button>
+            </div>}
+            {provider === "tiktok" && typeof onRegenerate === "function" && <TikTokReplyDelivery
+                suggestion={suggestion} text={draft} disabled={busyAction !== ""} onConsumed={() => setBusyAction("sent")} />}
+            {!(provider === "tiktok" && typeof onRegenerate === "function") && <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="الإرسال مقفل حاليًا في سياسة الأمان"
+                className="mt-3 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-slate-300 px-4 text-sm font-black text-slate-600 opacity-80"
+                data-testid="customer-intelligence-approve-and-send"
+            >
+                <LockKey size={18} weight="duotone" />
+                اعتماد وإرسال — الإرسال مقفل حاليًا
+            </button>}
+            {feedback && (
+                <p
+                    className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-5 text-slate-700"
+                    role="status"
+                    data-testid="customer-intelligence-suggestion-feedback"
+                >
+                    {feedback}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function CreateReplySuggestion({ conversationId, surface = "direct_message", onCreate = null }) {
+    const [creating, setCreating] = useState(false);
+    const [error, setError] = useState("");
+    const createLock = useRef(false);
+
+    const create = async () => {
+        if (createLock.current || typeof onCreate !== "function") return;
+        createLock.current = true;
+        setCreating(true);
+        setError("");
+        try {
+            await onCreate(conversationId);
+        } catch (_requestError) {
+            setError("تعذر إنشاء الاقتراح. لم يُرسل أي رد للعميل.");
+        } finally {
+            createLock.current = false;
+            setCreating(false);
+        }
+    };
+
+    return (
+        <section
+            className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-create-suggestion-panel"
+        >
+            <div className="font-black text-violet-950">لا يوجد اقتراح جاهز للمراجعة</div>
+            <p className="mt-1 text-xs font-bold leading-5 text-violet-800">
+                يمكنك طلب اقتراح من الذكاء لهذه المحادثة. لن يؤدي ذلك إلى إرسال أي رد للعميل.
+            </p>
+            {surface === "comment" && (
+                <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                    إنشاء الاقتراح يرسل نص سياق المحادثة، حتى 12 رسالة، إلى OpenAI. سيُصاغ الرد كتعليق عام قصير بلا بيانات شخصية، ويطلب الانتقال للخاص عند الحاجة.
+                </p>
+            )}
+            <button
+                type="button"
+                onClick={create}
+                disabled={creating || typeof onCreate !== "function"}
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-violet-700 px-4 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                data-testid="customer-intelligence-create-suggestion"
+            >
+                <ChatCircleDots size={18} weight="duotone" />
+                {creating ? "جارٍ إنشاء الاقتراح…" : "إنشاء اقتراح بالذكاء"}
+            </button>
+            {error && (
+                <p
+                    className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold leading-5 text-rose-900"
+                    role="alert"
+                    data-testid="customer-intelligence-create-suggestion-error"
+                >
+                    {error}
+                </p>
+            )}
+        </section>
+    );
+}
+
+function InstagramSetupCard({ setup, onConnect = null }) {
+    const [busyRef, setBusyRef] = useState("");
+    const [feedback, setFeedback] = useState("");
+    if (!setup || setup.state === "connected") return null;
+
+    const messages = {
+        meta_reauthorization_required: "أعد ربط Meta من مركز التطبيقات لمنح صلاحيات رسائل وتعليقات إنستغرام الجديدة، ثم ارجع هنا.",
+        no_instagram_account: "لم يعثر ربط Meta الحالي على حساب إنستغرام احترافي مرتبط.",
+        store_not_ready: "يلزم وجود متجر سلة واحد متصل قبل إنشاء ذاكرة قناة إنستغرام.",
+    };
+    const connect = async (candidateRef) => {
+        if (busyRef || typeof onConnect !== "function") return;
+        setBusyRef(candidateRef);
+        setFeedback("");
+        try {
+            await onConnect(candidateRef);
+            setFeedback("تم إنشاء ربط إنستغرام للاستقبال فقط دون تفعيل الإرسال.");
+        } catch (_error) {
+            setFeedback("تعذر إكمال الربط. لم تتغير صلاحيات الإرسال أو ربط واتساب.");
+        } finally {
+            setBusyRef("");
+        }
+    };
+
+    return (
+        <section
+            className="rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-instagram-setup"
+        >
+            <div className="flex items-start gap-3">
+                <Plug size={24} weight="duotone" className="mt-0.5 shrink-0 text-violet-700" />
+                <div className="min-w-0 flex-1">
+                    <div className="font-black text-violet-950">إكمال ربط إنستغرام مع ذكاء ميزان</div>
+                    <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
+                        الربط يستخدم تطبيق Meta نفسه، ويستقبل التعليقات والرسائل فقط. الإرسال التلقائي مغلق.
+                    </p>
+                    {setup.state === "ready" ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {(setup.candidates || []).map((candidate) => (
+                                <button
+                                    key={candidate.candidate_ref}
+                                    type="button"
+                                    onClick={() => connect(candidate.candidate_ref)}
+                                    disabled={busyRef !== "" || typeof onConnect !== "function"}
+                                    className="min-h-11 rounded-lg bg-violet-700 px-4 text-sm font-black text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                                >
+                                    {busyRef === candidate.candidate_ref
+                                        ? "جارٍ الربط…"
+                                        : `ربط ${candidate.display_name}`}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950">
+                            {messages[setup.state] || "إعداد إنستغرام غير جاهز حاليًا."}
+                        </p>
+                    )}
+                    {feedback && (
+                        <p className="mt-3 text-xs font-extrabold leading-5 text-violet-900" role="status">
+                            {feedback}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function CustomerLearningStatusCard({ status }) {
+    if (!status) return null;
+    const totalEvidence = status.total_evidence_events
+        ?? ((status.inbound_customer_messages || 0) + (status.employee_responses || 0));
+    const metadataOnlyMedia = status.metadata_only_media_events || 0;
+    const state = {
+        healthy: ["يعمل بصورة سليمة", "open"],
+        processing: ["جارٍ تحليل الوارد", "needs_review"],
+        attention_required: ["توجد رسائل تحتاج مراجعة", "blocked"],
+        no_data: ["بانتظار أول تفاعل", "open"],
+        not_configured: ["تشغيل الذكاء غير جاهز", "blocked"],
+    }[status.state] || ["حالة غير معروفة", "blocked"];
+    return (
+        <section
+            className="rounded-xl border border-violet-200 bg-violet-50 p-4"
+            data-testid="customer-intelligence-learning-status"
+            data-learning-state={status.state}
+        >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <Eye size={24} weight="duotone" className="mt-0.5 shrink-0 text-violet-700" />
+                    <div>
+                        <div className="font-black text-violet-950">تغذية ذكاء ميزان من قنوات العملاء</div>
+                        <p className="mt-1 text-xs font-bold leading-6 text-violet-800">
+                            التحليل يتبع إعدادات كل قناة. تعليقات تيك توك تُستورد يدويًا ولا تُرسل
+                            للتحليل تلقائيًا؛ إنشاء مسودة الرد إجراء منفصل، ومقترحات التنفيذ خاضعة للمراجعة البشرية.
+                        </p>
+                    </div>
+                </div>
+                <StatusPill status={state[1]} label={state[0]} />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                {[
+                    ["تغطية طابور الذكاء", `${status.queue_coverage_percent}%`],
+                    ["اكتمل تحليلها", `${status.analyzed_messages} / ${totalEvidence}`],
+                    ["قيد التحليل", status.pending_messages],
+                    ["مشكلات مفتوحة", status.open_problems],
+                    ["قرارات مقترحة", status.proposed_decisions],
+                    ["وسائط ببيانات وصفية فقط", metadataOnlyMedia],
+                ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-violet-100 bg-white p-3">
+                        <div className="text-[11px] font-extrabold text-violet-700">{label}</div>
+                        <div className="num mt-1 text-lg font-black text-violet-950">{value}</div>
+                    </div>
+                ))}
+            </div>
+            {status.failed_messages > 0 && (
+                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-extrabold leading-5 text-rose-900">
+                    تعذر تحليل <span className="num">{status.failed_messages}</span> تفاعل بعد المحاولات الآمنة؛
+                    بقي محفوظًا ويحتاج مراجعة تشغيلية، ولم يُرسل أي رد تلقائي.
+                </p>
+            )}
+            {metadataOnlyMedia > 0 && (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-extrabold leading-5 text-amber-950">
+                    توجد <span className="num">{metadataOnlyMedia}</span> رسالة وسائط بلا نص أو وصف؛
+                    دخل حدثها وبياناتها الوصفية في التحليل، لكن محتوى الصورة أو الصوت نفسه يحتاج موصل وسائط آمنًا.
+                </p>
+            )}
+        </section>
     );
 }
 
@@ -220,88 +594,243 @@ export function OverviewPanel({ model, writesLocked, policyKeys }) {
     );
 }
 
-export function ConversationsPanel({ model }) {
-    const conversations = model.conversations || [];
-    if (!conversations.length) {
-        return <EmptyState title="لا توجد محادثات في المعاينة" />;
-    }
-    const conversation = conversations[0];
-    const allMessages = conversations.flatMap((row) => row.messages || []);
-    const showcaseMessages = ["text", "audio", "image"]
-        .map((type) => allMessages.find((message) => message.type === type))
-        .filter(Boolean);
+export function ConversationsPanel({
+    inbox,
+    error = "",
+    learningStatus = null,
+    instagramSetup = null,
+    onConnectInstagram = null,
+    onSaveTikTokPolicy = null,
+    onRegenerateTikTokSuggestion = null,
+    onCreateSuggestion = null,
+    onReviewSuggestion = null,
+    onRejectSuggestion = null,
+    onEscalateSuggestion = null,
+}) {
+    const conversations = inbox?.conversations || [];
+    const [selectedId, setSelectedId] = useState("");
+    const explicitlySelected = conversations.some((row) => row.id === selectedId);
+    const selectedConversation = conversations.find((row) => row.id === selectedId)
+        || conversations[0]
+        || null;
+    const connected = inbox?.connection?.status === "connected";
+    const connections = inbox?.connections || [];
+    const providerName = (provider) => ({ instagram: "إنستغرام", tiktok: "تيك توك" }[provider] || "واتساب");
+    const conversationChannelLabel = (conversation) => {
+        if (conversation?.channel === "tiktok") return "تيك توك · تعليق عام";
+        if (conversation?.channel !== "instagram") return "واتساب";
+        return conversation.surface === "comment"
+            ? "إنستغرام · تعليق عام"
+            : "إنستغرام · رسالة خاصة";
+    };
+
+    // The parent renders the single canonical inbox error banner. Avoid a
+    // second empty/error state here for the same failed request.
+    if (error) return null;
+
     return (
-        <div className="grid gap-5 xl:grid-cols-[minmax(280px,.7fr)_minmax(0,1.3fr)]" data-testid="customer-intelligence-panel-conversations">
-            <div className="space-y-4">
-                <PreviewModeBanner compact />
-                <Panel
-                    title={conversation.customer_name || "عميل تجريبي"}
-                    subtitle="واتساب وهمي · لا اتصال خارجي"
-                    Icon={UsersThree}
-                    testid="customer-intelligence-conversation-summary"
-                >
-                    <div className="flex flex-wrap gap-2">
-                        <StatusPill status={conversation.status} />
-                        <StatusPill status="mock_provider" label="WhatsApp وهمي" />
-                    </div>
-                    <dl className="mt-4 space-y-3 text-sm">
-                        <div>
-                            <dt className="text-xs font-bold text-slate-500">النية</dt>
-                            <dd className="mt-1 font-extrabold text-slate-900">{conversation.intent || "—"}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-xs font-bold text-slate-500">الاعتراض</dt>
-                            <dd className="mt-1 font-extrabold text-slate-900">{conversation.objection || "—"}</dd>
-                        </div>
-                    </dl>
-                    <div className="mt-4">
-                        <Confidence value={conversation.confidence} />
-                    </div>
-                </Panel>
-
-                <Panel
-                    title="ملخص الذكاء"
-                    subtitle="استنتاج تجريبي، وليس حقيقة مؤكدة."
-                    Icon={ChartLineUp}
-                    testid="customer-intelligence-ai-summary"
-                >
-                    <p className="text-sm leading-7 text-slate-700">{conversation.ai_summary || "—"}</p>
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-[11px] font-extrabold text-amber-700">الخطوة المقترحة</div>
-                        <p className="mt-1 text-sm font-bold leading-6 text-amber-950">
-                            {conversation.next_best_action || "تحتاج مراجعة الموظف."}
-                        </p>
-                    </div>
-                </Panel>
-            </div>
-
-            <Panel
-                title="سياق المحادثة التجريبي"
-                subtitle="أمثلة نص وصوت وصورة لإثبات جاهزية الواجهة متعددة الوسائط."
-                Icon={ChatCircleDots}
-                testid="customer-intelligence-message-stream"
+        <div className="space-y-5" data-testid="customer-intelligence-panel-conversations" data-live-inbox="true">
+            <InstagramSetupCard setup={instagramSetup} onConnect={onConnectInstagram} />
+            <CustomerLearningStatusCard status={learningStatus} />
+            <section
+                className={`rounded-xl border p-4 ${
+                    connected
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                        : "border-amber-200 bg-amber-50 text-amber-950"
+                }`}
+                data-testid="customer-intelligence-live-connection"
             >
-                <div className="space-y-4">
-                    {showcaseMessages.map((message) => (
-                        <MessagePreview key={message.id} message={message} />
-                    ))}
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                        {connected
+                            ? <CheckCircle size={24} weight="duotone" className="mt-0.5 shrink-0 text-emerald-700" />
+                            : <WarningCircle size={24} weight="duotone" className="mt-0.5 shrink-0 text-amber-700" />}
+                        <div>
+                            <div className="font-extrabold">
+                                {connected
+                                    ? "قنوات العملاء متصلة وتستقبل التفاعلات"
+                                    : "قنوات العملاء غير جاهزة للاستقبال"}
+                            </div>
+                            <p className="mt-1 text-xs leading-5 opacity-80">
+                                صندوق وارد حقيقي. الرد التلقائي وإجراءات التجارة مغلقة. ردود تيك توك العامة تتطلب تحققًا ومعاينة واعتماد المالك قبل إرسالها.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs font-bold">
+                        {connections.map((item) => (
+                            <span
+                                key={item.provider}
+                                className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5"
+                            >
+                                {`${providerName(item.provider)} · ${item.status === "connected" ? "متصل" : "غير متصل"}`}
+                            </span>
+                        ))}
+                        <span className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5">
+                            <span className="num">{inbox?.conversation_count || 0}</span> محادثة
+                        </span>
+                        <span className="rounded-full border border-current/10 bg-white/70 px-3 py-1.5">
+                            <span className="num">{inbox?.message_count || 0}</span> رسالة
+                        </span>
+                    </div>
                 </div>
+                {(inbox?.content_unavailable_count || 0) > 0 && (
+                    <div
+                        className="mt-3 rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-xs font-bold leading-5 text-amber-950"
+                        data-testid="customer-intelligence-content-unavailable-warning"
+                    >
+                        تعذر عرض محتوى <span className="num">{inbox.content_unavailable_count}</span> رسالة
+                        محفوظة. الربط ما زال يستقبل، ويجب مراجعة إعداد تشفير العملاء في Backend.
+                    </div>
+                )}
+            </section>
+
+            {!connected ? (
+                <EmptyState
+                    title="لا توجد قناة عملاء جاهزة للاستقبال"
+                    detail="تظهر رسائل واتساب وإنستغرام بعد الربط، وتعليقات تيك توك بعد استيرادها من صفحة المنشورات."
+                />
+            ) : !conversations.length ? (
+                <EmptyState
+                    title="لا توجد رسائل واردة حتى الآن"
+                    detail="الربط متصل، وستظهر أول محادثة بعد وصول رسالة جديدة."
+                />
+            ) : (
                 <div
-                    className="mt-5 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50 p-4"
-                    data-testid="customer-intelligence-suggested-reply"
+                    className="grid gap-5 lg:grid-cols-[minmax(300px,.75fr)_minmax(0,1.25fr)]"
+                    data-testid="customer-intelligence-responsive-inbox"
                 >
-                    <div className="flex items-center gap-2 text-sm font-extrabold text-emerald-800">
-                        <Eye size={19} weight="duotone" />
-                        معاينة رد مقترح — غير قابل للإرسال
+                    <div className={explicitlySelected ? "hidden lg:block" : "block"}>
+                        <Panel
+                            title="محادثات وتفاعلات العملاء"
+                            subtitle="الأحدث أولًا · اختر محادثة لعرض الرسائل المحفوظة المتاحة"
+                            Icon={UsersThree}
+                            testid="customer-intelligence-live-conversation-list"
+                        >
+                        <div className="space-y-2" role="list" aria-label="محادثات وتفاعلات العملاء الواردة">
+                            {conversations.map((conversation) => {
+                                const active = conversation.id === selectedConversation?.id;
+                                return (
+                                    <div key={conversation.id} role="listitem">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedId(conversation.id)}
+                                            className={`w-full rounded-xl border p-3 text-right transition ${
+                                                active
+                                                    ? "border-emerald-500 bg-emerald-50 shadow-sm"
+                                                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40"
+                                            }`}
+                                            aria-pressed={active}
+                                            data-testid="customer-intelligence-live-conversation"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate font-extrabold text-slate-950">
+                                                        {conversation.customer_name || "عميل القناة"}
+                                                    </div>
+                                                    <div className="mt-1 text-[11px] font-extrabold text-violet-700">
+                                                        {conversationChannelLabel(conversation)}
+                                                    </div>
+                                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600" dir="auto">
+                                                        {conversation.last_message || "لا توجد رسالة قابلة للعرض"}
+                                                    </p>
+                                                </div>
+                                                <StatusPill status={conversation.status} />
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-500">
+                                                <time className="num" dateTime={conversation.last_message_at || undefined}>
+                                                    {formatRiyadhDateTime(conversation.last_message_at)}
+                                                </time>
+                                                <span><span className="num">{conversation.message_count}</span> رسالة</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {inbox?.has_more && (
+                            <p className="mt-3 text-center text-xs font-bold text-slate-500">
+                                توجد محادثات أقدم غير معروضة في هذه الصفحة.
+                            </p>
+                        )}
+                        </Panel>
                     </div>
-                    <p className="mt-2 text-sm leading-7 text-emerald-950">
-                        {conversation.suggested_reply || "لا يوجد رد مقترح."}
-                    </p>
-                    <div className="mt-3 text-[11px] font-bold text-emerald-700">
-                        لا يوجد زر إرسال في هذه المرحلة.
+
+                    <div className={explicitlySelected ? "block" : "hidden lg:block"}>
+                        <button
+                            type="button"
+                            onClick={() => setSelectedId("")}
+                            className="mb-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 lg:hidden"
+                            data-testid="customer-intelligence-back-to-conversations"
+                        >
+                            <ArrowRight size={18} weight="bold" />
+                            رجوع إلى المحادثات
+                        </button>
+                        <Panel
+                            title={selectedConversation?.customer_name || "محادثة عميل"}
+                            subtitle="رسائل العميل وردود الموظف المحفوظة في ميزان · بتوقيت الرياض"
+                            Icon={ChatCircleDots}
+                            testid="customer-intelligence-live-message-stream"
+                            actions={<StatusPill status={selectedConversation?.status} />}
+                        >
+                        {selectedConversation?.surface === "comment" && (
+                            <div
+                                className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-extrabold leading-6 text-amber-950"
+                                data-testid="customer-intelligence-public-comment-warning"
+                            >
+                                هذا تعليق عام على {providerName(selectedConversation.channel)}. لا تعرض بيانات الطلب أو الجوال أو العنوان؛
+                                اطلب من العميل الانتقال إلى الرسائل الخاصة لأي تفاصيل حساسة.
+                            </div>
+                        )}
+                        {selectedConversation?.messages?.length ? (
+                            <>
+                                {selectedConversation.message_count > selectedConversation.messages.length && (
+                                    <p
+                                        className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"
+                                        data-testid="customer-intelligence-message-window-notice"
+                                    >
+                                        يعرض أحدث <span className="num">{selectedConversation.messages.length}</span> من <span className="num">{selectedConversation.message_count}</span> رسالة.
+                                    </p>
+                                )}
+                                <div className="space-y-3" aria-label="سجل رسائل العميل وردود الموظف">
+                                    {selectedConversation.messages.map((message) => (
+                                        <LiveInboxMessage key={message.id} message={message} provider={selectedConversation.channel} />
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <EmptyState title="لا توجد رسالة قابلة للعرض في هذه المحادثة" />
+                        )}
+                            {selectedConversation?.channel === "tiktok" && typeof onSaveTikTokPolicy === "function" && (
+                                <TikTokReplyPolicy key={selectedConversation.id} conversationId={selectedConversation.id} onSave={onSaveTikTokPolicy} />
+                            )}
+                            {selectedConversation?.channel === "tiktok" && typeof onRegenerateTikTokSuggestion === "function" && (
+                                <TikTokReplyHistory key={`history:${selectedConversation.id}`} conversationId={selectedConversation.id} />
+                            )}
+                            {selectedConversation?.reply_suggestion && (
+                                <PendingReplySuggestion
+                                    key={`${selectedConversation.reply_suggestion.id}:${selectedConversation.reply_suggestion.version}`}
+                                    suggestion={selectedConversation.reply_suggestion}
+                                    provider={selectedConversation.channel}
+                                    onRegenerate={onRegenerateTikTokSuggestion}
+                                    onReview={onReviewSuggestion}
+                                    onReject={onRejectSuggestion}
+                                    onEscalate={onEscalateSuggestion}
+                                />
+                            )}
+                            {!selectedConversation?.reply_suggestion && (
+                                <CreateReplySuggestion
+                                    conversationId={selectedConversation?.id}
+                                    surface={selectedConversation?.surface}
+                                    onCreate={onCreateSuggestion}
+                                />
+                            )}
+                            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold leading-6 text-slate-600">
+                                لا يتم إرسال أي رد عند فتح الشاشة أو تعديل النص أو ضغط Enter.
+                            </div>
+                        </Panel>
                     </div>
                 </div>
-            </Panel>
+            )}
         </div>
     );
 }

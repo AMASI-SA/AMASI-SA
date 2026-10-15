@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import inspect
 import re
+import httpx
 import pytest
 
-from integrations.qoyod.api_client import QoyodAPIClient
+from integrations.qoyod.api_client import QoyodAPIClient, QoyodAPIError
 
 
 # (method_name, expected_http_verb, expected_path)
@@ -57,3 +58,70 @@ def test_no_residual_contacts_post_in_api_client_source():
     # _request("POST", "/contacts" call.
     bad = re.search(r'_request\(\s*["\']POST["\']\s*,\s*["\']/contacts["\']', source)
     assert bad is None, "POST /contacts is forbidden — use POST /customers."
+
+
+@pytest.mark.asyncio
+async def test_legacy_base_is_normalized_before_product_read(monkeypatch):
+    calls = []
+
+    class FakeHTTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            calls.append(url)
+            request = httpx.Request(method, url)
+            return httpx.Response(
+                200,
+                json={"products": [{"id": 42, "sku": "TARGET"}]},
+                request=request,
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
+    client = QoyodAPIClient(
+        "synthetic",
+        base_url="https://legacy.qoyod.com/api/2.0",
+    )
+
+    body = await client.list_products(page=1, limit=1)
+
+    assert body["products"][0]["id"] == 42
+    assert calls == [
+        "https://api.qoyod.com/2.0/products",
+    ]
+    assert client._base_url == "https://api.qoyod.com/2.0"
+
+
+@pytest.mark.asyncio
+async def test_normalized_canonical_product_failure_stays_fail_closed(monkeypatch):
+    class FakeHTTP:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def request(self, method, url, **kwargs):
+            request = httpx.Request(method, url)
+            return httpx.Response(401, json={"error": "refused"}, request=request)
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeHTTP)
+    client = QoyodAPIClient(
+        "synthetic",
+        base_url="https://legacy.qoyod.com/api/2.0",
+    )
+
+    with pytest.raises(QoyodAPIError) as result:
+        await client.list_products(page=1, limit=1)
+
+    assert result.value.status_code == 401
+    assert client._base_url == "https://api.qoyod.com/2.0"

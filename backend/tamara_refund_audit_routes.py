@@ -8,11 +8,11 @@ Two diagnostic tracks, single endpoint, ZERO writes:
     whether a matching payment_refunds row exists (by
     provider_payment_id OR `synthetic:<pid>`).  Surface
     `refunded_amount`, `updated_at_provider`, `created_at_provider`
-    and any cached refunds from `raw_payload`.
+    and selected cached refund dates from `raw_payload`.
 
   Track B — Targeted old-capture inspection:
-    For each `order_numbers` passed in, dump the FULL local picture
-    (payment_transactions doc, payment_refunds rows, every
+    For each `order_numbers` passed in, report selected diagnostic fields
+    (payment_transactions, payment_refunds, every
     settlement_entries row across ALL periods).  Optionally probe
     Tamara API for the live order to compare statuses & settlement
     metadata.
@@ -25,6 +25,25 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from security_public_errors import public_error
+from security_sensitive_routes import require_security_owner
+from tamara_fix_plan_dryrun_routes import (
+    _diagnostic_fields, _diagnostic_money, _diagnostic_scalar,
+)
+
+
+_TRANSACTION_FIELDS = (
+    "id", "provider", "provider_id", "order_number", "order_reference_id",
+    "amount", "captured_amount", "refunded_amount", "currency", "status",
+    "created_at_provider", "updated_at_provider", "effective_settlement_date",
+    "billing_eligible_at", "settlement_source", "provider_settlement_id",
+    "provider_settlement_date", "is_pre_accounting",
+)
+_REFUND_FIELDS = (
+    "id", "provider", "provider_refund_id", "provider_payment_id",
+    "order_number", "order_reference_id", "amount", "currency", "status",
+    "refunded_at", "created_at_provider", "synthesised", "is_pre_accounting",
+)
 
 
 def _r(n) -> float:
@@ -32,6 +51,7 @@ def _r(n) -> float:
 
 
 def _safe(v) -> Optional[str]:
+    v = _diagnostic_scalar(v)
     if v is None:
         return None
     return str(v) if not isinstance(v, str) else v
@@ -57,6 +77,7 @@ def make_tamara_refund_audit_router(db, current_user):
     ):
         """READ-ONLY. Returns Track A (refund row coverage) +
         Track B (targeted old-capture deep inspection)."""
+        user = await require_security_owner(db, user)
         uid = user["id"]
         from bnpl.settlements_service import _local_date_window_utc
         utc_gte, utc_lte = _local_date_window_utc(date_from, date_to)
@@ -101,7 +122,7 @@ def make_tamara_refund_audit_router(db, current_user):
                      ]},
                     {"_id": 0, "id": 1, "amount": 1, "refunded_at": 1,
                      "provider_refund_id": 1, "synthesised": 1,
-                     "reason": 1, "status": 1},
+                     "status": 1},
                 )
 
             # Pull cached refund hints from raw_payload (Tamara order
@@ -137,15 +158,15 @@ def make_tamara_refund_audit_router(db, current_user):
                 "tamara_total_refunded_amount": total_refunded_amount,
                 "tamara_refunds_array_len": tamara_refunds_arr_len,
                 "tamara_refunded_at": _safe(tamara_refunded_at),
-                "status": t.get("status"),
-                "currency": t.get("currency") or "SAR",
+                "status": _diagnostic_scalar(t.get("status")),
+                "currency": _diagnostic_scalar(t.get("currency")) or "SAR",
                 "created_at_provider": _safe(t.get("created_at_provider")),
                 "updated_at_provider": _safe(t.get("updated_at_provider")),
                 "effective_settlement_date":
                     _safe(t.get("effective_settlement_date")),
                 "billing_eligible_at": _safe(t.get("billing_eligible_at")),
                 "has_payment_refund": bool(existing),
-                "payment_refund_row": existing or None,
+                "payment_refund_row": _diagnostic_fields(existing, _REFUND_FIELDS),
             }
             if existing:
                 track_a_with_refund += 1
@@ -178,8 +199,7 @@ def make_tamara_refund_audit_router(db, current_user):
                     tamara_probe_errors.append(
                         "Tamara api_token not set — skipping live probe.")
             except Exception as exc:  # noqa: BLE001
-                tamara_probe_errors.append(
-                    f"failed to init Tamara client: {type(exc).__name__}: {exc}")
+                tamara_probe_errors.append(public_error("provider_operation_failed"))
                 client = None
 
         for onum in target_numbers:
@@ -189,7 +209,7 @@ def make_tamara_refund_audit_router(db, current_user):
                      {"order_number": onum},
                      {"order_reference_id": onum},
                  ]},
-                {"_id": 0, "raw_payload": 0},
+                {"_id": 0, **dict.fromkeys(_TRANSACTION_FIELDS, 1)},
             )
             refunds_local = await db.payment_refunds.find(
                 {"user_id": uid, "provider": "tamara",
@@ -198,7 +218,7 @@ def make_tamara_refund_audit_router(db, current_user):
                      *([{"provider_payment_id": (txn or {}).get("provider_id")}]
                        if (txn or {}).get("provider_id") else []),
                  ]},
-                {"_id": 0},
+                {"_id": 0, **dict.fromkeys(_REFUND_FIELDS, 1)},
             ).to_list(50)
 
             # All settlement_entries across ALL periods for this order.
@@ -229,48 +249,46 @@ def make_tamara_refund_audit_router(db, current_user):
                     if isinstance(raw, dict):
                         # Extract just the fields useful for diagnosis.
                         live = {
-                            "status": raw.get("status"),
-                            "total_amount": raw.get("total_amount"),
+                            "status": _diagnostic_scalar(raw.get("status")),
+                            "total_amount": _diagnostic_money(raw.get("total_amount")),
                             "total_refunded_amount":
-                                raw.get("total_refunded_amount"),
-                            "refunded_amount": raw.get("refunded_amount"),
-                            "settlement_id": raw.get("settlement_id"),
-                            "settlement": raw.get("settlement"),
-                            "settled_at": raw.get("settled_at"),
+                                _diagnostic_money(raw.get("total_refunded_amount")),
+                            "refunded_amount": _diagnostic_money(raw.get("refunded_amount")),
+                            "settlement_id": _diagnostic_scalar(raw.get("settlement_id")),
+                            "settlement": _diagnostic_fields(raw.get("settlement"),
+                                ("settlement_id", "status", "settlement_date", "settled_at")),
+                            "settled_at": _diagnostic_scalar(raw.get("settled_at")),
                             "captures_count": len(raw.get("captures") or []),
                             "refunds_array_len":
                                 len(raw.get("refunds") or []),
                             "refund_orders_array_len":
                                 len(raw.get("refund_orders") or []),
-                            "updated_at": raw.get("updated_at"),
-                            "created_at": raw.get("created_at"),
-                            "top_level_keys": sorted(raw.keys()),
+                            "updated_at": _diagnostic_scalar(raw.get("updated_at")),
+                            "created_at": _diagnostic_scalar(raw.get("created_at")),
+                            "top_level_keys": sorted(set(raw).intersection({
+                                "status", "total_amount", "total_refunded_amount", "refunded_amount",
+                                "settlement_id", "settlement", "settled_at", "captures", "refunds",
+                                "refund_orders", "updated_at", "created_at",
+                            })),
                         }
                         # Surface settlement-date hints in captures.
                         cap_settled_dates = []
                         for c in (raw.get("captures") or []):
                             if isinstance(c, dict):
-                                cap_settled_dates.append({
-                                    "capture_id": c.get("capture_id"),
-                                    "settled_at": c.get("settled_at"),
-                                    "created_at": c.get("created_at"),
-                                    "settlement_id": c.get("settlement_id"),
-                                })
+                                cap_settled_dates.append(_diagnostic_fields(c,
+                                    ("capture_id", "settled_at", "created_at", "settlement_id")))
                         live["captures_settlement_hints"] = cap_settled_dates
                 except TamaraError as exc:
-                    live_error = f"TamaraError {exc.status}: {exc.detail[:200]}"
+                    live_error = public_error("provider_operation_failed")
                 except Exception as exc:  # noqa: BLE001
-                    live_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+                    live_error = public_error("provider_operation_failed")
 
             row = {
                 "order_number_query": onum,
                 "found_in_payment_transactions": bool(txn),
-                "payment_transaction": (
-                    {k: v for k, v in (txn or {}).items()
-                     if k != "raw_payload"} if txn else None
-                ),
+                "payment_transaction": _diagnostic_fields(txn, _TRANSACTION_FIELDS),
                 "payment_refunds_count": len(refunds_local),
-                "payment_refunds": refunds_local,
+                "payment_refunds": [_diagnostic_fields(row, _REFUND_FIELDS) for row in refunds_local],
                 "settlement_entries_count": len(settlement_rows),
                 "settlement_entries_all_periods": settlement_rows,
                 "settlement_dates_observed": sorted({

@@ -469,87 +469,211 @@ The Phase 1 boundary is mandatory:
 
 ---
 
-## Decision-029 — Mezan Is AI-Native, Not AI-Dependent
+## Decision-029 — Employee Identity Is Separate from Login and Salary
 
-Status: Approved, architecture mandatory
+Status: Approved, Phase 1 implementation
 
-The long-term target is one AI-native Mezan OS, not a separate AI product and
-not a wholesale rewrite of the current system.
+Mezan V2 owns one canonical employee identity. A login account, operational
+role, salary contract and financial ledger entity are linked capabilities; none
+of them is the employee's identity by itself.
 
-Correct deterministic commerce, operational and accounting modules remain the
-authoritative foundation. AI reasons above trusted facts and invokes approved
-tools; it does not replace source-of-truth calculations or make core operation
-dependent on a language model being available.
+The initial migration is a guarded `shadow_read_only` copy:
 
-The binding architecture is defined in:
-
-`docs/adr/ADR-002-ai-native-operating-model.md`
-
----
-
-## Decision-030 — Existing Work Evolves Additively into the AI Architecture
-
-Status: Approved
-
-Validated work on Salla, advertising platforms, GA4, dashboards, products,
-costs, orders, suppliers, receiving, customer service, accounting and the
-integration control center remains part of Mezan OS.
-
-AI work must reuse those modules as factual inputs, deterministic services or
-execution connectors wherever they are correct. A separate duplicate AI stack
-must not be created merely to expose the same business capability to an agent.
+- `operating_salaries` remains payroll authority until a validated cutover.
+- `general_ledger` remains the authority for salary payable, advances and
+  custody; migration never recomputes or rewrites historical balances.
+- Existing users and operational role assignments are linked only through an
+  explicit identifier. A name match may be shown as a review suggestion but is
+  never applied automatically.
+- Migration is idempotent, audited and blocks duplicate legacy identities.
+- Salary changes become effective-dated contracts after cutover; historical
+  contracts are never overwritten.
+- The legacy employee page is retired only after one complete payroll cycle,
+  fulfillment permission checks and 100% count/value reconciliation pass.
+- AI may recommend assignments or flag anomalies. Salary payment, termination,
+  sensitive permission changes and payroll cutover require human approval.
 
 ---
 
-## Decision-031 — All AI-Initiated Writes Pass Through the Action Gateway
+## Decision-030 — Employee Management Opens Through a Single-Employee Pilot
 
-Status: Approved, architecture mandatory
+Status: Superseded by Decision-032 after pilot acceptance
 
-No AI model or agent may mutate a production database or external provider
-directly.
+Write-capable Employees V2 management starts with one native pilot employee
+before any of the 15 shadow-migrated employee records can be edited.
 
-Every AI-initiated action must pass through a Mezan Action Gateway that enforces
-identity, tenant isolation, permissions, allowlists, risk checks, approval level,
-budget/loss limits where applicable, idempotency, audit logging, deterministic
-execution, outcome measurement and rollback state.
+The pilot boundary is mandatory:
 
----
+- Only the owner can create, edit, link or assign the pilot employee.
+- At most one pilot employee exists per owner.
+- Pilot status is limited to `draft` or `inactive`; it cannot become payroll
+  active.
+- Pilot salary stays in an `employees_v2_pilot_only` contract with payroll,
+  legacy salary, liability and general-ledger writes disabled.
+- The 15 shadow-migrated employees remain read-only.
+- A login account must belong to the owner's team, must not be the owner, and
+  must have no employee link or operational role already.
+- Accounts suggested for migrated employees remain reserved for manual review;
+  this includes the unresolved Arafat suggestion.
+- Pilot account linkage is V2-only and does not write the legacy
+  `users.linked_employee_id` reverse link.
+- Role assignment uses the canonical `mezan_role_assignments_v2` catalogue and
+  is limited to the linked pilot account.
+- Create, edit, link, unlink and role actions append employee audit events.
 
-## Decision-032 — Specialized Agents Do Not Own Business Truth
-
-Status: Approved
-
-Mezan may use a supervisory agent and specialized Profit, Ads, Customer,
-Product, Orders, Accounting, Growth and Risk agents.
-
-Agents consume canonical and deterministic facts. They may produce analyses,
-recommendations or bounded action requests, but they do not become competing
-sources of truth for orders, costs, accounting, inventory, customers or provider
-facts.
-
----
-
-## Decision-033 — Business Memory Is Structured and Traceable
-
-Status: Approved
-
-Mezan must retain durable business memory as structured system data, including
-prior decisions, experiments, campaign outcomes, product profitability,
-operational patterns, legitimate customer signals, accepted/rejected
-recommendations and measured results.
-
-Conversational memory alone is not a business system of record. Durable memory
-must preserve provenance, time, version and confidence where applicable.
+Opening writes for the 15 migrated employees requires a separate acceptance
+decision after the pilot passes create/edit/link/role/unlink/audit checks and
+financial invariants remain unchanged.
 
 ---
 
-## Decision-034 — Deterministic Operation Is the Safe Degradation Mode
+## Decision-031 — Live Customer Memory Ingestion Is Encrypted and Read-Only
 
-Status: Approved
+Status: Approved, Abandoned Carts V2 foundation
 
-If an AI provider, model or agent is unavailable, degraded or below confidence
-threshold, Mezan's correctness-critical commerce, operational and accounting
-workflows must continue through deterministic code and explicit human controls.
+Mezan may ingest live Salla abandoned-cart and customer identity evidence into
+a dedicated tenant-scoped memory before Customer Intelligence exits its
+synthetic preview, provided that the ingestion boundary remains read-only and
+does not activate any customer or advertising action.
 
-AI unavailability must reduce intelligence or automation, not corrupt business
-truth or make core operations unavailable.
+The mandatory boundary is:
+
+- Customer name, email, mobile and address fields are encrypted at rest and
+  never copied into analytics snapshots, event audit records, logs or public
+  status responses as plaintext.
+- Customer lookup aliases are keyed HMAC digests; provider customer IDs are
+  provider-scoped, while contact aliases may join future channels to the same
+  identity inside the same tenant and merchant only.
+- Cart recovery URLs and coupon codes are encrypted. Public cart records expose
+  only presence and coverage facts.
+- Existing abandoned-cart collections are upgraded in place to schema V2 so
+  historical carts are not split or discarded.
+- First-touch and last-touch attribution are both preserved. Platform,
+  account, campaign, ad-group, ad, creative, click and UTM identifiers are
+  stored only when supplied by verified cart/order evidence; missing evidence
+  is not inferred.
+- A converted cart may recover attribution from its linked authoritative order.
+- Customer identity links added to `unified_orders` are additive metadata only.
+  They never change order state, totals, payment, shipment, accounting or
+  product facts, and an existing identity link is never overwritten silently.
+- Historical imports remain idempotent, retry bounded and read-only toward
+  Salla. Encryption configuration fails closed rather than storing plaintext.
+- The Customer Intelligence UI remains synthetic under Decision-028. Live PII
+  decryption, messaging, discounts, order creation, campaign mutation and AI
+  execution require later owner-only APIs, approvals, audit and rollback gates.
+
+---
+
+## Decision-032 — Employee Management Is Open While Payroll Remains Read-Only
+
+Status: Approved, Employee OS management closeout
+
+The single-employee pilot in Decision-030 has passed its management and audit
+checks. Owner-managed identity and access writes are now open for all canonical
+Employee V2 records, including the previously shadow-migrated employees.
+
+The approved boundary is:
+
+- The owner may create or edit employees, activate or deactivate them, link or
+  unlink a non-owner team login, reset its password and assign an operational
+  role.
+- Deactivation and unlinking revoke current and future authenticated access
+  immediately. Reactivation restores only the account and role state that was
+  explicitly preserved for that employee.
+- The preparation employee role remains limited to assigned-work read and work
+  permissions. It does not inherit owner, financial or broad operational access.
+- Every employee, account, password and role action appends an actor-stamped
+  event with before/after state. Password plaintext is never recorded.
+- `operating_salaries`, liabilities, advances, custody and `general_ledger`
+  remain authoritative and read-only from Employee OS. Employee management
+  creates no salary contract and makes zero financial writes.
+- Payroll cutover, salary editing and retirement of the legacy employee page
+  still require the reconciliation and parallel-cycle gates in Decision-029.
+
+---
+
+## Decision-033 — Customer Conversations Use One Channel-Neutral Mezan Core
+
+Status: Approved, persistence foundation only
+
+Mezan owns the customer and conversation memory. WhatsApp, Instagram and
+TikTok are transport adapters around that core; no channel platform or external
+AI product becomes the customer source of truth.
+
+The persistence foundation consists of five logical entities:
+
+- `customers` is the non-PII profile and routing record.
+- `customer_identities` is the existing encrypted
+  `mezan_customer_identities_v1` vault. It is reused, not copied or replaced.
+- `channels` identifies a tenant's provider account without storing provider
+  credentials or customer contact details in plaintext.
+- `conversations` links one provider thread to one canonical Mezan customer.
+- `conversation_messages` stores immutable channel evidence with encrypted
+  content and provider idempotency keys.
+
+Customer, conversation and message identity and lookup indexes are scoped by
+the authenticated Mezan tenant and merchant. Provider account, conversation
+and message references are non-reversible keys rather than raw phone numbers,
+handles or external IDs. A signed provider webhook is resolved through one
+global, unique provider-account HMAC; that binding contains no raw provider
+identifier and is used only to select the tenant before normal scoped access.
+
+This decision creates models and Mongo indexes only. It adds no channel
+webhook, provider client, GPT call, mutation endpoint or send worker. Outbound
+messaging, automatic replies, order creation, discounts, payment links and
+product mutations remain disabled. A later Channel Gateway decision must
+preserve this core and introduce inbound adapters before any egress capability.
+
+---
+
+## Decision-034 — WhatsApp Is the First Receive-Only Channel Adapter
+
+Status: Approved, disabled-by-default ingress implementation
+
+WhatsApp Cloud API is the first real channel connected to the shared Channel
+Gateway. The implementation accepts only Meta webhook verification and signed
+inbound message notifications.
+
+The boundary is mandatory:
+
+- Meta's GET challenge must match a backend-only verify token.
+- Every POST must carry a valid `X-Hub-Signature-256` computed over the exact
+  raw request body with the backend-only Meta App Secret.
+- A verified `phone_number_id` resolves through a non-reversible binding to
+  exactly one tenant channel. It is never accepted as `user_id` from the
+  webhook body.
+- Text and supported media/interactive evidence is normalized through the
+  shared Channel Gateway. Raw webhook bodies are not persisted.
+- Message text, contact identity and media references are encrypted at rest;
+  message IDs are idempotent HMAC keys.
+- Status-only and unsupported events never become fabricated customer
+  messages.
+- The adapter has no WhatsApp access token or send client. The router exposes
+  only GET/POST on `/channels/whatsapp/webhook`; no send operation exists.
+- GPT execution, auto-reply, employee reply, orders, discounts, payment links
+  and product mutations remain disabled and absent from this adapter.
+
+Production ingress stays off until the owner-approved channel binding, App
+Secret, verify token, HMAC key and PII encryption key are installed in the
+backend deployment environment.
+
+---
+
+## Decision-035 — Legacy Payroll Retirement Requires a Three-Way Read-Only Gate
+
+Status: Approved, cutover-readiness implementation
+
+Employee OS reports payroll retirement readiness without changing payroll or
+financial authority. The gate compares three independent surfaces:
+
+- Legacy live payroll accrual, paid cash, net due and open salary advances.
+- A fresh V2 projection built only from persisted effective-dated shadow
+  contracts; it must not copy current legacy amounts into the projection.
+- Posted `general_ledger` salary-payable and advance balances.
+
+Retirement remains blocked when an employee or contract is missing, any status,
+amount or effective date differs, projected accrual or net due differs, ledger
+salary payable or advances are unreconciled, V2 salary-contract management is
+disabled, or one complete parallel payroll cycle has not passed. The gate is
+owner-visible, read-only and makes zero financial writes. It does not by itself
+authorize salary editing, switch payroll authority or hide the legacy page.

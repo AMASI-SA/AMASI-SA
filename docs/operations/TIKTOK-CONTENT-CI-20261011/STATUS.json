@@ -1,0 +1,269 @@
+{
+  "task_id": "TIKTOK-CONTENT-CI-20261011",
+  "scope": "Phase5: separate TikTok creator-account authorization and owner-approved organic video/photo publishing using verified public media URLs; bounded manual status/history; reuse encrypted token infrastructure and existing Mezan UI. Subsequent CI slice connects comments to existing receive-only inbox and AI draft/review lifecycle; messaging remains capability-gated.",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-content-ci-20261011",
+  "base_production_sha": "20191e31116bfa9921057ba907fd6df9b62c023b",
+  "phase": "final_candidate_pending_ci_and_frozen_intent",
+  "production_changed": false,
+  "previous_task_checkpoint": {
+    "branch": "codex/tiktok-governed-management-handoff-20261010",
+    "sha": "78f46b8cddf7b0dea09105cc1f2b5f2fc0d8eff3",
+    "runtime_verified": true,
+    "guard_active": false
+  },
+  "acceptance": [
+    "Creator credentials must be distinct from Marketing advertiser credentials; account owner, actual token_info app_id/creator_id/scope verified",
+    "No media fetch, file upload, local storage, transcoding, autoplay, polling or unbounded list. TikTok pulls owner-verified public HTTPS URLs directly",
+    "Fresh verified URL property and creator video settings proof on preview and again before execution; finite bounded metadata, fresh scope and token expiry",
+    "Immutable owner preview, explicit exact confirmation, durable one execution claim and creator quota; ambiguous POST never retried, including with a new idempotency key",
+    "Publish share_id is a task ID, public post_ids only after read-only PUBLISH_COMPLETE, drafts are inbox delivery only",
+    "Browser-bound single-use creator OAuth nonce, existing callback compatibility, encrypted token/refreshtoken, refresh epoch/CAS and no public secrets",
+    "Comment ingress uses existing ChannelGateway encryption and tenant ownership; AI reply remains existing suggestion/review and no private model payload without specific consent",
+    "Actual Messaging scopes/readiness displayed honestly; account approval alone is not actual creator grant",
+    "Focused failing public route/UI baseline, isolated real Mongo and transport contracts; broader affected tests and CI before review/merge/release"
+  ],
+  "permissions": {
+    "git_source_merge_publish": "Explicitly authorized by user",
+    "creator_oauth_new_grant": "Not performed; action-time confirmation when concrete consent screen is ready",
+    "live_ai_private_payload": "Blocked by automatic approval review; no bypass",
+    "real_organic_content_publish": "No specific media/caption selected yet; synthetic tests only"
+  },
+  "changed_files": [
+    "backend/tests/test_tiktok_content_routes.py",
+    "frontend/src/pages/MarketingPlatformWorkspace.tiktok-content.test.jsx",
+    "backend/integrations_control_center/tiktok_creator_api.py",
+    "backend/integrations_control_center/tiktok_creator_accounts.py",
+    "backend/integrations_control_center/tiktok_connections.py",
+    "backend/tests/test_tiktok_creator_accounts.py",
+    "backend/integrations_control_center/tiktok_content_publishing.py",
+    "backend/integrations_control_center/tiktok_native_reporting_routes.py",
+    "backend/integrations_control_center/tiktok_native_guard.py",
+    "backend/tests/test_tiktok_content_publishing.py",
+    "frontend/src/components/marketing/TikTokContentWorkspace.jsx",
+    "frontend/src/components/marketing/TikTokContentWorkspace.test.jsx",
+    "frontend/src/pages/MarketingPlatformWorkspace.jsx",
+    ".github/workflows/prod-tiktok-native-hierarchy.yml",
+    ".github/workflows/tiktok-content-release-candidate.yml"
+  ],
+  "verification": {
+    "provider_writes": 0,
+    "media_transfers": 0,
+    "live_ai_calls": 0,
+    "gap_tests": "Public baseline proved 5 backend route failures and missing TikTok UI tab before implementation; creator contract tests now green",
+    "baseline": {
+      "head": "369e431b3685f67f7e7efa8ec09d751a14ba829a",
+      "backend": {
+        "failed": 5,
+        "passed": 0,
+        "exit_code": 1,
+        "seconds": 0.89,
+        "warnings": 1,
+        "reason": "Every new content route returned404 instead of expected422/403/413",
+        "python": "/root/.venv/bin/python"
+      },
+      "frontend": {
+        "failed": 1,
+        "passed": 1,
+        "exit_code": 1,
+        "reason": "TikTok content tab absent; other platform navigation test passed"
+      },
+      "dependency_install_exit": 0,
+      "initial_environment_error": "Default /usr/local/bin/python had no pytest; rerun with existing Mezan venv established valid product gap"
+    },
+    "current": {
+      "head": "5c80bca18dddf666a354f71c805dac654d9c0137",
+      "backend": {
+        "head": "7343d5278140dad6da968a575410d826cf3877e8",
+        "exit": 0,
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0,
+        "warnings": 1,
+        "seconds": 6.25,
+        "files": [
+          "test_tiktok_creator_accounts.py",
+          "test_tiktok_content_routes.py",
+          "test_tiktok_content_publishing.py"
+        ]
+      },
+      "runtime": "Owned disposable loopback Mongo27486 PID37010, WiredTiger cache0.25GB; unique dropped fixture databases; no Production Mongo used",
+      "publisher": "Public account+route+publisher contracts pending corrected test run",
+      "publisher_initial": {
+        "head": "a02a89fe6b54a277aa894ff6a91ce33fd94af8f9",
+        "exit": 2,
+        "passed": 0,
+        "classification": "Test fixture import used bare module instead of repository tests package; corrected after inspecting existing tests conventions"
+      },
+      "ui": {
+        "head": "7343d5278140dad6da968a575410d826cf3877e8",
+        "exit": 1,
+        "failed": 7,
+        "passed": 11,
+        "suites_failed": 1,
+        "suites_passed": 4,
+        "root": "DOM test environment window.crypto absent; corrected test boundary setup. No product assertion reached in 7 failed component tests."
+      },
+      "isolation_exit": 0,
+      "diff_exit": 2,
+      "diff_correction": "Removed added blank lines at EOF in three own modified files",
+      "ui_corrected": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "exit": 0,
+        "passed": 18,
+        "failed": 0,
+        "suites_passed": 5,
+        "suites_failed": 0,
+        "seconds": 2.675
+      },
+      "diff_corrected_exit": 0,
+      "native_ci": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "run_id": 38105107813,
+        "backend": "success",
+        "frontend": "success",
+        "source_build": "success",
+        "isolation": "success"
+      },
+      "release_ci": {
+        "head": "5b637c3fb2c90db601de27725101b3de4776f760",
+        "run_id": 38105107810,
+        "job_id": 114368839829,
+        "conclusion": "failure",
+        "cause": "Candidate A auto-resolution rejected Production20191 dependency changes after prior reviewed200e A/B pair; source build source differs from previous intent. No bypass or CI downgrade.",
+        "resolution": "Use adapter freeze_intent supported explicit source_base_git_sha=200e66c7a6e60f04bd58fae716b3981ad07ce3d1 after final source A clean build; bind entire backend/runtime/release-control/frontend manifests including already-merged approved PR1333 dependency declarations. Final B must pass all required CI and clean adapter rehearsal before any merge/publish."
+      },
+      "final_functional_ci": {
+        "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
+        "run_id": 38106439674,
+        "backend": {
+          "passed": 229,
+          "failed": 0,
+          "warnings": 1,
+          "seconds": 15.92,
+          "job": 114372873213
+        },
+        "frontend": {
+          "passed": 53,
+          "suites": 13,
+          "failed": 0,
+          "job": 114372873370
+        },
+        "isolation": "success"
+      },
+      "local_broad": {
+        "head": "7bb0448d048070ffd1a3753c63e7567e500da531",
+        "backend": {
+          "passed": 214,
+          "failed": 12,
+          "seconds": 14.35,
+          "classification": "Actual shared development cgroup critical pressure: governor cancel,7718MiB/8192MiB,ratio0.94215. The older hierarchy/scheduler functional cases depend on host admission; same full suite passed independently in GitHub. Production guard was not changed or disabled."
+        },
+        "frontend": {
+          "passed": 53,
+          "suites": 13,
+          "failed": 0,
+          "seconds": 3.559
+        },
+        "isolation_exit": 0,
+        "diff_exit": 0
+      },
+      "new_boundary_tests": "Public callback both auth_code and code, slash variants, and access-log redaction passed in full focused CI",
+      "compression_baseline": {
+        "worktree_head": "7bb0448d048070ffd1a3753c63e7567e500da531",
+        "external_requests": 0,
+        "observed_accept_encoding": "gzip, deflate",
+        "gap": "HTTPX began consuming compressed bytes before applying decoded response cap; unread stream sentinel raised, proving gap without allocating inflated payload."
+      }
+    }
+  },
+  "next_action": "Require new isolated creator candidate artifact and complete functional CI for compression boundary; download exact new A intent and create intent-only B; original B readiness and clean adapter rehearsal required.",
+  "updated_at": "2026-10-11T02:58:56.875Z",
+  "secrets_included": false,
+  "base_update": {
+    "previous": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "current": "20191e31116bfa9921057ba907fd6df9b62c023b",
+    "pr": 1333,
+    "scope": "Approved PDF/QR runtime dependency declarations",
+    "paths": [
+      "backend/requirements.txt",
+      "scripts/release_backend_requirements.lock"
+    ],
+    "tiktok_source_unchanged": true,
+    "app_head_unchanged": true,
+    "guard_active": false,
+    "ledger_latest": "Read-only last5 on 2026-10-11; shipping Draft1332 remains separate; no issue comment sent."
+  },
+  "pr": {
+    "number": 1334,
+    "draft": true,
+    "merged": false
+  },
+  "implementation": {
+    "creator_token_family_separate": true,
+    "opaque_state_contains_no_owner_id": true,
+    "browser_binding": true,
+    "token_info_app_creator_scope_verification": true,
+    "encrypted_tokens_and_creator_id": true,
+    "ambiguous_refresh_never_retried": true,
+    "metadata_body_limit": 32768,
+    "provider_response_limit": 131072,
+    "single_worker_immediate_pressure_refusal": true,
+    "provider_url_secret_logging_suppressed_in_own_context": true,
+    "publisher_implemented": true,
+    "ui_implemented": true,
+    "unused_preview_partial_ttl": true,
+    "max_open_previews_per_creator": 20,
+    "messaging_scopes": "Official token contract message.list.read/send/manage; actual granted scopes only, not requested in publishing OAuth",
+    "compressed_metadata_denied_before_stream_read": true
+  },
+  "owned_test_process": {
+    "pid": 37010,
+    "port": 27486,
+    "dbpath": "/tmp/mezan-tiktok-content-mongo-20261011",
+    "launch_record": "/tmp/mezan-tiktok-content-mongo-launch.json",
+    "source_worktree": "/tmp/mezan-tiktok-content-ci-20261011",
+    "sigterm_sent": true,
+    "stopped_verified": true
+  },
+  "resume_evidence": {
+    "guard_active": false,
+    "own_worktree_clean": true,
+    "app_tracked_clean": true,
+    "pr_head_matches": true,
+    "gh_cli_auth_unavailable": true,
+    "issue_connector": "Latest ledger already read before current continuation; fresh full comment read returned transport closed; no unsolicited issue write"
+  },
+  "release_candidate": {
+    "workflow": ".github/workflows/tiktok-content-release-candidate.yml",
+    "source_base": "200e66c7a6e60f04bd58fae716b3981ad07ce3d1",
+    "build_location": "Isolated GitHub runner to avoid memory pressure on Mezan development host",
+    "lease_created": false,
+    "publish": false,
+    "artifact": "tiktok-content-reviewed-intent-<exact source A sha>",
+    "protocol": "Supported adapter explicit source-base validation: exact prior A/B pair, unchanged intent throughout J..A, full frontend/backend/release-control manifests; final reviewed B must also pass original release-readiness and clean adapter rehearsal",
+    "initial_run": {
+      "run_id": 38106439731,
+      "head": "97f17af7cca5c6e2bb94ad41080f168b792a7c46",
+      "exit": 1,
+      "cause": "GitHub reserved GITHUB_SHA retains synthetic merge identity despite job-level env. Corrected to task-specific PR_SOURCE_GIT_SHA while keeping trusted GitHub event markers untouched; build dispatcher already supports observed PR head."
+    },
+    "previous_candidate": {
+      "head": "e5bc7879e4f1e7f0f408f0e5dc3f415e58096582",
+      "run_id": 38106729604,
+      "conclusion": "success",
+      "artifact_id": 11689838256,
+      "invalidated": "Additional bounded transport regression correction requires new source A and frozen intent."
+    }
+  },
+  "developer_portal": {
+    "verified_at": "2026-10-11T02:50:12.556Z",
+    "app_id": "7693921814656876565",
+    "status": "Approved",
+    "creator_redirect_uri": "https://mezansalla.com/api/integrations-v2/tiktok/callback",
+    "requested_scopes_all_in_registered_authorization_url": true,
+    "messaging_scopes_in_registered_authorization_url": false,
+    "external_permissions_changed": false,
+    "secrets_read": false
+  }
+}

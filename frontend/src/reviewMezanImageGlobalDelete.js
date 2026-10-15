@@ -90,6 +90,7 @@ async function handleGlobalDelete(event) {
   const button = isMezanGlobalDeleteButton(event.target);
   if (!button) return;
 
+  // Stop the legacy target onclick before it attempts the protected DELETE.
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();
@@ -115,6 +116,7 @@ async function handleGlobalDelete(event) {
   try {
     const { data: detail } = await api.get(
       `/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+      { params: { local_only: true } },
     );
     const cards = [...document.querySelectorAll(
       "[data-testid='order-review-product-card']",

@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from security_public_errors import public_error
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -23,7 +25,7 @@ def _now_iso() -> str:
 
 
 class BNPLSettlementRegisterIn(BaseModel):
-    provider: str               # "tabby" | "tamara"
+    provider: str               # "tabby" | "tamara" | "emkan"
     bank_account_id: str
     transferred_amount: float = Field(..., ge=0)
     commission: float = Field(0.0, ge=0)
@@ -57,7 +59,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 **(await compute_all_settlements(db, user["id"], from_date, to_date)),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/items/{provider}")
     async def settlement_items(
@@ -103,7 +105,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 ),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.post("/register")
     async def register_settlement(
@@ -865,18 +867,35 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                        "thursday": 3, "friday": 4, "saturday": 5,
                        "sunday": 6}
         _PROVIDER_DEFAULTS = {
-            "tabby":  {"invoice": "monday", "transfer": "tuesday"},
-            "tamara": {"invoice": "sunday", "transfer": "tuesday"},
+            "tabby":  {"invoice": "monday", "transfer": "monday"},
+            "tamara": {"invoice": "saturday", "transfer": "tuesday"},
         }
         settings_doc = await db.bnpl_settings.find_one(
             {"user_id": uid, "provider": provider},
-            {"_id": 0, "invoice_weekdays": 1, "transfer_weekdays": 1},
+            {"_id": 0, "invoice_weekdays": 1, "transfer_weekdays": 1,
+             "statement_cycle_defaults_version": 1},
         ) or {}
         defaults_for_p = _PROVIDER_DEFAULTS.get(provider) or {}
         inv_wds = (settings_doc.get("invoice_weekdays")
                    or [defaults_for_p.get("invoice", "monday")])
+        if provider == "tamara":
+            from bnpl.config_store import TAMARA_STATEMENT_CYCLE_VERSION
+            if (
+                settings_doc.get("statement_cycle_defaults_version")
+                != TAMARA_STATEMENT_CYCLE_VERSION
+                and inv_wds == ["sunday"]
+            ):
+                inv_wds = ["saturday"]
         tr_wds  = (settings_doc.get("transfer_weekdays")
                    or [defaults_for_p.get("transfer", "tuesday")])
+        if provider == "tabby":
+            from bnpl.config_store import TABBY_STATEMENT_DEFAULTS_VERSION
+            if (
+                settings_doc.get("statement_cycle_defaults_version")
+                != TABBY_STATEMENT_DEFAULTS_VERSION
+                and tr_wds == ["tuesday", "wednesday"]
+            ):
+                tr_wds = ["monday"]
         invoice_wd = WEEKDAY_MAP.get(
             (inv_wds[0] or "").lower(),
             WEEKDAY_MAP[defaults_for_p.get("invoice", "monday")],
@@ -925,6 +944,23 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
             date_from = start.isoformat()
             date_to = end.isoformat()
 
+        emkan_statement = None
+        if provider == "emkan":
+            # Emkan has no API/weekly cycle in the verified evidence. Pick the
+            # latest uploaded official statement inside the selected date
+            # filter and prefill exactly that one report.
+            statement_rows = await compute_weekly_settlements(
+                db, uid, provider, date_from, date_to,
+            )
+            if not statement_rows:
+                raise HTTPException(
+                    400,
+                    "لا يوجد ملف تسوية إمكان مرفوع ضمن الفترة المختارة.",
+                )
+            emkan_statement = statement_rows[-1]
+            date_from = emkan_statement["from"]
+            date_to = emkan_statement["to"]
+
         s = await compute_settlement_for_provider(
             db, uid, provider, date_from, date_to,
         )
@@ -955,9 +991,13 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         from bnpl.timezone import today_riyadh
         _ry_today = today_riyadh()
         ref_default = (
-            f"{provider.upper()}-{date_from or _ry_today.isoformat()}-AUTO"
-            if date_from
-            else f"{provider.upper()}-AUTO-{_ry_today.strftime('%Y%m%d')}"
+            emkan_statement.get("settlement_reference")
+            if emkan_statement
+            else (
+                f"{provider.upper()}-{date_from or _ry_today.isoformat()}-AUTO"
+                if date_from
+                else f"{provider.upper()}-AUTO-{_ry_today.strftime('%Y%m%d')}"
+            )
         )
 
         # Iter-231 — settlement_date_value is now driven by the
@@ -967,6 +1007,10 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
         # `transfer_weekdays`. Fallback: provider-default behaviour
         # (Tabby: +1 day, Tamara: +4 days) if config is empty/unusable.
         settlement_date_value = date_to
+        if emkan_statement:
+            settlement_date_value = (
+                emkan_statement.get("issue_date") or date_to
+            )
         if date_to:
             try:
                 _dt_to = _dt.strptime(date_to, "%Y-%m-%d").date()
@@ -976,6 +1020,8 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                     for w in (tr_wds or [])
                     if (w or "").lower() in WEEKDAY_MAP
                 }
+                if emkan_statement:
+                    target_weekdays = set()
                 picked = None
                 if target_weekdays:
                     # Search up to 14 days forward (covers any weekly cycle).
@@ -986,7 +1032,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                             break
                 if picked is not None:
                     settlement_date_value = picked.isoformat()
-                else:
+                elif not emkan_statement:
                     # Legacy fallback (only if no transfer_weekdays config).
                     if provider == "tamara":
                         settlement_date_value = (
@@ -1149,7 +1195,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 )),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/weekly/{provider}")
     async def weekly_settlements(
@@ -1188,7 +1234,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 },
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/balances/canonical")
     async def canonical_balances(user: dict = Depends(get_current_user)):
@@ -1208,7 +1254,7 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 ),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     @router.get("/matching/{provider}")
     async def matching_for_provider(
@@ -1236,6 +1282,6 @@ def attach_bnpl_settlements_routes(parent_router, *, db, get_current_user):
                 )),
             }
         except Exception as e:  # noqa: BLE001
-            return {"success": False, "error": f"{type(e).__name__}: {e}"}
+            return {"success": False, "error": public_error("operation_failed")}
 
     parent_router.include_router(router)

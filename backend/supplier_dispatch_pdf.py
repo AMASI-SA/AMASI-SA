@@ -1,0 +1,321 @@
+"""Approved Amasi A4 PDF for an employee-to-supplier dispatch.
+
+The PDF is rebuilt from the dispatch's immutable piece ids and their original
+reviewed batch snapshots. This preserves the approved 3x5 product-file design,
+original product image/specification snapshot and permanent per-piece QR while
+showing supplier + responsible employee in the header.
+"""
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime
+from typing import Any, Callable
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+
+from order_review_routes import _merchant_user_id, _text
+from preparation_pdf_amasi_a4_layout import generate_amasi_product_file_pdf
+from preparation_supplier_dispatch import (
+    DISPATCHES,
+    DISPATCH_STATUS_RECEIVED,
+    _is_manager,
+    _require_preparation_worker,
+)
+from preparation_piece_operations import PIECES
+from reviewed_preparation_batches import (
+    BATCHES,
+    _card_field_projection,
+    _line_from_batch_storage,
+)
+
+RIYADH = ZoneInfo("Asia/Riyadh")
+
+
+def _riyadh_date(value: Any) -> str:
+    if isinstance(value, datetime):
+        date = value if value.tzinfo else value.replace(tzinfo=RIYADH)
+        date = date.astimezone(RIYADH)
+        return f"{date.year}/{date.month:02d}/{date.day:02d}"
+    raw = _text(value)
+    if not raw:
+        return ""
+    try:
+        date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=RIYADH)
+        date = date.astimezone(RIYADH)
+        return f"{date.year}/{date.month:02d}/{date.day:02d}"
+    except ValueError:
+        return raw[:10].replace("-", "/")
+
+
+def _line_match(piece: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Match the exact physical unit snapshot before falling back to legacy rows."""
+    order_item_id = _text(piece.get("order_item_id"))
+    group_key = _text(piece.get("group_key"))
+    try:
+        unit_index = int(piece.get("unit_index") or 0)
+    except (TypeError, ValueError, OverflowError):
+        unit_index = 0
+
+    if order_item_id and unit_index > 0:
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if _text(row.get("order_item_id")) != order_item_id:
+                continue
+            try:
+                row_unit = int(row.get("unit_index") or 0)
+            except (TypeError, ValueError, OverflowError):
+                row_unit = 0
+            if row_unit == unit_index:
+                return row
+            unit_indices = row.get("unit_indices") or []
+            try:
+                if unit_index in {int(value) for value in unit_indices}:
+                    return row
+            except (TypeError, ValueError, OverflowError):
+                pass
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if order_item_id and _text(row.get("order_item_id")) == order_item_id:
+            return row
+        if group_key and _text(row.get("group_key")) == group_key:
+            return row
+    return None
+
+
+def _assert_saved_customer_options_preserved(
+    source: dict[str, Any],
+    line: Any,
+    *,
+    piece: dict[str, Any],
+) -> None:
+    """Fail closed if a saved customer option would disappear from supplier PDF.
+
+    The employee preparation PDF may stay compact, but the supplier PDF must
+    never silently drop customer-selected fields that were frozen into the
+    reviewed batch snapshot. Empty snapshots are allowed because some products
+    genuinely have no customer options.
+    """
+    stored_fields = [
+        row for row in (source.get("file_spec_fields") or [])
+        if isinstance(row, dict)
+    ]
+    if not stored_fields:
+        return
+
+    expected = _card_field_projection(
+        stored_fields,
+        source.get("preparation_note"),
+    )
+    missing: list[str] = []
+    scalar_checks = (
+        ("customer_name", getattr(line, "customer_name", None)),
+        ("size", getattr(line, "size", None)),
+        ("color", getattr(line, "color", None)),
+        ("note", getattr(line, "note", None)),
+    )
+    for key, actual in scalar_checks:
+        wanted = _text(expected.get(key))
+        if wanted and _text(actual) != wanted:
+            missing.append(key)
+
+    actual_options = {
+        _text(key): _text(value)
+        for key, value in (getattr(line, "product_options", None) or {}).items()
+        if _text(key) and _text(value)
+    }
+    for key, value in (expected.get("product_options") or {}).items():
+        visible_key = _text(key)
+        visible_value = _text(value)
+        if visible_key and visible_value and actual_options.get(visible_key) != visible_value:
+            missing.append(f"product_options.{visible_key}")
+
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "supplier_dispatch_customer_options_incomplete",
+                "message": "بيانات خيارات العميل المحفوظة غير مكتملة في ملف المورد. لم تتم طباعة ملف ناقص.",
+                "order_number": _text(source.get("order_number")),
+                "order_item_id": _text(source.get("order_item_id") or piece.get("order_item_id")),
+                "piece_id": _text(piece.get("piece_id")),
+                "missing_fields": missing,
+            },
+        )
+
+
+def _piece_received_from_dispatch_supplier(
+    piece: dict[str, Any],
+    dispatch: dict[str, Any],
+) -> bool:
+    """Return whether this physical piece was already received from this file's supplier."""
+    supplier_id = _text(dispatch.get("supplier_id"))
+    if supplier_id:
+        for raw in piece.get("supplier_receiving_history") or []:
+            if not isinstance(raw, dict):
+                continue
+            if _text(raw.get("supplier_id")) != supplier_id:
+                continue
+            if raw.get("received_at") or _text(raw.get("invoice_id")):
+                return True
+
+    return bool(
+        _text(piece.get("supplier_dispatch_id")) == _text(dispatch.get("id"))
+        and _text(piece.get("supplier_dispatch_status")) == DISPATCH_STATUS_RECEIVED
+    )
+
+
+def _remaining_dispatch_pieces(
+    dispatch: dict[str, Any],
+    pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        piece
+        for piece in pieces
+        if not _piece_received_from_dispatch_supplier(piece, dispatch)
+    ]
+
+
+async def build_supplier_dispatch_pdf(
+    db: Any,
+    *,
+    user_id: str,
+    dispatch: dict[str, Any],
+    remaining_only: bool = False,
+) -> bytes:
+    piece_ids = [_text(value) for value in dispatch.get("piece_ids") or [] if _text(value)]
+    if not piece_ids:
+        raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_empty"})
+
+    pieces = await db[PIECES].find(
+        {"user_id": user_id, "piece_id": {"$in": piece_ids}},
+        {"_id": 0, "image_b64": 0},
+    ).to_list(max(len(piece_ids), 1))
+    by_piece = {_text(row.get("piece_id")): row for row in pieces}
+    ordered = [by_piece[piece_id] for piece_id in piece_ids if piece_id in by_piece]
+    if len(ordered) != len(piece_ids):
+        raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_piece_snapshot_missing"})
+
+    if remaining_only:
+        ordered = _remaining_dispatch_pieces(dispatch, ordered)
+        if not ordered:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "supplier_dispatch_fully_received",
+                    "message": "تم استلام جميع قطع ملف المورد؛ لا توجد قطع متبقية للطباعة.",
+                },
+            )
+
+    batch_ids = sorted({_text(piece.get("batch_id")) for piece in ordered if _text(piece.get("batch_id"))})
+    batches = await db[BATCHES].find(
+        {"user_id": user_id, "id": {"$in": batch_ids}},
+        {"_id": 0},
+    ).to_list(max(len(batch_ids), 1))
+    by_batch = {_text(row.get("id")): row for row in batches}
+
+    lines = []
+    for piece in ordered:
+        batch = by_batch.get(_text(piece.get("batch_id")))
+        if not batch:
+            raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_batch_snapshot_missing"})
+        source = _line_match(piece, list(batch.get("lines") or []))
+        if not source:
+            raise HTTPException(status_code=409, detail={"code": "supplier_dispatch_line_snapshot_missing"})
+        unit_row = deepcopy(source)
+        unit_row["unit_index"] = int(piece.get("unit_index") or 1)
+        unit_row["unit_indices"] = [unit_row["unit_index"]]
+        unit_row["quantity"] = 1
+        line = _line_from_batch_storage(unit_row, batch)
+        _assert_saved_customer_options_preserved(source, line, piece=piece)
+        lines.append(line)
+
+    return generate_amasi_product_file_pdf(
+        lines,
+        serial_start=1,
+        title="ملف المنتجات",
+        supplier_name=_text(dispatch.get("supplier_name")),
+        responsible_employee_name=_text(dispatch.get("sent_by_name")),
+        file_number=_text(dispatch.get("supplier_file_number") or dispatch.get("file_number")),
+        file_date=_riyadh_date(dispatch.get("sent_at") or dispatch.get("created_at")),
+    )
+
+
+def make_supplier_dispatch_pdf_router(db: Any, current_user: Callable) -> APIRouter:
+    router = APIRouter(prefix="/supplier-dispatch-pdf-v1", tags=["Supplier Dispatch PDF"])
+
+    async def _dispatch_for_worker(
+        dispatch_id: str,
+        worker: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        user_id = _merchant_user_id(worker)
+        dispatch = await db[DISPATCHES].find_one(
+            {"user_id": user_id, "id": _text(dispatch_id)},
+            {"_id": 0},
+        )
+        if not dispatch:
+            raise HTTPException(status_code=404, detail={"code": "supplier_dispatch_not_found"})
+        if not _is_manager(worker) and _text(dispatch.get("sent_by_id")) != _text(worker.get("id")):
+            raise HTTPException(status_code=403, detail={"code": "supplier_dispatch_not_owned_by_employee"})
+        return user_id, dispatch
+
+    def _pdf_response(
+        dispatch: dict[str, Any],
+        data: bytes,
+        *,
+        remaining_only: bool,
+    ) -> Response:
+        safe = _text(dispatch.get("supplier_file_number") or dispatch.get("id"))
+        suffix = "-remaining" if remaining_only else ""
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="supplier-{safe}{suffix}.pdf"',
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @router.get("/{dispatch_id}/pdf")
+    async def pdf(dispatch_id: str, user: dict = Depends(current_user)) -> Response:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        user_id, dispatch = await _dispatch_for_worker(dispatch_id, worker)
+        data = await build_supplier_dispatch_pdf(
+            db,
+            user_id=user_id,
+            dispatch=dispatch,
+            remaining_only=False,
+        )
+        return _pdf_response(dispatch, data, remaining_only=False)
+
+    @router.get("/{dispatch_id}/remaining-pdf")
+    async def remaining_pdf(
+        dispatch_id: str,
+        user: dict = Depends(current_user),
+    ) -> Response:
+        worker = await _require_preparation_worker(db, user, permission="preparation.assigned.read")
+        user_id, dispatch = await _dispatch_for_worker(dispatch_id, worker)
+        data = await build_supplier_dispatch_pdf(
+            db,
+            user_id=user_id,
+            dispatch=dispatch,
+            remaining_only=True,
+        )
+        return _pdf_response(dispatch, data, remaining_only=True)
+
+    return router
+
+
+__all__ = [
+    "_assert_saved_customer_options_preserved",
+    "_piece_received_from_dispatch_supplier",
+    "_remaining_dispatch_pieces",
+    "build_supplier_dispatch_pdf",
+    "make_supplier_dispatch_pdf_router",
+]

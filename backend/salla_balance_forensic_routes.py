@@ -264,7 +264,8 @@ def make_salla_balance_forensic_router(db, current_user):
              "$or": [
                  {"payment_method": {"$regex": "salla", "$options": "i"}},
                  {"payment_method": {"$in": [
-                     "mada", "applepay", "stcpay", "credit_card"]}},
+                     "mada", "applepay", "googlepay", "stcpay", "visa",
+                     "mastercard", "credit_card", "debit_card", "salla_wallet"]}},
              ]},
             {"_id": 0, "id": 1, "order_number": 1, "payment_method": 1,
              "original_amount": 1, "new_amount": 1,
@@ -499,8 +500,11 @@ def make_salla_balance_forensic_router(db, current_user):
             rows = metrics.get("rows") or []
             # Map account's canonical key → central keys
             account_to_central = {
-                "salla": ["salla", "mada", "applepay",
-                          "stcpay", "credit_card"],
+                "salla": [
+                    "salla", "mada", "applepay", "googlepay", "stcpay",
+                    "visa", "mastercard", "credit_card", "debit_card",
+                    "salla_wallet",
+                ],
                 "tamara": ["tamara"],
                 "tabby": ["tabby"],
                 "emkan": ["emkan"],

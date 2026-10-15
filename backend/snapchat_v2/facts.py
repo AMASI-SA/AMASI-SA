@@ -1,0 +1,376 @@
+"""Idempotent, UTC-normalized Snapchat hourly fact storage."""
+from __future__ import annotations
+
+import asyncio
+import math
+from collections.abc import Awaitable, Callable, Iterable
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from pymongo import UpdateOne
+
+from .models import (
+    DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+    DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+    SNAPCHAT_PROVIDER,
+    build_attribution_key,
+    clean_text,
+    derive_entity_identity,
+    ensure_aware_utc,
+)
+
+SNAPCHAT_HOURLY_FACTS_COLLECTION = "mezan_snapchat_hourly_facts_v2"
+MAX_FACT_ROWS_PER_WRITE = 100_000
+HOURLY_FACT_WRITE_BATCH_SIZE = 200
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _nonnegative_number(value: Any, *, field: str) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be numeric")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field} must be numeric") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError(f"{field} must be a finite non-negative number")
+    return parsed
+
+
+def _nonnegative_int(value: Any, *, field: str) -> int:
+    parsed = _nonnegative_number(value, field=field)
+    rounded = int(parsed)
+    if abs(parsed - rounded) > 1e-9:
+        raise ValueError(f"{field} must be an integer")
+    return rounded
+
+
+def normalize_hourly_fact(
+    fact: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    user_id = clean_text(fact.get("user_id"), limit=128)
+    account_id = clean_text(fact.get("ad_account_id"), limit=128)
+    if not user_id or not account_id:
+        raise ValueError("user_id and ad_account_id are required")
+
+    hour_start = ensure_aware_utc(fact.get("hour_start_utc"), field="hour_start_utc")
+    hour_end_raw = fact.get("hour_end_utc") or (hour_start + timedelta(hours=1))
+    hour_end = ensure_aware_utc(hour_end_raw, field="hour_end_utc")
+    if hour_start.minute or hour_start.second or hour_start.microsecond:
+        raise ValueError("hour_start_utc must be aligned to the hour")
+    if hour_end != hour_start + timedelta(hours=1):
+        raise ValueError("hour_end_utc must be exactly one hour after hour_start_utc")
+
+    account_timezone = clean_text(fact.get("account_timezone"), limit=80)
+    if not account_timezone:
+        raise ValueError("account_timezone is required")
+    currency = clean_text(fact.get("currency"), limit=12).upper()
+    if not currency:
+        raise ValueError("currency is required")
+
+    action_report_time = clean_text(
+        fact.get("action_report_time") or "conversion",
+        limit=32,
+    ).lower()
+    attribution_windows = dict(fact.get("attribution_windows") or {})
+    attribution_key = build_attribution_key(action_report_time, attribution_windows)
+    entity_type, external_id = derive_entity_identity(fact)
+    current = ensure_aware_utc(now or _utcnow(), field="now")
+    spend_native = _nonnegative_number(fact.get("spend_native"), field="spend_native")
+
+    coverage = dict(fact.get("coverage") or {})
+    coverage.setdefault("status", "complete")
+    coverage.setdefault(
+        "data_state",
+        "confirmed_data" if spend_native > 0 else "confirmed_zero",
+    )
+    source = dict(fact.get("source") or {})
+    source.pop("access_token", None)
+    source.pop("refresh_token", None)
+    source.pop("authorization", None)
+
+    return {
+        "user_id": user_id,
+        "provider": SNAPCHAT_PROVIDER,
+        "ad_account_id": account_id,
+        "entity_type": entity_type,
+        "external_id": external_id,
+        "campaign_id": clean_text(fact.get("campaign_id"), limit=128) or None,
+        "ad_squad_id": clean_text(fact.get("ad_squad_id"), limit=128) or None,
+        "ad_id": clean_text(fact.get("ad_id"), limit=128) or None,
+        "hour_start_utc": hour_start,
+        "hour_end_utc": hour_end,
+        "account_timezone": account_timezone,
+        "currency": currency,
+        "action_report_time": action_report_time,
+        "attribution_windows": attribution_windows,
+        "attribution_key": attribution_key,
+        "spend_native": spend_native,
+        "impressions": _nonnegative_int(fact.get("impressions"), field="impressions"),
+        "swipes": _nonnegative_int(fact.get("swipes"), field="swipes"),
+        "video_views": _nonnegative_int(fact.get("video_views"), field="video_views"),
+        "view_completion": _nonnegative_number(
+            fact.get("view_completion"),
+            field="view_completion",
+        ),
+        "view_content": _nonnegative_int(
+            fact.get("view_content"),
+            field="view_content",
+        ),
+        "add_to_cart": _nonnegative_int(
+            fact.get("add_to_cart"),
+            field="add_to_cart",
+        ),
+        "start_checkout": _nonnegative_int(
+            fact.get("start_checkout"),
+            field="start_checkout",
+        ),
+        "add_billing": _nonnegative_int(
+            fact.get("add_billing"),
+            field="add_billing",
+        ),
+        "purchases": _nonnegative_int(fact.get("purchases"), field="purchases"),
+        "purchase_value_native": _nonnegative_number(
+            fact.get("purchase_value_native"),
+            field="purchase_value_native",
+        ),
+        "coverage": coverage,
+        "source": source,
+        "provisional": bool(fact.get("provisional", current < hour_end)),
+        "sync_run_id": clean_text(fact.get("sync_run_id"), limit=128),
+    }
+
+
+def hourly_fact_identity(fact: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "user_id": fact["user_id"],
+        "provider": SNAPCHAT_PROVIDER,
+        "ad_account_id": fact["ad_account_id"],
+        "entity_type": fact["entity_type"],
+        "external_id": fact["external_id"],
+        "hour_start_utc": fact["hour_start_utc"],
+        "action_report_time": fact["action_report_time"],
+        "attribution_key": fact["attribution_key"],
+    }
+
+
+async def ensure_fact_indexes(db: Any) -> None:
+    collection = db[SNAPCHAT_HOURLY_FACTS_COLLECTION]
+    await collection.create_index(
+        [
+            ("user_id", 1),
+            ("provider", 1),
+            ("ad_account_id", 1),
+            ("entity_type", 1),
+            ("external_id", 1),
+            ("hour_start_utc", 1),
+            ("action_report_time", 1),
+            ("attribution_key", 1),
+        ],
+        unique=True,
+        name="snapchat_v2_hourly_fact_identity_unique",
+    )
+    await collection.create_index(
+        [("user_id", 1), ("ad_account_id", 1), ("hour_start_utc", -1)],
+        name="snapchat_v2_hourly_account_time",
+    )
+    await collection.create_index(
+        [("user_id", 1), ("entity_type", 1), ("external_id", 1), ("hour_start_utc", -1)],
+        name="snapchat_v2_hourly_entity_time",
+    )
+    await collection.create_index(
+        [("sync_run_id", 1), ("updated_at", -1)],
+        name="snapchat_v2_hourly_sync_run",
+    )
+
+
+async def upsert_hourly_fact(
+    db: Any,
+    fact: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    normalized = normalize_hourly_fact(fact, now=now)
+    identity = hourly_fact_identity(normalized)
+    timestamp = ensure_aware_utc(now or _utcnow(), field="now")
+    result = await db[SNAPCHAT_HOURLY_FACTS_COLLECTION].update_one(
+        identity,
+        {
+            "$set": {
+                **normalized,
+                "updated_at": timestamp,
+            },
+            "$setOnInsert": {
+                "created_at": timestamp,
+            },
+        },
+        upsert=True,
+    )
+    return {
+        "identity": identity,
+        "inserted": getattr(result, "upserted_id", None) is not None,
+        "matched": int(getattr(result, "matched_count", 0) or 0),
+        "modified": int(getattr(result, "modified_count", 0) or 0),
+    }
+
+
+async def upsert_hourly_facts(
+    db: Any,
+    facts: Iterable[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    on_batch_persisted: Callable[[dict[str, int]], Awaitable[None]] | None = None,
+) -> dict[str, int]:
+    rows = list(facts)
+    if len(rows) > MAX_FACT_ROWS_PER_WRITE:
+        raise ValueError("Snapchat hourly fact write exceeded the safe row limit")
+
+    # Validate the complete provider payload before the first database write.
+    # A malformed or duplicate row must not leave an avoidable partial publish.
+    timestamp = ensure_aware_utc(now or _utcnow(), field="now")
+    prepared: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for fact in rows:
+        normalized = normalize_hourly_fact(fact, now=timestamp)
+        identity = hourly_fact_identity(normalized)
+        key = tuple(identity[field] for field in identity)
+        if key in seen:
+            raise ValueError("duplicate Snapchat hourly fact in one write batch")
+        seen.add(key)
+        prepared.append((identity, normalized))
+
+    await ensure_fact_indexes(db)
+    collection = db[SNAPCHAT_HOURLY_FACTS_COLLECTION]
+    inserted = matched = modified = 0
+    batches_total = (
+        math.ceil(len(prepared) / HOURLY_FACT_WRITE_BATCH_SIZE)
+        if prepared
+        else 0
+    )
+    batches_complete = 0
+    rows_persisted = 0
+    for offset in range(0, len(prepared), HOURLY_FACT_WRITE_BATCH_SIZE):
+        batch = prepared[offset : offset + HOURLY_FACT_WRITE_BATCH_SIZE]
+        operations = [
+            UpdateOne(
+                identity,
+                {
+                    "$set": {
+                        **normalized,
+                        "updated_at": timestamp,
+                    },
+                    "$setOnInsert": {
+                        "created_at": timestamp,
+                    },
+                },
+                upsert=True,
+            )
+            for identity, normalized in batch
+        ]
+        result = await collection.bulk_write(operations, ordered=True)
+        inserted += int(getattr(result, "upserted_count", 0) or 0)
+        matched += int(getattr(result, "matched_count", 0) or 0)
+        modified += int(getattr(result, "modified_count", 0) or 0)
+        batches_complete += 1
+        rows_persisted += len(batch)
+        if on_batch_persisted is not None:
+            await on_batch_persisted(
+                {
+                    "batch_rows": len(batch),
+                    "batches_complete": batches_complete,
+                    "batches_total": batches_total,
+                    "rows_persisted": rows_persisted,
+                    "rows_total": len(prepared),
+                }
+            )
+        else:
+            # Keep callers without a progress hook cooperative between batches.
+            await asyncio.sleep(0)
+    return {
+        "rows_received": len(rows),
+        "rows_saved": rows_persisted,
+        "inserted": inserted,
+        "matched": matched,
+        "modified": modified,
+        "write_batches": batches_complete,
+    }
+
+
+async def load_hourly_facts(
+    db: Any,
+    *,
+    user_id: str,
+    ad_account_id: str,
+    start_utc: datetime,
+    end_utc: datetime,
+    entity_type: str | None = None,
+    action_report_time: str | None = None,
+    attribution_windows: dict[str, Any] | None = None,
+    limit: int = MAX_FACT_ROWS_PER_WRITE,
+) -> list[dict[str, Any]]:
+    start = ensure_aware_utc(start_utc, field="start_utc")
+    end = ensure_aware_utc(end_utc, field="end_utc")
+    if end <= start:
+        raise ValueError("end_utc must be after start_utc")
+    query: dict[str, Any] = {
+        "user_id": str(user_id),
+        "provider": SNAPCHAT_PROVIDER,
+        "ad_account_id": str(ad_account_id),
+        "hour_start_utc": {"$gte": start, "$lt": end},
+    }
+    if entity_type:
+        query["entity_type"] = entity_type
+    if action_report_time:
+        normalized_action_time = clean_text(action_report_time, limit=32).lower()
+        query["action_report_time"] = normalized_action_time
+        selected_windows = attribution_windows or {
+            "swipe": DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
+            "view": DEFAULT_VIEW_ATTRIBUTION_WINDOW,
+        }
+        query["attribution_key"] = build_attribution_key(
+            normalized_action_time,
+            selected_windows,
+        )
+    async def _read_rows(selected_query: dict[str, Any]) -> list[dict[str, Any]]:
+        cursor = db[SNAPCHAT_HOURLY_FACTS_COLLECTION].find(
+            selected_query,
+            {"_id": 0},
+        )
+        if hasattr(cursor, "sort"):
+            cursor = cursor.sort(
+                [("hour_start_utc", 1), ("entity_type", 1), ("external_id", 1)]
+            )
+        if hasattr(cursor, "limit"):
+            cursor = cursor.limit(limit + 1)
+        if hasattr(cursor, "to_list"):
+            try:
+                return list(await cursor.to_list(length=limit + 1))
+            except TypeError:
+                return list(await cursor.to_list(limit + 1))
+        selected_rows: list[dict[str, Any]] = []
+        async for row in cursor:
+            selected_rows.append(row)
+            if len(selected_rows) > limit:
+                break
+        return selected_rows
+
+    rows = await _read_rows(query)
+    # An attribution-window change creates a new immutable fact series. During
+    # its first shadow sync the selected 28d-click/7d-view series may not exist
+    # yet. Returning confirmed facts from the previous series is safer than
+    # publishing false zero spend/conversions. Keep the action-report-time
+    # boundary so conversion-time and impression-time facts never mix.
+    if not rows and action_report_time and "attribution_key" in query:
+        fallback_query = dict(query)
+        fallback_query.pop("attribution_key", None)
+        rows = await _read_rows(fallback_query)
+    if len(rows) > limit:
+        raise ValueError("Snapchat hourly fact read was truncated")
+    return rows

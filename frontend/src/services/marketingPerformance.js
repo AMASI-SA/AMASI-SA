@@ -1,5 +1,6 @@
 import api from "../lib/api";
 import { getAdsManagerOverview } from "./adsManager";
+import { retryAdsRead } from "./adsReadRetry";
 import { getIntegrationsOverview } from "./integrationsV2";
 
 export const MARKETING_PLATFORMS = Object.freeze([
@@ -33,9 +34,35 @@ export const MARKETING_PLATFORM_CONFIG = Object.freeze({
 });
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const HOUR_RE = /^(?:[01]\d|2[0-3]):00$/;
 
 export function isMarketingPerformanceProvider(value) {
     return MARKETING_PLATFORMS.includes(String(value || "").trim());
+}
+
+export function clampSnapchatRangeToAccountToday(
+    { dateFrom, dateTo } = {},
+    accountLocalToday,
+) {
+    if (!ISO_DATE_RE.test(accountLocalToday || "")) {
+        return { dateFrom, dateTo };
+    }
+    return {
+        dateFrom: ISO_DATE_RE.test(dateFrom || "") && dateFrom > accountLocalToday
+            ? accountLocalToday
+            : dateFrom,
+        dateTo: ISO_DATE_RE.test(dateTo || "") && dateTo > accountLocalToday
+            ? accountLocalToday
+            : dateTo,
+    };
+}
+
+export function snapchatAccountLocalToday(integration = {}) {
+    const accountDays = (integration.accounts || [])
+        .map((account) => account?.local_today)
+        .filter((value) => ISO_DATE_RE.test(value || ""))
+        .sort();
+    return accountDays[0] || null;
 }
 
 function text(value, fallback = "") {
@@ -60,9 +87,17 @@ function normalizeTotals(value = {}) {
         spend_sar: number(value.spend_sar, { min: 0 }),
         sales_sar: number(value.sales_sar, { min: 0 }),
         orders: number(value.orders, { min: 0, integer: true }),
+        conversions: number(value.conversions, { min: 0 }),
         impressions: number(value.impressions, { min: 0, integer: true }),
         swipes: number(value.swipes, { min: 0, integer: true }),
         video_views: number(value.video_views, { min: 0, integer: true }),
+        view_content: number(value.view_content, { min: 0, integer: true }),
+        add_to_cart: number(value.add_to_cart, { min: 0, integer: true }),
+        start_checkout: number(value.start_checkout, { min: 0, integer: true }),
+        add_billing: number(value.add_billing, { min: 0, integer: true }),
+        paid_reach: number(value.paid_reach, { min: 0, integer: true }),
+        paid_frequency: number(value.paid_frequency, { min: 0 }),
+        reach_frequency_scope: nullableText(value.reach_frequency_scope),
         roas: number(value.roas, { min: 0 }),
         cpa_sar: number(value.cpa_sar, { min: 0 }),
         cpc_sar: number(value.cpc_sar, { min: 0 }),
@@ -76,15 +111,35 @@ function normalizeTotals(value = {}) {
     };
 }
 
+function normalizeHourly(value = {}) {
+    const hour = HOUR_RE.test(value.hour || "")
+        ? value.hour
+        : `${String(number(value.hour_index, { min: 0, integer: true }) || 0).padStart(2, "0")}:00`;
+    return {
+        date: ISO_DATE_RE.test(value.date || "") ? value.date : null,
+        hour,
+        hour_index: number(value.hour_index, { min: 0, integer: true }) || 0,
+        spend_sar: number(value.spend_sar, { min: 0 }) || 0,
+        sales_sar: number(value.sales_sar, { min: 0 }) || 0,
+        orders: number(value.orders, { min: 0, integer: true }) || 0,
+        roas: number(value.roas, { min: 0 }),
+        cpa_sar: number(value.cpa_sar, { min: 0 }),
+        observed: value.observed === true,
+        is_future: value.is_future === true,
+        result_source: text(value.result_source, "platform"),
+    };
+}
+
 function normalizeCampaign(value = {}) {
     const campaignId = nullableText(value.campaign_id);
     if (!campaignId) return null;
-    return {
+    const campaign = {
         account_id: nullableText(value.account_id),
         account_name: text(value.account_name, value.account_id || "حساب غير معروف"),
         campaign_id: campaignId,
         campaign_name: text(value.campaign_name, campaignId),
         status: text(value.status, "unknown"),
+        campaign_active: value.campaign_active === true,
         delivery_status: nullableText(value.delivery_status),
         objective: nullableText(value.objective),
         start_time: nullableText(value.start_time),
@@ -96,6 +151,13 @@ function normalizeCampaign(value = {}) {
         },
         ...normalizeTotals(value),
     };
+    if (value.salla_results && typeof value.salla_results === "object") {
+        campaign.salla_results = value.salla_results;
+    }
+    if (value.profitability && typeof value.profitability === "object") {
+        campaign.profitability = value.profitability;
+    }
+    return campaign;
 }
 
 function normalizeAccount(value = {}) {
@@ -106,6 +168,9 @@ function normalizeAccount(value = {}) {
         account_name: text(value.account_name, accountId),
         currency: nullableText(value.currency),
         timezone: nullableText(value.timezone),
+        local_today: ISO_DATE_RE.test(value.local_today || "")
+            ? value.local_today
+            : null,
         ...normalizeTotals(value),
     };
 }
@@ -144,6 +209,11 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
     return {
         platform: "snapchat",
         label: MARKETING_PLATFORM_CONFIG.snapchat.label,
+        result_source: text(value.result_source, "salla"),
+        action_report_time: text(value.action_report_time, "conversion"),
+        supported_action_report_times: Array.isArray(value.supported_action_report_times)
+            ? value.supported_action_report_times.filter((item) => ["conversion", "impression"].includes(item))
+            : ["conversion", "impression"],
         range: {
             date_from: ISO_DATE_RE.test(value.date_from || "")
                 ? value.date_from
@@ -154,11 +224,19 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             timezone: text(value.business_timezone, "Asia/Riyadh"),
         },
         connection: connectionFromIntegration(integration),
-        totals: normalizeTotals(value.totals),
+        totals: {
+            ...normalizeTotals(value.totals),
+            ...(value.totals?.profitability && typeof value.totals.profitability === "object"
+                ? { profitability: value.totals.profitability }
+                : {}),
+        },
         daily: Array.isArray(value.daily)
             ? value.daily
                 .filter((row) => ISO_DATE_RE.test(row?.date || ""))
                 .map((row) => ({ date: row.date, ...normalizeTotals(row) }))
+            : [],
+        hourly: Array.isArray(value.hourly)
+            ? value.hourly.map(normalizeHourly).sort((left, right) => left.hour_index - right.hour_index)
             : [],
         accounts: Array.isArray(value.accounts)
             ? value.accounts.map(normalizeAccount).filter(Boolean)
@@ -174,6 +252,10 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
         },
         source: {
             performance_collection: text(value.source?.performance_collection),
+            hourly_collection: text(value.source?.hourly_collection),
+            hourly_source_mode: text(value.source?.hourly_source_mode),
+            hourly_rows: number(value.source?.hourly_rows, { min: 0, integer: true }) || 0,
+            hourly_available: value.source?.hourly_available === true,
             entity_collection: text(value.source?.entity_collection),
             attribution_model: text(value.source?.attribution_model),
             selected_account_count: number(value.source?.selected_account_count, { min: 0, integer: true }) || 0,
@@ -183,6 +265,14 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             identity_coverage_pct: number(value.source?.identity_coverage_pct, { min: 0 }),
             row_limit_reached: value.source?.row_limit_reached === true,
             entity_limit_reached: value.source?.entity_limit_reached === true,
+            platform_total_snapshot_ready: value.source?.platform_total_snapshot_ready === true,
+            platform_direct_account_total_ready: value.source?.platform_direct_account_total_ready === true,
+            platform_action_report_time: nullableText(value.source?.platform_action_report_time),
+            account_local_action_report_time: nullableText(value.source?.account_local_action_report_time),
+            account_spend_source: nullableText(value.source?.account_spend_source),
+            account_commercial_totals_source: nullableText(
+                value.source?.account_commercial_totals_source,
+            ),
         },
         ai_readiness: {
             report_ready: value.ai_readiness?.report_ready === true,
@@ -191,6 +281,7 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
             orders_ready: value.ai_readiness?.orders_ready === true,
             sales_ready: value.ai_readiness?.sales_ready === true,
             ratios_ready: value.ai_readiness?.ratios_ready === true,
+            funnel_ready: value.ai_readiness?.funnel_ready === true,
             ai_analysis_ready: value.ai_readiness?.ai_analysis_ready === true,
             campaign_creation_enabled: false,
             campaign_management_enabled: false,
@@ -208,7 +299,7 @@ export function normalizeSnapchatMarketingWorkspace(payload = {}, integration = 
     };
 }
 
-function adaptAdsManager(platform, overview) {
+export function adaptAdsManager(platform, overview) {
     const config = MARKETING_PLATFORM_CONFIG[platform];
     const provider = overview.providers?.find(
         (row) => row.provider === config.adsProvider,
@@ -246,6 +337,7 @@ function adaptAdsManager(platform, overview) {
             date: row.date,
             ...normalizeTotals({ spend_sar: row[config.adsProvider] }),
         })),
+        hourly: [],
         accounts: [],
         campaigns: (overview.campaigns || [])
             .filter((row) => row.provider === config.adsProvider)
@@ -255,7 +347,16 @@ function adaptAdsManager(platform, overview) {
                 sales_sar: row.revenue_sar_equivalent,
                 orders: row.purchases,
                 swipes: row.clicks,
-                status: "unknown",
+                status: row.status || "unknown",
+                delivery_status: row.delivery_status || null,
+                objective: row.objective || null,
+                start_time: row.start_time || null,
+                end_time: row.end_time || null,
+                budget: row.budget || {
+                    currency: row.spend_currency || null,
+                    daily_native: null,
+                    lifetime_native: null,
+                },
             }))
             .filter(Boolean),
         campaign_pagination: overview.campaign_pagination,
@@ -285,78 +386,165 @@ function adaptAdsManager(platform, overview) {
     };
 }
 
-async function googleWorkspace() {
-    const overview = await getIntegrationsOverview();
-    const integration = overview.providers.find((row) => row.provider === "google_ads");
+export function normalizeGoogleMarketingWorkspace(value = {}, integration = {}) {
+    const accounts = (value.accounts || []).map((account) => {
+        const currency = account.currency || account.currency_code;
+        const metrics = account.metrics || (String(account.account_id || account.id || account.external_account_id || "") === String(value.account_id || "") ? value.totals : null) || account;
+        const spendNative = number(metrics.spend_native ?? metrics.cost_native ?? metrics.cost, { min: 0 });
+        return { ...account, account_id: String(account.account_id || account.id || account.external_account_id || ""), account_name: account.account_name || account.name || "حساب جوجل", currency, timezone: account.timezone || account.time_zone,
+            ...normalizeTotals({ ...metrics, spend_sar: metrics.spend_sar ?? (currency === "SAR" ? spendNative : null), sales_sar: metrics.sales_sar ?? account.salla_results?.sales_sar, orders: account.salla_results?.orders }), spend_native: spendNative, conversion_value_native: number(metrics.conversion_value_native ?? metrics.conversion_value ?? metrics.conversions_value, { min: 0 }), native_metrics: metrics };
+    });
+    const currencies = [...new Set(accounts.map((account) => account.currency).filter(Boolean))];
+    const nativeCurrency = value.currency || value.currency_code || (currencies.length === 1 ? currencies[0] : null);
+    const sourceTotals = value.totals || {};
+    const spendNative = number(sourceTotals.spend_native ?? sourceTotals.cost_native ?? sourceTotals.cost, { min: 0 });
+    const source = value.source && typeof value.source === "object" ? value.source : { origin: value.source || "google_ads_api" };
+    const campaigns = (value.campaigns || value.items || []).map((campaign) => {
+        const metrics = campaign.metrics || campaign;
+        const currency = campaign.currency || campaign.currency_code;
+        const nativeSpend = number(campaign.spend_native ?? metrics.spend_native ?? metrics.cost_native ?? metrics.cost, { min: 0 });
+        const normalized = normalizeCampaign({ ...campaign, ...metrics, campaign_id: String(campaign.campaign_id || campaign.entity_id || campaign.id || ""), campaign_name: campaign.campaign_name || campaign.name || campaign.entity_name || "حملة جوجل",
+            spend_sar: metrics.spend_sar ?? (currency === "SAR" ? nativeSpend : null), orders: campaign.salla_results?.orders, sales_sar: campaign.salla_results?.sales_sar,
+            budget: { currency, daily_native: campaign.budget_mode === "DAILY" ? campaign.budget_native : null, lifetime_native: campaign.budget_mode === "TOTAL" ? campaign.budget_native : null } });
+        return normalized ? { ...normalized, campaign_type: campaign.campaign_type, spend_native: nativeSpend, native_metrics: metrics } : null;
+    }).filter(Boolean);
     return {
         platform: "google",
         label: MARKETING_PLATFORM_CONFIG.google.label,
-        range: { date_from: null, date_to: null, timezone: "Asia/Riyadh" },
+        account_id: nullableText(value.account_id),
+        account_selection_required: value.account_selection_required === true,
+        result_source: "platform",
+        range: value.range || { date_from: value.date_from || null, date_to: value.date_to || null, timezone: value.time_zone || null },
         connection: connectionFromIntegration(integration),
-        totals: normalizeTotals({}),
-        daily: [],
-        accounts: [],
-        campaigns: [],
-        campaign_pagination: { page: 1, limit: 25, total: 0, pages: 0 },
+        totals: normalizeTotals({ ...sourceTotals, spend_sar: sourceTotals.spend_sar ?? (nativeCurrency === "SAR" ? spendNative : null), orders: sourceTotals.salla_results?.orders ?? sourceTotals.orders, sales_sar: sourceTotals.salla_results?.sales_sar ?? sourceTotals.sales_sar }),
+        native_totals: { ...sourceTotals, currency: nativeCurrency, spend_native: spendNative },
+        daily: (value.daily || []).map((row) => ({ ...row, ...normalizeTotals({ ...row, spend_sar: row.spend_sar ?? ((row.currency || row.currency_code || nativeCurrency) === "SAR" ? row.spend_native ?? row.cost_native : null), sales_sar: row.salla_results?.sales_sar, orders: row.salla_results?.orders }) })),
+        hourly: value.hourly || [],
+        accounts,
+        campaigns,
+        campaign_pagination: value.pagination || value.campaign_pagination || { page: 1, limit: 25, total: campaigns.length, pages: campaigns.length ? 1 : 0 },
         source: {
-            performance_rows: 0,
-            identity_coverage_pct: null,
-            row_limit_reached: false,
-            entity_limit_reached: false,
+            ...source,
+            performance_rows: source.performance_rows ?? campaigns.length,
+            identity_coverage_pct: source.identity_coverage_pct ?? null,
+            row_limit_reached: source.row_limit_reached === true,
+            entity_limit_reached: source.entity_limit_reached === true,
         },
         ai_readiness: {
-            report_ready: false,
-            campaign_identity_ready: false,
-            spend_ready: false,
-            orders_ready: false,
-            sales_ready: false,
-            ratios_ready: false,
-            ai_analysis_ready: false,
-            campaign_creation_enabled: false,
-            campaign_management_enabled: false,
+            ...(value.ai_readiness || {}),
+            report_ready: value.ai_readiness?.report_ready === true,
+            campaign_identity_ready: value.ai_readiness?.campaign_identity_ready === true,
+            spend_ready: value.ai_readiness?.spend_ready === true,
+            orders_ready: value.ai_readiness?.orders_ready === true,
+            sales_ready: value.ai_readiness?.sales_ready === true,
+            ratios_ready: value.ai_readiness?.ratios_ready === true,
+            ai_analysis_ready: value.ai_readiness?.ai_analysis_ready === true,
+            campaign_creation_enabled: value.ai_readiness?.campaign_creation_enabled === true,
+            campaign_management_enabled: value.ai_readiness?.campaign_management_enabled === true,
             required_lifecycle: [
-                "proposal", "preview", "approval", "execution",
-                "verification", "audit", "rollback",
+                "مسودة", "تحقق", "معاينة", "اعتماد", "تنفيذ", "قراءة النتيجة", "سجل", "قياس الأثر",
             ],
         },
-        insights: [],
-        policy: { mode: "observe_only", mutations_allowed: false },
+        insights: (value.insights || []).map(normalizeInsight),
+        permissions: value.permissions || {},
+        capabilities: value.capabilities || {},
+        policy: { mode: "approved_action_gateway", mutations_allowed: value.permissions?.can_execute === true },
     };
+}
+
+async function googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit, accountId }) {
+    const [response, overview] = await Promise.all([
+        retryAdsRead(() => api.get("/integrations-v2/google_ads/workspace", { params: { from_date: dateFrom, to_date: dateTo, account_id: accountId || undefined, campaign_query: campaignQuery || undefined, entity_type: "campaigns", page, limit } })),
+        getIntegrationsOverview().catch(() => ({ providers: [] })),
+    ]);
+    const integration = overview.providers.find((row) => row.provider === "google_ads") || {};
+    return normalizeGoogleMarketingWorkspace(response.data, integration);
 }
 
 export async function getMarketingPerformance({
     platform,
+    accountId,
     dateFrom,
     dateTo,
     campaignQuery = "",
     page = 1,
     limit = 25,
+    activeCampaignsOnly = true,
+    actionReportTime = "conversion",
+    resultSource = "salla",
 } = {}) {
     if (!isMarketingPerformanceProvider(platform)) {
         throw new Error("invalid_marketing_platform");
     }
     if (platform === "snapchat") {
-        const [reportResponse, integrations] = await Promise.all([
-            api.get("/integrations-v2/snapchat_ads/campaign-report", {
-                params: {
-                    from_date: ISO_DATE_RE.test(dateFrom || "") ? dateFrom : undefined,
-                    to_date: ISO_DATE_RE.test(dateTo || "") ? dateTo : undefined,
-                    campaign_query: String(campaignQuery || "").trim().slice(0, 120) || undefined,
-                    page,
-                    limit,
-                },
-            }),
-            getIntegrationsOverview(),
-        ]);
+        // Snapchat validates report dates in each ad account's timezone. Resolve
+        // the earliest local day first so Riyadh's next calendar day is never
+        // sent to an account that is still on the previous day.
+        const integrations = await retryAdsRead(() => getIntegrationsOverview());
         const integration = integrations.providers.find(
             (row) => row.provider === "snapchat_ads",
         ) || {};
-        return normalizeSnapchatMarketingWorkspace(
+        const accountLocalToday = snapchatAccountLocalToday(integration);
+        const requestRange = clampSnapchatRangeToAccountToday(
+            { dateFrom, dateTo },
+            accountLocalToday,
+        );
+        const reportResponse = await retryAdsRead(() => api.get(
+            "/integrations-v2/snapchat_ads/campaign-report",
+            {
+                params: {
+                    from_date: ISO_DATE_RE.test(requestRange.dateFrom || "")
+                        ? requestRange.dateFrom
+                        : undefined,
+                    to_date: ISO_DATE_RE.test(requestRange.dateTo || "")
+                        ? requestRange.dateTo
+                        : undefined,
+                    campaign_query: String(campaignQuery || "").trim().slice(0, 120) || undefined,
+                    page,
+                    limit,
+                    active_campaigns_only: activeCampaignsOnly,
+                    result_source: ["salla", "platform"].includes(resultSource)
+                        ? resultSource
+                        : "salla",
+                    action_report_time: ["conversion", "impression"].includes(actionReportTime)
+                        ? actionReportTime
+                        : "conversion",
+                },
+            },
+        ));
+        const normalized = normalizeSnapchatMarketingWorkspace(
             reportResponse.data,
             integration,
         );
+        return {
+            ...normalized,
+            account_local_today: accountLocalToday,
+            range: {
+                ...normalized.range,
+                date_from: normalized.range.date_from || requestRange.dateFrom,
+                date_to: normalized.range.date_to || requestRange.dateTo,
+            },
+        };
     }
-    if (platform === "google") return googleWorkspace();
+    if (platform === "google") return googleWorkspace({ dateFrom, dateTo, campaignQuery, page, limit, accountId });
+    if (platform === "tiktok") {
+        const [response, integrations] = await Promise.all([
+            retryAdsRead(() => api.get("/integrations-v2/tiktok_ads/workspace", {
+                params: { from_date: dateFrom, to_date: dateTo, entity_type: "overview" },
+            })),
+            retryAdsRead(() => getIntegrationsOverview()),
+        ]);
+        const value = response.data;
+        const integration = integrations.providers.find((row) => row.provider === "tiktok_ads") || {};
+        return {
+            ...value,
+            connection: connectionFromIntegration(integration),
+            totals: normalizeTotals(value.totals),
+            daily: (value.daily || []).map((row) => ({ date: row.date, ...normalizeTotals(row) })),
+            accounts: (value.accounts || []).map(normalizeAccount).filter(Boolean),
+            campaigns: [],
+        };
+    }
     const config = MARKETING_PLATFORM_CONFIG[platform];
     const overview = await getAdsManagerOverview({
         dateFrom,

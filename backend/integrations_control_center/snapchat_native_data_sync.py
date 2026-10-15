@@ -25,6 +25,8 @@ from .snapchat_native_data_common import (
     _parse_datetime,
     _timezone,
     _utcnow,
+    _start_sync_run_heartbeat,
+    _stop_sync_run_heartbeat,
     ensure_snapchat_native_sync_indexes,
     enumerate_native_sync_dates,
     snapchat_native_sync_enabled,
@@ -238,6 +240,7 @@ async def _insert_error(db: Any, *, user_id: str, run_id: str, code: str,
 async def execute_snapchat_native_sync(
     db: Any, user_id: str, payload: SnapchatNativeSyncInput,
     *, now: Callable[[], datetime] = _utcnow,
+    parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     runs = _collection(db, "mezan_integration_sync_runs_v2")
     now_value = now().astimezone(timezone.utc)
@@ -280,19 +283,34 @@ async def execute_snapchat_native_sync(
         if replay.get("status") in {"complete", "partial"}:
             return replay
     run_id = str(uuid.uuid4())
-    await runs.insert_one({
+    run_document = {
         "run_id": run_id, "user_id": user_id, "provider": SNAPCHAT_PROVIDER_ID,
         "run_type": "analytics_refresh", "status": "running",
         "started_at": started_at, "finished_at": None,
+        "worker_started_at": started_at,
+        "worker_heartbeat_at": started_at,
         "lock_expires_at": _iso(now_value + SNAPCHAT_NATIVE_SYNC_LOCK_TTL),
         "idempotency_key": fingerprint,
         "source_mode": SNAPCHAT_NATIVE_SYNC_SOURCE_MODE,
         "summary": {"requested_days": payload.days,
                     "requested_from": payload.from_date, "requested_to": payload.to_date},
         "error": None,
-    })
+    }
+    if parent_run_id:
+        run_document["parent_run_id"] = parent_run_id
+    await runs.insert_one(run_document)
+    heartbeat = _start_sync_run_heartbeat(
+        runs,
+        {"user_id": user_id, "run_id": run_id},
+        now=now,
+    )
     try:
-        engine = await SnapchatNativeDataSync(db, now=now).run(user_id, payload)
+        try:
+            engine = await SnapchatNativeDataSync(
+                db, now=now
+            ).run(user_id, payload)
+        finally:
+            await _stop_sync_run_heartbeat(heartbeat)
     except SnapchatNativeSyncError as exc:
         finished_at = _iso(now())
         failure = exc.result or {}

@@ -1,0 +1,30 @@
+{
+  "workflow": "qoyod-rounding-lrm-tests",
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "backend/tests/test_qoyod_rounding_lrm.py",
+    "backend/tests/test_qoyod_manual_send_plan_b.py",
+    "backend/tests/test_plan_b_payment_path_fix.py",
+    "backend/tests/test_pending_cross_tab_dedupe.py",
+    "backend/tests/test_plan_b_cross_trace_dedupe.py",
+    "backend/tests/test_pending_limit_and_status_filter_ordering.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\qoyod-rounding-lrm-tests.xml"
+  ],
+  "exit_code": 1,
+  "duration_seconds": 5.12,
+  "test_files": [
+    "backend/tests/test_qoyod_rounding_lrm.py",
+    "backend/tests/test_qoyod_manual_send_plan_b.py",
+    "backend/tests/test_plan_b_payment_path_fix.py",
+    "backend/tests/test_pending_cross_tab_dedupe.py",
+    "backend/tests/test_plan_b_cross_trace_dedupe.py",
+    "backend/tests/test_pending_limit_and_status_filter_ordering.py"
+  ]
+}

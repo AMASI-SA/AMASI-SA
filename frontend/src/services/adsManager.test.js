@@ -20,6 +20,15 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
+test("Google joins the overview whitelist without creating or recalculating monetary totals", async () => {
+    const payload = { range: { provider: "google" }, metrics: { provider_reported_spend_sar: 75 }, coverage: { providers_total: 4, provider_spend_providers: 4 }, providers: [{ provider: "google", metrics: { provider_reported_spend_sar: 75 }, campaign_coverage: { status: "available" }, freshness: {}, reconciliation: {} }], campaigns: [{ provider: "google", campaign_id: "456", campaign_name: "هدايا", spend_sar_equivalent: 75 }], daily_spend: [{ date: "2026-10-13", google: 75 }] };
+    api.get.mockResolvedValue({ data: payload });
+    const overview = await getAdsManagerOverview({ provider: "google", dateFrom: "2026-10-13", dateTo: "2026-10-13" });
+    expect(api.get.mock.calls[0][1].params.provider).toBe("google"); expect(overview.providers[0].provider).toBe("google"); expect(overview.campaigns[0].provider).toBe("google");
+    expect(overview.coverage.providers_total).toBe(4); expect(overview.coverage.provider_spend_providers).toBe(4); expect(overview.daily_spend[0].google).toBe(75);
+    expect(overview.metrics.provider_reported_spend_sar).toBe(75); expect(overview.policy).toBe(OBSERVE_ONLY_POLICY); expect(api.post).not.toHaveBeenCalled();
+});
+
 test("ads manager uses one GET request with bounded read filters", async () => {
     api.get.mockResolvedValue({
         data: {

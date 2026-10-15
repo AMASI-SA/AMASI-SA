@@ -1,0 +1,21 @@
+{
+  "name": "توصيل أماسي",
+  "short_name": "توصيل أماسي",
+  "description": "تطبيق موصلي متجر أماسي لإدارة التواصيل والتحصيلات",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/dashboard-advanced",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

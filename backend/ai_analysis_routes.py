@@ -14,28 +14,21 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
 from openai import APITimeoutError, AsyncOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-from ai_operational_context_v2 import (
-    DEFAULT_ORDER_SAMPLE_LIMIT,
-    MAX_ORDER_SAMPLE_LIMIT,
-    build_orders_v2_operational_context,
-)
 from ai_provider_status import openai_runtime_status
 
 MAX_LIST_ITEMS = 30
 MAX_TEXT_LENGTH = 500
-DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 45.0
+DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 20.0
 MIN_ANALYSIS_TIMEOUT_SECONDS = 0.05
 MAX_ANALYSIS_TIMEOUT_SECONDS = 45.0
-MAX_ANALYSIS_OUTPUT_TOKENS = 2400
-DEFAULT_ANALYSIS_REASONING_EFFORT = "low"
-ALLOWED_ANALYSIS_REASONING_EFFORTS = {"low", "medium", "high"}
+MAX_ANALYSIS_OUTPUT_TOKENS = 1200
 AI_ANALYSIS_JOB_COLLECTION = "mezan_ai_analysis_jobs"
-AI_ANALYSIS_JOB_STALE_SECONDS = 180
+AI_ANALYSIS_JOB_STALE_SECONDS = 120
 ACTIVE_JOB_STATUSES = ("queued", "running")
 ALLOWED_CONTEXT_KEYS = {
     "period",
@@ -46,7 +39,6 @@ ALLOWED_CONTEXT_KEYS = {
     "errors",
     "anomalies",
     "recommendations",
-    "operational_context_v2",
 }
 FORBIDDEN_KEY_FRAGMENTS = {
     "email",
@@ -101,7 +93,7 @@ def _is_forbidden_key(key: str) -> bool:
 
 
 def _sanitize(value: Any, *, depth: int = 0) -> Any:
-    if depth > 7:
+    if depth > 4:
         return None
     if value is None or isinstance(value, (bool, int, float)):
         return value
@@ -199,37 +191,6 @@ def _analysis_timeout_seconds() -> float:
     )
 
 
-def _analysis_reasoning_effort() -> str:
-    raw_value = os.environ.get(
-        "MEZAN_OPENAI_REASONING_EFFORT",
-        DEFAULT_ANALYSIS_REASONING_EFFORT,
-    ).strip().lower()
-    if raw_value in ALLOWED_ANALYSIS_REASONING_EFFORTS:
-        return raw_value
-    return DEFAULT_ANALYSIS_REASONING_EFFORT
-
-
-def _response_usage(response: Any) -> dict[str, int | None]:
-    usage = getattr(response, "usage", None)
-    output_details = (
-        getattr(usage, "output_tokens_details", None)
-        if usage is not None
-        else None
-    )
-    return {
-        "output_tokens": (
-            getattr(usage, "output_tokens", None)
-            if usage is not None
-            else None
-        ),
-        "reasoning_tokens": (
-            getattr(output_details, "reasoning_tokens", None)
-            if output_details is not None
-            else None
-        ),
-    }
-
-
 def _default_client() -> AsyncOpenAI:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -315,20 +276,12 @@ async def _run_openai_analysis(
             client.responses.create(
                 model=os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini"),
                 instructions=(
-                    "أنت العقل التشغيلي التحليلي داخل Mezan OS. أجب بالعربية "
-                    "وبالاعتماد حصراً على السياق المرسل، ولا تدّعي تنفيذ أي "
-                    "تعديل. إذا وجد operational_context_v2 فاعتبره المصدر "
-                    "المرجعي لحقائق الطلبات؛ فهو عينة آمنة من نفس عقد Orders "
-                    "V2 وعناصر الطلب الذي تستخدمه واجهة ميزان 2. استنتج بنفسك "
-                    "المفاهيم التجارية مثل الإجمالي والضريبة والخصم والشحن "
-                    "والدفع وربط الحملات من المسارات والقيم والعلاقات، ولا تعتمد "
-                    "على أسماء حقول متوقعة أو أحكام coverage/gates القديمة. لا "
-                    "تعتبر المفهوم مفقوداً لمجرد غياب اسم حقل واحد؛ قارن ملخص "
-                    "الطلب مع سطور المنتجات وابحث عن المسارات البديلة. اذكر في "
-                    "كل دليل المسارات التي اكتشفتها والقيم أو العلاقات الداعمة. "
-                    "رتّب المشاكل حسب الأثر، واجعل safe_to_act=false إذا كانت "
-                    "العينة أو الأدلة غير كافية. اقترح خطوات تحقق قابلة للقياس "
-                    "وقراءة فقط، ولا تطلب بيانات شخصية أو أسراراً."
+                    "أنت محلل تشغيل ومحاسبة داخل نظام Mezan OS. أجب "
+                    "بالعربية وبالاعتماد حصراً على السياق المرسل. لا تخترع "
+                    "بيانات، ولا تطلب بيانات شخصية أو أسراراً، ولا تدّعي "
+                    "تنفيذ أي تعديل. رتّب المشاكل حسب الأثر. safe_to_act "
+                    "يكون false إذا كان الدليل غير كافٍ أو توجد بوابة حرجة. "
+                    "اقترح خطوات تحقق قابلة للقياس وقراءة فقط."
                 ),
                 input=json.dumps(
                     {
@@ -338,8 +291,6 @@ async def _run_openai_analysis(
                     ensure_ascii=False,
                 ),
                 max_output_tokens=MAX_ANALYSIS_OUTPUT_TOKENS,
-                reasoning={"effort": _analysis_reasoning_effort()},
-                store=False,
                 text={
                     "format": {
                         "type": "json_schema",
@@ -352,93 +303,9 @@ async def _run_openai_analysis(
             ),
             timeout=_analysis_timeout_seconds(),
         )
-        response_status = str(
-            getattr(response, "status", "") or ""
-        ).strip().lower()
-        incomplete_details = getattr(response, "incomplete_details", None)
-        incomplete_reason = (
-            str(getattr(incomplete_details, "reason", "") or "").strip()
-            or None
-        )
-        usage = _response_usage(response)
-
-        if response_status == "incomplete":
-            logger.warning(
-                "Mezan OpenAI response incomplete reason=%s "
-                "output_tokens=%s reasoning_tokens=%s",
-                incomplete_reason,
-                usage["output_tokens"],
-                usage["reasoning_tokens"],
-            )
-            if incomplete_reason == "max_output_tokens":
-                raise HTTPException(
-                    status_code=502,
-                    detail={
-                        "code": "ai_analysis_output_limit",
-                        "message": (
-                            "لم يكتمل إخراج محلل ميزان ضمن حد الرموز الآمن. "
-                            "لم يتم تعديل أو إرسال أي بيانات؛ حاول مرة أخرى."
-                        ),
-                        "retryable": True,
-                        "upstream_status": response_status,
-                        "incomplete_reason": incomplete_reason,
-                    },
-                )
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "code": "ai_analysis_incomplete",
-                    "message": (
-                        "لم تكتمل استجابة محلل ميزان. لم يتم تعديل أو إرسال "
-                        "أي بيانات؛ حاول مرة أخرى."
-                    ),
-                    "retryable": incomplete_reason != "content_filter",
-                    "upstream_status": response_status,
-                    "incomplete_reason": incomplete_reason,
-                },
-            )
-
-        if response_status == "failed":
-            upstream_error = getattr(response, "error", None)
-            upstream_code = getattr(upstream_error, "code", None)
-            logger.warning(
-                "Mezan OpenAI response failed code=%s",
-                upstream_code,
-            )
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "code": "ai_analysis_upstream_failed",
-                    "message": (
-                        "تعذر على مزود الذكاء إنشاء نتيجة التحليل. لم يتم "
-                        "تعديل أو إرسال أي بيانات؛ حاول مرة أخرى."
-                    ),
-                    "retryable": True,
-                    "upstream_status": response_status,
-                },
-            )
-
         output_text = getattr(response, "output_text", None)
         if not isinstance(output_text, str) or not output_text.strip():
-            logger.warning(
-                "Mezan OpenAI returned empty output status=%s "
-                "output_tokens=%s reasoning_tokens=%s",
-                response_status or None,
-                usage["output_tokens"],
-                usage["reasoning_tokens"],
-            )
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "code": "ai_analysis_empty_output",
-                    "message": (
-                        "عاد محلل الذكاء دون نتيجة قابلة للعرض. لم يتم تعديل "
-                        "أو إرسال أي بيانات؛ حاول مرة أخرى."
-                    ),
-                    "retryable": True,
-                    "upstream_status": response_status or None,
-                },
-            )
+            raise ValueError("empty_openai_output")
         return AIAnalysisResult.model_validate_json(output_text).model_dump()
     except (asyncio.TimeoutError, APITimeoutError) as exc:
         raise HTTPException(
@@ -457,20 +324,12 @@ async def _run_openai_analysis(
         TypeError,
         AttributeError,
     ) as exc:
-        logger.warning(
-            "Mezan OpenAI structured output validation failed: %s",
-            type(exc).__name__,
-        )
         raise HTTPException(
             status_code=502,
-            detail={
-                "code": "ai_analysis_schema_invalid",
-                "message": (
-                    "عاد محلل الذكاء بنتيجة لا تطابق عقد ميزان. لم يتم "
-                    "تعديل أو إرسال أي بيانات؛ حاول مرة أخرى."
-                ),
-                "retryable": True,
-            },
+            detail=(
+                "عاد محلل الذكاء بنتيجة غير صالحة. لم يتم تعديل أو إرسال "
+                "أي بيانات."
+            ),
         ) from exc
     except Exception as exc:
         raise HTTPException(
@@ -490,37 +349,21 @@ async def _run_openai_analysis(
 
 def _job_error(exc: HTTPException) -> dict[str, Any]:
     detail = exc.detail
+    if isinstance(detail, dict):
+        message = str(detail.get("message") or detail.get("detail") or detail)
+    else:
+        message = str(detail)
     code_by_status = {
         422: "ai_analysis_invalid_request",
         502: "ai_analysis_upstream_failed",
         503: "ai_analysis_not_configured",
         504: "ai_analysis_timeout",
     }
-    if isinstance(detail, dict):
-        message = str(detail.get("message") or detail.get("detail") or detail)
-        code = str(
-            detail.get("code")
-            or code_by_status.get(exc.status_code, "ai_analysis_failed")
-        )
-        retryable = bool(
-            detail.get("retryable", exc.status_code >= 500)
-        )
-        safe_metadata = {
-            key: detail.get(key)
-            for key in ("upstream_status", "incomplete_reason")
-            if detail.get(key) is not None
-        }
-    else:
-        message = str(detail)
-        code = code_by_status.get(exc.status_code, "ai_analysis_failed")
-        retryable = exc.status_code >= 500
-        safe_metadata = {}
     return {
-        "code": code,
+        "code": code_by_status.get(exc.status_code, "ai_analysis_failed"),
         "message": message,
         "http_status": exc.status_code,
-        "retryable": retryable,
-        **safe_metadata,
+        "retryable": exc.status_code >= 500,
     }
 
 
@@ -534,8 +377,6 @@ def _safe_job(document: dict[str, Any]) -> dict[str, Any]:
             "message": error.get("message"),
             "http_status": int(error.get("http_status") or 502),
             "retryable": bool(error.get("retryable")),
-            "upstream_status": error.get("upstream_status"),
-            "incomplete_reason": error.get("incomplete_reason"),
         }
     return {
         "ok": status != "failed",
@@ -739,21 +580,6 @@ def make_ai_analysis_router(
             "model": status["analysis"]["model"],
             "writes_enabled": False,
         }
-
-    @router.get("/operational-context-v2")
-    async def operational_context_v2(
-        sample_limit: int = Query(
-            default=DEFAULT_ORDER_SAMPLE_LIMIT,
-            ge=1,
-            le=MAX_ORDER_SAMPLE_LIMIT,
-        ),
-        user: dict = Depends(current_user),
-    ) -> dict[str, Any]:
-        return await build_orders_v2_operational_context(
-            job_db_factory(),
-            user_id=_user_id(user),
-            sample_limit=sample_limit,
-        )
 
     @router.post("/analyze")
     async def analyze(

@@ -1,0 +1,42 @@
+{
+  "workflow": "qoyod-memory-bounds",
+  "command": [
+    "C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "backend/tests/test_resource_governor.py",
+    "backend/tests/test_mongo_observability.py",
+    "backend/tests/test_memory_boot_policy.py",
+    "backend/tests/test_memory_bounded_workers.py",
+    "backend/tests/test_dashboard_memory_admission.py",
+    "backend/tests/test_snapchat_memory_ordering.py",
+    "backend/tests/test_startup_guard.py",
+    "backend/tests/test_scheduler_readiness_gate.py",
+    "backend/tests/test_qoyod_unsent_memory_bounds.py",
+    "backend/tests/test_qoyod_unsent_range_counts.py",
+    "backend/tests/test_qoyod_unsent_report_eligibility.py",
+    "backend/tests/test_qoyod_reconciliation_v2.py",
+    "--junitxml=C:\\Users\\amasi\\.codex\\visualizations\\2026\\09\\30\\01a0efa3-b9b5-7280-89e8-2043e918fe5c\\mz2-integration\\docs\\operations\\MZ2-TRACK-C-INTEGRATION-20260930\\local-gates\\qoyod-memory-bounds.xml"
+  ],
+  "exit_code": 0,
+  "duration_seconds": 10.02,
+  "test_files": [
+    "backend/tests/test_resource_governor.py",
+    "backend/tests/test_mongo_observability.py",
+    "backend/tests/test_memory_boot_policy.py",
+    "backend/tests/test_memory_bounded_workers.py",
+    "backend/tests/test_dashboard_memory_admission.py",
+    "backend/tests/test_snapchat_memory_ordering.py",
+    "backend/tests/test_startup_guard.py",
+    "backend/tests/test_scheduler_readiness_gate.py",
+    "backend/tests/test_qoyod_unsent_memory_bounds.py",
+    "backend/tests/test_qoyod_unsent_range_counts.py",
+    "backend/tests/test_qoyod_unsent_report_eligibility.py",
+    "backend/tests/test_qoyod_reconciliation_v2.py"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "ProcessId": 7756,
+  "ParentProcessId": 32684,
+  "CreationDate": "2026-10-02T01:02:01.428606+03:00",
+  "ExecutablePath": "C:\\Users\\amasi\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+  "CommandLine": "\"C:\\Users\\amasi\\mz2-final-integration-owner-20261001\\.venv\\Scripts\\python.exe\" scripts/testing/mz2_business_uat/run_server.py"
+}

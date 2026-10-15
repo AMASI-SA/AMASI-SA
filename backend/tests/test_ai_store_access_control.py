@@ -68,6 +68,22 @@ def test_disabled_assignment_has_no_permissions():
     assert effective_permissions({"role_key": "product_manager", "enabled": False}) == []
 
 
+def test_preparation_operator_is_scoped_to_assigned_preparation_work():
+    permissions = effective_permissions({
+        "role_key": "preparation_operator",
+        "enabled": True,
+    })
+
+    assert permissions == [
+        "preparation.assigned.read",
+        "preparation.assigned.stop",
+        "preparation.assigned.work",
+    ]
+    assert "inventory.preparation.receive" not in permissions
+    assert "products.publish" not in permissions
+    assert "roles.manage" not in permissions
+
+
 def test_shipping_assignment_scopes_employee_to_warehouses_and_responsibilities():
     assignment = validate_assignment({
         "role_key": "shipping_operator",
@@ -113,6 +129,22 @@ def test_stock_preparation_permissions_follow_operational_roles():
     assert "inventory.preparation.create" in warehouse_permissions
     assert "inventory.preparation.work" in warehouse_permissions
     assert "inventory.preparation.receive" in warehouse_permissions
+
+
+def test_supplier_invoice_edit_permissions_can_be_granted_individually():
+    assignment = validate_assignment({
+        "role_key": "warehouse_operator",
+        "extra_permissions": [
+            "supplier_receiving.product_price.edit",
+            "supplier_receiving.service_price.edit",
+            "supplier_receiving.service.add",
+        ],
+    })
+    permissions = effective_permissions(assignment)
+
+    assert "supplier_receiving.product_price.edit" in permissions
+    assert "supplier_receiving.service_price.edit" in permissions
+    assert "supplier_receiving.service.add" in permissions
 
 
 def test_stock_preparation_responsibility_is_assignable():

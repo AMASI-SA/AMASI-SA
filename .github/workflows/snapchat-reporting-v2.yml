@@ -1,0 +1,107 @@
+name: Snapchat Reporting V2 Shadow
+
+on:
+  pull_request:
+    branches:
+      - main
+      - hotfix/prod-snap-meta-final
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - "backend/snapchat_v2/**"
+      - "backend/unified_marketing/**"
+      - "backend/decision_intelligence/evidence_adapter.py"
+      - "frontend/src/components/marketing/UnifiedMarketingOrdersPanel*"
+      - "frontend/src/components/marketing/SnapchatDecisionReadiness*"
+      - "frontend/src/pages/SnapchatV2Page*"
+      - "backend/snapchat_v2_test_bootstrap.py"
+      - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
+      - "backend/tests/test_snapchat_reporting_v2_*.py"
+      - ".github/workflows/snapchat-reporting-v2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reporting-v2-tests:
+    name: Snapchat reporting V2 foundation
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+    env:
+      JWT_SECRET: snapchat-reporting-v2-test-secret
+      SNAPCHAT_TOKEN_ENC_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      SNAP_PERIOD_TEST_MONGO: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          httpx==0.28.1
+          pydantic==2.13.4
+          pytest==9.0.3
+          pytest-asyncio
+          cryptography==48.0.0
+          openpyxl==3.1.5
+          pymongo==4.6.3
+          motor==3.3.1
+          python-dotenv==1.2.2
+          bcrypt==4.1.3
+          PyJWT==2.13.0
+          reportlab==4.5.1
+          mongomock==4.3.0
+      - name: Compile reporting V2
+        run: |
+          python -m compileall -q snapchat_v2
+          python -m py_compile snapchat_v2_test_bootstrap.py
+          python -m py_compile integrations_control_center/snapchat_native_tracking_routes.py
+          python -m py_compile tests/test_snapchat_reporting_v2_*.py
+      - name: Run reporting V2 tests
+        run: >-
+          python -m pytest
+          -p snapchat_v2_test_bootstrap
+          tests/test_snapchat_reporting_v2_*.py
+          tests/test_snapchat_period_diagnostics*.py
+          tests/test_snapchat_order_projection.py
+          tests/test_snapchat_clickid_attribution.py
+          tests/test_unified_marketing_snapchat_readiness.py
+          tests/test_decision_intelligence_phase5.py
+          -q
+          --tb=short
+
+  attribution-ui-tests:
+    name: Snapchat attribution details UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Test order attribution details and page integration
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand
+          src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
+          src/components/marketing/SnapchatDecisionReadiness.test.jsx
+          src/pages/SnapchatV2Page.test.jsx

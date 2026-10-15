@@ -1,0 +1,21 @@
+C5 FINAL ISOLATED ACCEPTANCE
+Repository: C:/Users/amasi/mz2-c-rich-shipping-20261001
+Expected HEAD: 9b451cc03b4f8159483cbf58ef0fd128d24530e1
+Expected TREE: 1756c44f0f631c4f72dc24525c694601e0ee8011
+Mongo: mongodb://127.0.0.1:27130/?replicaSet=mz2c
+HTTP: http://127.0.0.1:18771
+Required: PYTHONDONTWRITEBYTECODE=1; PYTHON_DOTENV_DISABLED=1; MZ2_C5_EXECUTE=isolated-authorized
+MONGO_URL and MONGODB_URI point to the same loopback replica.
+MZ2_C5_EVIDENCE: this evidence directory
+MZ2_C5_DIST: this evidence directory/dist
+JWT_SECRET: fresh in-memory synthetic secret; never persisted or printed
+PLAYWRIGHT_MODULE: C:/Users/amasi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright
+Scope: complete existing 16-stage synthetic SETUP workflow, final Stage16 lock. Physical stock approval, Opening Post, Activation and Production are not executed.
+Commands, workdir repository:
+1. Python capture_source.py before
+2. node scripts/testing/mz2_business_uat/build.cjs
+3. Python scripts/testing/mz2_business_uat/run_server.py
+4. node scripts/testing/mz2_business_uat/browser.cjs
+5. Create stop-server marker; await graceful lifespan cleanup of only owned UUID database
+6. Python capture_source.py after
+No source edits; no silent retry; no Production contact.

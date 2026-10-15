@@ -21,14 +21,43 @@ export async function listProductsV2({ page = 1, perPage = 30, query = "", statu
     return (await api.get("/products-v2", { params })).data;
 }
 
-export async function listWorkspaceProducts({ page = 1, perPage = 30, query = "", status = "", sort = "newest", missingSku = false } = {}) {
+export async function listWorkspaceProducts({
+    page = 1,
+    perPage = 30,
+    query = "",
+    status = "",
+    sort = "newest",
+    missingSku = false,
+    missingMezanCost = false,
+    soldOnly = false,
+    fromDate = "",
+    toDate = "",
+    paymentMethods = "",
+    shippingCompanies = "",
+    productIds = "",
+} = {}) {
     if (page === 1 && sort === "newest" && !query.trim()) {
         try { await syncRecentProductsV2(); } catch { /* keep local listing available */ }
     }
-    const params = { page, per_page: perPage, sort, missing_sku: missingSku };
+    const params = {
+        page,
+        per_page: perPage,
+        sort,
+        missing_sku: missingSku,
+        missing_mezan_cost: missingMezanCost,
+        sold_only: soldOnly,
+    };
     if (query.trim()) params.q = query.trim();
     if (status) params.status = status;
-    return (await api.get("/products-v2/workspace/products", { params })).data;
+    if (fromDate) params.from = fromDate;
+    if (toDate) params.to = toDate;
+    if (paymentMethods) params.payment_methods = paymentMethods;
+    if (shippingCompanies) params.shipping_companies = shippingCompanies;
+    if (productIds) params.product_ids = productIds;
+    const endpoint = missingMezanCost && soldOnly
+        ? "/products-v2/workspace/sold-missing-cost-products"
+        : "/products-v2/workspace/products";
+    return (await api.get(endpoint, { params })).data;
 }
 
 export async function getProductsV2Summary() { return (await api.get("/products-v2/summary")).data; }
@@ -47,6 +76,8 @@ export async function getProductOperations(productId) { return (await api.get(`/
 export async function saveProductOperationProfile(productId, payload) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/operations/profile`, payload)).data; }
 export async function linkProductResource(productId, resourceId, quantity = 1) { return (await api.put(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`, { quantity })).data; }
 export async function unlinkProductResource(productId, resourceId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/resource-links/${encodeURIComponent(resourceId)}`)).data; }
+export async function linkProductGroups(productId, groupIds) { return (await api.post(`/products-v2/${encodeURIComponent(productId)}/group-links`, { group_ids: groupIds })).data; }
+export async function unlinkProductGroup(productId, groupId) { return (await api.delete(`/products-v2/${encodeURIComponent(productId)}/group-links/${encodeURIComponent(groupId)}`)).data; }
 export async function listProductCreationDrafts(params = {}) { return (await api.get("/products-v2/creation-drafts", { params })).data; }
 export async function createProductCreationDraft(payload) { return (await api.post("/products-v2/creation-drafts", payload)).data; }
 export async function updateProductCreationDraft(draftId, payload) { return (await api.put(`/products-v2/creation-drafts/${encodeURIComponent(draftId)}`, payload)).data; }

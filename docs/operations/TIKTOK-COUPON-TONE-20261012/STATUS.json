@@ -1,0 +1,13 @@
+{
+  "task_id": "TIKTOK-COUPON-TONE-20261012",
+  "scope": "Native TikTok public coupon draft tone only",
+  "base_production_sha": "82de9e3091183fa6d14c5f45a1b651984bb28ec7",
+  "phase": "source_ready_for_CI",
+  "verification": {
+    "focused_tests": 54,
+    "exit": 0
+  },
+  "behavior": "Varied warm Saudi retail reply with trusted coupon; no gender assumption, hypothetical coupon failure, private-channel fallback for simple coupon requests or invented promises. No provider/model runtime calls in tests.",
+  "production_changed": false,
+  "next_action": "Fresh source CI and v5 A/B freeze. Do not alter active manual-reply release or publish until its guard is inactive."
+}

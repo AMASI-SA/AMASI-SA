@@ -52,3 +52,25 @@ def test_aligns_qoyod_document_rounding_without_negative_values():
         salla_total=533.56,
     )
     assert checked["difference"] == 0.0
+
+
+def test_preflight_normalizes_mill_lrm_before_qoyod_write():
+    payload = {"invoice": {"line_items": [
+        {
+            "product_id": 1, "quantity": 1, "unit_price": 95.0,
+            "discount": 14.691, "tax_percent": 15,
+        },
+        {
+            "product_id": 2, "quantity": 1, "unit_price": 23.15,
+            "discount": 1.41, "tax_percent": 15,
+        },
+    ]}}
+
+    result = _preflight_qoyod_invoice_payload(
+        payload, salla_total=117.34)
+
+    lines = payload["invoice"]["line_items"]
+    assert result["qoyod_predicted_total"] == 117.33
+    assert result["difference"] == -0.01
+    assert lines[0]["discount"] == 14.70
+    assert lines[1]["discount"] == 1.42

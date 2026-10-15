@@ -1,0 +1,100 @@
+[data-mezan-ads-report-load-indicator] {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  border: 1px solid rgb(226 232 240);
+  background: rgb(248 250 252);
+  padding: 9px 12px;
+  color: rgb(51 65 85);
+}
+
+[data-mezan-ads-report-load-indicator][hidden] {
+  display: none !important;
+}
+
+[data-mezan-ads-report-load-indicator][data-state="loading"] {
+  border-color: rgb(191 219 254);
+  background: rgb(239 246 255);
+  color: rgb(30 64 175);
+}
+
+[data-mezan-ads-report-load-indicator][data-state="success"] {
+  border-color: rgb(167 243 208);
+  background: rgb(236 253 245);
+  color: rgb(4 120 87);
+}
+
+[data-mezan-ads-report-load-indicator][data-state="error"] {
+  border-color: rgb(254 202 202);
+  background: rgb(254 242 242);
+  color: rgb(190 18 60);
+}
+
+.mezan-ads-report-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 9999px;
+  border: 2px solid rgb(147 197 253);
+  border-top-color: rgb(29 78 216);
+  animation: mezan-ads-report-spin 0.75s linear infinite;
+}
+
+.mezan-ads-report-state-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: white;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mezan-ads-report-state-icon--success {
+  background: rgb(16 185 129);
+}
+
+.mezan-ads-report-state-icon--error {
+  background: rgb(225 29 72);
+}
+
+.mezan-ads-report-state-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+
+.mezan-ads-report-state-copy strong {
+  font-weight: 900;
+}
+
+.mezan-ads-report-state-copy small {
+  overflow: hidden;
+  color: currentColor;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes mezan-ads-report-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  [data-mezan-ads-report-load-indicator] {
+    align-items: flex-start;
+  }
+}

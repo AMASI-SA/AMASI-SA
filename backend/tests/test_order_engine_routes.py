@@ -53,6 +53,8 @@ class FakeRepository:
         limit,
         before_order_date=None,
         before_order_number=None,
+        status_group=None,
+        status_exact=None,
     ):
         rows = [
             row
@@ -162,6 +164,22 @@ def test_owner_can_list_orders_with_default_limit():
         row["order_number"]
         for row in payload["items"]
     ] == ["300", "200", "100"]
+    assert repository.write_calls == 0
+
+
+def test_latest_sold_products_feed_returns_orders_without_enrichment():
+    client, repository = build_client({
+        "id": "owner-1",
+        "role": "owner",
+    })
+
+    response = client.get("/api/orders-v2/latest-sold-products?limit=2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 2
+    assert [row["order_number"] for row in payload["items"]] == ["300", "200"]
+    assert payload["items"][0]["items"][0]["name"] == "منتج"
     assert repository.write_calls == 0
 
 

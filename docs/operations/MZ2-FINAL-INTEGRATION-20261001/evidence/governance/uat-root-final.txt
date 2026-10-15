@@ -1,0 +1,23 @@
+PASS UI create persists a new backend session; list/get use same ID
+PASS UI cutover save persists and reload restores it
+PASS section save / reload restores explicit zero
+PASS identical retry is idempotent; stale CAS returns 409
+PASS N/A requires reason and evidence and round-trips without inferred zero
+PASS UI provider/bank binding persists exact IDs
+PASS UI per-account inventory valuation round-trip excludes physical quantities
+PASS server preview contains bank mapping and per-account inventory reconciliation
+PASS review locks server session and UI edits
+PASS readiness exposes Smoke B hold and live-post false, not physical approval
+PASS all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow
+PASS zero unexpected browser errors or external requests; zero financial effects
+PASS stage 4 HTTP employee salary, advance and custody persist independently
+PASS stage 5 HTTP supplier payable and advance remain separate
+PASS stage 6 HTTP external person creation, invalid request and exact identity readback
+PASS stage 7 real Track F courier, rate and canonical bank binding setup with replay and CAS
+PASS stage 7 full editor draft is rejected without changing native setup
+PASS stages 8 and 9 HTTP courier and driver receivable/payable balances persist without netting
+PASS stage 12 HTTP confirmed advertising wallet and payable preserve exact separate identities
+PASS stage 13 HTTP prepaid uses paid invoice calendar days, explicit selection and replay
+PASS stage 14 HTTP typed obligations and taxes remain separate; unknown deposit rejected
+PASS stage 15 combined domain preview and review preserve independent financial meanings
+PASS stage 16 live approval remains locked and all non-setup domains unchanged

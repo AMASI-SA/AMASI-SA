@@ -29,7 +29,11 @@ async def test_fetch_uses_order_details_as_authority():
                     "slug": "under_review",
                     "name": "تم المراجعة",
                 },
-            }}
+                }}
+
+        if path == "/shipments":
+            assert params == {"order_id": "987654", "per_page": 50}
+            return {"data": []}
 
         assert path == "/orders/items"
         assert params == {"order_id": "987654"}
@@ -76,11 +80,62 @@ async def test_fetch_uses_order_details_as_authority():
 
     assert calls[0][1] == "/orders"
     assert calls[1][1] == "/orders/987654"
-    assert calls[2] == (
+    assert (
         "GET",
         "/orders/items",
         {"order_id": "987654"},
-    )
+    ) in calls
+
+
+@pytest.mark.asyncio
+async def test_fetch_recovers_real_sku_from_variant_details():
+    calls = []
+
+    async def fake_call(db, user_id, method, path, params=None):
+        calls.append((method, path, params))
+        if path == "/orders":
+            return {"data": [{
+                "id": 987655,
+                "reference_id": "277674576",
+            }]}
+        if path == "/orders/987655":
+            return {"data": {
+                "id": 987655,
+                "reference_id": "277674576",
+                "status": {"slug": "completed", "name": "تم التنفيذ"},
+            }}
+        if path == "/orders/items":
+            return {"data": [{
+                "id": 365435778,
+                "product_sku_id": 2001,
+                "product": {"id": 3001, "name": "منتج بلا SKU في الطلب"},
+                "quantity": 1,
+                "amounts": {
+                    "price_without_tax": {"amount": 100, "currency": "SAR"},
+                    "total": {"amount": 115, "currency": "SAR"},
+                },
+            }]}
+        if path == "/shipments":
+            assert params == {"order_id": "987655", "per_page": 50}
+            return {"data": []}
+        if path == "/products/variants/2001":
+            return {"data": {"id": 2001, "sku": "REAL-VARIANT-SKU"}}
+        raise AssertionError(f"unexpected Salla endpoint: {path}")
+
+    with patch("salla_integration.sync.call_salla", new=fake_call):
+        details = await _fetch_salla_order_details(
+            object(), "orders-owner", "277674576"
+        )
+
+    assert details["items"][0]["sku"] == "REAL-VARIANT-SKU"
+    assert details["items"][0]["_mezan_sku_resolution"] == {
+        "source": "variant_details",
+        "endpoint": "/products/variants/2001",
+    }
+    called_paths = [path for _, path, _ in calls]
+    assert called_paths[:2] == ["/orders", "/orders/987655"]
+    assert set(called_paths[2:4]) == {"/orders/items", "/shipments"}
+    assert called_paths[-1] == "/products/variants/2001"
 
 
 class _Result:

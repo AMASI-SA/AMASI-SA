@@ -1,0 +1,11 @@
+PASS src/pages/accounting/h2/DriverPanel.test.jsx
+PASS src/pages/accounting/h2/AdvertisingPanel.test.jsx
+PASS src/pages/accounting/h2/ObligationsPanel.test.jsx
+PASS src/pages/accounting/h2/DailyReviewDesk.test.jsx
+PASS src/pages/accounting/h2/advertisingAdapter.test.js
+
+Test Suites: 5 passed, 5 total
+Tests:       41 passed, 41 total
+Snapshots:   0 total
+Time:        2.493 s, estimated 4 s
+Ran all test suites.

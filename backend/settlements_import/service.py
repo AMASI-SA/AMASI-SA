@@ -22,6 +22,7 @@ from typing import Any
 import openpyxl
 
 from .registry import detect_provider, parse
+from accounting_source_files import preserve_original
 
 
 def _now() -> datetime:
@@ -29,9 +30,7 @@ def _now() -> datetime:
 
 
 def _normalize_order_number(value: Any) -> str:
-    """unified_orders.order_number is stored as str. Salla / Tamara /
-    Tabby all emit numeric strings — but sometimes openpyxl reads them
-    as ints/floats. Always coerce to str + strip trailing `.0`."""
+    """Coerce provider order references to string and strip trailing `.0`."""
     if value is None:
         return ""
     s = str(value).strip()
@@ -62,6 +61,7 @@ async def import_file(
 
     existing = await db.settlement_files.find_one({"user_id": user_id, "file_hash": file_hash})
     if existing:
+        await preserve_original(db, user_id, existing["id"], content)
         return {
             "status": "duplicate",
             "message": "هذا الملف تم رفعه مسبقاً — تم تخطّيه.",
@@ -77,7 +77,12 @@ async def import_file(
         }
 
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+        wb = openpyxl.load_workbook(
+            io.BytesIO(content),
+            data_only=True,
+            read_only=True,
+            keep_links=False,
+        )
     except Exception as e:
         raise ValueError(f"تعذّر فتح الملف كـ Excel: {e}") from e
 
@@ -91,6 +96,7 @@ async def import_file(
     entries = parsed["entries"]
     totals = parsed["totals"]
     header = parsed["header"]
+    await preserve_original(db, user_id, file_id, content)
 
     # 2. Apply to unified_orders (one DB roundtrip per unique order_number)
     match_result = await _apply_entries(db, user_id, provider, entries, file_id=file_id)
@@ -158,6 +164,49 @@ async def _apply_entries(
 ) -> dict:
     """Group entries by order_number, aggregate per order (sale + refunds),
     then update unified_orders with the consolidated `actual_*` fields."""
+    # Emkan statements expose the provider UUID, while the order table uses
+    # the merchant/Salla reference. Resolve that UUID through the canonical
+    # payment transaction before grouping. If no transaction exists, retain
+    # the UUID as an auditable unmatched reference.
+    provider_order_ids = sorted({
+        _normalize_order_number(e.get("provider_order_id"))
+        for e in entries
+        if e.get("provider_order_id")
+    })
+    if provider_order_ids:
+        provider_to_order: dict[str, str] = {}
+        cursor = db.payment_transactions.find(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "provider_id": {"$in": provider_order_ids},
+            },
+            {
+                "_id": 0, "provider_id": 1,
+                "order_reference_id": 1, "order_number": 1,
+            },
+        )
+        async for transaction in cursor:
+            provider_id = _normalize_order_number(
+                transaction.get("provider_id")
+            )
+            merchant_order = _normalize_order_number(
+                transaction.get("order_reference_id")
+                or transaction.get("order_number")
+            )
+            if provider_id and merchant_order:
+                provider_to_order[provider_id] = merchant_order
+        for entry in entries:
+            provider_id = _normalize_order_number(
+                entry.get("provider_order_id")
+            )
+            merchant_order = provider_to_order.get(provider_id)
+            if merchant_order:
+                entry["source_order_number"] = _normalize_order_number(
+                    entry.get("order_number")
+                )
+                entry["order_number"] = merchant_order
+
     by_order: dict[str, list[dict]] = {}
     salla_purchase_orders: list[str] = []
     for e in entries:
@@ -167,6 +216,10 @@ async def _apply_entries(
         # represent the real net of the order they reference.
         if e.get("event_type") == "salla_purchase":
             salla_purchase_orders.append(_normalize_order_number(e.get("order_number")))
+            continue
+        # Provider-level payout fees have no order to update. They remain in
+        # settlement_entries / settlement_files for official reconciliation.
+        if e.get("event_type") == "settlement_fee":
             continue
         key = _normalize_order_number(e.get("order_number"))
         if not key:
@@ -274,11 +327,12 @@ def _consolidate_rows(rows: list[dict]) -> dict:
 
     Convention:
         actual_gross_amount = max(positive gross seen)  ← original order
-        actual_payment_fee  = sum(positive fees)        ← only sale rows
-        actual_payment_vat  = sum(positive vat)
+        actual_payment_fee  = sum(sale fees + signed refund rebates)
+        actual_payment_vat  = sum(sale VAT + signed refund VAT rebates)
         actual_net_amount   = sum(all net amounts)      ← captured - refund
         actual_refund_amount        = sum(refund_full)
         actual_partial_refund_amount= sum(refund_partial)
+        actual_canceled_amount      = sum(canceled events)
         actual_fee_rate     = weighted avg (against gross)
         settlement_date     = latest event date
     """
@@ -288,6 +342,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
     net = 0.0
     refund_full = 0.0
     refund_partial = 0.0
+    canceled_amount = 0.0
     fee_rate_acc = 0.0
     fee_rate_weight = 0.0
     payment_method = ""
@@ -301,6 +356,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
         net += float(r.get("actual_net_amount") or 0)
         refund_full += float(r.get("actual_refund_amount") or 0)
         refund_partial += float(r.get("actual_partial_refund_amount") or 0)
+        canceled_amount += float(r.get("actual_canceled_amount") or 0)
         rate = float(r.get("actual_fee_rate") or 0)
         if rate > 0:
             w = float(r.get("actual_gross_amount") or 0) or 1.0
@@ -323,6 +379,7 @@ def _consolidate_rows(rows: list[dict]) -> dict:
             "actual_net_amount": round(net, 2),
             "actual_refund_amount": round(refund_full, 2),
             "actual_partial_refund_amount": round(refund_partial, 2),
+            "actual_canceled_amount": round(canceled_amount, 2),
             "actual_fee_rate": fee_rate,
         },
         "settlement_date": settlement_date,
@@ -377,6 +434,7 @@ async def delete_file(db, user_id: str, file_id: str) -> dict:
             "actual_net_amount": "",
             "actual_refund_amount": "",
             "actual_partial_refund_amount": "",
+            "actual_canceled_amount": "",
             "actual_fee_rate": "",
             "settlement_source": "",
             "settlement_date": "",

@@ -1,0 +1,26 @@
+{
+  "synthetic_only": true,
+  "database": "mz2_track_f_63aff70a28b544b295353ca8a84dbcba",
+  "baseline_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+  "current_hash": "afa12ae9bc00e09d9284bd929433a610a9144770f6fe6cc7b16b10d4edf7ee7a",
+  "financial_controls_originals_c3_unchanged": true,
+  "write_control": {
+    "revision": 0,
+    "writes_paused": true,
+    "ledger_backend_state": "v2_active",
+    "ledger_backend_revision": 1,
+    "ledger_backend_contract_revision": 1,
+    "ledger_backend_activation_ref": "synthetic-only"
+  },
+  "changed_collections": [],
+  "attachment_count": 0,
+  "review_count": 0,
+  "legacy_accesses": [],
+  "http": [],
+  "excluded_from_fingerprint": [
+    "store_delivery_late_evidence_events_v1",
+    "new proof rows with origin=late_attachment",
+    "mz2_atomic_owners.revision only"
+  ],
+  "production_writes": 0
+}

@@ -1,0 +1,21 @@
+Release readiness diagnosis (read-only)
+HEAD A: 62adc43910b88201114de93074a5bb25fdbfe495
+PR base: 5a7b44b71c6c9974aba358493b3267a47d6e6314
+Resolved prior reviewed J: 5a7b44b71c6c9974aba358493b3267a47d6e6314
+Previous intent source: b0466515ed5827dfc78b483c9ec3fa9d7c37f81b
+
+Reproduced resolve_candidate_source_base(base, HEAD):
+DeploymentAdapterError: source A must change governed source without changing intent
+at scripts/emergent_deployment_adapter.py:645.
+
+Final intent file diff base..HEAD is empty (git diff --quiet exit 0).
+However mandatory git log/rev-list --full-history J..A -- release/release-intent-v5.json is nonempty:
+e8d3af9769b9bf00d14d95ed08c2dbc711df2b8d Integrate supplier debit identity and native producer
+de02308a24523717f993fb4a75e5316044dafa7c Integrate MZ2 financial identity foundation
+34920ec1d0ffc7f33ecea2eec540c2deb8b2fed8 Integrate security dependency remediation into MZ2 final integration
+
+This is actual source ancestry, not a synthetic fixture. Reviewed-B classification also correctly rejects changed governed source (EmployeesV2Management.jsx has real Track B salary changes). Candidate-A fallback then rejects the intent-touching merge history. No guard or test changes made. No intent/manifests generated, no freeze/build/deploy/lease or /app access.
+
+Safe follow-up requires a deliberately prepared release source lineage preserving prior reviewed intent unchanged throughout J..A, followed by the authorized governed A/B build and fresh intent-only B. Rebuilding alone does not remove the existing history violation. Preserve the integration branch/history; do not weaken full-history checks to mark CI green.
+
+Local Windows load_release_intent verification additionally stops first at filesystem-mode validation: frontend .env mode0666. This is not asserted as the Linux CI failure; the candidate-source Git-history failure above reproduced independently and exactly. No file contents or environment values were inspected.

@@ -20,6 +20,8 @@ See:
 """
 from __future__ import annotations
 
+from salla_shipping import CURRENT_SHIPPING, extract_shipping, outbound_shipment
+
 import hashlib
 import json
 import re
@@ -28,6 +30,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from order_currency import salla_order_currency_fields
 
 from .models import (
     AddressDTO,
@@ -461,6 +465,9 @@ def _address_from(value: Any) -> Optional[AddressDTO]:
         district=_text(
             _first(
                 district.get("name"),
+                data.get("district")
+                if isinstance(data.get("district"), str)
+                else None,
                 data.get("district_name"),
                 data.get("neighborhood"),
                 data.get("block"),
@@ -580,6 +587,8 @@ def _normalise_options(
         name = _first(
             option.get("name"),
             option.get("label"),
+            option.get("title"),
+            option.get("question"),
             option.get("key"),
             option.get("option"),
         )
@@ -591,6 +600,8 @@ def _normalise_options(
                     option.get("values"),
                     option.get("selected"),
                     option.get("choice"),
+                    option.get("answer"),
+                    option.get("option_value"),
                     option.get("text"),
                 )
                 if candidate not in (None, "", [], {})
@@ -675,6 +686,8 @@ def _custom_fields(item: dict[str, Any]) -> list[dict[str, Any]]:
         item.get("custom_fields"),
         item.get("customizations"),
         item.get("personalization"),
+        item.get("fields"),
+        item.get("questions"),
         item.get("attachments"),
         item.get("files"),
     ]
@@ -799,6 +812,9 @@ def _map_item(
         item.get("options"),
         item.get("choices"),
         item.get("attributes"),
+        item.get("product_options"),
+        item.get("selected_options"),
+        item.get("customer_options"),
         variant.get("options"),
         product.get("options"),
     ):
@@ -1118,9 +1134,38 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             raw_order.get("currency"),
         )
     ) or "SAR"
+    currency_fields = salla_order_currency_fields(
+        raw_order,
+        fallback_total=total_obj,
+        fallback_currency=currency,
+    )
 
-    shipments = _list(raw_order.get("shipments"))
-    first_shipment = _dict(shipments[0]) if shipments else {}
+    # Salla reports ``remaining_action.remaining_amount: null`` and
+    # ``has_remaining_amount: false`` for an uncollected COD order.  A root
+    # snapshot may also carry a synthesized zero from that null value.  For
+    # an order still under review, and only when Salla reports no collection,
+    # the amount due on delivery is the source order total.  Keep explicit
+    # remaining values and paid/partially paid orders authoritative.
+    if (
+        (method or "").casefold().replace("-", "_") in {"cod", "cash_on_delivery"}
+        and (status or "").casefold().replace(" ", "_") in {"under_review", "waiting_review", "pending_review"}
+        and remaining_action
+        and remaining_action.get("remaining_amount") is None
+        and remaining_action.get("has_remaining_amount") is False
+        and paid_amount == 0
+        and remaining_amount == 0
+        and currency == "SAR"
+        and _number(total_obj) > 0
+        and (_text(payment_raw.get("status")) or "").casefold() not in {"paid", "completed", "refunded"}
+        and (_text(raw_order.get("payment_status")) or "").casefold() not in {"paid", "completed", "refunded"}
+        and collection_status not in {"paid", "partial"}
+    ):
+        remaining_amount = _money_round(_number(total_obj))
+        has_remaining_amount = True
+        collection_status = "unpaid"
+
+    current_shipping = _dict(raw_order.get(CURRENT_SHIPPING)) or extract_shipping(raw_order) or {}
+    first_shipment = outbound_shipment(raw_order, current_shipping)
     shipping_label_url = (
         _media_url(first_shipment.get("label_url"))
         or _media_url(first_shipment.get("label"))
@@ -1129,10 +1174,27 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
         or _media_url(raw_order.get("shipping_label_url"))
     )
 
-    courier = _dict(
+    courier_value = _first(
+        first_shipment.get("courier"),
+        shipping_raw.get("courier"),
+        shipping_raw.get("company"),
+    )
+    courier = _dict(courier_value)
+    courier_name = _text(current_shipping.get("company_name")) if current_shipping else _text(
         _first(
-            first_shipment.get("courier"),
-            shipping_raw.get("company"),
+            courier.get("name"),
+            courier.get("label"),
+            courier.get("title"),
+            first_shipment.get("courier_name"),
+            first_shipment.get("company_name"),
+            shipping_raw.get("company_name"),
+            shipping_raw.get("shipping_company"),
+            shipping_raw.get("courier_name"),
+            courier_value if isinstance(courier_value, str) else None,
+            shipping_raw.get("company")
+            if isinstance(shipping_raw.get("company"), str)
+            else None,
+            raw_order.get("shipping_company"),
         )
     )
 
@@ -1277,33 +1339,31 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             ),
         ),
         shipping=ShippingDTO(
-            company=_text(
-                _first(
-                    courier.get("name"),
-                    first_shipment.get("courier_name"),
-                    shipping_raw.get("company_name"),
-                )
-            ),
-            company_code=_text(
+            company=courier_name,
+            shipment_id=_text(current_shipping.get("shipment_id")) if current_shipping else _text(first_shipment.get("id")),
+            company_code=_text(current_shipping.get("company_code")) if current_shipping else _text(
                 _first(
                     courier.get("code"),
                     first_shipment.get("courier_code"),
                     shipping_raw.get("company_code"),
                 )
             ),
-            method=_text(
+            method=_text(current_shipping.get("method")) if current_shipping else _text(
                 _first(
                     first_shipment.get("method"),
+                    first_shipment.get("shipping_method"),
                     shipping_raw.get("method"),
+                    shipping_raw.get("shipping_method"),
+                    raw_order.get("shipping_method"),
                 )
             ),
-            status=_text(
+            status=_text(current_shipping.get("status")) if current_shipping else _text(
                 _first(
                     first_shipment.get("status"),
                     shipping_raw.get("status"),
                 )
             ),
-            tracking_number=_text(
+            tracking_number=_text(current_shipping.get("tracking_number")) if current_shipping else _text(
                 _first(
                     first_shipment.get("tracking_number"),
                     first_shipment.get("tracking_id"),
@@ -1313,7 +1373,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     shipping_raw.get("shipping_number"),
                 )
             ),
-            tracking_url=_text(
+            tracking_url=_text(current_shipping.get("tracking_url")) if current_shipping else _text(
                 _first(
                     first_shipment.get("tracking_url"),
                     first_shipment.get("tracking_link"),
@@ -1321,7 +1381,7 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
                     shipping_raw.get("tracking_link"),
                 )
             ),
-            label_url=(
+            label_url=_media_url(current_shipping.get("label_url")) if current_shipping else (
                 shipping_label_url
                 or _media_url(shipping_raw.get("label_url"))
                 or _media_url(shipping_raw.get("label"))
@@ -1341,7 +1401,12 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
             address=_address_from(shipping_address_raw),
         ),
         totals=MoneyTotalsDTO(
-            currency=currency,
+            currency=currency_fields["original_currency"],
+            accounting_currency=currency_fields["accounting_currency"],
+            total_sar=currency_fields["total_amount_sar"],
+            exchange_rate_to_sar=currency_fields["exchange_rate_to_sar"],
+            conversion_status=currency_fields["currency_conversion_status"],
+            conversion_source=currency_fields["currency_conversion_source"],
             subtotal=_number(
                 _first(
                     amounts.get("sub_total"),

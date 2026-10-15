@@ -5,9 +5,7 @@ import {
     FilePdf,
     Funnel,
     MagnifyingGlass,
-    Minus,
     Package,
-    Plus,
     SpinnerGap,
     Stack,
     WarningCircle,
@@ -18,6 +16,8 @@ import {
     createReviewedPreparationBatch,
     downloadReviewedPreparationBatchPdf,
     listReviewedProductCatalog,
+    previewAms11353IncidentRecovery,
+    applyAms11353IncidentRecovery,
 } from "../services/orderReviewEngine";
 import {
     displayReviewedQuantity,
@@ -30,9 +30,13 @@ import {
     reconcileReviewedPreparationSelection,
     reviewedPreparationSelectionSummary,
     reviewedRemainingQuantity,
-    setReviewedPreparationQuantity,
     toggleReviewedPreparationProduct,
 } from "../reviewedPreparationSelection";
+import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
+import {
+    reviewedPieceCustomerOptions,
+    reviewedPieceOrderNumber,
+} from "../reviewedPieceCard";
 
 function categoryLabel(category) {
     return String(category?.path || category?.name || category?.id || "").trim();
@@ -81,6 +85,37 @@ function CategoryCheckbox({ category, selected, onToggle }) {
                 {category.product_count || 0}
             </span>
         </button>
+    );
+}
+
+function Ams11353IncidentRecovery({ onRecovered }) {
+    const [preview, setPreview] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const load = useCallback(async () => {
+        setBusy(true); setError("");
+        try { setPreview(await previewAms11353IncidentRecovery()); }
+        catch (e) { setError(e?.message || "تعذرت معاينة الاستعادة."); }
+        finally { setBusy(false); }
+    }, []);
+    useEffect(() => { load(); }, [load]);
+    const apply = async () => {
+        if (!preview?.ok || preview?.resolved_quantity !== 11) return;
+        if (!window.confirm("تأكيد إعادة 11 قطعة من AMS11353 إلى تمت المراجعة داخل ميزان فقط؟")) return;
+        setBusy(true); setError("");
+        try { await applyAms11353IncidentRecovery(); await load(); await onRecovered?.(); }
+        catch (e) { setError(e?.response?.data?.detail?.code || e?.message || "تعذرت الاستعادة."); setBusy(false); }
+    };
+    return (
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4" data-testid="ams11353-incident-recovery">
+            <h3 className="text-lg font-black text-amber-950">استعادة ملف AMS11353 المفقود</h3>
+            <p className="mt-1 text-sm font-bold text-amber-900">معاينة مقيدة بـ8 طلبات و11 قطعة؛ لا تغيّر سلة ولا ملف PF-20260825-0042.</p>
+            {preview && <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm font-black"><div className="rounded-xl bg-white p-2">الطلبات<br />{preview.expected_order_count}</div><div className="rounded-xl bg-white p-2">القطع<br />{preview.resolved_quantity}</div><div className="rounded-xl bg-white p-2">الحجوزات<br />{preview.target_allocations?.length || 0}</div></div>}
+            {preview?.already_recovered && <div className="mt-3 rounded-xl bg-emerald-100 p-3 text-sm font-black text-emerald-900">اكتملت الاستعادة سابقًا.</div>}
+            {preview?.problems?.length > 0 && <div className="mt-3 rounded-xl bg-rose-100 p-3 text-xs font-bold text-rose-900">{preview.problems.join(" · ")}</div>}
+            {error && <div className="mt-3 text-sm font-bold text-rose-700">{error}</div>}
+            <div className="mt-3 flex gap-2"><button type="button" onClick={load} disabled={busy} className="rounded-xl border bg-white px-4 py-2 font-black">تحديث المعاينة</button><button type="button" onClick={apply} disabled={busy || !preview?.ok || preview?.already_recovered || preview?.resolved_quantity !== 11} className="rounded-xl bg-amber-700 px-4 py-2 font-black text-white disabled:opacity-40">{busy ? "جاري الفحص…" : "استعادة 11 قطعة"}</button></div>
+        </div>
     );
 }
 
@@ -135,64 +170,6 @@ function MobileCategoryDrawer({ open, categories, selectedIds, onToggle, onClear
     );
 }
 
-function QuantitySelector({ product, value, onChange, onRemove }) {
-    const remaining = reviewedRemainingQuantity(product);
-    return (
-        <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 p-3" data-testid="reviewed-preparation-quantity">
-            <div className="flex items-center justify-between gap-2">
-                <div>
-                    <div className="text-xs font-extrabold text-violet-900">كمية هذا الملف</div>
-                    <div className="mt-0.5 text-[11px] text-violet-600">المتاح حاليًا: {remaining}</div>
-                </div>
-                <button
-                    type="button"
-                    onClick={onRemove}
-                    className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"
-                    aria-label={`إلغاء تحديد ${product.name}`}
-                >
-                    <X size={18} weight="bold" />
-                </button>
-            </div>
-            <div className="mt-3 grid grid-cols-[42px_minmax(64px,1fr)_42px_auto] items-center gap-2" dir="ltr">
-                <button
-                    type="button"
-                    onClick={() => onChange(Number(value || 1) - 1)}
-                    className="flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-800"
-                    aria-label="إنقاص الكمية"
-                >
-                    <Minus size={18} weight="bold" />
-                </button>
-                <input
-                    type="number"
-                    inputMode="numeric"
-                    min="1"
-                    max={remaining}
-                    step="1"
-                    value={value}
-                    onChange={(event) => onChange(event.target.value)}
-                    className="h-11 min-w-0 rounded-xl border border-violet-300 bg-white px-2 text-center text-lg font-black text-violet-950 outline-none focus:border-violet-600"
-                    aria-label={`كمية ${product.name} في الملف`}
-                />
-                <button
-                    type="button"
-                    onClick={() => onChange(Number(value || 1) + 1)}
-                    className="flex h-11 items-center justify-center rounded-xl border border-violet-200 bg-white text-violet-800"
-                    aria-label="زيادة الكمية"
-                >
-                    <Plus size={18} weight="bold" />
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onChange(remaining)}
-                    className="h-11 rounded-xl bg-violet-700 px-3 text-sm font-extrabold text-white"
-                >
-                    كامل
-                </button>
-            </div>
-        </div>
-    );
-}
-
 function BatchSuccess({ batch, onDownload, downloading }) {
     if (!batch) return null;
     return (
@@ -228,6 +205,8 @@ function BatchSuccess({ batch, onDownload, downloading }) {
 }
 
 export default function ReviewedOrders() {
+    const reviewedDate = new URLSearchParams(window.location.search).get("reviewed_date") || "";
+    const historical = Boolean(reviewedDate);
     const [catalog, setCatalog] = useState({ products: [], categories: [], summary: {}, truncated: false });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -239,13 +218,17 @@ export default function ReviewedOrders() {
     const [downloadingBatch, setDownloadingBatch] = useState(false);
     const [batchError, setBatchError] = useState("");
     const [lastBatch, setLastBatch] = useState(null);
+    const [stageInstructions, setStageInstructions] = useState([]);
     const requestIdRef = useRef("");
 
     const load = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
         setError("");
         try {
-            const nextCatalog = await listReviewedProductCatalog({ limit: 2000 });
+            const nextCatalog = await listReviewedProductCatalog({ limit: 2000, reviewedDate });
+            if (!reviewedDate && nextCatalog.selectionGrain !== "physical_piece") {
+                throw new Error("تعذّر تحميل بطاقات القطع المنفصلة بأمان. لم يتم عرض كميات مجمعة.");
+            }
             setCatalog(nextCatalog);
             setSelectedQuantities((current) => reconcileReviewedPreparationSelection(
                 current,
@@ -256,7 +239,7 @@ export default function ReviewedOrders() {
         } finally {
             if (!silent) setLoading(false);
         }
-    }, []);
+    }, [reviewedDate]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -305,7 +288,7 @@ export default function ReviewedOrders() {
     const createBatch = async () => {
         if (selectionSummary.productCount === 0 || creatingBatch || catalog.truncated) return;
         const confirmed = window.confirm(
-            `إنشاء ملف تجهيز يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} منتج؟`,
+            `إنشاء ملف تجهيز واحد يحتوي ${selectionSummary.totalQuantity} قطعة من ${selectionSummary.productCount} بطاقة محددة؟`,
         );
         if (!confirmed) return;
 
@@ -315,9 +298,15 @@ export default function ReviewedOrders() {
             requestIdRef.current = createPreparationClientRequestId();
         }
         try {
+            const productsByKey = new Map(
+                (catalog.products || []).map((product) => [product.group_key, product]),
+            );
             const batch = await createReviewedPreparationBatch({
                 clientRequestId: requestIdRef.current,
-                selections: selectionSummary.selections,
+                selections: selectionSummary.selections.map((selection) => ({
+                    ...selection,
+                    revision: productsByKey.get(selection.group_key)?.revision || undefined,
+                })),
             });
             setLastBatch(batch);
             setSelectedQuantities({});
@@ -330,30 +319,47 @@ export default function ReviewedOrders() {
             }
         } catch (createError) {
             setBatchError(createError.message);
+            if (createError?.code === "reviewed_selection_stale") {
+                // The refreshed catalog belongs to a new idempotent attempt;
+                // do not retain the failed request until a browser refresh.
+                requestIdRef.current = "";
+                setSelectedQuantities({});
+            }
+            if (createError?.code === "customer_service_instruction_action_required") {
+                setStageInstructions(createError?.detail?.instructions || []);
+            }
             await load({ silent: true });
         } finally {
             setCreatingBatch(false);
         }
     };
 
-    if (loading) return <div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div>;
-    if (error) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>;
+    const incidentRecovery = new URLSearchParams(window.location.search).get("incident") === "ams11353-20260825"
+        ? <Ams11353IncidentRecovery onRecovered={() => load({ silent: true })} />
+        : null;
+
+    // The incident preview must not be hidden behind the reviewed-products
+    // catalog request.  That catalog can be slow or temporarily unavailable,
+    // while the recovery endpoint is deliberately narrow and independent.
+    if (loading) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="flex min-h-80 items-center justify-center"><SpinnerGap size={34} className="animate-spin text-violet-600" /></div></section>;
+    if (error) return <section className="space-y-4" dir="rtl">{incidentRecovery}<div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}<button type="button" onClick={() => load()} className="mr-3 rounded-xl bg-rose-700 px-4 py-2 text-sm font-black text-white">إعادة المحاولة</button></div></section>;
 
     return (
         <section className={`space-y-4 ${selectionSummary.productCount > 0 ? "pb-28 sm:pb-24" : ""}`} dir="rtl" data-testid="reviewed-orders-stage" data-view="reviewed-products">
+            {incidentRecovery}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">منتجات تمت مراجعتها</h2>
-                        <p className="mt-1 text-sm text-slate-500">حدد المنتجات والكمية التي تريد إضافتها إلى ملف التجهيز الحالي.</p>
+                        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{historical ? `المنتجات التي مرّت بالمراجعة بتاريخ ${reviewedDate}` : "قطع تمت مراجعتها"}</h2>
+                        <p className="mt-1 text-sm text-slate-500">{historical ? "عرض تاريخي للكمية الأصلية وأرقام الطلبات، حتى لو انتقلت المنتجات لاحقًا إلى مرحلة أخرى." : "كل بطاقة تمثل قطعة واحدة؛ حدد القطع المطلوبة ثم أنشئ لها ملف تجهيز واحدًا."}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                         <div className="rounded-xl bg-violet-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-violet-500">المنتجات المتاحة</div>
+                            <div className="text-[11px] font-bold text-violet-500">{historical ? "المنتجات المتاحة" : "البطاقات المتاحة"}</div>
                             <div className="mt-0.5 text-lg font-black text-violet-900">{filteredProducts.length}</div>
                         </div>
                         <div className="rounded-xl bg-emerald-50 px-3 py-2">
-                            <div className="text-[11px] font-bold text-emerald-600">إجمالي المتبقي</div>
+                            <div className="text-[11px] font-bold text-emerald-600">{historical ? "إجمالي ما مرّ بالمراجعة" : "إجمالي المتبقي"}</div>
                             <div className="mt-0.5 text-lg font-black text-emerald-900">{displayReviewedQuantity(shownQuantity)}</div>
                         </div>
                     </div>
@@ -366,7 +372,7 @@ export default function ReviewedOrders() {
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             className="w-full rounded-xl border border-slate-200 py-3 pl-3 pr-10 text-sm outline-none focus:border-violet-500"
-                            placeholder="بحث باسم المنتج أو SKU"
+                            placeholder="بحث برقم الطلب أو خيارات العميل"
                         />
                     </label>
                     <button
@@ -438,6 +444,14 @@ export default function ReviewedOrders() {
                 </div>
             )}
 
+            <CustomerServiceInstructionBanner
+                instructions={stageInstructions}
+                stage="reviewed"
+                onUpdated={(response) => {
+                    if (!response?.waiting_customer_service_approval) setStageInstructions([]);
+                }}
+            />
+
             {catalog.truncated && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
                     تم الوصول إلى الحد التشغيلي لعدد الطلبات. لن يتم إنشاء ملف تجهيز من بيانات ناقصة قبل معالجة هذا التنبيه.
@@ -456,9 +470,10 @@ export default function ReviewedOrders() {
                             .filter(Boolean)
                             .slice(0, 2);
                         const selected = Object.prototype.hasOwnProperty.call(selectedQuantities, product.group_key);
-                        const selectedQuantity = selectedQuantities[product.group_key];
                         const remaining = reviewedRemainingQuantity(product);
                         const allocated = Math.max(0, Number(product.allocated_quantity || 0));
+                        const orderNumber = reviewedPieceOrderNumber(product);
+                        const customerOptions = reviewedPieceCustomerOptions(product);
                         return (
                             <article
                                 key={product.group_key}
@@ -466,15 +481,38 @@ export default function ReviewedOrders() {
                                 data-testid="reviewed-product-card"
                                 data-selected={selected ? "true" : "false"}
                             >
+                                {!historical && (
+                                    <div className="flex justify-end px-3 pt-3 sm:px-4 sm:pt-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
+                                            aria-label={`${selected ? "إلغاء تحديد" : "تحديد"} القطعة من الطلب ${orderNumber || "غير معروف"}`}
+                                            aria-pressed={selected}
+                                            className={`flex h-10 w-10 items-center justify-center rounded-full border-2 transition ${selected
+                                                ? "border-violet-700 bg-violet-700 text-white shadow-md shadow-violet-200"
+                                                : "border-slate-300 bg-white text-transparent hover:border-violet-500"}`}
+                                            data-testid="reviewed-piece-checkbox"
+                                        >
+                                            <Check size={22} weight="bold" />
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-3 p-3 sm:grid-cols-[118px_minmax(0,1fr)] sm:p-4">
                                     <div className="aspect-square overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
                                         <ProductImage product={product} />
                                     </div>
                                     <div className="flex min-w-0 flex-col">
                                         <div className="min-w-0 flex-1">
-                                            <h3 className="line-clamp-2 text-base font-black leading-7 text-slate-950 sm:text-lg">{product.name}</h3>
-                                            {product.sku && <div className="mt-1 truncate text-xs font-bold text-slate-400" dir="ltr">SKU: {product.sku}</div>}
-                                            {productCategories.length > 0 && (
+                                            {historical ? (
+                                                <h3 className="line-clamp-2 text-base font-black leading-7 text-slate-950 sm:text-lg">{product.name}</h3>
+                                            ) : (
+                                                <div className="rounded-xl bg-violet-50 px-3 py-2">
+                                                    <div className="text-[10px] font-bold text-violet-500">رقم الطلب</div>
+                                                    <div className="mt-0.5 text-base font-black text-violet-950" dir="ltr">#{orderNumber || "—"}</div>
+                                                </div>
+                                            )}
+                                            {historical && product.sku && <div className="mt-1 truncate text-xs font-bold text-slate-400" dir="ltr">SKU: {product.sku}</div>}
+                                            {historical && productCategories.length > 0 && (
                                                 <div className="mt-2 flex flex-wrap gap-1">
                                                     {productCategories.map((category) => (
                                                         <span key={category.id} className="max-w-full truncate rounded-full bg-slate-100 px-2 py-1 text-[10px] font-extrabold text-slate-600">
@@ -483,40 +521,42 @@ export default function ReviewedOrders() {
                                                     ))}
                                                 </div>
                                             )}
-                                            {allocated > 0 && (
+                                            {historical && allocated > 0 && (
                                                 <div className="mt-2 text-[11px] font-bold text-amber-700">رُفع سابقًا: {displayReviewedQuantity(allocated)}</div>
                                             )}
+                                            {!historical && (
+                                                <div className="mt-3">
+                                                    <div className="text-[11px] font-black text-slate-500">خيارات العميل</div>
+                                                    {customerOptions.length > 0 ? (
+                                                        <div className="mt-1.5 space-y-1.5">
+                                                            {customerOptions.map((option, index) => (
+                                                                <div key={`${option.label}-${index}`} className="rounded-lg bg-slate-50 px-2.5 py-2 text-xs text-slate-700">
+                                                                    <span className="font-black">{option.label}:</span>{" "}<span className="font-bold">{option.value}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="mt-1 text-xs font-bold text-slate-400">لا توجد خيارات لهذه القطعة</div>
+                                                    )}
+                                                    <div className="mt-2 text-[11px] font-bold text-violet-700">القطعة {product.unit_index} من {product.unit_total}</div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="mt-3 flex items-end justify-between gap-2">
+                                        {historical && <div className="mt-3 flex items-end justify-between gap-2">
                                             <div className="text-xs font-bold text-slate-400">
-                                                متبقي في <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
+                                                {historical ? "ظهر في" : "متبقي في"} <b className="text-slate-700">{product.source_order_count || 0}</b> طلب
                                             </div>
                                             <div className="min-w-20 rounded-2xl bg-emerald-600 px-3 py-2 text-center text-white shadow-sm shadow-emerald-200">
-                                                <div className="text-[10px] font-bold text-emerald-100">المتاح</div>
+                                                <div className="text-[10px] font-bold text-emerald-100">{historical ? "الكمية الأصلية" : "المتاح"}</div>
                                                 <div className="text-2xl font-black leading-none">{displayReviewedQuantity(remaining)}</div>
                                             </div>
-                                        </div>
+                                        </div>}
+                                        {historical && (product.source_order_numbers || []).length > 0 && (
+                                            <div className="mt-2 break-words text-[11px] font-bold text-violet-700" dir="ltr">
+                                                {(product.source_order_numbers || []).join(" • ")}
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-
-                                <div className="border-t border-slate-100 px-3 pb-3 sm:px-4 sm:pb-4">
-                                    {selected ? (
-                                        <QuantitySelector
-                                            product={product}
-                                            value={selectedQuantity}
-                                            onChange={(value) => setSelectedQuantities((current) => setReviewedPreparationQuantity(current, product, value))}
-                                            onRemove={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
-                                        />
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedQuantities((current) => toggleReviewedPreparationProduct(current, product))}
-                                            className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-extrabold text-violet-800 hover:bg-violet-100"
-                                        >
-                                            <Check size={19} weight="bold" />
-                                            تحديد للملف
-                                        </button>
-                                    )}
                                 </div>
                             </article>
                         );
@@ -538,12 +578,12 @@ export default function ReviewedOrders() {
                 onClose={() => setMobileFiltersOpen(false)}
             />
 
-            {selectionSummary.productCount > 0 && (
+            {!historical && selectionSummary.productCount > 0 && (
                 <div className="sticky bottom-3 z-50 mx-auto max-w-3xl rounded-2xl border border-violet-200 bg-white/95 p-3 shadow-2xl shadow-violet-200/60 backdrop-blur" data-testid="reviewed-preparation-selection-bar">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:text-right">
                             <div className="rounded-xl bg-violet-50 px-3 py-2">
-                                <div className="text-[10px] font-bold text-violet-500">المنتجات المحددة</div>
+                                <div className="text-[10px] font-bold text-violet-500">البطاقات المحددة</div>
                                 <div className="text-lg font-black text-violet-950">{selectionSummary.productCount}</div>
                             </div>
                             <div className="rounded-xl bg-emerald-50 px-3 py-2">

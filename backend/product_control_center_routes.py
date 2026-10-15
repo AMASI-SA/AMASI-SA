@@ -28,7 +28,7 @@ PROTECTED_FIELDS = {
 
 PUBLISHABLE_FIELDS = {
     "name", "description", "short_description", "price", "sale_price",
-    "status", "sku", "barcode", "categories", "brand", "seo",
+    "salla_cost_price", "status", "sku", "barcode", "categories", "brand", "seo",
     "google_category", "local_category", "images", "options",
     "custom_fields", "variants", "slug",
 }
@@ -80,6 +80,12 @@ def _salla_payload(patch: dict[str, Any]) -> dict[str, Any]:
     ):
         if key in patch:
             payload[key] = patch[key]
+    # `salla_cost_price` is deliberately a Product Control Center alias.
+    # The canonical Mezan accounting/cost fields remain protected and are never
+    # accepted from this draft path. Only the outbound Salla payload receives
+    # the provider field name `cost_price`.
+    if "salla_cost_price" in patch:
+        payload["cost_price"] = patch["salla_cost_price"]
     seo = patch.get("seo")
     if isinstance(seo, dict):
         if seo.get("title") is not None:
@@ -91,6 +97,83 @@ def _salla_payload(patch: dict[str, Any]) -> dict[str, Any]:
     if patch.get("google_category") is not None:
         payload["google_product_category"] = patch.get("google_category")
     return payload
+
+
+def _money_amount(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        for key in ("amount", "value", "price", "total"):
+            if key in value:
+                return _money_amount(value.get(key))
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _salla_product(response: Any) -> dict[str, Any]:
+    if not isinstance(response, dict):
+        return {}
+    data = response.get("data")
+    return data if isinstance(data, dict) else response
+
+
+def _price_snapshot(product: dict[str, Any]) -> dict[str, float | None]:
+    regular = _money_amount(product.get("regular_price"))
+    if regular is None:
+        regular = _money_amount(product.get("price"))
+    return {
+        "price": regular,
+        "sale_price": _money_amount(product.get("sale_price")),
+        "cost_price": _money_amount(product.get("cost_price") or product.get("cost")),
+    }
+
+
+def _salla_payload_with_preserved_prices(
+    patch: dict[str, Any], current_product: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, float | None]]:
+    """Build a complete price-safe Salla payload from a partial Mezan patch."""
+    payload = _salla_payload(patch)
+    snapshot = _price_snapshot(current_product)
+    if snapshot["price"] is None:
+        raise HTTPException(status_code=409, detail={"code": "salla_price_snapshot_missing"})
+    if "price" not in payload:
+        payload["price"] = snapshot["price"]
+    if "sale_price" not in payload and snapshot["sale_price"] is not None:
+        payload["sale_price"] = snapshot["sale_price"]
+    expected = {
+        "price": _money_amount(payload.get("price")),
+        "sale_price": _money_amount(payload.get("sale_price")),
+    }
+    if "cost_price" in payload:
+        expected["cost_price"] = _money_amount(payload.get("cost_price"))
+    return payload, expected
+
+
+def _verify_salla_prices(
+    product: dict[str, Any], expected: dict[str, float | None]
+) -> None:
+    actual = _price_snapshot(product)
+    mismatches: dict[str, dict[str, float | None]] = {}
+    for key, expected_value in expected.items():
+        if expected_value is None:
+            continue
+        actual_value = actual.get(key)
+        if actual_value is None or abs(actual_value - expected_value) > 0.0001:
+            mismatches[key] = {"expected": expected_value, "actual": actual_value}
+    if mismatches:
+        raise HTTPException(status_code=409, detail={
+            "code": "salla_price_verification_failed",
+            "mismatches": mismatches,
+        })
+
+
+def _before_value(product: dict[str, Any], key: str) -> Any:
+    if key == "salla_cost_price":
+        return product.get("cost_price_from_salla")
+    return product.get(key)
 
 
 async def _product(db: Any, user_id: str, product_id: str) -> dict[str, Any]:
@@ -161,6 +244,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "capabilities": {
                 "content": True, "seo": True, "categories": True,
                 "images": True, "pricing": True, "options": True,
+                "salla_cost_price": True,
                 "rollback": True, "cost_engine_preserved": True,
             },
         }
@@ -186,7 +270,7 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "source": _text(payload.get("source")) or "human",
             "reason": _text(payload.get("reason")),
             "changes": patch,
-            "before": {key: product.get(key) for key in patch},
+            "before": {key: _before_value(product, key) for key in patch},
             "created_at": now,
             "updated_at": now,
         }
@@ -224,11 +308,22 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
         if payload.get("confirmation") != "نشر التعديل إلى سلة":
             raise HTTPException(status_code=409, detail={"code": "publish_confirmation_required"})
         patch = _clean_patch(draft.get("changes") or {})
-        remote_payload = _salla_payload(patch)
-        if not remote_payload:
+        if not _salla_payload(patch):
             raise HTTPException(status_code=422, detail={"code": "no_salla_publishable_fields"})
         try:
+            current_response = await call_salla(db, user_id, "GET", f"/products/{salla_id}")
+            current_remote = _salla_product(current_response)
+            remote_payload, expected_prices = _salla_payload_with_preserved_prices(patch, current_remote)
             response = await call_salla(db, user_id, "PUT", f"/products/{salla_id}", json=remote_payload)
+            verified_response = await call_salla(db, user_id, "GET", f"/products/{salla_id}")
+            verified_remote = _salla_product(verified_response)
+            try:
+                _verify_salla_prices(verified_remote, expected_prices)
+            except HTTPException:
+                rollback_payload = {key: value for key, value in expected_prices.items() if value is not None}
+                if rollback_payload:
+                    await call_salla(db, user_id, "PUT", f"/products/{salla_id}", json=rollback_payload)
+                raise
         except SallaError as exc:
             raise HTTPException(status_code=exc.status_code if exc.status_code != 200 else 400, detail={"code": "salla_product_publish_failed", "message": str(exc), "needs_reauth": exc.needs_reauth}) from exc
         now = _now()
@@ -250,7 +345,12 @@ def make_product_control_center_router(db: Any, current_user: Callable[..., Any]
             "status": "published", "published_at": now, "updated_at": now, "revision_id": revision["id"],
         }})
         await supersede_active_drafts(db, user_id=user_id, salla_id=salla_id, keep_id=draft_id, now=now)
-        await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**patch, "updated_at": now, "last_control_center_publish_at": now}})
+        local_patch = {key: value for key, value in patch.items() if key != "salla_cost_price"}
+        if "salla_cost_price" in patch:
+            local_patch["cost_price_from_salla"] = _money_amount(
+                verified_remote.get("cost_price") or verified_remote.get("cost")
+            )
+        await db[PRODUCTS].update_one({"user_id": user_id, "salla_product_id": salla_id}, {"$set": {**local_patch, "updated_at": now, "last_control_center_publish_at": now}})
         return {"ok": True, "revision": _serialize(revision), "cost_engine_preserved": True}
 
     @router.get("/{product_id}/control-center/history")

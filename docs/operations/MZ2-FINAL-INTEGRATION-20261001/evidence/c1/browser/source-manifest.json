@@ -1,0 +1,15 @@
+{
+  "head": "f3be643522d8d3709a0508a9d3aba96fdbab727a",
+  "mode": "uncommitted task-owned harness plus root-owned mobile wrap fix",
+  "sha256": {
+    "scripts/testing/mz2_onboarding_ab/server.py": "97cc78c93845309c6c04cad52f8dd517abae8b8e4f816d40e00b9be7ad00ffc6",
+    "scripts/testing/mz2_onboarding_ab/build.cjs": "c69aa844e8767f25f1017d20445ff2dac3179ac37d82b19cd6fea77e918c0835",
+    "scripts/testing/mz2_onboarding_ab/review.jsx": "bf0e94404c02abf10cde93f5f847f51bb385be941306256a82a5c4bf2fff1587",
+    "scripts/testing/mz2_onboarding_ab/browser-c1.cjs": "78716959dec45fcdf617ee1d3e64906b16f1f97947b8e16d85ad68defaa5b9ac",
+    "scripts/testing/mz2_onboarding_ab/README.md": "0086cfe9f6b745c42fb4cde7e9fe3ebea67feb922c746fd1415bc07fa2b2749c",
+    "frontend/src/pages/accounting/onboarding/RichShippingContracts.jsx": "c03ad81637649c6f7e3bf60d21f4b515c3b244e16ec0cbc5c594edc2892957b2",
+    "frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx": "243e9175e81582c5c994d751602a18966079b5a80b638246084f2af0f2f846a7",
+    "backend/accounting_shipping_native_rich_contracts.py": "bde3ab1e9b9171cb4552f66ab4234445777aafbe2aa20e9b92a61f818f78809a",
+    "backend/accounting_shipping_native_routes.py": "1990c48737aa7d8617253565833a2b93ea5f88c83e14d7a5b713d73a4e1bf0d9"
+  }
+}

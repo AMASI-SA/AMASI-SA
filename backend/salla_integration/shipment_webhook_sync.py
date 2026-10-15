@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from .service import SallaError, call_salla
+from .store_scope import is_attribution_pilot_store
 
 log = logging.getLogger("salla.shipment_webhook")
 
@@ -54,14 +55,13 @@ async def _resolve_user_id(
     db: Any,
     merchant_id: Optional[str],
 ) -> tuple[Optional[str], str]:
-    """Resolve the Mezan owner of the Salla installation robustly.
+    """Resolve the Mezan owner only through an exact store binding.
 
     Salla may deliver ``merchant`` as a JSON number while Easy Mode stores
     ``store_id`` as a string (or vice versa in older rows). Match both shapes.
     A connected exact-store row is preferred. We then accept an exact-store row
     with a user_id even when its status is temporarily stale, because call_salla
-    is the authoritative token/status gate. Finally, fall back to the oldest
-    connected integration that has a user_id.
+    is the authoritative token/status gate. Cross-store fallback is forbidden.
     """
     merchant_text = _text(merchant_id)
     merchant_values: list[Any] = []
@@ -100,27 +100,6 @@ async def _resolve_user_id(
         if user_id:
             return user_id, "merchant_exact_any_status"
 
-    connected = await db.salla_integrations.find_one(
-        {
-            "status": "connected",
-            "user_id": {"$exists": True, "$nin": [None, ""]},
-        },
-        projection,
-        sort=[("updated_at", -1), ("created_at", 1)],
-    )
-    user_id = _text((connected or {}).get("user_id"))
-    if user_id:
-        return user_id, "connected_fallback"
-
-    any_integration = await db.salla_integrations.find_one(
-        {"user_id": {"$exists": True, "$nin": [None, ""]}},
-        projection,
-        sort=[("updated_at", -1), ("created_at", 1)],
-    )
-    user_id = _text((any_integration or {}).get("user_id"))
-    if user_id:
-        return user_id, "integration_fallback"
-
     return None, "not_found"
 
 
@@ -134,6 +113,15 @@ async def sync_shipment_from_verified_webhook(
         return {"attempted": False, "reason": "no_shipment_id"}
 
     merchant_id = _text(event_body.get("merchant"))
+    if is_attribution_pilot_store(merchant_id):
+        return {
+            "attempted": True,
+            "synced": False,
+            "shipment_id": shipment_id,
+            "merchant_id": merchant_id,
+            "owner_match_source": "blocked_attribution_pilot_store",
+            "reason": "attribution_pilot_store_shipments_blocked",
+        }
     user_id, owner_match_source = await _resolve_user_id(db, merchant_id)
     if not user_id:
         return {

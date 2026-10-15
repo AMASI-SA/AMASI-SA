@@ -1,5 +1,11 @@
 import api from "./lib/api";
 import {
+  isReviewCompletionComplete, isReviewConfirmationPending, isReviewOperationCompleted,
+  LEGACY_REVIEW_RESOLUTION_MESSAGE, LOCAL_REVIEW_COMPLETION_MODE,
+  REVIEW_COMPLETION_UNVERIFIED_MESSAGE, reviewConfirmationMessage, watchReviewConfirmation,
+} from "./reviewConfirmation";
+import { confirmReviewUnitSplit } from "./reviewUnitSplitGuard";
+import {
   armReviewAutoAdvance,
   attemptReviewAutoAdvance,
   clearPendingReviewAdvance,
@@ -256,9 +262,10 @@ function applyQueueVisibility(root = document) {
   return { tabs, pendingSection, customerSection };
 }
 
-async function fetchReviewDetail(orderNumber) {
+async function fetchReviewDetail(orderNumber, { localOnly = true } = {}) {
   const { data } = await api.get(
     `/order-reviews-v1/${encodeURIComponent(orderNumber)}`,
+    localOnly ? { params: { local_only: true } } : undefined,
   );
   return data;
 }
@@ -444,19 +451,40 @@ function captureWaitingCompletion(event) {
   });
 }
 
-async function completeWaitingSummary(item, overlay, button) {
+export async function completeWaitingSummary(item, overlay, button) {
   const orderNumber = text(item.order_number);
   if (!orderNumber || button.disabled) return;
   if (!window.confirm("اعتماد الطلب ونقله مباشرة إلى تمت المراجعة؟")) return;
   button.disabled = true;
   button.textContent = "جارٍ الاعتماد…";
   try {
-    const detail = await fetchReviewDetail(orderNumber);
+    const detail = await fetchReviewDetail(orderNumber, { localOnly: true });
+    if (!confirmReviewUnitSplit(detail)) {
+      throw new Error("تم إلغاء اعتماد المراجعة. راجع كمية المنتج قبل الاعتماد.");
+    }
     armReviewAutoAdvance(orderNumber, pendingReviewOrderRows());
-    await api.post(
+    const { data: result } = await api.post(
       `/order-reviews-v1/${encodeURIComponent(orderNumber)}/complete`,
       { expected_revision: Number(detail?.revision || 0) },
     );
+    if (isReviewConfirmationPending(result)) {
+      clearPendingReviewAdvance();
+      button.textContent = result.completion_mode === LOCAL_REVIEW_COMPLETION_MODE
+        ? "جارٍ إكمال المراجعة في ميزان…" : "بانتظار فحص المراجعة السابقة…";
+      toast(reviewConfirmationMessage(result));
+      watchReviewConfirmation(orderNumber, (operation) => {
+        if (isReviewOperationCompleted(operation)) {
+          overlay.remove();
+          toast("اكتملت مراجعة الطلب.");
+          loadWaiting();
+        } else if (["requires_review", "failed"].includes(operation.state)) {
+          button.textContent = "يحتاج فحص المراجعة";
+          toast(`توقف تأكيد المراجعة: ${operation.resume_block_reason || "review_confirmation_blocked"}`, true);
+        }
+      }, () => overlay.isConnected);
+      return;
+    }
+    if (!isReviewCompletionComplete(result)) throw new Error(REVIEW_COMPLETION_UNVERIFIED_MESSAGE);
     waitingByNumber.delete(orderNumber);
     waitingItems = waitingItems.filter(
       (row) => text(row.order_number) !== orderNumber,
@@ -468,10 +496,11 @@ async function completeWaitingSummary(item, overlay, button) {
     window.setTimeout(() => attemptReviewAutoAdvance(), 180);
   } catch (error) {
     clearPendingReviewAdvance();
-    button.disabled = false;
-    button.textContent = "تمت المراجعة";
+    const legacyResolutionRequired = error?.response?.data?.detail?.code === "review_completion_legacy_operation_requires_resolution";
+    button.disabled = legacyResolutionRequired;
+    button.textContent = legacyResolutionRequired ? "يحتاج فحص المراجعة السابقة" : "تمت المراجعة";
     toast(
-      error?.response?.data?.detail?.message
+      (legacyResolutionRequired ? LEGACY_REVIEW_RESOLUTION_MESSAGE : error?.response?.data?.detail?.message)
         || error?.message
         || "تعذر اعتماد مراجعة الطلب.",
       true,
@@ -548,7 +577,11 @@ function openWaitingOrder(item) {
   showWaitingSummary(item);
 }
 
-async function loadWaiting() {
+export async function loadWaiting() {
+  // This enhancement is mounted globally, but its protected endpoint belongs
+  // only to the review queue. Do not probe authenticated APIs from /login or
+  // unrelated pages; the recurring timer will resume once this page mounts.
+  if (!pageHeader()) return;
   if (loadingWaiting) return;
   loadingWaiting = true;
   try {

@@ -5,14 +5,14 @@ A unified directory of third parties the merchant transacts with
 counterparties). NOT employees — those stay in operating_salaries.
 
 Collection: counterparties
-  { id, user_id, kind, name, name_lower, ad_provider, notes,
+  { id, user_id, kind, name, name_lower, ad_provider, notes, phone,
     created_at, updated_at }
 
 Endpoints (/api/counterparties):
   GET    /                     list with filter (kind)
   POST   /                     create (with fuzzy duplicate check)
   POST   /check-duplicate      preview duplicate without saving
-  PUT    /{id}                 edit name/notes
+  PUT    /{id}                 edit name/notes/phone
   DELETE /{id}                 only when not referenced in liabilities
 """
 import difflib
@@ -67,12 +67,14 @@ class CounterpartyIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=160)
     ad_provider: Optional[str] = None
     notes: Optional[str] = Field("", max_length=500)
+    phone: Optional[str] = Field(None, max_length=40)
     force: bool = False  # bypass fuzzy duplicate warning
 
 
 class CounterpartyUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=160)
     notes: Optional[str] = Field(None, max_length=500)
+    phone: Optional[str] = Field(None, max_length=40)
 
 
 def attach_counterparties_routes(parent_router: APIRouter, db) -> None:
@@ -142,6 +144,8 @@ def attach_counterparties_routes(parent_router: APIRouter, db) -> None:
             "created_at": _now(),
             "updated_at": _now(),
         }
+        if payload.phone is not None:
+            row["phone"] = payload.phone.strip()
         await db.counterparties.insert_one(row)
         row.pop("_id", None)
         return row
@@ -160,6 +164,8 @@ def attach_counterparties_routes(parent_router: APIRouter, db) -> None:
             upd["name_lower"] = _norm(payload.name)
         if payload.notes is not None:
             upd["notes"] = payload.notes.strip()
+        if payload.phone is not None:
+            upd["phone"] = payload.phone.strip()
         await db.counterparties.update_one(
             {"id": cid, "user_id": user["id"]}, {"$set": upd}
         )

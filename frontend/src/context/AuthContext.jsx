@@ -1,42 +1,184 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import {
+    AUTH_SESSION_REQUEST_TIMEOUT_MS,
+    isAuthBootstrapAbort,
+    runBoundedAuthBootstrap,
+} from "./authBootstrap";
 
 const AuthContext = createContext(null);
 
+function clearLegacyBrowserAccessToken() {
+    // Browser authentication is cookie-only. Older Mezan builds persisted the
+    // JWT in localStorage, which made a long-lived bearer token readable by any
+    // script running in the page. Remove that legacy copy before the first
+    // authenticated request; the server-issued HttpOnly/Secure cookie remains
+    // the browser session source of truth.
+    try {
+        localStorage.removeItem("access_token");
+    } catch {
+        // Storage can be unavailable in hardened/private browser modes. Cookie
+        // authentication still works, so this cleanup is best-effort.
+    }
+}
+
+// Run the migration at module bootstrap, before AuthProvider's children can
+// mount and issue API calls. `api.js` reads localStorage only at request time,
+// so this prevents even one legacy bearer-token request during the first render.
+clearLegacyBrowserAccessToken();
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null); // null while checking, false if anon
-    const [loading, setLoading] = useState(true);
+    const [authStatus, setAuthStatus] = useState("checking");
+    const [authError, setAuthError] = useState(null);
+    const [probeGeneration, setProbeGeneration] = useState(0);
+    const bootstrapProbeActive = useRef(false);
+    const loading = authStatus === "checking";
 
-    const refreshUser = useCallback(async () => {
-        try {
-            const { data } = await api.get("/auth/me");
-            setUser(data);
-            return data;
-        } catch {
-            setUser(false);
-            return null;
-        }
+    const loadCurrentUser = useCallback(async ({
+        signal,
+        timeoutMs = AUTH_SESSION_REQUEST_TIMEOUT_MS,
+    } = {}) => {
+        const { data } = await api.get("/auth/me", {
+            signal,
+            timeout: timeoutMs,
+            _mezanAuthDeadlineAt: Date.now() + timeoutMs,
+        });
+        return data;
     }, []);
 
-    useEffect(() => {
-        (async () => {
-            await refreshUser();
-            setLoading(false);
-        })();
-    }, [refreshUser]);
+    const refreshUser = useCallback(async (options = {}) => {
+        try {
+            const data = await loadCurrentUser(options);
+            setUser(data);
+            setAuthError(null);
+            setAuthStatus("authenticated");
+            return data;
+        } catch (error) {
+            const status = error?.response?.status;
+            if (status === 401) {
+                setUser(false);
+                setAuthError(null);
+                setAuthStatus("anonymous");
+                return null;
+            }
 
-    const login = async (email, password) => {
-        const { data } = await api.post("/auth/login", { email, password });
-        if (data?.access_token) localStorage.setItem("access_token", data.access_token);
-        // Fetch the FULL /auth/me payload (includes permissions + is_owner + has_security_question)
-        // so RBAC-aware navigation works immediately after login.
+            // A temporary network/origin failure is not proof that the cookie
+            // session ended. Keep the last authenticated user internally, but
+            // fail closed until a fresh probe succeeds instead of redirecting.
+            setAuthError(error);
+            setAuthStatus("unavailable");
+            throw error;
+        }
+    }, [loadCurrentUser]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const controller = new AbortController();
+
+        setAuthError(null);
+        setAuthStatus("checking");
+        bootstrapProbeActive.current = true;
+        clearLegacyBrowserAccessToken();
+
+        runBoundedAuthBootstrap({
+            signal: controller.signal,
+            probe: async (requestOptions) => {
+                try {
+                    const data = await loadCurrentUser(requestOptions);
+                    return { user: data, status: "authenticated" };
+                } catch (error) {
+                    if (error?.response?.status === 401) {
+                        return { user: false, status: "anonymous" };
+                    }
+                    throw error;
+                }
+            },
+        }).then((result) => {
+            if (cancelled) return;
+            bootstrapProbeActive.current = false;
+            setUser(result.user);
+            setAuthError(null);
+            setAuthStatus(result.status);
+        }).catch((error) => {
+            if (cancelled || isAuthBootstrapAbort(error)) return;
+            bootstrapProbeActive.current = false;
+            // Fail closed without deleting the cookie or pretending the user
+            // is anonymous. Protected/Public routes render a retry surface.
+            setAuthError(error);
+            setAuthStatus("unavailable");
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [loadCurrentUser, probeGeneration]);
+
+    const retryAuth = useCallback(() => {
+        if (bootstrapProbeActive.current) return;
+        // Close the same-tick double-click window before React schedules the
+        // next generation. The effect releases this flag on success/failure.
+        bootstrapProbeActive.current = true;
+        setAuthError(null);
+        setAuthStatus("checking");
+        setProbeGeneration((generation) => generation + 1);
+    }, []);
+
+    const login = async (email, password, mfaBootstrapCode = "", forceTotp = false) => {
+        const payload = { email, password };
+        if (mfaBootstrapCode) payload.mfa_bootstrap_code = mfaBootstrapCode;
+        if (forceTotp) payload.force_totp = true;
+        const { data } = await api.post("/auth/login", payload);
+        clearLegacyBrowserAccessToken();
+
+        // Owner/Admin password success is deliberately not a browser session.
+        // First enrollment may require an out-of-band bootstrap proof; returning
+        // Owner devices may receive a platform-passkey challenge before TOTP.
+        if (
+            data?.mfa_bootstrap_required
+            || data?.mfa_required
+            || data?.mfa_setup_required
+            || data?.passkey_required
+        ) {
+            setUser(false);
+            return data;
+        }
+
+        const authenticatedUser = await refreshUser();
+        if (!authenticatedUser) {
+            const error = new Error("Login session could not be established");
+            error.response = {
+                status: 401,
+                data: { detail: "تعذر تأكيد جلسة تسجيل الدخول. يرجى المحاولة مرة أخرى." },
+            };
+            throw error;
+        }
+        return data;
+    };
+
+    const verifyMfa = async (challengeToken, code, { deferRefresh = false } = {}) => {
+        const { data } = await api.post("/auth/mfa/verify", {
+            challenge_token: challengeToken,
+            code,
+        });
+        clearLegacyBrowserAccessToken();
+
+        // Login may deliberately defer hydration while recovery codes or the
+        // optional trusted-device enrollment screen must remain visible.
+        if (deferRefresh) {
+            setUser(false);
+            setAuthStatus("anonymous");
+            return data;
+        }
+
         await refreshUser();
         return data;
     };
 
     const register = async (name, email, password) => {
         const { data } = await api.post("/auth/register", { name, email, password });
-        if (data?.access_token) localStorage.setItem("access_token", data.access_token);
+        clearLegacyBrowserAccessToken();
         await refreshUser();
         return data;
     };
@@ -47,17 +189,33 @@ export function AuthProvider({ children }) {
         } catch {
             // Best-effort: server may already consider us logged out. Still clear client state.
         }
-        localStorage.removeItem("access_token");
+        clearLegacyBrowserAccessToken();
         // Hard reload to /login guarantees protected-route logic re-evaluates immediately
         // (and clears any in-flight state on Dashboard/Reports pages).
         window.location.replace("/login");
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, formatApiErrorDetail }}>
+        <AuthContext.Provider value={{
+            user,
+            loading,
+            authStatus,
+            authError,
+            retryAuth,
+            login,
+            verifyMfa,
+            register,
+            logout,
+            refreshUser,
+            formatApiErrorDetail,
+        }}>
             {children}
         </AuthContext.Provider>
     );
+}
+
+export function useOptionalAuth() {
+    return useContext(AuthContext);
 }
 
 export function useAuth() {

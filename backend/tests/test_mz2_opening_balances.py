@@ -1,0 +1,354 @@
+"""Real-Mongo native opening reportability and historical P01 quarantine."""
+import os
+from decimal import Decimal
+from uuid import uuid4
+import unittest
+
+from fastapi import HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from accounting_atomic import atomic_owner
+from accounting_module_contract import OPERATION_ID
+from accounting_module_opening_balances import (
+    OpeningActivateIn,
+    OpeningApproveIn,
+    OpeningLineIn,
+    OpeningPreviewIn,
+    activate_p01,
+    approve_opening_preview,
+    create_opening_preview,
+)
+from accounting_mz2_reports import read_mz2_ledger
+from mz2_native_fixture import provision_native_opening
+
+
+class OpeningBalanceTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.mongo = AsyncIOMotorClient(
+            os.environ["MZ2_TEST_MONGO_URI"],
+            serverSelectionTimeoutMS=5000,
+        )
+        self.db = self.mongo["mz2_opening_" + uuid4().hex]
+        hello = await self.db.command("hello")
+        self.assertTrue(hello.get("setName"))
+        # This successful-write fixture has explicit owner write-control state.
+        await self.db.mz2_atomic_owners.insert_one({
+            "_id": "owner", "revision": 0, "writes_paused": False, "control_revision": 0,
+        })
+        self.actor = {
+            "id": "owner",
+            "role": "owner",
+            "name": "Synthetic owner",
+            "email": "owner@example.invalid",
+        }
+        await self.db.users.insert_one({
+            **self.actor,
+            "is_active": True,
+        })
+        await self.db.settings.insert_one({"user_id": "owner"})
+        await self.db.accounts.insert_many([
+            {
+                "id": "bank-inma",
+                "user_id": "owner",
+                "name": "Synthetic bank",
+                "account_type": "bank",
+                "status": "active",
+            },
+            {
+                "id": "cash-main",
+                "user_id": "owner",
+                "name": "Synthetic cash",
+                "account_type": "cash",
+                "status": "active",
+            },
+            {
+                "id": "legacy-provider-account",
+                "user_id": "owner",
+                "name": "Synthetic platform account",
+                "account_type": "payment_platform",
+                "status": "active",
+            },
+        ])
+        await self.db.mezan_employees_v2.insert_one({
+            "id": "employee-1",
+            "user_id": "owner",
+            "name": "Synthetic employee",
+            "status": "active",
+        })
+
+    async def asyncTearDown(self):
+        await self.mongo.drop_database(self.db.name)
+        self.mongo.close()
+
+    def preview_payload(self):
+        refs = {
+            "banks_cash": "UAT-BANKS",
+            "providers": "UAT-PROVIDERS",
+            "couriers_cod": "UAT-COURIERS",
+            "inventory": "UAT-INVENTORY-ZERO",
+            "suppliers": "UAT-SUPPLIERS",
+            "payroll_obligations": "UAT-PAYROLL",
+            "equity": "UAT-EQUITY",
+        }
+        lines = [
+            OpeningLineIn(category="bank", entity_id="bank-inma", label="Bank", amount="1000"),
+            OpeningLineIn(category="provider_receivable", entity_id="tamara", amount="115"),
+            OpeningLineIn(category="courier_cod_receivable", entity_id="smsa", amount="100"),
+            OpeningLineIn(category="employee_advance", entity_id="employee-1", amount="50"),
+            OpeningLineIn(category="employee_salary_payable", entity_id="employee-1", amount="300"),
+            OpeningLineIn(category="supplier_payable", entity_id="supplier-1", amount="200"),
+        ]
+        return OpeningPreviewIn(
+            cutover_at="2026-09-20T21:00:00+03:00",
+            evidence_sheet_ref="UAT-SIGNED-OPENING",
+            evidence_sections=refs,
+            lines=lines,
+            notes="Synthetic isolated UAT",
+        )
+
+    async def tx(self, callback):
+        return await atomic_owner(self.db, "owner", callback)
+
+    async def create(self):
+        payload = self.preview_payload()
+        return await self.tx(
+            lambda scoped: create_opening_preview(
+                scoped,
+                owner="owner",
+                actor=self.actor,
+                payload=payload,
+            )
+        )
+
+    async def approve(self, preview_id):
+        payload = OpeningApproveIn(
+            preview_id=preview_id,
+            confirmation="APPROVE_OPENING_BALANCE",
+        )
+        return await self.tx(
+            lambda scoped: approve_opening_preview(
+                scoped,
+                owner="owner",
+                actor=self.actor,
+                payload=payload,
+            )
+        )
+
+    async def activate(self):
+        payload = OpeningActivateIn(
+            activation_ref="UAT-ACTIVATION-001",
+            confirmation="ACTIVATE_MZ2_P01",
+        )
+        return await self.tx(
+            lambda scoped: activate_p01(
+                scoped,
+                owner="owner",
+                actor=self.actor,
+                payload=payload,
+            )
+        )
+
+    async def test_legacy_preview_post_cannot_activate_native_cutover(self):
+        preview = await self.create()
+        self.assertTrue(preview["totals"]["balanced"])
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        self.assertEqual(preview["status"], "previewed")
+        # Debit 1265 vs natural liabilities 500 => an automatic credit equity plug 765.
+        plug = [row for row in preview["lines"] if row["category"] == "equity_plug"]
+        self.assertEqual(len(plug), 1)
+        self.assertEqual(plug[0]["side"], "credit")
+        self.assertEqual(plug[0]["amount"], "765.00")
+
+        posted = await self.approve(preview["id"])
+        self.assertEqual(posted["state"], "posted")
+        self.assertEqual(posted["debit_total"], posted["credit_total"])
+        group = posted["txn_group_id"]
+        rows = await self.db.general_ledger.find({"txn_group_id": group}).to_list(100)
+        self.assertEqual(len(rows), len(preview["lines"]))
+        self.assertEqual(
+            sum(row["amount"] for row in rows if row["side"] == "debit"),
+            sum(row["amount"] for row in rows if row["side"] == "credit"),
+        )
+        self.assertTrue(all(
+            row["entry_type"] == "opening_balance"
+            and row["status"] == "posted"
+            and row["metadata"]["operation_id"] == OPERATION_ID
+            and row["metadata"]["accounting_at"] == "2026-09-20T18:00:00+00:00"
+            for row in rows
+        ))
+
+        settings = await self.db.settings.find_one({"user_id": "owner"})
+        cutover = settings["mezan2_financial_cutover"]
+        self.assertEqual(cutover["status"], "prepared")
+        self.assertEqual(cutover["opening_balance_txn_group_id"], group)
+        zero = {
+            (row["entity_type"], row["entity_id"], row["sub_account"])
+            for row in cutover["opening_balance_zero_accounts"]
+        }
+        self.assertIn(("bank", "cash-main", "main"), zero)
+        self.assertIn(("bank", "legacy-provider-account", "main"), zero)
+        self.assertIn(("payment_gateway", "salla", "receivable"), zero)
+        self.assertIn(("payment_gateway", "tabby", "receivable"), zero)
+        self.assertIn(("payment_gateway", "emkan", "receivable"), zero)
+        self.assertNotIn(("payment_gateway", "tamara", "receivable"), zero)
+
+        # Historical approval is not a verified V2 opening. Activation must stay
+        # blocked even when its old preview, evidence and journal are balanced.
+        with self.assertRaises(HTTPException) as blocked:
+            await self.activate()
+        self.assertEqual(blocked.exception.status_code, 409)
+        self.assertEqual(blocked.exception.detail["code"], "mz2_p01_activation_not_ready")
+        self.assertIn("opening_posted", blocked.exception.detail["missing"])
+        after = await self.db.settings.find_one({"user_id": "owner"})
+        self.assertEqual(after, settings)
+        self.assertEqual(await self.db.general_ledger.count_documents({}), len(rows))
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), 0)
+        scope = await read_mz2_ledger(self.db, owner="owner")
+        self.assertEqual(scope["status"], "not_ready")
+        self.assertEqual(scope["reason"], "mz2_native_ledger_required")
+        self.assertEqual(scope["items"], [])
+
+    async def test_sealed_native_opening_is_reportable_without_legacy_fallback(self):
+        # This is a sealed native ledger fixture, not a substitute for the public
+        # draft/review/post/transition HTTP tests in financial_accounts_real_mongo.
+        sentinel = {"user_id": "owner", "txn_group_id": "legacy-sentinel",
+                    "entity_type": "bank", "entity_id": "bank-inma", "sub_account": "main",
+                    "side": "debit", "amount": 999999, "status": "posted",
+                    "entry_type": "opening_balance", "metadata": {"operation_id": OPERATION_ID}}
+        await self.db.general_ledger.insert_one(sentinel)
+        group = await provision_native_opening(
+            self.db, bank_balances={"bank-inma": "1000.00"},
+            cutover="2026-09-20T18:00:00Z", entries=[
+                dict(entity_type="payment_gateway", entity_id="tamara", sub_account="receivable",
+                     side="debit", amount="115.00"),
+                dict(entity_type="equity", entity_id="opening_balance_equity", sub_account="main",
+                     side="credit", amount="115.00"),
+            ])
+        scope = await read_mz2_ledger(self.db, owner="owner")
+        self.assertEqual(scope["status"], "available", scope)
+        self.assertTrue(scope["items"])
+        self.assertEqual({row["txn_group_id"] for row in scope["items"]}, {group})
+        for side in ("debit", "credit"):
+            self.assertEqual(sum(Decimal(str(row["amount"])) for row in scope["items"]
+                                 if row["side"] == side), Decimal("1115.00"))
+        self.assertTrue(any(row["entity_type"] == "payment_gateway"
+                            and row["entity_id"] == "tamara"
+                            and row["sub_account"] == "receivable" for row in scope["items"]))
+        before = await self.db.accounting_general_ledger_v2.count_documents({})
+        self.assertEqual(before, 4)
+        self.assertEqual(await provision_native_opening(self.db), group)
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        self.assertEqual(await self.db.general_ledger.find_one({"_id": sentinel["_id"]}), sentinel)
+        with self.assertRaises(HTTPException) as blocked:
+            await self.activate()
+        self.assertEqual(blocked.exception.status_code, 423)
+        self.assertEqual(blocked.exception.detail["code"], "accounting_legacy_writer_disabled")
+        self.assertEqual(await self.db.accounting_general_ledger_v2.count_documents({}), before)
+        control = await self.db.mz2_atomic_owners.find_one({"_id": "owner"})
+        self.assertFalse(control["writes_paused"])
+        self.assertEqual(control["ledger_backend_state"], "v2_active")
+
+    async def test_duplicate_approval_returns_same_group_without_new_legs(self):
+        preview = await self.create()
+        first = await self.approve(preview["id"])
+        before = await self.db.general_ledger.count_documents({})
+        second = await self.approve(preview["id"])
+        self.assertEqual(second["state"], "already_posted")
+        self.assertEqual(second["txn_group_id"], first["txn_group_id"])
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+
+    async def test_account_scope_change_after_preview_blocks_without_journal(self):
+        preview = await self.create()
+        await self.db.accounts.insert_one({
+            "id": "bank-new",
+            "user_id": "owner",
+            "name": "Changed after preview",
+            "account_type": "bank",
+            "status": "active",
+        })
+        before = await self.db.general_ledger.count_documents({})
+        with self.assertRaises(HTTPException) as ctx:
+            await self.approve(preview["id"])
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("opening_account_scope_changed", str(ctx.exception.detail))
+        self.assertEqual(await self.db.general_ledger.count_documents({}), before)
+
+    async def test_opening_must_be_first_mz2_journal(self):
+        preview = await self.create()
+        await self.db.general_ledger.insert_one({
+            "id": "bad-before-opening",
+            "user_id": "owner",
+            "entry_no": 1,
+            "entity_type": "bank",
+            "entity_id": "bank-inma",
+            "sub_account": "main",
+            "entry_type": "bnpl_sale",
+            "side": "debit",
+            "amount": 1.0,
+            "status": "posted",
+            "txn_group_id": "existing-mz2",
+            "metadata": {
+                "operation_id": OPERATION_ID,
+                "accounting_at": "2026-09-20T18:01:00+00:00",
+            },
+        })
+        with self.assertRaises(HTTPException) as ctx:
+            await self.approve(preview["id"])
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, "opening_must_precede_all_mz2_journals")
+
+    async def test_p02_flag_blocks_preview_and_activation(self):
+        await self.db.settings.update_one(
+            {"user_id": "owner"},
+            {"$set": {"mezan2_financial_cutover.p02_shipping_cod_enabled": True}},
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            await self.create()
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("p02_must_remain_locked", str(ctx.exception.detail))
+
+    async def test_missing_evidence_section_and_unknown_employee_fail_before_gl(self):
+        payload = self.preview_payload()
+        payload.evidence_sections.pop("inventory")
+        with self.assertRaises(HTTPException):
+            await self.tx(
+                lambda scoped: create_opening_preview(
+                    scoped, owner="owner", actor=self.actor, payload=payload
+                )
+            )
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+        payload = self.preview_payload()
+        payload.lines.append(
+            OpeningLineIn(
+                category="employee_advance",
+                entity_id="missing-employee",
+                amount="10",
+            )
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            await self.tx(
+                lambda scoped: create_opening_preview(
+                    scoped, owner="owner", actor=self.actor, payload=payload
+                )
+            )
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("opening_employee_missing", str(ctx.exception.detail))
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+
+    async def test_opening_employee_scope_is_v2_only_and_alias_is_not_postable(self):
+        await self.db.mezan_employees_v2.update_one({"id": "employee-1"}, {"$set": {"legacy_employee_id": "legacy-person"}})
+        await self.db.operating_salaries.insert_one({"id": "legacy-person", "user_id": "owner", "category": "employee", "status": "active"})
+        payload = self.preview_payload()
+        payload.lines.append(OpeningLineIn(category="employee_custody", entity_id="legacy-person", amount="10"))
+        with self.assertRaises(HTTPException) as exc:
+            await self.tx(lambda tx: create_opening_preview(tx, owner="owner", actor=self.actor, payload=payload))
+        self.assertEqual(exc.exception.detail["code"], "opening_employee_missing")
+        self.assertEqual(await self.db.general_ledger.count_documents({}), 0)
+        preview = await self.create()
+        identities = {row["entity_id"] for row in preview["lines"] + preview["zero_scope"] if row["entity_type"] == "employee"}
+        self.assertEqual(identities, {"employee-1"})
+
+
+if __name__ == "__main__":
+    unittest.main()

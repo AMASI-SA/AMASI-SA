@@ -7,6 +7,7 @@
 // writeoff / adjustment on the resulting ledger entry.
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../lib/api";
 import HelpToggle from "../components/HelpToggle";
 import Iter245MovementForm from "../components/Iter245MovementForm";
@@ -130,6 +131,7 @@ const ITER245_OPS = {
 };
 
 export default function UnifiedEntryScreen() {
+    const [searchParams] = useSearchParams();
     const [opType, setOpType] = useState("");
     const [busy, setBusy] = useState(false);
     // Iter-209 — Recent ledger transactions panel + green highlight on
@@ -179,6 +181,7 @@ export default function UnifiedEntryScreen() {
     const [codBankAmount,    setCodBankAmount]    = useState("");
     const [codShippingCost,  setCodShippingCost]  = useState("");
     const [codFee,           setCodFee]           = useState("");
+    const [codFeeVat,        setCodFeeVat]        = useState("");
     const [codOtherFees,     setCodOtherFees]     = useState("");
     const [codOtherCategory, setCodOtherCategory] = useState("");
     const [result, setResult] = useState(null);
@@ -249,6 +252,16 @@ export default function UnifiedEntryScreen() {
         () => OP_TYPES.filter(o => !hiddenTypes.includes(o.value)),
         [hiddenTypes],
     );
+
+    // Financial-provider cards deep-link to the correct canonical form.
+    // Only known operation codes are accepted; arbitrary query values never
+    // change the form or reach an accounting endpoint.
+    useEffect(() => {
+        const requested = searchParams.get("operation") || "";
+        if (OP_TYPES.some((row) => row.value === requested)) {
+            setOpType(requested);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         let alive = true;
@@ -544,7 +557,8 @@ export default function UnifiedEntryScreen() {
         setCustodyItems([{ expense_category: "", amount: "", notes: "" }]);
         // Iter-191 — COD settlement legs.
         setCodBankAmount(""); setCodShippingCost("");
-        setCodFee(""); setCodOtherFees(""); setCodOtherCategory("");
+        setCodFee(""); setCodFeeVat("");
+        setCodOtherFees(""); setCodOtherCategory("");
         // Iter-250b · P1.5.q — reset pay-source picker so it doesn't
         // bleed across operation switches.
         setPaySource("bank"); setCustodyEmployeeId("");
@@ -916,8 +930,9 @@ export default function UnifiedEntryScreen() {
                     const bankAmtN  = Number(codBankAmount   || 0);
                     const shipAmtN  = Number(codShippingCost || 0);
                     const feeAmtN   = Number(codFee          || 0);
+                    const feeVatAmtN = Number(codFeeVat      || 0);
                     const otherAmtN = Number(codOtherFees    || 0);
-                    const total = bankAmtN + shipAmtN + feeAmtN + otherAmtN;
+                    const total = bankAmtN + shipAmtN + feeAmtN + feeVatAmtN + otherAmtN;
                     if (!entityId) {
                         toast.error("اختر شركة الشحن"); setBusy(false); return;
                     }
@@ -933,6 +948,10 @@ export default function UnifiedEntryScreen() {
                         toast.error("اختر فئة المصروف للرسوم الأخرى");
                         setBusy(false); return;
                     }
+                    if (feeVatAmtN > 0 && feeAmtN <= 0) {
+                        toast.error("أدخل عمولة COD قبل إدخال ضريبة العمولة");
+                        setBusy(false); return;
+                    }
                     const codBalNow = Number(courierCodBalances[entityId] || 0);
                     if (total > codBalNow + 0.005) {
                         toast.error("إجمالي التسوية يتجاوز الرصيد المتاح");
@@ -944,6 +963,7 @@ export default function UnifiedEntryScreen() {
                         bank_account_id:    bankAmtN > 0 ? bankId   : null,
                         shipping_cost:      shipAmtN,
                         cod_fee:            feeAmtN,
+                        cod_fee_vat:        feeVatAmtN,
                         other_fees:         otherAmtN,
                         other_fees_category: otherAmtN > 0 ? codOtherCategory : null,
                         ...common,
@@ -988,7 +1008,8 @@ export default function UnifiedEntryScreen() {
             setNotes(""); setInvoiceNo("");
             setCustodyItems([{ expense_category: "", amount: "", notes: "" }]);
             setCodBankAmount(""); setCodShippingCost("");
-            setCodFee(""); setCodOtherFees(""); setCodOtherCategory("");
+            setCodFee(""); setCodFeeVat("");
+            setCodOtherFees(""); setCodOtherCategory("");
             await loadRecentTxns(newGroupId);
         } catch (e) {
             const det = e.response?.data?.detail;
@@ -1046,6 +1067,15 @@ export default function UnifiedEntryScreen() {
                 <p className="text-sm text-slate-500 mb-6">
                     شاشة موحدة لكل العمليات المحاسبية. ينشئ النظام القيود المزدوجة تلقائياً.
                 </p>
+
+                <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs font-semibold leading-6 text-sky-900" data-testid="unified-provider-movement-policy">
+                    <div className="font-extrabold">قاعدة التحويل والتسوية</div>
+                    <div>
+                        التحويل بين بنك أو صندوق هو نقل رصيد ولا يُعد إيرادًا أو مصروفًا.
+                        تحويل سلة/تمارا/تابي/إمكان إلى البنك يُسجّل من كشف تسوية المزود،
+                        وتحصيل شركة الشحن يُسجّل كتسوية COD؛ لذلك لا تُعامل هذه الحالات كتحويل عام.
+                    </div>
+                </div>
 
                 {/* Op type selector */}
                 <div className="mb-6">
@@ -1464,9 +1494,10 @@ export default function UnifiedEntryScreen() {
                             const bankAmt    = Number(codBankAmount    || 0);
                             const shipAmt    = Number(codShippingCost  || 0);
                             const feeAmt     = Number(codFee           || 0);
+                            const feeVatAmt  = Number(codFeeVat        || 0);
                             const otherAmt   = Number(codOtherFees     || 0);
                             const totalSettle = Math.round(
-                                (bankAmt + shipAmt + feeAmt + otherAmt) * 100) / 100;
+                                (bankAmt + shipAmt + feeAmt + feeVatAmt + otherAmt) * 100) / 100;
                             const remaining = Math.round((codBal - totalSettle) * 100) / 100;
                             const overSettled = totalSettle > codBal + 0.005;
 
@@ -1609,12 +1640,26 @@ export default function UnifiedEntryScreen() {
                                                     <p className="text-sky-800 bg-sky-50 border border-sky-200 rounded p-2"><b>الفرق عن "تكلفة الشحن":</b> الشحن = نقل الطرد. رسوم COD = تحصيل النقد من العميل وتسليمه لك. شركات كثيرة تفصلهما في كشف الحساب.</p>
                                                 </HelpToggle>
                                             </div>
-                                            <input type="number" step="0.01"
-                                                placeholder="0.00"
-                                                value={codFee}
-                                                onChange={e => setCodFee(e.target.value)}
-                                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
-                                                data-testid="cod-fee" />
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                <label className="text-[11px] font-bold text-slate-600">
+                                                    العمولة قبل الضريبة
+                                                    <input type="number" step="0.01"
+                                                        placeholder="0.00"
+                                                        value={codFee}
+                                                        onChange={e => setCodFee(e.target.value)}
+                                                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                                        data-testid="cod-fee" />
+                                                </label>
+                                                <label className="text-[11px] font-bold text-slate-600">
+                                                    ضريبة العمولة
+                                                    <input type="number" step="0.01"
+                                                        placeholder="0.00"
+                                                        value={codFeeVat}
+                                                        onChange={e => setCodFeeVat(e.target.value)}
+                                                        className="mt-1 w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                                                        data-testid="cod-fee-vat" />
+                                                </label>
+                                            </div>
                                         </div>
 
                                         {/* Leg 4 — Other fees + category */}
@@ -1668,6 +1713,8 @@ export default function UnifiedEntryScreen() {
                                                 <div className="text-left font-bold num">{fmt(shipAmt)} ر.س</div>
                                                 <div className="text-slate-600">رسوم COD:</div>
                                                 <div className="text-left font-bold num">{fmt(feeAmt)} ر.س</div>
+                                                <div className="text-slate-600">ضريبة رسوم COD:</div>
+                                                <div className="text-left font-bold num">{fmt(feeVatAmt)} ر.س</div>
                                                 <div className="text-slate-600">رسوم أخرى:</div>
                                                 <div className="text-left font-bold num">{fmt(otherAmt)} ر.س</div>
                                                 <div className="font-extrabold text-slate-800 border-t border-slate-300 pt-1 mt-0.5">
@@ -2739,4 +2786,3 @@ export {
     SUB_ACCOUNT_LABELS,
     REVERSAL_REASONS,
 };
-

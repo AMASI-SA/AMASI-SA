@@ -1,0 +1,48 @@
+{
+  "task": "MZ2_C2_SUPPLIER_DEBIT_IDENTITY_NATIVE_PRODUCER",
+  "state": "MZ2_C2_SETUP_PAUSE_DECOUPLED_READY_FOR_REVIEW",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/mz2-supplier-debit-identity-native-producer-20260930",
+  "fresh_production_head": "728730366cfee6c906172c7c14a2a67251ed1065",
+  "fresh_production_tree": "70b4c3d7b501f7c8a31767ceb61d5ac4cb204df9",
+  "frozen_c1_head": "49cf4fa967fa17792b45d94613e5ba89111c2b60",
+  "frozen_c1_tree": "075c62d5f68082c6bccad73b5c61f58e6852f3ab",
+  "track_a_final_head": "92eda46c71e039800a7e91db8a814e5b86161b74",
+  "track_a_final_tree": "0c1886fe28d96bb37552192849ff2b9173c793e8",
+  "contract": "docs/operations/MZ2-C2-SUPPLIER-NATIVE/CONTRACT.md",
+  "tests": {
+    "command": "PYTHONPATH=backend:backend/tests python -m pytest -q backend/tests/test_supplier_debit_setup_atomic.py backend/tests/test_supplier_native_invoice_v2.py backend/tests/test_supplier_debit_identity_v2.py backend/tests/test_supplier_receiving.py backend/tests/test_supplier_invoice_financial_integrity.py backend/tests/test_accounting_ledger_v2.py backend/tests/test_mz2_write_control.py backend/tests/test_mz2_closed_periods.py",
+    "result": "200 passed, 7 subtests passed; exit 0; 125.18s",
+    "database": "isolated UUID loopback Mongo replica databases dropped after tests",
+    "legacy_monitor": "zero forbidden legacy collections in new native post and real HTTP close/retry/read/PDF"
+  },
+  "integration_dependencies": [
+    "combine frozen C1 supplier payment consumer/native supplier sink guard; no C1 changes copied",
+    "Track A bank wiring belongs to Final Integration; no bank wiring in C2",
+    "supplier reversal remains fail-closed until payment/allocation reconciliation"
+  ],
+  "final_handoff": "Issue #1006 records exact final HEAD/TREE, Draft PR and CI after commit",
+  "financial_writes_production": 0,
+  "merge": "NO",
+  "deploy": "NO",
+  "opening_post": "NO",
+  "activation": "NO",
+  "release_guard": "NO",
+  "draft_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1216",
+  "review": "Independent setup-boundary review found no remaining actionable issue after restricting sealed Opening reads to the current verified Opening and approved_preview_hash only. Frozen files, native posting, financial atomic/write-control and journal/period/cutover gates are unchanged in this follow-up.",
+  "setup_followup": {
+    "resume_head": "4e3f318ee9ca44c6e972c4f9c38535062d73eda9",
+    "resume_tree": "abeb160f404a046b80991e961e75413abf9f98b4",
+    "boundary": "supplier_debit_setup_atomic_owner; same owner serialization row; only revision is incremented internally",
+    "write_allowlist": {
+      "mz2_supplier_debit_mappings_v2": ["insert_one", "insert_many", "replace_one", "update_one"],
+      "mz2_supplier_expense_identities_v2": ["insert_one", "insert_many", "replace_one", "update_one"],
+      "mz2_supplier_debit_identity_audit_v2": ["insert_one", "insert_many"]
+    },
+    "paused_financial_post": "Real native HTTP close remains 423; no invoice or journal created",
+    "rollback": "Forbidden mutations, caught denials, raw/session escape and nested control/financial entry abort all setup and owner-revision effects",
+    "concurrency": "Six concurrent setup mutations serialize with contiguous versions; actual write-control transaction waits on same owner row; missing-row initialization adds no financial controls",
+    "preopening_setup": "Explicit reviewed draft reference with owner approval, manifest and original evidence validation; runtime resolution still requires posted active Opening"
+  },
+  "ci": "Exact follow-up HEAD CI is recorded in Issue #1006 after push. Prior resume HEAD: 16 workflows passed; Security Gate failed on inherited urllib3/PyJWT advisories."
+}

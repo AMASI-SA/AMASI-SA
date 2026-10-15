@@ -1,0 +1,10 @@
+[36mvite v8.2.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 79 modules transformed.
+rendering chunks...
+computing gzip size...
+../mz2-late-evidence-proof-20261002/final-browser-c732/dist/index.html                   0.38 kB │ gzip:  0.27 kB
+../mz2-late-evidence-proof-20261002/final-browser-c732/dist/assets/index-BPzcGiBX.css   25.71 kB │ gzip:  5.51 kB
+../mz2-late-evidence-proof-20261002/final-browser-c732/dist/assets/index-DGP5sDOf.js   268.39 kB │ gzip: 86.70 kB
+
+[32m✓ built in 935ms[39m

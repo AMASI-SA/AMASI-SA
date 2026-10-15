@@ -1,0 +1,103 @@
+{
+  "task_id": "QOYOD-404-RECOVERY-20260919",
+  "status": "BLOCKED_UNKNOWN_AUDIT_SELECTION_FIXED_PENDING_RELEASE",
+  "latest_checkpoint": {
+    "branch": "codex/qoyod-404-blocked-audit-20260920",
+    "base": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
+    "live": "User activated once. Worker progressed past isolated6472 then paused with blocked/outcome_unknown on282829315.2complete,1rounding_unsettled,1blocked_unknown,195pending;197remaining. No new verified completion.",
+    "root_cause": "Audit selector excluded blocked/outcome_unknown although unresolved_attempt prevents activation for it. Worker catch also omitted read diagnostics. Underlying provider read exception still unproven.",
+    "fix": "Readonly audit uses activation's unresolved predicate; worker preserves existing bounded read diagnostics. No claim removal, retry, financial write or activation added.",
+    "validation": "Both new integration regressions fail baseline for intended causes; all60 recovery tests pass after fix. CI/governed build/independent review pending.",
+    "next": "Review sourceA, governed CI artifact then intent-onlyB, authorized guarded release, readonly audit282829315, handle actual evidence. Do not resend6472 or fake payment; keep exclusions/COD/SKU.",
+    "historical_note": "Entries below are historical. #1104 was deployed and verify3 passed before user activation; do not repeat its completed release. Documentation checkpoint a73ae224ad46ca245af9bb669dc91aa609dfdecb records that handoff."
+  },
+  "authorized_sequence": [
+    "404",
+    "COD",
+    "missing_SKU"
+  ],
+  "current_phase": "404",
+  "scope": "Eligible completed/delivering/delivered orders from 2026-07-01 through 2026-09-19",
+  "source_checkpoint": "c6708cf446bc447234a5f753a5b453f578415b54",
+  "production_deployment": "dd73ae13ae8c644c6b6469e76cccaabf285aaa3c",
+  "census_proof": {
+    "unique_90_day_rows": 6579,
+    "sent": 5729,
+    "unsent": 784,
+    "failed": 66,
+    "duplicates": 0,
+    "eligible_requested_scope": 6063,
+    "saved_404_count": 199,
+    "cod_in_404": 0,
+    "invoice_markers_in_404": 0
+  },
+  "census_method": "Browser table collection using narrower order-number searches and deduplication; full unique set and status counts exactly match unfiltered 90-day server counters. Then filter business date and eligible status.",
+  "display_limitation": "Backend returns first 1000 rows before frontend status filtering; payment-check button 100 is a separate check limit. Default visible 171 failures was incomplete.",
+  "processed": 2,
+  "successful_new_invoices": 2,
+  "reconciled_existing_invoices": 0,
+  "production_source_changed": true,
+  "cod_sku_actions": false,
+  "next": "Review and release bounded read diagnostics; capture actual failed production read before choosing a fix. Do not retry invoice6472 or payment; campaign paused2/197.",
+  "findings": {
+    "first_precheck": "Salla order and payment eligible; no invoice sent",
+    "sample_failure": "Historical GET /products 404 before accepted release",
+    "runtime": "Accepted release identity and critical hashes verified; no deployment needed",
+    "quarantine": "Saved non-transient 404 quarantines are excluded by the automatic worker; deployment alone does not requeue them",
+    "financial_submission": "Second user-confirmed attempt verified: exact single provider reference, total and settlement match fresh Salla direct connector read, zero balance, Mezan sent/reconciled. Saved Mezan amount is stale; do not use it as live total.",
+    "provider_bulk_reads": "Fresh provider snapshot completed in background despite 120-second proxy timeout; exact reference yielded one fully paid invoice, zero balance, matching total."
+  },
+  "remaining": 197,
+  "isolated_tests": {
+    "sender_and_adjacent_regressions": 138,
+    "production_adapter": "implemented and exercised with synthetic provider boundaries",
+    "activation": "explicit fingerprint-bound UI and HTTP route",
+    "network": "all provider boundaries mocked",
+    "core": 18,
+    "full_frontend_build": "Pending fresh governed CI build on review-fix SHA; not claimed from prior run",
+    "live_provider_testing": "not performed",
+    "worker_integration": "one order per tick; durable claims; audit-only stale cursor",
+    "new_react_dom": "passed",
+    "existing_frontend": 8,
+    "http_mongo_worker_adapter": 22,
+    "fresh_backend_total": 178,
+    "fresh_subtests": 35
+  },
+  "task_branch": "codex/qoyod-404-audit-diagnostics-20260920",
+  "reviewed_base": "635e181f7520354029efbdc8e89d76a94de77ff2",
+  "production_activation": "paused after existing invoice rounding residual",
+  "review_fixes": {
+    "owner_authority": "All control POSTs require authenticated nonempty actor id, owner role and campaign ownership; GET visibility unchanged",
+    "expired_audit": "Server can_audit and audit_block_reason; server recheck and atomic lease retained; financial claims unchanged",
+    "production_changed": false
+  },
+  "rounding_checkpoint": {
+    "live": "2 excluded completed, 1 review with existing invoice +0.01 SAR outstanding, 196 pending; no new live writes this turn",
+    "local_tests": "54 core/HTTP/Mongo/race/worker tests; 53 sender/LRM regressions; 152 adjacent amount/payment/diagnosis/client/currency/dedupe regressions; 3 new numeric/final-sender tests. React DOM passed. All providers isolated. Two existing frozen-worker tests deselected following repository focused suite.",
+    "root_cause": "Runtime LRM wrapper rebuilds product discount to 3dp after base alignment. Placeholder preflight normalizes a throwaway payload; actual outgoing payload was rebuilt without final normalization. Reproduced sanitized Salla amounts locally: 139 unit, 135.11 product gross, 24.07 shipping net, 161.11 total; LRM emits 21.508 discount, normalized document total 161.12.",
+    "scope": "User approved 0.01 SAR tolerance for continuation; keep outstanding visible and not complete; no extra invoice/payment or COD/SKU action",
+    "next": "Finish sender regression/case test, independently review, checkpoint source A, governed build and intent-only B; CI/review/merge; management deployment and three-probe verify; read-only audit and release review; user activates once; verify all199 actual outcomes",
+    "review": "Independent review found one activation/audit race; lease_token CAS added and tested with old-query regression controls. No other material finding reported.",
+    "ci": "Five workflows passed on c6708cf44 including full Frontend build twice/reproducibility verification. Final source SHA CI pending; not inferred from prior SHA.",
+    "release_blocker": "Cloud code-server disconnected then Preview Unavailable; cannot run /app release guard status. Local Windows has no WSL; no supported Linux release environment yet. No lease created or cleared; no publish, financial activation or paid Emergent chat."
+  },
+  "pull_request": 1100,
+  "audit_diagnostics": {
+    "base": "3b6bdc290bb401e41e804b46d1f29b068a50b4fa",
+    "known": "Two readonly audits returned review/outcome_unknown. Actual exception not established; pagination and health timeouts are not proof of cause.",
+    "change": "Capture fixed stage, allowlisted error/cause type, HTTP status, page, elapsed milliseconds and approved code-file line. No exception messages, bodies, URLs, keys, customer data or financial actions.",
+    "tests": "58 core/HTTP/Mongo/worker/diagnostic tests and real React DOM passed fresh; full build/CI pending",
+    "live": "2 excluded completed,196 pending,1 unresolved review.6472 historic total161.12/paid161.11/balance0.01; new live stored calculation accepts0.01, not fresh provider proof."
+  },
+  "nonblocking_backlog_checkpoint_20260927": {
+    "base": "2e3b166d6713984ab8a63ae66fcecaef51e415c5",
+    "deployed_source_observed": "d9df51b3e6148b11d320c6dfe9a640b89247feda",
+    "live_before_change": "Recovery UI showed 45 completed and 154 remaining, including 148 pending, four rounding reviews, one blocked ineligible order and one submitted-invoice-not-found review. The general new-order Qoyod worker was healthy.",
+    "root_cause": "The closed historical campaign treated finalized review/unknown quarantines as activation blockers and paused the whole campaign after any per-order failure.",
+    "change": "Only the reviewed historical campaign opts out of the default fail-closed per-order pause, clears its cursor after every persisted disposition, and treats only a genuinely running row as unresolved. Read-only audit still includes ambiguous quarantines.",
+    "safety": "Durable attempt claims and no-resend handling remain intact; authorization failure and genuine in-flight work still block progress; direct and batch callers retain fail-closed behavior; new-order and manual-send paths are unchanged.",
+    "tests": "243 passed and 73 subtests passed across recovery races, integration, isolation, diagnostics, rounding, dead-letter, manual client, currency, status, payment, product lookup and send-plan suites.",
+    "branch": "fix/qoyod-404-nonblocking-20260927",
+    "release": "Source commit A is prepared on the task branch; not yet merged, deployed or activated. Production is unchanged."
+  }
+}

@@ -1,0 +1,99 @@
+[
+  {
+    "stage": 1,
+    "name": "Explicit cutover and retained original in a newly created session",
+    "status": "PASS",
+    "began": "2026-10-01T21:53:57.213Z",
+    "finished": "2026-10-01T21:53:58.101Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 2
+  },
+  {
+    "stage": 2,
+    "name": "Bank/cash/overdraft exact identities; explicit zero and separate liability",
+    "status": "PASS",
+    "began": "2026-10-01T21:53:58.101Z",
+    "finished": "2026-10-01T21:53:58.930Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 3
+  },
+  {
+    "stage": 3,
+    "name": "Provider receivable and explicit canonical bank binding",
+    "status": "PASS",
+    "began": "2026-10-01T21:53:58.931Z",
+    "finished": "2026-10-01T21:53:59.615Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 4
+  },
+  {
+    "stage": 4,
+    "name": "Employee salary, advance and custody entered and restored independently",
+    "status": "PASS",
+    "began": "2026-10-01T21:53:59.616Z",
+    "finished": "2026-10-01T21:54:00.430Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 5
+  },
+  {
+    "stage": 5,
+    "name": "Supplier payable and advance remain separate",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:00.432Z",
+    "finished": "2026-10-01T21:54:01.366Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 6
+  },
+  {
+    "stage": 6,
+    "name": "Create/select actual external contact and preserve supplier siblings",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:01.367Z",
+    "finished": "2026-10-01T21:54:02.455Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 7
+  },
+  {
+    "stage": 7,
+    "name": "Rich courier terms, actual uploaded source review and immutable approval",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:02.457Z",
+    "finished": "2026-10-01T21:54:05.703Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 7
+  },
+  {
+    "stage": 8,
+    "name": "Courier balances entered through Stage7 and financially saved from Stage8",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:05.705Z",
+    "finished": "2026-10-01T21:54:06.641Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 8
+  },
+  {
+    "stage": 9,
+    "name": "Driver opening responsibility and fees stay separate from courier siblings",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:06.643Z",
+    "finished": "2026-10-01T21:54:07.634Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 9
+  },
+  {
+    "stage": 10,
+    "name": "Actual V2 inventory catalogue, variant/component draft and independent account valuation",
+    "status": "PASS",
+    "began": "2026-10-01T21:54:07.635Z",
+    "finished": "2026-10-01T21:54:10.008Z",
+    "session_id": "onboarding-8de34ccf6cafad3f950b0958e84f40a4ac1d65aaab0f363df9714e994e7f2b02",
+    "session_version": 11
+  },
+  {
+    "stage": 11,
+    "name": "Create actual effective fee policy through UI and preserve provider facts",
+    "status": "FAIL",
+    "began": "2026-10-01T21:54:10.010Z",
+    "error": "AssertionError [ERR_ASSERTION]: Saved fee section must render complete in actual Stage11 navigation: 11عمولات طرق الدفع والضرائب\nناقص · دليل ناقص\n    at C:\\Users\\amasi\\mz2-c-rich-shipping-20261001\\scripts\\testing\\mz2_business_uat\\browser.cjs:143:76\n    at async record (C:\\Users\\amasi\\mz2-c-rich-shipping-20261001\\scripts\\testing\\mz2_business_uat\\browser.cjs:48:9)\n    at async C:\\Users\\amasi\\mz2-c-rich-shipping-20261001\\scripts\\testing\\mz2_business_uat\\browser.cjs:139:5"
+  }
+]

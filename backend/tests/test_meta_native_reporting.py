@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from integrations_control_center import meta_account_selection as selection
+from integrations_control_center import meta_campaign_reporting as campaign_reporting
 from integrations_control_center import meta_native_reporting as reporting
 from integrations_control_center import meta_native_reporting_routes as routes
 
@@ -163,6 +164,53 @@ class FakeResponse:
         }
 
 
+class FakeCampaignCatalogResponse:
+    status_code = 200
+
+    def json(self):
+        return {
+            "data": [
+                {
+                    "id": "campaign-1",
+                    "name": "Meta Sales Campaign",
+                    "objective": "OUTCOME_SALES",
+                    "status": "ACTIVE",
+                    "effective_status": "ACTIVE",
+                    "daily_budget": "25000",
+                    "lifetime_budget": "100000",
+                    "start_time": "2026-07-01T00:00:00+0000",
+                    "stop_time": "2026-08-31T23:59:59+0000",
+                }
+            ]
+        }
+
+
+class FakeCampaignInsightsResponse:
+    status_code = 200
+
+    def json(self):
+        return {
+            "data": [
+                {
+                    "campaign_id": "campaign-1",
+                    "campaign_name": "Meta Sales Campaign",
+                    "spend": "120.50",
+                    "impressions": "15000",
+                    "clicks": "510",
+                    "account_currency": "USD",
+                    "date_start": "2026-07-30",
+                    "date_stop": "2026-07-30",
+                    "actions": [
+                        {"action_type": "omni_purchase", "value": "21"}
+                    ],
+                    "action_values": [
+                        {"action_type": "omni_purchase", "value": "620.40"}
+                    ],
+                }
+            ]
+        }
+
+
 class FakeHttpClient:
     calls = []
 
@@ -177,6 +225,10 @@ class FakeHttpClient:
 
     async def get(self, url, **kwargs):
         type(self).calls.append((url, deepcopy(kwargs)))
+        if url.endswith("/campaigns"):
+            return FakeCampaignCatalogResponse()
+        if (kwargs.get("params") or {}).get("level") == "campaign":
+            return FakeCampaignInsightsResponse()
         return FakeResponse()
 
 
@@ -277,6 +329,7 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert result["accounts_attempted"] == 1
     assert result["accounts_complete"] == 1
     assert result["rows_saved"] == 1
+    assert result["campaign_rows_saved"] == 1
     assert result["source_only"] is True
     assert result["provider_write_reached"] is False
     assert result["campaign_write_reached"] is False
@@ -306,8 +359,28 @@ async def test_native_reporting_persists_only_selected_source_rows(configured, m
     assert "general_ledger" not in written_collections
     assert "qoyod_invoices" not in written_collections
     assert reporting.META_REPORTING_COLLECTION in written_collections
+    assert campaign_reporting.META_CAMPAIGN_REPORTING_COLLECTION in written_collections
 
-    url, kwargs = FakeHttpClient.calls[0]
+    campaign_rows = db.rows[
+        campaign_reporting.META_CAMPAIGN_REPORTING_COLLECTION
+    ]
+    assert len(campaign_rows) == 1
+    campaign = campaign_rows[0]
+    assert campaign["campaign_id"] == "campaign-1"
+    assert campaign["campaign_name"] == "Meta Sales Campaign"
+    assert campaign["objective"] == "OUTCOME_SALES"
+    assert campaign["effective_status"] == "ACTIVE"
+    assert campaign["daily_budget_native"] == 250.0
+    assert campaign["spend_sar"] == 451.88
+    assert campaign["purchase_value_sar"] == 2326.50
+    assert campaign["source_only"] is True
+    assert campaign["accounting_eligible"] is False
+
+    url, kwargs = next(
+        (url, kwargs)
+        for url, kwargs in FakeHttpClient.calls
+        if (kwargs.get("params") or {}).get("level") == "account"
+    )
     assert url.endswith("/act_111/insights")
     assert kwargs["params"]["access_token"] == "meta-token"
     assert kwargs["params"]["appsecret_proof"]

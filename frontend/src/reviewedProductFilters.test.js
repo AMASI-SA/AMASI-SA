@@ -5,12 +5,6 @@ import {
   selectedReviewedCategoryNames,
   toggleReviewedCategory,
 } from "./reviewedProductFilters";
-import {
-  findReviewedProductForCard,
-  reviewedProductSortButtonLabel,
-  reviewedProductSortCandidateSummary,
-  updateReviewedProductSortPreference,
-} from "./reviewedProductSortUi";
 
 const products = [
   {
@@ -18,6 +12,8 @@ const products = [
     name: "سلسال بالاسم",
     sku: "NAME-1",
     category_ids: ["accessories", "necklaces"],
+    source_order_numbers: ["279800001"],
+    source_lines: [{ options_normalized: { "اسم العميل": "خالد" } }],
   },
   {
     group_key: "product:2",
@@ -50,9 +46,11 @@ test("category selection toggles without duplicates", () => {
     .toEqual(["bags", "necklaces"]);
 });
 
-test("search works with product name sku and product id", () => {
+test("search works with product name sku product id and order number", () => {
   expect(filterReviewedProducts(products, [], "كوتش")).toEqual([products[1]]);
   expect(filterReviewedProducts(products, [], "NAME-1")).toEqual([products[0]]);
+  expect(filterReviewedProducts(products, [], "279800001")).toEqual([products[0]]);
+  expect(filterReviewedProducts(products, [], "خالد")).toEqual([products[0]]);
 });
 
 test("quantity and selected labels stay phone friendly", () => {
@@ -62,38 +60,4 @@ test("quantity and selected labels stay phone friendly", () => {
     [{ id: "bags", name: "الشنط" }, { id: "necklaces", name: "السلاسل" }],
     ["necklaces"],
   )).toEqual(["السلاسل"]);
-});
-
-test("sort candidate summary shows highest piece demand first", () => {
-  expect(reviewedProductSortCandidateSummary({
-    values: [
-      { value: "5 سنوات", quantity: 30 },
-      { value: "6 سنوات", quantity: 12 },
-    ],
-  })).toBe("5 سنوات (30 قطعة)، 6 سنوات (12 قطعة)");
-});
-
-test("sort button reflects the saved one-field preference", () => {
-  expect(reviewedProductSortButtonLabel({ preparation_sort_label: "العمر" }))
-    .toBe("ترتيب الملف: العمر");
-  expect(reviewedProductSortButtonLabel({}))
-    .toBe("تحديد ترتيب الملف");
-});
-
-test("visible reviewed card maps to its product by name and sku", () => {
-  expect(findReviewedProductForCard(products, {
-    name: "شنطة كوتش",
-    sku: "BAG-2",
-  })?.group_key).toBe("product:2");
-});
-
-test("saved preference updates only sort metadata", () => {
-  const updated = updateReviewedProductSortPreference(products[0], {
-    spec_key: "اللون",
-    spec_label: "اللون",
-    candidates: [{ key: "اللون", label: "اللون", values: [] }],
-  });
-  expect(updated.group_key).toBe("product:1");
-  expect(updated.preparation_sort_spec).toBe("اللون");
-  expect(updated.preparation_sort_candidates).toHaveLength(1);
 });

@@ -268,40 +268,18 @@ async def discover_all_providers(db, user_id: str) -> dict:
     out["meta"] = meta_block
 
     # ── Snapchat ──
-    snap_conn = await read_v1_snapchat_connection(db, user_id)
+    # V1 discovery is frozen. Do not read the plaintext legacy token, cached
+    # V1 accounts, or call Snapchat from this old control plane.
     snap_block: dict = {
-        "connection_status": "missing",
+        "connection_status": "legacy_frozen",
         "v1_token_ref": None,
         "accounts": [],
-        "error": None,
+        "error": {
+            "code": "snapchat_legacy_frozen",
+            "message": "Use Snapchat in Mezan 2",
+            "redirect_to": "/integrations-v2?provider=snapchat_ads",
+        },
     }
-    if snap_conn:
-        snap_block["v1_token_ref"] = {
-            "provider": "snapchat",
-            "collection": "snapchat_connections",
-            "user_id": user_id,
-            "linked_at": _now_iso(),
-            "snapshot_only": True,
-        }
-        cached = await _cached_accounts_for_snapchat(db, user_id)
-        access_token = snap_conn.get("access_token") or ""
-        accounts, status = await list_snapchat_ad_accounts(access_token)
-        if status.get("ok"):
-            snap_block["connection_status"] = "active"
-            snap_block["accounts"] = accounts or cached
-            # If API returned accounts but cache had extra (e.g.
-            # multi-org with one org access denied), merge by external id.
-            if cached:
-                existing_ids = {a["external_account_id"] for a in accounts}
-                for c in cached:
-                    if c["external_account_id"] not in existing_ids:
-                        snap_block["accounts"].append({
-                            **c, "_from_cache": True,
-                        })
-        else:
-            snap_block["connection_status"] = status.get("reason") or "error"
-            snap_block["accounts"] = cached
-            snap_block["error"] = status
     out["snapchat"] = snap_block
 
     # ── TikTok ──

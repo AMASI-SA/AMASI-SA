@@ -1,0 +1,205 @@
+{
+  "results": [
+    {
+      "name": "UI create persists a new backend session; list/get use same ID",
+      "status": "PASS"
+    },
+    {
+      "name": "UI cutover save persists and reload restores it",
+      "status": "PASS"
+    },
+    {
+      "name": "section save / reload restores explicit zero",
+      "status": "PASS"
+    },
+    {
+      "name": "identical retry is idempotent; stale CAS returns 409",
+      "status": "PASS"
+    },
+    {
+      "name": "N/A requires reason and evidence and round-trips without inferred zero",
+      "status": "PASS"
+    },
+    {
+      "name": "UI provider/bank binding persists exact IDs",
+      "status": "PASS"
+    },
+    {
+      "name": "UI per-account inventory valuation round-trip excludes physical quantities",
+      "status": "PASS"
+    },
+    {
+      "name": "server preview contains bank mapping and per-account inventory reconciliation",
+      "status": "PASS"
+    },
+    {
+      "name": "review locks server session and UI edits",
+      "status": "PASS"
+    },
+    {
+      "name": "readiness exposes Smoke B hold and live-post false, not physical approval",
+      "status": "PASS"
+    },
+    {
+      "name": "all 16 stages navigate in reviewed session; mobile RTL has no horizontal overflow",
+      "status": "PASS"
+    },
+    {
+      "name": "zero unexpected browser errors or external requests; zero financial effects",
+      "status": "PASS"
+    }
+  ],
+  "errors": [],
+  "blocked": [],
+  "writes": [
+    {
+      "url": "/api/accounting-module/onboarding/sessions",
+      "method": "POST",
+      "body": {
+        "cutover_at": "2026-10-01T00:00:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "idempotency_key": "a84de555-ce69-4da3-8b8b-f58172b0a69a"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-7c30055d77c3be425eeafe7c720f25c10ae7fceb5f588170b838f35457719939/cutover",
+      "method": "PUT",
+      "body": {
+        "cutover_at": "2026-10-01T00:01:00+03:00",
+        "cutover_timezone": "Asia/Riyadh",
+        "cutover_evidence_file_id": null,
+        "version": 1,
+        "idempotency_key": "6cbd7f21-759e-4b6f-b24d-20cdc50d1278"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/banks_cash",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "Owner evidence: no applicable balance",
+        "evidence_file_id": "9b3d0851-c769-44f1-8b1a-0b2d5351a112",
+        "data": {
+          "lines": [
+            {
+              "category": "financial_account",
+              "financial_account_id": "8ebbc271-336b-44cd-b01b-f3008f8f1a17",
+              "meaning": "zero",
+              "original_amount": "0.00",
+              "original_currency": "SAR",
+              "fx_rate_to_sar": "1",
+              "evidence_file_id": "9b3d0851-c769-44f1-8b1a-0b2d5351a112"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": null
+        },
+        "version": 11,
+        "idempotency_key": "99b227b2-98be-4d51-934a-835acb6d21e7"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/suppliers",
+      "method": "PUT",
+      "body": {
+        "status": "not_applicable",
+        "reason": "Synthetic evidence confirms no suppliers",
+        "evidence_file_id": "23845b6f-8d96-4d32-b545-9a7482077cb7",
+        "data": {
+          "lines": [],
+          "provider_bindings": []
+        },
+        "version": 12,
+        "idempotency_key": "1a240557-492e-4adc-b40f-6de1b7f651fb"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/providers",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "",
+        "evidence_file_id": "4164fc55-d766-4574-8267-033a844b3303",
+        "data": {
+          "lines": [
+            {
+              "category": "provider_receivable",
+              "entity_id": "tabby",
+              "original_amount": "17.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "4164fc55-d766-4574-8267-033a844b3303"
+            }
+          ],
+          "provider_bindings": [
+            {
+              "provider": "tabby",
+              "bank_account_id": "8ebbc271-336b-44cd-b01b-f3008f8f1a17",
+              "evidence_file_id": "4164fc55-d766-4574-8267-033a844b3303"
+            }
+          ],
+          "inventory_valuation": null
+        },
+        "version": 13,
+        "idempotency_key": "a79f10d7-0283-4cad-8e2c-0398fa939cf7"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/sections/inventory",
+      "method": "PUT",
+      "body": {
+        "status": "complete",
+        "reason": "",
+        "evidence_file_id": "df5c80ef-2c49-4ee3-8b0e-855cdc2e3a12",
+        "data": {
+          "lines": [
+            {
+              "category": "inventory_asset",
+              "entity_id": "inventory-a",
+              "original_amount": "70.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "df5c80ef-2c49-4ee3-8b0e-855cdc2e3a12"
+            },
+            {
+              "category": "inventory_asset",
+              "entity_id": "inventory-b",
+              "original_amount": "30.00",
+              "meaning": "available_to_us",
+              "evidence_file_id": "df5c80ef-2c49-4ee3-8b0e-855cdc2e3a12"
+            }
+          ],
+          "provider_bindings": [],
+          "inventory_valuation": {
+            "total_sar": "100.00",
+            "evidence_file_id": "df5c80ef-2c49-4ee3-8b0e-855cdc2e3a12",
+            "manifest_hash": "90802c68e5e4cc25b80dc02cb37c266cde0a2b8c80fab6f068935f2aebb0f750",
+            "account_totals": {
+              "inventory-a": "70.00",
+              "inventory-b": "30.00"
+            }
+          }
+        },
+        "version": 14,
+        "idempotency_key": "6d17c9ba-f12f-41f4-b5ad-b6ad1aa13876"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/preview",
+      "method": "POST",
+      "body": {
+        "note": "Synthetic isolated A+B review",
+        "version": 15,
+        "idempotency_key": "089c3e4a-317c-4269-b2a7-a75f94ec8983"
+      }
+    },
+    {
+      "url": "/api/accounting-module/onboarding/sessions/onboarding-0f95ae9f4d0afd98e6473dab15d76e8e32904ff2fac61cffea87be8ecae48079/review",
+      "method": "POST",
+      "body": {
+        "note": "Synthetic isolated A+B review",
+        "version": 16,
+        "idempotency_key": "67f44b7d-deca-4c75-a543-91b1ee26e527"
+      }
+    }
+  ],
+  "passed": 12
+}

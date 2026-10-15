@@ -1,0 +1,32 @@
+{
+  "classification": "AMASI_TEST_ORDER_MANIFEST",
+  "store_id": "FILL_STORE_ID",
+  "downstream_reviewed": false,
+  "orders": [
+    {
+      "state": "pending",
+      "order_id": "FILL_INTERNAL_ORDER_ID",
+      "order_number": "FILL_REFERENCE_ID",
+      "test_customer_id": "FILL_CONTROLLED_TEST_CUSTOMER_ID",
+      "disposable_test_order": true,
+      "preserve_item_id": "FILL_ORIGINAL_ITEM_ID",
+      "item_id": "FILL_CURRENT_TARGET_ITEM_ID",
+      "product_id": "FILL_TARGET_PRODUCT_ID",
+      "sku": "FILL_TARGET_SKU",
+      "payment_method": "bank",
+      "branch_id": "FILL_BRANCH_ID"
+    }
+  ],
+  "products": [
+    {
+      "kind": "text_option",
+      "product_id": "FILL_TARGET_PRODUCT_ID",
+      "sku": "FILL_TARGET_SKU",
+      "branch_id": "FILL_BRANCH_ID",
+      "option_ids": ["FILL_OPTION_ID"],
+      "option_value_tuples": [
+        {"option_id": "FILL_OPTION_ID", "value_kind": "text"}
+      ]
+    }
+  ]
+}

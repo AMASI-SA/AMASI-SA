@@ -1,163 +1,237 @@
-# Mezan OS — Persistent Agent Context
+# Production release protocol
 
-This file is the first-read project contract for any AI coding agent, assistant, or new development conversation working in this repository.
+These rules apply to every agent and every conversation that can deploy this
+repository to the shared Emergent production project.
 
-## Project Goal
+## Protocol v5 only
 
-Mezan OS is one long-lived **AI-native commerce operating system**. It is not a separate AI project and it is not a rewrite of the current product.
+Release Guard v4 is not compatible with the Emergent Cloud Build artifact
+boundary. Do not publish a v4 release. Protocol v5 makes the governed release
+inside Cloud Build; ignored output left in a local `/app` session is never a
+deployment input.
 
-The product must evolve so that trusted commerce, operational, accounting, advertising, customer and product data can be observed by specialized AI agents, converted into evidence-backed decisions, and later executed through bounded, governed actions.
+The production branch remains `hotfix/prod-snap-meta-final`, and GitHub
+`origin/hotfix/prod-snap-meta-final` remains the reviewed source of truth.
+Before changing `/app` or starting a release rehearsal, run:
 
-The primary business optimization target is **sustainable net profit**, while preserving accounting correctness, customer experience, operational quality, privacy, security and owner-defined constraints.
+```bash
+cd /app
+python scripts/production_release_guard.py status
+```
 
-A core growth objective is also to make Amasi products understandable, discoverable and recommendable through natural-language AI commerce. Mezan must be designed for a future in which a shopper can express a need to an AI assistant in ordinary language and the system can represent that intent, match it to accurate Amasi product knowledge, measure the resulting journey and use the outcome to improve Amasi.
+Continue only when it reports `"active": false`. A v1-v4 lease must be closed
+by its owner using the guard which created it. Never reuse an older lease or
+identity with protocol v5.
 
-## Parallel Development Agreement
+## What is known about Emergent
 
-Development is intentionally **parallel**:
+The failed-v4 runtime logs prove a shared `/app` workspace, Backend cwd
+`/app/backend`, Frontend cwd `/app/frontend`, Frontend runtime command
+`yarn start` whose then-deployed package script used Vite development serving,
+host Node v20.20.2, and host Yarn v1.22.22. The current UI exposes runtime logs,
+not a complete Cloud Build transcript. It has not yet proved the historic Cloud
+Build install/build argv or cwd, presence of `.git`, package snapshot order,
+runtime package roots, or whether Frontend output is copied into the Backend
+package. Do not present any of those as observed fact.
 
-1. Continue completing and stabilizing the current deterministic Mezan workstreams: Salla, orders, order items, products, components/services, suppliers, receiving, preparation, costs, accounting, Qoyod, dashboards, Snapchat, Meta, TikTok, Google/GA4, customer service and integrations.
-2. At the same time, shape those workstreams so they become trusted inputs, deterministic tools and execution connectors for future AI agents.
-3. Preserve rich product/variant facts, customer-language signals, provenance and attribution evidence needed for future AI shopping discovery.
-4. Do not stop current delivery to perform a wholesale AI rewrite.
-5. Do not create a second duplicated "AI Mezan" stack beside the real system.
-6. Do not prematurely add autonomous writes merely because a model can perform them.
+Serving the generated build requires a governed runtime entry point for
+`frontend/build`. It must return `/build-meta.json` before SPA fallback with
+JSON bytes and MIME; materializing the file or adding headers alone is not
+sufficient. Protocol v5 maps `yarn start` to the governed runtime entry point;
+that new mapping remains subject to the clean-clone route test and later
+Production verification.
 
-A workstream may advance independently when it is safe, but its data contracts, provenance, permissions, auditability and source-of-truth rules must remain compatible with the AI-native target architecture.
+The v5 adapter prints sanitized environment evidence and its exact governed
+commands. Preserve that output from the next Cloud Build so the unknowns can
+be resolved without logging environment values or secrets.
 
-## Binding Architecture
+## Reviewed two-commit handoff
 
-Read these before architecture or cross-cutting changes:
+Protocol v5 uses a non-self-referential two-commit contract:
 
-1. `docs/adr/ADR-001-architecture-principles.md`
-2. `docs/adr/ADR-002-ai-native-operating-model.md`
-3. `docs/adr/ADR-003-ai-commerce-discovery.md`
-4. `docs/PROJECT_DECISIONS.md`
-5. `docs/AI_COMMERCE_OPERATING_SYSTEM_ROADMAP.md`
+1. source commit **A** contains all governed source changes;
+2. a local governed A/B build of A freezes the reviewed
+   `release/release-intent-v5.json`;
+3. intent commit **B** adds or updates only that tracked intent file;
+4. the intent's `source_git_sha` remains A, while the operational guard records
+   B (or a tree-equivalent merge commit) separately as `deployment_git_sha`.
 
-These documents are binding project decisions, not optional background notes.
+When Git metadata is available, A must be an ancestor of the deployment commit
+and the content diff after A may change only the intent file. Merge ancestry
+metadata may differ, but it may not introduce another governed source change.
+This split avoids the impossible requirement for a tracked file to contain the
+SHA of the commit which contains that same file. Do not squash or rebase A and
+B after freezing the intent. If either SHA or tree changes, create a new source
+commit, rebuild, and freeze a new intent-only commit.
 
-For product, search, content, recommendation or AI-shopping work, also read:
+The intent binds the full reviewed Frontend source manifest, deterministic
+Frontend artifact tree and `build-meta.json`, reproducibility proof, critical
+Backend hashes, source SHA, and deterministic runtime identity. The runtime
+release ID has form `rg5-<sha256>` and is derived from canonical identity
+content. It contains no UUID, actor, timestamp, or lease state. Operational
+lease ownership and timestamps remain local coordination data and cannot
+change the runtime identity.
 
-- `docs/PRODUCT_CONTROL_CENTER_AI_ARCHITECTURE.md`
+## Cloud Build deployment adapter
 
-## Core Rule: AI-Native, Not AI-Dependent
+The repository now configures this Emergent-facing Frontend package contract:
 
-Correctness-critical business behavior remains deterministic and authoritative, including:
+```bash
+cd frontend
+yarn build
+```
 
-- Orders and order-item identity/state.
-- Product cost, tax, accounting and reconciliation calculations.
-- Inventory, supplier and receiving state.
-- Permissions and tenant isolation.
-- Idempotency and duplicate prevention.
-- Provider normalization and canonical models.
-- Hard budget/loss/risk constraints.
+`frontend/scripts/build-entry.cjs` is the only dispatcher. Outside GitHub
+Actions it always enters the Emergent deployment adapter. Inside GitHub
+Actions it permits the ordinary current-HEAD Vite build only after
+`GITHUB_ACTIONS=true`, `GITHUB_SHA`, `GITHUB_WORKSPACE`, and the actual Git HEAD
+all agree. Partial or mismatched GitHub markers fail closed. This keeps the
+repository's existing CI consumers on the source under review without letting
+Cloud Build bypass the tracked release intent.
 
-AI reasons **above** trusted facts. It may analyze, explain, prioritize, predict, recommend and request actions. It does not become the source of truth for deterministic business facts.
+The reviewed public client origin is
+`REACT_APP_BACKEND_URL=https://mezansalla.com`; Local bootstrap and Cloud
+materialization must use that exact value. The retained UI logs do not expose
+the historic Cloud Build argv/cwd, so the next Cloud log must confirm this
+configured entry point. Under the contract,
+host Node 20 and host Yarn only dispatch the repository's Python deployment
+adapter. They do not run Vite or build the governed release. The adapter uses
+`scripts/frontend_release_toolchain.py` to run exactly:
 
-If AI is unavailable or below confidence, Mezan must continue operating safely through deterministic code and explicit human controls.
+```bash
+python scripts/frontend_release_toolchain.py ensure
 
-## Target Flow
+python scripts/frontend_release_toolchain.py exec -- \
+  yarn --cwd frontend install --frozen-lockfile --non-interactive
 
-`External Sources → Raw Facts → Canonical Domain → Deterministic Business/Financial Rules → Intelligence Features → Specialized AI Agents → Mezan Action Gateway → Approved Connectors/Workflows → Outcome Measurement`
+python scripts/frontend_release_toolchain.py exec -- \
+  yarn --cwd frontend build:release
 
-## AI Commerce Discovery Core Loop
+python scripts/frontend_release_toolchain.py exec -- \
+  python scripts/verify_frontend_build.py \
+    --expected-git-sha "<intent-source-git-sha>" \
+    --reviewed-intent-v5
+```
 
-Mezan must preserve the ability to support this long-term loop:
+Those commands use exactly Node v22.23.2 and Yarn v1.22.22. `build:release`
+performs clean A/B builds and retains B only after the complete artifacts and
+proof match. The adapter begins by removing inherited `frontend/node_modules`,
+`frontend/build`, `frontend/.release/reproducible-build.json`, and
+`backend/release_identity.json`; therefore no ignored or untracked local file
+can satisfy the build.
 
-`Natural-language customer need → structured intent/constraints → trusted product knowledge → evidence-ranked Amasi products → session/order/order item → net-profit outcome → experiment/business memory → improved product knowledge`
+After verification, the same adapter atomically materializes the ignored
+outputs in the Cloud Build workspace:
 
-AI-shopping readiness is broader than SEO. Product facts, taxonomy, attributes, natural-language questions/answers, media, availability, pricing, product performance and legitimate customer-language signals must remain usable by future conversational discovery systems.
+- `frontend/build`, including `index.html` and valid `build-meta.json`;
+- `frontend/.release/reproducible-build.json`;
+- `backend/release_identity.json`.
 
-Never improve AI discoverability by fabricating product claims, hiding provenance or mixing inferred attributes with authoritative facts.
+These files must remain ignored and untracked. Do not force-add them. The
+Backend identity embeds the verified Frontend artifact/proof contract and is
+valid in an isolated Backend package without `.git` or a sibling Frontend
+directory. Protocol v5 does not assume Frontend build files cross into the
+Backend runtime package.
 
-## Target Agent Topology
+The adapter's package-boundary check validates isolated copies of the declared
+Frontend and Backend package roots and emits file counts, tree digests, and
+exact records for required members. It does not emit a complete package file
+listing. This proves required candidate contents at adapter verification time;
+it does not prove whether Emergent snapshots before or after that point. The
+next Cloud log and the deployed probes remain required evidence of the actual
+platform handoff.
 
-The long-term system may include:
+## Lease and production verification
 
-- Mezan Supervisor.
-- Profit Agent.
-- Ads Agent.
-- Customer Agent.
-- Product Agent.
-- Orders Agent.
-- Accounting Agent.
-- Growth Agent.
-- Risk Agent.
+Do not create a lease during toolchain bootstrap, dependency installation, or
+the clean-clone adapter rehearsal. Only after the v5 local rehearsal matches
+the reviewed intent may the owner run `prepare`, followed immediately before a
+publish by `prepublish`. `prepare` records the deterministic runtime identity
+and the separate deployment commit; it does not generate a random runtime
+release ID.
 
-Agents do not own business truth. They consume canonical facts and produce traceable analyses, recommendations or bounded action requests.
+This repository change and its CI must not create a lease, click Preview,
+publish, approve, execute, sync, backfill, or perform any financial,
+advertising, budget, bid, or target-cost write.
 
-For AI commerce discovery:
+After a separately authorized publish, success requires a newer explicit
+`Deployment Succeeded` and:
 
-- Product Agent monitors product-knowledge completeness and semantic readiness.
-- Customer Agent contributes legitimate Voice-of-Customer language and intent signals.
-- Growth Agent identifies discovery gaps and profitable demand opportunities.
-- Supervisor coordinates cross-domain priorities without bypassing source-of-truth or Action Gateway controls.
+```bash
+python scripts/production_release_guard.py verify \
+  --url https://mezansalla.com
+```
 
-## Mandatory Action Gateway
+All three consecutive probes must report the intended deterministic release
+ID and source SHA, `verified_identity_available=true`,
+`critical_file_hashes_match=true`, and `frontend_build_verified=true`.
+`/build-meta.json` must return the exact governed JSON bytes with an
+`application/json` content type in both canonical and cache-busted requests;
+SPA HTML is a hard failure. Successful verification closes the matching lease
+and `status` must then report `"active": false`.
 
-No AI model or agent may write directly to production databases or external providers such as Snapchat, Meta, TikTok, Google Ads, Salla, Qoyod or customer channels.
+Never use `git reset --hard` to satisfy this protocol. Preserve unrelated
+Emergent files and never clear another conversation's lease.
 
-Every AI-initiated write must eventually pass through the **Mezan Action Gateway**, enforcing at minimum:
+## Mandatory conversation continuity protocol
 
-- Actor identity and authentication.
-- Tenant isolation and permissions.
-- Action allowlists.
-- Risk and confidence checks.
-- Approval level.
-- Budget/loss/cooldown guards where applicable.
-- Idempotency and duplicate prevention.
-- Deterministic connector/workflow execution.
-- Immutable audit logs.
-- Outcome measurement.
-- Rollback state and emergency stop where applicable.
+These rules apply to every multi-step task so work can continue safely when a
+conversation, terminal, cloud workspace, or context window ends.
 
-## Progressive Autonomy
+### Durable checkpoint is required
 
-Autonomy advances only through explicit gates:
+- Never keep material work only in `/tmp`, an unpushed worktree, terminal
+  scrollback, screenshots, or conversation memory.
+- Use a dedicated task branch. Do not place checkpoint commits directly on the
+  production branch.
+- When the current user authorization permits GitHub writes, create a commit and
+  push the task branch after every meaningful verified milestone, and before a
+  long-running command, approval wait, handoff, or likely context limit.
+- Incomplete but useful work must be preserved as an explicitly labeled WIP
+  checkpoint or Draft PR. A checkpoint is not evidence that the change is ready
+  to merge, deploy, or publish.
+- If GitHub writes are not authorized or unavailable, stop before the session
+  can be lost, preserve the work as a patch outside ephemeral directories, and
+  ask for the minimum permission needed to create the remote checkpoint.
 
-1. Observe.
-2. Analyze and explain.
-3. Recommend.
-4. Prepare an action for approval.
-5. Execute approved low-risk actions within limits.
-6. Run bounded autonomous experiments after measured reliability.
+### Canonical handoff record
 
-Never skip evidence, permission, approval, audit or rollback gates.
+GitHub Issue #1006 is the repository-wide continuation ledger. Each operation
+that already has a task-specific status document must update that document as
+well (for example, `docs/operations/<TASK-ID>/STATUS.json`). After every material
+checkpoint, record:
 
-## Business Memory
+1. task ID and scope;
+2. repository, task branch, and exact full commit SHA;
+3. changed files and the behavior completed;
+4. verification commands, exit status, and material results;
+5. PR, CI, review, merge, Release Guard, and deployment state when applicable;
+6. incomplete work, blockers, risks, and unrelated work intentionally preserved;
+7. the exact next safe action or command; and
+8. whether Production changed (`yes` or `no`), with evidence if `yes`.
 
-Durable Mezan business memory must be structured, versioned and traceable system data. Do not rely on chat memory as the business system of record.
+Do not record secrets, tokens, customer data, or environment values in commits,
+status documents, issues, PRs, or logs.
 
-Examples include decision history, experiment results, campaign/creative performance, product profitability, supplier/operational patterns, legitimate customer-intent signals, AI/search discovery outcomes, owner approvals/rejections and measured outcomes.
+### Resume procedure for a new conversation
 
-## How to Treat Existing Code
+A new conversation must not rely on the phrase "continue", screenshots, or a
+summary alone. Before editing, it must:
 
-Existing validated work is valuable infrastructure for the AI-native architecture. Classify capabilities as:
+1. read the applicable `AGENTS.md` files;
+2. read the task status document and latest relevant entry in Issue #1006;
+3. fetch the remote task branch and verify the recorded full SHA;
+4. inspect `git status`, recent commits, the PR, CI, and release/deployment
+   state as applicable; and
+5. compare repository evidence with the handoff record.
 
-- `REUSE`
-- `REFACTOR`
-- `REPLACE`
-- `DELETE`
+Continue only from the latest verified remote checkpoint. Do not restart
+completed work, repeat a successful deployment step, reuse another
+conversation's lease, or assume uncommitted files exist in a new workspace. If
+the evidence differs from the handoff, stop and report the discrepancy before
+making changes.
 
-Do not rewrite a working deterministic module merely to make it look AI-native. Reuse it as a trusted service or connector when correct.
+Before declaring a task complete, leave the task branch remotely recoverable
+and write a final handoff entry even when the same conversation expects to
+continue.
 
-## New Conversation / New Agent Startup Checklist
-
-Before proposing major work:
-
-1. Read this `AGENTS.md`.
-2. Read ADR-001, ADR-002 and ADR-003.
-3. Read relevant entries in `docs/PROJECT_DECISIONS.md`.
-4. Check `docs/AI_COMMERCE_OPERATING_SYSTEM_ROADMAP.md` for the current phase/gates.
-5. Inspect the current implementation and recent PRs for the workstream being changed.
-6. Preserve ongoing parallel work and avoid collisions with other branches/workstreams.
-7. Prefer additive changes, feature flags and backward-compatible contracts.
-8. Keep AI-readiness and AI-commerce-discovery readiness in scope, but do not let future AI work block urgent deterministic fixes.
-9. For product-facing work, preserve the facts and provenance required to answer natural-language shopper needs without inventing attributes.
-
-## Non-Negotiable Interpretation
-
-When a new conversation enters this repository, the default interpretation must be:
-
-> We are continuing the same Mezan OS project. Current operational/product/accounting/advertising work and AI development proceed in parallel toward one AI-native system. The current system is the foundation for the AI; it is not throwaway work and it is not a separate path. A core AI goal is to make Amasi increasingly understandable, discoverable and recommendable to natural-language shopping assistants while measuring the resulting business impact.

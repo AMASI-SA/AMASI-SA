@@ -1,0 +1,44 @@
+yarn run v1.22.22
+$ react-scripts test --watchAll=false --runInBand src/pages/accounting/h2/DriverPanel.test.jsx
+FAIL src/pages/accounting/h2/DriverPanel.test.jsx
+  √ loads exact F context then pending evidence only; no bank legacy endpoint or writes (362 ms)
+  √ 404 stops after context and shows blocked instead of legacy fallback (32 ms)
+  × connected bank port removes stale wiring blocker while destination proof remains blocked (142 ms)
+  √ bank port without explicit ready=true retains blocker (false) (40 ms)
+  √ bank port without explicit ready=true retains blocker (undefined) (27 ms)
+  √ bank port without explicit ready=true retains blocker (true) (15 ms)
+  √ server failures show retry and no replacement data (4 ms)
+  √ empty review queue is explicitly unrelated to driver balance (5 ms)
+  √ selecting driver displays native balances unchanged, no netting from entries (34 ms)
+  √ legacy or mismatched statement is rejected (3 ms)
+  √ loading skeleton does not claim zero (4 ms)
+  √ pending queue cannot silently represent approved history (32 ms)
+  √ pending queue cannot silently represent rejected history (22 ms)
+  √ approved financial result requires both backend posted state and journal (13 ms)
+  √ network transport failure offers retry instead of capability status (9 ms)
+  √ unimplemented native route is blocked without probing another endpoint (21 ms)
+
+  ● connected bank port removes stale wiring blocker while destination proof remains blocked
+
+    expect(received).not.toContain(expected) // indexOf
+
+    Expected substring: not "shipping_bank_binding_readiness_required"
+    Received string:        "الموصلون والشحن والتحويلات والشبكةتحديث بيانات الشحنمسؤولية COD والمستحق مستقلة. الأرقام التالية من دفتر MZ2 فقط.كشف الموصل أو شركة الشحن اختر هوية من MZ2موصل تجريبي · موصلمراجعة التحويل البنكي والشبكةطريقة الدفع كل طلبات المراجعةتحويل بنكيشبكة / POSتُعرض أول 250 مراجعة معلقة فقط. مبالغ الأدلة ليست أرصدة أو تحصيلات نهائية.▤لا توجد مراجعات معلقة معروضةلا تعني قائمة المراجعة الفارغة أن مسؤولية الموصل صفر.BLOCKED_BY_BACKEND / not_readyاعتماد التحويل والشبكة يتطلب وجهة مالية ودليل وصول موثقين من Backend. اعتماد الشبكة لا يعني وصول المبلغ إلى البنك.mz2_driver_payment_destination_not_integratedBLOCKED_BY_BACKEND / not_readyتحصيل النقد وسداد الموصلين والشحن وتسوية الشبكة إلى البنك بانتظار الربط البنكي الأصلي.shipping_bank_binding_readiness_requiredBLOCKED_BY_BACKEND / not_readyسجل المراجعات المعتمدة والمرفوضة: لا يوفر Track F عقد قراءة للسجل.driver_payment_review_history_read_contract_missingBLOCKED_BY_BACKEND / not_readyحيازة النقد الفعلية: لا يوفر Track F كشفًا أصليًا مستقلاً؛ لا تُستنتج من مسؤولية COD.driver_cash_custody_read_contract_missing"
+
+      27 |         .mockResolvedValueOnce({ data: { items: [] } });
+      28 |     await render();
+    > 29 |     expect(node.textContent).not.toContain("shipping_bank_binding_readiness_required");
+         |                                  ^
+      30 |     expect(node.textContent).not.toContain("بانتظار الربط البنكي الأصلي");
+      31 |     expect(node.textContent).toContain("mz2_driver_payment_destination_not_integrated");
+      32 |     expect(node.textContent).toContain("BLOCKED_BY_BACKEND");
+
+      at Object.<anonymous> (src/pages/accounting/h2/DriverPanel.test.jsx:29:34)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 passed, 16 total
+Snapshots:   0 total
+Time:        5.922 s
+Ran all test suites matching /src\\pages\\accounting\\h2\\DriverPanel.test.jsx/i.
+error Command failed with exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

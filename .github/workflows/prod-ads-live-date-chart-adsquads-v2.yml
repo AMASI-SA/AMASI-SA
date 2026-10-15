@@ -1,0 +1,70 @@
+name: Production Ads Live Date Chart Ad Squads V2
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "frontend/src/index.js"
+      - "frontend/src/marketingAdsLiveWorkspaceEnhancer.js"
+      - "frontend/src/marketingAdsLiveWorkspaceEnhancer.test.js"
+      - "frontend/src/components/ArabicDateRangePicker.jsx"
+      - "frontend/src/components/AdvancedFilters.jsx"
+      - "frontend/src/components/AdvancedFilters.test.jsx"
+      - "frontend/src/components/marketing/AdsPerformanceExplorer.jsx"
+      - "frontend/src/components/marketing/AdsPerformanceExplorer.test.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.jsx"
+      - "frontend/src/components/marketing/AdSquadManagerTable.test.jsx"
+      - ".github/workflows/prod-ads-live-date-chart-adsquads-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-test-and-build:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frontend dependencies
+        run: yarn install --non-interactive
+      - name: Test live Ads Manager and shared date contracts
+        env:
+          CI: "true"
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/marketingAdsLiveWorkspaceEnhancer.test.js
+          src/components/AdvancedFilters.test.jsx
+          src/components/marketing/AdsPerformanceExplorer.test.jsx
+          src/components/marketing/AdSquadManagerTable.test.jsx
+          src/components/marketing/ArabicDateRangePicker.test.jsx
+      - name: Build Production frontend
+        env:
+          CI: "false"
+        run: yarn build
+      - name: Enforce live read-only Ads Manager contract
+        working-directory: .
+        run: |
+          INDEX=frontend/src/index.js
+          LIVE=frontend/src/marketingAdsLiveWorkspaceEnhancer.js
+          FILTERS=frontend/src/components/AdvancedFilters.jsx
+          CHART=frontend/src/components/marketing/AdsPerformanceExplorer.jsx
+          SQUADS=frontend/src/components/marketing/AdSquadManagerTable.jsx
+          grep -q 'marketingAdsLiveWorkspaceEnhancer' "$INDEX"
+          grep -q 'AUTO_REFRESH_MS = 60_000' "$LIVE"
+          grep -q 'default_tab: "campaigns"' "$LIVE"
+          grep -q 'snapchatSelectedAccountId' "$LIVE"
+          grep -q 'adsquad_default_sort: "newest"' "$LIVE"
+          grep -q 'الأكثر صرفًا' "$LIVE"
+          grep -q 'النشطة أولًا' "$LIVE"
+          grep -q 'ArabicDateRangePicker' "$FILTERS"
+          grep -q 'ads-performance-single-day-chart' "$CHART"
+          grep -q 'sortAdSquadRows' "$SQUADS"
+          ! grep -Eq '(api|axios)\.(post|put|patch|delete)\(' "$LIVE" "$FILTERS" "$CHART" "$SQUADS"

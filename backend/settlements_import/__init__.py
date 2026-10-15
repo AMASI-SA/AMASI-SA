@@ -8,8 +8,10 @@ __all__ = [
     "PROVIDER_SALLA",
     "PROVIDER_TAMARA",
     "PROVIDER_TABBY",
+    "PROVIDER_EMKAN",
 ]
 
 PROVIDER_SALLA = "salla"
 PROVIDER_TAMARA = "tamara"
 PROVIDER_TABBY = "tabby"
+PROVIDER_EMKAN = "emkan"

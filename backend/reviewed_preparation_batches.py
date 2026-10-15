@@ -10,6 +10,7 @@ This engine is Mezan-only. It performs no Salla or Qoyod writes.
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import io
 import ipaddress
@@ -27,7 +28,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import BulkWriteError, DuplicateKeyError
 
+from order_engine.repository import MongoOrderRepository
+from order_engine.salla_refresh import refresh_order_from_salla
+from order_engine.service import OrderNotFoundError, get_order
 from order_item_engine.mapper import map_order_item_identities
+from order_item_engine.models import (
+    OrderItemIdentityDTO,
+    OrderItemOptionDTO,
+    OrderItemSourceDTO,
+)
+from order_tracking_notes import enforce_stage_instructions
 from order_review_routes import (
     EVENTS,
     WORKFLOWS,
@@ -37,22 +47,30 @@ from order_review_routes import (
 )
 from order_review_spec_replacements import (
     canonical_spec_key,
+    extract_item_specs,
     supplier_file_spec_fields,
 )
 from preparation_pdf import ProductLine, generate_preparation_pdf
+from preparation_piece_barcode import preparation_piece_barcode
+from reviewed_preparation_v3 import (
+    bounded_map_ordered,
+    stable_ready_item_id,
+    stable_ready_unit_id,
+)
 from reviewed_products_catalog import (
     ACTIVE_PREPARATION_ALLOCATION_STATUSES,
     MAX_REVIEWED_ORDERS,
     PREPARATION_UNIT_ALLOCATIONS,
     load_reviewed_product_context,
+    order_items_with_review_snapshot,
 )
 from tz_utils import riyadh_now_aware
 
 
 BATCHES = "mezan_preparation_batches_v2"
 BATCH_BUILD_TTL_MINUTES = 20
-MAX_BATCH_SELECTIONS = 200
 MAX_BATCH_UNITS = 1500
+MAX_BATCH_SELECTIONS = MAX_BATCH_UNITS
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
@@ -61,6 +79,7 @@ class PreparationProductSelection(BaseModel):
 
     group_key: str = Field(min_length=1, max_length=500)
     quantity: int = Field(ge=1, le=MAX_BATCH_UNITS)
+    revision: str | None = Field(default=None, min_length=64, max_length=64)
 
 
 class CreatePreparationBatchRequest(BaseModel):
@@ -109,6 +128,235 @@ def _unit_quantity(value: Any) -> int:
     return rounded
 
 
+def _order_document(order: Any) -> dict[str, Any]:
+    """Normalize canonical orders without assuming one concrete DTO class."""
+    if isinstance(order, dict):
+        document = dict(order)
+    elif hasattr(order, "model_dump"):
+        document = dict(order.model_dump(mode="json"))
+    else:
+        document = dict(vars(order)) if hasattr(order, "__dict__") else {}
+
+    raw_items = document.get("items") or getattr(order, "items", None) or []
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            items.append(dict(item))
+        elif hasattr(item, "model_dump"):
+            items.append(dict(item.model_dump(mode="json")))
+        elif hasattr(item, "__dict__"):
+            items.append(dict(vars(item)))
+    document["items"] = items
+    return document
+
+
+def _review_snapshot_identity(
+    order: Any,
+    workflow: dict[str, Any],
+    allocation: dict[str, Any],
+) -> tuple[OrderItemIdentityDTO, dict[str, Any]] | None:
+    """Resolve a catalog recovery line from its durable review snapshot.
+
+    The reviewed catalog can intentionally restore a line that Salla no longer
+    returns.  Such a line uses ``review-snapshot:<order>:<index>`` as a recovery
+    identity.  Re-validate every available strong fact before materialising a
+    file; unrelated missing identities still hit the stale-data guard.
+    """
+    order_item_id = _text(allocation.get("order_item_id"))
+    line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+    if _text(line.get("identity_source")) != "review_snapshot":
+        return None
+    try:
+        snapshot_index = int(line.get("review_snapshot_index"))
+    except (TypeError, ValueError):
+        try:
+            snapshot_index = int(order_item_id.rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            return None
+    snapshots = workflow.get("items") or []
+    if snapshot_index < 0 or snapshot_index >= len(snapshots):
+        return None
+    snapshot = snapshots[snapshot_index]
+    if not isinstance(snapshot, dict):
+        return None
+    frozen_identity = (
+        line.get("review_snapshot_identity")
+        if isinstance(line.get("review_snapshot_identity"), dict)
+        else {}
+    )
+    historical_id = _text(snapshot.get("order_item_id"))
+    frozen_order_item_id = _text(frozen_identity.get("order_item_id"))
+    if historical_id and historical_id != order_item_id:
+        return None
+    if frozen_order_item_id and frozen_order_item_id != order_item_id:
+        return None
+    for field in ("product_id", "parent_product_id", "variant_id", "sku", "barcode"):
+        # ``line[field]`` is the canonical Product V2-enriched value used for
+        # grouping and display.  Compare the untouched snapshot identity here;
+        # otherwise legitimate enrichment (not a commercial data change) makes
+        # every old sparse reviewed line look stale at file creation time.
+        current = _text(
+            frozen_identity.get(field)
+            if frozen_identity
+            else line.get(field)
+        )
+        frozen = _text(snapshot.get(field))
+        if current and frozen and current.casefold() != frozen.casefold():
+            return None
+    frozen_quantity = _unit_quantity(frozen_identity.get("quantity"))
+    snapshot_quantity = _unit_quantity(snapshot.get("quantity"))
+    if frozen_quantity and frozen_quantity != snapshot_quantity:
+        return None
+    if snapshot_quantity <= 0 or _unit_quantity(allocation.get("quantity")) > snapshot_quantity:
+        return None
+
+    raw_options = snapshot.get("options") or []
+    options: list[OrderItemOptionDTO] = []
+    for raw in raw_options if isinstance(raw_options, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        name = _text(raw.get("name") or raw.get("label") or raw.get("key"))
+        value = raw.get("value")
+        if name and value not in (None, ""):
+            options.append(OrderItemOptionDTO(name=name, value=value))
+
+    identity = OrderItemIdentityDTO(
+        order_item_id=order_item_id,
+        order_id=_text(getattr(order, "order_id", None)) or _text(getattr(order, "order_number", None)),
+        order_number=_text(getattr(order, "order_number", None)),
+        order_created_at=getattr(order, "created_at"),
+        line_index=max(0, int(line.get("line_index") or snapshot_index)),
+        source=OrderItemSourceDTO(
+            provider="salla",
+            source_order_id=_text(getattr(getattr(order, "source", None), "source_order_id", None)) or None,
+            source_order_item_id=_text(snapshot.get("source_item_id")) or None,
+            source_product_id=_text(snapshot.get("product_id") or line.get("product_id")) or None,
+            source_variant_id=_text(snapshot.get("variant_id") or line.get("variant_id")) or None,
+        ),
+        product_id=_text(line.get("product_id") or snapshot.get("product_id")) or None,
+        parent_product_id=_text(line.get("parent_product_id") or snapshot.get("parent_product_id")) or None,
+        variant_id=_text(line.get("variant_id") or snapshot.get("variant_id")) or None,
+        sku=_text(line.get("sku") or snapshot.get("sku")) or None,
+        barcode=_text(line.get("barcode") or snapshot.get("barcode")) or None,
+        name=_text(snapshot.get("product_name") or line.get("product_name")) or "منتج",
+        quantity=snapshot_quantity,
+        image_url=_text(snapshot.get("selected_image_url") or line.get("image_url")) or None,
+        options=options,
+    )
+    return identity, snapshot
+
+
+def _ready_options(raw_options: Any) -> list[OrderItemOptionDTO]:
+    options: list[OrderItemOptionDTO] = []
+    if isinstance(raw_options, dict):
+        values = [
+            {"name": key, "value": value}
+            for key, value in raw_options.items()
+        ]
+    elif isinstance(raw_options, list):
+        values = raw_options
+    else:
+        values = []
+    for raw in values:
+        if not isinstance(raw, dict):
+            continue
+        name = _text(raw.get("name") or raw.get("label") or raw.get("key"))
+        value = raw.get("value")
+        if name and value not in (None, ""):
+            options.append(OrderItemOptionDTO(name=name, value=value))
+    return options
+
+
+def _reviewed_ready_identity(
+    order: Any,
+    workflow: dict[str, Any],
+    allocation: dict[str, Any],
+) -> tuple[OrderItemIdentityDTO, dict[str, Any]] | None:
+    """Materialise a normal reviewed product from its frozen ready-item record.
+
+    The catalog and file builder both derive this record from the durable
+    review workflow.  File creation therefore does not depend on a second live
+    Salla identity mapping, while recovered incident lines remain on their
+    existing, separate review-snapshot path.
+    """
+    line = allocation.get("line") if isinstance(allocation.get("line"), dict) else {}
+    if _text(line.get("identity_source")) != "reviewed_ready":
+        return None
+    frozen = (
+        line.get("ready_item_identity")
+        if isinstance(line.get("ready_item_identity"), dict)
+        else {}
+    )
+    if not frozen:
+        return None
+    order_item_id = _text(allocation.get("order_item_id"))
+    if not order_item_id or _text(frozen.get("order_item_id")) != order_item_id:
+        return None
+    ready_item_id = _text(line.get("ready_item_id"))
+    if not ready_item_id or ready_item_id != stable_ready_item_id(line):
+        return None
+    if _text(allocation.get("ready_item_id")) not in {"", ready_item_id}:
+        return None
+
+    states = {
+        _text(row.get("order_item_id")): dict(row)
+        for row in workflow.get("items") or []
+        if isinstance(row, dict) and _text(row.get("order_item_id"))
+    }
+    state = states.get(order_item_id, {})
+    quantity = _unit_quantity(frozen.get("quantity"))
+    if quantity <= 0 or _unit_quantity(allocation.get("quantity")) > quantity:
+        return None
+    unit_indices = [
+        int(value)
+        for value in (allocation.get("unit_indices") or [])
+        if int(value) > 0
+    ]
+    if unit_indices and any(value > quantity for value in unit_indices):
+        return None
+    ready_unit_id = _text(allocation.get("ready_unit_id"))
+    if ready_unit_id:
+        if len(unit_indices) != 1:
+            return None
+        if ready_unit_id != stable_ready_unit_id(line, unit_indices[0]):
+            return None
+        if _text(line.get("ready_unit_id")) != ready_unit_id:
+            return None
+    identity = OrderItemIdentityDTO(
+        order_item_id=order_item_id,
+        order_id=_text(getattr(order, "order_id", None))
+        or _text(getattr(order, "order_number", None)),
+        order_number=_text(getattr(order, "order_number", None)),
+        order_created_at=getattr(order, "created_at"),
+        line_index=max(0, int(line.get("line_index") or 0)),
+        source=OrderItemSourceDTO(
+            provider="salla",
+            source_order_id=_text(
+                getattr(getattr(order, "source", None), "source_order_id", None)
+            ) or None,
+            source_order_item_id=_text(frozen.get("source_item_id")) or None,
+            source_product_id=_text(frozen.get("product_id")) or None,
+            source_variant_id=_text(frozen.get("variant_id")) or None,
+        ),
+        product_id=_text(frozen.get("product_id") or line.get("product_id")) or None,
+        parent_product_id=_text(
+            frozen.get("parent_product_id") or line.get("parent_product_id")
+        ) or None,
+        variant_id=_text(frozen.get("variant_id") or line.get("variant_id")) or None,
+        sku=_text(frozen.get("sku") or line.get("sku")) or None,
+        barcode=_text(frozen.get("barcode") or line.get("barcode")) or None,
+        name=_text(frozen.get("product_name") or line.get("product_name")) or "منتج",
+        quantity=quantity,
+        image_url=_text(
+            frozen.get("selected_image_url")
+            or line.get("selected_image_url")
+            or line.get("image_url")
+        ) or None,
+        options=_ready_options(frozen.get("options")),
+    )
+    return identity, state
+
+
 def plan_preparation_allocations(
     products: list[dict[str, Any]],
     selections: list[dict[str, Any]],
@@ -133,6 +381,10 @@ def plan_preparation_allocations(
         product = by_key.get(group_key)
         if not product:
             raise ValueError("reviewed_product_not_available")
+        expected_revision = _text(selection.get("revision"))
+        current_revision = _text(product.get("revision"))
+        if expected_revision and expected_revision != current_revision:
+            raise ValueError("reviewed_selection_stale")
         remaining = _unit_quantity(
             product.get("remaining_quantity")
             if product.get("remaining_quantity") is not None
@@ -140,6 +392,25 @@ def plan_preparation_allocations(
         )
         if quantity > remaining:
             raise ValueError("preparation_quantity_exceeds_remaining")
+        if product.get("piece_level") and quantity != 1:
+            raise ValueError("preparation_piece_quantity_must_be_one")
+        if product.get("piece_level"):
+            piece_lines = product.get("source_lines") or []
+            if len(piece_lines) != 1:
+                raise ValueError("reviewed_selection_stale")
+            piece_line = piece_lines[0]
+            piece_indices = [
+                int(value)
+                for value in (piece_line.get("available_unit_indices") or [])
+                if int(value) > 0
+            ]
+            ready_unit_id = _text(piece_line.get("ready_unit_id"))
+            if (
+                len(piece_indices) != 1
+                or ready_unit_id != group_key
+                or ready_unit_id != stable_ready_unit_id(piece_line, piece_indices[0])
+            ):
+                raise ValueError("reviewed_selection_stale")
 
         pending = quantity
         for line in product.get("source_lines") or []:
@@ -169,6 +440,8 @@ def plan_preparation_allocations(
                 "sku": product.get("sku"),
                 "order_number": _text(line.get("order_number")),
                 "order_item_id": _text(line.get("order_item_id")),
+                "ready_item_id": _text(line.get("ready_item_id")) or None,
+                "ready_unit_id": _text(line.get("ready_unit_id")) or None,
                 "quantity": take,
                 "unit_indices": available[:take],
                 "line": dict(line),
@@ -318,36 +591,95 @@ def _card_field_projection(
     }
 
 
-def _line_from_batch_storage(row: dict[str, Any]) -> ProductLine:
+def _line_from_batch_storage(
+    row: dict[str, Any],
+    batch: dict[str, Any] | None = None,
+) -> ProductLine:
+    # Rebuild customer-selected option fields from the immutable reviewed
+    # file snapshot when older/stale batch rows are missing the projected
+    # convenience fields. Both the employee preparation PDF and the supplier
+    # dispatch PDF pass through this function, so one canonical fallback keeps
+    # both files consistent without changing the original Salla values.
+    stored_spec_fields = [
+        field for field in (row.get("file_spec_fields") or [])
+        if isinstance(field, dict)
+    ]
+    fallback_fields = _card_field_projection(stored_spec_fields, row.get("preparation_note"))
     image_bytes = None
     if row.get("image_b64"):
         try:
             image_bytes = base64.b64decode(row["image_b64"])
         except Exception:
             image_bytes = None
+    batch = batch or {}
+    barcode_payload = None
+    unit_index = row.get("unit_index")
+    if unit_index in (None, ""):
+        unit_indices = row.get("unit_indices") or []
+        # A printed preparation card may represent more than one physical
+        # piece. Use its first materialised piece as a stable card anchor;
+        # supplier receiving expands that anchor to the remaining pieces on
+        # the same exact batch/order line before asking for a quantity.
+        unit_index = unit_indices[0] if unit_indices else None
+    if all((
+        _text(batch.get("user_id")),
+        _text(batch.get("id")),
+        _text(row.get("order_number")),
+        _text(row.get("order_item_id")),
+        unit_index not in (None, ""),
+    )):
+        barcode_payload = preparation_piece_barcode(
+            user_id=batch.get("user_id"),
+            batch_id=batch.get("id"),
+            order_number=row.get("order_number"),
+            order_item_id=row.get("order_item_id"),
+            unit_index=unit_index,
+        )
     return ProductLine(
         order_number=_text(row.get("order_number")),
         order_date=_text(row.get("order_date")) or None,
         product_name=_text(row.get("product_name")) or None,
-        customer_name=_text(row.get("customer_name")) or None,
-        note=_text(row.get("note")) or None,
+        customer_name=(
+            _text(row.get("customer_name"))
+            or _text(fallback_fields.get("customer_name"))
+            or None
+        ),
+        note=(
+            _text(row.get("note"))
+            or _text(fallback_fields.get("note"))
+            or None
+        ),
         quantity=int(row.get("quantity") or 1),
         total_products_in_order=max(1, int(row.get("total_products_in_order") or 1)),
         item_index=int(row.get("line_index") or 0),
         image_bytes=image_bytes,
         image_mime=_text(row.get("image_mime")) or None,
         shipping_company=_text(row.get("shipping_company")) or None,
-        size=_text(row.get("size")) or None,
-        color=_text(row.get("color")) or None,
+        size=(
+            _text(row.get("size"))
+            or _text(fallback_fields.get("size"))
+            or None
+        ),
+        color=(
+            _text(row.get("color"))
+            or _text(fallback_fields.get("color"))
+            or None
+        ),
         product_id=_text(row.get("product_id")) or None,
         sku=_text(row.get("sku")) or None,
-        product_options=dict(row.get("product_options") or {}),
+        product_options={
+            **dict(fallback_fields.get("product_options") or {}),
+            **dict(row.get("product_options") or {}),
+        },
+        barcode_payload=barcode_payload,
+        file_spec_fields=list(row.get("file_spec_fields") or []),
+        preparation_note=_text(row.get("preparation_note")) or None,
     )
 
 
 def render_preparation_batch_pdf(batch: dict[str, Any]) -> bytes:
     lines = [
-        _line_from_batch_storage(row)
+        _line_from_batch_storage(row, batch)
         for row in batch.get("lines") or []
         if isinstance(row, dict)
     ]
@@ -358,6 +690,187 @@ def render_preparation_batch_pdf(batch: dict[str, Any]) -> bytes:
         serial_start=1,
         title=_text(batch.get("title")) or "تجهيز المنتجات",
     )
+
+
+def repair_batch_line_customer_options(
+    lines: list[dict[str, Any]],
+    *,
+    identities_by_order: dict[str, list[Any]],
+    workflows_by_order: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int, list[str]]:
+    """Rebuild missing PDF option snapshots from canonical Salla order items."""
+    repaired: list[dict[str, Any]] = []
+    repaired_count = 0
+    unresolved: list[str] = []
+    for source in lines:
+        row = dict(source)
+        order_number = _text(row.get("order_number"))
+        order_item_id = _text(row.get("order_item_id"))
+        identities = identities_by_order.get(order_number) or []
+        identity = next(
+            (
+                candidate for candidate in identities
+                if _text(getattr(candidate, "order_item_id", None)) == order_item_id
+            ),
+            None,
+        )
+        if identity is None:
+            line_index = int(row.get("line_index") or 0)
+            identity = next(
+                (
+                    candidate for candidate in identities
+                    if int(getattr(candidate, "line_index", -1) or 0) == line_index
+                    and (
+                        not _text(row.get("sku"))
+                        or _text(getattr(candidate, "sku", None)) == _text(row.get("sku"))
+                    )
+                ),
+                None,
+            )
+        if identity is None:
+            unresolved.append(f"{order_number}:{order_item_id}")
+            repaired.append(row)
+            continue
+        workflow = workflows_by_order.get(order_number) or {}
+        states = {
+            _text(state.get("order_item_id")): dict(state)
+            for state in workflow.get("items") or []
+            if isinstance(state, dict) and _text(state.get("order_item_id"))
+        }
+        state = states.get(_text(getattr(identity, "order_item_id", None)), {})
+        spec_fields = supplier_file_spec_fields(identity, state)
+        if not spec_fields:
+            repaired.append(row)
+            continue
+        card_fields = _card_field_projection(
+            spec_fields,
+            row.get("preparation_note") or state.get("preparation_note"),
+        )
+        before = (
+            row.get("file_spec_fields"), row.get("customer_name"),
+            row.get("size"), row.get("color"), row.get("note"),
+            row.get("product_options"),
+        )
+        row.update({
+            "file_spec_fields": spec_fields,
+            "customer_name": card_fields["customer_name"],
+            "size": card_fields["size"],
+            "color": card_fields["color"],
+            "note": card_fields["note"],
+            "product_options": card_fields["product_options"],
+        })
+        after = (
+            row.get("file_spec_fields"), row.get("customer_name"),
+            row.get("size"), row.get("color"), row.get("note"),
+            row.get("product_options"),
+        )
+        if before != after:
+            repaired_count += 1
+        repaired.append(row)
+    return repaired, repaired_count, unresolved
+
+
+async def refresh_and_repair_batch_customer_options(
+    db: Any,
+    *,
+    user_id: str,
+    lines: list[dict[str, Any]],
+    refresh_only_missing: bool,
+) -> dict[str, Any]:
+    """Refresh Salla reads and rebuild batch option snapshots before PDF use.
+
+    New files only refresh orders whose frozen lines do not yet contain
+    customer fields.  The historical repair action refreshes every order in
+    the file.  Both paths use the same identity reconciliation and never write
+    an order status back to Salla.
+    """
+    source_lines = [dict(row) for row in lines if isinstance(row, dict)]
+    order_numbers = sorted({
+        _text(row.get("order_number"))
+        for row in source_lines
+        if _text(row.get("order_number"))
+    })
+    missing_keys = {
+        f"{_text(row.get('order_number'))}:{_text(row.get('order_item_id'))}"
+        for row in source_lines
+        if not list(row.get("file_spec_fields") or [])
+    }
+    refresh_order_numbers = (
+        sorted({key.split(":", 1)[0] for key in missing_keys if key})
+        if refresh_only_missing
+        else order_numbers
+    )
+    if refresh_only_missing and not refresh_order_numbers:
+        return {
+            "lines": source_lines,
+            "repaired_line_count": 0,
+            "unresolved": [],
+            "refresh_failures": [],
+            "refreshed_order_numbers": [],
+        }
+
+    refresh_failures: list[dict[str, Any]] = []
+    refresh_limit = asyncio.Semaphore(8)
+
+    async def refresh_one(order_number: str) -> tuple[str, dict[str, Any]]:
+        async with refresh_limit:
+            try:
+                result = await refresh_order_from_salla(
+                    db,
+                    user_id,
+                    order_number,
+                    force=True,
+                    minimum_fresh_seconds=0,
+                    allow_auto_fulfillment=False,
+                )
+            except Exception as exc:  # The caller decides whether to fail closed.
+                result = {"ok": False, "found": False, "code": type(exc).__name__}
+            return order_number, result
+
+    refresh_results = await asyncio.gather(*(
+        refresh_one(order_number) for order_number in refresh_order_numbers
+    ))
+    for order_number, result in refresh_results:
+        if not result.get("ok") or not result.get("found"):
+            refresh_failures.append({
+                "order_number": order_number,
+                "code": _text(result.get("code")) or "salla_refresh_failed",
+            })
+
+    repository = MongoOrderRepository(db)
+    identities_by_order: dict[str, list[Any]] = {}
+    for order_number in order_numbers:
+        try:
+            order = await get_order(
+                repository,
+                user_id=user_id,
+                order_number=order_number,
+            )
+        except OrderNotFoundError:
+            continue
+        identities_by_order[order_number] = map_order_item_identities(order)
+
+    workflow_rows = await db[WORKFLOWS].find(
+        {"user_id": user_id, "order_number": {"$in": order_numbers}},
+        {"_id": 0},
+    ).to_list(len(order_numbers) or 1)
+    workflows_by_order = {
+        _text(row.get("order_number")): row for row in workflow_rows
+    }
+    repaired_lines, repaired_count, unresolved = repair_batch_line_customer_options(
+        source_lines,
+        identities_by_order=identities_by_order,
+        workflows_by_order=workflows_by_order,
+    )
+    if refresh_only_missing:
+        unresolved = [key for key in unresolved if key in missing_keys]
+    return {
+        "lines": repaired_lines,
+        "repaired_line_count": repaired_count,
+        "unresolved": unresolved,
+        "refresh_failures": refresh_failures,
+        "refreshed_order_numbers": refresh_order_numbers,
+    }
 
 
 def _batch_response(batch: dict[str, Any]) -> dict[str, Any]:
@@ -441,6 +954,98 @@ async def _cleanup_stale_builds(db: Any, user_id: str) -> None:
     })
 
 
+async def _finalize_batch_assignment(
+    db: Any,
+    *,
+    user_id: str,
+    client_request_id: str,
+    actor: dict[str, Any],
+) -> dict[str, Any]:
+    """Require registry and employee-piece materialisation before success."""
+    import preparation_file_registry as registry_module
+
+    row = await registry_module._finalize_registry_row(
+        db,
+        user_id=user_id,
+        client_request_id=client_request_id,
+        actor=actor,
+    )
+    if _text(row.get("piece_registry_status")) != "ready":
+        # The installed safety wrapper marks transient materialisation failures
+        # as recovery_required. One idempotent retry covers a short DB race;
+        # deterministic identity errors still fail closed below.
+        row = await registry_module._finalize_registry_row(
+            db,
+            user_id=user_id,
+            client_request_id=client_request_id,
+            actor=actor,
+        )
+    if (
+        _text(row.get("status")) != "ready"
+        or _text(row.get("piece_registry_status")) != "ready"
+        or not _text(row.get("responsible_employee_id"))
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "preparation_employee_assignment_incomplete",
+                "message": (
+                    "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
+                    "تمت المراجعة ولم يتم اعتماد الملف."
+                ),
+            },
+        )
+    return row
+
+
+async def _rollback_unassigned_batch(
+    db: Any,
+    *,
+    user_id: str,
+    client_request_id: str,
+    batch_id: str,
+    actor: dict[str, Any],
+    reason: str,
+) -> None:
+    """Compensate a just-created batch that never reached the employee."""
+    from preparation_file_registry import REGISTRY
+    from preparation_piece_operations import PIECES
+
+    await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "status": {"$in": ["reserved", "committed"]},
+    })
+    await db[PIECES].delete_many({
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "started_at": {"$in": [None, ""]},
+    })
+    await db[BATCHES].delete_one({
+        "user_id": user_id,
+        "id": batch_id,
+        "execution_status": {"$ne": "in_progress"},
+    })
+    await db[REGISTRY].delete_one({
+        "user_id": user_id,
+        "client_request_id": client_request_id,
+        "batch_id": {"$in": [None, "", batch_id]},
+    })
+    await db[EVENTS].insert_one({
+        "id": uuid.uuid4().hex,
+        "user_id": user_id,
+        "batch_id": batch_id,
+        "client_request_id": client_request_id,
+        "event_type": "preparation_employee_assignment_rolled_back",
+        "reason": reason[:240],
+        "occurred_at": _now(),
+        "actor_id": _text(actor.get("id")),
+        "mezan_only": True,
+        "salla_updated": False,
+        "qoyod_updated": False,
+    })
+
+
 async def _build_batch_lines(
     context: dict[str, Any],
     planned: list[dict[str, Any]],
@@ -453,91 +1058,186 @@ async def _build_batch_lines(
         _text(workflow.get("order_number")): workflow
         for _order, workflow in context.get("pairs") or []
     }
-    identities_by_order = {
-        order_number: {
-            _text(identity.order_item_id): identity
-            for identity in map_order_item_identities(order)
-        }
-        for order_number, order in orders_by_number.items()
-    }
-
     result: list[dict[str, Any]] = []
+    for index, allocation in enumerate(planned, start=1):
+        order_number = _text(allocation.get("order_number"))
+        order_item_id = _text(allocation.get("order_item_id"))
+        order = orders_by_number.get(order_number)
+        workflow = workflows_by_number.get(order_number) or {}
+        identity: OrderItemIdentityDTO | None = None
+        snapshot_state: dict[str, Any] | None = None
+        if order is not None:
+            line = allocation.get("line") or {}
+            if _text(line.get("identity_source")) == "review_snapshot":
+                resolved = _review_snapshot_identity(order, workflow, allocation)
+            else:
+                resolved = _reviewed_ready_identity(order, workflow, allocation)
+            if resolved is not None:
+                identity, snapshot_state = resolved
+        if order is None or identity is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "reviewed_line_changed_reload_required",
+                    "message": (
+                        "تغيّرت بيانات المنتج بعد فتح الملف. حدّث منتجات "
+                        "تمت المراجعة ثم أعد تحديد الكمية. لم يتم إنشاء ملف."
+                    ),
+                    "order_number": order_number,
+                },
+            )
+        states = {
+            _text(row.get("order_item_id")): dict(row)
+            for row in workflow.get("items") or []
+            if isinstance(row, dict) and _text(row.get("order_item_id"))
+        }
+        state = snapshot_state or states.get(order_item_id, {}) or {}
+        if state.get("supplier_export") is False:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "reviewed_line_no_longer_exportable",
+                    "message": (
+                        "هذا المنتج لم يعد متاحًا لملف التجهيز. حدّث الصفحة "
+                        "ثم أعد الاختيار. لم يتم إنشاء ملف."
+                    ),
+                    "order_number": order_number,
+                },
+            )
+        line = allocation.get("line") or {}
+        catalog_spec_fields = line.get("file_spec_fields")
+        spec_fields = (
+            [dict(row) for row in catalog_spec_fields if isinstance(row, dict)]
+            if isinstance(catalog_spec_fields, list)
+            else supplier_file_spec_fields(identity, state)
+        )
+        # Fail closed before materialising the employee preparation file:
+        # every customer option visible in Waiting Review must be frozen
+        # into the immutable file snapshot unless the reviewer explicitly
+        # hid that spec from exported files. The supplier PDF later reuses
+        # this exact snapshot, so this one guard protects both files.
+        hidden_spec_keys = {
+            canonical_spec_key(value)
+            for value in state.get("supplier_export_excluded_spec_keys", []) or []
+            if canonical_spec_key(value)
+        }
+        required_specs = {
+            row["spec_key"]: row
+            for row in extract_item_specs(identity)
+            if row.get("spec_key") and row["spec_key"] not in hidden_spec_keys
+        }
+        snapshotted_specs = {
+            canonical_spec_key(row.get("spec_key") or row.get("name"))
+            for row in spec_fields
+            if isinstance(row, dict)
+            and canonical_spec_key(row.get("spec_key") or row.get("name"))
+            and _text(row.get("value"))
+        }
+        missing_spec_keys = sorted(set(required_specs) - snapshotted_specs)
+        if missing_spec_keys:
+            missing_labels = [required_specs[key]["name"] for key in missing_spec_keys]
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_customer_options_snapshot_incomplete",
+                    "message": (
+                        "تعذّر إنشاء ملف التجهيز لأن بعض خيارات العميل لم تُحفظ بالكامل: "
+                        + "، ".join(missing_labels)
+                        + ". حدّث الطلب ثم أعد المحاولة."
+                    ),
+                    "order_number": order_number,
+                    "order_item_id": order_item_id,
+                    "missing_spec_keys": missing_spec_keys,
+                },
+            )
+        card_fields = _card_field_projection(
+            spec_fields,
+            state.get("preparation_note"),
+        )
+        image_url = (
+            _text(state.get("selected_image_url"))
+            or _text(getattr(identity, "image_url", None))
+            or _text(line.get("image_url"))
+        )
+        image_bytes, image_mime = (None, None)
+        total_products = sum(
+            _unit_quantity(getattr(item, "quantity", 0))
+            for item in getattr(order, "items", None) or []
+        ) or 1
+        result.append({
+            "line_number": index,
+            "group_key": _text(allocation.get("group_key")),
+            "order_number": order_number,
+            "order_item_id": order_item_id,
+            "ready_item_id": _text(allocation.get("ready_item_id")) or None,
+            "ready_unit_id": _text(allocation.get("ready_unit_id")) or None,
+            "unit_indices": list(allocation.get("unit_indices") or []),
+            "quantity": int(allocation.get("quantity") or 0),
+            "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
+            "product_id": _text(getattr(identity, "product_id", None)) or None,
+            "sku": _text(getattr(identity, "sku", None)) or None,
+            "line_index": int(getattr(identity, "line_index", 0) or 0),
+            "order_date": str(getattr(order, "created_at", "") or ""),
+            "shipping_company": _text(getattr(getattr(order, "shipping", None), "company", None)) or None,
+            "total_products_in_order": total_products,
+            "selected_image_url": image_url or None,
+            "image_b64": base64.b64encode(image_bytes).decode("ascii") if image_bytes else None,
+            "image_mime": image_mime,
+            "customer_name": card_fields["customer_name"],
+            "size": card_fields["size"],
+            "color": card_fields["color"],
+            "note": card_fields["note"],
+            "product_options": card_fields["product_options"],
+            "file_spec_fields": spec_fields,
+            "preparation_note": _text(state.get("preparation_note")) or None,
+        })
+
     image_cache: dict[str, tuple[bytes | None, str | None]] = {}
-    timeout = httpx.Timeout(10.0, connect=5.0)
+    timeout = httpx.Timeout(3.0, connect=2.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        for index, allocation in enumerate(planned, start=1):
-            order_number = _text(allocation.get("order_number"))
-            order_item_id = _text(allocation.get("order_item_id"))
-            order = orders_by_number.get(order_number)
-            workflow = workflows_by_number.get(order_number) or {}
-            identity = (identities_by_order.get(order_number) or {}).get(order_item_id)
-            if order is None or identity is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_changed_reload_required",
-                        "order_number": order_number,
-                    },
-                )
-            states = {
-                _text(row.get("order_item_id")): dict(row)
-                for row in workflow.get("items") or []
-                if isinstance(row, dict) and _text(row.get("order_item_id"))
-            }
-            state = states.get(order_item_id, {})
-            if state.get("supplier_export") is False:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "reviewed_line_no_longer_exportable",
-                        "order_number": order_number,
-                    },
-                )
-            spec_fields = supplier_file_spec_fields(identity, state)
-            card_fields = _card_field_projection(
-                spec_fields,
-                state.get("preparation_note"),
-            )
-            image_url = (
-                _text(state.get("selected_image_url"))
-                or _text(getattr(identity, "image_url", None))
-                or _text((allocation.get("line") or {}).get("image_url"))
-            )
-            image_bytes, image_mime = await _download_card_image(
+        async def hydrate(row: dict[str, Any]) -> tuple[bytes | None, str | None]:
+            return await _download_card_image(
                 client,
-                image_url,
+                row.get("selected_image_url"),
                 image_cache,
             )
-            total_products = sum(
-                _unit_quantity(getattr(item, "quantity", 0))
-                for item in getattr(order, "items", None) or []
-            ) or 1
-            result.append({
-                "line_number": index,
-                "group_key": _text(allocation.get("group_key")),
-                "order_number": order_number,
-                "order_item_id": order_item_id,
-                "unit_indices": list(allocation.get("unit_indices") or []),
-                "quantity": int(allocation.get("quantity") or 0),
-                "product_name": _text(getattr(identity, "name", None)) or _text(allocation.get("product_name")),
-                "product_id": _text(getattr(identity, "product_id", None)) or None,
-                "sku": _text(getattr(identity, "sku", None)) or None,
-                "line_index": int(getattr(identity, "line_index", 0) or 0),
-                "order_date": str(getattr(order, "created_at", "") or ""),
-                "shipping_company": _text(getattr(getattr(order, "shipping", None), "company", None)) or None,
-                "total_products_in_order": total_products,
-                "selected_image_url": image_url or None,
-                "image_b64": base64.b64encode(image_bytes).decode("ascii") if image_bytes else None,
-                "image_mime": image_mime,
-                "customer_name": card_fields["customer_name"],
-                "size": card_fields["size"],
-                "color": card_fields["color"],
-                "note": card_fields["note"],
-                "product_options": card_fields["product_options"],
-                "file_spec_fields": spec_fields,
-                "preparation_note": _text(state.get("preparation_note")) or None,
-            })
+
+        hydrated = await bounded_map_ordered(
+            result,
+            hydrate,
+            concurrency=8,
+        )
+    for row, (image_bytes, image_mime) in zip(result, hydrated):
+        row["image_b64"] = (
+            base64.b64encode(image_bytes).decode("ascii")
+            if image_bytes
+            else None
+        )
+        row["image_mime"] = image_mime
     return result
+
+
+async def _repair_new_batch_options(
+    db: Any, *, user_id: str, context: dict[str, Any], lines: list[dict[str, Any]],
+) -> dict[str, Any]:
+    from review_local_policy import LOCAL_COMPLETION_MODE
+
+    # The shared context already proved local approval. _build_batch_lines
+    # validates identity and every required customer option against that local
+    # snapshot; an empty option set is not permission to refresh from Salla.
+    local_numbers = {
+        _text(workflow.get("order_number")) for _order, workflow in context.get("pairs") or []
+        if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
+    }
+    legacy_lines = [row for row in lines if _text(row.get("order_number")) not in local_numbers]
+    result = await refresh_and_repair_batch_customer_options(
+        db, user_id=user_id, lines=legacy_lines, refresh_only_missing=True,
+    )
+    repaired = iter(result["lines"])
+    return {**result, "lines": [
+        row if _text(row.get("order_number")) in local_numbers else next(repaired)
+        for row in lines
+    ]}
 
 
 async def _reconcile_order_stage(
@@ -562,6 +1262,7 @@ async def _reconcile_order_stage(
         db,
         user_id=user_id,
         limit=MAX_REVIEWED_ORDERS,
+        order_number=order_number,
     )
     order = next(
         (
@@ -570,10 +1271,21 @@ async def _reconcile_order_stage(
         ),
         None,
     )
-    # Once already moved to in_progress it is intentionally absent from the
-    # reviewed context. The stage itself is the durable completion evidence.
+    # Recovery can remove a failed batch after the order was moved to
+    # in_progress.  Such orders are absent from the reviewed-only context, so
+    # load the canonical order directly and recompute coverage from the
+    # allocation ledger.  Treating the stage itself as completion evidence
+    # strands released units outside both reviewed products and preparation
+    # files.
     if order is None and stage == "in_progress":
-        return True, 0
+        try:
+            order = await get_order(
+                MongoOrderRepository(db),
+                user_id=user_id,
+                order_number=order_number,
+            )
+        except OrderNotFoundError:
+            return True, 0
     if order is None:
         return False, 0
 
@@ -600,13 +1312,16 @@ async def _reconcile_order_stage(
         if item_id and unit_index > 0:
             allocated_by_item[item_id].add(unit_index)
 
+    order_document = _order_document(order)
     required = allocated = 0
-    for item in getattr(order, "items", None) or []:
-        item_id = _text(getattr(item, "order_item_id", None))
+    for item in order_items_with_review_snapshot(order_document, workflow):
+        item_id = _text(item.get("order_item_id"))
         state = states.get(item_id, {})
+        if item.get("_review_snapshot_state"):
+            state = {**item, **state}
         if state.get("supplier_export") is False:
             continue
-        quantity = _unit_quantity(getattr(item, "quantity", 0))
+        quantity = _unit_quantity(item.get("quantity"))
         required += quantity
         allocated += min(quantity, len(allocated_by_item.get(item_id, set())))
     remaining = max(0, required - allocated)
@@ -626,10 +1341,12 @@ async def _reconcile_order_stage(
             "updated_at": now,
             "updated_by": actor_id,
         },
-        "$addToSet": {"preparation_batch_ids": batch_id},
         "$inc": {"revision": 1},
     }
+    if batch_id:
+        update["$addToSet"] = {"preparation_batch_ids": batch_id}
     transitioned = remaining == 0 and stage == "reviewed"
+    restored = remaining > 0 and stage == "in_progress"
     if transitioned:
         update["$set"].update({
             "stage": "in_progress",
@@ -638,6 +1355,18 @@ async def _reconcile_order_stage(
             "in_progress_by_name": actor_name,
             "preparation_fully_allocated_at": now,
         })
+    elif restored:
+        update["$set"].update({
+            "stage": "reviewed",
+            "reviewed_at": workflow.get("reviewed_at") or now,
+            "reviewed_by": workflow.get("reviewed_by") or actor_id,
+        })
+        update["$unset"] = {
+            "in_progress_at": "",
+            "in_progress_by": "",
+            "in_progress_by_name": "",
+            "preparation_fully_allocated_at": "",
+        }
     await db[WORKFLOWS].update_one(
         {"user_id": user_id, "order_number": order_number},
         update,
@@ -654,7 +1383,20 @@ async def _reconcile_order_stage(
             "salla_updated": False,
             "qoyod_updated": False,
         })
-    return transitioned or stage == "in_progress", remaining
+    elif restored:
+        await db[EVENTS].insert_one({
+            "user_id": user_id,
+            "order_number": order_number,
+            "batch_id": batch_id or None,
+            "event_type": "order_restored_to_reviewed_after_failed_preparation_file",
+            "remaining_quantity": remaining,
+            "occurred_at": now,
+            "actor_id": actor_id,
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        })
+    return remaining == 0, remaining
 
 
 async def _reconcile_batch_orders(
@@ -722,6 +1464,23 @@ def make_reviewed_preparation_batches_router(
         )
         if existing:
             if _text(existing.get("status")) == "ready":
+                registry = await _finalize_batch_assignment(
+                    db,
+                    user_id=user_id,
+                    client_request_id=payload.client_request_id,
+                    actor=reviewer,
+                )
+                await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+                    {
+                        "user_id": user_id,
+                        "batch_id": existing.get("id"),
+                        "status": "reserved",
+                    },
+                    {
+                        "$set": {"status": "committed", "committed_at": _now()},
+                        "$unset": {"expires_at": ""},
+                    },
+                )
                 reconciliation = await _reconcile_batch_orders(
                     db,
                     user_id=user_id,
@@ -733,7 +1492,17 @@ def make_reviewed_preparation_batches_router(
                     {"$set": reconciliation},
                 )
                 existing.update(reconciliation)
-                return _batch_response(existing)
+                response = _batch_response(existing)
+                response.update({
+                    "file_registered": True,
+                    "file_number": _text(registry.get("file_number")),
+                    "file_name": _text(registry.get("file_name")) or response["file_name"],
+                    "registry_status": _text(registry.get("status")),
+                    "piece_registry_status": _text(registry.get("piece_registry_status")),
+                    "responsible_employee_id": _text(registry.get("responsible_employee_id")),
+                    "responsible_employee_name": _text(registry.get("responsible_employee_name")),
+                })
+                return response
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -768,11 +1537,33 @@ def make_reviewed_preparation_batches_router(
                 "preparation_quantity_exceeds_remaining": "الكمية المختارة أكبر من الكمية المتبقية.",
                 "reviewed_product_allocation_incomplete": "تعذّر توزيع الكمية على الطلبات المتاحة. حدّث الصفحة.",
                 "duplicate_product_group": "لا يمكن تكرار المنتج نفسه داخل الملف.",
+                "reviewed_selection_stale": (
+                    "تغيّرت الكمية أو هوية القطعة بعد فتح الصفحة. "
+                    "تم تحديث القائمة؛ أعد تحديد الكمية."
+                ),
+                "preparation_piece_quantity_must_be_one": "يجب اختيار كل قطعة كبطاقة مستقلة.",
             }
             raise HTTPException(
                 status_code=409,
                 detail={"code": code, "message": messages.get(code, "اختيار المنتجات غير صالح.")},
             ) from exc
+
+        # Resolve the gate at the selected product grain.  An order-wide stop
+        # blocks every selected line, while a product stop blocks only that
+        # product and does not freeze unrelated lines from the same order.
+        for order_number, order_item_id in sorted({
+            (_text(row.get("order_number")), _text(row.get("order_item_id")))
+            for row in planned
+            if _text(row.get("order_number"))
+        }):
+            await enforce_stage_instructions(
+                db,
+                user_id=user_id,
+                order_number=order_number,
+                order_item_id=order_item_id,
+                stage="reviewed",
+                actor_id=_text(reviewer.get("id")),
+            )
 
         batch_id = uuid.uuid4().hex
         now = _now()
@@ -806,7 +1597,13 @@ def make_reviewed_preparation_batches_router(
             )
             if duplicate and _text(duplicate.get("status")) == "ready":
                 return _batch_response(duplicate)
-            raise HTTPException(status_code=409, detail={"code": "preparation_batch_build_in_progress"})
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_batch_build_in_progress",
+                    "message": "يجري إنشاء هذا الملف بالفعل؛ انتظر لحظات ولا تكرر الحفظ.",
+                },
+            )
 
         allocation_docs: list[dict[str, Any]] = []
         reservation_expiry = now + timedelta(minutes=BATCH_BUILD_TTL_MINUTES)
@@ -820,6 +1617,8 @@ def make_reviewed_preparation_batches_router(
                     "group_key": allocation["group_key"],
                     "order_number": allocation["order_number"],
                     "order_item_id": allocation["order_item_id"],
+                    "ready_item_id": allocation.get("ready_item_id"),
+                    "ready_unit_id": allocation.get("ready_unit_id"),
                     "unit_index": int(unit_index),
                     "reserved_at": now,
                     "expires_at": reservation_expiry,
@@ -845,8 +1644,34 @@ def make_reviewed_preparation_batches_router(
 
         try:
             batch_lines = await _build_batch_lines(context, planned)
+            option_repair = await _repair_new_batch_options(
+                db,
+                user_id=user_id,
+                context=context,
+                lines=batch_lines,
+            )
+            if option_repair["refresh_failures"] or option_repair["unresolved"]:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "preparation_customer_options_verification_failed",
+                        "message": (
+                            "تعذّر التحقق من خيارات العميل في بعض القطع؛ "
+                            "لم يُعتمد الملف ولم تُخصم أي قطعة. أعد المحاولة."
+                        ),
+                        "refresh_failures": option_repair["refresh_failures"],
+                        "unresolved": option_repair["unresolved"],
+                    },
+                )
+            batch_lines = option_repair["lines"]
             pdf_bytes = generate_preparation_pdf(
-                [_line_from_batch_storage(row) for row in batch_lines],
+                [
+                    _line_from_batch_storage(
+                        row,
+                        {"id": batch_id, "user_id": user_id},
+                    )
+                    for row in batch_lines
+                ],
                 serial_start=1,
                 title="تجهيز المنتجات",
             )
@@ -868,17 +1693,16 @@ def make_reviewed_preparation_batches_router(
                 "allocated_quantity": allocated_quantity,
                 "pdf_size_bytes": len(pdf_bytes),
                 "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+                "customer_options_auto_repaired_line_count": option_repair[
+                    "repaired_line_count"
+                ],
+                "customer_options_auto_refreshed_order_numbers": option_repair[
+                    "refreshed_order_numbers"
+                ],
             }
             await db[BATCHES].update_one(
                 {"user_id": user_id, "id": batch_id, "status": "building"},
                 {"$set": ready_patch, "$unset": {"expires_at": ""}},
-            )
-            await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
-                {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
-                {
-                    "$set": {"status": "committed", "committed_at": ready_at},
-                    "$unset": {"expires_at": ""},
-                },
             )
         except HTTPException:
             await db[PREPARATION_UNIT_ALLOCATIONS].delete_many({"user_id": user_id, "batch_id": batch_id})
@@ -899,6 +1723,44 @@ def make_reviewed_preparation_batches_router(
             {"user_id": user_id, "id": batch_id},
             {"_id": 0},
         ) or {**shell, **ready_patch}
+        try:
+            registry = await _finalize_batch_assignment(
+                db,
+                user_id=user_id,
+                client_request_id=payload.client_request_id,
+                actor=reviewer,
+            )
+        except Exception as exc:
+            await _rollback_unassigned_batch(
+                db,
+                user_id=user_id,
+                client_request_id=payload.client_request_id,
+                batch_id=batch_id,
+                actor=reviewer,
+                reason=type(exc).__name__,
+            )
+            if isinstance(exc, HTTPException):
+                raise
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "preparation_employee_assignment_incomplete",
+                    "message": (
+                        "لم يكتمل رفع ملف التجهيز للموظف؛ أُعيدت القطع إلى "
+                        "تمت المراجعة ولم يتم اعتماد الملف."
+                    ),
+                },
+            ) from exc
+
+        # Only a file that is registered and visible to its responsible
+        # employee may consume reviewed quantities or advance order stages.
+        await db[PREPARATION_UNIT_ALLOCATIONS].update_many(
+            {"user_id": user_id, "batch_id": batch_id, "status": "reserved"},
+            {
+                "$set": {"status": "committed", "committed_at": _now()},
+                "$unset": {"expires_at": ""},
+            },
+        )
         reconciliation = await _reconcile_batch_orders(
             db,
             user_id=user_id,
@@ -922,7 +1784,88 @@ def make_reviewed_preparation_batches_router(
             "salla_updated": False,
             "qoyod_updated": False,
         })
-        return _batch_response(batch)
+        response = _batch_response(batch)
+        response.update({
+            "file_registered": True,
+            "file_number": _text(registry.get("file_number")),
+            "file_name": _text(registry.get("file_name")) or response["file_name"],
+            "registry_status": _text(registry.get("status")),
+            "piece_registry_status": _text(registry.get("piece_registry_status")),
+            "responsible_employee_id": _text(registry.get("responsible_employee_id")),
+            "responsible_employee_name": _text(registry.get("responsible_employee_name")),
+        })
+        return response
+
+    @router.post("/batches/{batch_id}/repair-customer-options")
+    async def repair_customer_options(
+        batch_id: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        reviewer = _require_reviewer(user)
+        user_id = _merchant_user_id(reviewer)
+        batch = await db[BATCHES].find_one(
+            {"user_id": user_id, "id": batch_id, "status": "ready"},
+            {"_id": 0},
+        )
+        if not batch:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "preparation_batch_not_found"},
+            )
+        repair_result = await refresh_and_repair_batch_customer_options(
+            db,
+            user_id=user_id,
+            lines=[
+                dict(row)
+                for row in batch.get("lines") or []
+                if isinstance(row, dict)
+            ],
+            refresh_only_missing=False,
+        )
+        repaired_lines = repair_result["lines"]
+        repaired_count = repair_result["repaired_line_count"]
+        unresolved = repair_result["unresolved"]
+        refresh_failures = repair_result["refresh_failures"]
+        repaired_batch = {**batch, "lines": repaired_lines}
+        pdf_bytes = render_preparation_batch_pdf(repaired_batch)
+        now = _now()
+        patch = {
+            "lines": repaired_lines,
+            "pdf_size_bytes": len(pdf_bytes),
+            "pdf_sha256": hashlib.sha256(pdf_bytes).hexdigest(),
+            "customer_options_repaired_at": now,
+            "customer_options_repaired_by": _text(reviewer.get("id")),
+            "customer_options_repaired_line_count": repaired_count,
+            "customer_options_repair_unresolved": unresolved,
+            "updated_at": now,
+        }
+        await db[BATCHES].update_one(
+            {"user_id": user_id, "id": batch_id, "status": "ready"},
+            {"$set": patch},
+        )
+        await db[EVENTS].insert_one({
+            "user_id": user_id,
+            "batch_id": batch_id,
+            "event_type": "preparation_batch_customer_options_repaired",
+            "repaired_line_count": repaired_count,
+            "unresolved": unresolved,
+            "refresh_failures": refresh_failures,
+            "occurred_at": now,
+            "actor_id": _text(reviewer.get("id")),
+            "mezan_only": True,
+            "salla_updated": False,
+            "qoyod_updated": False,
+        })
+        return {
+            "ok": not unresolved and not refresh_failures,
+            "batch_id": batch_id,
+            "repaired_line_count": repaired_count,
+            "unresolved": unresolved,
+            "refresh_failures": refresh_failures,
+            "pdf_sha256": patch["pdf_sha256"],
+            "salla_updated": False,
+            "qoyod_updated": False,
+        }
 
     @router.get("/batches")
     async def list_batches(

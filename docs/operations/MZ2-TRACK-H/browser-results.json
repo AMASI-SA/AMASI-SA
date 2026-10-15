@@ -1,0 +1,121 @@
+{
+  "kind": "synthetic component review",
+  "viewports": [
+    "1440x1000",
+    "390x844"
+  ],
+  "screenshots": "viewport PNG; no production records",
+  "results": [
+    {
+      "page": "home",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "daily",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "settlements",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "shipping",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "inventory",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "reports",
+      "device": "desktop",
+      "scroll": 1425,
+      "width": 1440,
+      "loaded": true
+    },
+    {
+      "page": "home",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "page": "daily",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "page": "settlements",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "page": "shipping",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "page": "inventory",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "page": "reports",
+      "device": "mobile",
+      "scroll": 375,
+      "width": 390,
+      "loaded": true
+    },
+    {
+      "check": "journal-search-detail-escape",
+      "visibleLegs": 2,
+      "filteredRows": 2,
+      "dialogOpen": false,
+      "focused": "تفاصيل القيد SYN-JOURNAL-001"
+    },
+    {
+      "check": "reports-unavailable",
+      "expectedVisible": true,
+      "financialTable": false
+    },
+    {
+      "check": "reports-error",
+      "expectedVisible": true,
+      "financialTable": false
+    },
+    {
+      "check": "reports-empty",
+      "expectedVisible": true,
+      "financialTable": false
+    },
+    {
+      "check": "reports-loading",
+      "expectedVisible": true,
+      "financialTable": false
+    }
+  ]
+}

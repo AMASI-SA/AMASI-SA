@@ -188,8 +188,18 @@ class FakeCollection:
         return object()
 
     async def create_index(self, keys, **kwargs):
-        self.db.indexes.append((self.name, deepcopy(keys), deepcopy(kwargs)))
-        return kwargs.get("name")
+        safe_keys = deepcopy(keys)
+        safe_options = deepcopy(kwargs)
+        name = safe_options.get("name")
+        identity = (self.name, name)
+        existing = self.db.index_catalog.get(identity)
+        definition = (safe_keys, safe_options)
+        if existing is not None and existing != definition:
+            raise RuntimeError(f"IndexOptionsConflict: {self.name}.{name}")
+        if existing is None:
+            self.db.index_catalog[identity] = definition
+            self.db.indexes.append((self.name, safe_keys, safe_options))
+        return name
 
 
 class FakeDB:
@@ -198,6 +208,7 @@ class FakeDB:
         self.reads: list[tuple] = []
         self.writes: list[tuple] = []
         self.indexes: list[tuple] = []
+        self.index_catalog: dict[tuple[str, str | None], tuple] = {}
 
     def __getitem__(self, name: str):
         return FakeCollection(name, self)
@@ -229,6 +240,7 @@ def _service(db: FakeDB) -> IntegrationsControlCenterService:
 def test_catalog_has_exact_provider_and_ad_capability_contract():
     assert [item.provider for item in PROVIDERS] == [
         "salla",
+        "instagram",
         "snapchat_ads",
         "tiktok_ads",
         "meta_ads",
@@ -332,6 +344,7 @@ def test_advertising_mutations_need_a_management_connection_before_approval():
 def test_salla_capabilities_use_permission_specific_evidence():
     definition = PROVIDER_BY_ID["salla"]
     production_permissions = {
+        "carts.read",
         "offline_access",
         "settings.read",
         "orders.read_write",
@@ -346,6 +359,26 @@ def test_salla_capabilities_use_permission_specific_evidence():
         permissions_observed=True,
     )
     assert {entry["state"] for entry in matrix.values()} == {"available"}
+
+    without_carts = build_capability_matrix(
+        definition,
+        connection_status="connected",
+        has_data=True,
+        current_permissions=production_permissions - {"carts.read"},
+        permissions_observed=True,
+    )
+    assert without_carts["abandoned_carts.read"]["state"] == (
+        "blocked_missing_permission"
+    )
+    assert {
+        without_carts[key]["state"]
+        for key in {
+            "store.read",
+            "orders.read",
+            "products.read",
+            "customers.read_from_orders",
+        }
+    } == {"available"}
 
     without_products = build_capability_matrix(
         definition,
@@ -449,7 +482,7 @@ def test_owner_gate_accepts_owner_and_rejects_other_roles():
 
 
 @pytest.mark.asyncio
-async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
+async def test_indexes_cover_v2_and_governed_ad_journal_unique_identities():
     db = FakeDB()
     await ensure_integrations_control_center_indexes(db)
     indexed_collections = {name for name, _, _ in db.indexes}
@@ -461,6 +494,12 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
         "mezan_integration_sync_runs_v2",
         "mezan_integration_errors_v2",
         "mezan_campaign_product_links_v2",
+        "mezan_meta_management_proposals_v1",
+        "mezan_snapchat_campaign_proposals_v1",
+        "mezan_snapchat_campaign_audit_v1",
+        "mezan_snapchat_campaign_entity_leases_v1",
+        "mezan_snapchat_campaign_preview_jobs_v1",
+        "mezan_ad_decision_ledger_v1",
     }
     unique_names = {
         options["name"]
@@ -475,7 +514,57 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
         "mezan_integration_sync_runs_v2_one_running",
         "mezan_integration_errors_v2_error_unique",
         "mezan_campaign_product_links_v2_idempotency_unique",
+        "meta_management_proposal_unique",
+        "meta_management_idempotency_unique",
+        "snap_management_proposal_unique",
+        "snap_management_idempotency_unique",
+        "snap_management_active_entity_lease_unique",
+        "snap_management_preview_job_unique",
+        "snap_management_preview_idempotency_unique",
+        "ad_decision_ledger_entry_unique",
+        "ad_decision_source_event_unique",
+        "mezan_campaign_product_links_v2_event_unique",
+        "mezan_campaign_product_links_v2_linear_history",
     }
+    meta_management_definitions = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if collection == "mezan_meta_management_proposals_v1"
+    ]
+    assert meta_management_definitions == [
+        (
+            [("user_id", 1), ("proposal_id", 1)],
+            {"unique": True, "name": "meta_management_proposal_unique"},
+        ),
+        (
+            [("user_id", 1), ("idempotency_key", 1)],
+            {"unique": True, "name": "meta_management_idempotency_unique"},
+        ),
+        (
+            [("user_id", 1), ("status", 1), ("created_at", -1)],
+            {"name": "meta_management_status_latest"},
+        ),
+    ]
+    # Define the deployed idempotency index exactly once. MongoDB rejects a
+    # repeated index name when a later installer changes any option.
+    idempotency_definitions = [
+        (keys, options)
+        for collection, keys, options in db.indexes
+        if (
+            collection == "mezan_campaign_product_links_v2"
+            and options.get("name")
+            == "mezan_campaign_product_links_v2_idempotency_unique"
+        )
+    ]
+    assert idempotency_definitions == [
+        (
+            [("user_id", 1), ("idempotency_key", 1)],
+            {
+                "unique": True,
+                "name": "mezan_campaign_product_links_v2_idempotency_unique",
+            },
+        ),
+    ]
     running_lock_indexes = [
         (keys, options)
         for collection, keys, options in db.indexes
@@ -501,7 +590,35 @@ async def test_indexes_cover_all_seven_v2_collections_and_unique_identities():
 
 
 @pytest.mark.asyncio
-async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
+async def test_fake_mongo_rejects_same_index_name_with_different_options():
+    db = FakeDB()
+    collection = db.mezan_campaign_product_links_v2
+    keys = [("user_id", 1), ("idempotency_key", 1)]
+    name = "mezan_campaign_product_links_v2_idempotency_unique"
+
+    await collection.create_index(keys, unique=True, name=name)
+    with pytest.raises(RuntimeError, match="IndexOptionsConflict"):
+        await collection.create_index(
+            keys,
+            unique=True,
+            partialFilterExpression={"idempotency_key": {"$type": "string"}},
+            name=name,
+        )
+
+
+@pytest.mark.asyncio
+async def test_index_installation_is_idempotent_across_repeated_startup():
+    db = FakeDB()
+    await ensure_integrations_control_center_indexes(db)
+    first_install = deepcopy(db.indexes)
+
+    await ensure_integrations_control_center_indexes(db)
+
+    assert db.indexes == first_install
+
+
+@pytest.mark.asyncio
+async def test_overview_has_eleven_cards_and_distinguishes_tiktok_data_feed():
     db = FakeDB(
         {
             "salla_integrations": [
@@ -538,8 +655,8 @@ async def test_overview_has_ten_cards_and_distinguishes_tiktok_data_feed():
     )
     overview = await _service(db).overview("owner-1")
     OverviewResponse.model_validate(overview)
-    assert overview["summary"]["total"] == 10
-    assert len(overview["providers"]) == 10
+    assert overview["summary"]["total"] == 11
+    assert len(overview["providers"]) == 11
     by_provider = {card["provider"]: card for card in overview["providers"]}
     assert by_provider["salla"]["connection_status"] == "connected"
     assert by_provider["salla"]["connection_provenance"] == "api_connection"
@@ -617,9 +734,80 @@ async def test_salla_permission_evidence_distinguishes_unknown_from_missing():
         "missing": ["shipping.read_write"],
         "unknown": False,
     }
+    assert incomplete_salla["capabilities"]["abandoned_carts.read"]["state"] == (
+        "blocked_missing_permission"
+    )
     assert {
-        entry["state"] for entry in incomplete_salla["capabilities"].values()
+        entry["state"]
+        for key, entry in incomplete_salla["capabilities"].items()
+        if key != "abandoned_carts.read"
     } == {"available"}
+
+
+@pytest.mark.asyncio
+async def test_instagram_card_reads_only_safe_receive_only_binding_evidence():
+    raw_account_key = "account:v1:raw-instagram-binding-must-not-render"
+    raw_access_token = "raw-meta-token-must-not-render"
+    scopes = [
+        "instagram_basic",
+        "instagram_manage_comments",
+        "instagram_manage_messages",
+        "pages_manage_metadata",
+        "pages_messaging",
+    ]
+    db = FakeDB(
+        {
+            "mezan_customer_channels_v1": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "instagram",
+                    "status": "connected",
+                    "external_account_key": raw_account_key,
+                    "ingress_enabled": True,
+                    "egress_mode": "disabled",
+                    "send_allowed": False,
+                    "ai_auto_reply_allowed": False,
+                    "plaintext_credentials_stored": False,
+                    "updated_at": "2026-07-28T11:30:00+00:00",
+                }
+            ],
+            "mezan_meta_oauth_credentials_v2": [
+                {
+                    "user_id": "owner-1",
+                    "provider": "meta_ads",
+                    "scope": scopes,
+                    "access_token": raw_access_token,
+                    "updated_at": "2026-07-28T11:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    instagram = next(
+        card for card in overview["providers"] if card["provider"] == "instagram"
+    )
+
+    assert instagram["connection_status"] == "connected"
+    assert instagram["connection_provenance"] == "api_connection"
+    assert instagram["source_mode"] == "customer_channel"
+    assert instagram["permissions"] == {
+        "current": sorted(scopes),
+        "missing": [],
+        "unknown": False,
+    }
+    assert instagram["accounts"][0]["display_name"] == (
+        "Instagram · استقبال الرسائل والتعليقات"
+    )
+    assert instagram["accounts"][0]["external_account_id"] is None
+    assert instagram["actions"]["settings"]["href"] == (
+        "/integrations-v2/instagram"
+    )
+    assert instagram["actions"]["disconnect"]["enabled"] is False
+    rendered = json.dumps(instagram, ensure_ascii=False)
+    assert raw_account_key not in rendered
+    assert raw_access_token not in rendered
+    assert "إرسال رسائل من إنستغرام" in rendered
 
 
 @pytest.mark.asyncio
@@ -721,12 +909,12 @@ async def test_production_shape_separates_api_legacy_feed_and_disconnected():
     assert by_provider["shipping_companies"]["connection_provenance"] == "planned"
 
     expected_summary = {
-        "total": 10,
+        "total": 11,
         "connected": 4,
         "api_connections": 2,
         "legacy_integrations": 2,
         "data_feeds": 1,
-        "disconnected": 4,
+        "disconnected": 5,
         "planned": 1,
         "unknown": 0,
         "missing_permissions": 0,
@@ -823,11 +1011,83 @@ async def test_stored_or_stale_credentials_do_not_claim_verified_connection():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("verified_version", "expected_status"),
+    [("version-a", "unknown"), ("version-b", "connected")],
+)
+async def test_qoyod_versioned_credentials_require_matching_verification_version(
+    verified_version,
+    expected_status,
+):
+    db = FakeDB(
+        {
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "encrypted-never-project",
+                    "credential_version": "version-b",
+                    "last_verified_credential_version": verified_version,
+                    # Deliberately newer than rotated_at: version identity,
+                    # not timestamp ordering, is authoritative once present.
+                    "last_verified_at": "2026-07-28T11:00:00+00:00",
+                    "rotated_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    by_provider = {card["provider"]: card for card in overview["providers"]}
+
+    assert by_provider["qoyod"]["connection_status"] == expected_status
+    assert by_provider["qoyod"]["connection_provenance"] == "legacy_integration"
+
+
+@pytest.mark.asyncio
 async def test_database_failure_is_not_misreported_as_disconnected():
     with pytest.raises(RuntimeError, match="mongo unavailable"):
         await IntegrationsControlCenterService(FailingDB(), now=lambda: NOW).overview(
             "owner-1"
         )
+
+
+@pytest.mark.asyncio
+async def test_qoyod_circuit_breaker_is_reported_as_stopped_in_overview():
+    db = FakeDB(
+        {
+            "qoyod_credentials": [
+                {
+                    "user_id": "main",
+                    "api_key_enc": "encrypted-never-project",
+                    "last_verified_at": "2026-07-28T10:00:00+00:00",
+                }
+            ],
+            "qoyod_settings": [
+                {
+                    "user_id": "main",
+                    "enabled": True,
+                    "auto_send": False,
+                    "plan_b_auto_send_disabled_reason": "circuit_breaker",
+                    "plan_b_auto_send_disabled_at": "2026-07-28T11:00:00+00:00",
+                    "plan_b_auto_send_last_error": {
+                        "code": "salla_status_refresh_failed",
+                        "at": "2026-07-28T11:00:00+00:00",
+                    },
+                }
+            ],
+        }
+    )
+
+    overview = await _service(db).overview("owner-1")
+    qoyod = next(
+        card for card in overview["providers"] if card["provider"] == "qoyod"
+    )
+
+    assert qoyod["connection_status"] == "error"
+    assert qoyod["connection_provenance"] == "legacy_integration"
+    assert qoyod["latest_error"]["code"] == "salla_status_refresh_failed"
+    assert qoyod["health"]["status"] == "unhealthy"
+    assert overview["summary"]["attention_required"] >= 1
 
 
 @pytest.mark.asyncio
@@ -968,8 +1228,9 @@ async def test_safe_settings_and_reconnect_deep_links_never_enable_disconnect():
     by_provider = {card["provider"]: card for card in overview["providers"]}
     expected = {
         "salla": "/settings/salla",
+        "instagram": "/integrations-v2/instagram",
         "meta_ads": "/settings",
-        "qoyod": "/integrations/qoyod/settings",
+        "qoyod": "/integrations-v2/qoyod",
     }
     for provider, href in expected.items():
         assert by_provider[provider]["actions"]["settings"] == {
