@@ -41,7 +41,7 @@ async def setup(monkeypatch, request):
     await db.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
         "stage": "completed", "store_courier_assignee_id": "driver-current",
         "store_courier_assignee_name": "Current driver", "store_delivery_assignment_id": "assignment-current"})
-    state = {"order": {"id": "salla-order", "reference_id": ORDER,
+    state = {"order": {"id": "salla-order", "reference_id": ORDER, "status": "completed",
         "shipping": {"company_name": "SMSA"}, "customer": {"full_name": "Test"}},
         "rows": [deepcopy(CURRENT)], "calls": [], "fail": None}
 
@@ -410,7 +410,7 @@ async def test_issue_guard_still_requires_current_completed_stage(setup, stage):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("piece_kind", ["physical", "virtual"])
-async def test_completed_store_courier_reprint_uses_formatter_after_delivery(setup, monkeypatch, piece_kind):
+async def test_store_courier_reprint_requires_current_completed_even_after_delivery(setup, monkeypatch, piece_kind):
     db, state = setup
     state["order"]["status"] = {"slug": "delivered"}
     state["order"]["shipping"] = {
@@ -434,10 +434,8 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
     await db.order_review_workflows.update_one({"user_id": OWNER}, {"$set": workflow_patch})
     before = await dump(db)
     response = await completed_print_request(db, monkeypatch)
-    assert response.status_code == 200, response.text
-    result = response.json()
-    assert result["ready"] and result["label_type"] == "store_courier"
-    assert result["print_data"]["address"]["address_line"] == "Current courier address"
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "order_status_not_completed"
     assert not any(path.startswith("/shipments") for path in state["calls"])
     assert await dump(db) == before
 
