@@ -20,6 +20,7 @@ def _request(**overrides):
         "price": 250,
         "description": "خاتم جاهز للشحن",
         "product_type": "product",
+        "weight": 0.25,
         "fulfillment_type": "instant",
         "inventory_policy": "branch_stock_required",
     }
@@ -187,7 +188,16 @@ def test_salla_payload_maps_https_images_without_import_fields():
 
 def test_service_product_type_is_preserved_in_salla_payload():
     draft = normalize_creation_input(_request(product_type="service"))
-    assert build_salla_product_payload(draft)["product_type"] == "service"
+    payload = build_salla_product_payload(draft)
+    assert payload["product_type"] == "service"
+    assert payload["require_shipping"] is True
+    assert payload["weight"] == 0.25
+    assert payload["weight_type"] == "kg"
+
+
+def test_shippable_service_requires_explicit_weight_before_publish():
+    with pytest.raises(ValueError, match="shipping_weight_required"):
+        normalize_creation_input(_request(product_type="service", weight=None))
 
 
 def test_unsupported_product_types_remain_rejected():

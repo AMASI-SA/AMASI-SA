@@ -24,6 +24,7 @@ const EMPTY_FORM = {
     price: "",
     description: "",
     product_type: "product",
+    weight: "",
     options: [],
     image_url: "",
     fulfillment_type: "",
@@ -56,6 +57,7 @@ function errorMessage(error) {
         invalid_product_option_name: "أسماء الخيارات مطلوبة ويجب ألا تتكرر.",
         invalid_product_option_values: "كل قائمة تحتاج قيمتين مختلفتين على الأقل.",
         text_option_cannot_have_values: "حقل النص لا يحتوي قيمًا ثابتة.",
+        shipping_weight_required: "أدخل وزن الشحن بالكيلوجرام للخدمة المشحونة.",
     };
     if (Array.isArray(detail)) return "راجع بيانات المنتج والخيارات؛ بعض الحقول غير مكتملة أو تتجاوز الحد المسموح.";
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";
@@ -89,6 +91,7 @@ export default function ProductCreationPanel({ onCreated }) {
         && form.fulfillment_type
         && form.inventory_policy
         && PRODUCT_TYPE_LABELS[form.product_type]
+        && (form.product_type !== "service" || Number(form.weight) > 0)
         && !optionsError
         && (
             form.inventory_policy !== "branch_stock_required"
@@ -115,6 +118,7 @@ export default function ProductCreationPanel({ onCreated }) {
                 price: Number(form.price),
                 description: form.description || null,
                 product_type: form.product_type,
+                weight: form.weight === "" ? null : Number(form.weight),
                 options: serializeCreationOptions(form.options),
                 category_ids: form.category_ids || [],
                 image_urls: [form.image_url.trim(), ...(form.image_urls || []).slice(1)].filter(Boolean),
@@ -212,6 +216,7 @@ export default function ProductCreationPanel({ onCreated }) {
         setForm({
             ...EMPTY_FORM, ...activeDraft,
             description: activeDraft.description || "",
+            weight: activeDraft.weight ?? "",
             image_url: activeDraft.image_urls?.[0] || "",
             options: creationOptionsFromDraft(activeDraft.options),
         });
@@ -297,6 +302,11 @@ export default function ProductCreationPanel({ onCreated }) {
                                     <option value="instant">مباشر للشحن ما لم توجد خدمة</option>
                                 </select>
                                 <span className="block text-xs font-normal leading-5 text-slate-500">الخدمة المرتبطة بالمنتج كله تُدخل جميع طلباته التجهيز، والخدمة المرتبطة بخيار تُطبق عند اختياره.</span>
+                            </label>
+                            <label className="space-y-1 text-sm font-bold">
+                                <span>وزن الشحن (كجم)</span>
+                                <input type="number" min="0.001" max="1000000" step="0.001" value={form.weight} onChange={(event) => update("weight", event.target.value)} required={form.product_type === "service"} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
+                                <span className="block text-xs font-normal text-slate-500">أدخل الوزن الفعلي؛ مطلوب للخدمة حسب الطلب التي تُشحن للعميل.</span>
                             </label>
                             <label className="space-y-1 text-sm font-bold">
                                 <span>سياسة مخزون المنتج النهائي</span>

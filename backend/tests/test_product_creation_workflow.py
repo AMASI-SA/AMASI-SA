@@ -64,6 +64,7 @@ def request(**changes):
     values = {
         "name": "هدية بالاسم", "sku": "CUSTOM-100", "price": 239,
         "product_type": "service", "fulfillment_type": "requires_preparation",
+        "weight": 0.25,
         "inventory_policy": "branch_stock_required",
         "options": [
             {"name": "المقاس", "type": "choice", "required": True,
@@ -136,10 +137,11 @@ def test_editing_options_revokes_approval_and_keeps_tenant_isolation():
         routes = endpoints(db)
         draft = (await routes["create_draft"](request(), OWNER))["draft"]
         await routes["approve_draft"](draft["id"], OWNER)
-        legacy = ProductCreationDraftRequest(**request().model_dump(exclude={"product_type", "options"}))
+        legacy = ProductCreationDraftRequest(**request().model_dump(exclude={"product_type", "options", "weight"}))
         preserved = await routes["update_draft"](draft["id"], legacy, OWNER)
         assert preserved["draft"]["product_type"] == "service"
         assert preserved["draft"]["options"] == draft["options"]
+        assert preserved["draft"]["weight"] == draft["weight"]
         updated = await routes["update_draft"](draft["id"], request(options=[]), OWNER)
         assert updated["draft"]["status"] == "draft"
         assert updated["draft"]["approved_at"] is None

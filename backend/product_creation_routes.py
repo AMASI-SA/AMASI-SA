@@ -127,6 +127,7 @@ class ProductCreationDraftRequest(BaseModel):
     price: float = Field(ge=0, le=100000000)
     description: str | None = Field(default=None, max_length=50000)
     product_type: str = Field(default="product", max_length=40)
+    weight: float | None = Field(default=None, gt=0, le=1000000, allow_inf_nan=False)
     options: list[ProductCreationOption] = Field(default_factory=list, max_length=20)
     category_ids: list[int] = Field(default_factory=list, max_length=50)
     image_urls: list[str] = Field(default_factory=list, max_length=20)
@@ -161,6 +162,8 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
     product_type = _text(payload.product_type).casefold()
     if product_type not in ALLOWED_PRODUCT_TYPES:
         raise ValueError("unsupported_product_type")
+    if product_type == "service" and payload.weight is None:
+        raise ValueError("shipping_weight_required")
     fulfillment_type = normalize_fulfillment_type(payload.fulfillment_type)
     inventory_policy = normalize_inventory_policy(payload.inventory_policy)
     stockout_policy = normalize_stockout_policy(payload.stockout_policy)
@@ -181,6 +184,7 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
         "price": float(payload.price),
         "description": _text(payload.description) or None,
         "product_type": product_type,
+        "weight": payload.weight,
         "options": normalize_creation_options(payload.options),
         "category_ids": list(dict.fromkeys(payload.category_ids)),
         "image_urls": list(dict.fromkeys(image_urls)),
@@ -243,6 +247,8 @@ def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
     }
     if draft.get("description"):
         payload["description"] = draft["description"]
+    if draft.get("weight") is not None:
+        payload.update(weight=float(draft["weight"]), weight_type="kg")
     if draft.get("category_ids"):
         payload["categories"] = list(draft["category_ids"])
     if draft.get("image_urls"):
@@ -737,6 +743,8 @@ def make_product_creation_router(
             values["options"] = current.get("options") or []
         if "product_type" not in payload.model_fields_set:
             values["product_type"] = current.get("product_type") or "product"
+        if "weight" not in payload.model_fields_set:
+            values["weight"] = current.get("weight")
         await _validate_unique_sku(
             db,
             merchant_id=context["merchant_id"],

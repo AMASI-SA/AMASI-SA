@@ -5,6 +5,9 @@ and `service` (made-to-order service). The type remains immutable after Salla
 creation. Other product kinds and other customer field kinds are outside this
 increment.
 
+Shippable services require an explicit positive shipping weight in kilograms;
+Mezan never invents it. The adapter forwards this weight with `require_shipping`.
+
 Draft `options` is an optional array, defaulting to empty for older clients:
 
 ```json
