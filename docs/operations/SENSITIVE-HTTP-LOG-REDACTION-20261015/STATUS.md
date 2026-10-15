@@ -1,86 +1,140 @@
-# Sensitive HTTP log redaction — 2026-10-15
+# Sensitive HTTP log redaction — published and verified
 
 - Task: `SENSITIVE-HTTP-LOG-REDACTION-20261015`.
-- User authorized implementation of the separately observed runtime logging fix.
-- Base: production `231f5714257220cdfe192428275c2bca62e0bd2d`.
-- Current integrated production baseline: `f174e294d12e2d96f0ba03678c4e4768036bea2d`
-  (PR1373 shipping change and reviewed intent; no overlap with these five files).
-- Branch: `codex/redact-sensitive-http-logs-20261015`.
-- State: candidate review completed and findings corrected; clean source lineage
-  replaces a refused intermediate merge; required final-head CI pending.
-- Production changed: **no**. No merge, release intent, lease, restart or deployment.
+- Outcome: **published and verified**.
+- Repository: `AMASI-SA/AMASI-SA`; merged [PR #1374](https://github.com/AMASI-SA/AMASI-SA/pull/1374).
+- Source A: `2fbc6a96b2010f78cbb2e1aac94dbf6c4b40c74f`.
+- Reviewed intent-only B: `f75b9db45f48d5a37301fdb06ca6f84c1310e027`, parent A.
+- Deployment D: `ce3c6ffaf3bc445c46d178c04b8765829b6552a9`.
+- D parents: previous production J `f174e294d12e2d96f0ba03678c4e4768036bea2d`, B.
+- B/D tree: `5692bae267a1c1e3945a3711a249b16e8ea5979f`, exactly equivalent.
+- A/B were not squashed or rebased after freeze.
+- Runtime release:
+  `rg5-ddb356568a59c7bf83af43b08ce98f7a7a102b52dff07eb3db76fedcc3cb3837`.
+- Frontend artifact:
+  `d2dbe74dd4ca72214896feae83a929b88c736cf7e3f140b06aaa112344b7ea95`.
+- New runtime boot: `2026-10-15T22:43:37.710459+00:00`.
+- Production changed by this task: **yes**, with evidence below.
 
-## Finding and boundary
+## Fixed behavior and scope
 
-Meta requests include credential query parameters. Global INFO logging emitted
-HTTPX's complete request URLs. An offline MockTransport reproduction confirmed
-that both synthetic token and proof appeared in the original log output while
-the request itself succeeded. No real credentials or runtime logs were copied
-into this task's artifacts.
+Meta credential query fields were present in HTTPX INFO request URLs. The new
+stdlib-only `backend/sensitive_logging.py` wraps existing root/named logging
+formatters before provider imports in `backend/server.py`. Final messages,
+tracebacks and stack text redact sensitive query aliases, encoded key names,
+punctuated/quoted values, reflected credential fields and bearer values.
+Outgoing requests, response behavior, ordinary query/diagnostic fields and
+existing structured Uvicorn/TikTok filters are preserved.
 
-The new `backend/sensitive_logging.py` wraps existing root and named logger
-handler formatters before provider imports in `backend/server.py`. It sanitizes
-the final rendered output, including exception chains, cached exception text and
-stack information. Requests, structured access-log filter arguments, existing
-formatter behavior, log levels, methods, hosts, paths, statuses, ordinary query
-fields and provider diagnostic codes remain intact. Repeated installation is
-idempotent. OAuth query aliases and percent-encoded key names are covered, as
-are reflected credential fields and bearer values.
+Implementation files: `backend/sensitive_logging.py`, `backend/server.py`,
+`backend/tests/test_sensitive_logging.py`,
+`.github/workflows/security-gate.yml`, and this status document. B changes only
+`release/release-intent-v5.json`.
 
-Changed source: `backend/sensitive_logging.py`, `backend/server.py`.
-Regression: `backend/tests/test_sensitive_logging.py`.
-CI: `.github/workflows/security-gate.yml` adds the new output contracts plus
-nearby synthetic Meta/TikTok compatibility suites. This status is the fifth file.
+Historical retained logs are unchanged. No real credentials were used as test
+fixtures or exported; no broad runtime log reads, provider/account writes,
+credential rotations/deletions, database/business writes or paid Emergent chat
+prompts were performed by this task. The fix covers configured standard web
+logging; future external logging reconfiguration must reinstall the wrapper.
+Arbitrary unlabelled secrets, direct prints, third-party exports and separately
+configured processes were not established covered.
 
-## Fresh verification
+## Review and tests
 
-Use `PYTHONDONTWRITEBYTECODE=1`, `PYTHONPATH=backend`, and `--noconftest`.
-The repository conftest reads a runtime .env; tests here must remain offline.
+Independent boundary investigation and one candidate review completed.
+Review's delimiter/quote suffix issue was confirmed and corrected before freeze,
+with additional real-HTTPX pagination regression tests. No other concrete
+finding was reported. The original synthetic token/proof exposure reproduced
+before the fix; all focused negative and legitimate controls passed afterward.
 
-- Baseline: real HTTPX 0.28.1 with MockTransport confirmed synthetic values
-  present in INFO output and normal HTTP 200/JSON response (exit 0).
-- Focused candidate: `python -B -m pytest --noconftest -q
-  backend/tests/test_sensitive_logging.py` — **40 passed**, exit 0.
-- Changed Python source syntax compiled in memory — passed, exit 0.
-- `git diff --check` — passed, exit 0.
-- Local interpreter: Python 3.12.14; HTTPX 0.28.1, Uvicorn 0.25.0. Other existing
-  local test dependencies differ from the repository lock. Required CI must
-  validate the declared Python 3.11 dependency closure before readiness.
-- Earlier focused attempts exposed a bearer-header redaction gap (corrected)
-  and local missing Uvicorn/provider dependencies. The focused suite now uses
-  the real isolated TikTok callback filter class without loading its unrelated
-  provider package. Those failed attempts are not acceptance evidence.
-- Independent read-only review identified partial-value leakage at punctuation
-  and quoted query delimiters. Confirmed with synthetic inputs and corrected;
-  real HTTPX pagination URL tests now include literal parentheses, semicolons,
-  braces, OAuth code and encoded keys. Quoted field replacements remain stable
-  on repeated sanitization. Review found no other concrete issue. One review
-  cycle completed; final corrected candidate is verified by the focused suite.
-- First remote source checkpoint: `0ad7c14f136274fc57d754b355e050f089406138`;
-  Draft PR1374. Production advanced independently during this task. Its exact
-  seven-file compare contains only shipping workflow/service/tests/status and
-  release intent. Intermediate merge `60409d2e89357165f924630f47ee6cb23a7221e5`
-  preserved that content but release readiness correctly refused the full-history
-  intent transition. It is a failed readiness attempt, not accepted release evidence.
-- Intermediate exact-head Security Gate passed: job `116669059138`, run
-  `38806491218`. New logging plus provider regressions: **59 passed, 11 skipped**.
-  All 11 skips were unrelated TikTok database tests requiring an explicit
-  disposable Mongo URI. Final CI runs only TikTok's relevant stateless callback
-  logging test, along with all four Meta suites and the 40 output contracts.
-- Correction: create a new source commit directly on current production
-  `f174e294d12e2d96f0ba03678c4e4768036bea2d`, carrying the same runtime/test blobs
-  and unchanged inherited release intent. Preserve the intermediate branch before
-  moving this task's unfrozen PR head with an expected-head check. No guard or
-  release policy is weakened; no reviewed A/B has been frozen for this task.
+Exact B final checks: **29 success / 4 skipped / 0 failure / 0 pending**.
+The four required build/security/preflight checks and CodeQL Python/JavaScript/
+aggregate passed. Interim CodeQL neutral aggregate resolved after Python
+completed. Skips: manual redeploy, two unrelated Snapchat settings jobs and
+TikTok release-candidate job; none is counted as a pass.
 
-## Remaining scope and next safe action
+- `python -B -m pytest --noconftest -q backend/tests/test_sensitive_logging.py`:
+  **40 passed**, exit0. Changed-source syntax and `git diff --check`: passed.
+- Exact-B Security Gate `38816182837`, backend `116701310970`:
+  **57 logging/provider tests**, **83 security tests**, and **216 inherited
+  tests + 29 subtests** passed; audit, compile and policy checks passed.
+- Frontend security `116701311233`: full tests/audit/CSP/build passed; source
+  verification had **275 suites / 1780 tests** passing.
+- Readiness `38816182686`: preflight `116701310509`, Frontend
+  `116701310387`, Host20 clean-clone adapter `116701766934` passed.
+  Rehearsal verifies no-Git package boundaries, governed artifact/proof/identity,
+  isolated Backend health and canonical/cache-busted JSON routes.
+- Evidence artifact `12011300143`, SHA256
+  `516adfdc743fabd0796b2a760c8b03fa22a9c96ecd2229414fc3142b623163cb`,
+  expires `2026-10-29T22:21:13Z`.
 
-Run required CI and the synthetic provider suites on the exact remote head, and
-update this status and Issue #1006. Do not merge or publish this checkpoint.
+Earlier unfrozen merge history was refused by the full-history intent gate; it
+was replaced by clean source A on J. That failed readiness attempt and earlier
+bearer/dependency failures were not relabelled passes. Intermediate source is
+recoverable on `codex/sensitive-log-60409d2-checkpoint`. Candidate ZIP digest
+`8dc0b658046cfff48698a2879abe171c0be36c36d1c7ba7c0529c62ea658a7c6`
+and official A/B intent validators passed before B was attached.
 
-Protection covers this web process's configured standard logging handlers.
-Future external logging reconfiguration must call the installer again. This
-does not retroactively alter retained logs or establish coverage for arbitrary
-unlabelled secrets, direct print calls, third-party export systems, or separately
-configured processes. No credential rotation, deletion, provider write, database
-change or paid Emergent chat action is part of this implementation.
+## Local deployment preparation
+
+Shared guard inactive and tracked source clean were checked before /app update.
+Initial root disk was full. Generated Yarn cache was moved intact to
+`/tmp/mezan-sensitive-yarn-cache-vwh0kzcw/yarn`, original-path symlink preserved;
+938775369 file bytes retained, about1.17GB freed. No log/data cleanup occurred.
+
+/app fast-forwarded J→D only, preserving unrelated
+`.emergent/system_deps.txt.tmp`, `INTENT-1367.json.gz`,
+`deployer-agent-docs/`, original Terminal1 and blank unsaved editor.
+No untracked Backend/scripts bytecode cache was found before the adapter.
+
+/app/frontend official `yarn build` with public origin, TMPDIR=/tmp and
+PYTHONDONTWRITEBYTECODE=1 completed **exit0 in88.78s**; exact A/release/artifact
+assertions passed. Log: `/tmp/sensitive-1374-adapter.log`.
+Generated Backend identity263041 bytes, SHA256
+`5fb7f9732b3e623530495a1847e5bbaf2ac444ea935cdd15ec65a1b5b0f6adcd`.
+No generated build/identity was manually fabricated or force-added.
+
+## Publication and runtime acceptance
+
+- Lease actor: `codex-sensitive-logs-1374-05c4b4df7c11`.
+- Official prepare exit0 at `2026-10-15T22:33:42.403220+00:00`.
+- Official prepublish exit0 / ready_to_publish:true with exact A/D/release.
+- Re-publish changes → Yes, Re-publish was submitted **once**.
+- New platform start: **Oct16 01:36AM Asia/Riyadh**.
+- New green **Deployment finished Oct16 01:44AM Asia/Riyadh**.
+- New Live snapshot: `b9d75b5`; prior `4c6e3b8` is history.
+  Displayed Publish numbers renumber; use snapshot/time. Current UI wording is
+  Deployment finished/Live; literal older Deployment Succeeded was not exposed.
+
+Official command:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com
+```
+
+Completed **exit0 in67.82s**, **verified:true**, **checks:3**. All three
+consecutive source/identity/critical-hash/Backend source/Frontend artifact/proof
+checks matched, including canonical/cache-busted JSON bytes and MIME/cache
+checks. Proof has **40 Frontend request variants per observation**.
+Verify JSON `/tmp/sensitive-1374-verify.json`, SHA256
+`d9346e1fd27e3dd98ea415aa939f7bfdcea631a96a9e06e8539ba1f401e67640`.
+Immediately following guard status: **active:false**. The guard closed its own
+lease; no manual lease clearing was performed.
+
+Post-verification standalone smoke executed the deployed source's formatter
+using a synthetic HTTPX-shaped event. Both values were masked, method/status/
+ordinary query diagnostics preserved, input unchanged, network_used:false.
+No live Meta request was made for this smoke. Final /app tracked status empty.
+The source/CI tests separately exercised actual HTTPX MockTransport.
+
+## Final handoff
+
+Publication and requested verification are complete. No republish is needed.
+Fresh Git production ref remained D at final handoff. Frozen A/B, merged D and
+review evidence remain recoverable. This accurate final documentation checkpoint
+is outside D and **must not be deployed or merged as an intent-only release**.
+Earlier publication-preparation status branch remains historical.
+
+Future changes need a fresh current-production/ledger/guard read and a new
+reviewed source/intent chain; never reuse this closed lease. Historical log
+retention and any future credential rotation are separate scopes.
