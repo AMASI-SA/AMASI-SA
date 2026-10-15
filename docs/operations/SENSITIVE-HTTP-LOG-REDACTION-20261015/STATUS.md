@@ -3,6 +3,8 @@
 - Task: `SENSITIVE-HTTP-LOG-REDACTION-20261015`.
 - User authorized implementation of the separately observed runtime logging fix.
 - Base: production `231f5714257220cdfe192428275c2bca62e0bd2d`.
+- Current integrated production baseline: `f174e294d12e2d96f0ba03678c4e4768036bea2d`
+  (PR1373 shipping change and reviewed intent; no overlap with these five files).
 - Branch: `codex/redact-sensitive-http-logs-20261015`.
 - State: candidate review completed and findings corrected; required CI pending.
 - Production changed: **no**. No merge, release intent, lease, restart or deployment.
@@ -53,6 +55,10 @@ The repository conftest reads a runtime .env; tests here must remain offline.
   braces, OAuth code and encoded keys. Quoted field replacements remain stable
   on repeated sanitization. Review found no other concrete issue. One review
   cycle completed; final corrected candidate is verified by the focused suite.
+- First remote source checkpoint: `0ad7c14f136274fc57d754b355e050f089406138`;
+  Draft PR1374. Production advanced independently during this task. Its exact
+  seven-file compare contains only shipping workflow/service/tests/status and
+  release intent; preserve it via a task-branch merge before final CI acceptance.
 
 ## Remaining scope and next safe action
 

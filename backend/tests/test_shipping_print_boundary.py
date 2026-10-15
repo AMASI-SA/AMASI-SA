@@ -140,7 +140,7 @@ async def test_store_switch_during_document_fetch_is_blocked(database, monkeypat
     await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
         "stage": "completed", "assembly_status": "completed"})
     await seed(database, company="مندوب المتجر", code="0")
-    await providers(monkeypatch)
+    await providers(monkeypatch, order={"status": "completed", "shipping": {"company_name": "مندوب المتجر", "company_code": "0"}})
     async def store(*args):
         await database.unified_orders.update_one({"user_id": OWNER}, {"$set": {
             f"{CURRENT_SHIPPING}.company_code": "imile", f"{CURRENT_SHIPPING}.company_name": "iMile"}})
@@ -158,7 +158,7 @@ async def test_store_document_reads_current_assignment(database, monkeypatch):
         "stage": "completed", "assembly_status": "completed",
         "store_courier_assignee_id": "current-driver", "store_courier_assignee_name": "Current driver",
         "store_delivery_assignment_id": "assignment-current"})
-    await providers(monkeypatch)
+    await providers(monkeypatch, order={"status": "completed", "shipping": {"company_name": "مندوب المتجر", "company_code": "0"}})
     result = await shipping.issue_shipping_label(database, OWNER, ORDER)
     assert result["print_data"]["assigned_courier_id"] == "current-driver"
     assert result["print_data"]["assignment_id"] == "assignment-current"
@@ -183,7 +183,7 @@ async def test_imile_to_internal_during_own_sync(database, monkeypatch):
     async def sync(db, *_args):
         await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
             f"{CURRENT_SHIPPING}.company_code": "0", f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر"}})
-    await providers(monkeypatch, resync=sync)
+    await providers(monkeypatch, resync=sync, order={"status": "completed", "shipping": {"company_name": "مندوب المتجر", "company_code": "0"}})
     result = await shipping.issue_shipping_label(database, OWNER, ORDER)
     assert result["label_type"] == "store_courier" and result["tracking_number"] is None
 
