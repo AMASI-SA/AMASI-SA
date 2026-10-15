@@ -8,6 +8,7 @@ on:
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
       - backend/tests/test_shipping_print_legacy_path.py
+      - backend/tests/test_store_courier_unified_print.py
       - backend/tests/test_shipping_label_current_guard.py
       - backend/fulfillment_carrier_label.py
       - backend/preparation_piece_operations.py
@@ -50,7 +51,7 @@ jobs:
           }
           shipping_tests = {name for name in changed if name.startswith((
               "backend/tests/test_shipping_", "backend/tests/test_salla_current_shipping",
-              "backend/tests/test_fulfillment_carrier_label"))}
+              "backend/tests/test_fulfillment_carrier_label", "backend/tests/test_store_courier_unified_print"))}
           affected = bool(changed & owned or shipping_tests)
           bootstrap = bool(changed & {
               "backend/salla_shipping.py", "backend/tests/test_shipping_snapshot_bootstrap.py"
@@ -106,6 +107,7 @@ jobs:
           backend/tests/test_shipping_snapshot_bootstrap.py
           backend/tests/test_shipping_print_boundary.py
           backend/tests/test_shipping_print_legacy_path.py
+          backend/tests/test_store_courier_unified_print.py
           backend/tests/test_shipping_label_current_guard.py
           backend/tests/test_fulfillment_carrier_label.py
           backend/tests/test_salla_current_shipping.py

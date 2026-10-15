@@ -201,11 +201,8 @@ async def _ensure_internal_order_completed(db, user_id, order_number, internal_i
                                  "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
     if _order_is_completed(order):
         return order, False
-    carrier = extract_shipping({"shipping": order.get("shipping"),
-        "shipping_company": order.get("shipping_company"),
-        "shipping_company_code": order.get("shipping_company_code")}) or {}
-    if not _is_store_courier({"courier_name": carrier.get("company_name"),
-                             "meta": {"app_id": carrier.get("company_code")}}):
+    source, _ = await _current_courier_source(db, user_id, internal_id, order)
+    if source is None:
         raise ShippingLabelError("store_courier_not_confirmed", "لم تؤكد سلة أن الطلب لمندوب المتجر؛ لم تُحدّث الحالة.")
     from review_local_policy import (
         LOCAL_COMPLETION_MODE, assembly_execution_allowed, load_local_review_workflows,
@@ -1509,6 +1506,33 @@ async def _print_shipment_rows(
     return _active_outbound([details])
 
 
+async def _current_courier_source(db, user_id, internal_id, order):
+    """One current-provider classification for issuance and print reads.
+
+    Explicit order carrier wins over old shipments. Missing order fields may
+    be supplied by the current outbound shipment, never by a saved UI label.
+    An empty dict denotes order-level courier evidence; None means external.
+    """
+    carrier = extract_shipping({
+        "shipping": order.get("shipping"),
+        "shipping_company": order.get("shipping_company"),
+        "shipping_company_code": order.get("shipping_company_code"),
+    }) or {}
+    if _is_store_courier({"courier_name": carrier.get("company_name"),
+                          "meta": {"app_id": carrier.get("company_code")}}):
+        return {}, []
+    rows = await _print_shipment_rows(db, user_id, internal_id)
+    active = _active_outbound(rows)
+    if active and _is_store_courier(active[0]):
+        if carrier.get("company_name") or carrier.get("company_code"):
+            raise ShippingLabelError(
+                "shipping_snapshot_changed",
+                "ناقل الطلب الحالي يختلف عن شحنة المندوب؛ أعد التحقق من الشحنة الحالية.",
+            )
+        return dict(active[0]), active
+    return None, active
+
+
 async def refresh_shipping_label(
     db: Any,
     user_id: str,
@@ -1529,20 +1553,7 @@ async def refresh_shipping_label(
         )
         if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
-        carrier = extract_shipping({
-            "shipping": order.get("shipping"),
-            "shipping_company": order.get("shipping_company"),
-            "shipping_company_code": order.get("shipping_company_code"),
-        }) or {}
-        store_courier = _is_store_courier({
-            "courier_name": carrier.get("company_name"),
-            "meta": {"app_id": carrier.get("company_code")},
-        })
-        rows = [] if store_courier else await _print_shipment_rows(
-            db,
-            user_id,
-            internal_id,
-        )
+        source, rows = await _current_courier_source(db, user_id, internal_id, order)
     except SallaError as exc:
         if exc.status_code == 403:
             raise ShippingLabelError(
@@ -1557,17 +1568,27 @@ async def refresh_shipping_label(
         ) from exc
 
     active = _active_outbound(rows)
-    if store_courier or (active and _is_store_courier(active[0])):
+    if source is not None:
+        if not _order_is_completed(order):
+            raise ShippingLabelError(
+                "order_status_not_completed",
+                "لم تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ»؛ لم تُفتح بوليصة المندوب.",
+            )
         # Use the pre-guard courier formatter, without the issue path's status
         # transition or resync. Old external shipments do not supply its data.
-        source = {} if store_courier else dict(active[0])
         store = await _store_identity(db, user_id)
-        print_order = {**order, "shipments": []} if store_courier else order
+        print_order = {**order, "shipments": []} if not source else order
         print_data = _store_courier_print_data(normalized, print_order, source, store)
+        if not source:
+            carrier = extract_shipping({"shipping": order.get("shipping"),
+                "shipping_company": order.get("shipping_company"),
+                "shipping_company_code": order.get("shipping_company_code")}) or {}
+            print_data["courier_name"] = _text(carrier.get("company_name")) or "مندوب المتجر"
         return {
             "ok": True, "source": "mezan", "ready": True,
+            "order_status_completed": True,
             "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
-            "status": "store_courier", "courier_name": "مندوب المتجر",
+            "status": "store_courier", "courier_name": print_data["courier_name"],
             "label_url": None, "tracking_number": None, "shipping_number": None,
             "print_data": print_data,
             "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
@@ -1613,7 +1634,25 @@ async def issue_shipping_label(
         )
         if _internal_carrier(label_baseline):
             order, changed = await _ensure_internal_order_completed(db, user_id, normalized, internal_id, order)
-            result = await _internal_delivery_document(db, user_id, normalized, order, label_baseline)
+            # Re-read current provider facts after the status transition. Use
+            # the same formatter and proof as web/mobile print, not stale local
+            # carrier clocks, saved labels, or a different issuance document.
+            result = await refresh_shipping_label(db, user_id, normalized)
+            if result.get("label_type") != "store_courier":
+                raise _stale_label()
+            current = await _label_baseline(db, user_id, normalized)
+            if _label_carriers_match(_label_carrier(label_baseline), _label_carrier(current)) is False:
+                raise _stale_label()
+            workflow = await db.order_review_workflows.find_one(
+                {"user_id": str(user_id), "order_number": normalized},
+                {"_id": 0, "store_courier_assignee_id": 1, "store_courier_assignee_name": 1,
+                 "store_delivery_assignment_id": 1},
+            ) or {}
+            result["print_data"].update(
+                assigned_courier_id=workflow.get("store_courier_assignee_id"),
+                assigned_courier_name=workflow.get("store_courier_assignee_name"),
+                assignment_id=workflow.get("store_delivery_assignment_id"),
+            )
             return {**result, "order_status_changed": changed}
         # Keep the shipment created with the order before changing status.
         # Some Salla couriers temporarily remove it from order details during
@@ -1671,6 +1710,11 @@ async def issue_shipping_label(
             # never creates or overwrites a shipment.
             active = order_created_shipments
     if active and (force_store_courier or _is_store_courier(active[0])):
+        if not force_store_courier:
+            result = await refresh_shipping_label(db, user_id, normalized)
+            if result.get("label_type") != "store_courier":
+                raise _stale_label()
+            return {**result, "order_status_changed": order_status_changed}
         source = dict(active[0])
         if force_store_courier:
             # Experiment-only override: reuse the authoritative Salla order
