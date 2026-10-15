@@ -442,7 +442,7 @@ def make_operational_balance_router(db, current_user):
         actor, owner, source = await scope(db, user, "view")
         from operational_balance_sources import entities
         try:
-            rows = await entities(db, owner, kind)
+            rows = await entities(db, owner, kind, include_unready=source != "employee_app")
             if source == "employee_app" and kind == "employee_custody":
                 from operational_app_banks import assigned_custody
                 own = await assigned_custody(db, owner, actor)

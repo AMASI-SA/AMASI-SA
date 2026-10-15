@@ -5,6 +5,11 @@ import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),customerReturns:jest.fn(),entities:jest.fn(),returnOrder:jest.fn(),saveCustomerReturn:jest.fn(),returnShippingQuote:jest.fn()},requestId:jest.fn(),messageFor:e=>e.response?.data?.detail?.message||'تعذر الحفظ'}));
 let host,root;
 const scope='a'.repeat(64);
+test('empty return register is explicitly explained without creating records',async()=>{
+ await act(async()=>root.render(<CustomerReturns/>));
+ expect(host.textContent).toContain('لا توجد مرتجعات مسجلة حتى الآن');
+ expect(api.saveCustomerReturn).not.toHaveBeenCalled();
+});
 const click=async text=>act(async()=>[...host.querySelectorAll('button')].find(b=>b.textContent===text).click());
 const field=name=>[...host.querySelectorAll('.op-field')].find(l=>l.querySelector('span')?.textContent===name).querySelector('input,select');
 const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});

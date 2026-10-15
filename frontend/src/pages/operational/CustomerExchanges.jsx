@@ -107,7 +107,7 @@ function ExchangeForm({context}){
         {mode==='shipping_completed'&&<><p>أكد فقط بعد تنفيذ الشحنة. يتحول التقديري إلى مستحق للشركة دون خصم البنك.</p><Field label="مرجع شحنة البدل المنفذة"><input value={shipment} onChange={e=>setShipment(e.target.value)}/></Field></>}
       </fieldset><button className="op-primary" disabled={disabled} onClick={save}>{busy?'جارٍ الحفظ…':'حفظ العملية'}</button></>}
     </section>
-    <section><h2>الاستبدالات المسجلة</h2><button disabled={busy||loading} onClick={()=>reload().catch(e=>setError(messageFor(e)))}>تحديث القائمة</button>
+    <section><h2>الاستبدالات المسجلة</h2>{!loading&&!error&&!cases.length&&<p>لا توجد استبدالات مسجلة حتى الآن.</p>}<button disabled={busy||loading} onClick={()=>reload().catch(e=>setError(messageFor(e)))}>تحديث القائمة</button>
       {cases.filter(c=>!number.trim()||c.order_number===number.trim()).map(c=><article className="op-card op-movement-cards" key={c.id}><h3>الطلب الأصلي {c.order_number}</h3><p>{c.purchase_status==='purchased'?'تم شراء جميع البدائل':c.purchase_status==='partial'?'شراء جزئي — يوجد متبقٍ':'بانتظار شراء البديل'}</p>
         <div className="op-summary">{[['expected_products','منتجات متوقعة'],['confirmed_products','فواتير مورد مؤكدة'],['shipping','تكلفة الشحن'],['customer_contribution','مساهمة العميل'],['net_cost','صافي التكلفة علينا']].map(([k,label])=><article key={k}>{label}<strong>{c.summary[k]} ريال</strong></article>)}</div>
         <p>{c.shipping.name} · {c.shipping.status==='completed'?'الشحنة منفذة':'بانتظار تنفيذ الشحنة'}</p>

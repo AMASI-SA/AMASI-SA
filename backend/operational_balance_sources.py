@@ -11,6 +11,20 @@ from zoneinfo import ZoneInfo
 import calendar
 import hashlib
 import json
+from shipping_companies import normalize_shipping_company
+
+
+def external_courier(row):
+    """Exclude internal delivery from opening courier identities as well as discovery."""
+    values = [row.get('courier_key'), row.get('id'), row.get('name'), row.get('company_name'),
+              *(row.get('salla_carrier_keys') or [])]
+    for value in values:
+        text = str(value or '').strip().lower()
+        key, _ = normalize_shipping_company(text)
+        if key in {'mandoob', 'mandoob_riyadh', 'pickup'} or any(
+                marker in text for marker in ('store driver', 'store_driver', 'مندوب', 'موصل المتجر')):
+            return False
+    return True
 
 ENTITY_COLLECTIONS = {
     'employee': 'mezan_employees_v2', 'supplier': 'mezan_suppliers_v2',
@@ -25,6 +39,7 @@ AD_SOURCES = {
     'google_ads': ('google_ads', 'mezan_google_ads_performance_daily_v2'),
 }
 ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
+    'settings',  # Projected courier identity only; excluded from financial-source scans.
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
     'mz2_ad_fx_snapshots_v2',
@@ -44,8 +59,8 @@ PAYMENT_METHODS = {
 }
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
-# expense_categories is MZ2's direct registry, also physically shared with older
-# consumers; no claim is made about the provenance of an untagged stored row.
+# The physical registry is shared. Only explicit operational provenance or a
+# known system expense code may augment this picker; store categories cannot.
 EXPENSE_CATEGORIES = {
     'fuel': 'بترول ووقود', 'rent': 'إيجارات', 'telecom': 'إنترنت واتصالات',
     'utilities': 'ماء وكهرباء', 'hospitality_food': 'أكل وضيافة',
@@ -241,7 +256,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS or collection == 'users':
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {'users', 'settings'}:
         raise ValueError('operational_source_rejected')
     result = await db[collection].find({'user_id': owner}).to_list(MAX_ROWS + 1)
     if len(result) > MAX_ROWS:
@@ -251,11 +266,14 @@ async def rows(db, owner, collection):
     return result
 
 
-async def entities(db, owner, kind):
+async def entities(db, owner, kind, *, include_unready=False):
     if kind == 'operating_expense':
         catalog = {code: {'id': code, 'name': name, 'kind': kind, 'currency': 'SAR', 'source': 'mz2_builtin'}
                    for code, name in EXPENSE_CATEGORIES.items()}
         stored = await rows(db, owner, 'expense_categories')
+        stored = [r for r in stored if r.get('source') == 'operational_balance'
+                  or (r.get('system') is True
+                      and str(r.get('code') or '').strip().lower() in EXPENSE_CATEGORIES)]
         counts = Counter(str(r.get('code') or '').strip().lower() for r in stored)
         for row in stored:
             code = str(row.get('code') or '').strip().lower()
@@ -301,9 +319,76 @@ async def entities(db, owner, kind):
         setups = await rows(db, owner, 'mz2_shipping_setup_v2')
         if len(setups) > 1:
             raise ValueError('shipping_setup_ambiguous')
-        source = [dict(r, id=r.get('courier_key'), currency='SAR')
+        source = [dict(r, id=r.get('courier_key'), currency='SAR',
+                       **({'ready': False, 'setup_issue': 'courier_confirmation_required'}
+                          if not r.get('confirmed_by') or not r.get('confirmed_at') else {}))
                   for setup in setups for r in setup.get('couriers', [])
-                  if r.get('confirmed_by') and r.get('confirmed_at')]
+                  if external_courier(r) and (include_unready or (r.get('confirmed_by') and r.get('confirmed_at')))]
+        if not owner:
+            raise ValueError('operational_source_rejected')
+        # Same persisted courier identities used by MZ2's shipping contract
+        # setup. No default companies, old balances or prices are imported.
+        projection = {'_id': 0, 'user_id': 1, 'shipping_companies.name': 1,
+                      **{f'shipping_companies.{key}': 1 for key in
+                         ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived')}}
+        settings = await db['settings'].find({'user_id': owner}, projection).to_list(2)
+        if len(settings) > 1 or any(r.get('user_id') != owner for r in settings):
+            raise ValueError('shipping_setup_ambiguous')
+        configured_rows = (settings[0].get('shipping_companies') or []) if settings else []
+        if not isinstance(configured_rows, list) or len(configured_rows) > 1000:
+            raise ValueError('shipping_setup_ambiguous')
+        configured_keys = set()
+        configured_aliases = set()
+        native = [r for setup in setups for r in setup.get('couriers', [])]
+        for configured in configured_rows:
+            if not isinstance(configured, dict):
+                raise ValueError('shipping_setup_ambiguous')
+            if not usable(configured) or not external_courier(configured):
+                continue
+            key, name = normalize_shipping_company(configured.get('name'))
+            if key == 'unknown':
+                continue
+            if key in configured_keys:
+                raise ValueError('operational_entity_identity_ambiguous')
+            configured_keys.add(key)
+            configured_aliases.update((key, configured['name']))
+            matches = [r for r in native if r.get('courier_key') == key or
+                       any(normalize_shipping_company(alias)[0] == key for alias in r.get('salla_carrier_keys', []))]
+            if len(matches) > 1:
+                raise ValueError('operational_entity_identity_ambiguous')
+            if not matches:
+                source.append({'id': key, 'name': name, 'currency': 'SAR'})
+        if include_unready:
+            # Discovery only: reuse the reader's native carrier key, never turn
+            # an order label into a confirmed party or import order balances.
+            projection = {'user_id': 1, 'raw_by_source.salla_direct.salla_shipping_current': 1,
+                          'raw_by_source.salla_direct.shipping': 1, '_id': 0}
+            orders = await db['unified_orders'].find({'user_id': owner}, projection).to_list(MAX_ROWS + 1)
+            if len(orders) > MAX_ROWS:
+                raise ValueError('operational_source_scope_too_large')
+            configured = {key for setup in setups for c in setup.get('couriers', [])
+                          for key in c.get('salla_carrier_keys', []) if isinstance(key, str)}
+            configured.update(configured_aliases)
+            discovered = set()
+            for record in orders:
+                if record.get('user_id') != owner:
+                    raise ValueError('operational_source_owner_mismatch')
+                raw = (record.get('raw_by_source') or {}).get('salla_direct') or {}
+                shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
+                if not isinstance(shipping, dict):
+                    continue
+                key = shipping.get('company_code') or shipping.get('company')
+                if (not isinstance(key, str) or not key.strip() or key in configured or key in discovered
+                        or normalize_shipping_company(key)[0] in configured_keys):
+                    continue
+                discovered.add(key)
+                name = shipping.get('company')
+                if not external_courier({'courier_key': key, 'name': name}):
+                    continue
+                source.append({'id': 'order-carrier:' + hashlib.sha256(key.encode()).hexdigest(),
+                               'name': name if isinstance(name, str) and name.strip() else key,
+                               'currency': 'SAR', 'ready': False,
+                               'setup_issue': 'courier_order_identity_unbound'})
     elif kind == 'ad_account':
         accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
         bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
@@ -328,6 +413,23 @@ async def entities(db, owner, kind):
             source.append(dict(binding, **metadata, id=str(binding.get('_id') or ''),
                                name=f"{binding['platform']}: {account['display_name']}" if account.get('display_name') else None,
                                currency=account.get('currency')))
+        # Connection evidence can be displayed without granting permission to
+        # use an unconfirmed financial identity. Existing binding IDs stay exact.
+        linked = {r.get('integration_account_id') for r in source}
+        providers = {v[0]: k for k, v in AD_SOURCES.items()}
+        for account in accounts if include_unready else []:
+            key = account.get('mezan_integration_account_id')
+            platform = providers.get(account.get('provider'))
+            if (not key or key in linked or not platform or not usable(account)
+                    or account.get('connection_status') != 'connected'):
+                continue
+            source.append(dict(id='unbound:' + str(key),
+                               name=f"{platform}: {account.get('display_name') or account.get('external_account_id') or key}",
+                               currency=account.get('currency'), platform=platform,
+                               integration_account_id=key,
+                               platform_account_id=account.get('external_account_id'),
+                               ready=False, settings_complete=False,
+                               setup_issue='ad_financial_binding_required'))
     elif kind in ENTITY_COLLECTIONS:
         source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
         if kind in ('bank', 'cash'):
@@ -348,7 +450,8 @@ async def entities(db, owner, kind):
         name = row.get('display_name') or row.get('name') or row.get('company_name')
         result.append({'id': identity, 'name': name or 'جهة — إعداد الاسم غير مكتمل',
                        'currency': currency, 'kind': kind,
-                       **({'ready': False} if not name or not currency else {}),
+                       **({'ready': False} if not name or not currency or row.get('ready') is False else {}),
+                       **({'setup_issue': row['setup_issue']} if row.get('setup_issue') else {}),
                        **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode',
                            'wallet_fraction', 'hybrid_policy_id', 'settings_complete')}
                           if kind == 'ad_account' else {})})
@@ -486,7 +589,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'expense_categories', 'mezan_products_v2'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2'})}
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
