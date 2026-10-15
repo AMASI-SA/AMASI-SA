@@ -1,0 +1,25 @@
+{
+  "task": "Operational opening catalog correction",
+  "base": "231f5714257220cdfe192428275c2bca62e0bd2d",
+  "branch": "codex/operational-opening-catalog-fix",
+  "status": "DRAFT_PARTIAL_REVIEW",
+  "production_changed": false,
+  "completed": [
+    "Explicit operational expense provenance; no deletion or historical balance mutation",
+    "Web read-only discovery of connected unbound advertising accounts and unconfirmed configured couriers",
+    "Unready identities remain excluded from existing financial and operational writers",
+    "Opening UI explains inventory quantity/valuation separation and missing identity bindings"
+  ],
+  "verification": {
+    "backend_source_tests": 35,
+    "frontend_tests": 52,
+    "ci": "NOT_RUN",
+    "production_authenticated_catalog": "NOT_INSPECTED"
+  },
+  "remaining": [
+    "Read-only owner-scoped verification of existing bank and courier setup versus order identities; do not import legacy balances",
+    "Review unknown historical custom expense categories before rollout",
+    "Review and CI before any merge/deploy; no production write authorization inferred"
+  ],
+  "next_safe_action": "Inspect canonical bank IDs and courier setup/bindings using approved read-only access; agree exact mappings without enabling accounting or writing balances."
+}

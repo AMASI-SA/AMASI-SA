@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { OpeningBalances } from './OpeningBalances';
+import { OpeningBalances, EntityPicker } from './OpeningBalances';
 import DailyMovementsComponent from './DailyMovements';
 import {pendingMovementKey} from './pendingMovementStorage';
 const DailyMovements = props => <DailyMovementsComponent storageScope="test-owner:test-actor" {...props}/>;
@@ -462,4 +462,26 @@ test('stock navigation uses reports permission and reads canonical stock only wh
 });
 test('write-only cannot navigate to physical stock report',async()=>{
  await render(<OperationalBalances/>);expect(button('المخزون المتاح')).toBeUndefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
+});
+
+test('connected advertising account is visible but cannot bypass missing financial binding', async()=>{
+ api.entities.mockResolvedValue({items:[{id:'unbound:meta',name:'Meta account',currency:'SAR',ready:false,settings_complete:false}]});
+ await render(<EntityPicker kind="ad_account" value="" onChange={jest.fn()}/>);
+ const option=host.querySelector('option[value="unbound:meta"]');
+ expect(option.textContent).toContain('Meta account');expect(option.disabled).toBe(true);
+ expect(host.textContent).toContain('تأكيد ربطه');
+ expect(api.opening).not.toHaveBeenCalled();expect(api.movement).not.toHaveBeenCalled();
+});
+
+test('empty bank picker explains order identity versus balance identity without creating records',async()=>{
+ api.entities.mockResolvedValue({items:[]});
+ await render(<EntityPicker kind="bank" value="" onChange={jest.fn()}/>);
+ expect(host.textContent).toContain('ظهور البنك في الطلبات لا يربطه تلقائيًا بالرصيد');
+ expect(api.addEntity).not.toHaveBeenCalled();
+});
+
+test('opening explains separate quantity and valuation inventory path',async()=>{
+ await render(<OpeningBalances context={{opening_count:0}} onFinished={jest.fn()}/>);
+ expect(host.textContent).toContain('لا تُكرر قيمته هنا');
+ expect(api.opening).not.toHaveBeenCalled();
 });

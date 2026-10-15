@@ -44,8 +44,8 @@ PAYMENT_METHODS = {
 }
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
-# expense_categories is MZ2's direct registry, also physically shared with older
-# consumers; no claim is made about the provenance of an untagged stored row.
+# The physical registry is shared. Only explicit operational provenance or a
+# known system expense code may augment this picker; store categories cannot.
 EXPENSE_CATEGORIES = {
     'fuel': 'بترول ووقود', 'rent': 'إيجارات', 'telecom': 'إنترنت واتصالات',
     'utilities': 'ماء وكهرباء', 'hospitality_food': 'أكل وضيافة',
@@ -251,11 +251,14 @@ async def rows(db, owner, collection):
     return result
 
 
-async def entities(db, owner, kind):
+async def entities(db, owner, kind, *, include_unready=False):
     if kind == 'operating_expense':
         catalog = {code: {'id': code, 'name': name, 'kind': kind, 'currency': 'SAR', 'source': 'mz2_builtin'}
                    for code, name in EXPENSE_CATEGORIES.items()}
         stored = await rows(db, owner, 'expense_categories')
+        stored = [r for r in stored if r.get('source') == 'operational_balance'
+                  or (r.get('system') is True
+                      and str(r.get('code') or '').strip().lower() in EXPENSE_CATEGORIES)]
         counts = Counter(str(r.get('code') or '').strip().lower() for r in stored)
         for row in stored:
             code = str(row.get('code') or '').strip().lower()
@@ -301,9 +304,11 @@ async def entities(db, owner, kind):
         setups = await rows(db, owner, 'mz2_shipping_setup_v2')
         if len(setups) > 1:
             raise ValueError('shipping_setup_ambiguous')
-        source = [dict(r, id=r.get('courier_key'), currency='SAR')
+        source = [dict(r, id=r.get('courier_key'), currency='SAR',
+                       **({'ready': False, 'setup_issue': 'courier_confirmation_required'}
+                          if not r.get('confirmed_by') or not r.get('confirmed_at') else {}))
                   for setup in setups for r in setup.get('couriers', [])
-                  if r.get('confirmed_by') and r.get('confirmed_at')]
+                  if include_unready or (r.get('confirmed_by') and r.get('confirmed_at'))]
     elif kind == 'ad_account':
         accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
         bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
@@ -328,6 +333,23 @@ async def entities(db, owner, kind):
             source.append(dict(binding, **metadata, id=str(binding.get('_id') or ''),
                                name=f"{binding['platform']}: {account['display_name']}" if account.get('display_name') else None,
                                currency=account.get('currency')))
+        # Connection evidence can be displayed without granting permission to
+        # use an unconfirmed financial identity. Existing binding IDs stay exact.
+        linked = {r.get('integration_account_id') for r in source}
+        providers = {v[0]: k for k, v in AD_SOURCES.items()}
+        for account in accounts if include_unready else []:
+            key = account.get('mezan_integration_account_id')
+            platform = providers.get(account.get('provider'))
+            if (not key or key in linked or not platform or not usable(account)
+                    or account.get('connection_status') != 'connected'):
+                continue
+            source.append(dict(id='unbound:' + str(key),
+                               name=f"{platform}: {account.get('display_name') or account.get('external_account_id') or key}",
+                               currency=account.get('currency'), platform=platform,
+                               integration_account_id=key,
+                               platform_account_id=account.get('external_account_id'),
+                               ready=False, settings_complete=False,
+                               setup_issue='ad_financial_binding_required'))
     elif kind in ENTITY_COLLECTIONS:
         source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
         if kind in ('bank', 'cash'):
@@ -348,7 +370,8 @@ async def entities(db, owner, kind):
         name = row.get('display_name') or row.get('name') or row.get('company_name')
         result.append({'id': identity, 'name': name or 'جهة — إعداد الاسم غير مكتمل',
                        'currency': currency, 'kind': kind,
-                       **({'ready': False} if not name or not currency else {}),
+                       **({'ready': False} if not name or not currency or row.get('ready') is False else {}),
+                       **({'setup_issue': row['setup_issue']} if row.get('setup_issue') else {}),
                        **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode',
                            'wallet_fraction', 'hybrid_policy_id', 'settings_complete')}
                           if kind == 'ad_account' else {})})

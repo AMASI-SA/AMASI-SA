@@ -34,6 +34,44 @@ class DB:
 
 def run(awaitable): return asyncio.run(awaitable)
 def row(**kw): return {'user_id': 'owner', **kw}
+
+def test_expense_catalog_excludes_store_categories_without_changing_records():
+    records = [row(code='graduation_brooches', name='بروشات التخرج'),
+               row(code='ramadan', name='كولكشن رمضان'),
+               row(code='fuel', name='وقود', system=True),
+               row(code='op_custom', name='تنظيف المكتب', source='operational_balance'),
+               row(code='ignored', name='متوقف', source='operational_balance', status='inactive')]
+    db = DB({'expense_categories': records})
+    before = deepcopy(db.data)
+    choices = {r['id']: r for r in run(src.entities(db, 'owner', 'operating_expense'))}
+    assert 'graduation_brooches' not in choices and 'ramadan' not in choices
+    assert 'ignored' not in choices
+    assert choices['op_custom']['name'] == 'تنظيف المكتب'
+    assert 'fuel' in choices
+    assert db.data == before
+
+def test_unknown_store_duplicates_do_not_break_operational_expense_picker():
+    db = DB({'expense_categories': [row(name='منتج بلا كود'), row(name='منتج آخر بلا كود')]})
+    assert {r['id'] for r in run(src.entities(db, 'owner', 'operating_expense'))} == set(src.EXPENSE_CATEGORIES)
+
+def test_connected_ad_account_visible_without_granting_financial_eligibility():
+    db = DB({'mezan_integration_accounts_v2': [row(mezan_integration_account_id='connected',
+        external_account_id='native-account', provider='meta_ads', display_name='My Meta',
+        currency='SAR', connection_status='connected')]})
+    before = deepcopy(db.data)
+    assert run(src.entities(db, 'owner', 'ad_account')) == []
+    result = run(src.entities(db, 'owner', 'ad_account', include_unready=True))
+    assert len(result) == 1 and result[0]['name'] == 'meta: My Meta'
+    assert result[0]['ready'] is False and result[0]['settings_complete'] is False
+    assert result[0]['setup_issue'] == 'ad_financial_binding_required'
+    assert db.data == before
+
+def test_unconfirmed_courier_visible_but_not_selectable():
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{'courier_key': 'carrier', 'name': 'Carrier', 'status': 'active'}])]})
+    assert run(src.entities(db, 'owner', 'courier')) == []
+    result = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert len(result) == 1 and result[0]['ready'] is False
+    assert result[0]['setup_issue'] == 'courier_confirmation_required'
 def order(**kw):
     return row(order_number='10', raw_by_source={'salla_direct': {
         'id': '100', 'reference_id': '10', 'created_at': '2026-10-06T01:00:00+00:00',
@@ -369,14 +407,14 @@ def test_cross_invoice_same_physical_component_rejected_even_after_supplier_chan
 
 def test_custody_reuses_native_employee_identity_and_expenses_native_registry():
     db = HardBoundaryDB({'mezan_employees_v2': [row(id='employee', name='Ahmad', status='active')],
-        'expense_categories': [row(code='custom', name='Native category', status='active'), row(code='salary', name='Reserved', status='active')],
+        'expense_categories': [row(code='custom', name='Native category', status='active', source='operational_balance'), row(code='salary', name='Reserved', status='active')],
         'expense_category_tree': [row(id='tree-only', name='Forbidden')]})
     custody = run(src.entities(db, 'owner', 'employee_custody'))
     assert custody == [{'id': 'employee', 'name': 'Ahmad', 'currency': 'SAR', 'kind': 'employee_custody'}]
     categories = {r['id']: r for r in run(src.entities(db, 'owner', 'operating_expense'))}
     assert {'fuel', 'rent', 'telecom', 'utilities', 'hospitality_food', 'hospitality_drinks', 'subscriptions', 'maintenance', 'office', 'transportation', 'other', 'custom'} <= set(categories)
     assert 'salary' not in categories and 'tree-only' not in categories
-    assert categories['custom']['source'] == 'mz2_category_registry'
+    assert categories['custom']['source'] == 'operational_balance'
     assert 'expense_category_tree' not in db.reads
 
 
