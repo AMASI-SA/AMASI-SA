@@ -10,6 +10,7 @@ import {
     listProductCreationDrafts,
     previewProductCreationDraft,
     publishProductCreationDraft,
+    updateProductCreationDraft,
 } from "../../services/mezanProductsV2";
 import {
     FROZEN_FULFILLMENT_TYPE,
@@ -17,6 +18,12 @@ import {
     PRODUCT_OPERATION_CHOICES_ENABLED,
     applyFrozenProductOperationDefaults,
 } from "../../lib/productOperationFreeze";
+import ProductCreationOptionsEditor from "./ProductCreationOptionsEditor";
+import ProductCreationOptionsPreview from "./ProductCreationOptionsPreview";
+import {
+    PRODUCT_TYPE_LABELS, creationOptionsError, creationOptionsFromDraft,
+    serializeCreationOptions,
+} from "./productCreationOptions";
 
 const EMPTY_FORM = {
     name: "",
@@ -24,6 +31,8 @@ const EMPTY_FORM = {
     price: "",
     description: "",
     product_type: "product",
+    weight: "",
+    options: [],
     image_url: "",
     fulfillment_type: FROZEN_FULFILLMENT_TYPE,
     inventory_policy: FROZEN_INVENTORY_POLICY,
@@ -51,7 +60,16 @@ function errorMessage(error) {
         salla_product_inventory_policy_uncertain: "أُنشئ المنتج في سلة، لكن لم نتأكد من تطبيق سياسة المخزون. احتفظنا بالطلب للمصالحة الآمنة.",
         invalid_stockout_policy: "اختر ماذا يحدث عند نفاد المخزون.",
         invalid_low_stock_threshold: "حد قرب النفاد يجب أن يكون صفرًا أو عددًا صحيحًا موجبًا.",
+        unsupported_product_type: "اختر منتجًا جاهزًا أو خدمة حسب الطلب.",
+        invalid_product_option_name: "أسماء الخيارات مطلوبة ويجب ألا تتكرر.",
+        invalid_product_option_values: "كل قائمة تحتاج قيمتين مختلفتين على الأقل.",
+        text_option_cannot_have_values: "حقل النص لا يحتوي قيمًا ثابتة.",
+        shipping_weight_required: "أدخل وزن الشحن بالكيلوجرام للخدمة المشحونة.",
+        invalid_product_option_condition: "اختر حقل قائمة وقيمة صحيحة لشرط الظهور.",
+        cyclic_product_option_condition: "شروط الظهور لا يمكن أن تعتمد على بعضها في حلقة.",
+        salla_product_options_uncertain: "أُنشئ المنتج، لكن لم يكتمل ربط شروط الحقول. سنصالح إعدادات المنتج الموجود قبل أي إعادة، دون إنشاء نسخة أخرى.",
     };
+    if (Array.isArray(detail)) return "راجع بيانات المنتج والخيارات؛ بعض الحقول غير مكتملة أو تتجاوز الحد المسموح.";
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";
 }
 
@@ -62,6 +80,8 @@ export default function ProductCreationPanel({ onCreated }) {
     const [activeDraft, setActiveDraft] = useState(null);
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [editingDraftId, setEditingDraftId] = useState(null);
+    const optionsError = creationOptionsError(form.options);
 
     const loadDrafts = useCallback(async () => {
         try {
@@ -78,6 +98,9 @@ export default function ProductCreationPanel({ onCreated }) {
         form.name.trim().length >= 2
         && form.sku.trim()
         && form.price !== ""
+        && PRODUCT_TYPE_LABELS[form.product_type]
+        && (form.product_type !== "service" || Number(form.weight) > 0)
+        && !optionsError
         && (
             !PRODUCT_OPERATION_CHOICES_ENABLED
             || (
@@ -93,7 +116,7 @@ export default function ProductCreationPanel({ onCreated }) {
                 )
             )
         )
-    ), [form]);
+    ), [form, optionsError]);
 
     function update(key, value) {
         setForm((current) => ({ ...current, [key]: value }));
@@ -104,16 +127,26 @@ export default function ProductCreationPanel({ onCreated }) {
         if (!canSave) return;
         setBusy(true);
         try {
-            const result = await createProductCreationDraft(applyFrozenProductOperationDefaults({
+            const payload = applyFrozenProductOperationDefaults({
                 name: form.name,
                 sku: form.sku,
                 price: Number(form.price),
                 description: form.description || null,
-                product_type: "product",
-                category_ids: [],
-                image_urls: form.image_url.trim() ? [form.image_url.trim()] : [],
-            }));
+                product_type: form.product_type,
+                weight: form.weight === "" ? null : Number(form.weight),
+                options: serializeCreationOptions(form.options),
+                category_ids: form.category_ids || [],
+                image_urls: [form.image_url.trim(), ...(form.image_urls || []).slice(1)].filter(Boolean),
+                fulfillment_type: form.fulfillment_type,
+                inventory_policy: form.inventory_policy,
+                stockout_policy: form.stockout_policy,
+                low_stock_threshold: Number(form.low_stock_threshold),
+            });
+            const result = editingDraftId
+                ? await updateProductCreationDraft(editingDraftId, payload)
+                : await createProductCreationDraft(payload);
             setActiveDraft(result.draft);
+            setEditingDraftId(null);
             setPreview(null);
             toast.success("حُفظت مسودة المنتج داخل ميزان");
             await loadDrafts();
@@ -191,9 +224,23 @@ export default function ProductCreationPanel({ onCreated }) {
 
     function startNew() {
         setForm(EMPTY_FORM);
+        setEditingDraftId(null);
         setActiveDraft(null);
         setPreview(null);
         setOpen(true);
+    }
+
+    function editDraft() {
+        setForm({
+            ...EMPTY_FORM, ...activeDraft,
+            description: activeDraft.description || "",
+            weight: activeDraft.weight ?? "",
+            image_url: activeDraft.image_urls?.[0] || "",
+            options: creationOptionsFromDraft(activeDraft.options),
+        });
+        setEditingDraftId(activeDraft.id);
+        setActiveDraft(null);
+        setPreview(null);
     }
 
     return (
@@ -258,6 +305,18 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <span>السعر</span>
                                 <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => update("price", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" required />
                             </label>
+                            <label className="space-y-1 text-sm font-bold">
+                                <span>نوع المنتج في سلة</span>
+                                <select value={form.product_type} onChange={(event) => update("product_type", event.target.value)} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400">
+                                    {Object.entries(PRODUCT_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                </select>
+                                <span className="block text-xs font-normal text-slate-500">اختر النوع قبل الإنشاء؛ لا يمكن تغييره في سلة لاحقًا.</span>
+                            </label>
+                            <label className="space-y-1 text-sm font-bold">
+                                <span>وزن الشحن (كجم)</span>
+                                <input type="number" min="0.001" max="1000000" step="0.001" value={form.weight} onChange={(event) => update("weight", event.target.value)} required={form.product_type === "service"} className="h-11 w-full rounded-xl border px-3 outline-none focus:border-indigo-400" />
+                                <span className="block text-xs font-normal text-slate-500">أدخل الوزن الفعلي؛ مطلوب للخدمة حسب الطلب التي تُشحن للعميل.</span>
+                            </label>
                             <div className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-xs font-bold leading-6 text-violet-950">
                                 خيارات التشغيل والمخزون مجمّدة مؤقتًا؛ كل منتج جديد يدخل مسار التجهيز تلقائيًا.
                             </div>
@@ -310,8 +369,12 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <textarea value={form.description} onChange={(event) => update("description", event.target.value)} rows={4} className="w-full rounded-xl border p-3 outline-none focus:border-indigo-400" />
                             </label>
                             <div className="lg:col-span-2">
+                                <ProductCreationOptionsEditor options={form.options} onChange={(options) => update("options", options)} disabled={busy} />
+                                {optionsError && <p role="alert" className="mt-2 text-sm text-rose-700">{optionsError}</p>}
+                            </div>
+                            <div className="lg:col-span-2">
                                 <button type="submit" disabled={!canSave || busy} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 font-black text-white disabled:opacity-50">
-                                    <Plus /> حفظ المسودة في ميزان
+                                    <Plus /> {editingDraftId ? "حفظ تعديلات المسودة" : "حفظ المسودة في ميزان"}
                                 </button>
                             </div>
                         </form>
@@ -319,7 +382,8 @@ export default function ProductCreationPanel({ onCreated }) {
 
                     {activeDraft && (
                         <div className="space-y-4">
-                            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-3 rounded-2xl border bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-6">
+                                <div><div className="text-xs text-slate-500">نوع المنتج</div><div className="font-black">{PRODUCT_TYPE_LABELS[activeDraft.product_type || "product"]}</div></div>
                                 <div><div className="text-xs text-slate-500">SKU</div><div className="font-black">{activeDraft.sku}</div></div>
                                 <div><div className="text-xs text-slate-500">السعر</div><div className="font-black">{activeDraft.price} ر.س</div></div>
                                 {!PRODUCT_OPERATION_CHOICES_ENABLED && <div><div className="text-xs text-slate-500">التشغيل</div><div className="font-black">يحتاج تجهيز (ثابت مؤقتًا)</div></div>}
@@ -330,6 +394,9 @@ export default function ProductCreationPanel({ onCreated }) {
                                 </>}
                                 <div><div className="text-xs text-slate-500">الحالة</div><div className="font-black">{STATUS_LABELS[activeDraft.status] || activeDraft.status}</div></div>
                             </div>
+
+                            {!!activeDraft.options?.length && <ProductCreationOptionsPreview key={activeDraft.id} options={activeDraft.options} />}
+                            {activeDraft.status === "published_unverified" && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">أُنشئ المنتج، لكن لم يكتمل التحقق من نوعه وخياراته في سلة. لا تُنشئ نسخة أخرى.</p>}
 
                             {preview && (
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
@@ -352,6 +419,7 @@ export default function ProductCreationPanel({ onCreated }) {
                             )}
 
                             <div className="flex flex-wrap gap-2">
+                                {["draft", "approved"].includes(activeDraft.status) && <button type="button" disabled={busy} onClick={editDraft} className="rounded-xl border px-4 py-3 font-black disabled:opacity-50">تعديل المسودة</button>}
                                 {activeDraft.status === "draft" && !preview && (
                                     <button type="button" disabled={busy} onClick={reviewDraft} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50"><Eye /> معاينة وفحص</button>
                                 )}
