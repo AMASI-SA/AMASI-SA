@@ -1,86 +1,129 @@
-# Sensitive HTTP log redaction — 2026-10-15
+# Sensitive HTTP log redaction — verified source handoff
 
 - Task: `SENSITIVE-HTTP-LOG-REDACTION-20261015`.
-- User authorized implementation of the separately observed runtime logging fix.
-- Base: production `231f5714257220cdfe192428275c2bca62e0bd2d`.
-- Current integrated production baseline: `f174e294d12e2d96f0ba03678c4e4768036bea2d`
-  (PR1373 shipping change and reviewed intent; no overlap with these five files).
-- Branch: `codex/redact-sensitive-http-logs-20261015`.
-- State: candidate review completed and findings corrected; clean source lineage
-  replaces a refused intermediate merge; required final-head CI pending.
-- Production changed: **no**. No merge, release intent, lease, restart or deployment.
+- Outcome: **fixed in source and verified; not deployed**.
+- Repository: `AMASI-SA/AMASI-SA`; PR [#1374](https://github.com/AMASI-SA/AMASI-SA/pull/1374).
+- Code branch: `codex/redact-sensitive-http-logs-20261015`.
+- Accepted code/source: `2fbc6a96b2010f78cbb2e1aac94dbf6c4b40c74f`.
+- Code tree: `79e16198efda289486bc936badefba5e12084002`.
+- Direct parent / current reviewed production baseline:
+  `f174e294d12e2d96f0ba03678c4e4768036bea2d`.
+- Production changed by this task: **no**. No merge to production, release-intent
+  commit, lease, /app mutation, restart or publication.
+- This final status is a documentation-only checkpoint after the tested code
+  source. It must not be deployed or treated as an intent-only B.
 
-## Finding and boundary
+## Vulnerable path and invariant
 
-Meta requests include credential query parameters. Global INFO logging emitted
-HTTPX's complete request URLs. An offline MockTransport reproduction confirmed
-that both synthetic token and proof appeared in the original log output while
-the request itself succeeded. No real credentials or runtime logs were copied
-into this task's artifacts.
+Meta reporting/discovery/OAuth construct credential query fields including
+access_token, appsecret_proof, client_secret, fb_exchange_token, input_token and
+code. Existing INFO logging emitted HTTPX's complete URL. Provider pagination
+can supply the complete URL independently of the original params dictionary.
+An offline real-HTTPX MockTransport baseline reproduced both synthetic token and
+proof in emitted output, with a legitimate HTTP200/JSON response.
 
-The new `backend/sensitive_logging.py` wraps existing root and named logger
-handler formatters before provider imports in `backend/server.py`. It sanitizes
-the final rendered output, including exception chains, cached exception text and
-stack information. Requests, structured access-log filter arguments, existing
-formatter behavior, log levels, methods, hosts, paths, statuses, ordinary query
-fields and provider diagnostic codes remain intact. Repeated installation is
-idempotent. OAuth query aliases and percent-encoded key names are covered, as
-are reflected credential fields and bearer values.
+The boundary now replaces sensitive values in final formatted standard-log
+output. HTTP requests, response data, methods, hosts, paths, status codes,
+ordinary query fields and provider error codes retain their behavior.
+Sanitizing after formatting also covers chained exceptions, cached exception
+text and stack information. Original LogRecords and structured Uvicorn/TikTok
+filter arguments remain intact.
 
-Changed source: `backend/sensitive_logging.py`, `backend/server.py`.
-Regression: `backend/tests/test_sensitive_logging.py`.
-CI: `.github/workflows/security-gate.yml` adds the new output contracts plus
-nearby synthetic Meta/TikTok compatibility suites. This status is the fifth file.
+## Changed files and strategy
 
-## Fresh verification
+1. `backend/sensitive_logging.py`: stdlib-only final formatter wrapper and
+   idempotent installer for existing root and named logger handlers; covers
+   aliases, case/percent-encoded key names, punctuation/quoted query values,
+   reflected credential fields and bearer values.
+2. `backend/server.py`: installs before provider imports; replaces the late
+   basicConfig call with the same level/format policy at early bootstrap.
+3. `backend/tests/test_sensitive_logging.py`: 40 offline output contracts using
+   real HTTPX MockTransport, real Uvicorn AccessFormatter and isolated execution
+   of the actual TikTok callback filter; verifies both privacy and normal use.
+4. `.github/workflows/security-gate.yml`: compiles helper and runs output
+   contracts, four Meta suites and the relevant stateless TikTok logging test.
+5. This task status document.
 
-Use `PYTHONDONTWRITEBYTECODE=1`, `PYTHONPATH=backend`, and `--noconftest`.
-The repository conftest reads a runtime .env; tests here must remain offline.
+Final-output wrapping is narrower than changing every provider request and
+preserves credentials at the provider boundary. Root logger filters alone
+would miss propagated records; flattening records would break existing
+structured access filters.
 
-- Baseline: real HTTPX 0.28.1 with MockTransport confirmed synthetic values
-  present in INFO output and normal HTTP 200/JSON response (exit 0).
-- Focused candidate: `python -B -m pytest --noconftest -q
-  backend/tests/test_sensitive_logging.py` — **40 passed**, exit 0.
-- Changed Python source syntax compiled in memory — passed, exit 0.
-- `git diff --check` — passed, exit 0.
-- Local interpreter: Python 3.12.14; HTTPX 0.28.1, Uvicorn 0.25.0. Other existing
-  local test dependencies differ from the repository lock. Required CI must
-  validate the declared Python 3.11 dependency closure before readiness.
-- Earlier focused attempts exposed a bearer-header redaction gap (corrected)
-  and local missing Uvicorn/provider dependencies. The focused suite now uses
-  the real isolated TikTok callback filter class without loading its unrelated
-  provider package. Those failed attempts are not acceptance evidence.
-- Independent read-only review identified partial-value leakage at punctuation
-  and quoted query delimiters. Confirmed with synthetic inputs and corrected;
-  real HTTPX pagination URL tests now include literal parentheses, semicolons,
-  braces, OAuth code and encoded keys. Quoted field replacements remain stable
-  on repeated sanitization. Review found no other concrete issue. One review
-  cycle completed; final corrected candidate is verified by the focused suite.
-- First remote source checkpoint: `0ad7c14f136274fc57d754b355e050f089406138`;
-  Draft PR1374. Production advanced independently during this task. Its exact
-  seven-file compare contains only shipping workflow/service/tests/status and
-  release intent. Intermediate merge `60409d2e89357165f924630f47ee6cb23a7221e5`
-  preserved that content but release readiness correctly refused the full-history
-  intent transition. It is a failed readiness attempt, not accepted release evidence.
-- Intermediate exact-head Security Gate passed: job `116669059138`, run
-  `38806491218`. New logging plus provider regressions: **59 passed, 11 skipped**.
-  All 11 skips were unrelated TikTok database tests requiring an explicit
-  disposable Mongo URI. Final CI runs only TikTok's relevant stateless callback
-  logging test, along with all four Meta suites and the 40 output contracts.
-- Correction: create a new source commit directly on current production
-  `f174e294d12e2d96f0ba03678c4e4768036bea2d`, carrying the same runtime/test blobs
-  and unchanged inherited release intent. Preserve the intermediate branch before
-  moving this task's unfrozen PR head with an expected-head check. No guard or
-  release policy is weakened; no reviewed A/B has been frozen for this task.
+## Ordered fresh verification
 
-## Remaining scope and next safe action
+All local pytest invocations used `PYTHONDONTWRITEBYTECODE=1`,
+`PYTHONPATH=backend` and `--noconftest`, avoiding the repository conftest's
+runtime .env loader. No real credentials or runtime logs were used as fixtures.
 
-Run required CI and the synthetic provider suites on the exact remote head, and
-update this status and Issue #1006. Do not merge or publish this checkpoint.
+1. Syntax/diff: changed Python source compiled in memory; final CI Backend
+   preflight compiled backend and ran release guard/identity suites; all passed.
+   `git diff --check f174e294d12e2d96f0ba03678c4e4768036bea2d HEAD`: exit0.
+2. Focused trigger and alternate inputs:
+   `python -B -m pytest --noconftest -q backend/tests/test_sensitive_logging.py`:
+   **40 passed**, exit0. Original synthetic token/proof no longer occur in
+   emitted handler output; request query values and normal responses are intact.
+   Alternate cases cover OAuth aliases, encoded keys, duplicated fields,
+   punctuation, quotes, reflected fields, bearer headers and exception copies.
+3. Legitimate behavior / owning checks, exact accepted source:
+   Security Gate run `38806988268`, backend job `116670272352`:
+   - output + four Meta suites + stateless TikTok access logging:
+     **57 passed, no skips**, exit0;
+   - existing security contracts: **83 passed**, exit0;
+   - inherited boundary regressions: **216 passed + 29 subtests**, exit0;
+   - dependency policy, audit, compile and toolchain contracts passed.
+   Frontend security job `116670272127`: **275 suites / 1780 tests passed**,
+   dependency audit, CSP/security manifests and production build passed.
+   Release readiness run `38806988380`: Backend preflight `116670272627`
+   and Frontend build `116670273060` passed. The official source transition
+   resolver returns the exact f174e294d baseline; no intent history or byte diff
+   exists in baseline..source.
 
-Protection covers this web process's configured standard logging handlers.
-Future external logging reconfiguration must call the installer again. This
-does not retroactively alter retained logs or establish coverage for arbitrary
-unlabelled secrets, direct print calls, third-party export systems, or separately
-configured processes. No credential rotation, deletion, provider write, database
-change or paid Emergent chat action is part of this implementation.
+Final exact-source check summary: **28 success / 4 skipped / 0 failure /
+0 pending**. Four required checks and CodeQL Python/JavaScript/aggregate passed.
+An interim CodeQL neutral aggregate resolved after Python completed.
+Skips are manual redeploy, Host20 reviewed-intent adapter rehearsal (no B yet),
+and two unrelated Snapchat settings jobs; none is counted as a pass.
+
+CI created candidate artifact `12006713115`, name
+`release-v5-reviewed-intent-candidate`, run `38806988380`,
+SHA256 `8dc0b658046cfff48698a2879abe171c0be36c36d1c7ba7c0529c62ea658a7c6`,
+expires `2026-10-17T21:05:05Z`. This candidate is not an approved release
+intent or evidence of production publication.
+
+## Review and failed-attempt accounting
+
+Independent read-only boundary investigation and one candidate review completed.
+Review found partial-value delimiter/quote leakage; confirmed with synthetic
+inputs and fixed, with expanded actual HTTPX pagination regressions. No other
+concrete finding was reported. Parent verified the corrected final candidate.
+
+Earlier attempts found a bearer-header gap (corrected) and missing local test
+dependencies. Direct git push lacked authentication; the connected GitHub API
+created verified remote commits instead. Local Python3.12 dependency differences
+were superseded by exact-source Python3.11.17 CI with declared requirements.
+
+Intermediate source `0ad7c14f136274fc57d754b355e050f089406138` was based on
+older production. Merge `60409d2e89357165f924630f47ee6cb23a7221e5` preserved
+new shipping content, but release readiness correctly refused its full-history
+intent transition. That failed build is not acceptance evidence. The intermediate
+is preserved on `codex/sensitive-log-60409d2-checkpoint`. Only the unfrozen owned
+task head was rebuilt directly from current production using an expected-head
+update; production history, frozen reviewed A/B and release policy were untouched.
+Final runtime/test blobs equal the reviewed corrected candidate.
+
+## Limits and next safe action
+
+Configured standard logging in the web process is covered. Future external
+logging reconfiguration must reinstall the wrapper. Historical retained logs,
+arbitrary unlabelled secrets, direct prints, third-party exports and separately
+configured processes were not established covered. No live Meta request was
+needed; compatibility proof uses synthetic provider transports. No credentials
+were rotated/deleted; no provider, account, database or business data was changed.
+
+Implementation is complete. Before any separately authorized publication,
+re-read current production, ledger and /app guard; preserve any other task's
+lease. Recheck current baseline and candidate validity, freeze a new intent-only
+B for the approved source, require exact-B clean-clone/Host20 package rehearsal,
+then the normal one-publish/three-probe guard procedure. Never deploy this source
+using the inherited shipping intent or reuse another task's lease. Paid Emergent
+chat prompts remain prohibited by the user.
