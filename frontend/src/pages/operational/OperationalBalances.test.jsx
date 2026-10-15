@@ -463,6 +463,31 @@ test('stock navigation uses reports permission and reads canonical stock only wh
 test('write-only cannot navigate to physical stock report',async()=>{
  await render(<OperationalBalances/>);expect(button('المخزون المتاح')).toBeUndefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
 });
+test('opening explains currency before selection and shows selected currency', async () => {
+  await render(<OpeningBalances context={{opening_count: 0}} />);
+  expect(host.textContent).toContain('اختر الجهة لإظهار عملة الرصيد');
+  await input(host.querySelectorAll('select')[0], 'supplier');
+  await input(host.querySelectorAll('select')[1], 'supplier1');
+  expect(host.textContent).toContain('عملة الرصيد: SAR');
+  expect(api.opening).not.toHaveBeenCalled();
+});
+test('draft reports explain empty summaries without pretending zero balances', async () => {
+  api.context.mockResolvedValue({status:'draft',permissions:{manage:true,move:true,reports:true}});
+  api.reports.mockResolvedValue({parties:[],summaries:{},issues:[],details:{}});
+  await render(<OperationalBalances />);
+  await click('الأرصدة والتقارير التشغيلية');
+  expect(host.textContent).toContain('لم يبدأ الاحتساب بعد');
+  expect([...host.querySelectorAll('.op-summary strong')].every(e=>e.textContent==='لم يبدأ الاحتساب')).toBe(true);
+  expect(api.finish).not.toHaveBeenCalled();
+});
+test('draft purchase message distinguishes setup from missing permission', async () => {
+  api.context.mockResolvedValue({status:'draft',permissions:{manage:true,move:true,reports:true}});
+  await render(<OperationalBalances />);
+  await click('شراء المخزون');
+  expect(host.textContent).toContain('شراء المخزون متاح بعد إنهاء الأرصدة الافتتاحية');
+  expect(host.textContent).not.toContain('لا تتوفر صلاحية للمشتريات التشغيلية');
+  expect(api.inventoryCatalog).not.toHaveBeenCalled();
+});
 
 test('connected advertising account is visible but cannot bypass missing financial binding', async()=>{
  api.entities.mockResolvedValue({items:[{id:'unbound:meta',name:'Meta account',currency:'SAR',ready:false,settings_complete:false}]});

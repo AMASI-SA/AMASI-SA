@@ -14,7 +14,7 @@ import api from "../lib/api";
 const fmt = (v) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
-export default function ShippingCompanySettings() {
+export default function ShippingCompanySettings({ mezan2 = false }) {
     const [settings, setSettings] = useState(null);
     const [busy, setBusy] = useState(false);
 
@@ -152,10 +152,11 @@ export default function ShippingCompanySettings() {
         <div className="p-6 max-w-6xl mx-auto space-y-5" dir="rtl" data-testid="shipping-settings-page">
             <header className="flex items-center justify-between gap-2 flex-wrap">
                 <h1 className="text-2xl font-extrabold text-slate-900">⚙️ إعدادات شركات الشحن</h1>
-                <Link to="/shipping/ledger" className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-bold rounded-lg" data-testid="settings-back">
+                <Link to={mezan2 ? "/operational-balances" : "/shipping/ledger"} className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-bold rounded-lg" data-testid="settings-back">
                     ← الأرصدة
                 </Link>
             </header>
+            {mezan2 && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm">هذه الإعدادات مشتركة مع تقارير الأرباح الحالية؛ تعديل الأسعار يؤثر على الحسابات التي تعتمد عليها. لا تُنقل أرصدة أو حركات قديمة عند فتح الصفحة. أرصدة مندوبي المتجر تُدار من مسار المناديب، وليست ضمن شركات الشحن الخارجية.</p>}
 
             <div className="rounded-xl bg-blue-50 border-2 border-blue-200 text-blue-900 text-[12px] p-3" data-testid="settings-help">
                 <strong>نوع الشركة:</strong>

@@ -14,6 +14,10 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name == 'settings':
+            assert projection and projection.get('_id') == 0
+            assert set(projection) == {'_id', 'user_id', 'shipping_companies.name',
+                *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
         if self.name == 'users':
             assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
             self.db.reads.append(self.name)
@@ -72,6 +76,42 @@ def test_unconfirmed_courier_visible_but_not_selectable():
     result = run(src.entities(db, 'owner', 'courier', include_unready=True))
     assert len(result) == 1 and result[0]['ready'] is False
     assert result[0]['setup_issue'] == 'courier_confirmation_required'
+
+@pytest.mark.parametrize('name', ['مندوب المتجر', 'مندوب الرياض', 'store_driver', 'pickup', 'استلام من المتجر'])
+def test_internal_delivery_never_appears_as_opening_courier(name):
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{
+        'courier_key': name, 'name': name, 'confirmed_by': 'owner', 'confirmed_at': START}])],
+        'unified_orders': [order(shipping={'company': name})],
+        'store_drivers': [row(id='driver', name='موصل مستقل', status='active')]})
+    for discover in (False, True):
+        assert run(src.entities(db, 'owner', 'courier', include_unready=discover)) == []
+    assert [r['id'] for r in run(src.entities(db, 'owner', 'store_driver'))] == ['driver']
+
+def test_existing_shipping_settings_supply_identity_without_importing_costs_or_balances():
+    db = DB({'settings': [row(shipping_companies=[
+        {'name': 'SMSA', 'cost': 999, 'balance': 5000}, {'name': 'مندوب المتجر'},
+        {'name': 'DHL', 'active': False}])]})
+    before = deepcopy(db.data)
+    choices = run(src.entities(db, 'owner', 'courier'))
+    assert [(c['id'], c['name']) for c in choices] == [('smsa', 'سمسا')]
+    assert 'cost' not in choices[0] and 'balance' not in choices[0]
+    from operational_balance_service import entity
+    assert run(entity(db, 'owner', 'courier', 'smsa', 'SAR'))['id'] == 'smsa'
+    with pytest.raises(ValueError, match='source_rejected'):
+        run(src.rows(db, 'owner', 'settings'))
+    assert db.data == before
+
+def test_shipping_settings_preserve_existing_native_identity_and_no_discovery_duplicate():
+    db = DB({'settings': [row(shipping_companies=[{'name': 'SMSA'}])],
+        'mz2_shipping_setup_v2': [row(couriers=[{'courier_key':'existing-id', 'name':'سمسا',
+            'salla_carrier_keys':['smsa'], 'confirmed_by':'owner', 'confirmed_at':START}])],
+        'unified_orders': [order(shipping={'company':'SMSA'})]})
+    assert [c['id'] for c in run(src.entities(db, 'owner', 'courier', include_unready=True))] == ['existing-id']
+
+def test_ambiguous_shipping_settings_do_not_guess_an_opening_identity():
+    db = DB({'settings': [row(shipping_companies=[{'name': 'SMSA'}, {'name': 'سمسا'}])]})
+    with pytest.raises(ValueError, match='identity_ambiguous'):
+        run(src.entities(db, 'owner', 'courier'))
 def order(**kw):
     return row(order_number='10', raw_by_source={'salla_direct': {
         'id': '100', 'reference_id': '10', 'created_at': '2026-10-06T01:00:00+00:00',
@@ -297,6 +337,7 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # A future accidental source fallback must fail the runtime read, even if the
 # production developer also adds it to ALLOWED_COLLECTIONS.
 HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
+    'settings',  # Owner-scoped courier identity projection only; generic reader rejects it.
     'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',

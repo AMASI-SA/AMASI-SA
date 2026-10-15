@@ -48,6 +48,7 @@ const ACCOUNTING_LOCATION = {
 
 test("Mezan 2 shell is limited to Mezan 2 routes including the advanced dashboard", () => {
     [
+        "/shipping-settings-v2",
         "/dashboard-advanced",
         "/dashboard-v2",
         "/orders-v2/280001234",

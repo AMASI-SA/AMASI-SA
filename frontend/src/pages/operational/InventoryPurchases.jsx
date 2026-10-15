@@ -93,6 +93,6 @@ export default function InventoryPurchases({context,source='mezan2',mode='purcha
       {mode==='reports'&&<h3>إجمالي الكميات المشتراة</h3>}{(mode==='reports'?stock:[]).map(l=><p key={inventoryIdentity(l)}>{l.name} · المشتراة {l.quantity} {unitLabel(l.unit)} · المرتجعة {l.returned_quantity??0} · المتبقية {l.remaining_quantity??l.quantity}</p>)}
     </>}
     {payment&&paying&&<fieldset className="op-card" disabled={disabled}><legend>سداد فاتورة {payment.row.invoice_number}</legend><Field label="مصدر السداد"><select disabled={!!fixedSource} value={payment.account} onChange={e=>setPayment({...payment,account:e.target.value})}><option value="">اختر بنكًا أو صندوقًا أو عهدة</option>{accounts.map(a=><option key={`${a.kind}:${a.id}`} value={`${a.kind}:${a.id}`}>{a.name}</option>)}</select></Field><Field label="مبلغ السداد"><input inputMode="decimal" value={payment.amount} onChange={e=>setPayment({...payment,amount:e.target.value})}/></Field><Field label="مرجع السداد الاختياري"><input value={payment.reference} onChange={e=>setPayment({...payment,reference:e.target.value})}/></Field><button onClick={()=>save('payment')}>حفظ السداد</button></fieldset>}
-    {!writable&&!readable&&<p role="alert">لا تتوفر صلاحية للمشتريات التشغيلية.</p>}
+    {!writable&&!readable&&<p role="alert">{!context.permissions?.move ? 'لا تتوفر صلاحية للمشتريات التشغيلية.' : context.status==='draft' ? 'شراء المخزون متاح بعد إنهاء الأرصدة الافتتاحية؛ لم يبدأ النظام التشغيلي بعد.' : 'المشتريات متوقفة لأن النظام للقراءة فقط.'}</p>}
   </section>;
 }

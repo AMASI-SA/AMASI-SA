@@ -70,7 +70,8 @@ export function navigationSectionsForAccountingAccess(access) {
             ...section,
             items: section.items.map((item) => ({ ...item })),
         }];
-    });
+    }).concat([{ id: "shipping-settings", label: "شركات الشحن", Icon: Receipt,
+        items: [{to: "/shipping-settings-v2", label: "إدارة شركات الشحن والأسعار", exactSearch: true}] }]);
 }
 
 function installNavigationSections(sections) {
