@@ -16,7 +16,7 @@
 
 Base: `2196670da3a5cbf47ac633548a344529dd5b41f7` on
 `origin/hotfix/prod-snap-meta-final`.
-Task branch: `codex/store-courier-unified-print`.
+Task branch: `codex/store-courier-release-20261015`.
 Worktree: `D:/amasi-build/store-courier-unified-print`.
 Changes are limited to the shipping service, regression tests, and this record.
 Existing mobile Build43 edits and unrelated Qoyod changes were not modified.
@@ -74,7 +74,10 @@ Production advanced to 231f5714257220cdfe192428275c2bca62e0bd2d (products PR1371
 Merged that baseline without conflicts; the old candidate intent is superseded.
 A new governed build and intent are required before publication.
 The owner reiterated rollback authorization on any new-code printing regression.
-Rollback implementation target is isolated commit 6b7699d5427253d91919b3a537318cba8d4e207f,
+Rollback implementation target is the isolated fix commit on the release branch,
 reverted on latest production, preserving subsequent unrelated work.
 Production changed by this task: no. No lease acquired or publish attempted.
 Next: fresh combined CI, new reviewed intent and rehearsal, guard gates, emulator PDF UAT.
+
+Release guard rejected the merge-history candidate: inherited intent history crossed the new baseline. Rebuilt the same source changes by cherry-pick on clean production baseline 231f5714257220cdfe192428275c2bca62e0bd2d, without weakening any guard. Previous PR1370 is superseded by this release branch. No production deployment.
+
