@@ -1,0 +1,41 @@
+{
+  "task": "Operational opening catalog correction",
+  "base": "231f5714257220cdfe192428275c2bca62e0bd2d",
+  "branch": "codex/operational-opening-catalog-fix",
+  "status": "IMPLEMENTED_UAT_FIXES_PENDING_CI_AND_LIVE_MAPPING",
+  "production_changed": false,
+  "completed": [
+    "Explicit operational expense provenance; no deletion or historical balance mutation",
+    "Web read-only discovery of connected unbound advertising accounts and unconfirmed configured couriers",
+    "Unready identities remain excluded from existing financial and operational writers",
+    "Opening UI explains inventory quantity/valuation separation and missing identity bindings",
+    "Web courier discovery from owner-scoped native order shipping fields; disabled until explicit canonical setup confirmation; forged opening IDs rejected",
+    "Mezan 2 shipping-settings route reuses existing settings page and pricing storage, without migrating data or changing profit calculations",
+    "Owner-scoped projected configured courier identities available for opening; no prices/balances imported; native identity preserved",
+    "Internal store drivers and pickup excluded from courier opening catalog",
+    "UAT currency prompt, setup-versus-permission purchase message, and report empty states corrected",
+    "Return/exchange/purchase register empty messages; accessible direction button grouping"
+  ],
+  "verification": {
+    "backend_source_tests": 55,
+    "frontend_affected_tests": 117,
+    "shipping_profit_tests": 16,
+    "shipping_profit_subtests": 18,
+    "ci": "Previous HEAD had security workflow/source mismatch (missing sensitive_logging.py); latest Production merged, new CI pending",
+    "production_authenticated_catalog": "NOT_INSPECTED",
+    "browser_access": "BLOCKED: failed to write kernel assets, os error 3",
+    "followup_frontend_tests": 108
+  },
+  "remaining": [
+    "Verify current CI and integrate latest Production before v5 A/B release preparation",
+    "Live read-only bank/ad binding verification: connected ad accounts are displayed but unconfirmed bindings remain blocked; order bank labels cannot create canonical bank identities automatically",
+    "Current shared shipping settings remain profit-report source; operational fee recognition still requires its approved dated contract. No automatic legacy price adoption was implemented",
+    "Review unknown historical expense categories before rollout",
+    "Mobile viewport UAT and owner read-only smoke after deployment; do not claim complete financial transaction UAT",
+    "Emergent browser unavailable (os error 3): operator terminal required for release guard and publishing",
+    "Order courier discovery limit 20000 retained; large owner catalogs fail closed"
+  ],
+  "next_safe_action": "Review final diff and GitHub CI, preserve current Production changes, complete explicit bank/ad and shipping-contract setup wiring without business writes, then v5 release gates via approved operator terminal.",
+  "production_review": "Integrated ce3c6ffaf (PR1374 sensitive-log redaction) and PR1373 shipping print with a non-rewriting merge; no conflicts; production branch not changed",
+  "authorization": "Owner requests implementation through deployment for agreed fixes; financial or inventory business writes and writer activation remain excluded."
+}

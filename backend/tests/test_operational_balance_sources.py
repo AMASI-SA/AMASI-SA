@@ -14,6 +14,10 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name == 'settings':
+            assert projection and projection.get('_id') == 0
+            assert set(projection) == {'_id', 'user_id', 'shipping_companies.name',
+                *('shipping_companies.' + key for key in ('status', 'active', 'is_active', 'archived', 'deleted', 'is_deleted', 'is_archived'))}
         if self.name == 'users':
             assert query == {'$or': [{'id': 'owner', 'role': 'owner'}, {'created_by': 'owner', 'role': 'admin'}]}
             self.db.reads.append(self.name)
@@ -34,11 +38,120 @@ class DB:
 
 def run(awaitable): return asyncio.run(awaitable)
 def row(**kw): return {'user_id': 'owner', **kw}
+
+def test_expense_catalog_excludes_store_categories_without_changing_records():
+    records = [row(code='graduation_brooches', name='بروشات التخرج'),
+               row(code='ramadan', name='كولكشن رمضان'),
+               row(code='fuel', name='وقود', system=True),
+               row(code='op_custom', name='تنظيف المكتب', source='operational_balance'),
+               row(code='ignored', name='متوقف', source='operational_balance', status='inactive')]
+    db = DB({'expense_categories': records})
+    before = deepcopy(db.data)
+    choices = {r['id']: r for r in run(src.entities(db, 'owner', 'operating_expense'))}
+    assert 'graduation_brooches' not in choices and 'ramadan' not in choices
+    assert 'ignored' not in choices
+    assert choices['op_custom']['name'] == 'تنظيف المكتب'
+    assert 'fuel' in choices
+    assert db.data == before
+
+def test_unknown_store_duplicates_do_not_break_operational_expense_picker():
+    db = DB({'expense_categories': [row(name='منتج بلا كود'), row(name='منتج آخر بلا كود')]})
+    assert {r['id'] for r in run(src.entities(db, 'owner', 'operating_expense'))} == set(src.EXPENSE_CATEGORIES)
+
+def test_connected_ad_account_visible_without_granting_financial_eligibility():
+    db = DB({'mezan_integration_accounts_v2': [row(mezan_integration_account_id='connected',
+        external_account_id='native-account', provider='meta_ads', display_name='My Meta',
+        currency='SAR', connection_status='connected')]})
+    before = deepcopy(db.data)
+    assert run(src.entities(db, 'owner', 'ad_account')) == []
+    result = run(src.entities(db, 'owner', 'ad_account', include_unready=True))
+    assert len(result) == 1 and result[0]['name'] == 'meta: My Meta'
+    assert result[0]['ready'] is False and result[0]['settings_complete'] is False
+    assert result[0]['setup_issue'] == 'ad_financial_binding_required'
+    assert db.data == before
+
+def test_unconfirmed_courier_visible_but_not_selectable():
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{'courier_key': 'carrier', 'name': 'Carrier', 'status': 'active'}])]})
+    assert run(src.entities(db, 'owner', 'courier')) == []
+    result = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert len(result) == 1 and result[0]['ready'] is False
+    assert result[0]['setup_issue'] == 'courier_confirmation_required'
+
+@pytest.mark.parametrize('name', ['مندوب المتجر', 'مندوب الرياض', 'store_driver', 'pickup', 'استلام من المتجر'])
+def test_internal_delivery_never_appears_as_opening_courier(name):
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{
+        'courier_key': name, 'name': name, 'confirmed_by': 'owner', 'confirmed_at': START}])],
+        'unified_orders': [order(shipping={'company': name})],
+        'store_drivers': [row(id='driver', name='موصل مستقل', status='active')]})
+    for discover in (False, True):
+        assert run(src.entities(db, 'owner', 'courier', include_unready=discover)) == []
+    assert [r['id'] for r in run(src.entities(db, 'owner', 'store_driver'))] == ['driver']
+
+def test_existing_shipping_settings_supply_identity_without_importing_costs_or_balances():
+    db = DB({'settings': [row(shipping_companies=[
+        {'name': 'SMSA', 'cost': 999, 'balance': 5000}, {'name': 'مندوب المتجر'},
+        {'name': 'DHL', 'active': False}])]})
+    before = deepcopy(db.data)
+    choices = run(src.entities(db, 'owner', 'courier'))
+    assert [(c['id'], c['name']) for c in choices] == [('smsa', 'سمسا')]
+    assert 'cost' not in choices[0] and 'balance' not in choices[0]
+    from operational_balance_service import entity
+    assert run(entity(db, 'owner', 'courier', 'smsa', 'SAR'))['id'] == 'smsa'
+    with pytest.raises(ValueError, match='source_rejected'):
+        run(src.rows(db, 'owner', 'settings'))
+    assert db.data == before
+
+def test_shipping_settings_preserve_existing_native_identity_and_no_discovery_duplicate():
+    db = DB({'settings': [row(shipping_companies=[{'name': 'SMSA'}])],
+        'mz2_shipping_setup_v2': [row(couriers=[{'courier_key':'existing-id', 'name':'سمسا',
+            'salla_carrier_keys':['smsa'], 'confirmed_by':'owner', 'confirmed_at':START}])],
+        'unified_orders': [order(shipping={'company':'SMSA'})]})
+    assert [c['id'] for c in run(src.entities(db, 'owner', 'courier', include_unready=True))] == ['existing-id']
+
+def test_ambiguous_shipping_settings_do_not_guess_an_opening_identity():
+    db = DB({'settings': [row(shipping_companies=[{'name': 'SMSA'}, {'name': 'سمسا'}])]})
+    with pytest.raises(ValueError, match='identity_ambiguous'):
+        run(src.entities(db, 'owner', 'courier'))
 def order(**kw):
     return row(order_number='10', raw_by_source={'salla_direct': {
         'id': '100', 'reference_id': '10', 'created_at': '2026-10-06T01:00:00+00:00',
         'status': 'in_progress', 'currency': 'SAR', 'total': {'amount': '300', 'currency': 'SAR'},
         'items': [{'id': 'line', 'product_id': 'p1', 'quantity': 2}], **kw}})
+
+def test_order_courier_discovery_never_grants_opening_eligibility():
+    db = DB({'unified_orders': [order(shipping={'company': 'شركة من الطلبات'}),
+                               order(shipping={'company': 'شركة من الطلبات'})]})
+    before = deepcopy(db.data)
+    assert run(src.entities(db, 'owner', 'courier')) == []
+    assert 'unified_orders' not in db.reads
+    choices = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert len(choices) == 1
+    assert choices[0]['name'] == 'شركة من الطلبات'
+    assert choices[0]['ready'] is False
+    assert choices[0]['setup_issue'] == 'courier_order_identity_unbound'
+    from fastapi import HTTPException
+    from operational_balance_service import entity
+    with pytest.raises(HTTPException) as rejected:
+        run(entity(db, 'owner', 'courier', choices[0]['id'], 'SAR'))
+    assert rejected.value.detail['code'] == 'operational_mz2_identity_required'
+    assert db.data == before
+
+def test_order_courier_discovery_uses_same_current_shipping_alias_as_reader():
+    db = DB({'mz2_shipping_setup_v2': [row(couriers=[{
+        'courier_key': 'canonical', 'name': 'Approved carrier',
+        'salla_carrier_keys': ['native'], 'confirmed_by': 'owner', 'confirmed_at': START}])],
+        'unified_orders': [order(salla_shipping_current={'company_code': 'native'},
+                                shipping={'company': 'stale'})]})
+    choices = run(src.entities(db, 'owner', 'courier', include_unready=True))
+    assert [c['id'] for c in choices] == ['canonical']
+
+def test_order_courier_discovery_is_owner_scoped_and_bounded(monkeypatch):
+    db = DB({'unified_orders': [dict(order(shipping={'company': 'Other'}), user_id='other')]})
+    assert run(src.entities(db, 'owner', 'courier', include_unready=True)) == []
+    monkeypatch.setattr(src, 'MAX_ROWS', 1)
+    db.data['unified_orders'] = [order(shipping={'company': 'A'}), order(shipping={'company': 'B'})]
+    with pytest.raises(ValueError, match='scope_too_large'):
+        run(src.entities(db, 'owner', 'courier', include_unready=True))
 
 def test_entity_identity_exact_owner_and_no_alias():
     db = DB({'mezan_employees_v2': [row(id='e1', name='A', legacy_id='old'), {'user_id': 'other', 'id': 'e2'}, row(id='e3', status='inactive')]})
@@ -224,6 +337,7 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # A future accidental source fallback must fail the runtime read, even if the
 # production developer also adds it to ALLOWED_COLLECTIONS.
 HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
+    'settings',  # Owner-scoped courier identity projection only; generic reader rejects it.
     'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
@@ -369,14 +483,14 @@ def test_cross_invoice_same_physical_component_rejected_even_after_supplier_chan
 
 def test_custody_reuses_native_employee_identity_and_expenses_native_registry():
     db = HardBoundaryDB({'mezan_employees_v2': [row(id='employee', name='Ahmad', status='active')],
-        'expense_categories': [row(code='custom', name='Native category', status='active'), row(code='salary', name='Reserved', status='active')],
+        'expense_categories': [row(code='custom', name='Native category', status='active', source='operational_balance'), row(code='salary', name='Reserved', status='active')],
         'expense_category_tree': [row(id='tree-only', name='Forbidden')]})
     custody = run(src.entities(db, 'owner', 'employee_custody'))
     assert custody == [{'id': 'employee', 'name': 'Ahmad', 'currency': 'SAR', 'kind': 'employee_custody'}]
     categories = {r['id']: r for r in run(src.entities(db, 'owner', 'operating_expense'))}
     assert {'fuel', 'rent', 'telecom', 'utilities', 'hospitality_food', 'hospitality_drinks', 'subscriptions', 'maintenance', 'office', 'transportation', 'other', 'custom'} <= set(categories)
     assert 'salary' not in categories and 'tree-only' not in categories
-    assert categories['custom']['source'] == 'mz2_category_registry'
+    assert categories['custom']['source'] == 'operational_balance'
     assert 'expense_category_tree' not in db.reads
 
 

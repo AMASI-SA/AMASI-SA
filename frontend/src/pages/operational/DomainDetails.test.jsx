@@ -7,6 +7,10 @@ const section = title => [...host.querySelectorAll('details')].find(node => node
 beforeEach(()=>{global.IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);});
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
 const render = async report => act(async()=>root.render(<DomainDetails report={report}/>));
+test('empty detail sections explain absence instead of rendering blank panels',async()=>{
+ await render({parties:[],obligations:[],summaries:{},details:{}});
+ for(const node of host.querySelectorAll('details')) expect(node.textContent).toContain('لا توجد بيانات مسجلة لهذا القسم');
+});
 
 test('advertising keeps latest daily snapshot and groups month by account and currency using exact cents',async()=>{
  const obligations=[
