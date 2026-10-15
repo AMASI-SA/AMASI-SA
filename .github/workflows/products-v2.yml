@@ -68,6 +68,7 @@ on:
       - "frontend/src/components/products/ProductControlCenter.jsx"
       - "frontend/src/components/products/ProductCreationPanel.jsx"
       - "frontend/src/components/products/ProductCreationOptionsEditor.jsx"
+      - "frontend/src/components/products/ProductCreationOptionsPreview.jsx"
       - "frontend/src/components/products/productCreationOptions.js"
       - "frontend/src/components/products/ProductCreationPanel.test.jsx"
       - "frontend/src/components/products/ProductControlCenterPanel.jsx"

@@ -3,6 +3,7 @@ import asyncio
 from copy import deepcopy
 
 import pytest
+import httpx
 from fastapi import HTTPException
 
 import product_creation_routes as creation
@@ -106,7 +107,7 @@ def test_draft_preview_approval_publish_and_readback(monkeypatch, drop_options):
             raise AssertionError(f"Unexpected provider call: {method} {path}")
 
         async def save(db, *, merchant_id, draft, raw, actor_id):
-            assert draft["options"] == request().model_dump()["options"]
+            assert draft["options"] == creation.normalize_creation_input(request())["options"]
             return {"mezan_product_id": "mpv2_123", "salla_product_id": "123"}
 
         monkeypatch.setattr(creation, "call_salla", provider)
@@ -150,5 +151,112 @@ def test_editing_options_revokes_approval_and_keeps_tenant_isolation():
             await routes["get_creation_draft"](draft["id"], {"id": "owner-2", "role": "owner"})
         assert denied.value.status_code == 404
         assert len(db[DRAFTS].rows) == 1
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("failure,with_image", [
+    (None, True), (None, False), ("applied_timeout", True),
+    ("ignored_condition", True), ("missing_value_id", True), ("ignored_hide", True),
+])
+def test_gift_condition_is_verified_before_sale_and_retry_never_duplicates(monkeypatch, failure, with_image):
+    async def scenario():
+        db = DB()
+        await db.salla_integrations.insert_one({
+            "user_id": "owner-1", "status": "connected", "scope": "products.read_write",
+        })
+        routes = endpoints(db)
+        remote = None
+        calls = []
+        failed = False
+        gift = request(
+            inventory_policy="finished_goods_inventory_not_tracked",
+            image_urls=["https://cdn.example/gift.jpg"] if with_image else [],
+            options=[
+                {"name": "هل تريد إضافة كرت إهداء", "description": "اختر", "type": "choice",
+                 "required": True, "values": ["نعم", "لا بدون كرت إهداء"]},
+                {"name": "كرت الإهداء", "description": "اكتب اللي تبيه على كرت الإهداء",
+                 "type": "text", "required": True,
+                 "condition": {"option_index": 0, "operator": "=", "value": "نعم"}},
+            ],
+        )
+
+        async def provider(db, merchant_id, method, path, **kwargs):
+            nonlocal remote, failed
+            assert merchant_id == "owner-1"
+            calls.append((method, path, deepcopy(kwargs)))
+            if path.startswith("/products/sku/"):
+                return {"data": deepcopy(remote)}
+            if method == "POST" and path == "/products":
+                payload = deepcopy(kwargs["json"])
+                assert payload["status"] == "hidden"
+                assert payload["quantity"] == 0 and payload["unlimited_quantity"] is False
+                remote = {**payload, "id": 123, "type": "service"}
+                remote["options"][0].update(id=101, values=[{"id": 11, "name": "نعم"}, {"id": 12, "name": "لا بدون كرت إهداء"}])
+                remote["options"][1]["id"] = 102
+                if failure == "missing_value_id":
+                    remote["options"][0]["values"][0].pop("id")
+                if failure == "ignored_hide":
+                    remote["status"] = "sale"
+                return {"data": deepcopy(remote)}
+            if method == "GET" and path == "/products/123":
+                return {"data": deepcopy(remote)}
+            if method == "POST" and path == "/products/123/status":
+                status = kwargs["json"]["status"]
+                if failure == "ignored_hide" and not failed:
+                    failed = True
+                    return {"data": deepcopy(remote)}
+                if status == "sale":
+                    assert creation.creation_verification_errors(creation.normalize_creation_input(gift), remote) == []
+                remote["status"] = status
+                return {"data": deepcopy(remote)}
+            if method == "PUT" and path == "/products/options/102":
+                payload = kwargs["json"]
+                assert "values" not in payload  # Existing option/value IDs must survive.
+                assert remote["status"] == "hidden"
+                assert payload["visibility_condition_option"] == 101
+                assert payload["visibility_condition_value"] == 11
+                if failure == "ignored_condition" and not failed:
+                    failed = True
+                    return {"data": deepcopy(remote["options"][1])}
+                remote["options"][1].update(payload)
+                if failure == "applied_timeout" and not failed:
+                    failed = True
+                    raise httpx.ReadTimeout("condition was applied before response timed out")
+                return {"data": deepcopy(remote["options"][1])}
+            if method == "POST" and path == "/products/quantities/bulk":
+                assert remote["status"] == "hidden"
+                assert creation.creation_verification_errors(creation.normalize_creation_input(gift), remote) == []
+                remote["unlimited_quantity"] = True
+                return {"success": True}
+            raise AssertionError(f"Unexpected provider call: {method} {path}")
+
+        async def save(*args, **kwargs):
+            return {"mezan_product_id": "mpv2_123", "salla_product_id": "123"}
+
+        monkeypatch.setattr(creation, "call_salla", provider)
+        monkeypatch.setattr(creation, "_save_created_product", save)
+        draft_id = (await routes["create_draft"](gift, OWNER))["draft"]["id"]
+        await routes["approve_draft"](draft_id, OWNER)
+        if failure:
+            with pytest.raises(HTTPException) as uncertain:
+                await routes["publish_draft"](draft_id, {"confirmation": creation.PUBLISH_CONFIRMATION}, OWNER)
+            assert uncertain.value.detail["code"] == "salla_product_options_uncertain"
+            draft = await db[DRAFTS].find_one({"id": draft_id})
+            assert draft["status"] == "publish_unknown" and draft["salla_product_id"] == "123"
+            assert not any(path == "/products/quantities/bulk" for _, path, _ in calls)
+            assert remote["quantity"] == 0 and remote["unlimited_quantity"] is False
+            if failure != "ignored_hide":
+                assert remote["status"] == "hidden"
+            if failure == "missing_value_id":
+                remote["options"][0]["values"][0]["id"] = 11
+        result = await routes["publish_draft"](draft_id, {"confirmation": creation.PUBLISH_CONFIRMATION}, OWNER)
+        assert result["verified"] is True and result["draft"]["status"] == "published"
+        assert remote["status"] == ("sale" if with_image else "hidden")
+        assert remote["unlimited_quantity"] is True
+        await routes["publish_draft"](draft_id, {"confirmation": creation.PUBLISH_CONFIRMATION}, OWNER)
+        assert sum(method == "POST" and path == "/products" for method, path, _ in calls) == 1
+        if failure == "applied_timeout":
+            assert sum(method == "PUT" for method, _, _ in calls) == 1
 
     asyncio.run(scenario())

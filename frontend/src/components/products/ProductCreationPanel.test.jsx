@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import ProductCreationPanel from "./ProductCreationPanel";
-import { CHILD_SIZE_VALUES } from "./productCreationOptions";
+import { CHILD_SIZE_VALUES, creationOptionsError, removeCreationOption } from "./productCreationOptions";
 import * as api from "../../services/mezanProductsV2";
 
 jest.mock("../../services/mezanProductsV2", () => ({
@@ -52,6 +52,11 @@ async function change(label, value) {
     });
 }
 
+async function check(label) {
+    const wrapper = [...container.querySelectorAll("label")].find((element) => element.textContent.trim() === label);
+    await act(async () => wrapper.querySelector('input[type="checkbox"]').click());
+}
+
 async function submit() {
     await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
 }
@@ -86,7 +91,7 @@ test("creates a service with age sizes and customer text, then previews both", a
     const preview = container.querySelector('section[aria-label="معاينة خيارات العميل"]');
     expect(preview.querySelectorAll("option")).toHaveLength(11);
     expect(preview.textContent).toContain("10 سنوات");
-    expect(preview.querySelector('input[placeholder="يكتب العميل النص هنا"]').disabled).toBe(true);
+    expect(preview.querySelector('input[placeholder="يكتب العميل النص هنا"]').readOnly).toBe(true);
 });
 
 test("editing an approved draft updates its type and options without losing media", async () => {
@@ -104,7 +109,8 @@ test("editing an approved draft updates its type and options without losing medi
     await act(async () => [...container.querySelectorAll("button")].find((element) => element.textContent.includes("منتج محفوظ")).click());
     await click("تعديل المسودة");
     await change("نوع المنتج في سلة", "product");
-    await change("قيم الخيار 1 — كل قيمة في سطر", "S\nM\nL");
+    await click("إضافة قيمة جديدة للخيار 1");
+    await change("قيمة 3 للخيار 1", "L");
     await submit();
 
     expect(api.createProductCreationDraft).not.toHaveBeenCalled();
@@ -121,10 +127,67 @@ test("duplicate choice values block saving and removing an option restores the f
     await click("منتج جديد");
     await click("إضافة قائمة اختيارات");
     await change("اسم الخيار 1", "المقاس");
-    await change("قيم الخيار 1 — كل قيمة في سطر", "S\n S ");
+    await change("قيمة 1 للخيار 1", "S");
+    await change("قيمة 2 للخيار 1", " S ");
     await submit();
     expect(api.createProductCreationDraft).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]').textContent).toContain("قيمتين مختلفتين");
     await click("حذف");
     expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
+test("gift text and its help appear and become required only when the customer chooses yes", async () => {
+    await act(async () => root.render(<ProductCreationPanel />));
+    await click("منتج جديد");
+    await change("اسم المنتج", "هدية مخصصة");
+    await change("SKU فريد", "GIFT-100");
+    await change("السعر", "239");
+    await change("نوع المنتج في سلة", "service");
+    await change("وزن الشحن (كجم)", "0.25");
+    await change("المسار الافتراضي للتنفيذ", "requires_preparation");
+    await change("سياسة مخزون المنتج النهائي", "finished_goods_inventory_not_tracked");
+    await click("إضافة قائمة اختيارات");
+    await change("اسم الخيار 1", "هل تريد إضافة كرت إهداء");
+    await change("الوصف التوضيحي للخيار 1 (اختياري)", "اختر");
+    await change("قيمة 1 للخيار 1", "نعم");
+    await change("قيمة 2 للخيار 1", "لا بدون كرت إهداء");
+    await check("إجابة مطلوبة للخيار 1");
+    await click("إضافة حقل نص");
+    await change("اسم الخيار 2", "كرت الإهداء");
+    await change("الوصف التوضيحي للخيار 2 (اختياري)", "اكتب اللي تبيه على كرت الإهداء");
+    await check("إجابة مطلوبة للخيار 2");
+    await check("شرط ظهور الحقل 2");
+    expect(container.querySelector('button[type="submit"]').disabled).toBe(true);
+    await change("الحقل المرتبط بالخيار 2", "0");
+    await change("قيمة الشرط للخيار 2", "نعم");
+    await submit();
+
+    const options = api.createProductCreationDraft.mock.calls[0][0].options;
+    expect(options[0]).toMatchObject({ description: "اختر", values: ["نعم", "لا بدون كرت إهداء"] });
+    expect(options[1]).toMatchObject({
+        name: "كرت الإهداء", required: true, description: "اكتب اللي تبيه على كرت الإهداء",
+        condition: { option_index: 0, operator: "=", value: "نعم" },
+    });
+    const preview = container.querySelector('section[aria-label="معاينة خيارات العميل"]');
+    expect(preview.querySelector("input")).toBeNull();
+    await change("هل تريد إضافة كرت إهداء · مطلوب", "نعم");
+    expect(preview.querySelector("input").required).toBe(true);
+    expect(preview.textContent).toContain("اكتب اللي تبيه على كرت الإهداء");
+    await change("هل تريد إضافة كرت إهداء · مطلوب", "لا بدون كرت إهداء");
+    expect(preview.querySelector("input")).toBeNull();
+    await click("تعديل المسودة");
+    await submit();
+    expect(api.updateProductCreationDraft.mock.calls[0][1].options).toEqual(options);
+});
+
+test("removing a parent invalidates its conditions and cycles cannot be saved", () => {
+    const options = [
+        { name: "إهداء", type: "choice", required: true, values: ["نعم", "لا"] },
+        { name: "النص", type: "text", required: true, values: [], condition: { option_index: 0, operator: "=", value: "نعم" } },
+    ];
+    expect(creationOptionsError(removeCreationOption(options, 0))).toContain("أكمل شرط الظهور");
+    expect(creationOptionsError([
+        { ...options[0], condition: { option_index: 1, operator: "=", value: "نعم" } },
+        { ...options[0], name: "خيار ثان", condition: { option_index: 0, operator: "=", value: "نعم" } },
+    ])).toContain("حلقة");
 });

@@ -272,6 +272,52 @@ def test_readback_must_confirm_type_options_values_and_required_flags():
     assert creation_verification_errors(draft, raw) == ["product_option_mismatch:المقاس"]
 
 
+def test_gift_description_and_condition_round_trip_and_deferred_references():
+    draft = normalize_creation_input(_request(product_type="service", options=[
+        {"name": "هل تريد إضافة كرت إهداء", "type": "choice", "required": True,
+         "description": " اختر ", "values": ["نعم", "لا بدون كرت إهداء"]},
+        {"name": "كرت الإهداء", "type": "text", "required": True,
+         "description": " اكتب اللي تبيه على كرت الإهداء ",
+         "condition": {"option_index": 0, "operator": "=", "value": "نعم"}},
+    ]))
+    payload = build_salla_product_payload(draft)
+    assert payload["status"] == "hidden"
+    assert payload["quantity"] == 0
+    assert payload["unlimited_quantity"] is False
+    assert payload["options"][1]["description"] == "اكتب اللي تبيه على كرت الإهداء"
+    assert "visibility_condition_option" not in payload["options"][1]
+    raw = {"id": 123, "type": "service", "options": [
+        {**payload["options"][0], "id": 101, "values": [{"id": 11, "name": "نعم"}, {"id": 12, "name": "لا بدون كرت إهداء"}]},
+        {**payload["options"][1], "id": 102, "visibility": "on_condition",
+         "visibility_condition_type": "=", "visibility_condition_option": 101, "visibility_condition_value": 11},
+    ]}
+    assert creation_verification_errors(draft, raw) == []
+    raw["options"][1]["visibility_condition_value"] = 12
+    assert creation_verification_errors(draft, raw) == ["product_option_condition_mismatch:كرت الإهداء"]
+    raw["options"][1]["visibility_condition_value"] = 11
+    raw["options"][1]["description"] = ""
+    assert creation_verification_errors(draft, raw) == ["product_option_mismatch:كرت الإهداء"]
+
+
+@pytest.mark.parametrize("condition", [
+    {"option_index": 1, "value": "نعم"},
+    {"option_index": 9, "value": "نعم"},
+    {"option_index": 0, "value": "قيمة غير موجودة"},
+])
+def test_invalid_condition_references_are_rejected(condition):
+    with pytest.raises(ValueError):
+        normalize_creation_input(_request(options=[
+            {"name": "إهداء", "type": "choice", "values": ["نعم", "لا"]},
+            {"name": "النص", "type": "text", "condition": condition},
+        ]))
+
+
+def test_cyclic_conditions_are_rejected_before_salla_calls():
+    with pytest.raises(ValueError, match="cyclic_product_option_condition"):
+        normalize_creation_input(_request(options=[
+            {"name": "أ", "type": "choice", "values": ["نعم", "لا"], "condition": {"option_index": 1, "value": "نعم"}},
+            {"name": "ب", "type": "choice", "values": ["نعم", "لا"], "condition": {"option_index": 0, "value": "نعم"}},
+        ]))
 def test_image_urls_require_https():
     try:
         normalize_creation_input(_request(

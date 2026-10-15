@@ -4,8 +4,8 @@ This workflow is deliberately one-way and creation-only:
 
 Mezan draft -> preview -> human approval -> explicit publish -> verification.
 
-It never imports a product, updates an existing Salla product, or invokes
-Salla's bulk import endpoint.
+It never imports or edits catalog products. Option references are finalized
+only for the product created by this workflow; Salla bulk import is not used.
 """
 from __future__ import annotations
 
@@ -83,6 +83,14 @@ def _safe_sku(value: Any) -> str:
     return sku
 
 
+class ProductCreationCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    option_index: int = Field(ge=0, le=19)
+    operator: Literal["=", "!="] = "="
+    value: str = Field(min_length=1, max_length=100)
+
+
 class ProductCreationOption(BaseModel):
     """Provider-independent customer fields supported by this release."""
 
@@ -91,6 +99,8 @@ class ProductCreationOption(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     type: Literal["text", "choice"]
     required: bool = False
+    description: str = Field(default="", max_length=1000)
+    condition: ProductCreationCondition | None = None
     values: list[str] = Field(default_factory=list, max_length=100)
 
 
@@ -112,10 +122,39 @@ def normalize_creation_options(options: list[ProductCreationOption]) -> list[dic
                 raise ValueError("invalid_product_option_values")
         elif values:
             raise ValueError("text_option_cannot_have_values")
-        result.append({
+        normalized = {
             "name": name, "type": option.type,
             "required": option.required, "values": values,
-        })
+        }
+        if option.description.strip():
+            normalized["description"] = option.description.strip()
+        if option.condition:
+            normalized["condition"] = {
+                **option.condition.model_dump(),
+                "value": option.condition.value.strip(),
+            }
+        result.append(normalized)
+    for index, option in enumerate(result):
+        condition = option.get("condition")
+        if not condition:
+            continue
+        parent = condition["option_index"]
+        if (
+            parent >= len(result) or parent == index
+            or result[parent]["type"] != "choice"
+            or condition["value"] not in result[parent]["values"]
+        ):
+            raise ValueError("invalid_product_option_condition")
+        seen = {index}
+        current = option
+        while current.get("condition"):
+            parent = current["condition"]["option_index"]
+            if parent in seen:
+                raise ValueError("cyclic_product_option_condition")
+            seen.add(parent)
+            if parent >= len(result):
+                raise ValueError("invalid_product_option_condition")
+            current = result[parent]
     return result
 
 
@@ -269,15 +308,22 @@ def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
                 "type": "select" if option["type"] == "choice" else "text",
                 "required": option["required"],
                 "display_type": "text",
+                **({"description": option["description"]} if option.get("description") else {}),
                 **({"values": [{"name": value} for value in option["values"]]}
                    if option["type"] == "choice" else {}),
             }
             for option in draft["options"]
         ]
+    if any(option.get("condition") for option in draft.get("options") or []):
+        # Salla's conditional references require real option/value IDs. Keep
+        # this new product hidden and at zero stock until those IDs are linked.
+        payload.update(status="hidden", quantity=0, unlimited_quantity=False)
     return payload
 
 
-def creation_verification_errors(draft: dict[str, Any], raw: dict[str, Any]) -> list[str]:
+def creation_verification_errors(
+    draft: dict[str, Any], raw: dict[str, Any], *, conditions: bool = True,
+) -> list[str]:
     """A product ID alone does not prove that customer options were saved."""
     errors = []
     if _text(raw.get("type") or raw.get("product_type")) != (draft.get("product_type") or "product"):
@@ -298,9 +344,75 @@ def creation_verification_errors(draft: dict[str, Any], raw: dict[str, Any]) -> 
             saved.get("type") not in types
             or (saved.get("required") in (True, 1, "1", "true")) != option["required"]
             or saved_names != option["values"]
+            or _text(saved.get("description")) != option.get("description", "")
         ):
             errors.append(f"product_option_mismatch:{option['name']}")
+        if conditions and option.get("condition"):
+            if not _condition_matches(draft, option, saved, by_name):
+                errors.append(f"product_option_condition_mismatch:{option['name']}")
+        elif conditions and saved.get("visibility") not in (None, "always"):
+            errors.append(f"product_option_condition_mismatch:{option['name']}")
     return errors
+
+
+def _condition_payload(
+    draft: dict[str, Any], option: dict[str, Any], by_name: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    condition = option["condition"]
+    parent = by_name[draft["options"][condition["option_index"]]["name"]]
+    value = next(value for value in parent["values"] if _text(value.get("name")) == condition["value"])
+    return {
+        "visibility": "on_condition",
+        "visibility_condition_type": condition["operator"],
+        "visibility_condition_option": int(parent["id"]),
+        "visibility_condition_value": int(value["id"]),
+    }
+
+
+def _condition_matches(draft, option, saved, by_name) -> bool:
+    try:
+        expected = _condition_payload(draft, option, by_name)
+        return all(_text(saved.get(key)) == _text(value) for key, value in expected.items())
+    except (KeyError, TypeError, ValueError, StopIteration):
+        return False
+
+
+async def _apply_salla_creation_conditions(db, *, merchant_id, draft, salla_id):
+    """Link only existing options; never resend values and regenerate variants."""
+    path = f"/products/{quote(salla_id, safe='')}"
+    await call_salla(db, merchant_id, "POST", f"{path}/status", json={"status": "hidden"})
+    response = await call_salla(db, merchant_id, "GET", path)
+    raw = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(raw, dict) or raw.get("status") != "hidden":
+        raise RuntimeError("conditional_product_not_hidden")
+    errors = creation_verification_errors(draft, raw, conditions=False)
+    if errors:
+        raise RuntimeError(", ".join(errors))
+    by_name = {_text(option["name"]): option for option in raw["options"]}
+    for option in draft["options"]:
+        if not option.get("condition"):
+            continue
+        saved = by_name[option["name"]]
+        if _condition_matches(draft, option, saved, by_name):
+            continue
+        try:
+            condition = _condition_payload(draft, option, by_name)
+            option_id = int(saved["id"])
+        except (KeyError, TypeError, ValueError, StopIteration) as exc:
+            raise RuntimeError("salla_option_reference_missing") from exc
+        await call_salla(db, merchant_id, "PUT", f"/products/options/{option_id}", json={
+            "name": option["name"], "type": saved["type"],
+            "required": option["required"], "display_type": "text",
+            "description": option.get("description", ""), **condition,
+        })
+    response = await call_salla(db, merchant_id, "GET", path)
+    raw = response.get("data") if isinstance(response, dict) else None
+    if not isinstance(raw, dict) or raw.get("status") != "hidden":
+        raise RuntimeError("conditional_product_not_hidden")
+    errors = creation_verification_errors(draft, raw)
+    if errors:
+        raise RuntimeError(", ".join(errors))
+    return raw
 
 
 async def _apply_salla_inventory_policy(
@@ -995,6 +1107,25 @@ def make_product_creation_router(
                 ) from exc
 
         salla_id = _text(raw_created.get("id"))
+        has_conditions = any(option.get("condition") for option in locked.get("options") or [])
+        if has_conditions:
+            try:
+                raw_created = await _apply_salla_creation_conditions(
+                    db, merchant_id=context["merchant_id"], draft=locked, salla_id=salla_id,
+                )
+            except (SallaError, httpx.TimeoutException, httpx.NetworkError, RuntimeError) as exc:
+                await db[DRAFTS].update_one(
+                    {"user_id": context["merchant_id"], "id": draft_id},
+                    {"$set": {
+                        "status": "publish_unknown", "salla_product_id": salla_id,
+                        "updated_at": _now(), "last_error": str(exc)[:500],
+                    }},
+                )
+                raise HTTPException(status_code=503, detail={
+                    "code": "salla_product_options_uncertain", "product_created": True,
+                    "salla_product_id": salla_id, "safe_to_retry": False,
+                    "reconciliation_required": True,
+                }) from exc
         try:
             inventory_policy = await _apply_salla_inventory_policy(
                 db,
@@ -1002,6 +1133,16 @@ def make_product_creation_router(
                 salla_product_id=salla_id,
                 inventory_policy=_draft_inventory_policy(locked)["mode"],
             )
+            if has_conditions:
+                target_status = (
+                    inventory_policy["initial_salla_status"]
+                    if raw_created.get("images") else "hidden"
+                )
+                await call_salla(
+                    db, context["merchant_id"], "POST",
+                    f"/products/{quote(salla_id, safe='')}/status",
+                    json={"status": target_status},
+                )
         except (SallaError, httpx.TimeoutException, httpx.NetworkError) as exc:
             await db[DRAFTS].update_one(
                 {"user_id": context["merchant_id"], "id": draft_id},

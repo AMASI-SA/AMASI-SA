@@ -13,6 +13,7 @@ import {
     updateProductCreationDraft,
 } from "../../services/mezanProductsV2";
 import ProductCreationOptionsEditor from "./ProductCreationOptionsEditor";
+import ProductCreationOptionsPreview from "./ProductCreationOptionsPreview";
 import {
     PRODUCT_TYPE_LABELS, creationOptionsError, creationOptionsFromDraft,
     serializeCreationOptions,
@@ -58,6 +59,9 @@ function errorMessage(error) {
         invalid_product_option_values: "كل قائمة تحتاج قيمتين مختلفتين على الأقل.",
         text_option_cannot_have_values: "حقل النص لا يحتوي قيمًا ثابتة.",
         shipping_weight_required: "أدخل وزن الشحن بالكيلوجرام للخدمة المشحونة.",
+        invalid_product_option_condition: "اختر حقل قائمة وقيمة صحيحة لشرط الظهور.",
+        cyclic_product_option_condition: "شروط الظهور لا يمكن أن تعتمد على بعضها في حلقة.",
+        salla_product_options_uncertain: "أُنشئ المنتج، لكن لم يكتمل ربط شروط الحقول. سنصالح إعدادات المنتج الموجود قبل أي إعادة، دون إنشاء نسخة أخرى.",
     };
     if (Array.isArray(detail)) return "راجع بيانات المنتج والخيارات؛ بعض الحقول غير مكتملة أو تتجاوز الحد المسموح.";
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";
@@ -369,15 +373,7 @@ export default function ProductCreationPanel({ onCreated }) {
                                 <div><div className="text-xs text-slate-500">الحالة</div><div className="font-black">{STATUS_LABELS[activeDraft.status] || activeDraft.status}</div></div>
                             </div>
 
-                            {!!activeDraft.options?.length && <section className="space-y-3 rounded-2xl border p-4" aria-label="معاينة خيارات العميل">
-                                <h4 className="font-black">خيارات المنتج وتخصيص العميل</h4>
-                                {activeDraft.options.map((option, index) => <label key={index} className="block space-y-1 text-sm font-bold">
-                                    <span>{option.name} · {option.required ? "مطلوب" : "اختياري"}</span>
-                                    {option.type === "choice"
-                                        ? <select className="h-11 w-full rounded-xl border px-3" defaultValue="" disabled><option value="">اختر {option.name}</option>{option.values.map((value) => <option key={value}>{value}</option>)}</select>
-                                        : <input className="h-11 w-full rounded-xl border px-3" placeholder="يكتب العميل النص هنا" disabled />}
-                                </label>)}
-                            </section>}
+                            {!!activeDraft.options?.length && <ProductCreationOptionsPreview key={activeDraft.id} options={activeDraft.options} />}
                             {activeDraft.status === "published_unverified" && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">أُنشئ المنتج، لكن لم يكتمل التحقق من نوعه وخياراته في سلة. لا تُنشئ نسخة أخرى.</p>}
 
                             {preview && (
