@@ -81,3 +81,46 @@ Next: fresh combined CI, new reviewed intent and rehearsal, guard gates, emulato
 
 Release guard rejected the merge-history candidate: inherited intent history crossed the new baseline. Rebuilt the same source changes by cherry-pick on clean production baseline 231f5714257220cdfe192428275c2bca62e0bd2d, without weakening any guard. Previous PR1370 is superseded by this release branch. No production deployment.
 
+
+## Published verification and emulator acceptance — 2026-10-16
+
+PR1373 merged; deployment commit f174e294d12e2d96f0ba03678c4e4768036bea2d.
+Source A: 21a33af8d99f0bfb8869b057c5a7c6d0c58864d7.
+Intent-only B: a0b335dcf157c5af9378bea6f50fdfa5d31c2626.
+Final source/intent CI and Linux clean-clone rehearsal38805661588 succeeded.
+Emergent /app matched the exact reviewed tree. Adapter initially refused generated
+backend bytecode; one untracked cache directory was preserved outside /app/backend.
+Rebuild with PYTHONDONTWRITEBYTECODE=1 succeeded; no guard/source relaxation.
+prepare and prepublish succeeded, actor store-courier-1373. UI publication started
+2026-10-16 00:04 Arabia Standard Time. The current UI uses a green "Deployment finished"
+marker (not the historical literal "Deployment Succeeded"); a newer marker appeared,
+Live publication identifier changed from88c0fd7 to4c6e3b8, and runtime started anew.
+Do not describe the literal older UI text as observed.
+Guard verify exit0, verified:true, three consecutive full checks; subsequent status active:false.
+Release: rg5-96eeae9285badaa5b06ccfc6f7346cb09e2daa03bfedaa4e52ce16a4d6e53be0.
+Public health independently confirmed exact source and verified identity.
+Production changed by this task: YES, evidenced by the release identity above.
+
+Android emulator5554 / com.amasi.sa.mobile versionCode43: original blocked issue action
+now returned a ready courier label and opened the actual Google PDF viewer. After
+returning to assembly, a fresh order search and print action opened the correct PDF
+again. Recipient fields, courier, order QR/number were visible. No physical printer
+job, QR receipt confirmation, or shipment handoff was performed. No document was sent.
+Customer/order-specific visual evidence remains local outside GitHub, not committed.
+
+Separate existing layout limitation observed: long address text is clipped in the
+installed mobile PDF template. carrierLabelPrint.ts combines formatted address plus
+component fields and uses .row max-height:0.42in; overflow:hidden. This mobile file
+was not modified by this backend release. Both prior internal formatter and new
+shared path call _store_courier_print_data. No claim that long-address layout was fixed.
+No rollback triggered: the original issuance failure is resolved and repeated PDF
+opening passed; the existing layout limitation is disclosed for separate mobile work.
+
+Rollback remains authorized if a regression is established. Revert isolated source
+e2a90eae7e0650fbab732f72f66201e76a01d2f5 and companion test-workflow change as needed
+on latest production, create a new governed source/intent pair and republish through
+all gates. Do not reset production or undo Salla transitions/data as code rollback.
+Prior live source: e34fa4c967d39a22a4e4a1ccb7a998698f194890.
+Local inverse patch git-apply-check passed; SHA256:
+B044674EE52D603D86C47C8412DC6A815FE6CCA9DE87CF342B63B4C64C4362A2.
+This documentation checkpoint is separate from the frozen production release.
