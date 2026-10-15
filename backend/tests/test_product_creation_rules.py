@@ -5,7 +5,9 @@ from product_creation_routes import (
     ProductCreationDraftRequest,
     _apply_salla_inventory_policy,
     build_salla_product_payload,
+    creation_verification_errors,
     normalize_creation_input,
+    _serialize_draft,
 )
 from product_fulfillment_routes import ProductOperationProfileRequest
 from product_fulfillment_rules import inventory_policy_details
@@ -18,6 +20,7 @@ def _request(**overrides):
         "price": 250,
         "description": "خاتم جاهز للشحن",
         "product_type": "product",
+        "weight": 0.25,
         "fulfillment_type": "instant",
         "inventory_policy": "branch_stock_required",
     }
@@ -185,13 +188,142 @@ def test_salla_payload_maps_https_images_without_import_fields():
     assert "bulk_import" not in payload
 
 
-def test_product_type_is_intentionally_bounded_for_first_release():
+def test_service_product_type_is_preserved_in_salla_payload():
+    draft = normalize_creation_input(_request(product_type="service"))
+    payload = build_salla_product_payload(draft)
+    assert payload["product_type"] == "service"
+    assert payload["require_shipping"] is True
+    assert payload["weight"] == 0.25
+    assert payload["weight_type"] == "kg"
+
+
+def test_shippable_service_requires_explicit_weight_before_publish():
+    with pytest.raises(ValueError, match="shipping_weight_required"):
+        normalize_creation_input(_request(product_type="service", weight=None))
+
+
+def test_unsupported_product_types_remain_rejected():
     try:
-        normalize_creation_input(_request(product_type="service"))
+        normalize_creation_input(_request(product_type="digital"))
     except ValueError as exc:
         assert str(exc) == "unsupported_product_type"
     else:
         raise AssertionError("unsupported immutable product type was accepted")
+
+
+@pytest.mark.parametrize("product_type", ["product", "service"])
+def test_creation_carries_customer_text_and_age_choices(product_type):
+    ages = [f"{age} سنة" for age in range(1, 11)]
+    draft = normalize_creation_input(_request(product_type=product_type, options=[
+        {"name": " المقاس ", "type": "choice", "required": True, "values": ages},
+        {"name": "الاسم المطلوب", "type": "text", "required": False},
+    ]))
+    payload = build_salla_product_payload(draft)
+    assert draft["options"][0]["name"] == "المقاس"
+    assert payload["options"][0]["type"] == "select"
+    assert payload["options"][0]["required"] is True
+    assert [value["name"] for value in payload["options"][0]["values"]] == ages
+    assert payload["options"][1] == {
+        "name": "الاسم المطلوب", "type": "text", "required": False,
+        "display_type": "text",
+    }
+
+
+def test_legacy_draft_without_options_still_builds_original_payload():
+    draft = normalize_creation_input(_request())
+    draft.pop("options", None)
+    assert "options" not in build_salla_product_payload(draft)
+
+
+@pytest.mark.parametrize("frozen", [True, False])
+def test_legacy_published_policy_result_can_be_read_and_reconciled(monkeypatch, frozen):
+    monkeypatch.setattr(creation_routes, "PRODUCT_OPERATION_CHOICES_FROZEN", frozen)
+    draft = normalize_creation_input(_request())
+    draft["inventory_policy"] = inventory_policy_details("branch_stock_required")
+    assert _serialize_draft(draft)["inventory_policy"] == (
+        "finished_goods_inventory_not_tracked" if frozen else "branch_stock_required"
+    )
+    assert build_salla_product_payload(draft)["status"] == ("sale" if frozen else "out")
+
+
+@pytest.mark.parametrize("options", [
+    [{"name": " ", "type": "text"}],
+    [{"name": "المقاس", "type": "choice", "values": ["سنة"]}],
+    [{"name": "المقاس", "type": "choice", "values": ["سنة", " سنة "]}],
+    [{"name": "الاسم", "type": "text", "values": ["قيمة"]}],
+    [{"name": "الاسم", "type": "text"}, {"name": " الاسم ", "type": "text"}],
+])
+def test_invalid_options_fail_before_external_creation(options):
+    with pytest.raises(ValueError):
+        normalize_creation_input(_request(options=options))
+
+
+def test_readback_must_confirm_type_options_values_and_required_flags():
+    draft = normalize_creation_input(_request(product_type="service", options=[
+        {"name": "المقاس", "type": "choice", "required": True, "values": ["سنة", "سنتان"]},
+        {"name": "الاسم", "type": "text"},
+    ]))
+    raw = {"id": 123, "type": "service", "options": [
+        {"id": 1, "name": "المقاس", "type": "select", "required": True,
+         "values": [{"id": 10, "name": "سنة"}, {"id": 11, "name": "سنتان"}]},
+        {"id": 2, "name": "الاسم", "type": "text", "required": False, "values": []},
+    ]}
+    assert creation_verification_errors(draft, raw) == []
+    assert creation_verification_errors(draft, {**raw, "options": []}) == ["product_options_mismatch"]
+    assert "product_type_mismatch" in creation_verification_errors(draft, {**raw, "type": "product"})
+    raw["options"][0]["values"].pop()
+    assert creation_verification_errors(draft, raw) == ["product_option_mismatch:المقاس"]
+    raw["options"][0]["values"].append({"id": 11, "name": "سنتان"})
+    raw["options"][0]["required"] = False
+    assert creation_verification_errors(draft, raw) == ["product_option_mismatch:المقاس"]
+
+
+def test_gift_description_and_condition_round_trip_and_deferred_references():
+    draft = normalize_creation_input(_request(product_type="service", options=[
+        {"name": "هل تريد إضافة كرت إهداء", "type": "choice", "required": True,
+         "description": " اختر ", "values": ["نعم", "لا بدون كرت إهداء"]},
+        {"name": "كرت الإهداء", "type": "text", "required": True,
+         "description": " اكتب اللي تبيه على كرت الإهداء ",
+         "condition": {"option_index": 0, "operator": "=", "value": "نعم"}},
+    ]))
+    payload = build_salla_product_payload(draft)
+    assert payload["status"] == "hidden"
+    assert payload["quantity"] == 0
+    assert payload["unlimited_quantity"] is False
+    assert payload["options"][1]["description"] == "اكتب اللي تبيه على كرت الإهداء"
+    assert "visibility_condition_option" not in payload["options"][1]
+    raw = {"id": 123, "type": "service", "options": [
+        {**payload["options"][0], "id": 101, "values": [{"id": 11, "name": "نعم"}, {"id": 12, "name": "لا بدون كرت إهداء"}]},
+        {**payload["options"][1], "id": 102, "visibility": "on_condition",
+         "visibility_condition_type": "=", "visibility_condition_option": 101, "visibility_condition_value": 11},
+    ]}
+    assert creation_verification_errors(draft, raw) == []
+    raw["options"][1]["visibility_condition_value"] = 12
+    assert creation_verification_errors(draft, raw) == ["product_option_condition_mismatch:كرت الإهداء"]
+    raw["options"][1]["visibility_condition_value"] = 11
+    raw["options"][1]["description"] = ""
+    assert creation_verification_errors(draft, raw) == ["product_option_mismatch:كرت الإهداء"]
+
+
+@pytest.mark.parametrize("condition", [
+    {"option_index": 1, "value": "نعم"},
+    {"option_index": 9, "value": "نعم"},
+    {"option_index": 0, "value": "قيمة غير موجودة"},
+])
+def test_invalid_condition_references_are_rejected(condition):
+    with pytest.raises(ValueError):
+        normalize_creation_input(_request(options=[
+            {"name": "إهداء", "type": "choice", "values": ["نعم", "لا"]},
+            {"name": "النص", "type": "text", "condition": condition},
+        ]))
+
+
+def test_cyclic_conditions_are_rejected_before_salla_calls():
+    with pytest.raises(ValueError, match="cyclic_product_option_condition"):
+        normalize_creation_input(_request(options=[
+            {"name": "أ", "type": "choice", "values": ["نعم", "لا"], "condition": {"option_index": 1, "value": "نعم"}},
+            {"name": "ب", "type": "choice", "values": ["نعم", "لا"], "condition": {"option_index": 0, "value": "نعم"}},
+        ]))
 
 
 def test_image_urls_require_https():
