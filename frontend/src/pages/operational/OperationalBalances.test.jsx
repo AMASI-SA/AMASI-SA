@@ -465,6 +465,8 @@ test('write-only cannot navigate to physical stock report',async()=>{
 });
 test('opening explains currency before selection and shows selected currency', async () => {
   await render(<OpeningBalances context={{opening_count: 0}} />);
+  expect(button('له').closest('label')).toBeNull();
+  expect(button('له').closest('[role="group"]').getAttribute('aria-label')).toBe('الاتجاه');
   expect(host.textContent).toContain('اختر الجهة لإظهار عملة الرصيد');
   await input(host.querySelectorAll('select')[0], 'supplier');
   await input(host.querySelectorAll('select')[1], 'supplier1');
@@ -477,6 +479,7 @@ test('draft reports explain empty summaries without pretending zero balances', a
   await render(<OperationalBalances />);
   await click('الأرصدة والتقارير التشغيلية');
   expect(host.textContent).toContain('لم يبدأ الاحتساب بعد');
+  expect(host.textContent).toContain('لا توجد مشتريات مسجلة حتى الآن');
   expect([...host.querySelectorAll('.op-summary strong')].every(e=>e.textContent==='لم يبدأ الاحتساب')).toBe(true);
   expect(api.finish).not.toHaveBeenCalled();
 });
