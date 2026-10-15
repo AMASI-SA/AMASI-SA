@@ -146,3 +146,21 @@ chat prompts remain prohibited by the user.
   acceptance and fresh shared guard/production recheck before preserving A/B
   merge. Materialize official adapter before prepare/prepublish.
 - This documentation checkpoint is outside frozen A/B and must not be deployed.
+
+## Publication started
+
+- Exact-B final checks:29 success /4 appropriate skips /0 failures or pending;
+  CodeQL and required security/build/preflight passed. Host20 clean-clone
+  rehearsal116701766934 passed; artifact12011300143 retains evidence.
+- PR1374 merged to D `ce3c6ffaf3bc445c46d178c04b8765829b6552a9`, tree equals B.
+- /app fast-forward J→D, tracked clean, unrelated files preserved, no bytecode
+  cache found. Official local adapter exit0 in88.78s; exact target identity.
+- Backend identity263041 bytes, SHA256
+  `5fb7f9732b3e623530495a1847e5bbaf2ac444ea935cdd15ec65a1b5b0f6adcd`.
+- Lease owned by `codex-sensitive-logs-1374-05c4b4df7c11`, prepared
+  `2026-10-15T22:33:42.403220+00:00`. Prepare/prepublish exit0.
+- One Re-publish changes / Yes confirmation; NEW Deployment Started
+  Oct16 01:36AM Asia/Riyadh, Publishing in progress.
+- Publication completion remains unverified. Never submit another publish or
+  clear this lease. Wait newer completion then official verify3/statusfalse.
+- No paid platform chat, actual provider credential use, log-history or DB write.
