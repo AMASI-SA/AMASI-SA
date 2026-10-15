@@ -53,7 +53,7 @@ class GateTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as e:
             await receive(self.db, user=self.f.actor, payload=self.payload)
         self.assertEqual(e.exception.status_code,429)
-        control = asyncio.create_task(set_pause(self.db,user=self.f.actor,paused=True,revision=0,reason='emergency'))
+        control = asyncio.create_task(set_pause(self.db,user=self.f.actor,paused=True,revision=1,reason='emergency'))
         await asyncio.sleep(.1)
         self.assertFalse(control.done())
         await asyncio.wait_for(p.wait(),10)
@@ -69,7 +69,7 @@ class GateTests(unittest.IsolatedAsyncioTestCase):
         request = self.f.request_for(invoice)
         request['receipts'][0].update(physical_receipt_id=receipt['id'],physical_source_line_id='physical-line')
         before = await self.db.warehouse_locations.find_one({'id':'location-product'})
-        await set_pause(self.db,user=self.f.actor,paused=True,revision=0,reason='pause')
+        await set_pause(self.db,user=self.f.actor,paused=True,revision=1,reason='pause')
         with self.assertRaises(HTTPException) as e:
             await return_pending(self.db,user=self.f.actor,receipt_id=receipt['id'],source_return_id='return',quantity=1)
         self.assertEqual(e.exception.status_code,423)
@@ -81,12 +81,12 @@ class GateTests(unittest.IsolatedAsyncioTestCase):
             await set_pause(self.db,user={'id':'outsider'},paused=False,revision=1,reason='denied')
         with self.assertRaises(HTTPException):
             await set_pause(self.db,user=self.f.actor,paused=False,revision=0,reason='stale')
-        await set_pause(self.db,user=self.f.actor,paused=False,revision=1,reason='resume')
+        await set_pause(self.db,user=self.f.actor,paused=False,revision=2,reason='resume')
         for _ in range(2):
             self.assertEqual((await self.f.approve(invoice,request)).status_code,200)
         self.assertEqual((await self.db.warehouse_locations.find_one({'id':'location-product'}))['occupancy']['total_quantity'],10)
         self.assertEqual(await self.db.accounting_journal_groups_v2.count_documents({}),1)
-        self.assertEqual(await self.db.mz2_inventory_control_audit.count_documents({}),2)
+        self.assertEqual(await self.db.mz2_inventory_control_audit.count_documents({}),3)
 
     async def test_stale_worker_cannot_start_transaction_after_expiry(self):
         from operational_atomic import operational_owner
@@ -110,10 +110,10 @@ class GateTests(unittest.IsolatedAsyncioTestCase):
         async def current():return actor
         app=FastAPI();router=APIRouter();attach_physical_routes(router,self.db,current);app.include_router(router)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://synthetic.local') as client:
-            self.assertEqual((await client.get('/physical-write-control')).json(),{'paused':False,'revision':0})
-            response=await client.put('/physical-write-control',json={'paused':True,'revision':0,'reason':'HTTP pause'})
+            self.assertEqual((await client.get('/physical-write-control')).json(),{'paused':False,'revision':1})
+            response=await client.put('/physical-write-control',json={'paused':True,'revision':1,'reason':'HTTP pause'})
             self.assertEqual(response.status_code,200,response.text)
-            self.assertEqual(response.json(),{'paused':True,'revision':1})
+            self.assertEqual(response.json(),{'paused':True,'revision':2})
             await self.db.users.insert_one({'id':'staff','role':'staff','created_by':'owner','is_active':True,'accounting_permissions':['accounting.inventory.view']})
             actor.clear();actor.update({'id':'staff'})
             response=await client.put('/physical-write-control',json={'paused':False,'revision':1,'reason':'not owner'})
