@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from urllib.parse import quote
 
 import httpx
@@ -50,7 +50,7 @@ EVENTS = "mezan_product_creation_events_v2"
 PUBLISH_CONFIRMATION = "إنشاء المنتج في سلة"
 REQUIRED_SALLA_SCOPE = "products.read_write"
 EDITABLE_STATUSES = {"draft", "approved"}
-ALLOWED_PRODUCT_TYPES = {"product"}
+ALLOWED_PRODUCT_TYPES = {"product", "service"}
 
 
 def _now() -> datetime:
@@ -83,6 +83,42 @@ def _safe_sku(value: Any) -> str:
     return sku
 
 
+class ProductCreationOption(BaseModel):
+    """Provider-independent customer fields supported by this release."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    type: Literal["text", "choice"]
+    required: bool = False
+    values: list[str] = Field(default_factory=list, max_length=100)
+
+
+def normalize_creation_options(options: list[ProductCreationOption]) -> list[dict[str, Any]]:
+    result = []
+    names: set[str] = set()
+    for option in options:
+        name = option.name.strip()
+        if not name or name.casefold() in names:
+            raise ValueError("invalid_product_option_name")
+        names.add(name.casefold())
+        values = [value.strip() for value in option.values]
+        if option.type == "choice":
+            if (
+                len(values) < 2
+                or any(not value or len(value) > 100 for value in values)
+                or len({value.casefold() for value in values}) != len(values)
+            ):
+                raise ValueError("invalid_product_option_values")
+        elif values:
+            raise ValueError("text_option_cannot_have_values")
+        result.append({
+            "name": name, "type": option.type,
+            "required": option.required, "values": values,
+        })
+    return result
+
+
 class ProductCreationDraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -91,6 +127,7 @@ class ProductCreationDraftRequest(BaseModel):
     price: float = Field(ge=0, le=100000000)
     description: str | None = Field(default=None, max_length=50000)
     product_type: str = Field(default="product", max_length=40)
+    options: list[ProductCreationOption] = Field(default_factory=list, max_length=20)
     category_ids: list[int] = Field(default_factory=list, max_length=50)
     image_urls: list[str] = Field(default_factory=list, max_length=20)
     fulfillment_type: str = Field(max_length=40)
@@ -144,6 +181,7 @@ def normalize_creation_input(payload: ProductCreationDraftRequest) -> dict[str, 
         "price": float(payload.price),
         "description": _text(payload.description) or None,
         "product_type": product_type,
+        "options": normalize_creation_options(payload.options),
         "category_ids": list(dict.fromkeys(payload.category_ids)),
         "image_urls": list(dict.fromkeys(image_urls)),
         "fulfillment_type": fulfillment_type,
@@ -158,6 +196,8 @@ def _serialize_draft(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if result:
         result.pop("warehouse_id", None)
         result.pop("quantity", None)
+        if isinstance(result.get("inventory_policy"), dict):
+            result["inventory_policy"] = result["inventory_policy"].get("mode")
         if (
             result.get("inventory_policy") not in INVENTORY_POLICIES
             and result.get("fulfillment_type") in FULFILLMENT_TYPES
@@ -183,6 +223,8 @@ def _serialize_draft(row: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def _draft_inventory_policy(draft: dict[str, Any]) -> dict[str, Any]:
     value = draft.get("inventory_policy")
+    if isinstance(value, dict):
+        value = value.get("mode")
     if value in INVENTORY_POLICIES:
         return inventory_policy_details(value)
     return inventory_policy_for_fulfillment(draft["fulfillment_type"])
@@ -214,7 +256,45 @@ def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
             }
             for index, url in enumerate(draft["image_urls"])
         ]
+    if draft.get("options"):
+        payload["options"] = [
+            {
+                "name": option["name"],
+                "type": "select" if option["type"] == "choice" else "text",
+                "required": option["required"],
+                "display_type": "text",
+                **({"values": [{"name": value} for value in option["values"]]}
+                   if option["type"] == "choice" else {}),
+            }
+            for option in draft["options"]
+        ]
     return payload
+
+
+def creation_verification_errors(draft: dict[str, Any], raw: dict[str, Any]) -> list[str]:
+    """A product ID alone does not prove that customer options were saved."""
+    errors = []
+    if _text(raw.get("type") or raw.get("product_type")) != (draft.get("product_type") or "product"):
+        errors.append("product_type_mismatch")
+    expected = draft.get("options") or []
+    actual = raw.get("options") or []
+    if not isinstance(actual, list) or len(actual) != len(expected):
+        return errors + ["product_options_mismatch"]
+    by_name = {_text(option.get("name")): option for option in actual if isinstance(option, dict)}
+    if len(by_name) != len(expected):
+        return errors + ["product_options_mismatch"]
+    for option in expected:
+        saved = by_name.get(option["name"], {})
+        types = {"select", "radio"} if option["type"] == "choice" else {"text", "textarea"}
+        values = saved.get("values") or []
+        saved_names = [_text(value.get("name")) for value in values if isinstance(value, dict)] if isinstance(values, list) else []
+        if (
+            saved.get("type") not in types
+            or (saved.get("required") in (True, 1, "1", "true")) != option["required"]
+            or saved_names != option["values"]
+        ):
+            errors.append(f"product_option_mismatch:{option['name']}")
+    return errors
 
 
 async def _apply_salla_inventory_policy(
@@ -558,6 +638,8 @@ def make_product_creation_router(
                 "inventory_and_preparation_are_independent": True,
                 "product_service_applies_to_every_order": True,
                 "allowed_inventory_policies": sorted(INVENTORY_POLICIES),
+                "allowed_product_types": sorted(ALLOWED_PRODUCT_TYPES),
+                "allowed_option_types": ["text", "choice"],
             },
         }
 
@@ -650,6 +732,11 @@ def make_product_creation_router(
                 status_code=422,
                 detail={"code": str(exc)},
             ) from exc
+        # Older clients predate these fields; omission must not erase them.
+        if "options" not in payload.model_fields_set:
+            values["options"] = current.get("options") or []
+        if "product_type" not in payload.model_fields_set:
+            values["product_type"] = current.get("product_type") or "product"
         await _validate_unique_sku(
             db,
             merchant_id=context["merchant_id"],
@@ -943,7 +1030,9 @@ def make_product_creation_router(
             )
             if isinstance(verified_raw, dict) and _text(verified_raw.get("id")):
                 raw_created = verified_raw
-                verified = True
+                errors = creation_verification_errors(locked, verified_raw)
+                verified = not errors
+                verify_error = ", ".join(errors) or None
         except (SallaError, httpx.TimeoutException, httpx.NetworkError) as exc:
             verify_error = str(exc)[:500]
 
@@ -968,7 +1057,8 @@ def make_product_creation_router(
                 "verified": verified,
                 "verify_error": verify_error,
                 "reconciled_after_unknown": reconciled,
-                "inventory_policy": inventory_policy,
+                "inventory_policy": inventory_policy["mode"],
+                "inventory_policy_result": inventory_policy,
             }},
         )
         await _event(
