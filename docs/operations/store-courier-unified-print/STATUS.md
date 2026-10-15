@@ -65,3 +65,16 @@ correction must be assessed separately, not guessed as part of code rollback.
 Rollback triggers: valid courier cannot open its current PDF; a courier PDF
 opens before confirmed Salla completed; wrong order/recipient/carrier appears;
 official-carrier label regression; release identity verification fails.
+
+## Release preparation update 2026-10-15
+
+Source 0b15a6b756aa00c775d7cd1f32a62f398e73f397 passed all active PR checks.
+Shipping replica-set run 38752709990: 461 passed, 1 skipped.
+Production advanced to 231f5714257220cdfe192428275c2bca62e0bd2d (products PR1371).
+Merged that baseline without conflicts; the old candidate intent is superseded.
+A new governed build and intent are required before publication.
+The owner reiterated rollback authorization on any new-code printing regression.
+Rollback implementation target is isolated commit 6b7699d5427253d91919b3a537318cba8d4e207f,
+reverted on latest production, preserving subsequent unrelated work.
+Production changed by this task: no. No lease acquired or publish attempted.
+Next: fresh combined CI, new reviewed intent and rehearsal, guard gates, emulator PDF UAT.
