@@ -1,0 +1,67 @@
+# Sensitive HTTP log redaction — 2026-10-15
+
+- Task: `SENSITIVE-HTTP-LOG-REDACTION-20261015`.
+- User authorized implementation of the separately observed runtime logging fix.
+- Base: production `231f5714257220cdfe192428275c2bca62e0bd2d`.
+- Branch: `codex/redact-sensitive-http-logs-20261015`.
+- State: candidate review completed and findings corrected; required CI pending.
+- Production changed: **no**. No merge, release intent, lease, restart or deployment.
+
+## Finding and boundary
+
+Meta requests include credential query parameters. Global INFO logging emitted
+HTTPX's complete request URLs. An offline MockTransport reproduction confirmed
+that both synthetic token and proof appeared in the original log output while
+the request itself succeeded. No real credentials or runtime logs were copied
+into this task's artifacts.
+
+The new `backend/sensitive_logging.py` wraps existing root and named logger
+handler formatters before provider imports in `backend/server.py`. It sanitizes
+the final rendered output, including exception chains, cached exception text and
+stack information. Requests, structured access-log filter arguments, existing
+formatter behavior, log levels, methods, hosts, paths, statuses, ordinary query
+fields and provider diagnostic codes remain intact. Repeated installation is
+idempotent. OAuth query aliases and percent-encoded key names are covered, as
+are reflected credential fields and bearer values.
+
+Changed source: `backend/sensitive_logging.py`, `backend/server.py`.
+Regression: `backend/tests/test_sensitive_logging.py`.
+CI: `.github/workflows/security-gate.yml` adds the new output contracts plus
+nearby synthetic Meta/TikTok compatibility suites. This status is the fifth file.
+
+## Fresh verification
+
+Use `PYTHONDONTWRITEBYTECODE=1`, `PYTHONPATH=backend`, and `--noconftest`.
+The repository conftest reads a runtime .env; tests here must remain offline.
+
+- Baseline: real HTTPX 0.28.1 with MockTransport confirmed synthetic values
+  present in INFO output and normal HTTP 200/JSON response (exit 0).
+- Focused candidate: `python -B -m pytest --noconftest -q
+  backend/tests/test_sensitive_logging.py` — **40 passed**, exit 0.
+- Changed Python source syntax compiled in memory — passed, exit 0.
+- `git diff --check` — passed, exit 0.
+- Local interpreter: Python 3.12.14; HTTPX 0.28.1, Uvicorn 0.25.0. Other existing
+  local test dependencies differ from the repository lock. Required CI must
+  validate the declared Python 3.11 dependency closure before readiness.
+- Earlier focused attempts exposed a bearer-header redaction gap (corrected)
+  and local missing Uvicorn/provider dependencies. The focused suite now uses
+  the real isolated TikTok callback filter class without loading its unrelated
+  provider package. Those failed attempts are not acceptance evidence.
+- Independent read-only review identified partial-value leakage at punctuation
+  and quoted query delimiters. Confirmed with synthetic inputs and corrected;
+  real HTTPX pagination URL tests now include literal parentheses, semicolons,
+  braces, OAuth code and encoded keys. Quoted field replacements remain stable
+  on repeated sanitization. Review found no other concrete issue. One review
+  cycle completed; final corrected candidate is verified by the focused suite.
+
+## Remaining scope and next safe action
+
+Run required CI and the synthetic provider suites on the exact remote head, and
+update this status and Issue #1006. Do not merge or publish this checkpoint.
+
+Protection covers this web process's configured standard logging handlers.
+Future external logging reconfiguration must call the installer again. This
+does not retroactively alter retained logs or establish coverage for arbitrary
+unlabelled secrets, direct print calls, third-party export systems, or separately
+configured processes. No credential rotation, deletion, provider write, database
+change or paid Emergent chat action is part of this implementation.

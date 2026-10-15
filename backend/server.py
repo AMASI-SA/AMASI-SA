@@ -1,4 +1,8 @@
 """Hesab — accounting backend for Salla-platform analytics."""
+from sensitive_logging import configure_sensitive_logging
+
+configure_sensitive_logging()
+
 from dotenv import load_dotenv
 from pathlib import Path
 from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH, validate_account_password
@@ -4656,7 +4660,6 @@ app.add_middleware(
     },
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 

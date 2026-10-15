@@ -61,6 +61,7 @@ jobs:
             backend/email_otp_policy.py \
             backend/email_otp_security.py \
             backend/excel_upload_security.py \
+            backend/sensitive_logging.py \
             scripts/frontend_release_toolchain.py
       - name: Verify governed frontend toolchain bootstrap contracts
         env:
@@ -86,6 +87,16 @@ jobs:
         run: |
           python -m pytest --noconftest -q \
             backend/tests/test_inherited_security_*.py
+
+      - name: Verify sensitive logging output (offline)
+        run: |
+          python -m pytest --noconftest -q \
+            backend/tests/test_sensitive_logging.py \
+            backend/tests/test_meta_native_integrations_v2.py \
+            backend/tests/test_meta_native_reporting.py \
+            backend/tests/test_meta_management_readiness.py \
+            backend/tests/test_meta_campaign_management.py \
+            backend/tests/test_tiktok_creator_accounts.py
 
   frontend-security:
     name: Frontend dependency and CSP checks
