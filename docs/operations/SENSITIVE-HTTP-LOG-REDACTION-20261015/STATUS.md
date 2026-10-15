@@ -1,7 +1,7 @@
 # Sensitive HTTP log redaction — verified source handoff
 
 - Task: `SENSITIVE-HTTP-LOG-REDACTION-20261015`.
-- Outcome: **fixed in source and verified; not deployed**.
+- Outcome: **fixed in source and verified; publication preparation in progress**.
 - Repository: `AMASI-SA/AMASI-SA`; PR [#1374](https://github.com/AMASI-SA/AMASI-SA/pull/1374).
 - Code branch: `codex/redact-sensitive-http-logs-20261015`.
 - Accepted code/source: `2fbc6a96b2010f78cbb2e1aac94dbf6c4b40c74f`.
@@ -127,3 +127,22 @@ B for the approved source, require exact-B clean-clone/Host20 package rehearsal,
 then the normal one-publish/three-probe guard procedure. Never deploy this source
 using the inherited shipping intent or reuse another task's lease. Paid Emergent
 chat prompts remain prohibited by the user.
+
+## Publication preparation — user requested continuation
+
+- Immutable source A `2fbc6a96b2010f78cbb2e1aac94dbf6c4b40c74f`.
+- Reviewed intent-only B `f75b9db45f48d5a37301fdb06ca6f84c1310e027`, parent A,
+  tree `5692bae267a1c1e3945a3711a249b16e8ea5979f`.
+- PR1374 head is B; backup `codex/sensitive-logs-reviewed-2fbc6a96`.
+- Target `rg5-ddb356568a59c7bf83af43b08ce98f7a7a102b52dff07eb3db76fedcc3cb3837`.
+- Official external candidate validator passed on exact A and frozen B validator
+  was started; exact-B checks and Host20 clean-clone/package rehearsal pending.
+- Shared guard observed inactive, /app HEAD/current production J=f174e294d.
+- Disk was full. Generated Yarn cache moved intact to
+  `/tmp/mezan-sensitive-yarn-cache-vwh0kzcw/yarn`, original-path symlink preserved.
+  Byte total938775369 retained; /app free1175199744 bytes, tracked clean.
+- Original terminal/unsaved editor and unrelated untracked files preserved.
+- No lease, /app source update, merge or publish yet. Next require exact-B
+  acceptance and fresh shared guard/production recheck before preserving A/B
+  merge. Materialize official adapter before prepare/prepublish.
+- This documentation checkpoint is outside frozen A/B and must not be deployed.
