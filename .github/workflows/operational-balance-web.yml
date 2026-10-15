@@ -53,6 +53,8 @@ jobs:
           docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
       - name: Run operational contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py --tb=short --junitxml=operational-backend.xml
+      - name: Preserve shipping summary and calculator contracts
+        run: python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
       - name: Reject missing or skipped tests
         run: |
           python - <<'PY'
@@ -97,6 +99,8 @@ jobs:
           node node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --resetMocks=false
           --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
           '**/MezanV2NavigationShell.employees.test.jsx'
+          '**/MezanV2NavigationShell.test.jsx'
+          '**/ShippingCompanySettings.test.jsx'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
