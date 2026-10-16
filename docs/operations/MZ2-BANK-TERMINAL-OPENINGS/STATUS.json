@@ -30,7 +30,7 @@
     "No native driver-payment or accounting activation changes",
     "Emergent browser tool fails with kernel assets os error3; operator read-only preflight requested"
   ],
-  "next": "Obtain missing Release Guard/Manage Publishing state, then merge exact checked B if Production unchanged; use durable isolated artifact, never build/install in /app. Official publish and verify still required.",
+  "next": "Await Manage Publishing Idle confirmation. Production branch remains726cc701bf120d8aa6f7b055f91ce7463c9626b9; PR1401 CLEAN and15 checks passed. Merge exact checked B only after coordination; archive/restore candidate outside /app then official prepare/prepublish/publish/verify. No business writes.",
   "production_changed": false,
   "source_sha": "abaacdae8183a70be97e723494a59972d8f32f72",
   "intent_sha": "30c4901ed39c70a1f4f4c3b138c9d25a1790a793",
@@ -42,7 +42,7 @@
     "head": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
     "tracked_clean": true,
     "available_mb": 608,
-    "guard": "not supplied",
+    "guard": "active=false (owner terminal output)",
     "manage_publishing": "not supplied"
   }
 }
