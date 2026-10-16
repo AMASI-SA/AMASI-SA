@@ -51,14 +51,47 @@ Use `-m pytest -p snapchat_v2_test_bootstrap` from `backend`.
 Frontend uses matching-lockfile dependencies via a local junction; CI installs
 fresh frozen-lockfile dependencies. Junction is untracked and is not release input.
 
+## Reviewed source checkpoint
+
+Backend PR #1377 merged at `6d11803503e98fcd5727f4e11c2abc38ae3c95a7`
+after all GitHub checks passed. Reviewed branch head:
+`692a68183789cfa33417aa7f06e7a9b242beb410`.
+UI PR #1378 is separate, based on production, with source A
+`75d61325b62ee5e0bd5f0568f8fb8199ec9b362d`. Settings-only guard and its
+backend/frontend tests passed. The UI guard adds only the new extracted UI path.
+
+Full Campaign AI suite: **334 passed, 1 failed**. The failing
+`test_production_runtime_uses_same_prompts_as_live_eval` also fails unchanged
+production base `a0f03a73ec364481e1995d8d35987fd99a85ac8e` (1 failed/1 passed
+in the isolated two-test file); it is not caused by this change.
+
+Read-only live evidence: existing recommendation page generates Snapchat advice,
+but showed zero executable approvals; readiness still lacked hierarchy coverage.
+This is pre-deployment evidence, not validation of the new implementation.
+
+`/app` guard reported active=false. Its HEAD remains the old production base;
+untracked files were preserved. Isolated cloud worktree:
+`/root/unified-marketing-ai-release-20261016`. Node22.23.2/Yarn1.22.22 governed
+two-pass build verified for source A, artifact tree
+`2a8598f897b981603c1e71e99a0da58f91efbbc7464efdae5282f789b0e92f80`, proof hash
+`caa84127994d63c87d65cac9e579229bd9c0cbc66cf2ee75d3bacc7aa5308941`.
+Initial build correctly rejected using the prior release intent; rerun used the
+documented candidate bootstrap mode. Release Readiness run 38908252600 passed
+and exported a candidate intent; clean-clone rehearsal awaits intent commit B.
+
+Production runtime changed: **no**; production Git source changed: **yes**, PR1377.
+This documentation-only checkpoint is not part of source A. Latest release state
+and exact intent/merge SHA must be read from Issue #1006 before continuing.
+
 ## Outstanding / next safe steps
 
-1. Complete semantic evidence binding review and rerun the combined suites.
-2. Review complete diff, run CI and preserve exact checkpoint SHA in Issue #1006.
+1. Compare downloaded CI candidate intent with isolated cloud build, commit only
+   the intent as B on the UI branch, then run the clean-clone adapter rehearsal.
+2. Complete UI review/merge without squashing A/B; preserve exact SHA in Issue #1006.
 3. Follow applicable production protocol v5 for any separately authorized release;
-   no lease, merge, deployment or live AI execution has been performed by this task.
+   no lease, deployment or live AI execution has been performed by this task.
 4. Validate live account readiness and recommendation generation after deployment;
    mock tests alone cannot prove production coverage or provider execution readiness.
 
 Unrelated main-worktree Qoyod changes and operational selection PR #1376 are
-preserved. Existing production lease status has not been inspected in this task.
+preserved. Do not clear another conversation's lease.
