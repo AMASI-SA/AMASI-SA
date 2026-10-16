@@ -114,7 +114,23 @@ class CatalogEligibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(page.json()["truncated"])
         self.assertEqual(loaded, ["catalog-2000"])
         self.assertEqual(self.reads.commands["aggregate"], 1)
-        self.assertEqual(self.reads.commands["find"], 7)
+        self.assertEqual(self.reads.commands["find"], 9)
+        # The two frozen-bundle lookups are batched after eligibility filtering,
+        # so exhausted orders never expand their scope or cause per-order reads.
+        for collection, number_field, snapshot_field in (
+            (PLANS, "order_id", "bundle_snapshots"),
+            (fulfillment.COMPONENT_LIFECYCLES, "order_number", "bundle_intake_snapshots"),
+        ):
+            queries = [row for row in self.reads.finds
+                       if row["find"] == collection and snapshot_field in row["filter"]]
+            self.assertEqual(len(queries), 1)
+            self.assertEqual(queries[0]["filter"], {
+                "user_id": "owner", number_field: {"$in": ["catalog-2000"]},
+                snapshot_field: {"$exists": True},
+            })
+            self.assertEqual(queries[0]["projection"], {
+                "_id": 0, number_field: 1, snapshot_field: 1,
+            })
         self.assertFalse(set(self.reads.commands) - {"find", "aggregate", "getMore", "killCursors"})
         self.assertEqual(self.reads.returned[completion.WORKFLOWS], 1)
         self.assertEqual(await self.on_hand(), stock)
