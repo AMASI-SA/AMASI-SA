@@ -180,12 +180,9 @@ export async function verifyShippingLabel(orderNumber) {
     try {
         const { data } = await api.post(
             `/orders-v2/${encodeURIComponent(normalized)}/shipping-label/refresh`,
-            undefined, { timeout: 15000 },
         );
         return data;
     } catch (error) {
-        const failure = new Error(shippingLabelErrorMessage(error));
-        failure.status = error?.response?.status;
-        throw failure;
+        throw new Error(shippingLabelErrorMessage(error));
     }
 }

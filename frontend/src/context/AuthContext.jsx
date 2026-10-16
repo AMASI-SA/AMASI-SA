@@ -184,8 +184,6 @@ export function AuthProvider({ children }) {
     };
 
     const logout = async () => {
-        // Stop delayed document openings immediately, even if logout's network call stalls.
-        window.dispatchEvent(new Event("mezan:auth-ending"));
         try {
             await api.post("/auth/logout");
         } catch {

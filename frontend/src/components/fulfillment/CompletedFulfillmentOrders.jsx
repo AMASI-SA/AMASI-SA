@@ -50,7 +50,7 @@ export function savedCarrierSnapshot(order) {
 }
 
 export { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
-import { openCurrentCarrierLabel, pendingLabelPrint } from "../../lib/openCurrentCarrierLabel";
+import { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
 
 export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfirmPrint }) {
     const [opening, setOpening] = useState(false);
@@ -64,9 +64,6 @@ export function CarrierLabelControl({ order, permissions, busy, onIssue, onConfi
         return () => { mounted.current = false; };
     }, []);
     const snapshot = order.carrierSnapshot || savedCarrierSnapshot(order);
-    useEffect(() => {
-        if (!permissions.can_print) pendingLabelPrint.cancel(order.order_number);
-    }, [permissions.can_print, order.order_number]);
     const current = order.current_shipment;
     const projected = current?.source === "salla_current_shipping" && !snapshot.verified_action;
     const openCurrent = async () => {
