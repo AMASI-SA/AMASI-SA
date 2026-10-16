@@ -19,6 +19,7 @@ import {
     applyFrozenProductOperationDefaults,
 } from "../../lib/productOperationFreeze";
 import ProductCreationOptionsEditor from "./ProductCreationOptionsEditor";
+import BundleEditor from "./BundleEditor";
 import ProductCreationOptionsPreview from "./ProductCreationOptionsPreview";
 import {
     PRODUCT_TYPE_LABELS, creationOptionsError, creationOptionsFromDraft,
@@ -396,6 +397,7 @@ export default function ProductCreationPanel({ onCreated }) {
                             </div>
 
                             {!!activeDraft.options?.length && <ProductCreationOptionsPreview key={activeDraft.id} options={activeDraft.options} />}
+                            {activeDraft.status === "published" && activeDraft.salla_product_id && <BundleEditor key={activeDraft.salla_product_id} productId={activeDraft.salla_product_id} salePrice={activeDraft.price} />}
                             {activeDraft.status === "published_unverified" && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">أُنشئ المنتج، لكن لم يكتمل التحقق من نوعه وخياراته في سلة. لا تُنشئ نسخة أخرى.</p>}
 
                             {preview && (

@@ -842,15 +842,40 @@ def _available_workflow_pipeline(query: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+async def bundle_parent_line_ids(db, user_id, order_numbers):
+    """Frozen bundle parents belong to bundle requirements, never legacy PDFs."""
+    numbers = list(set(order_numbers))
+    result = defaultdict(set)
+    if not numbers:
+        return result
+    for collection, number_field, snapshot_field in (
+        ("mezan_component_consumption_plans_v1", "order_id", "bundle_snapshots"),
+        ("mezan_component_order_lifecycle_v1", "order_number", "bundle_intake_snapshots"),
+    ):
+        rows = await db[collection].find({"user_id": user_id, number_field: {"$in": numbers},
+            snapshot_field: {"$exists": True}}, {"_id": 0, number_field: 1, snapshot_field: 1}).to_list(len(numbers) + 1)
+        for row in rows:
+            result[_text(row[number_field])].update(str(key) for key, value in row.get(snapshot_field, {}).items() if value)
+    return result
+
+
 async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
     numbers = list(dict.fromkeys(_text(w.get("order_number")) for w in workflows))
     orders = await get_orders(MongoOrderRepository(db), user_id=user_id, order_numbers=numbers)
+    bundle_lines = await bundle_parent_line_ids(db, user_id, numbers)
     approved = {} if historical else await load_local_assignment_workflows(
         db, user_id=user_id, workflows=workflows,
     )
     pairs = []
     for workflow in workflows:
         number = _text(workflow.get("order_number"))
+        if bundle_lines[number]:
+            workflow = dict(workflow)
+            states = {_text(row.get("order_item_id")): dict(row) for row in workflow.get("items", []) if isinstance(row, dict)}
+            for line_id in bundle_lines[number]:
+                states[line_id] = {**states.get(line_id, {}), "order_item_id": line_id,
+                    "supplier_export": False, "bundle_requirements_route": True}
+            workflow["items"] = list(states.values())
         order = orders.get(number)
         mode = workflow.get("completion_mode")
         if order is None or (not historical and (not is_known_review_mode(mode) or (

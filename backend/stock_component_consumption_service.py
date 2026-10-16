@@ -320,6 +320,8 @@ async def _available(db: Any, owner: str, warehouse_ids: list[str]) -> list[dict
     reserved: dict[tuple[str, str, str], Decimal] = {}
     for unit in await _rows(db[UNITS], {"user_id": owner, "state": "reserved"}):
         for allocation in unit.get("allocations", []):
+            if (allocation.get("inventory_identity") or {}).get("item_type") == "product":
+                continue
             key = (allocation["location_id"], allocation["lot_id"], allocation["resource_id"])
             reserved[key] = reserved.get(key, Decimal(0)) + quantity_decimal(allocation["quantity"])
     result, identities = [], set()
@@ -430,6 +432,11 @@ async def reserve_component_stock(db: Any, *, merchant_id: str, order_id: str,
             if comparison < 0:
                 _fail("stale_source_version", plan_id=plan_id)
             if current.get("input_hash") != fingerprint:
+                if current.get("bundle_snapshots") and comparison > 0 and warehouses == current.get("warehouse_ids", []):
+                    from bundle_fulfillment_v2 import amend_order, option_answers
+                    answers = {_text(row.get("order_line_id") or row.get("order_item_id")): option_answers(row) for row in lines}
+                    current = await amend_order(scoped, owner, current, normalized, version, fingerprint, actor_id, answers_by_line=answers)
+                    return await _public(scoped, owner, current)
                 _fail("plan_conflict", plan_id=plan_id)
             if comparison > 0:
                 await scoped[PLANS].update_one({"_id": plan_id}, {"$set": {"source_version": version}})
@@ -441,9 +448,34 @@ async def reserve_component_stock(db: Any, *, merchant_id: str, order_id: str,
                 "created_at": _now(), "actor_id": actor_id}
         available = await _available(scoped, owner, warehouses)
         await scoped[PLANS].insert_one(plan)
+        lifecycle = await scoped["mezan_component_order_lifecycle_v1"].find_one({"user_id": owner, "order_number": order}) or {}
+        intake = lifecycle.get("bundle_intake_snapshots") or {}
         for line in normalized:
             needs_recipe = line["quantity"] > sum(row["quantity"] for row in line["prebuilt_receipts"])
-            product_id, demands = await _recipe(scoped, owner, line, include_demands=needs_recipe)
+            from bundle_catalog_v2 import expand_bundle
+            from bundle_fulfillment_v2 import allocate_leaves, inventory_lots, MAX_ORDER_LEAVES, present_options, filled_options, option_answers
+            selected_options = [{"option_id": k[3:], "value_id": v[3:]} for k, v in line["selected_context"]
+                                if k.startswith("id:") and v.startswith("id:") and v != "id:filled"]
+            captured = intake.get(line["order_line_id"])
+            if line["order_line_id"] in intake and captured is None:
+                bundle = None
+            else:
+                bundle = await expand_bundle(scoped, owner, line["product_id"], variant_id=line["variant_id"],
+                    option_answers=option_answers(next(row for row in lines if _text(row.get("order_line_id") or row.get("order_item_id")) == line["order_line_id"])),
+                    selected_options=selected_options, frozen_definitions=(captured or {}).get("frozen_definitions"),
+                    present_option_ids=present_options(line), filled_option_ids=filled_options(line))
+            if bundle:
+                if line["prebuilt_receipts"]:
+                    _fail("bundle_prebuilt_requires_review")
+                plan.setdefault("bundle_snapshots", {})[line["order_line_id"]] = bundle
+                if sum(len(s["leaves"]) * next(l["quantity"] for l in normalized if l["order_line_id"] == key)
+                       for key, s in plan["bundle_snapshots"].items()) > MAX_ORDER_LEAVES:
+                    _fail("bundle_order_leaf_limit")
+                product_id, demands = bundle["product_id"], []
+                bundle_lots = await inventory_lots(scoped, owner, warehouses)
+            else:
+                product_id, demands = await _recipe(scoped, owner, line, include_demands=needs_recipe)
+                available = await _available(scoped, owner, warehouses)
             prebuilt = await _prebuilt(scoped, owner, plan_id, line, product_id)
             for index in range(1, line["quantity"] + 1):
                 unit_id = _id("component_unit", owner, order, line["order_line_id"], index)
@@ -466,12 +498,19 @@ async def reserve_component_stock(db: Any, *, merchant_id: str, order_id: str,
                             break
                     if remaining:
                         _fail("insufficient_stock", resource_id=demand["resource_id"], missing_quantity=str(remaining))
+                bundle_fields = {}
+                if bundle:
+                    leaves, allocations = await allocate_leaves(scoped, owner, bundle["leaves"], bundle_lots, unit_id=unit_id)
+                    bundle_fields = {"bundle_leaves": leaves, "bundle_revision": bundle["revision"]}
                 await scoped[UNITS].insert_one({"_id": unit_id, "user_id": owner, "plan_id": plan_id, "order_id": order,
                                                "order_line_id": line["order_line_id"], "unit_index": index,
                                                "product_id": product_id, "variant_id": line["variant_id"], "selected_context": line["selected_context"],
                                                "resource_demands": unit_demands, "allocations": allocations,
                                                "prebuilt": proof, "state": "reserved",
-                                               "consumption_id": _id("component_consumption", unit_id, unit_demands), "created_at": _now()})
+                                               "consumption_id": _id("component_consumption", unit_id, unit_demands, bundle_fields),
+                                               **bundle_fields, "created_at": _now()})
+        if plan.get("bundle_snapshots"):
+            await scoped[PLANS].update_one({"_id": plan_id, "user_id": owner}, {"$set": {"bundle_snapshots": plan["bundle_snapshots"]}})
         return await _public(scoped, owner, plan)
     return await operational_owner(db, owner, reserve)
 
@@ -513,8 +552,13 @@ async def _deduct(db: Any, owner: str, allocations: list[dict]) -> None:
         after = deepcopy(before)
         total_taken = Decimal(0)
         for demand in demands:
-            matches = [item for item in after.get("items", []) if item.get("item_type") == "stock_component"
-                       and _text(item.get("resource_id")) == demand["resource_id"] and _lot(item) == demand["lot_id"]]
+            if demand.get("inventory_identity"):
+                from purchase_receiving_service import same_identity
+                matches = [item for item in after.get("items", []) if same_identity(item, demand["inventory_identity"])
+                           and _lot(item) == demand["lot_id"]]
+            else:
+                matches = [item for item in after.get("items", []) if item.get("item_type") == "stock_component"
+                           and _text(item.get("resource_id")) == demand["resource_id"] and _lot(item) == demand["lot_id"]]
             if len(matches) != 1:
                 _fail("reserved_lot_missing")
             item = matches[0]
@@ -565,6 +609,9 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
         pending = [row for row in rows if row["state"] != "consumed"]
         if any(row["state"] != "reserved" for row in pending):
             _fail("unit_released")
+        from bundle_fulfillment_v2 import capture_actual_cost
+        bundle_costs = {row["_id"]: await capture_actual_cost(scoped, owner, row)
+                        for row in pending if row.get("bundle_leaves")}
         await _deduct(scoped, owner, [allocation for row in pending for allocation in row["allocations"]])
         for row in rows:
             if row["state"] == "consumed":
@@ -572,7 +619,8 @@ async def consume_component_stock(db: Any, *, merchant_id: str, order_id: str,
             if row["state"] != "reserved":
                 _fail("unit_released")
             await scoped[UNITS].update_one({"_id": row["_id"], "state": "reserved"},
-                                         {"$set": {"state": "consumed", "consumed_at": _now(), "actor_id": actor_id}})
+                                         {"$set": {"state": "consumed", "consumed_at": _now(), "actor_id": actor_id,
+                                             **({"bundle_leaves": bundle_costs[row["_id"]]} if row["_id"] in bundle_costs else {})}})
         return await _public(scoped, owner, plan, duplicate=duplicate, proof_unit_ids={row["_id"] for row in rows})
     return await operational_owner(db, owner, consume)
 

@@ -264,15 +264,24 @@ def test_evidence_reads_are_batched_and_owner_scoped_on_real_mongo():
             dict(id=f'lot-{index}', user_id=owner, location_id=f'loc-{index}', status='posted')
             for index in range(201) for owner in ('owner', 'other')])
         queries = []
+        hold_queries = []
+        class ObservedHolds:
+            def find(self, query):
+                hold_queries.append(deepcopy(query))
+                return db.mezan_component_consumption_units_v1.find(query)
         class ObservedCollection:
             def find(self, query):
                 queries.append(deepcopy(query))
                 return db.mezan_inventory_receipts_v2.find(query)
         class ObservedDatabase:
             def __getitem__(self, name):
+                if name == 'mezan_component_consumption_units_v1':
+                    return ObservedHolds()
                 assert name == 'mezan_inventory_receipts_v2'
                 return ObservedCollection()
         evidence = await _load_inventory_evidence(ObservedDatabase(), 'owner', locations)
+        assert evidence.pop('bundle_product_holds') == {}
+        assert hold_queries == [{'user_id': 'owner', 'state': 'reserved', 'bundle_leaves': {'$exists': True}}]
         assert len(queries) == 3 and len(evidence) == 201
         assert all(q['user_id'] == 'owner' and len(q['location_id']['$in']) <= 100 for q in queries)
         assert all(r['user_id'] == 'owner' for rows in evidence.values() for r in rows)

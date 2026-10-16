@@ -243,6 +243,7 @@ def install_reviewed_product_sorting() -> None:
         user_id: str,
         limit: int = catalog_module.MAX_REVIEWED_ORDERS,
         reviewed_date: str = "",
+        order_number: str = "",
     ) -> dict[str, Any]:
         assert _ORIGINAL_CONTEXT_LOADER is not None
         context = await _ORIGINAL_CONTEXT_LOADER(
@@ -250,6 +251,7 @@ def install_reviewed_product_sorting() -> None:
             user_id=user_id,
             limit=limit,
             reviewed_date=reviewed_date,
+            order_number=order_number,
         )
         preferences = await _load_preferences(database, user_id)
         context["catalog"] = apply_reviewed_product_sorting(context.get("catalog") or {}, preferences)
