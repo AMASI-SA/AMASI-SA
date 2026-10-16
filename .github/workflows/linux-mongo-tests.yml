@@ -1,0 +1,80 @@
+name: Isolated Linux Mongo exact-SHA tests
+on:
+  push:
+    branches: [codex/linux-mongo-test-environment]
+    paths: ['.github/workflows/linux-mongo-tests.yml', 'scripts/ci/linux_mongo/**', '.github/ci/linux-mongo-request.json']
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full approved source SHA (not a merge ref)
+        required: true
+        type: string
+      tests_json:
+        description: JSON array of explicit backend test selectors
+        required: true
+        type: string
+      minimum_tests:
+        description: Minimum executed JUnit cases
+        required: true
+        default: '1'
+        type: string
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      tests_json:
+        required: true
+        type: string
+      minimum_tests:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  linux-mongo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: AMASI-SA/AMASI-SA
+          ref: ${{ github.event_name == 'push' && github.sha || 'abb24232b8165c9dcc27d42fb2b9e85bfdde8cff' }}
+          path: harness
+          persist-credentials: false
+      - name: Resolve explicit request
+        id: request
+        env:
+          INPUT_SHA: ${{ inputs.source_sha }}
+          INPUT_TESTS: ${{ inputs.tests_json }}
+          INPUT_MINIMUM: ${{ inputs.minimum_tests }}
+        run: python harness/scripts/ci/linux_mongo/resolve_request.py
+      - uses: actions/checkout@v4
+        with:
+          repository: AMASI-SA/AMASI-SA
+          ref: ${{ steps.request.outputs.sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify gate contract
+        run: python harness/scripts/ci/linux_mongo/test_contract.py
+      - name: Execute exact source against network-isolated replica set
+        env:
+          TEST_SOURCE: ${{ github.workspace }}/source
+          TEST_EVIDENCE: ${{ runner.temp }}/linux-mongo-evidence
+          TEST_SHA: ${{ steps.request.outputs.sha }}
+          TEST_PATHS: ${{ steps.request.outputs.tests }}
+          TEST_MINIMUM: ${{ steps.request.outputs.minimum }}
+        run: |
+          mkdir -p "$TEST_EVIDENCE"
+          git -C harness rev-parse HEAD > "$TEST_EVIDENCE/harness-sha.txt"
+          python harness/scripts/ci/linux_mongo/run.py
+      - name: Preserve identity and results even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-mongo-${{ steps.request.outputs.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/linux-mongo-evidence
+          if-no-files-found: error
