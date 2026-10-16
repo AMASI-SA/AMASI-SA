@@ -2,7 +2,7 @@
   "task": "Operational opening catalog correction",
   "base": "ce3c6ffaf3bc445c46d178c04b8765829b6552a9",
   "branch": "codex/operational-opening-clean-v5",
-  "status": "DURABLE_PACKAGE_VERIFIED_WAITING_EMERGENT_TRANSFER",
+  "status": "DEPLOY_VERIFY_PASS_AD_SELECTION_AND_BANK_SETUP_GAPS",
   "production_changed": true,
   "completed": [
     "Explicit operational expense provenance; no deletion or historical balance mutation",
@@ -35,8 +35,8 @@
     "Emergent browser unavailable (os error 3): operator terminal required for release guard and publishing",
     "Order courier discovery limit 20000 retained; large owner catalogs fail closed"
   ],
-  "next_safe_action": "Operator downloads verified artifact to isolated .git directory; inspect existing generated targets before safe restoration. /app source updated to merge, but missing build-meta. No prepare/publish until verified package restored and live operational guards checked.",
-  "production_review": "PR1375 merged as a0f03a73ec364481e1995d8d35987fd99a85ac8e, tree e04c5f54daba62ce13dbaaed6fb665e14d51313d equals reviewed B. Production Git source changed; deployed runtime not changed by this task.",
+  "next_safe_action": "Complete selected-only advertising catalog correction on separate branch codex/operational-ad-selection-fix. Snapchat/Meta explicit mezan_selected; Google/TikTok selection source must be established before filtering. User expects 2 Snapchat, 1 TikTok, 1 Google, 1 Meta; do not hardcode counts or change account activation. Bank setup and ad financial binding remain incomplete; no business writes.",
+  "production_review": "Operator reported deployment completed; supplied official verify output has verified=true and exact deployment a0f03a73ec364481e1995d8d35987fd99a85ac8e/source9b19392f6/release rg5-4edc6dca021fed8603615b94c514efb36602f570087dab22b7ccd35ea039c1e3. Separate current guard status not supplied.",
   "authorization": "Owner requests implementation through deployment for agreed fixes; financial or inventory business writes and writer activation remain excluded.",
   "release": {
     "release_id": "rg5-4edc6dca021fed8603615b94c514efb36602f570087dab22b7ccd35ea039c1e3",
