@@ -46,3 +46,18 @@ def test_changed_source_preserves_days_and_allocations_and_audits_once(change):
     assert result['movements'] == original['movements']
     assert {'code':'salary_source_changed', 'source_id':'salary:e:2026-10-08'} in result['engine']['issues']
     assert reconcile(result, altered, NOW) == result
+
+
+def test_future_revision_end_metadata_does_not_invalidate_saved_days():
+    _, _, sources = source()
+    original = reconcile({'status':'active', 'started_at':START}, sources, NOW)
+    # Legacy saved days have currency only in their obligation.
+    original['engine']['salary_days']['salary:e:2026-10-08'].pop('currency')
+    altered = deepcopy(sources)
+    revisions = altered['employees'][0]['salary_revisions']
+    revisions[0]['effective_to'] = '2026-10-16'
+    revisions.append({'effective_from':'2026-10-17', 'salary':'6200', 'status':'active'})
+    result = reconcile(original, altered, NOW)
+    assert result['engine']['salary_days'] == original['engine']['salary_days']
+    assert not result['engine'].get('salary_conflicts')
+    assert not any(i['code'] == 'salary_source_changed' for i in result['engine']['issues'])

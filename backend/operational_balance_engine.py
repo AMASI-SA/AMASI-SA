@@ -419,7 +419,6 @@ def reconcile(state, sources, as_of):
         proposed = current_salary.get(key)
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]
-                or previous.get("revision") != proposed["revision"]
                 or previous_currency != proposed["currency"]):
             conflicts[key] = {"recorded": deepcopy(previous), "proposed": deepcopy(proposed),
                               "action_required": "review_documented_salary_adjustment"}
