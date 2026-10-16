@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING, ReturnDocument, UpdateOne
 from pymongo.errors import DuplicateKeyError
 
+from supplier_invoice_recovery import register_recovery, require_close_generation, REQUEST_PATTERN
 from supplier_native_invoice_v2 import PurchaseTax, close_payload_hash, post_native_invoice
 from accounting_atomic import atomic_owner
 from accounting_writer_transition import transition_state
@@ -235,6 +236,9 @@ class SupplierReceivingInvoiceLineRequest(BaseModel):
 
 class SupplierReceivingSessionCloseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    client_request_id: str | None = Field(default=None, pattern=REQUEST_PATTERN)
+    close_fence: int | None = Field(default=None, ge=0, strict=True)
 
     accounting_date: date | None = None
     purchase_tax: PurchaseTax | None = None
@@ -3679,6 +3683,8 @@ def make_supplier_receiving_router(
     register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
 
     register_display_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
+    import sys
+    register_recovery(router, db, current_user, sys.modules[__name__])
 
     @router.get("/catalog")
     async def catalog(
@@ -5743,15 +5749,23 @@ def make_supplier_receiving_router(
         effective_actor = {**user, "id": context["actor_id"], "name": _actor_name(user)}
         native_mode = (await transition_state(db, context["merchant_id"]))["state"] == "v2_active"
         request_hash = close_payload_hash(payload)
+        admitted_fence = session.get("close_fence", 0)
+        if (payload.client_request_id is None) != (payload.close_fence is None):
+            raise HTTPException(422, detail={"code": "supplier_invoice_attempt_identity_required"})
 
         async def closed_result(closed: dict[str, Any], tx: Any = None) -> dict[str, Any]:
             kw = {"session": tx} if tx is not None else {}
+            operation = closed.get("close_operation") or {}
+            if payload.client_request_id and operation.get("client_request_id") != payload.client_request_id:
+                raise HTTPException(409, detail={"code": "supplier_invoice_other_close_attempt"})
             saved = await db[SUPPLIER_INVOICES].find_one(
                 {"user_id": context["merchant_id"], "session_id": session_id}, {"_id": 0}, **kw,
             )
             require_invoice_integrity(isinstance(saved, dict), "closed_session_without_invoice")
             if saved.get("mz2_financial_contract") == "mz2_supplier_invoice_v1" and saved.get("mz2_close_payload_hash") != request_hash:
                 raise HTTPException(409, detail={"code": "supplier_native_close_payload_conflict"})
+            if operation.get("request_hash") and operation["request_hash"] != request_hash:
+                raise HTTPException(409, detail={"code": "supplier_invoice_close_payload_conflict"})
             if saved.get("experiment_mode") is not True:
                 saved = await verify_persisted_supplier_invoice(
                     db, user_id=context["merchant_id"], invoice_id=saved.get("id"),
@@ -5805,6 +5819,10 @@ def make_supplier_receiving_router(
                     status_code=409,
                     detail={"code": "supplier_receiving_session_close_conflict"},
                 )
+            require_close_generation(fresh_session, payload, admitted_fence)
+            # Write the same row used by reconciliation before financial work.
+            await db[SESSIONS].update_one({"user_id": merchant_id, "id": session_id},
+                {"$inc": {"close_transaction_fence": 1}}, session=mongo_session)
             now = _now()
             if (
                 fresh_session.get("scan_lock_token")
@@ -6245,6 +6263,8 @@ def make_supplier_receiving_router(
                         "closed_by": context["actor_id"],
                         "closed_by_name": _actor_name(user),
                         "close_note": _text(payload.note) or None,
+                        "close_operation": {"client_request_id": payload.client_request_id,
+                            "request_hash": request_hash, "close_fence": payload.close_fence},
                         "supplier_service_link_status": (
                             "service_simulated" if is_experiment else "service_recorded"
                         ),

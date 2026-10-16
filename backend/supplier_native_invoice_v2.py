@@ -51,6 +51,9 @@ def digest(value):
 def close_payload_hash(payload):
     values = payload.model_dump(mode='json')
     values.pop('note', None)
+    # Transport recovery metadata must not invalidate historic native invoices.
+    values.pop('client_request_id', None)
+    values.pop('close_fence', None)
     return digest(values)
 
 
