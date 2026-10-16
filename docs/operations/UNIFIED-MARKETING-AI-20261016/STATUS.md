@@ -127,3 +127,20 @@ Rollback if a deployed regression is verified: create a new dedicated revert PR
 for this task's source changes (backend1377 and UI1378), retain unrelated later
 changes, build a fresh source/intent pair and pass the same deployment gates.
 Do not reset the production branch or bypass validation with a stale artifact.
+
+## Authorized production deployment in progress
+
+User explicitly authorized publish and read-only readiness/recommendation tests.
+/app was fresh-fetched and fast-forwarded to deployment commit
+4561ef771676142d853104b433fc9dd2897dab46, preserving unrelated untracked files.
+The /app governed adapter build passed after removing generated backend Python
+bytecode (source unchanged). Prepare succeeded for actor
+unified-marketing-ai-20261016 at 2026-10-16T13:48:14.794693+00:00, with the final
+rg5-763513961fc3a4c3f2fba1d42935246388d0777a7268478c10bdc0808278bbf0 identity.
+Prepublish exited 0. Emergent Re-publish changes and its confirmation were
+clicked. Prior visible version: Publish 100, 9eed1c2, Oct16 15:02 Saudi.
+Deployment is not yet verified. Lease remains owned by this task; do not clear.
+Next: wait for newer explicit Deployment Succeeded, run production guard verify
+against https://mezansalla.com, require three exact probes and inactive status,
+then test Snapchat readiness and recommendation generation without approving or
+executing advertising changes.
