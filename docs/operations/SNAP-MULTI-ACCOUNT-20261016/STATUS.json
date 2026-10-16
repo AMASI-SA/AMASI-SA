@@ -1,8 +1,8 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
   "state": "native_sar_financial_tests_passed_not_deployed",
-  "branch": "codex/snapchat-native-financial-readiness-20261016",
-  "production_base": "1ac8b530b7238cbbb985e770019dc897f158eb13",
+  "branch": "codex/snapchat-native-financial-integrated-20261016",
+  "production_base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
     "Enabled accounts only; zero spend remains enabled",
@@ -19,7 +19,8 @@
     "diff_check": "exit 0",
     "prior_environment_failure": "7 legacy HTTP integration tests require configured disposable service URL; no URL was configured, so requests failed locally with MissingSchema before network. Excluded from local unit scope; no production registration performed.",
     "attribution_regression": "61 passed, 1 skipped across account scope, attribution readiness, period, entity and timezone suites; exit 0",
-    "native_financial_backend": "139 passed, exit 0; settings, management, account selection, AI profit gate and monthly goal"
+    "native_financial_backend": "139 passed, exit 0; settings, management, account selection, AI profit gate and monthly goal",
+    "independent_ai_review": "No blocking defect; AI routes through governed management; 48 AI guard tests passed and106settings/management passed"
   },
   "live_read_only_evidence": "Exactly two Mezan-selected connected Snapchat accounts: Saudi/SAR/Asia-Riyadh and Self Service/USD/America-Los_Angeles; other seven disabled.",
   "production_changed": true,
