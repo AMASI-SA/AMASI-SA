@@ -4,6 +4,11 @@ import CustomerExchanges from './CustomerExchanges';
 import {operationalApi as api,requestId} from './api';
 jest.mock('./api',()=>({operationalApi:{context:jest.fn(),customerExchanges:jest.fn(),movements:jest.fn(),entities:jest.fn(),exchangeOrder:jest.fn(),saveExchange:jest.fn(),returnShippingQuote:jest.fn()},requestId:jest.fn(),messageFor:e=>e.response?.data?.detail?.message||'خطأ في API'}));
 let host,root;const scope='a'.repeat(64);
+test('empty exchange register is explicitly explained without creating records',async()=>{
+ await act(async()=>root.render(<CustomerExchanges/>));
+ expect(host.textContent).toContain('لا توجد استبدالات مسجلة حتى الآن');
+ expect(api.saveExchange).not.toHaveBeenCalled();
+});
 const row={id:'case1',order_number:'1001',purchase_status:'pending',items:[{id:'a',name:'منتج أ',quantity:2,remaining_to_buy:2}],shipping:{id:'carrier',name:'شركة الشحن',amount:'28.75',status:'pending',reference:''},purchases:[],contributions:[],summary:{expected_products:'100.00',confirmed_products:'0.00',shipping:'28.75',customer_contribution:'0.00',net_cost:'128.75'}};
 const field=name=>[...host.querySelectorAll('.op-field')].find(l=>l.querySelector('span')?.textContent===name).querySelector('input,select');
 const input=async(name,value)=>act(async()=>{const e=field(name);Object.getOwnPropertyDescriptor(e.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event(e.tagName==='SELECT'?'change':'input',{bubbles:true}));});

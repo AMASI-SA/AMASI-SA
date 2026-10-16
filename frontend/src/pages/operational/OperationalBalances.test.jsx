@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { OpeningBalances } from './OpeningBalances';
+import { OpeningBalances, EntityPicker } from './OpeningBalances';
 import DailyMovementsComponent from './DailyMovements';
 import {pendingMovementKey} from './pendingMovementStorage';
 const DailyMovements = props => <DailyMovementsComponent storageScope="test-owner:test-actor" {...props}/>;
@@ -462,4 +462,54 @@ test('stock navigation uses reports permission and reads canonical stock only wh
 });
 test('write-only cannot navigate to physical stock report',async()=>{
  await render(<OperationalBalances/>);expect(button('المخزون المتاح')).toBeUndefined();expect(api.inventoryAvailability).not.toHaveBeenCalled();
+});
+test('opening explains currency before selection and shows selected currency', async () => {
+  await render(<OpeningBalances context={{opening_count: 0}} />);
+  expect(button('له').closest('label')).toBeNull();
+  expect(button('له').closest('[role="group"]').getAttribute('aria-label')).toBe('الاتجاه');
+  expect(host.textContent).toContain('اختر الجهة لإظهار عملة الرصيد');
+  await input(host.querySelectorAll('select')[0], 'supplier');
+  await input(host.querySelectorAll('select')[1], 'supplier1');
+  expect(host.textContent).toContain('عملة الرصيد: SAR');
+  expect(api.opening).not.toHaveBeenCalled();
+});
+test('draft reports explain empty summaries without pretending zero balances', async () => {
+  api.context.mockResolvedValue({status:'draft',permissions:{manage:true,move:true,reports:true}});
+  api.reports.mockResolvedValue({parties:[],summaries:{},issues:[],details:{}});
+  await render(<OperationalBalances />);
+  await click('الأرصدة والتقارير التشغيلية');
+  expect(host.textContent).toContain('لم يبدأ الاحتساب بعد');
+  expect(host.textContent).toContain('لا توجد مشتريات مسجلة حتى الآن');
+  expect([...host.querySelectorAll('.op-summary strong')].every(e=>e.textContent==='لم يبدأ الاحتساب')).toBe(true);
+  expect(api.finish).not.toHaveBeenCalled();
+});
+test('draft purchase message distinguishes setup from missing permission', async () => {
+  api.context.mockResolvedValue({status:'draft',permissions:{manage:true,move:true,reports:true}});
+  await render(<OperationalBalances />);
+  await click('شراء المخزون');
+  expect(host.textContent).toContain('شراء المخزون متاح بعد إنهاء الأرصدة الافتتاحية');
+  expect(host.textContent).not.toContain('لا تتوفر صلاحية للمشتريات التشغيلية');
+  expect(api.inventoryCatalog).not.toHaveBeenCalled();
+});
+
+test('connected advertising account is visible but cannot bypass missing financial binding', async()=>{
+ api.entities.mockResolvedValue({items:[{id:'unbound:meta',name:'Meta account',currency:'SAR',ready:false,settings_complete:false}]});
+ await render(<EntityPicker kind="ad_account" value="" onChange={jest.fn()}/>);
+ const option=host.querySelector('option[value="unbound:meta"]');
+ expect(option.textContent).toContain('Meta account');expect(option.disabled).toBe(true);
+ expect(host.textContent).toContain('تأكيد ربطه');
+ expect(api.opening).not.toHaveBeenCalled();expect(api.movement).not.toHaveBeenCalled();
+});
+
+test('empty bank picker explains order identity versus balance identity without creating records',async()=>{
+ api.entities.mockResolvedValue({items:[]});
+ await render(<EntityPicker kind="bank" value="" onChange={jest.fn()}/>);
+ expect(host.textContent).toContain('ظهور البنك في الطلبات لا يربطه تلقائيًا بالرصيد');
+ expect(api.addEntity).not.toHaveBeenCalled();
+});
+
+test('opening explains separate quantity and valuation inventory path',async()=>{
+ await render(<OpeningBalances context={{opening_count:0}} onFinished={jest.fn()}/>);
+ expect(host.textContent).toContain('لا تُكرر قيمته هنا');
+ expect(api.opening).not.toHaveBeenCalled();
 });
