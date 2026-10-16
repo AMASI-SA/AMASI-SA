@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "GOOGLE_PERIODIC_REVIEWED_INTENT_CI_RUNNING_PLATFORM_LOGIN_REQUIRED",
-  "updated_at_utc": "2026-10-16T22:43:35.502Z",
+  "status": "GOOGLE_PERIODIC_RELEASE_READY_WAITING_OTHER_OWNER_PUBLICATION",
+  "updated_at_utc": "2026-10-16T23:11:28.816Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Complete exact B CI/CodeQL and clean adapter. Platform login required before publication; after authentication recheck Production ref and actual guard to avoid other releases/leases. Merge only exact current-base reviewed B, actual /app rehearsal, prepare/prepublish, single toolbar republish, three exact public probes, UI and periodic-cycle acceptance. Do not reuse obsolete intents.",
+  "next_safe_action": "Wait for smart-bundles owner to complete current publication and close its own active lease. Recheck actual guard inactive and remote Production still J c03c9df22d07a9a99984b02ab134763b0ae600a8; then exact B merge, actual adapter, own prepare/prepublish, single toolbar republish, exact3 public probes and live UI/periodic acceptance. Never clear mz2-smart-bundles lease.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,7 +450,7 @@
     }
   },
   "completion_followup": {
-    "status": "REVIEWED_INTENT_B_CI_RUNNING_PLATFORM_LOGIN_REQUIRED",
+    "status": "ALL_31_B_CI_PASS_WAITING_OTHER_OWNER_PUBLICATION",
     "branch": "codex/google-periodic-current-prod-20261016",
     "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
     "scope": [
@@ -502,7 +502,12 @@
     "reviewed_B": {
       "intent_only_diff_verified": true,
       "readiness_run": 38977371812,
-      "status": "IN_PROGRESS; no known failure at checkpoint"
+      "status": "PASS",
+      "all_latest_check_contexts": 31,
+      "non_success_or_skip": 0,
+      "canonical_CodeQL": "success;0 annotations",
+      "clean_host20_adapter_job": 117230349227,
+      "clean_host20_adapter": "PASS;2026-10-16T22:44:09Z through22:46:20Z"
     },
     "superseded_pr": 1367,
     "superseded_pr_state": "closed unmerged; preserved source0723, obsolete old-base intent must not deploy",
@@ -517,9 +522,18 @@
     },
     "authentication": {
       "editor_signed_in_verified": true,
-      "emergent_platform": "Still shows signed-out methods after secure request timed out; no sign-in success claimed",
-      "credentials_read_or_logged": false
+      "emergent_platform_signed_in_verified": true,
+      "user_confirmed_done": true,
+      "paid_project_chat_requests": 0
     },
-    "merged": false
+    "merged": false,
+    "other_release": {
+      "actor": "mz2-smart-bundles",
+      "guard_active": true,
+      "actual_app_head": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
+      "platform_started": "Oct17 02:03 Saudi",
+      "publication_observed_in_progress": true,
+      "other_lease_modified": false
+    }
   }
 }
