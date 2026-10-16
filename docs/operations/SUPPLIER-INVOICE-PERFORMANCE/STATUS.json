@@ -1,0 +1,73 @@
+{
+  "task_id": "SUPPLIER-INVOICE-PERFORMANCE",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/supplier-invoice-performance-20261010",
+  "base_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
+  "state": "ready_for_draft_owner_review",
+  "production_changed": false,
+  "merge": "not_authorized_not_done",
+  "release_intent": "not_authorized_not_done",
+  "deploy_ota": "not_authorized_not_done",
+  "verification": {
+    "focused_financial_native_display_pdf_suite": "162 passed, 0 skipped, exit 0",
+    "latest_image_index_suite_after_stream_chunk_and_font_lock": "27 passed, exit 0",
+    "real_native_baseline_current_save_profiles": "6 passed, exit 0",
+    "pdf_benchmark": "exit 0; 1/10/50 products, unique/repeated/missing images",
+    "diff_check": "exit 0",
+    "display_ci_followup": "149 passed, 0 skipped, exit 0; complete display CI list plus 6 native save profiles, 134.28s",
+    "boundary_and_index_focused": "2 passed, 26 deselected, exit 0; original financial hashes preserved"
+  },
+  "evidence": [
+    "REPORT.md",
+    "pytest.xml",
+    "pdf-benchmark.json",
+    "save-profile.txt",
+    "display-ci-followup.xml"
+  ],
+  "limitations": [
+    "No Production measurement or Android installed-device verification",
+    "Total save wall time improvement is not established; proven repeated index DDL reduction 36 to 12 including replay",
+    "Optional image deadline may omit uncached photos; cache has no eviction policy"
+  ],
+  "next_safe_action": "Owner reviews Draft PR #1320 and refreshed CI; no merge, deployment, OTA, or release intent",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1320",
+  "build44_compatibility": {
+    "recorded_on": "2026-10-16",
+    "branch": "codex/supplier-invoice-release-20261017",
+    "base_source_a": "f603b4ef8fd3c3a4238b5aafb7ae4f6fa73d5bba",
+    "production_base": "8c9ef8cd96bcef0f3b50c7c7928dad99698ba279",
+    "status": "LOCAL_PASS_REMOTE_CI_PENDING",
+    "production_changed": false,
+    "remote_ci": "pending new Draft PR",
+    "merge_release": "wait Android first release handoff and current Production verification",
+    "ledger": "Issue1006 fetch failed Transport closed; coordinator handling continuity",
+    "fresh_evidence": [
+      "BUILD44-COMPATIBILITY.md",
+      "build44-preservation.json",
+      "build44-pdf-benchmark.json",
+      "build44-auth.xml",
+      "build44-compatibility.xml"
+    ],
+    "results": {
+      "core": "135 passed, 0 failed, 0 skipped, exit 0, 138.29s",
+      "authorization": "16 passed, 0 failed, 0 skipped, exit 0, 21.10s",
+      "benchmark": "completed offline synthetic, 1/10/50 products",
+      "source_preservation": "PASS",
+      "diff_check": "PASS"
+    }
+  },
+  "current_release": {
+    "recorded_on": "2026-10-16",
+    "branch": "codex/supplier-performance-integrated-20261016",
+    "base": "1ac8b530b7238cbbb985e770019dc897f158eb13",
+    "state": "INTEGRATED_SOURCE_PENDING_FRESH_CI_AND_RELEASE",
+    "authorization": "owner authorized deployment and reversible code rollback",
+    "production_changed_by_this_task": false,
+    "superseded_frozen_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1384",
+    "superseded_head": "8bd307ff8e9f3bb6d665f791b02fb3539e5503fd",
+    "reason": "Production advanced through PR1397, including supplier option refresh PR1395; preserve all current changes. No frozen intent from earlier candidates reused.",
+    "ready_shipping": "excluded; external conditional status mutation remains unproven",
+    "verification": "Prior #1391 source passed 14/14 workflows. Integrated tests pending; runtime performance files unchanged. Current CI includes PR1395 refresh regression.",
+    "next_safe_action": "Fresh integrated CI and rollback proof, await release owner handoff and inactive guard, then new governed source/intent build."
+  }
+}

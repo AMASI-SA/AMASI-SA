@@ -114,7 +114,7 @@ async def test_exact_amount_actor_tenant_readback_and_presentation_source(env, m
     reread=await http.get('/supplier-receiving-v1/invoices/'+inv['id']);assert reread.status_code==200
     assert reread.json()['supplier_invoice']['total_halalas']==total
     captured=[]
-    def render(document):
+    def render(document, **kwargs):
         captured.append(deepcopy(document))
         return b'synthetic-presentation-output'
     monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
@@ -132,7 +132,7 @@ async def test_presentation_rereads_saved_invoice_and_ignores_independent_draft_
     await db[r.SUPPLIER_INVOICES].update_one({'id':iid},{'$set':{'lines.0.product_name':'Persisted after commit'}})
     persisted=await db[r.SUPPLIER_INVOICES].find_one({'id':iid},{'_id':0})
     captured=[]
-    def render(document): captured.append(deepcopy(document));return b'presentation-only'
+    def render(document, **kwargs): captured.append(deepcopy(document));return b'presentation-only'
     monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
     response=await http.get('/supplier-receiving-v1/invoices/'+iid+'/pdf',params={
         'total_halalas':1,'supplier_id':'wrong-draft-supplier','invoice_number':'DRAFT','lines':'[]'})
@@ -144,7 +144,7 @@ async def test_presentation_rereads_saved_invoice_and_ignores_independent_draft_
 
 async def test_missing_or_foreign_invoice_never_reaches_presentation_generator(env,monkeypatch):
     db,http,_=env;captured=[]
-    def render(document):captured.append(document);return b'presentation-only'
+    def render(document, **kwargs):captured.append(document);return b'presentation-only'
     monkeypatch.setattr(r,'generate_supplier_invoice_pdf',render)
     await db[r.SUPPLIER_INVOICES].insert_one({'id':'foreign','user_id':'other-merchant','supplier_approved_by':'employee'})
     for iid in ['missing','foreign']:
@@ -158,7 +158,7 @@ async def test_presentation_failure_does_not_change_posted_invoice_or_ledger(env
     before_invoice=await db[r.SUPPLIER_INVOICES].find_one({'id':iid})
     before_ledger=await db.general_ledger.find({}).sort('id',1).to_list(10)
     before_session=await db[r.SESSIONS].find_one({'id':s['id']})
-    def fail(_document):raise RuntimeError('synthetic-presentation-failure')
+    def fail(_document, **kwargs):raise RuntimeError('synthetic-presentation-failure')
     monkeypatch.setattr(r,'generate_supplier_invoice_pdf',fail)
     with pytest.raises(RuntimeError,match='synthetic-presentation-failure'):
         await http.get('/supplier-receiving-v1/invoices/'+iid+'/pdf')
