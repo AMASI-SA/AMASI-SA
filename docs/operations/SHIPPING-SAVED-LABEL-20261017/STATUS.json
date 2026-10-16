@@ -2,9 +2,9 @@
   "task": "SHIPPING-SAVED-LABEL-20261017",
   "branch": "codex/shipping-saved-label-only-20261017",
   "base": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
-  "state": "WIP - local print and nested-label ingestion verified; production arrival evidence pending",
-  "behavior": "External public print reads canonical saved shipping.label_url with no provider fallback. Merchant courier and issuance provider helper retained. Missing label returns immediately. Also extract nested shipping.shipment.label without overriding top-level shipment history; exclude placeholder, return and conflicting carrier.",
-  "verification": "241 passed, 151 skipped (isolated Mongo replica set unavailable), exit 0; git diff --check exit 0. Top-level and nested label arrival -> printable -> sparse retention tested. Live delivery latency and persistence-retry reliability not established.",
+  "state": "Parallel Android-only candidate implemented; release/device validation pending",
+  "behavior": "Legacy refresh and web remain unchanged. New POST /fulfillment-v2/completed/{order}/carrier-label/refresh-saved reads canonical saved label only. Durable verified shipping inbox retries local persistence, retains invalidations/cancellation fences, performs no provider lookup or full-order replay. Android candidate persists waiting intent and polls new endpoint only.",
+  "verification": "311 passed, 151 skipped (isolated replica-set Mongo unavailable), pytest exit0 across 11 affected backend suites. Legacy test files restored exactly to production base and pass unchanged. New opt-in route/permission, delayed-label, retry/crash/cancellation and duplicate-worker tests pass.",
   "test_files": [
     "test_shipping_saved_label_print.py",
     "test_shipping_print_legacy_path.py",
@@ -12,15 +12,18 @@
     "test_shipping_label_current_guard.py",
     "test_shipping_snapshot_bootstrap.py",
     "test_store_courier_unified_print.py",
-    "test_salla_current_shipping.py"
+    "test_salla_current_shipping.py",
+    "test_shipping_label_inbox.py"
   ],
   "risks": [
-    "User requires reliable arrival, not only fast missing-label response",
-    "Webhook capture records persistence failures while acknowledging; durable retry not established",
-    "Legacy provider tests characterize private helper; public external print and ingestion use separate database-backed tests."
+    "Live webhook timing/device viewer behavior unverified",
+    "Backend must be deployed before new Android candidate; new endpoint intentionally has no legacy fallback",
+    "No lease, production merge, deployment or APK build performed"
   ],
-  "next": "Finish independent review and inspect production event evidence / ingestion retry before release. Do not merge or deploy PR1404 (obsolete order-details-only design). Follow AGENTS protocol v5 for any release.",
+  "next": "Finish independent review, remote CI incl real Mongo and Android candidate tests. Deploy backend through AGENTS v5, then Android release task builds isolated pilot version/channel. Retain old endpoint until pilot proven.",
   "production_changed": false,
   "release_guard": "not prepared",
-  "deployment": "not attempted"
+  "deployment": "not attempted",
+  "web_candidate": "Not activated. Optional candidate preserved remotely on codex/web-pending-label-candidate-20261017; final frontend diff vs production base is empty.",
+  "android_branch": "AMASI-SA/amasi-mobile codex/pending-carrier-print-20261017"
 }

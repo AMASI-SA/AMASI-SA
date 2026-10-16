@@ -1,7 +1,4 @@
-"""Retained provider/courier helper contract; external public printing is local.
-
-See test_shipping_saved_label_print.py for the public saved-label contract.
-"""
+"""Print-only contract: synthetic provider data, no network or production writes."""
 from copy import deepcopy
 import os
 import uuid
@@ -75,15 +72,6 @@ async def setup(monkeypatch, request):
 
     def forbidden(*args, **kwargs):
         pytest.fail("print called a stale guard, persistence, sync, or issue path")
-    # HTTP tests isolate the canonical DTO read; saved-label tests use real storage.
-    from types import SimpleNamespace
-    async def saved_order(*args, **kwargs):
-        carrier = state["order"].get("shipping", {})
-        return SimpleNamespace(shipping=SimpleNamespace(
-            company=carrier.get("company_name"), company_code=carrier.get("company_code"),
-            shipment_id="200", status="created", tracking_number="CURRENT-AWB",
-            label_url=CURRENT["label_url"], tracking_url=None))
-    monkeypatch.setattr("order_engine.service.get_order", saved_order)
     monkeypatch.setattr(shipping, "call_salla", provider)
     for name in ("_stale_label", "_persist_verified_snapshot", "_best_effort_resync",
                  "issue_shipping_label", "_ensure_order_completed", "operational_owner"):
@@ -103,7 +91,7 @@ async def dump(db):
 async def test_smsa_uses_current_provider_label_despite_every_local_identity_difference(setup):
     db, state = setup
     before = await dump(db)
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_url"] == CURRENT["label_url"]
     assert result["shipment_id"] == "200" and result["tracking_number"] == "CURRENT-AWB"
     assert await dump(db) == before
@@ -116,7 +104,7 @@ async def test_store_courier_uses_legacy_formatter_without_shipment_or_clock_gua
         "address": {"address_line": "Current address"}}
     state["order"]["shipments"] = [{**CURRENT, "ship_to": {"address_line": "OLD address"}}]
     before = await dump(db)
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_type"] == "store_courier"
     assert result["print_data"]["address"]["address_line"] == "Current address"
     assert not any(path.startswith("/shipments") for path in state["calls"])
@@ -137,10 +125,10 @@ async def test_no_old_label_fallback_or_writes(setup, kind):
     before = await dump(db)
     if kind == "failure":
         with pytest.raises(shipping.ShippingLabelError) as caught:
-            await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+            await shipping.refresh_shipping_label(db, OWNER, ORDER)
         assert caught.value.code == "salla_shipping_unavailable"
     else:
-        result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
         assert not result["ready"]
         assert result["message"]
     assert await dump(db) == before
@@ -152,7 +140,7 @@ async def test_requested_order_identity_required(setup, reference):
     db, state = setup
     state["order"]["reference_id"] = reference
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert "/shipments" not in state["calls"]
 
 
@@ -165,7 +153,7 @@ async def test_current_pending_never_falls_back_to_another_ready_shipment(setup)
         {**CURRENT, "id": "700", "type": "return"},
         {**CURRENT, "id": "100", "tracking_number": "READY-AWB", "label_url": "https://labels.test/ready.pdf"},
     ]
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
     assert not result["label_url"]
 
@@ -176,7 +164,7 @@ async def test_legacy_store_courier_embedded_in_salla_shipment(setup):
     state["order"]["shipping"] = {}
     state["rows"] = [{"id": "200", "courier_name": "مندوب المتجر", "meta": {"app_id": 0},
                       "ship_to": {"address_line": "Courier address"}}]
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["label_type"] == "store_courier" and result["ready"]
     assert result["print_data"]["address"]["address_line"] == "Courier address"
 
@@ -226,7 +214,7 @@ async def test_print_rejects_shipment_for_another_order(setup):
     db, state = setup
     state["rows"][0]["order_id"] = "other-order"
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 @pytest.mark.asyncio
@@ -234,7 +222,7 @@ async def test_print_does_not_keep_embedded_label_when_fresh_list_is_empty(setup
     db, state = setup
     state["order"]["shipments"] = [deepcopy(CURRENT)]
     state["rows"] = []
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
     assert "/shipments" in state["calls"]
 
@@ -244,7 +232,7 @@ async def test_print_detail_failure_never_uses_list_label(setup):
     db, state = setup
     state["fail"] = "/shipments/200"
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 @pytest.mark.asyncio
@@ -255,7 +243,7 @@ async def test_external_current_label_ignores_cancelled_and_return_rows(setup, c
     state["rows"][0]["courier_name"] = company
     state["rows"] += [{**CURRENT, "id": "999", "status": "cancelled"}, {**CURRENT, "id": "998", "type": "return"}]
     before = await dump(db)
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["shipment_id"] == "200"
     assert result["label_url"] == CURRENT["label_url"]
     assert await dump(db) == before
@@ -267,14 +255,14 @@ async def test_print_missing_order_identity_fails_closed(setup, reference):
     db, state = setup
     state["order"]["reference_id"] = reference
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 @pytest.mark.asyncio
 async def test_multiple_ready_shipments_are_not_guessed_by_numeric_id(setup):
     db, state = setup
     state["rows"].append({**CURRENT, "id": "999", "label_url": "https://labels.test/old.pdf"})
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"] and not result["label_url"]
 
 
@@ -283,7 +271,7 @@ async def test_imile_ready_pdf_from_same_current_tracking_endpoint(setup):
     db, state = setup
     state["rows"][0].update(courier_name="iMile", label_url=None)
     state["tracking"] = {"shipment": {**CURRENT, "courier_name": "iMile"}}
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_url"] == CURRENT["label_url"]
     assert "/shipments/200/tracking" in state["calls"]
 
@@ -294,7 +282,7 @@ async def test_tracking_response_for_other_order_is_not_opened(setup):
     state["rows"][0]["label_url"] = None
     state["tracking"] = {"shipment": {**CURRENT, "order_id": "other-order"}}
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 @pytest.mark.asyncio
@@ -305,7 +293,7 @@ async def test_tracking_response_for_other_order_is_not_opened(setup):
 async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
     db, state = setup
     state["detail"] = detail
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
     assert not result["label_url"]
 
@@ -319,7 +307,7 @@ async def test_detail_identity_mismatch_cannot_open_another_order(setup, detail)
     db, state = setup
     state["detail"] = detail
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 async def completed_print_request(db, monkeypatch, *, order_number=ORDER):
@@ -373,7 +361,7 @@ async def test_completed_assembly_print_survives_later_stages_and_reprint(
     assert response.json()["label_url"] == CURRENT["label_url"]
     assert response.json()["shipment_id"] == "200"
     assert response.json()["tracking_number"] == "CURRENT-AWB"
-    assert state["calls"] == []
+    assert "/shipments" in state["calls"]
     assert await dump(db) == before
 
 
@@ -512,7 +500,7 @@ async def test_scope_compat_external_current_label(scope_fallback, company, phas
              "label_url": "https://labels.test/fresh-compatible.pdf"}
     state["order_shipments"] = {"data": {"shipments": [fresh]}}
     denied = deny_print_read(state, phase, status)
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["shipment_id"] == "200"
     assert result["label_url"] == fresh["label_url"]
     assert result["tracking_number"] == "CURRENT-AWB"
@@ -538,7 +526,7 @@ async def test_scope_compat_courier_detected_before_external_reads(scope_fallbac
     state["denied"] = {"/shipments/200": 403, "/shipments/200/tracking": 403}
     if status:
         state["denied"]["/shipments"] = status
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_type"] == "store_courier"
     assert result["shipment_id"] == "200"
     assert result["print_data"]["address"]["address_line"] == "Current courier address"
@@ -583,10 +571,10 @@ async def test_scope_compat_rejects_invalid_current_source(scope_fallback, phase
     state["order"]["shipments"] = [deepcopy(CURRENT)]
     if kind in {"wrong_order", "malformed"}:
         with pytest.raises(shipping.ShippingLabelError) as caught:
-            await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+            await shipping.refresh_shipping_label(db, OWNER, ORDER)
         assert caught.value.code != "shipping_scope_required"
     else:
-        result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
         assert not result["ready"]
 
 
@@ -597,7 +585,7 @@ async def test_scope_compat_never_switches_current_shipment(scope_fallback, phas
     deny_print_read(state, phase)
     state["order_shipments"]["data"][0]["id"] = "199"
     with pytest.raises(shipping.ShippingLabelError) as caught:
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "salla_order_reference_mismatch"
 
 
@@ -607,7 +595,7 @@ async def test_scope_compat_non_auth_failures_do_not_fallback(scope_fallback, ph
     db, state = scope_fallback
     deny_print_read(state, phase, 502)
     with pytest.raises(shipping.ShippingLabelError) as caught:
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "salla_shipping_unavailable"
     assert "/orders/salla-order/shipments" not in state["calls"]
 
@@ -620,7 +608,7 @@ async def test_scope_compat_denied_fallback_does_not_use_old_label(scope_fallbac
     state["denied"]["/orders/salla-order/shipments"] = status
     state["order"]["shipments"] = [deepcopy(CURRENT)]
     with pytest.raises(shipping.ShippingLabelError):
-        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+        await shipping.refresh_shipping_label(db, OWNER, ORDER)
 
 
 @pytest.mark.asyncio
@@ -630,7 +618,7 @@ async def test_scope_compat_terminal_details_do_not_revive_fallback(scope_fallba
     state["detail"] = {**CURRENT, "label_url": None,
                        **({"status": status} if status == "cancelled" else {"type": status})}
     state["denied"] = {"/shipments/200/tracking": 403}
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
     assert "/orders/salla-order/shipments" not in state["calls"]
 
@@ -643,5 +631,5 @@ async def test_scope_compat_cannot_revive_older_same_shipment(scope_fallback, cl
     observed = state["detail"] if clock_source == "details" else state["rows"][0]
     observed["updated_at"] = "2026-10-08T02:00:00Z"
     state["order_shipments"]["data"][0]["updated_at"] = "2026-10-08T01:00:00Z"
-    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
+    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]

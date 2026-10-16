@@ -38,7 +38,7 @@ async def saved(monkeypatch):
 @pytest.mark.asyncio
 async def test_saved_pdf_prints_without_provider_or_writes(saved):
     before = await saved.unified_orders.find_one({})
-    result = await shipping.refresh_shipping_label(saved, "owner", "3001")
+    result = await shipping.refresh_saved_shipping_label(saved, "owner", "3001")
     assert result["ready"] is True
     assert result["label_url"] == "https://labels.test/new.pdf"
     assert result["shipment_id"] == "new"
@@ -59,7 +59,7 @@ async def test_unavailable_current_label_never_falls_back(saved, change):
     }})
     if "label_url" in change:
         await saved.unified_orders.update_one({}, {"$set": {"shipping_label_url": change["label_url"]}})
-    result = await shipping.refresh_shipping_label(saved, "owner", "3001")
+    result = await shipping.refresh_saved_shipping_label(saved, "owner", "3001")
     assert result["ready"] is False
     assert result["label_url"] is None
     assert result["message"]
@@ -68,7 +68,7 @@ async def test_unavailable_current_label_never_falls_back(saved, change):
 @pytest.mark.asyncio
 async def test_other_owner_cannot_read_label_or_trigger_lookup(saved):
     with pytest.raises(shipping.ShippingLabelError) as error:
-        await shipping.refresh_shipping_label(saved, "other-owner", "3001")
+        await shipping.refresh_saved_shipping_label(saved, "other-owner", "3001")
     assert error.value.status_code == 404
 
 
@@ -87,7 +87,7 @@ async def test_saved_courier_preserves_provider_formatter(saved, monkeypatch):
         return expected
 
     monkeypatch.setattr(shipping, "_refresh_provider_shipping_label", courier)
-    assert await shipping.refresh_shipping_label(saved, "owner", "3001") == expected
+    assert await shipping.refresh_saved_shipping_label(saved, "owner", "3001") == expected
     assert calls == [(saved, "owner", "3001")]
 
 
@@ -103,7 +103,7 @@ async def test_courier_changed_to_external_never_searches_shipments(saved, monke
 
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     with pytest.raises(shipping.ShippingLabelError) as error:
-        await shipping.refresh_shipping_label(saved, "owner", "3001")
+        await shipping.refresh_saved_shipping_label(saved, "owner", "3001")
     assert error.value.code == "shipping_snapshot_changed"
 
 
@@ -131,7 +131,7 @@ async def test_ingested_label_becomes_printable_and_survives_sparse_update(monke
                            source="salla_direct", raw=payload)
 
     await ingest({**base, "updated_at": "2026-10-01T09:00:00Z"})
-    assert not (await shipping.refresh_shipping_label(db, "owner", "3001"))["ready"]
+    assert not (await shipping.refresh_saved_shipping_label(db, "owner", "3001"))["ready"]
     shipment = {
         "id": "current", "courier_name": "iMile", "status": "created",
         "tracking_number": "AWB", "label_url": "https://labels.test/arrived.pdf",
@@ -143,10 +143,10 @@ async def test_ingested_label_becomes_printable_and_survives_sparse_update(monke
         arriving = {**base, "updated_at": "2026-10-01T10:00:00Z",
             "shipping": {"company": "iMile", "shipment": nested}}
     await ingest(arriving)
-    result = await shipping.refresh_shipping_label(db, "owner", "3001")
+    result = await shipping.refresh_saved_shipping_label(db, "owner", "3001")
     assert result["ready"] and result["label_url"] == "https://labels.test/arrived.pdf"
     await ingest({**base, "updated_at": "2026-10-01T11:00:00Z"})
-    assert await shipping.refresh_shipping_label(db, "owner", "3001") == result
+    assert await shipping.refresh_saved_shipping_label(db, "owner", "3001") == result
 
 
 @pytest.mark.parametrize("nested", [
@@ -177,3 +177,43 @@ def test_nested_cancellation_clears_saved_label():
     }}})
     assert result["status"] == "cancelled"
     assert result["label_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_parallel_http_route_is_opt_in_and_old_route_is_retained(saved, monkeypatch):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    import fulfillment_v2_routes as fulfillment
+    await saved.order_review_workflows.insert_one({"user_id": "owner", "order_number": "3001",
+        "stage": "completed", "assembly_status": "completed"})
+    calls = []
+    async def legacy(*args):
+        calls.append("legacy")
+        return {"ready": True, "source": "legacy-provider", "label_url": "https://labels.test/legacy.pdf"}
+    monkeypatch.setattr(fulfillment, "refresh_shipping_label", legacy)
+    async def user():
+        return {"id": "owner", "role": "owner"}
+    app = FastAPI()
+    app.include_router(fulfillment.make_fulfillment_v2_router(saved, user))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        old = await client.post("/fulfillment-v2/completed/3001/carrier-label/refresh")
+        new = await client.post("/fulfillment-v2/completed/3001/carrier-label/refresh-saved")
+    assert old.status_code == new.status_code == 200
+    assert old.json()["source"] == "legacy-provider"
+    assert new.json()["label_url"] == "https://labels.test/new.pdf"
+    assert new.json()["source"] == "mezan"
+    assert calls == ["legacy"]
+
+
+@pytest.mark.asyncio
+async def test_parallel_route_keeps_employee_permission_checks(saved):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    import fulfillment_v2_routes as fulfillment
+    async def user():
+        return {"id": "employee", "role": "employee", "created_by": "owner"}
+    app = FastAPI()
+    app.include_router(fulfillment.make_fulfillment_v2_router(saved, user))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/fulfillment-v2/completed/3001/carrier-label/refresh-saved")
+    assert response.status_code == 403

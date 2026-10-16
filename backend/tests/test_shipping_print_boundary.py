@@ -61,7 +61,7 @@ async def providers(monkeypatch, *, rows=None, order=None, resync=None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["issue_shipping_label", "_refresh_provider_shipping_label"])
+@pytest.mark.parametrize("action", ["issue_shipping_label", "refresh_shipping_label"])
 @pytest.mark.parametrize("previous", [False, True])
 async def test_internal_print_needs_no_external_shipment_or_awb(database, monkeypatch, action, previous):
     await database.order_review_workflows.insert_one({"user_id": OWNER, "order_number": ORDER,
@@ -79,7 +79,7 @@ async def test_internal_print_needs_no_external_shipment_or_awb(database, monkey
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["issue_shipping_label", "_refresh_provider_shipping_label"])
+@pytest.mark.parametrize("action", ["issue_shipping_label", "refresh_shipping_label"])
 @pytest.mark.parametrize("new_code", ["imile", "smsa"])
 async def test_issue_resync_is_preserved_but_legacy_print_does_not_sync(database, monkeypatch, action, new_code):
     await seed(database, shipment_id="old")

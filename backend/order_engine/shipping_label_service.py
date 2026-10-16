@@ -1538,6 +1538,15 @@ async def refresh_shipping_label(
     user_id: str,
     order_number: str,
 ) -> dict[str, Any]:
+    """Legacy print contract retained for existing apps and the web."""
+    return await _refresh_provider_shipping_label(db, user_id, order_number)
+
+
+async def refresh_saved_shipping_label(
+    db: Any,
+    user_id: str,
+    order_number: str,
+) -> dict[str, Any]:
     """Print external labels from saved order data, with no provider fallback."""
     from .repository import MongoOrderRepository
     from .service import OrderNotFoundError, get_order
