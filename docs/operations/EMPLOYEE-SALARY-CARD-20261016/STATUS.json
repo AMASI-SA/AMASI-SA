@@ -1,9 +1,9 @@
 {
   "task": "employee-salary-card-refresh-20261016",
-  "branch": "codex/employee-salary-card-refresh-20261016",
-  "base_sha": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
+  "branch": "codex/employee-salary-clean-integration-20261016",
+  "base_sha": "8c9ef8cd96bcef0f3b50c7c7928dad99698ba279",
   "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
-  "state": "Remote checkpoint and draft PR created; GitHub CI pending",
+  "state": "Clean source integration; candidate-base validation PASS; fresh CI pending",
   "completed": [
     "Show current and scheduled salary on Employee OS cards immediately after save",
     "Verify employee account creation/reset accepts six digits or more",
@@ -36,7 +36,8 @@
     "Operational balances and accounting ledger remain separate; no automatic financial bridge"
   ],
   "next_action": "Inspect PR checks and review source. No merge or deployment authorized. Coordinate final release intent with current production branch only after explicit release authorization.",
-  "source_commit": "cb0f490c17d3f2d12f04a6ed0d01822efff7836e",
+  "source_commit": "b51018ff",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1381",
-  "ci": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/38915630786"
+  "ci": "Pending clean candidate checks",
+  "integration_proof": "Before this documentation-only checkpoint, tree e2de4c0256b1dc131d4cec79d1e9782f3ee58712 exactly equals isolated merge of PR1381 and Production8c9ef8cd. Original branch preserved. resolve_candidate_source_base PASS without guard changes."
 }
