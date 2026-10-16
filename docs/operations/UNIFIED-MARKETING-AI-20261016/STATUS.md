@@ -79,3 +79,20 @@ Regression test failed twice with KeyError before fix; 52 focused tests passed
 afterward (phase5 plus unified execution evidence). Future provider is covered.
 No readiness gates weakened. Follow-up needs PR, new source/intent build pair,
 CI, deployment and live verification under existing authorization.
+
+## Follow-up release prepared and publishing
+
+PR1380 merged after all checks passed, merge8c9ef8cd96bcef0f3b50c7c7928dad99698ba279.
+SourceA69df38d25a84f7c671e821f898306e275f8cc3b6 and intentB624bdb695d7d26946b9a2f6849ef76c78623d825.
+Runtime rg5-c07aa97b4a26ae633bd697c8c4f1a8886ccc3ab1ccce6bb48d6e6d0fa808d0b2;
+intent SHA2564c923178366f136d78b6aeaded14ab9586be4b9ad180394d8b23c140504f0306.
+Cloud and CI builds match, candidate workflow38912791031 and PR release workflow38913100896 passed.
+/app was inactive, clean tracked, fast-forwarded from4561 to8c9ef; untracked preserved.
+Governed build and prepare/prepublish succeeded (gate exit0), actor
+unified-marketing-ai-provider-response-20261016. Publish confirmation clicked;
+prior visible version58053ca. New deployment not yet verified; lease active.
+A fresh AI cycle generated two Meta recommendations at17:08 Saudi after first
+deployment; no approval/execution performed. Snapchat-specific live readiness
+and source evidence still require final validation after this second deploy.
+Next: wait for completed/green live deployment; guard verify exact runtime,
+confirm inactive lease, recheck all7 Snapchat gates and fresh recommendation scope.
