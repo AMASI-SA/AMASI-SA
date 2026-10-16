@@ -383,7 +383,7 @@ async def test_paused_financial_http_posts_remain_blocked_after_setup(db):
 @pytest.mark.asyncio
 async def test_setup_serializes_with_financial_posting_and_rechecks_history(db, monkeypatch):
     from accounting_atomic import atomic_owner
-    from operational_atomic import employee_setup_atomic_owner
+    from operational_atomic import employee_lifecycle_atomic_owner
     created = await create(db, monthly_salary=3000, salary_effective_date="2026-10-01")
     await db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {"writes_paused": False}})
     locked, release, attempted = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -396,8 +396,8 @@ async def test_setup_serializes_with_financial_posting_and_rechecks_history(db, 
         })
     async def setup(db, owner, callback):
         attempted.set()
-        return await employee_setup_atomic_owner(db, owner, callback)
-    monkeypatch.setattr(routes, "employee_setup_atomic_owner", setup)
+        return await employee_lifecycle_atomic_owner(db, owner, callback)
+    monkeypatch.setattr(routes, "employee_lifecycle_atomic_owner", setup)
     posting = asyncio.create_task(atomic_owner(db, "owner", financial))
     await asyncio.wait_for(locked.wait(), 10)
     editing = asyncio.create_task(salary(db, created["employee_id"], 4000, "2026-10-16"))

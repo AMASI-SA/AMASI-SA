@@ -41,6 +41,9 @@ _PROFILES = {
         "store_delivery_late_evidence_events_v1", "store_delivery_delivery_proofs",
     }),
 }
+_PROFILES["employee_lifecycle"] = _PROFILES["employee_setup"] | {
+    "users", "mezan_role_assignments_v2", "operational_balance_states_v1",
+}
 _DRIVER_CASH_INSERTS = {
     "store_delivery_collections": frozenset({
         "id", "user_id", "assignment_id", "order_id", "order_number", "driver_id", "amount", "amount_source",
@@ -187,7 +190,7 @@ class _Collection:
                     _reject(self.__state)
                 if args and isinstance(args[0], dict):
                     query = args[0]
-                    if self.__state["profile"] == "employee_setup" and self.__collection.name in {
+                    if self.__state["profile"] in {"employee_setup", "employee_lifecycle"} and self.__collection.name in {
                             "mezan_role_assignments_v2", "mezan_mobile_app_access_v1"}:
                         # Here user_id is the employee's login, not the tenant.
                         # Existing management response reads use explicit owner
@@ -219,7 +222,7 @@ class _Collection:
                 allowed = {"insert_one"} if name in _DRIVER_CASH_INSERTS else {"update_one", "find_one_and_update"}
                 if method not in allowed:
                     _reject(self.__state)
-            if self.__state["profile"] == "employee_setup":
+            if self.__state["profile"] in {"employee_setup", "employee_lifecycle"}:
                 if method not in {"insert_one", "update_one"} or (
                         name == "mezan_employee_events_v2" and method != "insert_one"):
                     _reject(self.__state)
@@ -228,6 +231,17 @@ class _Collection:
             if self.__state["profile"] == "physical_receipt" and method not in {"insert_one", "update_one"}:
                 _reject(self.__state)
             args = list(deepcopy(args))
+            if self.__state["profile"] == "employee_lifecycle" and name == "operational_balance_states_v1":
+                if (method != "update_one" or len(args) != 2 or kwargs
+                        or not isinstance(args[0], dict)
+                        or set(args[0]) != {"_id", "owner_id", "revision"}
+                        or args[0]["_id"] != self.__owner or args[0]["owner_id"] != self.__owner
+                        or type(args[0]["revision"]) is not int or args[0]["revision"] < 0
+                        or args[1] != {"$inc": {"revision": 1, "salary_contract_revision": 1}}):
+                    _reject(self.__state)
+                return await self.__collection.update_one(*args, session=self.__session)
+            if self.__state["profile"] == "employee_lifecycle" and name in {"users", "mezan_role_assignments_v2"}:
+                return await self._employee_access(name, method, args, kwargs)
             if method.startswith("insert"):
                 documents = [args[0]] if method == "insert_one" else args[0]
                 if not isinstance(documents, list) or not documents:
@@ -258,6 +272,62 @@ class _Collection:
                     _reject(self.__state)
             return await getattr(self.__collection, method)(*args, session=self.__session, **kwargs)
         return write
+
+    async def _employee_access(self, name, method, args, kwargs):
+        """Suspend/restore an existing login; never grant a role or password."""
+        if (method != "update_one" or len(args) != 2 or set(kwargs) - {"upsert"}
+                or kwargs.get("upsert") or not isinstance(args[0], dict)
+                or not isinstance(args[1], dict) or set(args[1]) != {"$set"}
+                or not isinstance(args[1]["$set"], dict)):
+            _reject(self.__state)
+        query, values = args[0], args[1]["$set"]
+        owner = self.__owner
+        if name == "users":
+            subject = query.get("id")
+            if (not isinstance(subject, str) or not subject or subject == owner
+                    or query != {"id": subject, "created_by": owner, "role": {"$ne": "owner"}}):
+                _reject(self.__state, "operational_owner_scope_conflict")
+            active = values.get("is_active")
+            if (type(active) is not bool or set(values) != {
+                    "disabled", "is_active", "employee_access_state", "employee_access_reason",
+                    "employee_access_updated_at", "employee_access_updated_by"}
+                    or type(values.get("disabled")) is not bool or values["disabled"] != (not active)
+                    or values["employee_access_state"] != ("active" if active else "disabled")
+                    or values["employee_access_updated_by"] != owner
+                    or not isinstance(values["employee_access_reason"], str)
+                    or not isinstance(values["employee_access_updated_at"], str)):
+                _reject(self.__state)
+            result = await self.__collection.update_one(query, args[1], session=self.__session)
+            if result.matched_count:
+                self.__state.setdefault("employee_access", {})[subject] = active
+            return result
+        subject = query.get("user_id")
+        if (not isinstance(subject, str) or not subject or subject == owner
+                or query not in ({"owner_user_id": owner, "user_id": subject},
+                                 {"owner_user_id": None, "created_by": owner, "user_id": subject})
+                or subject not in self.__state.get("employee_access", {})):
+            _reject(self.__state, "operational_owner_scope_conflict")
+        if not set(values) <= {"owner_user_id", "user_id", "enabled", "effective_permissions",
+                               "suspended_by_employee_v2", "enabled_before_employee_suspension",
+                               "updated_at", "updated_by"}:
+            _reject(self.__state)
+        before = await self.__collection.find_one(query, session=self.__session)
+        if before is None:
+            # Preserve write_role_assignment's canonical retry after legacy promotion.
+            return await self.__collection.update_one(query, {"$set": {}}, session=self.__session)
+        active = self.__state["employee_access"][subject]
+        from ai_store_access_contract import effective_permissions
+        enabled = (bool(before.get("enabled_before_employee_suspension", False))
+                   if before.get("suspended_by_employee_v2") else bool(before.get("enabled", False)))
+        expected = {"owner_user_id": owner, "user_id": subject, "enabled": enabled if active else False,
+                    "effective_permissions": effective_permissions({**before, "enabled": enabled}) if active else [],
+                    "suspended_by_employee_v2": not active, "updated_by": owner,
+                    "updated_at": values.get("updated_at")}
+        if not active:
+            expected["enabled_before_employee_suspension"] = enabled
+        if values != expected or not isinstance(values.get("updated_at"), str):
+            _reject(self.__state)
+        return await self.__collection.update_one(query, args[1], session=self.__session)
 
     def _document(self, name, doc):
         if self.__state["profile"] == "physical_receipt":
@@ -415,6 +485,15 @@ async def employee_setup_atomic_owner(db, owner, callback):
     changes writes_paused or grants financial activation to a missing owner.
     """
     return await operational_owner(db, owner, callback, profile="employee_setup")
+
+
+async def employee_lifecycle_atomic_owner(db, owner, callback):
+    """Atomically change employee history and suspend/restore existing access.
+
+    Unlike setup this permits only the existing account access policy writes,
+    with role restoration bounded to permissions already held before suspension.
+    """
+    return await operational_owner(db, owner, callback, profile="employee_lifecycle")
 
 
 async def operational_owner(db, owner, callback, *, profile="fulfillment"):
