@@ -1,0 +1,36 @@
+{
+  "base": "f603b4ef8fd3c3a4238b5aafb7ae4f6fa73d5bba",
+  "results": {
+    "_scan_piece_in_transaction": {
+      "unchanged": true,
+      "sha256": "301d1244fe6a11d5f57a1dd753072798cb3ae773703324e575856c47b8635f7a",
+      "normalization": "none"
+    },
+    "scan_piece": {
+      "unchanged": true,
+      "sha256": "912f4160d007e9379d527e0a108a80858cef7bd07b85c0f2dd385998dca04bce",
+      "normalization": "none"
+    },
+    "close_session": {
+      "unchanged": true,
+      "sha256": "c8072e5155907ec0e5f7accce2bea1f124ff382dae1c1771c9b41991d931017d",
+      "normalization": "index-call-only"
+    },
+    "backend/supplier_invoice_recovery.py": {
+      "unchanged": true,
+      "sha256": "abd97effefbe8dba47c2e9191f4665504cee53d9d29e38e0596cd4b733958793"
+    },
+    "backend/supplier_scan_attempts.py": {
+      "unchanged": true,
+      "sha256": "0e50dd74ad83226653fbd09a4057d5c3be55332b4053a8d72859dc44a858647f"
+    },
+    "backend/supplier_native_invoice_v2.py": {
+      "unchanged": true,
+      "sha256": "7e1bb858ff05204343b73eea742097233006a80d43acc26976a507c51e37aff5"
+    },
+    "backend/supplier_invoice_integrity.py": {
+      "unchanged": true,
+      "sha256": "b260f64f2d498c90f0f054303032aef931e9b70a49b22fb8b2f27b5fd306e91e"
+    }
+  }
+}
