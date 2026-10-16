@@ -34,7 +34,7 @@ export default function MarketingDecisionReadiness({ accountId, date, provider, 
         setState({ status: "loading" });
         try {
             const { data } = await api.get("/ads-manager/decision-intelligence/phase5/shadow", {
-                params: { provider, date_from: date, date_to: date, max_candidates: 1 },
+                params: { provider, account_id: accountId, date_from: date, date_to: date, max_candidates: 1 },
             });
             if (request.current !== current) return;
             if (!validScope(data, accountId, date, provider)) throw new Error("scope_mismatch");

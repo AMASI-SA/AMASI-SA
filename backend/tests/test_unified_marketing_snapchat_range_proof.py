@@ -142,6 +142,10 @@ async def test_entity_daily_series_uses_exact_v2_total_facts(monkeypatch):
         return {"exchange_rate_to_sar": 3.75}
 
     monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "resolve_account", selected)
+    async def enabled(*args, **kwargs):
+        return [await selected(*args, **kwargs)]
+    monkeypatch.setattr(reader, "list_enabled_accounts", enabled)
     monkeypatch.setattr(reader, "calculate_cost_components", cost)
     db = Database({
         "mezan_snapchat_committed_totals_v1": DailyCollection([]),
@@ -247,6 +251,10 @@ async def test_dashboard_snapshot_uses_v2_projection_hours_and_cost_settings(
         }
 
     monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "resolve_account", selected)
+    async def enabled(*args, **kwargs):
+        return [await selected(*args, **kwargs)]
+    monkeypatch.setattr(reader, "list_enabled_accounts", enabled)
     monkeypatch.setattr(reader, "list_daily_projections", projections)
     monkeypatch.setattr(reader, "_projection_financial_status", complete_financial)
     monkeypatch.setattr(reader, "list_reconciliation", reconciled)
@@ -332,6 +340,10 @@ async def test_open_riyadh_day_exposes_observed_spend_as_provisional_only(
         }
 
     monkeypatch.setattr(reader, "get_selected_account", selected)
+    monkeypatch.setattr(reader, "resolve_account", selected)
+    async def enabled(*args, **kwargs):
+        return [await selected(*args, **kwargs)]
+    monkeypatch.setattr(reader, "list_enabled_accounts", enabled)
     monkeypatch.setattr(reader, "list_daily_projections", projections)
     monkeypatch.setattr(reader, "_projection_financial_status", complete_financial)
     monkeypatch.setattr(reader, "list_reconciliation", unreconciled)

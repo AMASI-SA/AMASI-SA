@@ -386,6 +386,7 @@ async def load_decision_evidence(
     user_id: str,
     *,
     provider: str,
+    account_id: str | None = None,
     date_from: date,
     date_to: date,
     now: datetime | None = None,
@@ -398,8 +399,9 @@ async def load_decision_evidence(
         db,
         str(user_id),
         provider=provider,
+        **({"account_id": account_id} if account_id is not None else {}),
     )
-    if not identity:
+    if not identity or (account_id is not None and str(identity.get("id")) != str(account_id)):
         raise ValueError("unified_marketing_account_missing")
     timezone_name = str(identity.get("timezone") or "").strip()
     calls = {
@@ -407,6 +409,7 @@ async def load_decision_evidence(
             db,
             str(user_id),
             provider=provider,
+            **({"account_id": account_id} if account_id is not None else {}),
             date_from=date_from,
             date_to=date_to,
             timezone_name=timezone_name,
@@ -416,6 +419,7 @@ async def load_decision_evidence(
                 db,
                 str(user_id),
                 provider=provider,
+                **({"account_id": account_id} if account_id is not None else {}),
                 entity_level=level,
                 date_from=date_from,
                 date_to=date_to,
