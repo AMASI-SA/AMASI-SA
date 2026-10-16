@@ -24,7 +24,7 @@ jest.mock('./api', () => ({
     movements: jest.fn(),
     audit: jest.fn()
   },
-  entityKinds: [['supplier', 'موردين'], ['bank', 'بنوك'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
+  entityKinds: [['pos_receivable', 'جهاز الشبكة'], ['supplier', 'موردين'], ['bank', 'بنوك'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
   requestId: jest.fn(() => `request-${Math.random()}`),
   messageFor: () => 'تعذر إتمام العملية', feeIncomplete: issue => /fee/.test(issue?.code||'')
 }));
@@ -113,6 +113,21 @@ test('successful opening clears form and increments counter', async () => {
   expect(host.textContent).toContain('الأرصدة المدخلة: 3');
   expect(host.querySelector('input').value).toBe('');
   expect(host.querySelector('select').value).toBe('');
+});
+
+test('terminal opening is explicit receivable and never auto-imports an amount', async () => {
+  await render(<OpeningBalances context={{opening_count:0}}/>);
+  await input(host.querySelector('select'), 'pos_receivable');
+  await input(host.querySelectorAll('select')[1], 'pos_receivable1');
+  expect(host.querySelector('input').value).toBe('');
+  expect(host.textContent).toContain('لا تكرره في البنك أو عهدة المندوب');
+  expect(button('له')).toBeUndefined();
+  expect(api.opening).not.toHaveBeenCalled();
+  await click('مبلغ لنا لدى الشبكة');
+  await input(host.querySelector('input'), '250.00');
+  await click('حفظ');
+  expect(api.opening).toHaveBeenCalledWith(expect.objectContaining({party_type:'pos_receivable',
+    party_id:'pos_receivable1', direction:'for_us', amount:'250.00', currency:'SAR'}));
 });
 test('ambiguous failure keeps values and same retry identity', async () => {
   api.opening.mockRejectedValueOnce(new Error('network'));
