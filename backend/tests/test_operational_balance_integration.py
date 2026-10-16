@@ -52,6 +52,48 @@ def opening(kind="bank", identity="bank", amount="1000", direction="for_us", req
     return dict(request_id=request, party_type=kind, party_id=identity, amount=amount, currency="SAR", direction=direction)
 
 
+def test_ad_selection_http_owner_isolation_and_concurrent_version():
+    async def scenario(db):
+        records = [
+            {'user_id': owner, 'provider': provider, 'mezan_integration_account_id': identity,
+             'external_account_id': identity, 'display_name': identity, 'connection_status': 'connected',
+             'mezan_selected': selected, 'currency': 'SAR'}
+            for owner, provider, identity, selected in [
+                ('owner', 'snapchat_ads', 'snap', True), ('owner', 'snapchat_ads', 'inactive-snap', False),
+                ('owner', 'google_ads', 'google', False), ('other', 'google_ads', 'foreign', True)]
+        ]
+        await db.mezan_integration_accounts_v2.insert_many(records)
+        app = FastAPI()
+        async def principal(x_test_user: str = Header(default='owner'), x_test_mobile: str = Header(default='no')):
+            return {'id': x_test_user, '_session_client': 'amasi_mobile' if x_test_mobile == 'yes' else 'web'}
+        app.include_router(make_operational_balance_router(db, principal), prefix='/api')
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://isolated') as client:
+            base = '/api/operational-balances'
+            url = base + '/ad-account-selection'
+            assert (await client.get(url, headers={'x-test-user': 'staff'})).status_code == 403
+            assert (await client.get(url, headers={'x-test-mobile': 'yes'})).status_code == 403
+            choices = (await client.get(url)).json()
+            assert {r['id'] for r in choices['items']} == {'snap', 'inactive-snap', 'google'}
+            assert await db[STATES].count_documents({}) == 0
+            payload = {'request_id': 'selection-google', 'version': 0, 'account_ids': ['google']}
+            assert (await client.post(url, json={**payload, 'account_ids': ['foreign']})).status_code == 409
+            replies = await asyncio.gather(client.post(url, json=payload), client.post(url, json={**payload, 'request_id': 'selection-empty', 'account_ids': []}))
+            assert sorted(r.status_code for r in replies) == [200, 409]
+            winner = payload if replies[0].status_code == 200 else {**payload, 'request_id': 'selection-empty', 'account_ids': []}
+            assert (await client.post(url, json=winner)).status_code == 200
+            state = await read(db, 'owner')
+            assert state['openings'] == {} and state['movements'] == [] and state['status'] == 'draft'
+            assert len(state['audit']) == 1 and state['ad_catalog_selection']['version'] == 1
+            visible = (await client.get(base + '/entities/ad_account')).json()
+            # Native Snap selection remains selected independently of the editable preference.
+            items = visible if isinstance(visible, list) else visible['items']
+            ids = {r['integration_account_id'] for r in items}
+            assert ids == {'snap'} | set(winner['account_ids'])
+            assert await db.general_ledger.count_documents({}) == 0
+            assert await db.mezan_integration_accounts_v2.count_documents({}) == 4
+    run(scenario)
+
+
 async def started(db, supplier="500"):
     await save_opening(db, "owner", "owner", opening(), clock=START)
     await save_opening(db, "owner", "owner", opening("supplier", "supplier", supplier, "for_party", "baseline2"), clock=START)
