@@ -1,7 +1,7 @@
 {
   "task": "Operational POS terminal opening receivable",
-  "branch": "codex/operational-ad-selection-fix",
-  "status": "IMPLEMENTED_REAL_MONGO_CI_PENDING",
+  "branch": "codex/operational-opening-release-1674-20261016",
+  "status": "LATEST_PRODUCTION_INTEGRATED_CI_PENDING",
   "production_changed": false,
   "contract": "Explicit owner selection of the native documented other_receivable identity used in driver card-terminal review; manually entered operational opening amount; no native amount import or accounting activation",
   "completed": [
@@ -11,11 +11,16 @@
     "Existing settlement and duplicate protections reused; no ledger writes",
     "Native opening facts excluded from automatic operational source scanning"
   ],
-  "verification": {"local_backend":"59 passed", "local_frontend":"56 passed", "real_mongo":"PR CI pending"},
+  "verification": {
+    "local_backend": "66 passed on latest integration",
+    "local_frontend": "56 passed",
+    "real_mongo": "Prior PR1376 CI38906760970 passed430backend160frontend; fresh integration CI pending"
+  },
   "remaining": [
-    "Run real Mongo opening/settlement replay test in CI",
+    "Fresh integration CI and reviewed v5 intent-only B",
     "Native documented receivable must exist; no live identity or balance created by this task",
     "No new automatic driver POS recognition or fee policy integration claimed",
     "Draft PR only; release v5 identity and deployment pending"
-  ]
+  ],
+  "base_sha": "1674bb8b0a7a995e6ea87c83db93feb7d1a12e70"
 }
