@@ -96,3 +96,41 @@ deployment; no approval/execution performed. Snapchat-specific live readiness
 and source evidence still require final validation after this second deploy.
 Next: wait for completed/green live deployment; guard verify exact runtime,
 confirm inactive lease, recheck all7 Snapchat gates and fresh recommendation scope.
+
+## Verified deployed result and remaining live data blocker
+
+Second deploy completed green in Emergent at17:25 Saudi, live version10c6ee4
+(after58053ca). Production Guard verify exited0 and returned verified=true for
+source69df38d25a84f7c671e821f898306e275f8cc3b6, deployment8c9ef8cd96bcef0f3b50c7c7928dad99698ba279,
+runtime rg5-c07aa97b4a26ae633bd697c8c4f1a8886ccc3ab1ccce6bb48d6e6d0fa808d0b2.
+Boot observed2026-10-16T14:24:24.834343+00:00. Three internal probes and full
+frontend checks passed. Guard status activefalse. UI now says green Deployment
+finished rather than literal Deployment Succeeded; record exact observed label.
+Logs: /root/readiness-provider-verify.log. Production changed yes.
+
+Live detailed readiness now renders correctly for closed day2026-10-15:
+5/7 gates passed (contract, closed day, reconciliation, freshness, attribution).
+Coverage false ONLY at campaign level; account, ad_group and ad complete.
+Financial coverage false; unmatched orders0 and missing-cost orders0.
+Code explains financial dependency: _derive_account_profitability in
+backend/unified_marketing/readers/snapchat_v2_decision_evidence.py refuses account
+profit aggregation when campaign sync/coverage is partial. This does not prove
+which source-run field causes campaign incompleteness; raw production source-run
+and fact diagnostics remain required. Do not weaken guards or claim100% ready.
+The account-only readiness card says ready but is a narrower check.
+
+Selected15Oct in UI, applied and confirmed report dates. Campaign rows and totals
+remain partial. Clicked manual V2 report sync once for that closed day (report data
+refresh only, no campaign/budget changes); busy state ended. Result toast not
+captured, so do not claim sync succeeded. Subsequent detailed readiness unchanged.
+A fresh17:08 recommendation snapshot was generated after first deployment and
+contains2Meta recommendations; proves model cycle, not Snapchat eligibility.
+No recommendation approved/executed and no advertising/financial transaction writes.
+
+Outstanding: diagnose production campaign source facts/run proof for15Oct and
+AI3day closed window, repair source or sync issue with evidence, then recheck7/7
+and Snapchat model input/recommendation path. Future adapters share registry/core;
+actual future providers are not yet certified. Tracking snippet remains deferred.
+Current source fixes are published and verified; full business readiness remains
+incomplete. Preserve all unrelated work. No active lease. Next safe action is
+read-only production campaign-run/fact diagnostics, not another blind deploy.
