@@ -1203,6 +1203,7 @@ async def run_overlap_mongo_verification():
     from unittest.mock import AsyncMock, patch
     import preparation_piece_operations as operations
     import supplier_receiving_routes as supplier
+    import order_review_routes as review
 
     uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
     parsed = urlsplit(uri)
@@ -1212,25 +1213,41 @@ async def run_overlap_mongo_verification():
         raise RuntimeError("Explicit unauthenticated loopback MZ2_TEST_MONGO_URI required")
     sys.path.insert(0, str(Path(operations.__file__).resolve().parent / "tests"))
     from test_g47_component_lifecycle_integration import (
-        ComponentRouteTests, WHEN, fulfillment, PLANS, UNITS,
+        ComponentRouteTests, WHEN, LATER, fulfillment, PLANS, UNITS,
     )
 
     async def live_order(case):
-        await case.db.unified_orders.insert_one({
-            "user_id": "owner", "order_number": "order-1", "order_date": WHEN,
-            "order_status": "in_progress",
-            "raw_by_source": {"salla_direct": case.source_payload(
-                number="order-1", status="in_progress")},
-        })
+        # accept() already seeds this canonical identity. A second insert
+        # makes find_one read the older under_review document nondeterministically.
+        # Exercise the real status writer on the same order instead.
+        result = await case.webhook(case.source_payload(
+            number="order-1", version=LATER, status="in_progress"))
+        case.assertTrue(result["synced"])
+        case.assertEqual(await case.db.unified_orders.count_documents({
+            "user_id": "owner", "order_number": "order-1"}), 1)
         current = await operations._current_assembly_order(
             case.db, user_id="owner", order_number="order-1")
         case.assertEqual(current.status, "in_progress")
 
-    async def setup_physical(case):
-        response, _ = await case.accept()
+    async def accept_canonical(case):
+        # Both acceptance and the later status webhook must describe the same
+        # complete order facts. Minimal DTO-only seeding is a different source
+        # snapshot and must be rejected by the component execution fence.
+        case.assertTrue((await case.webhook(case.source_payload(number="order-1")))["synced"])
+        order = await review.get_order(review.MongoOrderRepository(case.db),
+                                       user_id="owner", order_number="order-1")
+        response, _ = await case.accept(order=order)
         case.assertEqual(response.status_code, 200, response.text)
+        return order.items[0].order_item_id
+
+    async def setup_physical(case):
+        line_id = await accept_canonical(case)
         case.assertEqual(await case.db[PLANS].count_documents({}), 1)
         await case.seed_physical()
+        # Match the real mapper's scoped identity, not the old DTO stub's id.
+        await case.db[operations.PIECES].update_many(
+            {"user_id": "owner", "order_number": "order-1"},
+            {"$set": {"order_item_id": line_id}})
         await live_order(case)
         # The current Salla status must reopen this formerly completed workflow.
         await case.db[fulfillment.WORKFLOWS].update_one(
@@ -1278,19 +1295,18 @@ async def run_overlap_mongo_verification():
         await abort_mutation(case, operations.PIECES, {"assembly_status": {"$ne": "ready"}})
 
     async def virtual_once_and_operational_zero(case):
-        response, _ = await case.accept()
-        case.assertEqual(response.status_code, 200, response.text)
+        line_id = await accept_canonical(case)
         await live_order(case)
-        direct_id = operations._direct_assembly_piece_id("order-1", "line-1", 1)
+        direct_id = operations._direct_assembly_piece_id("order-1", line_id, 1)
         await case.db[fulfillment.WORKFLOWS].update_one(
             {"user_id": "owner", "order_number": "order-1"}, {"$set": {
                 "stage": "in_progress", "preparation_receipt_status": "partial",
-                "items": [{"order_item_id": "line-1", "preparation_route": "direct_assembly",
+                "items": [{"order_item_id": line_id, "preparation_route": "direct_assembly",
                     "product_id": "p", "quantity": 2,
-                    "direct_assembly_piece_ids": [direct_id, operations._direct_assembly_piece_id("order-1", "line-1", 2)]}],
+                    "direct_assembly_piece_ids": [direct_id, operations._direct_assembly_piece_id("order-1", line_id, 2)]}],
                 "operational_items": [{"operational_item_id": "operational-overlap",
                     "name": "Synthetic note", "assembly_status": "pending",
-                    "source_order_item_id": "line-1", "blocks_order_completion": True}]}})
+                    "source_order_item_id": line_id, "blocks_order_completion": True}]}})
         before = await case.db[UNITS].find({}).sort("_id", 1).to_list(10)
         for attempt in range(2):
             response = await case.mark_piece("operational-overlap")
@@ -1323,7 +1339,7 @@ async def run_overlap_mongo_verification():
 
         case.app.include_router(supplier.make_supplier_receiving_router(case.db, actor))
         await case.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {
-            "ledger_backend_state": "v2_active", "ledger_backend_revision": 2,
+            "ledger_backend_state": "legacy_active", "ledger_backend_revision": 1,
             "ledger_backend_contract_revision": 1,
             "ledger_backend_activation_ref": "SYNTHETIC-OVERLAP"}})
         await case.db[supplier.COST_PROFILES].insert_one({
@@ -1345,6 +1361,18 @@ async def run_overlap_mongo_verification():
             "services": [], "occurred_at": datetime.fromisoformat(WHEN)})
         observed = []
         original = supplier._post_supplier_invoice_ledger
+        real_transition = supplier.transition_state
+
+        async def activate_after_writer_selection(db, owner):
+            # Current Production routes v2-active owners to the native writer.
+            # Exercise the retained legacy guard at the actual race boundary:
+            # selection read is legacy, then persisted state changes before
+            # the transaction. Do not replace the ledger guard or its result.
+            selected = await real_transition(db, owner)
+            case.assertEqual(selected["state"], "legacy_active")
+            await case.db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {
+                "ledger_backend_state": "v2_active", "ledger_backend_revision": 2}})
+            return selected
 
         async def observe_actual_guard(db, **kwargs):
             session = kwargs["mongo_session"]
@@ -1352,7 +1380,8 @@ async def run_overlap_mongo_verification():
             observed.append((session.in_transaction, profile["base_cost"]))
             return await original(db, **kwargs)
 
-        with patch.object(supplier, "_post_supplier_invoice_ledger", observe_actual_guard):
+        with patch.object(supplier, "_post_supplier_invoice_ledger", observe_actual_guard), \
+             patch.object(supplier, "transition_state", activate_after_writer_selection):
             response = await case.client.post("/supplier-receiving-v1/sessions/supplier-overlap/close", json={
                 "confirmed_total_halalas": 600, "expected_supplier_id": "supplier",
                 "invoice_lines": [{"piece_ids": ["supplier-piece"],
