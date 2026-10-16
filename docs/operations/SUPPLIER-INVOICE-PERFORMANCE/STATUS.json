@@ -58,16 +58,16 @@
   },
   "current_release": {
     "recorded_on": "2026-10-16",
-    "branch": "codex/supplier-invoice-current-release-20261016",
-    "base": "d29b1a3ad0c61f7ace686b7709a7577ebda40d13",
-    "state": "SOURCE_CHECKPOINT_PENDING_FINAL_CI_AND_RELEASE",
+    "branch": "codex/supplier-performance-integrated-20261016",
+    "base": "1ac8b530b7238cbbb985e770019dc897f158eb13",
+    "state": "INTEGRATED_SOURCE_PENDING_FRESH_CI_AND_RELEASE",
     "authorization": "owner authorized deployment and reversible code rollback",
     "production_changed_by_this_task": false,
     "superseded_frozen_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1384",
     "superseded_head": "8bd307ff8e9f3bb6d665f791b02fb3539e5503fd",
-    "reason": "Concurrent PR1386 changed Production and /app after #1384 intent freeze; original A/B preserved, new source built from current Production",
+    "reason": "Production advanced through PR1397, including supplier option refresh PR1395; preserve all current changes. No frozen intent from earlier candidates reused.",
     "ready_shipping": "excluded; external conditional status mutation remains unproven",
-    "verification": "supplier source/tests unchanged from source A a098; 14/14 source CI;135 core+16 auth;88 rollback historical. Fresh replacement CI and build required.",
-    "next_safe_action": "push source checkpoint; exact-head CI and governed new A/B; wait current release owner verification/inactive lease; no stale intent merge"
+    "verification": "Prior #1391 source passed 14/14 workflows. Integrated tests pending; runtime performance files unchanged. Current CI includes PR1395 refresh regression.",
+    "next_safe_action": "Fresh integrated CI and rollback proof, await release owner handoff and inactive guard, then new governed source/intent build."
   }
 }

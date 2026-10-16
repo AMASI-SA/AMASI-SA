@@ -1,5 +1,22 @@
 # Supplier invoice performance release and rollback
 
+## Current integration checkpoint (supersedes earlier release targets)
+
+Production base: `1ac8b530b7238cbbb985e770019dc897f158eb13` (PR #1397).
+Branch: `codex/supplier-performance-integrated-20261016`.
+Preserves PR #1395 supplier option surcharge refresh and all Snapchat changes.
+The three performance runtime files match #1391 source `7f33125` exactly.
+Fresh integrated CI, source/intent build and deployment proof remain required.
+Earlier intent artifacts and rollback branches below are historical and must
+not be deployed on this base.
+
+For rollback, revert only performance commits `9e17d34da` and `69050d67a`
+on a new branch from the actual deployed HEAD, preserving later unrelated
+changes. Keep financial data and optional image cache intact. Verify code
+equivalence to this base for the affected runtime files, rerun invoice and
+option-refresh tests, and create a fresh reviewed source/intent release.
+Do not reset Production or deploy an earlier whole-repository snapshot.
+
 Owner authorized deployment and a recoverable code rollback on 2026-10-16.
 Ready/shipping automatic completion is excluded: its provider conditional-write
 contract remains unresolved. Do not activate #1321 as part of this release.
