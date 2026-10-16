@@ -1,6 +1,6 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "native_sar_financial_tests_passed_not_deployed",
+  "state": "verified_source_waiting_other_release_and_live_validation",
   "branch": "codex/snapchat-native-financial-integrated-20261016",
   "production_base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
@@ -20,19 +20,23 @@
     "prior_environment_failure": "7 legacy HTTP integration tests require configured disposable service URL; no URL was configured, so requests failed locally with MissingSchema before network. Excluded from local unit scope; no production registration performed.",
     "attribution_regression": "61 passed, 1 skipped across account scope, attribution readiness, period, entity and timezone suites; exit 0",
     "native_financial_backend": "139 passed, exit 0; settings, management, account selection, AI profit gate and monthly goal",
-    "independent_ai_review": "No blocking defect; AI routes through governed management; 48 AI guard tests passed and106settings/management passed"
+    "independent_ai_review": "No blocking defect; AI routes through governed management; 48 AI guard tests passed and106settings/management passed",
+    "additional_root_checks": "53 AI budget/preflight/unified/multi-account tests passed; 11 safety regression tests passed after installing CI-pinned openai1.99.9 in existing test venv"
   },
   "live_read_only_evidence": "Exactly two Mezan-selected connected Snapchat accounts: Saudi/SAR/Asia-Riyadh and Self Service/USD/America-Los_Angeles; other seven disabled.",
   "production_changed": true,
   "advertising_writes": false,
   "remaining": [
-    "Independent AI execution path review",
-    "Integrate latest production 726cc701bf120d8aa6f7b055f91ce7463c9626b9 before new v5 release",
-    "Fresh production AI cycle and preview validation",
-    "Monthly cost incompleteness remains a legitimate scale blocker"
+    "Wait for existing supplier owner to finish release and close lease",
+    "Freeze fresh v5 intent for current source; final clean-clone CI then governed deploy",
+    "Repeat both account creation/edit previews and fresh AI cycle",
+    "Resolve actual missing monthly costs without inventing costs or weakening scale gate"
   ],
-  "next_safe_action": "Cherry-pick source-only checkpoint onto latest production, verify then freeze fresh v5 intent. No live ad writes authorized by this checkpoint.",
+  "next_safe_action": "Read latest ledger; fetch and compare production, PR1399 CI; guard status must be inactive before any release rehearsal or /app modification. Preserve all supplier changes.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
   "deployed_release": "PR1397 deployment1ac8b530b7238cbbb985e770019dc897f158eb13 source063c92dc25a35db57933623103625d1163b62ebc; subsequent supplierPR1398 advanced remote, not inspected deployment yet",
-  "live_acceptance": "Prior PR1397 verified 3 probes and green21:31Saudi; both accounts7/7 closed day2026-10-15. Latest AI snapshot14:08UTC has82missingcost and110incompleteorders; all7accountingcomponents known."
+  "live_acceptance": "Prior PR1397 verified 3 probes and green21:31Saudi; both accounts7/7 closed day2026-10-15. Latest AI snapshot14:08UTC has82missingcost and110incompleteorders; all7accountingcomponents known.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1399",
+  "release_blocker": "Active lease owned by SUPPLIER-INVOICE-PERFORMANCE-1398; source1852e26bc774fd55996d9dc90c25b1bb28300304 deployment726cc701bf120d8aa6f7b055f91ce7463c9626b9 release rg5-402ecbac44c51ea2ef73d0e646b400213d13751bf9976c964942480e739db66e. Do not clear or modify /app while active.",
+  "live_preview_blocker": "Saudi campaign creation preview not submitted: product catalog lookup returned Cloudflare origin invalid-response message. No provider write. Cause unproven; retry after active release completes."
 }
