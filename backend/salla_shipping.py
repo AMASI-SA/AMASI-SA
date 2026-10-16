@@ -142,6 +142,17 @@ def extract_shipping(payload: dict, *, event_name: str = "order.snapshot", event
             carrier = {"company_name": name, "company_code": None, "company_logo": None}
             path = "delivery_method"
     shipment = payload if shipment_event else outbound_shipment(payload, carrier)
+    # Some order notifications carry their AWB inside shipping.shipment.
+    # It belongs to the enclosing carrier when it has no carrier of its own.
+    # Never use it to replace an explicit top-level shipment selection/history.
+    nested = _dict(shipping.get("shipment"))
+    if (not shipment_event and not shipment and not payload.get("shipments")
+            and not payload.get("shipment") and nested
+            and _text(nested.get("id")) not in {None, "0"}
+            and str(nested.get("type") or "").casefold() not in RETURNS):
+        nested_carrier = _carrier(nested)
+        if not _has_identity(nested_carrier) or same_carrier(carrier, nested_carrier):
+            shipment = nested
     if not _has_identity(carrier):
         carrier = _carrier(shipment)
         path = "shipment" if shipment_event else "shipments"

@@ -108,7 +108,8 @@ async def test_courier_changed_to_external_never_searches_shipments(saved, monke
 
 
 @pytest.mark.asyncio
-async def test_ingested_label_becomes_printable_and_survives_sparse_update(monkeypatch):
+@pytest.mark.parametrize("shape", ["shipments", "shipping.shipment"])
+async def test_ingested_label_becomes_printable_and_survives_sparse_update(monkeypatch, shape):
     from orders_db import upsert_order
     from salla_integration.sync import _salla_order_to_doc
 
@@ -131,11 +132,48 @@ async def test_ingested_label_becomes_printable_and_survives_sparse_update(monke
 
     await ingest({**base, "updated_at": "2026-10-01T09:00:00Z"})
     assert not (await shipping.refresh_shipping_label(db, "owner", "3001"))["ready"]
-    await ingest({**base, "updated_at": "2026-10-01T10:00:00Z", "shipments": [{
+    shipment = {
         "id": "current", "courier_name": "iMile", "status": "created",
         "tracking_number": "AWB", "label_url": "https://labels.test/arrived.pdf",
-    }]})
+    }
+    arriving = {**base, "updated_at": "2026-10-01T10:00:00Z", "shipments": [shipment]}
+    if shape == "shipping.shipment":
+        nested = {key: value for key, value in shipment.items() if key not in {"courier_name", "label_url"}}
+        nested["label"] = {"url": shipment["label_url"]}
+        arriving = {**base, "updated_at": "2026-10-01T10:00:00Z",
+            "shipping": {"company": "iMile", "shipment": nested}}
+    await ingest(arriving)
     result = await shipping.refresh_shipping_label(db, "owner", "3001")
     assert result["ready"] and result["label_url"] == "https://labels.test/arrived.pdf"
     await ingest({**base, "updated_at": "2026-10-01T11:00:00Z"})
     assert await shipping.refresh_shipping_label(db, "owner", "3001") == result
+
+
+@pytest.mark.parametrize("nested", [
+    {"id": "0"}, {"id": "nested", "type": "return"},
+    {"id": "nested", "courier_name": "DHL"},
+])
+def test_nested_label_rejects_placeholder_return_or_other_carrier(nested):
+    from salla_shipping import extract_shipping
+    result = extract_shipping({"shipping": {"company": "iMile", "shipment": {
+        **nested, "label": "https://labels.test/wrong.pdf", "tracking_number": "WRONG",
+    }}})
+    assert not result.get("label_url")
+
+
+def test_nested_label_never_overrides_explicit_shipment_history():
+    from salla_shipping import extract_shipping
+    result = extract_shipping({"shipping": {"company": "iMile", "shipment": {
+        "id": "nested", "label": "https://labels.test/wrong.pdf",
+    }}, "shipments": [{"id": "current", "courier_name": "iMile",
+        "label_url": "https://labels.test/current.pdf"}]})
+    assert result["label_url"] == "https://labels.test/current.pdf"
+
+
+def test_nested_cancellation_clears_saved_label():
+    from salla_shipping import extract_shipping
+    result = extract_shipping({"shipping": {"company": "iMile", "shipment": {
+        "id": "current", "status": "cancelled", "label": "https://labels.test/cancelled.pdf",
+    }}})
+    assert result["status"] == "cancelled"
+    assert result["label_url"] is None

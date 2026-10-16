@@ -2,11 +2,23 @@
   "task": "SHIPPING-SAVED-LABEL-20261017",
   "branch": "codex/shipping-saved-label-only-20261017",
   "base": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
-  "state": "WIP - saved print verified locally; arrival reliability and review pending",
-  "behavior": "External public print reads canonical saved shipping.label_url with no provider fallback. Merchant courier and issuance provider helper retained. Missing label returns immediately.",
-  "verification": "235 passed, 151 skipped (isolated Mongo replica set unavailable), exit 0; git diff --check exit 0. Synthetic arrival -> printable -> sparse update retention passes. No live latency or webhook delivery guarantee established.",
-  "test_files": ["test_shipping_saved_label_print.py", "test_shipping_print_legacy_path.py", "test_shipping_print_boundary.py", "test_shipping_label_current_guard.py", "test_shipping_snapshot_bootstrap.py", "test_store_courier_unified_print.py", "test_salla_current_shipping.py"],
-  "risks": ["User requires reliable arrival, not only fast missing-label response", "Webhook capture records persistence failures while acknowledging; durable retry not established", "Legacy provider tests now characterize private helper; public external contract separately tested"],
+  "state": "WIP - local print and nested-label ingestion verified; production arrival evidence pending",
+  "behavior": "External public print reads canonical saved shipping.label_url with no provider fallback. Merchant courier and issuance provider helper retained. Missing label returns immediately. Also extract nested shipping.shipment.label without overriding top-level shipment history; exclude placeholder, return and conflicting carrier.",
+  "verification": "241 passed, 151 skipped (isolated Mongo replica set unavailable), exit 0; git diff --check exit 0. Top-level and nested label arrival -> printable -> sparse retention tested. Live delivery latency and persistence-retry reliability not established.",
+  "test_files": [
+    "test_shipping_saved_label_print.py",
+    "test_shipping_print_legacy_path.py",
+    "test_shipping_print_boundary.py",
+    "test_shipping_label_current_guard.py",
+    "test_shipping_snapshot_bootstrap.py",
+    "test_store_courier_unified_print.py",
+    "test_salla_current_shipping.py"
+  ],
+  "risks": [
+    "User requires reliable arrival, not only fast missing-label response",
+    "Webhook capture records persistence failures while acknowledging; durable retry not established",
+    "Legacy provider tests characterize private helper; public external print and ingestion use separate database-backed tests."
+  ],
   "next": "Finish independent review and inspect production event evidence / ingestion retry before release. Do not merge or deploy PR1404 (obsolete order-details-only design). Follow AGENTS protocol v5 for any release.",
   "production_changed": false,
   "release_guard": "not prepared",
