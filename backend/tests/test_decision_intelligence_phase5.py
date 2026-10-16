@@ -190,6 +190,16 @@ def _evidence(identity: dict | None = None, reports: dict | None = None) -> dict
     )
 
 
+@pytest.mark.parametrize("provider", ["snapchat_ads", "future_ads"])
+def test_readiness_response_preserves_provider_scope_for_consumer(provider):
+    evidence = _evidence()
+    evidence["provider"] = provider
+    result = run_phase5_shadow_from_evidence(evidence)
+    assert result["provider"] == provider
+    assert result["account"] == evidence["account"]
+    assert result["period"] == evidence["period"]
+
+
 def test_closed_reconciled_day_builds_shadow_recommendation_chain():
     evidence = _evidence()
     assert evidence["contract_version"] == CONTRACT_VERSION

@@ -180,6 +180,7 @@ def run_phase5_shadow_from_evidence(
     return {
         "phase": PHASE5_VERSION,
         "mode": "recommendation_shadow",
+        "provider": evidence.get("provider"),
         "contract_version": evidence.get("contract_version"),
         "source": evidence.get("source"),
         "account": evidence.get("account"),
