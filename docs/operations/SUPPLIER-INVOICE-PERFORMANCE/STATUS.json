@@ -60,14 +60,20 @@
     "recorded_on": "2026-10-16",
     "branch": "codex/supplier-performance-integrated-20261016",
     "base": "1ac8b530b7238cbbb985e770019dc897f158eb13",
-    "state": "INTEGRATED_SOURCE_PENDING_FRESH_CI_AND_RELEASE",
+    "state": "DEPLOYED_VERIFIED",
     "authorization": "owner authorized deployment and reversible code rollback",
-    "production_changed_by_this_task": false,
+    "production_changed_by_this_task": true,
     "superseded_frozen_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1384",
     "superseded_head": "8bd307ff8e9f3bb6d665f791b02fb3539e5503fd",
     "reason": "Production advanced through PR1397, including supplier option refresh PR1395; preserve all current changes. No frozen intent from earlier candidates reused.",
     "ready_shipping": "excluded; external conditional status mutation remains unproven",
-    "verification": "Prior #1391 source passed 14/14 workflows. Integrated tests pending; runtime performance files unchanged. Current CI includes PR1395 refresh regression.",
-    "next_safe_action": "Fresh integrated CI and rollback proof, await release owner handoff and inactive guard, then new governed source/intent build."
+    "verification": "14/14 applicable final-head workflows PASS; 339 native invoice tests +7 subtests PASS; isolated source build and clean-clone adapter PASS; deployed guard verified:true checks:3",
+    "next_safe_action": "No repeat deployment. Observe normal invoice print use; Android device acceptance remains separate. Ready automation excluded.",
+    "deployed_sha": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
+    "source_sha": "1852e26bc774fd55996d9dc90c25b1bb28300304",
+    "reviewed_head": "7fecffbf61f430c7e5b88d32e4514d16965d9251",
+    "tree": "b7d99f832b7ded0735e2c286fabe006e911b4e3b",
+    "release_id": "rg5-402ecbac44c51ea2ef73d0e646b400213d13751bf9976c964942480e739db66e",
+    "initial_probe": "First guard probe returned HTTP520 during startup; subsequent full guard run passed all3 checks. No repeated publish."
   }
 }
