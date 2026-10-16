@@ -413,6 +413,75 @@ async def _snapchat_v1_campaign_entities(
     return rows
 
 
+class _AccountEntityRows(list):
+    """Keep diagnostic evidence alongside the backwards-compatible row list."""
+
+    def __init__(self, bundle: dict[str, Any], key: str):
+        super().__init__(bundle.get(key) or [])
+        self.account_diagnostics = list(bundle.get("account_diagnostics") or [])
+
+
+def _account_analysis(diagnostics, entities, candidates, recommendations, source):
+    """Describe this cycle's evidence; absence of a decision is not monitoring."""
+    accounts = {}
+    for diagnostic in diagnostics:
+        identity = diagnostic.get("account") or {}
+        account_id = str(identity.get("id") or "")
+        if not account_id:
+            continue
+        key = ("snapchat", account_id)
+        eligibility = diagnostic.get("decision_eligibility") or {}
+        previous = accounts.get(key)
+        # Both source reads must be healthy; never hide a blocked read with a
+        # later healthy one, or certify an account using another account.
+        if previous and previous["decision_eligibility"].get("eligible") is False:
+            continue
+        accounts[key] = {
+            "provider": "snapchat", "account_id": account_id,
+            "account_name": identity.get("name") or identity.get("display_name") or account_id,
+            "period": diagnostic.get("period"),
+            "decision_eligibility": eligibility,
+        }
+    for row in entities:
+        key = (str(row.get("provider") or ""), str(row.get("account_id") or ""))
+        if not all(key):
+            continue
+        accounts.setdefault(key, {
+            "provider": key[0], "account_id": key[1],
+            "account_name": row.get("account_name") or key[1],
+            "period": None, "decision_eligibility": {},
+        })
+    output = []
+    for key, account in accounts.items():
+        def matches(row):
+            return (str(row.get("provider") or ""), str(row.get("account_id") or "")) == key
+        account["entities_scanned"] = sum(matches(row) for row in entities)
+        account["candidates_scanned"] = sum(matches(row) for row in candidates)
+        account["recommendations_count"] = sum(matches(row) for row in recommendations)
+        eligibility = account["decision_eligibility"]
+        account["gates"] = eligibility.get("gates") or []
+        account["blocked_by"] = list(eligibility.get("blocked_by") or [])
+        if eligibility.get("eligible") is False:
+            reason = eligibility.get("reason") or "account_evidence_unavailable"
+            if not account["blocked_by"]:
+                account["blocked_by"] = [reason]
+            status = "analysis_failed" if reason == "account_evidence_load_failed" else "blocked"
+        elif not account["candidates_scanned"]:
+            status = "no_candidates" if eligibility.get("eligible") is True or account["entities_scanned"] else "unknown"
+        elif source == "openai_unavailable":
+            status = "analysis_failed"
+            account["blocked_by"] = ["openai_unavailable"]
+        elif account["recommendations_count"]:
+            status = "recommendations_available"
+        elif source == "openai":
+            status = "no_recommendation"
+        else:
+            status = "unknown"
+        account["status"] = status
+        output.append(account)
+    return output
+
+
 async def _snapchat_campaign_entities(
     db: Any,
     user_id: str,
@@ -423,7 +492,7 @@ async def _snapchat_campaign_entities(
     bundle = await load_snapchat_unified_ai_entities(
         db, str(user_id), start, end
     )
-    return list(bundle.get("campaigns") or [])
+    return _AccountEntityRows(bundle, "campaigns")
 
 
 async def _campaign_entities(
@@ -665,7 +734,7 @@ async def _snapchat_child_entities(
     bundle = await load_snapchat_unified_ai_entities(
         db, str(user_id), start, end
     )
-    return list(bundle.get("children") or [])
+    return _AccountEntityRows(bundle, "children")
 
 
 def _candidate_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
@@ -1097,11 +1166,12 @@ async def run_campaign_ai_monitor(
                 })
 
         entities: list[dict[str, Any]] = []
+        account_diagnostics: list[dict[str, Any]] = []
         for provider in ("snapchat", "meta"):
             try:
-                entities.extend(
-                    await _campaign_entities(db, user_id, provider, start, end)
-                )
+                rows = await _campaign_entities(db, user_id, provider, start, end)
+                account_diagnostics.extend(getattr(rows, "account_diagnostics", []))
+                entities.extend(rows)
             except Exception as exc:
                 errors.append({
                     "source": f"{provider}_campaigns",
@@ -1110,7 +1180,9 @@ async def run_campaign_ai_monitor(
                     ),
                 })
         try:
-            entities.extend(await _snapchat_child_entities(db, user_id, start, end))
+            rows = await _snapchat_child_entities(db, user_id, start, end)
+            account_diagnostics.extend(getattr(rows, "account_diagnostics", []))
+            entities.extend(rows)
         except Exception as exc:
             errors.append({
                 "source": "snapchat_children",
@@ -1354,6 +1426,10 @@ async def run_campaign_ai_monitor(
                 *[item["source"] for item in errors],
             ])),
             "fingerprint": fingerprint,
+            "account_analysis": _account_analysis(
+                account_diagnostics, entities, candidates, recommendation_rows,
+                recommendation_source,
+            ),
             "entities_scanned": len(entities),
             "candidates_scanned": len(candidates),
             "providers": ["snapchat", "meta"],

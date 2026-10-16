@@ -8,6 +8,25 @@ import campaign_ai_unified_shadow as shadow
 import campaign_ai_unified_source as source
 
 
+@pytest.mark.asyncio
+async def test_shadow_exposes_range_blockers_without_model_or_writes(monkeypatch):
+    diagnostic = {"account": {"id": "snap-test"},
+                  "period": {"date_from": "2026-10-13", "date_to": "2026-10-15"},
+                  "decision_eligibility": {"eligible": False, "blocked_by": ["coverage"]}}
+    async def empty(*args, **kwargs):
+        return []
+    async def unified(*args, **kwargs):
+        return {"campaigns": [], "children": [], "account_diagnostics": [diagnostic]}
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_campaign_entities", empty)
+    monkeypatch.setattr(shadow._v1_policy, "_snapchat_v1_child_entities", empty)
+    monkeypatch.setattr(shadow, "load_snapchat_unified_ai_entities", unified)
+    result = await shadow.build_campaign_ai_unified_shadow(None, "owner", days=3)
+    assert result["account_diagnostics"] == [diagnostic]
+    assert result["openai_called"] is False
+    assert result["writes_performed"] is False
+    assert result["recommendations_created"] is False
+
+
 def _row(
     level: str,
     entity_id: str,
