@@ -1,7 +1,7 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "source_integrated_on_bank_release_pending_v5",
-  "branch": "codex/snapchat-native-financial-release-20261016",
+  "state": "native_financial_deployed_verified_live_acceptance_in_progress",
+  "branch": "codex/snapchat-native-financial-evidence-20261016",
   "production_base": "36172c4a237cce54cd8e89080020cac84ceccf29",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
@@ -27,16 +27,15 @@
   "production_changed": true,
   "advertising_writes": false,
   "remaining": [
-    "Wait for existing supplier owner to finish release and close lease",
-    "Freeze fresh v5 intent for current source; final clean-clone CI then governed deploy",
-    "Repeat both account creation/edit previews and fresh AI cycle",
-    "Resolve actual missing monthly costs without inventing costs or weakening scale gate"
+    "Postdeploy SARreadiness and bothaccountpreview acceptance",
+    "Monthlyadvertisingquality and actualmissingcosts remain scale blockers",
+    "Real provider execution requires specific approvedproposal"
   ],
-  "next_safe_action": "Create fresh PR and source candidate build; freeze intent-only B from matching reviewed artifact. Preserve supplier and bank releases.",
+  "next_safe_action": "Complete read-only readiness and previewonly flows on deployed97aa64777. No newdeploymentneeded. Never deploythisevidencebranch.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
-  "deployed_release": "PR1397 deployment1ac8b530b7238cbbb985e770019dc897f158eb13 source063c92dc25a35db57933623103625d1163b62ebc; subsequent supplierPR1398 advanced remote, not inspected deployment yet",
-  "live_acceptance": "Prior PR1397 verified 3 probes and green21:31Saudi; both accounts7/7 closed day2026-10-15. Latest AI snapshot14:08UTC has82missingcost and110incompleteorders; all7accountingcomponents known.",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1399",
-  "release_blocker": "Fresh /app guard reports active=false; final prepublish gate still mandatory.",
-  "live_preview_blocker": "Saudi campaign creation preview not submitted: product catalog lookup returned Cloudflare origin invalid-response message. No provider write. Cause unproven; retry after active release completes."
+  "deployed_release": "rg5-71ff2521a713e76d185bab55de959e1eaf1f14e9851d65c2698d5e12a5730c54; sourcef8c268396c77445761db5ca16da7c0e758729acc; deployment97aa64777a9bbd7b10bd6b0b8001aba26297b926; green23:03Saudi; verifytrue checks3; leaseinactive",
+  "live_acceptance": "Fresh postdeploy USD account7/7 forclosedOct15,unlinked0,costmissing0. SAR and previews pending. Latest AI19:15UTC monthlyadvertisingunknown,missingcost77,incomplete112; recommendation generationworks.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1402",
+  "release_blocker": null,
+  "live_preview_blocker": "Broadproductquery failedearlier; exactSKU AMS11509 succeeds. No adwrite. Retry currentreleasepreview."
 }
