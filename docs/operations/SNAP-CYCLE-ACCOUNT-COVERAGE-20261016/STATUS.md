@@ -8,3 +8,9 @@ Full-range source eligibility can return no Snapchat entities while the single c
 Verification:84 backend tests and28 frontend tests passed; all exit0. Live three-day shadow had0 unified entities versus53 campaigns/170 groups/200 ads from legacy observer. Exact live blocking gate is still unproven. Do not label this issue resolved until actual period diagnostic and fresh cycle are checked.
 
 Production unchanged by this PR. Previous release97aa remains deployed and verified. No financial/ad writes. Preserve bank/terminal and supplier fixes. Release requires v5 source A, generated reviewed intent-only B, CI, official build/prepare/prepublish and visible success plusverify3. Next: finish CI, freeze intent, deploy under existing user authorization, inspect3-day account diagnostics and correct underlying data/code blocker if evidenced. Never promote missing costs tozero.
+
+## Deployment proof
+
+PR1403 merged and published as08545aee8a168b069150643a549d548c5f34aab2. Sourceaf323c89724ef21cda909b66868559ea820ad562; runtime rg5-f7d8b811922c81b74bd21f639dfd34107d130d8562c63572c1d0eedd89208226. EmergentexplicitDeploymentSuccessfulOct17 00:20Saudi. Initialverifyhit520duringstartup; logshealth200andapprequests200thenofficialretryverifiedtruechecks3, guardactivefalse. Log/root/snap-cycle-verify-retry.log. No advertisingwrites.
+
+Live3dayshadow afterpublish: USD accountOct13–15 all7gatespassed,172/172ordersattributed,missingcost0,BUTconvertedcampaign/group/adrowsremain0. This identifies a second candidate-level conversion/eligibility issue beyondglobalreadiness, not yetdiagnosed. SAROct14–16blockedbycoverage,reconciliation,financial_coverage;freshsynccomplete,missingcost0. Needinspectcampaignroweligibility/conversion forUSD andperiodcoverage forSAR withoutweakeninggates. UserasksfinishSnapfirstbeforeotherAIplannerwork. This evidencebranchmustneverdeploy.
