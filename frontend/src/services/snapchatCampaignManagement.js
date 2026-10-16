@@ -125,11 +125,19 @@ function baseFinancialSettingsReady(value, accountId = "") {
         ? (Date.now() - settingsSyncedAt) / 1000
         : Number.NaN;
     const expectedAccountId = text(accountId);
+    const currencyProof = object(value.account_currency_proof);
+    const currencyReady = value.account_currency === "USD" || (
+        value.account_currency === "SAR"
+        && currencyProof.verified === true
+        && currencyProof.source === "snapchat_api_discovery"
+        && currencyProof.currency === "SAR"
+        && currencyProof.ad_account_id === value.ad_account_id
+    );
     return Boolean(
         value.unified_entity_id
         && value.provider_entity_id
         && value.mapping_verified === true
-        && value.account_currency === "USD"
+        && currencyReady
         && value.ad_account_id
         && (!expectedAccountId || value.ad_account_id === expectedAccountId)
         && FINANCIAL_SETTINGS_READY.has(value.quality.settings_status)

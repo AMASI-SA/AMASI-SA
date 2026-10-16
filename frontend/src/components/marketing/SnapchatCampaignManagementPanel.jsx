@@ -320,8 +320,9 @@ function formatAuditValue(change, side, accountCurrency) {
     if (["daily_budget_micro", "bid_micro"].includes(field)) {
         const raw = Number(value);
         const rawText = Number.isFinite(raw) ? `${raw.toLocaleString("en-US")} micro` : String(value);
-        return String(accountCurrency || "").toUpperCase() === "USD" && Number.isFinite(raw)
-            ? `${rawText} · ${(raw / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 6 })} USD`
+        const currency = String(accountCurrency || "").toUpperCase();
+        return ["USD", "SAR"].includes(currency) && Number.isFinite(raw)
+            ? `${rawText} · ${(raw / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${currency}`
             : rawText;
     }
     return typeof value === "object" ? JSON.stringify(value) : String(value);

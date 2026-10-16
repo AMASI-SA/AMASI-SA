@@ -1,8 +1,8 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "attribution_followup_verified_ready_for_v5",
-  "branch": "codex/snapchat-attribution-integrated-20261016",
-  "production_base": "5a66b5e9831c857b27114521b3abddd839a4e1f1",
+  "state": "source_integrated_on_bank_release_pending_v5",
+  "branch": "codex/snapchat-native-financial-release-20261016",
+  "production_base": "36172c4a237cce54cd8e89080020cac84ceccf29",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
     "Enabled accounts only; zero spend remains enabled",
@@ -15,20 +15,28 @@
   ],
   "verification": {
     "integrated_backend": "263 passed, 1 skipped; exit 0",
-    "frontend": "54 passed in 3 suites; exit 0",
+    "frontend": "68 passed, 2 suites, exit 0",
     "diff_check": "exit 0",
     "prior_environment_failure": "7 legacy HTTP integration tests require configured disposable service URL; no URL was configured, so requests failed locally with MissingSchema before network. Excluded from local unit scope; no production registration performed.",
-    "attribution_regression": "61 passed, 1 skipped across account scope, attribution readiness, period, entity and timezone suites; exit 0"
+    "attribution_regression": "61 passed, 1 skipped across account scope, attribution readiness, period, entity and timezone suites; exit 0",
+    "native_financial_backend": "139 passed, exit 0; settings, management, account selection, AI profit gate and monthly goal",
+    "independent_ai_review": "No blocking defect; AI routes through governed management; 48 AI guard tests passed and106settings/management passed",
+    "additional_root_checks": "53 AI budget/preflight/unified/multi-account tests passed; 11 safety regression tests passed after installing CI-pinned openai1.99.9 in existing test venv"
   },
   "live_read_only_evidence": "Exactly two Mezan-selected connected Snapchat accounts: Saudi/SAR/Asia-Riyadh and Self Service/USD/America-Los_Angeles; other seven disabled.",
   "production_changed": true,
   "advertising_writes": false,
   "remaining": [
-    "Governed source/intent CI and production deployment of attribution fix",
-    "Recheck both live account readiness and remaining unknown orders"
+    "Wait for existing supplier owner to finish release and close lease",
+    "Freeze fresh v5 intent for current source; final clean-clone CI then governed deploy",
+    "Repeat both account creation/edit previews and fresh AI cycle",
+    "Resolve actual missing monthly costs without inventing costs or weakening scale gate"
   ],
-  "next_safe_action": "Verify integrated source preserves PR1395; freeze new v5 intent from this base. PR1396 source is stale and must not deploy.",
+  "next_safe_action": "Create fresh PR and source candidate build; freeze intent-only B from matching reviewed artifact. Preserve supplier and bank releases.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
-  "deployed_release": "rg5-415a9b55f1b9e4cd137cc3e990acca476f06244098002fc122800d8762f64dd2, source175252f9e, guardverified3checks, leaseinactive, Emergentgreen20:51Saudi",
-  "live_acceptance": "Only2enabledaccounts displayed, portfolio2663.59SAR(US2663.59+Saudi0) onOct16Riyadh; US7of7;Saudi6of7(64unlinked) day15. Exactforeignownershipof64notyetproven."
+  "deployed_release": "PR1397 deployment1ac8b530b7238cbbb985e770019dc897f158eb13 source063c92dc25a35db57933623103625d1163b62ebc; subsequent supplierPR1398 advanced remote, not inspected deployment yet",
+  "live_acceptance": "Prior PR1397 verified 3 probes and green21:31Saudi; both accounts7/7 closed day2026-10-15. Latest AI snapshot14:08UTC has82missingcost and110incompleteorders; all7accountingcomponents known.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1399",
+  "release_blocker": "Fresh /app guard reports active=false; final prepublish gate still mandatory.",
+  "live_preview_blocker": "Saudi campaign creation preview not submitted: product catalog lookup returned Cloudflare origin invalid-response message. No provider write. Cause unproven; retry after active release completes."
 }
