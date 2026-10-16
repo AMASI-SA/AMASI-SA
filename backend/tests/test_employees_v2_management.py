@@ -88,6 +88,13 @@ class _Collection:
                 return copy.deepcopy(row)
         return None
 
+    def find(self, query, _projection=None):
+        rows = [copy.deepcopy(row) for row in self.rows if _matches(row, query)]
+        class Cursor:
+            async def to_list(self, length):
+                return rows[:length]
+        return Cursor()
+
     async def update_one(self, query, update, upsert=False):
         for row in self.rows:
             if not _matches(row, query):
@@ -117,6 +124,16 @@ class _Database:
 
     def __getattr__(self, name):
         return self[name]
+
+
+@pytest.fixture(autouse=True)
+def in_memory_lifecycle_boundary(monkeypatch):
+    # These tests isolate API policy. Real commit/rollback and capability checks
+    # live in test_employee_lifecycle_capability and test_employee_payroll_history_guard.
+    async def run(db, owner, callback):
+        assert isinstance(db, _Database)
+        return await callback(db)
+    monkeypatch.setattr(employee_routes, "employee_lifecycle_atomic_owner", run)
 
 
 def _route_endpoint(router, path, method):
