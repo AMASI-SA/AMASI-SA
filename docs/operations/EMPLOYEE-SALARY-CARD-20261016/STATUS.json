@@ -44,7 +44,8 @@
       "operational_balance_sources.py bank and POS identity"
     ],
     "resolution": "Clean source-only cherry-pick; latest production additions preserved; no old intent carried forward",
-    "fresh_verification": "pending"
+    "fresh_verification": "48 operational engine/legacy upgrade tests PASS; 44 lifecycle capability tests including real Mongo PASS; comprehensive suite pending",
+    "legacy_compatibility": "Exact pre-upgrade calendar rounding accepted only for old rows without currency, matching revision salary/status and obligation currency. No tolerance or financial history rewrite."
   },
   "previous_source": "29ae5117b0ad68e57213bae6d909a29c9fd62939"
 }

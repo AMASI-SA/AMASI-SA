@@ -2,7 +2,7 @@
 from calendar import monthrange
 from copy import deepcopy
 from datetime import date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 
 def candidates(employee, first, today):
@@ -40,6 +40,30 @@ def candidates(employee, first, today):
                 total += salary / Decimal(monthrange(current.year, current.month)[1])
                 earned = total.quantize(Decimal('.01'), rounding=ROUND_HALF_UP) - before
                 result[key] = {'amount': format(earned, '.2f'), 'revision': deepcopy(revision),
-                               'currency': employee['currency']}
+                               'currency': employee['currency'], 'daily_salary': format(salary, 'f')}
         current += timedelta(days=1)
     return result, missing
+
+
+def legacy_salary_day_matches(key, previous, proposed, recorded_currency):
+    """Recognize exact pre-upgrade rounding, never a general cent tolerance.
+
+    Old rows have currency only on their obligation. Preserve them only when
+    their recorded revision still has the same financial inputs and the amount
+    exactly matches the old calendar-day formula with current leave eligibility.
+    """
+    if 'currency' in previous or not proposed or recorded_currency != proposed['currency']:
+        return False
+    try:
+        before, after = previous['revision'], proposed['revision']
+        if (before['status'] != after['status']
+                or Decimal(str(before['salary'])) != Decimal(str(after['salary']))):
+            return False
+        day = date.fromisoformat(key.rsplit(':', 1)[1])
+        salary = Decimal(proposed['daily_salary'])
+        days = Decimal(monthrange(day.year, day.month)[1])
+        rounded = lambda value: value.quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+        expected = rounded(salary * day.day / days) - rounded(salary * (day.day - 1) / days)
+        return Decimal(str(previous['amount'])) == expected
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        return False

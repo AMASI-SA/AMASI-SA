@@ -36,7 +36,7 @@ def capability(profile="employee_lifecycle", legacy=False):
         assignment["owner_user_id"] = "owner"
     root = {"users": Collection("users", {"id": "login"}),
             "mezan_role_assignments_v2": Collection("mezan_role_assignments_v2", assignment)}
-    for name in ("general_ledger", "mz2_atomic_owners", "mezan_employee_events_v2", "order_review_auth_sessions_v2"):
+    for name in ("general_ledger", "mz2_atomic_owners", "mezan_employee_events_v2", "order_review_auth_sessions_v2", "mezan_bundle_definitions_v2"):
         root[name] = Collection(name)
     root["operational_balance_states_v1"] = Collection("operational_balance_states_v1", {"_id": "owner"})
     state = {"profile": profile, "failed": False}
@@ -59,6 +59,10 @@ async def test_employee_lifecycle_rejects_review_session_binding_before_database
 @pytest.mark.asyncio
 @pytest.mark.parametrize("profile,collection", [
     ("employee_lifecycle", "order_review_auth_sessions_v2"),
+    ("employee_lifecycle", "mezan_bundle_definitions_v2"),
+    ("bundle_catalog", "users"),
+    ("bundle_catalog", "mezan_role_assignments_v2"),
+    ("bundle_catalog", "operational_balance_states_v1"),
     ("fulfillment", "users"),
     ("fulfillment", "mezan_role_assignments_v2"),
     ("fulfillment", "operational_balance_states_v1"),

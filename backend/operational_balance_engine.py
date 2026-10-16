@@ -401,7 +401,7 @@ def reconcile(state, sources, as_of):
             engine["cod_reports"] = checkpoint[3]
             issue(str(error), oid)
 
-    from operational_salary_projection import candidates as salary_candidates
+    from operational_salary_projection import candidates as salary_candidates, legacy_salary_day_matches
     first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
     today = now.astimezone(RIYADH).date()
     current_salary = {}
@@ -419,7 +419,8 @@ def reconcile(state, sources, as_of):
         proposed = current_salary.get(key)
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]
-                or previous_currency != proposed["currency"]):
+                or previous_currency != proposed["currency"]) and not legacy_salary_day_matches(
+                    key, previous, proposed, previous_currency):
             conflicts[key] = {"recorded": deepcopy(previous), "proposed": deepcopy(proposed),
                               "action_required": "review_documented_salary_adjustment"}
             issue("salary_source_changed", key)
