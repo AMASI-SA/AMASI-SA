@@ -2,8 +2,8 @@
   "task": "Operational opening catalog correction",
   "base": "ce3c6ffaf3bc445c46d178c04b8765829b6552a9",
   "branch": "codex/operational-opening-clean-v5",
-  "status": "IMPLEMENTED_UAT_FIXES_PENDING_CI_AND_LIVE_MAPPING",
-  "production_changed": false,
+  "status": "SOURCE_MERGED_DEPLOY_BLOCKED_BY_BROWSER_ACCESS",
+  "production_changed": true,
   "completed": [
     "Explicit operational expense provenance; no deletion or historical balance mutation",
     "Web read-only discovery of connected unbound advertising accounts and unconfirmed configured couriers",
@@ -21,7 +21,7 @@
     "frontend_affected_tests": 117,
     "shipping_profit_tests": 16,
     "shipping_profit_subtests": 18,
-    "ci": "PR1372: affected operational, security, accounting and shipping checks PASS. Release readiness rejected historical intent edits. Clean branch preserves exact code tree above latest Production; fresh CI pending.",
+    "ci": "All applicable checks on reviewed B PASS, including official Linux clean-clone rehearsal run 38892121826. Post-merge push gates in progress.",
     "production_authenticated_catalog": "NOT_INSPECTED",
     "browser_access": "BLOCKED: failed to write kernel assets, os error 3",
     "followup_frontend_tests": 108
@@ -35,7 +35,14 @@
     "Emergent browser unavailable (os error 3): operator terminal required for release guard and publishing",
     "Order courier discovery limit 20000 retained; large owner catalogs fail closed"
   ],
-  "next_safe_action": "Review final diff and GitHub CI, preserve current Production changes, complete explicit bank/ad and shipping-contract setup wiring without business writes, then v5 release gates via approved operator terminal.",
-  "production_review": "Fresh source lineage above ce3c6ffaf; before status update, staged tree exactly equals prior candidate 0df8f7a67b4606f6fe07d944ea826fcac4fb7219. Original PR1372/history preserved.",
-  "authorization": "Owner requests implementation through deployment for agreed fixes; financial or inventory business writes and writer activation remain excluded."
+  "next_safe_action": "Wait post-merge push gates; user restoring Emergent access. Browser retry still os error 3. Once available inspect active release lease, Manage Publishing, workspace disk/git/source and current writer controls. No prepare/publish until those checks; no business writes. Do not merge this handoff-only branch.",
+  "production_review": "PR1375 merged as a0f03a73ec364481e1995d8d35987fd99a85ac8e, tree e04c5f54daba62ce13dbaaed6fb665e14d51313d equals reviewed B. Production Git source changed; deployed runtime not changed by this task.",
+  "authorization": "Owner requests implementation through deployment for agreed fixes; financial or inventory business writes and writer activation remain excluded.",
+  "release": {
+    "release_id": "rg5-4edc6dca021fed8603615b94c514efb36602f570087dab22b7ccd35ea039c1e3",
+    "source": "9b19392f6f2a6389511fa87f239be673d9dfd55a",
+    "merge": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
+    "intent": "801228411bbf251c6cb5879a9d3f64549b88fbf0",
+    "pr": 1375
+  }
 }
