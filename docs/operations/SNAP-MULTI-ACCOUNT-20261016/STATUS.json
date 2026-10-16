@@ -1,8 +1,8 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "attribution_followup_verified_ready_for_v5",
-  "branch": "codex/snapchat-attribution-integrated-20261016",
-  "production_base": "5a66b5e9831c857b27114521b3abddd839a4e1f1",
+  "state": "deployed_and_live_acceptance_verified",
+  "branch": "codex/snapchat-multi-account-verification-20261016",
+  "production_base": "1ac8b530b7238cbbb985e770019dc897f158eb13",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
     "Enabled accounts only; zero spend remains enabled",
@@ -23,12 +23,18 @@
   "live_read_only_evidence": "Exactly two Mezan-selected connected Snapchat accounts: Saudi/SAR/Asia-Riyadh and Self Service/USD/America-Los_Angeles; other seven disabled.",
   "production_changed": true,
   "advertising_writes": false,
-  "remaining": [
-    "Governed source/intent CI and production deployment of attribution fix",
-    "Recheck both live account readiness and remaining unknown orders"
-  ],
-  "next_safe_action": "Verify integrated source preserves PR1395; freeze new v5 intent from this base. PR1396 source is stale and must not deploy.",
+  "remaining": [],
+  "next_safe_action": "No more code change required for this scope. Use account selector for native reports and allaccounts for common Riyadh SAR totals. This branch is documentation-only, not a deployment candidate.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
-  "deployed_release": "rg5-415a9b55f1b9e4cd137cc3e990acca476f06244098002fc122800d8762f64dd2, source175252f9e, guardverified3checks, leaseinactive, Emergentgreen20:51Saudi",
-  "live_acceptance": "Only2enabledaccounts displayed, portfolio2663.59SAR(US2663.59+Saudi0) onOct16Riyadh; US7of7;Saudi6of7(64unlinked) day15. Exactforeignownershipof64notyetproven."
+  "deployed_release": "rg5-da572892dd7aaee2b3847ac8215543afc46d16f8533c9ead1acb769ef5c09054; source063c92dc25a35db57933623103625d1163b62ebc; deployment1ac8b530b7238cbbb985e770019dc897f158eb13; Emergent green finished21:31Saudi; guardverified3checks; leaseinactive",
+  "live_acceptance": "Exactly2enabledaccounts plusall. US and Saudi each7of7 for closed2026-10-15,unlinked0,costmissing0; Saudi beforefollowup6of7/unlinked64. Oct16Riyadh portfolio2750.99SAR =US2750.99+Saudi0. NativeUS477.87USD at earlier read uses different day boundary. No adwrites.",
+  "validation_limits": [
+    "No real campaign create/edit/approve performed; account binding covered by backend and frontend tests.",
+    "Live readiness proves the closed day2026-10-15 only; no blanket100percent or autonomous execution claim.",
+    "Recommendations page loaded earlier17:08plan; fresh AI generation was not triggered through UI.",
+    "Broader monthly profit completeness and optional storefront/browser enrichment are separate from account readiness."
+  ],
+  "release_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1397",
+  "rollback": "Prior deployed base5a66b5e9831c857b27114521b3abddd839a4e1f1 preserved. Any rollback must preserve subsequent unrelated fixes and follow fresh v5 source/intent/guard protocol; never reset shared workspace.",
+  "verification_log": "/root/snap-attribution-production-verify.log"
 }
