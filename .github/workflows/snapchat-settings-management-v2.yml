@@ -132,6 +132,8 @@ jobs:
               backend/snapchat_v2/routes.py|\
               backend/snapchat_v2/scheduler.py|\
               backend/snapchat_v2/status.py|\
+              backend/snapchat_v2/salla_outcomes.py|\
+              backend/tests/test_snapchat_salla_account_scope.py|\
               backend/tests/test_campaign_ai_multi_account.py|\
               backend/tests/test_campaign_ai_unified_cutover.py|\
               backend/tests/test_campaign_ai_unified_execution_evidence.py|\
