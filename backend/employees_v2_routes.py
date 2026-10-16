@@ -28,7 +28,7 @@ from fastapi.encoders import jsonable_encoder
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from operational_atomic import employee_setup_atomic_owner
+from operational_atomic import employee_setup_atomic_owner, employee_lifecycle_atomic_owner
 from auth import hash_password
 from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH
 from ai_store_access_contract import (
@@ -361,7 +361,7 @@ def _salary_contract_view(contract: dict[str, Any], today: date) -> dict[str, An
 async def _assert_salary_history_mutable(db, owner_id, employee, contract, effective_date):
     """Conservative freeze: posted employee history requires an adjustment.
 
-    Serializes with financial posting through employee_setup_atomic_owner. No guessed date,
+    Serializes with financial posting through employee_lifecycle_atomic_owner. No guessed date,
     legacy salary fallback, or rewrite of opening/settlement/ledger documents.
     A forward change is allowed only beyond every evidenced affected period.
     """
@@ -369,6 +369,19 @@ async def _assert_salary_history_mutable(db, owner_id, employee, contract, effec
         employee.get("id"), employee.get("financial_entity_id"), employee.get("legacy_employee_id"),
         (contract or {}).get("id"), (contract or {}).get("legacy_salary_id"),
     ) if value})
+    operational = await db.operational_balance_states_v1.find_one(
+        {"_id": owner_id, "owner_id": owner_id}, {"_id": 0, "engine.salary_days": 1},
+    )
+    prefix = f"salary:{employee['id']}:"
+    for key in ((operational or {}).get("engine") or {}).get("salary_days", {}):
+        if not key.startswith(prefix):
+            continue
+        try:
+            recorded_day = date.fromisoformat(key[len(prefix):])
+        except ValueError:
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"}) from None
+        if recorded_day >= effective_date:
+            raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
     rows = await db.general_ledger.find({
         "user_id": owner_id, "entity_type": "employee", "entity_id": {"$in": ids},
         "status": {"$in": ["posted", "reversed"]},
@@ -400,6 +413,26 @@ async def _assert_salary_history_mutable(db, owner_id, employee, contract, effec
             last -= timedelta(days=1)
         if effective_date <= last:
             raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"})
+
+
+async def _invalidate_operational_salary_snapshot(db, owner_id):
+    """Serialize a contract change with operational reconciliation's revision CAS.
+
+    The lifecycle transaction changes only revision metadata, never financial
+    history. A concurrent reducer must retry with the newly committed contract.
+    No state is created: accounting activation owns its full initial document.
+    """
+    state = await db.operational_balance_states_v1.find_one(
+        {"_id": owner_id, "owner_id": owner_id}, {"_id": 1, "revision": 1},
+    )
+    if state is None:
+        return
+    result = await db.operational_balance_states_v1.update_one(
+        {"_id": owner_id, "owner_id": owner_id, "revision": state["revision"]},
+        {"$inc": {"revision": 1, "salary_contract_revision": 1}},
+    )
+    if not result.matched_count:
+        raise HTTPException(409, detail={"code": "employee_salary_revision_conflict"})
 
 
 def _new_salary_contract(
@@ -565,6 +598,7 @@ def build_employee_management_snapshot(
             "department": employee.get("department"),
             "hire_date": employee.get("hire_date"),
             "status": status,
+            "payroll_status_effective_date": employee.get("payroll_status_effective_date"),
             "legacy_status": raw_status or None,
             "notes": employee.get("notes"),
             "version": int(employee.get("version") or 1),
@@ -1943,7 +1977,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             key in payload for key in ("monthly_salary", "salary_effective_date")
         )
         contract = None
-        if status_changed or salary_fields_present:
+        if status_changed or salary_fields_present or "hire_date" in values:
             contract = await db[SALARY_CONTRACTS].find_one(
                 {"user_id": owner_id, "employee_id": employee_id},
                 {"_id": 0},
@@ -1984,14 +2018,14 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             try:
                 effective_date = date.fromisoformat(
                     _text(payload.get("status_effective_date"))
-                    or riyadh_today().isoformat()
+                    or (riyadh_today() + timedelta(days=1)).isoformat()
                 )
             except ValueError as exc:
                 raise HTTPException(
                     status_code=422,
                     detail={"code": "employee_payroll_status_effective_date_invalid"},
                 ) from exc
-            if effective_date > riyadh_today():
+            if effective_date > riyadh_today() + timedelta(days=1):
                 raise HTTPException(
                     status_code=422,
                     detail={"code": "employee_payroll_status_effective_date_future"},
@@ -2012,7 +2046,7 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
         if status_changed and contract is not None and effective_date is not None:
             try:
                 periods = transition_suspensions(
-                    suspension_history(contract, employee),
+                    contract["suspension_periods"] if "suspension_periods" in contract else suspension_history(contract, employee),
                     target_state=target_status,
                     effective_date=effective_date,
                     period_id=f"empsusp_{uuid.uuid4().hex}",
@@ -2037,11 +2071,21 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
 
         salary_contract_to_insert = None
         previous_salary_amount = _money((contract or {}).get("monthly_amount")) or None
+        affected_dates = []
+        if status_changed and contract is not None and effective_date is not None:
+            affected_dates.append(effective_date)
+        if "hire_date" in values and contract is not None:
+            old_start = first_salary_accrual_date({**contract, "start_date": max(
+                str(contract.get("effective_from") or ""), str(employee.get("hire_date") or ""))})
+            new_start = first_salary_accrual_date({**contract, "start_date": max(
+                str(contract.get("effective_from") or ""), str(values.get("hire_date") or ""))})
+            if old_start != new_start:
+                affected_dates.extend(day for day in (old_start, new_start) if day)
         if salary_changed:
             affected_from = salary_change["effective_date"]
             if salary_change.get("operation") == "amend_future":
                 affected_from = min(affected_from, date.fromisoformat(normalized_salary_revisions(contract)[-1]["effective_from"]))
-            await _assert_salary_history_mutable(db, owner_id, employee, contract, affected_from)
+            affected_dates.append(affected_from)
             if contract is None:
                 salary_employee = {**employee, **values, "status": target_status}
                 salary_contract_to_insert = _new_salary_contract(
@@ -2113,6 +2157,10 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
                     if len(revisions) == 1:
                         contract_update["effective_from"] = revisions[0]["effective_from"]
 
+        if affected_dates:
+            await _assert_salary_history_mutable(db, owner_id, employee, contract, min(affected_dates))
+            await _invalidate_operational_salary_snapshot(db, owner_id)
+
         if contract is not None and contract_update is not None:
             contract_update["version"] = int(contract.get("version") or 1) + 1
 
@@ -2122,6 +2170,8 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
             "updated_at": now,
             "updated_by": owner_id,
         }
+        if status_changed and effective_date is not None:
+            update_fields["payroll_status_effective_date"] = effective_date.isoformat()
         if salary_contract_to_insert is not None:
             update_fields["management.payroll_enabled"] = True
         version_query: dict[str, Any] = {
@@ -2264,9 +2314,9 @@ def make_employees_v2_router(db: Any, current_user: Callable) -> APIRouter:
     @router.put("/management/employees/{employee_id}")
     async def update_employee(employee_id: str, payload: dict[str, Any] = Body(...), user: dict = Depends(current_user)):
         _require_owner(user)
-        if any(key in payload for key in ("monthly_salary", "salary_effective_date")):
+        if any(key in payload for key in ("monthly_salary", "salary_effective_date", "status", "hire_date")):
             await ensure_employee_v2_indexes(db)
-            return await employee_setup_atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
+            return await employee_lifecycle_atomic_owner(db, _text(user.get("id")), lambda tx: update_employee_core(tx, employee_id, payload, user))
         return await update_employee_core(db, employee_id, payload, user)
 
     @router.put("/management/employees/{employee_id}/account")

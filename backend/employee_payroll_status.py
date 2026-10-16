@@ -50,7 +50,11 @@ def normalized_suspensions(value: Any) -> list[dict[str, Any]]:
         row["returned_on"] = returned.isoformat() if returned else None
         row["reason"] = str(item.get("reason") or "inactive").strip()
         rows.append(row)
-    return sorted(rows, key=lambda row: (row["started_on"], row.get("id") or ""))
+    # Same-day stop/undo leaves an empty half-open range. Keep those completed
+    # ranges before a new leave at the same boundary, regardless of UUID order.
+    return sorted(rows, key=lambda row: (
+        row["started_on"], row.get("returned_on") != row["started_on"], row.get("id") or "",
+    ))
 
 
 def _salary_amount(value: Any) -> float:
@@ -269,10 +273,26 @@ def transition_suspensions(
     """Open/close one unpaid range while retaining every prior leave."""
     if target_state not in PAYROLL_STATES:
         raise ValueError("employee_status_invalid")
+    # The permissive read projection must not silently erase damaged history
+    # during a write. Existing payroll ranges are half-open and chronological.
+    if periods is not None and not isinstance(periods, list):
+        raise ValueError("employee_payroll_suspension_history_invalid")
+    for period in periods or []:
+        if not isinstance(period, dict):
+            raise ValueError("employee_payroll_suspension_history_invalid")
+        started = _date(period.get("started_on"))
+        returned = _date(period.get("returned_on"))
+        if (not started or (period.get("returned_on") and not returned)
+                or (returned and returned < started)):
+            raise ValueError("employee_payroll_suspension_history_invalid")
     rows = normalized_suspensions(periods)
     open_indexes = [index for index, row in enumerate(rows) if not row.get("returned_on")]
     if len(open_indexes) > 1:
         raise ValueError("employee_payroll_multiple_open_suspensions")
+    for previous, current in zip(rows, rows[1:]):
+        if (not previous.get("returned_on")
+                or current["started_on"] < previous["returned_on"]):
+            raise ValueError("employee_payroll_suspension_overlap")
 
     if target_state == "active":
         if open_indexes:
@@ -290,6 +310,8 @@ def transition_suspensions(
 
     if open_indexes:
         index = open_indexes[0]
+        if effective_date < _date(rows[index]["started_on"]):
+            raise ValueError("employee_payroll_transition_before_previous")
         rows[index] = {
             **rows[index],
             "reason": target_state,
@@ -298,6 +320,8 @@ def transition_suspensions(
         }
         return rows
 
+    if rows and effective_date < _date(rows[-1]["returned_on"]):
+        raise ValueError("employee_payroll_transition_before_previous")
     rows.append({
         "id": period_id,
         "started_on": effective_date.isoformat(),
