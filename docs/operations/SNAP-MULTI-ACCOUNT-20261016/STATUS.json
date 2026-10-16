@@ -1,8 +1,8 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
   "state": "attribution_followup_verified_ready_for_v5",
-  "branch": "codex/snapchat-account-attribution-followup-20261016",
-  "production_base": "f8b49d0f7677adeeca2d8235766a5b87ca95a95d",
+  "branch": "codex/snapchat-attribution-integrated-20261016",
+  "production_base": "5a66b5e9831c857b27114521b3abddd839a4e1f1",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
     "Enabled accounts only; zero spend remains enabled",
@@ -27,7 +27,7 @@
     "Governed source/intent CI and production deployment of attribution fix",
     "Recheck both live account readiness and remaining unknown orders"
   ],
-  "next_safe_action": "Push verified source A; freeze independent governed intent and compare CI candidate before intent-only B and deployment.",
+  "next_safe_action": "Verify integrated source preserves PR1395; freeze new v5 intent from this base. PR1396 source is stale and must not deploy.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
   "deployed_release": "rg5-415a9b55f1b9e4cd137cc3e990acca476f06244098002fc122800d8762f64dd2, source175252f9e, guardverified3checks, leaseinactive, Emergentgreen20:51Saudi",
   "live_acceptance": "Only2enabledaccounts displayed, portfolio2663.59SAR(US2663.59+Saudi0) onOct16Riyadh; US7of7;Saudi6of7(64unlinked) day15. Exactforeignownershipof64notyetproven."
