@@ -210,6 +210,21 @@ async def _load_inventory_evidence(db: Any, owner: str, locations: list[dict]) -
                 keys.update(_text(key) for key in receipt.get("adopted_receipt_ids") or [])
             for key in keys - {""}:
                 result.setdefault((location_id, key), []).append(receipt)
+    # Bundle product leaves share physical stock with ordinary product holds.
+    # Carry their allocations alongside receipt evidence so every existing
+    # inventory-row consumer sees the same available quantity.
+    held = {}
+    units = await db["mezan_component_consumption_units_v1"].find({
+        "user_id": owner, "state": "reserved", "bundle_leaves": {"$exists": True}
+    }).to_list(length=20001)
+    if len(units) > 20000:
+        raise HTTPException(409, detail={"code": "bundle_inventory_scan_limit"})
+    for unit in units:
+        for allocation in unit.get("allocations") or []:
+            if (allocation.get("inventory_identity") or {}).get("item_type") == "product":
+                key = (allocation["location_id"], allocation["lot_id"])
+                held[key] = held.get(key, 0.0) + float(allocation["quantity"])
+    result["bundle_product_holds"] = held
     return result
 
 
@@ -405,7 +420,8 @@ def _inventory_rows(locations: list[dict[str, Any]], evidence: dict | None = Non
                 "warehouse_id": warehouse_id,
                 "identifiers": identifiers,
                 "on_hand": quantity,
-                "remaining": 0.0 if reason else quantity,
+                "remaining": 0.0 if reason else max(0.0, quantity - (evidence or {}).get("bundle_product_holds", {}).get(
+                    (_text(location.get("id")), _text(item.get("receipt_id") or item.get("lot_id"))), 0.0)),
                 "eligibility_reason": reason,
                 "eligibility_identity": _inventory_identity_snapshot(item),
                 "receipt_id": receipt_id or None,
@@ -962,6 +978,8 @@ async def build_order_fulfillment_decision(
         current_order_number=_text(order.order_number),
     )
 
+    from bundle_fulfillment_v2 import routing_lines
+    bundle_lines = await routing_lines(db, user_id, order)
     lines = []
     for item_index, item in enumerate(order.items):
         product_id = _product_id(item)
@@ -992,7 +1010,21 @@ async def build_order_fulfillment_decision(
         direct_assembly = (
             _text(review_state.get("preparation_route")) == "direct_assembly"
         )
-        if direct_assembly:
+        bundle_line = bundle_lines.get(_text(getattr(item, "order_item_id", None)))
+        if bundle_line is not None:
+            # The sale offer is not another physical unit. Its frozen leaves
+            # own stock and supplier requirements, including current-product units.
+            direct_assembly = False
+            bundle_ready = bundle_line.get("ready") is True
+            classification = {
+                **classification, "configured": True,
+                "resolved_type": FULFILLMENT_TYPE_INSTANT if bundle_ready else "requires_preparation",
+                "requires_preparation": not bundle_ready,
+                "requires_branch_inventory": False,
+                "supplier_export_eligible": False,
+                "bundle": True, "bundle_ready": bundle_ready,
+            }
+        elif direct_assembly:
             # This is a stocked warehouse product. It skips supplier and
             # preparation custody but still reserves/deducts real inventory.
             classification = {
@@ -1082,6 +1114,12 @@ async def build_order_fulfillment_decision(
         })
 
     decision = evaluate_order_fulfillment(order=order, lines=lines)
+    if any(row.get("bundle") and not row.get("bundle_ready") for row in lines):
+        decision["blockers"] = list(dict.fromkeys([*decision["blockers"], "bundle_components_incomplete"]))
+        decision.update(ready_to_ship=False, route_stage="reviewed", preparation_stages_required=True)
+    if bundle_lines:
+        decision["supplier_export_order_required"] = any(
+            row.get("supplier_export_eligible") for row in lines if not row.get("bundle"))
     assembly_operational_items = [
         row for row in (operational_items or [])
         if row.get("blocks_order_completion") is not False
@@ -1420,6 +1458,8 @@ async def reconcile_component_order_lifecycle(
         if previous.get("source_fingerprint") == fingerprint and (not version or version == previous_version):
             return {**previous, "snapshot_revision": watermark.get("revision")}
         generation = int(previous.get("generation") or 0) + 1
+        from bundle_fulfillment_v2 import capture_intake
+        bundle_intake = await capture_intake(scoped, user_id, lines, previous.get("bundle_intake_snapshots"))
         row = {
             "_id": identity, "user_id": user_id, "order_number": order_number,
             "generation": generation, "source_updated_at": version or previous_version,
@@ -1427,6 +1467,7 @@ async def reconcile_component_order_lifecycle(
             "cancelled": cancelled or bool(previous.get("cancelled")),
             "eligible": eligible, "state": "pending", "retry_required": True,
             "updated_at": _now(), "plan_id": previous.get("plan_id"),
+            "bundle_intake_snapshots": bundle_intake,
         }
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
         return {**row, "snapshot_revision": watermark.get("revision")}

@@ -1,0 +1,24 @@
+const control = "w-full rounded-lg border p-2 text-sm";
+export function resizeCurrentSlots(slots, quantity) {
+    const size = Math.max(0, Math.min(100, Math.floor(Number(quantity) || 0)));
+    return Array.from({ length: size }, (_, index) => slots?.[index] || { slot_id: String(index + 1) });
+}
+
+export default function CurrentProductSlots({ row, variants, options, onChange }) {
+    const slots = row.slots || [];
+    const update = (index, patch) => onChange({ slots: slots.map((slot, i) => i === index ? { ...slot, ...patch } : slot) });
+    const choiceOptions = options.filter((option) => option.values?.length);
+    const textOptions = options.filter((option) => !option.values?.length);
+    return <section className="space-y-3 rounded-lg bg-violet-50 p-3">
+        <h4 className="font-bold">وحدات نفس المنتج الحالي</h4><p className="text-xs">كل قطعة تحتفظ بمقاسها ولونها. اختر متغيرًا موجودًا أو اربط خيارات العميل به. تخصيص المقاس النصي لدى المورد لا ينشئ مخزون متغير.</p>
+        {!slots.length ? <><label>متغير موحّد لكل القطع<select className={control} value={row.variant_id || ""} onChange={(e) => onChange({ variant_id: e.target.value || null })}><option value="">بدون اختيار افتراضي</option>{variants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name || variant.name || variant.sku || variant.id}</option>)}</select></label><button type="button" className="rounded-lg border p-2" onClick={() => onChange({ slots: resizeCurrentSlots([], row.quantity), variant_id: null })}>تخصيص المقاس واللون لكل قطعة</button></> : slots.map((slot, index) => <fieldset key={slot.slot_id} className="space-y-2 rounded-lg border bg-white p-3"><legend>القطعة {index + 1}</legend>
+            <label>متغير هذه القطعة<select className={control} value={slot.variant_id || ""} onChange={(e) => update(index, { variant_id: e.target.value || null, variant_rules: [] })}><option value="">يُحدد من قواعد الخيارات أو تخصيص المورد</option>{variants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name || variant.name || variant.sku || variant.id}</option>)}</select></label>
+            {(slot.variant_rules || []).map((rule, ruleIndex) => <div key={ruleIndex} className="space-y-2 rounded border p-2">{(rule.conditions || []).map((condition, conditionIndex) => <label key={conditionIndex}>عند اختيار<select className={control} value={JSON.stringify({ option_id: String(condition.option_id), value_id: String(condition.value_id) })} onChange={(e) => update(index, { variant_rules: slot.variant_rules.map((entry, i) => i === ruleIndex ? { ...entry, conditions: entry.conditions.map((old, j) => j === conditionIndex ? (e.target.value ? JSON.parse(e.target.value) : { option_id: "", value_id: "" }) : old) } : entry) })}><option value="">اختر قيمة</option>{choiceOptions.flatMap((option) => option.values.map((value) => <option key={`${option.id}:${value.id}`} value={JSON.stringify({ option_id: String(option.id), value_id: String(value.id) })}>{option.name}: {value.name}</option>))}</select></label>)}
+                <label>المتغير الناتج<select className={control} value={rule.variant_id || ""} onChange={(e) => update(index, { variant_rules: slot.variant_rules.map((entry, i) => i === ruleIndex ? { ...entry, variant_id: e.target.value } : entry) })}><option value="">اختر المتغير</option>{variants.map((variant) => <option key={variant.id} value={variant.id}>{variant.display_name || variant.name || variant.sku || variant.id}</option>)}</select></label>
+                <button type="button" className="ml-3 text-sm underline" onClick={() => update(index, { variant_rules: slot.variant_rules.map((entry, i) => i === ruleIndex ? { ...entry, conditions: [...entry.conditions, { option_id: "", value_id: "" }] } : entry) })}>إضافة شرط آخر للقاعدة</button><button type="button" className="text-sm text-red-700" onClick={() => update(index, { variant_rules: slot.variant_rules.filter((_, i) => i !== ruleIndex) })}>حذف القاعدة</button>
+            </div>)}
+            {choiceOptions.length > 0 && variants.length > 0 && <button type="button" className="rounded border p-2 text-sm" onClick={() => update(index, { variant_id: null, variant_rules: [...(slot.variant_rules || []), { conditions: [{ option_id: "", value_id: "" }], variant_id: "" }] })}>ربط متغير باختيار العميل</button>}
+            {textOptions.length > 0 && <fieldset><legend className="text-sm">حقول تخصيص هذه القطعة لدى المورد</legend>{textOptions.map((option) => <label className="ml-4 inline-flex gap-2 text-sm" key={option.id}><input type="checkbox" checked={(slot.customization_option_ids || []).includes(String(option.id))} onChange={(e) => update(index, { customization_option_ids: [...(slot.customization_option_ids || []).filter((id) => id !== String(option.id)), ...(e.target.checked ? [String(option.id)] : [])] })} />{option.name}</label>)}</fieldset>}
+        </fieldset>)}
+    </section>;
+}

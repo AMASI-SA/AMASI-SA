@@ -36,6 +36,7 @@ import {
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
+import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
 import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
 
@@ -903,6 +904,7 @@ export default function OrderDetailsV2() {
             </section>
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
+            <BundleOperationalPanel orderNumber={openedOrderNumber} canReceive={userHasPermission(user, "inventory.preparation.receive")} canChangeSource={userHasPermission(user, "products.cost.write")} />
             {userHasPermission(user, "customer_intelligence.inbox.read") && openedOrderNumber && (
                 <OrderTrackingNotesPanel key={openedOrderNumber} orderNumber={openedOrderNumber} embedded />
             )}

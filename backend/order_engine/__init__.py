@@ -134,7 +134,11 @@ def make_order_engine_router(*args, **kwargs):
     install_product_media_ai_execution_support()
     make_product_v2_router = _product_v2_routes.make_product_v2_router
 
+    from bundle_catalog_v2 import make_bundle_router
+    from bundle_fulfillment_v2 import make_bundle_operations_router
     child_routers = [
+        make_bundle_router(db, current_user),
+        make_bundle_operations_router(db, current_user),
         make_warehouse_location_router(db, current_user),
         make_warehouse_location_v2_router(db, current_user),
         make_warehouse_room_router(db, current_user),

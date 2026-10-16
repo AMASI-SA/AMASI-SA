@@ -1,0 +1,5 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body { background: #f1f5f9; font-family: Tahoma, Arial, sans-serif; }
+button:disabled { opacity: .45; cursor: not-allowed; }

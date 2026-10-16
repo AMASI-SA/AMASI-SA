@@ -267,6 +267,9 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
     now = _now()
     rows = []
     order_total_cost = 0.0
+    from bundle_fulfillment_v2 import order_view as bundle_order_view
+    bundle_view = await bundle_order_view(db, user_id, str(order.order_number))
+    bundle_costs = {str(row["order_line_id"]): row for row in bundle_view["bundles"]}
     for item in order.items:
         product_id = str(item.parent_product_id or item.product_id or "").strip()
         quantity = float(item.quantity or 1)
@@ -375,6 +378,28 @@ async def calculate_order_cost_snapshot(db: Any, *, user_id: str, order: Any) ->
             "calculated_at": now,
         }
         selector = {"user_id": user_id, "order_number": order.order_number, "order_item_id": item.order_item_id}
+        bundle = bundle_costs.get(str(item.order_item_id))
+        if bundle:
+            # A sold bundle is one revenue line. Its frozen leaf costs replace
+            # the parent base/resources/options, never add to them.
+            bundle_amount = bundle.get("actual_cost")
+            if bundle_amount is None:
+                bundle_amount = bundle.get("expected_cost")
+            resolved = float(bundle_amount) if bundle_amount is not None else None
+            uses_fallback = bundle.get("actual_cost") is None and any(
+                str(leaf.get("cost_source", "")).startswith("salla_") for leaf in bundle.get("leaves", []))
+            order_total_cost += (resolved or 0.0) - line_cost
+            snapshot.update({"base_unit_cost": 0.0, "product_resource_unit_cost": 0.0,
+                "option_unit_cost": 0.0, "applied_product_resources": [], "applied_option_costs": [],
+                "unit_cost": resolved / quantity if resolved is not None and quantity else None,
+                "line_cost": resolved, "cost_complete": resolved is not None,
+                "mezan_cost_complete": resolved is not None and not uses_fallback,
+                "mezan_cost_missing": resolved is None or uses_fallback,
+                "calculation_cost_available": resolved is not None, "uses_salla_fallback": uses_fallback,
+                "base_cost_source": "bundle_snapshot", "cost_authority": "bundle_snapshot",
+                "bundle_revision": bundle["revision"], "bundle_actual_cost": bundle.get("actual_cost"),
+                "bundle_expected_cost": bundle.get("expected_cost"),
+                "cost_stage": "actual" if bundle.get("actual_cost") is not None else "expected"})
         await db[SNAPSHOTS].update_one(
             selector,
             {"$set": {**snapshot, "updated_at": now}, "$setOnInsert": {"created_at": now}},
