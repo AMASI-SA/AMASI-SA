@@ -292,7 +292,7 @@ async def test_report_route_publishes_provider_headline_and_keeps_hourly_endpoin
             )
 
     monkeypatch.setattr(snapchat_routes, "datetime", FrozenDateTime)
-    monkeypatch.setattr(snapchat_routes, "get_selected_account", selected_account)
+    monkeypatch.setattr(snapchat_routes, "resolve_account", lambda db, user, account=None: selected_account(db, user))
     monkeypatch.setattr(
         snapchat_routes,
         "list_daily_projections",

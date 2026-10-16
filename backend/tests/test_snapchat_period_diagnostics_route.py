@@ -10,7 +10,7 @@ from snapchat_v2 import routes
 @pytest.mark.asyncio
 @pytest.mark.parametrize("case, expected", [
     ("owner", 200), ("employee", 403), ("anonymous", 401),
-    ("invalid_split", 422), ("large_range", 422), ("changed_account", 409),
+    ("invalid_split", 422), ("large_range", 422), ("changed_account", 404),
     ("limit", 422), ("timeout", 503), ("database_failure", 503),
 ])
 async def test_diagnostic_enforces_access_scope_and_bounded_read(monkeypatch, case, expected):
@@ -26,8 +26,10 @@ async def test_diagnostic_enforces_access_scope_and_bounded_read(monkeypatch, ca
             raise HTTPException(status_code=403)
         return user
 
-    async def selected_account(db, user_id):
+    async def selected_account(db, user_id, ad_account_id=None):
         assert user_id == "owner-tenant"
+        if ad_account_id == "other-account":
+            raise LookupError("snapchat_account_not_found")
         return {"ad_account_id": "account", "timezone": "America/Los_Angeles"}
 
     async def diagnostic(db, user_id, **kwargs):
@@ -44,7 +46,7 @@ async def test_diagnostic_enforces_access_scope_and_bounded_read(monkeypatch, ca
             raise RuntimeError("private connection detail")
         return {"candidate_rows": 1, "all_orders": {"whole": 1, "left": 0, "right": 0, "gap": 1}}
 
-    monkeypatch.setattr(routes, "get_selected_account", selected_account)
+    monkeypatch.setattr(routes, "resolve_account", selected_account)
     monkeypatch.setattr(routes, "audit_period_partition", diagnostic)
     router = APIRouter()
     routes.attach_snapchat_v2_routes(router, object(), current_user, require_owner)

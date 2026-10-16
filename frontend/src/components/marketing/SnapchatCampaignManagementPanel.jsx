@@ -962,7 +962,7 @@ export default function SnapchatCampaignManagementPanel({
                 ...next,
                 ...retainedDecisionContext(current),
                 currentSettings,
-                accountId: current.accountId || accountId || "",
+                accountId: preferredAction?.endsWith(".update") ? (currentSettings?.ad_account_id || accountId || "") : (current.accountId || accountId || ""),
                 pixelId: preferredAction === "ad_squad.create"
                     ? solePixelId(readiness, current.accountId || accountId || "")
                     : next.pixelId,
@@ -997,7 +997,7 @@ export default function SnapchatCampaignManagementPanel({
                 ...next,
                 ...retainedDecisionContext(current),
                 currentSettings: action.endsWith(".update") ? currentSettings : null,
-                accountId: current.accountId,
+                accountId: action.endsWith(".update") ? (currentSettings?.ad_account_id || accountId || "") : current.accountId,
                 pixelId: action === "ad_squad.create"
                     ? solePixelId(readiness, current.accountId)
                     : next.pixelId,
@@ -1389,7 +1389,7 @@ export default function SnapchatCampaignManagementPanel({
                                 <div className="grid gap-3 md:grid-cols-2">
                                     <SelectField label="الحساب الإعلاني" value={form.accountId} onChange={changeAccount} disabled={isUpdate} testId="snapchat-management-account-select">
                                         {!readiness?.accounts?.length && <option value="">لا يوجد حساب محدد</option>}
-                                        {(readiness?.accounts || []).map((account) => <option key={account.account_id} value={account.account_id} label={`${account.display_name} · ${account.currency}`} />)}
+                                        {(readiness?.accounts || []).map((account) => <option key={account.account_id} value={account.account_id} label={`${account.display_name} · ${account.currency} · ${account.timezone || "التوقيت غير متاح"}`} />)}
                                     </SelectField>
                                     <SelectField label="العملية" value={form.action} onChange={changeAction} testId="snapchat-management-action-select">
                                         {ACTIONS.map(([value, label]) => <option key={value} value={value} label={label} />)}

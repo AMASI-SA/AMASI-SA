@@ -209,6 +209,7 @@ async def _snapchat_rows(db: Any, user_id: str, candidate: dict[str, Any], start
         db,
         user_id,
         provider="snapchat_ads",
+        account_id=str(candidate.get("account_id") or ""),
         entity_level=level,
         entity_ids=[entity_id],
         date_from=start,
@@ -255,6 +256,7 @@ async def _snapchat_creative_metadata(db: Any, user_id: str, candidate: dict[str
         db,
         user_id,
         provider="snapchat_ads",
+        account_id=str(candidate.get("account_id") or ""),
         entity_level="ad",
         entity_id=str(candidate.get("entity_id") or ""),
     )

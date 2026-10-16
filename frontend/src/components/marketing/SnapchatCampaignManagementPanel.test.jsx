@@ -189,6 +189,24 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         });
     });
 
+    test("creation account choice cannot move an existing campaign update to another account", async () => {
+        getSnapchatManagementReadiness.mockResolvedValue({ proposal_enabled: true, accounts: [
+            { account_id: "account-1", display_name: "Saudi", currency: "SAR", management_allowed: true, pixels: [] },
+            { account_id: "account-2", display_name: "US", currency: "USD", management_allowed: true, pixels: [] },
+        ] });
+        await act(async () => { root.render(<SnapchatCampaignManagementPanel accountId="account-1" selectedCampaign={{campaign_id:"campaign-1"}} currentSettings={{ad_account_id:"account-1"}} />); });
+        await act(async () => { container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click(); });
+        const accountSelect = () => container.querySelector('[data-testid="snapchat-management-account-select"]');
+        await act(async () => { change(accountSelect(), "account-2"); });
+        expect(accountSelect().value).toBe("account-2");
+        expect(accountSelect().disabled).toBe(false);
+        await act(async () => { change(container.querySelector('[data-testid="snapchat-management-action-select"]'), "campaign.update"); });
+        expect(accountSelect().value).toBe("account-1");
+        expect(accountSelect().disabled).toBe(true);
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
+    });
+
     afterEach(async () => {
         await act(async () => root.unmount());
         container.remove();
