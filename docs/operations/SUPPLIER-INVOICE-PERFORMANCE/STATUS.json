@@ -55,5 +55,19 @@
       "source_preservation": "PASS",
       "diff_check": "PASS"
     }
+  },
+  "current_release": {
+    "recorded_on": "2026-10-16",
+    "branch": "codex/supplier-invoice-current-release-20261016",
+    "base": "d29b1a3ad0c61f7ace686b7709a7577ebda40d13",
+    "state": "SOURCE_CHECKPOINT_PENDING_FINAL_CI_AND_RELEASE",
+    "authorization": "owner authorized deployment and reversible code rollback",
+    "production_changed_by_this_task": false,
+    "superseded_frozen_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1384",
+    "superseded_head": "8bd307ff8e9f3bb6d665f791b02fb3539e5503fd",
+    "reason": "Concurrent PR1386 changed Production and /app after #1384 intent freeze; original A/B preserved, new source built from current Production",
+    "ready_shipping": "excluded; external conditional status mutation remains unproven",
+    "verification": "supplier source/tests unchanged from source A a098; 14/14 source CI;135 core+16 auth;88 rollback historical. Fresh replacement CI and build required.",
+    "next_safe_action": "push source checkpoint; exact-head CI and governed new A/B; wait current release owner verification/inactive lease; no stale intent merge"
   }
 }
