@@ -1,0 +1,25 @@
+{
+  "task_id": "GOOGLE-ADS-PERIODIC-COMPLETION-20261014",
+  "status": "WIP_REINTEGRATED_ON_CURRENT_PRODUCTION_PENDING_FRESH_CI",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-periodic-current-prod-20261016",
+  "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
+  "superseded_source": "07237e81797eb22d3e2f78daded9e159c4ba6c7f",
+  "superseded_pr": 1367,
+  "scope": [
+    "Google diagnostic recommendations join existing five-hour cycle and shared list",
+    "Move standalone Google intelligence from dashboard to native Google workspace",
+    "Separate model notes from authoritative draft gaps; Search language compatibility; existing Smart common management"
+  ],
+  "preserved": "All current production updates including native multi-account analysis and CampaignAccountAnalysis surfaces",
+  "prior_verification": "Historical source only: 241 focused backend passed/1 skipped, 30 CI contexts success/skipped, governed two-clean-build and freeze passed. Prior intent is obsolete; no reuse.",
+  "current_verification": "PENDING on new current-base source; prior frozen artifact must not be deployed.",
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "paid_project_chat_requests": 0,
+  "production_changed": false,
+  "next_safe_action": "Require fresh CI and source candidate intent from existing Mezan Release Readiness; preserve current Production base and other conversations' leases.",
+  "pr": 1406,
+  "previous_source": "7a49e23a8c6c94189245df1ae4792e6d0d1f05f0",
+  "previous_source_verification": "30 completed CI contexts success/skipped including CodeQL, Google backend/frontend, source/worker/decision contracts and governed frontend candidate freeze; superseded because smart bundles merged into Production."
+}

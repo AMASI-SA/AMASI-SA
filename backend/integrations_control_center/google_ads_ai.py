@@ -387,6 +387,9 @@ never use guessed geo/language IDs or fabricate assets. Do not substitute anothe
 campaign type when the requested type is unsupported. Explain assumptions and
 cite supplied evidence IDs. Creative text requires review. There are no tools
 and no execution: only the shared manual gateway can publish an approved draft.
+Missing requirements must apply to the selected campaign and requested features.
+Optional suggestions are review notes, not blockers. SEARCH language matching is
+automatic from creative and landing-page language: leave language_ids empty.
 Populate only the selected campaign family's fields. Do not fill optional
 features merely because they appear in the schema. Use null, false or empty
 lists for unrequested features. For SEARCH, choose RSA unless DSA is explicitly
@@ -412,6 +415,7 @@ def _draft_reasoning_schema(schema: dict[str, Any], campaign_type: str | None) -
         campaign["campaign_type"]["enum"] = [campaign_type]
     if campaign_type != "SEARCH":
         return schema
+    campaign["language_ids"]["maxItems"] = 0
     for field in ("shopping", "app", "hotel"):
         campaign.pop(field)
     search = definitions["GoogleSearchInput"]["properties"]
@@ -593,8 +597,9 @@ async def generate_google_campaign_draft(
             missing.append({"code": "merchant_product_offer_mapping_required",
                             "message": "اربط منتجات سلة المختارة بمعرّفات منتجات Merchant Center المثبتة؛ الاستهداف الحالي لا يثبت حصر الحملة فيها.",
                             "field": "groups.product_offer_ids"})
-    for value in output.missing_requirements:
-        missing.append({"code": "ai_input_required", "message": _text(value, 500), "field": None})
+    # Model prose is advisory. Only authoritative contract/context checks decide
+    # readiness; provider validate-only and approval remain mandatory downstream.
+    review_notes = list(dict.fromkeys(_text(value, 500) for value in output.missing_requirements if _text(value, 500)))
     for product_id in missing_products:
         missing.append({"code": "product_v2_fact_missing", "message": "المنتج غير متاح ضمن بيانات المتجر المثبتة.", "field": f"products.{product_id}"})
     for key in ("currency_code", "time_zone"):
@@ -603,6 +608,8 @@ async def generate_google_campaign_draft(
     if not supported:
         missing.append({"code": "account_campaign_capabilities_unverified", "message": "أهلية نوع الحملة للحساب تحتاج التحقق.", "field": "campaign_type"})
     for field in ("geo_target_ids", "language_ids"):
+        if field == "language_ids" and draft["campaign_type"] == "SEARCH":
+            continue
         effective_targets = [group.get(field) if group.get(field) is not None else draft.get(field)
                              for group in draft.get("groups", [])] if draft["campaign_type"] == "DEMAND_GEN" else [draft.get(field)]
         if not effective_targets or any(not values for values in effective_targets):
@@ -616,7 +623,8 @@ async def generate_google_campaign_draft(
     return {"provider": "google_ads", "account_id": body.account_id, "draft": draft,
             "explanation": _text(output.explanation, 2000), "product_ids": output.product_ids,
             "evidence": [{"evidence_id": key, **value} for key, value in evidence.items()],
-            "limitations": limitations, "missing_requirements": missing, "ready_for_preview": not missing,
+            "limitations": limitations, "review_notes": review_notes,
+            "missing_requirements": missing, "ready_for_preview": not missing,
             "ready_for_execution": False, "approval_required": True, "provider_writes": 0}
 
 
@@ -868,3 +876,4 @@ def _guard_unverified_financial_claims(texts: list[str], registry: dict[str, Any
 
 
 __all__ = ["GoogleAIDraftInput", "GoogleAIAnalysisInput", "generate_google_campaign_draft", "analyze_google_campaigns"]
+

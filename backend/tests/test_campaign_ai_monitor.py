@@ -310,6 +310,10 @@ def test_scheduler_discovers_connected_v2_ad_account_owner():
     class Accounts:
         async def distinct(self, field, query):
             assert field == "user_id"
+            if query.get("provider") == "google_ads":
+                assert query["connection_provenance"] == "api_connection"
+                assert query["connection_status"] == "connected"
+                return []
             assert query == {
                 "provider": {"$in": ["snapchat_ads", "meta_ads"]},
                 "connection_status": {"$in": ["connected", "needs_reauth"]},
@@ -330,6 +334,10 @@ def test_scheduler_discovers_legacy_credential_owners_when_v2_is_empty():
 
         async def distinct(self, field, query):
             assert field == "user_id"
+            if query.get("provider") == "google_ads":
+                assert query["connection_provenance"] == "api_connection"
+                assert query["connection_status"] == "connected"
+                return []
             assert query == self.expected_query
             return self.values
 
@@ -361,6 +369,10 @@ def test_scheduler_keeps_legacy_fallback_out_of_the_v2_path():
     class Accounts:
         async def distinct(self, field, query):
             assert field == "user_id"
+            if query.get("provider") == "google_ads":
+                assert query["connection_provenance"] == "api_connection"
+                assert query["connection_status"] == "connected"
+                return []
             assert query["connection_status"]["$in"] == ["connected", "needs_reauth"]
             return ["owner-1"]
 
@@ -577,3 +589,4 @@ def test_recommendation_explanation_states_reason_wait_and_success_criteria():
     assert explanation["financial_impact"]["period_estimated_contribution_sar"] == -180
     assert explanation["financial_impact"]["forecast_delta_sar"] > 0
     assert explanation["financial_impact"]["is_estimate"] is True
+

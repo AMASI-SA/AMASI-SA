@@ -383,8 +383,9 @@ async def test_owner_reconcile_safely_cancels_stale_gate_before_submission(db, p
 async def test_delivery_expansion_respects_staff_budget_ceiling_without_budget_edit(db, provider):
     staff = await gateway.principal(db, {"id": "staff-a", "role": "admin"}, write=True)
     await db[gateway.POLICIES].insert_one({"user_id": "owner-a", "account_id": ACCOUNT, "subject_id": "staff-a", "enabled": True, "allowed_actions": ["set_targeting"], "max_daily_budget_native": "10"})
-    proposal = await preview(db, action="set_targeting", geo_target_ids=["2682"], language_ids=["1019"])
+    proposal = await preview(db, action="set_targeting", geo_target_ids=["2682"])
     assert proposal["financial_bound"]["budget_native"] == "20"
     with pytest.raises(HTTPException):
         await gateway.execute_google_proposal(db, staff, proposal["proposal_id"], proposal["confirmation_digest"])
     assert provider.writes == 0
+

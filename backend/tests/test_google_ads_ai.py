@@ -7,6 +7,39 @@ from pydantic import ValidationError
 from integrations_control_center.google_ads_ai import GoogleAIProductOfferSelection
 
 
+@pytest.mark.asyncio
+async def test_model_optional_suggestions_are_review_notes_not_readiness_blockers():
+    output = draft_output()
+    output["missing_requirements"] = ["Optional conversion tracking", "Merchant Center for a future Shopping campaign"]
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(),
+        account_context=account_context(), client_factory=lambda: ModelClient(output))
+    assert result["ready_for_preview"] is True
+    assert result["missing_requirements"] == []
+    assert result["review_notes"] == output["missing_requirements"]
+    assert result["ready_for_execution"] is False
+
+
+@pytest.mark.asyncio
+async def test_authoritative_missing_group_still_blocks_preview_with_model_review_notes():
+    output = draft_output()
+    output["draft"]["groups"] = []
+    output["missing_requirements"] = ["Review creative copy"]
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(),
+        account_context=account_context(), client_factory=lambda: ModelClient(output))
+    assert result["ready_for_preview"] is False
+    assert any(item["field"] == "groups" for item in result["missing_requirements"])
+    assert result["review_notes"] == ["Review creative copy"]
+
+
+@pytest.mark.asyncio
+async def test_search_generation_no_longer_requests_manual_language_targeting():
+    client = ModelClient(draft_output())
+    await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(),
+        account_context=account_context(), client_factory=lambda: client)
+    schema = client.calls[0]["text"]["format"]["schema"]
+    assert schema["$defs"]["GoogleCampaignDraft"]["properties"]["language_ids"]["maxItems"] == 0
+
+
 def test_explicit_product_offer_selection_contract_preserves_ids_and_forbids_extra_data():
     selected = {"product_id": "mpv2_1", "merchant_id": "00123", "offer_id": "SKU:HOODIE/BLUE"}
     parsed = GoogleAIProductOfferSelection.model_validate(selected)
@@ -532,3 +565,4 @@ def test_analysis_dates_require_real_dates_and_bounded_ordered_period():
     for date_from, date_to in (("2026-02-30", "2026-03-01"), ("2026-10-13", "2026-10-12"), ("2026-09-01", "2026-10-13")):
         with pytest.raises(ValidationError):
             GoogleAIAnalysisInput(account_id=ACCOUNT, date_from=date_from, date_to=date_to)
+
