@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "PUBLISHED_SEARCH_AI_ACCEPTANCE_PASS_COMPLETION_GAPS_IN_PROGRESS",
-  "updated_at_utc": "2026-10-14T19:01:10.101Z",
+  "status": "GOOGLE_PERIODIC_REVIEWED_INTENT_CI_RUNNING_PLATFORM_LOGIN_REQUIRED",
+  "updated_at_utc": "2026-10-16T22:43:35.502Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Inspect governed source build/freeze result; create immutable intent-only B, clean adapter and B CI. Exact merge/publication/public verification then UI and native AI acceptance; do not bypass existing global cadence to claim a live periodic cycle.",
+  "next_safe_action": "Complete exact B CI/CodeQL and clean adapter. Platform login required before publication; after authentication recheck Production ref and actual guard to avoid other releases/leases. Merge only exact current-base reviewed B, actual /app rehearsal, prepare/prepublish, single toolbar republish, three exact public probes, UI and periodic-cycle acceptance. Do not reuse obsolete intents.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,9 +450,9 @@
     }
   },
   "completion_followup": {
-    "status": "SOURCE_CI_PASS_GOVERNED_BUILD_AND_FREEZE_IN_PROGRESS",
-    "branch": "codex/google-api-completion-20261014",
-    "base_sha": "8e4ac33b7386f1ff9ecff6394a18ae8f992f97b2",
+    "status": "REVIEWED_INTENT_B_CI_RUNNING_PLATFORM_LOGIN_REQUIRED",
+    "branch": "codex/google-periodic-current-prod-20261016",
+    "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
     "scope": [
       "Google native read-only analysis joins the existing global5hour cycle; native-only owner/account discovery, bounded isolated failures and idempotent snapshot append.",
       "Google recommendations share the periodic snapshot/dashboard/list with Snapchat/Meta; legacy execution remains restricted to existing providers, Google requires its native gateway.",
@@ -462,10 +462,10 @@
     "provider_writes": 0,
     "financial_writes": 0,
     "paid_project_chat_requests": 0,
-    "pr": 1367,
-    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1367",
-    "source_sha": "07237e81797eb22d3e2f78daded9e159c4ba6c7f",
-    "source_tree": "d70826d08b2618b9931e0e9b58752fb489bac17e",
+    "pr": 1406,
+    "pr_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1406",
+    "source_sha": "515af86450528e9a70c779a0d0869a3b26007c6d",
+    "source_tree": "77ed7d10b23d7b3c889911f258023bd2bf03ea6f",
     "focused_backend": {
       "source": "77889e51928671c2fd588e47ea56c2bf9f3f0129",
       "exit_code": 0,
@@ -485,6 +485,41 @@
       "log": "/root/google-periodic-1367-source-build.log",
       "result": "/root/google-periodic-1367-source-build-result.json"
     },
-    "published": false
+    "published": false,
+    "intent_sha": "62c29d11e2a62531aadedcf88f459105994763a6",
+    "intent_tree": "b3cedac5138475cc89e4e47f255a02fa6440bb90",
+    "intent_blob": "4a7c5ad7899c74a51d797f98640a0dcc8de1717a",
+    "intent_sha256": "6a5a89c25754a85b1837c19d18f4c97c8c73987d9056fb396e6ba955d1628b4b",
+    "release_id": "rg5-7f698a0bc867018a8242bb6425f007c752fb14f32c0c09e535332f86ae8a3eda",
+    "frontend_artifact_tree_sha256": "c3f37b5156710b090426909dc944d840c45a46e4116b4fe862e5fd4d69c02f8a",
+    "source_verification": {
+      "google_backend": "341 passed in9.44s, real Google CI",
+      "google_frontend": "86 tests/11suites passed",
+      "source_readiness_run": 38977137777,
+      "source_candidate_freeze": "PASS; official artifact12080115330, ZIPdigest verified and exact JSON/Gitblob verified",
+      "remaining_source_contexts": "G47/stock source runs cancelled by subsequent B synchronization; do not count cancelled as PASS. Source CodeQL Python was still running."
+    },
+    "reviewed_B": {
+      "intent_only_diff_verified": true,
+      "readiness_run": 38977371812,
+      "status": "IN_PROGRESS; no known failure at checkpoint"
+    },
+    "superseded_pr": 1367,
+    "superseded_pr_state": "closed unmerged; preserved source0723, obsolete old-base intent must not deploy",
+    "prior_current_base_source_backup": "codex/google-periodic-source-7a49-backup",
+    "original_workspace": {
+      "head": "08545aee8a168b069150643a549d548c5f34aab2",
+      "guard_active": false,
+      "tracked_changes": false,
+      "free_mib": 596,
+      "old_tmp_clone_exists": false,
+      "own_untracked_intent_gzip_preserved": true
+    },
+    "authentication": {
+      "editor_signed_in_verified": true,
+      "emergent_platform": "Still shows signed-out methods after secure request timed out; no sign-in success claimed",
+      "credentials_read_or_logged": false
+    },
+    "merged": false
   }
 }
