@@ -759,16 +759,19 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     async def list_pending_review_pages(
         page: int = Query(1, ge=1, le=100_000),
         limit: int = Query(10, ge=1, le=50),
+        search: Optional[str] = Query(default=None, max_length=100),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
+        search_text = _text(search)
         numbers, total_count = await repository.numbered_pending_review_order_numbers(
             user_id=merchant_id,
             page=page,
             limit=limit,
             workflow_collection=WORKFLOWS,
             completed_stages=REVIEW_COMPLETED_STAGES,
+            search=search_text,
         )
         orders = await get_orders(repository, user_id=merchant_id, order_numbers=numbers)
         ordered_rows = [orders[number] for number in numbers if number in orders]
@@ -781,19 +784,35 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "items": [order.model_dump(mode="json") for order in ordered_rows],
             "page": page,
             "total_count": total_count,
+            "search_applied": search_text,
         }
 
     @router.get("/reviewed")
     async def list_reviewed_reviews(
         limit: int = Query(50, ge=1, le=100),
+        page: int = Query(1, ge=1, le=100_000),
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         reviewer = _require_reviewer(user)
         merchant_id = _merchant_user_id(reviewer)
-        workflows = await db[WORKFLOWS].find(
-            {"user_id": merchant_id, "stage": "reviewed"},
-            {"_id": 0},
-        ).sort("reviewed_at", -1).limit(limit).to_list(limit)
+        # Page and count one tenant's Mezan workflow membership together. Salla
+        # status may legitimately stay pending after a completed local review.
+        result = await db[WORKFLOWS].aggregate([
+            {"$match": {"user_id": merchant_id, "stage": "reviewed"}},
+            {"$facet": {
+                "items": [
+                    {"$sort": {"reviewed_at": -1, "order_number": -1}},
+                    {"$skip": (page - 1) * limit},
+                    {"$limit": limit},
+                    {"$project": {"_id": 0}},
+                ],
+                "count": [{"$count": "value"}],
+            }},
+        ]).to_list(length=1)
+        result = result[0] if result else {}
+        workflows = result.get("items", [])
+        counts = result.get("count", [])
+        total_count = int(counts[0]["value"]) if counts else 0
         items = []
         for workflow in workflows:
             order_number = _text(workflow.get("order_number"))
@@ -819,7 +838,9 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 "salla_admin_url": await _salla_admin_url(db, merchant_id, order_number),
             })
             items.append(payload)
-        return {"items": items}
+        return {"items": items, "page": page, "total_count": total_count,
+                "skipped_invalid": len(workflows) - len(items),
+                "next_page": page + 1 if page * limit < total_count else None}
 
     @router.get("/{order_number}")
     async def get_review_detail(order_number: str, local_only: bool = Query(False),

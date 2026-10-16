@@ -316,6 +316,10 @@ def _monitoring_piece_view(piece: dict[str, Any]) -> dict[str, Any]:
         "supplier_id": _text(piece.get("supplier_id")) or None,
         "supplier_name": _text(piece.get("supplier_name")) or None,
         "supplier_receiving_session_id": _text(piece.get("supplier_receiving_session_id")) or None,
+        "order_status": piece.get("order_status"),
+        "order_status_native": piece.get("order_status_native"),
+        "waiting_review_eligible": piece.get("waiting_review_eligible") is True,
+        "preparation_terminal": piece.get("preparation_terminal") is True,
         "read_only": True,
     }
 

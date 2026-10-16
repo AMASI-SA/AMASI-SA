@@ -628,6 +628,7 @@ def _group_piece_products(
             "order_status": piece.get("order_status"),
             "order_status_native": piece.get("order_status_native"),
             "waiting_review_eligible": piece.get("waiting_review_eligible") is True,
+            "preparation_terminal": piece.get("preparation_terminal") is True,
             "quantity": 0,
             "available_quantity": 0,
             "sent_quantity": 0,
@@ -647,6 +648,11 @@ def _group_piece_products(
         # waiting_products projection below contains only eligible pieces.
         row["waiting_review_eligible"] = (
             row["waiting_review_eligible"] and piece.get("waiting_review_eligible") is True
+        )
+        # Product-grain consumers may hide a row only when all its pieces have
+        # left preparation; mixed groups retain their active/history quantities.
+        row["preparation_terminal"] = (
+            row["preparation_terminal"] and piece.get("preparation_terminal") is True
         )
         for field in ("order_status", "order_status_native"):
             if row.get(field) != piece.get(field):
@@ -873,6 +879,7 @@ def _piece_products(
             "order_status": piece.get("order_status"),
             "order_status_native": piece.get("order_status_native"),
             "waiting_review_eligible": piece.get("waiting_review_eligible") is True,
+            "preparation_terminal": piece.get("preparation_terminal") is True,
             "quantity": 1,
             "available_quantity": int(piece_is_available_for_supplier_dispatch(piece) and (
                 not waiting_only or piece.get("waiting_review_eligible") is True
@@ -911,6 +918,9 @@ def _file_view(
 ) -> dict[str, Any]:
     project = _piece_products if piece_grain else _group_piece_products
     products = project(pieces, waiting_only=waiting_only)
+    live_products = project([piece for piece in pieces
+                             if piece.get("preparation_terminal") is not True],
+                            waiting_only=waiting_only)
     waiting_products = project([piece for piece in pieces
                                 if piece.get("waiting_review_eligible") is True
                                 and piece_is_available_for_supplier_dispatch(piece)],
@@ -925,6 +935,10 @@ def _file_view(
         "execution_status": _text(registry.get("execution_status")) or "assigned",
         "registered_at": registry.get("registered_at"),
         "piece_count": len(pieces),
+        # Live queue counts are separate from immutable supplier history below.
+        "in_progress_pieces": sum(row["sent_quantity"] + row["ready_quantity"] for row in live_products),
+        "in_progress_products": sum(1 for row in live_products
+                                    if row["sent_quantity"] + row["ready_quantity"] > 0),
         "available_quantity": sum(row["available_quantity"] for row in products),
         "sent_quantity": sum(row["sent_quantity"] for row in products),
         "ready_quantity": sum(row["ready_quantity"] for row in products),
@@ -947,8 +961,8 @@ def employee_workspace_summary(
         for file_row in files
     )
     in_progress_pieces = sum(
-        int(file_row.get("sent_quantity") or 0)
-        + int(file_row.get("ready_quantity") or 0)
+        int(file_row.get("in_progress_pieces", int(file_row.get("sent_quantity") or 0)
+                         + int(file_row.get("ready_quantity") or 0)))
         for file_row in files
     )
     waiting_review_products = sum(
@@ -958,13 +972,11 @@ def employee_workspace_summary(
         if int(product.get("available_quantity") or 0) > 0
     )
     in_progress_products = sum(
-        1
+        int(file_row.get("in_progress_products", sum(
+            1 for product in file_row.get("products") or []
+            if int(product.get("sent_quantity") or 0) + int(product.get("ready_quantity") or 0) > 0
+        )))
         for file_row in files
-        for product in file_row.get("products") or []
-        if (
-            int(product.get("sent_quantity") or 0)
-            + int(product.get("ready_quantity") or 0)
-        ) > 0
     )
     received_awaiting_handoff = [
         row

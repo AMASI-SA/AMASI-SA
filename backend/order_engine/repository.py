@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol
@@ -397,6 +398,47 @@ def _pending_review_membership_pipeline(
     ]
 
 
+def _pending_review_search_match(search: str) -> dict[str, Any]:
+    """Literal search across stored order/customer/payment facts, never a provider call."""
+    fields = (
+        "order_number", "customer_name", "customer_mobile", "payment_method",
+        "payment_method.name", "payment_method.label", "payment_method.code", "payment_method.slug",
+        "raw_by_source.salla_direct.customer.full_name",
+        "raw_by_source.salla_direct.customer.name",
+        "raw_by_source.salla_direct.customer.first_name",
+        "raw_by_source.salla_direct.customer.last_name",
+        "raw_by_source.salla_direct.customer.mobile",
+        "raw_by_source.salla_direct.customer.phone",
+        "raw_by_source.salla_direct.payment_method",
+        "raw_by_source.salla_direct.payment_method.name",
+        "raw_by_source.salla_direct.payment_method.label",
+        "raw_by_source.salla_direct.payment_method.code",
+        "raw_by_source.salla_direct.payment_method.slug",
+        "raw_by_source.salla_direct.payment.method",
+        "raw_by_source.salla_direct.payment.method.name",
+        "raw_by_source.salla_direct.payment.method.label",
+        "raw_by_source.salla_direct.payment.method.code",
+        "raw_by_source.salla_direct.payment.method.slug",
+    )
+    values = [
+        {"$convert": {"input": "$" + field, "to": "string", "onError": "", "onNull": ""}}
+        for field in fields
+    ]
+    # Some provider snapshots carry only separate name components. A full
+    # customer-name search must match that same display name across all pages.
+    values.append({"$concat": [
+        {"$convert": {"input": "$raw_by_source.salla_direct.customer.first_name", "to": "string", "onError": "", "onNull": ""}},
+        " ",
+        {"$convert": {"input": "$raw_by_source.salla_direct.customer.last_name", "to": "string", "onError": "", "onNull": ""}},
+    ]})
+    return {"$match": {"$expr": {"$or": [
+        {"$regexMatch": {
+            "input": value,
+            "regex": re.escape(search), "options": "i",
+        }} for value in values
+    ]}}}
+
+
 class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
@@ -496,6 +538,7 @@ class MongoOrderRepository:
         limit: int,
         workflow_collection: str,
         completed_stages: set[str],
+        search: Optional[str] = None,
     ) -> tuple[list[str], int]:
         """Page and count the same tenant-scoped review queue in one DB snapshot.
 
@@ -509,7 +552,11 @@ class MongoOrderRepository:
         pipeline = _pending_review_membership_pipeline(
             user_id=user_id, workflow_collection=workflow_collection,
             completed_stages=completed_stages,
-        ) + [
+        )
+        search_text = str(search or "").strip()
+        if search_text:
+            pipeline.append(_pending_review_search_match(search_text))
+        pipeline += [
             {
                 "$facet": {
                     "items": [
