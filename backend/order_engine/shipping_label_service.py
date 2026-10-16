@@ -1494,8 +1494,8 @@ async def refresh_shipping_label(
     except SallaError as exc:
         if exc.status_code == 403:
             raise ShippingLabelError(
-                "shipping_scope_required",
-                "صلاحية قراءة الشحن غير مفعلة في ربط سلة.",
+                "order_scope_required",
+                "تعذّر الوصول إلى بيانات الطلب؛ تحقق من صلاحية قراءة الطلبات في ربط سلة.",
                 status_code=403,
             ) from exc
         raise ShippingLabelError(

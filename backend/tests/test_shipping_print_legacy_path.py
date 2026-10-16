@@ -509,8 +509,13 @@ async def test_invalid_order_embedded_source_has_no_fallback(order_details_only,
 async def test_order_read_failure_never_probes_shipping_routes(order_details_only, status):
     db, state = order_details_only
     state["denied"] = {"/orders/salla-order": status}
-    with pytest.raises(shipping.ShippingLabelError):
+    with pytest.raises(shipping.ShippingLabelError) as caught:
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    if status == 403:
+        assert caught.value.code == "order_scope_required"
+        assert "قراءة الطلبات" in str(caught.value)
+    else:
+        assert caught.value.code == "salla_shipping_unavailable"
     assert state["calls"] == ["/orders", "/orders/salla-order"]
 
 
