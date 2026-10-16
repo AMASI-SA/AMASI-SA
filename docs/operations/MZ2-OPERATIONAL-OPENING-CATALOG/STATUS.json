@@ -2,7 +2,7 @@
   "task": "Operational opening catalog correction",
   "base": "ce3c6ffaf3bc445c46d178c04b8765829b6552a9",
   "branch": "codex/operational-opening-clean-v5",
-  "status": "SOURCE_MERGED_DEPLOY_BLOCKED_BY_BROWSER_ACCESS",
+  "status": "DURABLE_PACKAGE_VERIFIED_WAITING_EMERGENT_TRANSFER",
   "production_changed": true,
   "completed": [
     "Explicit operational expense provenance; no deletion or historical balance mutation",
@@ -35,7 +35,7 @@
     "Emergent browser unavailable (os error 3): operator terminal required for release guard and publishing",
     "Order courier discovery limit 20000 retained; large owner catalogs fail closed"
   ],
-  "next_safe_action": "Wait post-merge push gates; user restoring Emergent access. Browser retry still os error 3. Once available inspect active release lease, Manage Publishing, workspace disk/git/source and current writer controls. No prepare/publish until those checks; no business writes. Do not merge this handoff-only branch.",
+  "next_safe_action": "Operator downloads verified artifact to isolated .git directory; inspect existing generated targets before safe restoration. /app source updated to merge, but missing build-meta. No prepare/publish until verified package restored and live operational guards checked.",
   "production_review": "PR1375 merged as a0f03a73ec364481e1995d8d35987fd99a85ac8e, tree e04c5f54daba62ce13dbaaed6fb665e14d51313d equals reviewed B. Production Git source changed; deployed runtime not changed by this task.",
   "authorization": "Owner requests implementation through deployment for agreed fixes; financial or inventory business writes and writer activation remain excluded.",
   "release": {
@@ -44,5 +44,15 @@
     "merge": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
     "intent": "801228411bbf251c6cb5879a9d3f64549b88fbf0",
     "pr": 1375
+  },
+  "archive": {
+    "restore_test": "PASS",
+    "artifact": 12043248081,
+    "path": "D:/codex-release-archives/operational-opening/a0f03a73",
+    "manifest_sha256": "96d3aae4388fce210c6cdf5cde4ae44ffc065e81758155a0158fb31925a993f0",
+    "files_verified": 21,
+    "archive_sha256": "5bd95ab9eb063042281cd0faec9d200f075a4ca7f1f9fd104c3e01be4360fea8",
+    "unpacked_bytes": 8288655,
+    "run": 38895330433
   }
 }
