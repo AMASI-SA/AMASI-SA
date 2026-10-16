@@ -24,7 +24,7 @@ out.mkdir(parents=True, exist_ok=True)
 env = {k: v for k, v in os.environ.items() if k.upper() in {
     "SYSTEMROOT", "WINDIR", "PATH", "TEMP", "TMP", "COMSPEC", "PATHEXT", "USERPROFILE",
 }}
-env.update(PYTHONPATH=str(ROOT / "backend"), PYTHON_DOTENV_DISABLED="1",
+env.update(PYTHONPATH=os.pathsep.join((str(ROOT / "backend"), str(ROOT / "backend/tests"))), PYTHON_DOTENV_DISABLED="1",
            JWT_SECRET="synthetic-salary-effective-test-only", MZ2_TEST_MONGO_URI=args.mongo_uri,
            NODE_PATH=str(Path(args.node_modules).resolve()), CI="true", NODE_ENV="test")
 backend = [args.python, "-m", "pytest", "--noconftest", "-q", "-o", "asyncio_mode=auto",
@@ -32,7 +32,12 @@ backend = [args.python, "-m", "pytest", "--noconftest", "-q", "-o", "asyncio_mod
                f"backend/tests/{name}.py" for name in (
                    "test_employee_salary_effective_date", "test_employee_salary_contract_management",
                    "test_employee_payroll_v2_cutover", "test_employees_v2_management",
-                   "test_employee_account_access_revocation", "test_employee_password_policy")]]
+                   "test_employee_account_access_revocation", "test_employee_password_policy",
+                   "test_employee_payroll_history_guard", "test_employee_lifecycle_capability",
+                   "test_employee_suspension_timeline", "test_employee_payroll_context_directory",
+                   "test_operational_balance_engine", "test_operational_balance_engine_fixes",
+                   "test_operational_balance_sources", "test_operational_balance_salary_consistency",
+                   "test_employee_operational_salary_integration", "test_review_session_fence")]]
 jest = """
 const base=process.env.NODE_PATH;
 const real=require('fs').realpathSync(base+'/react-scripts');
@@ -61,6 +66,15 @@ source_paths = [
     "backend/tests/test_employee_salary_effective_date.py", "backend/tests/test_employee_salary_contract_management.py",
     "backend/tests/test_employee_payroll_v2_cutover.py", "frontend/src/pages/EmployeesV2Management.jsx",
     "frontend/src/pages/EmployeesV2Management.test.jsx",
+    "backend/operational_atomic.py", "backend/accounting_employee_finance.py",
+    "backend/tests/test_employee_payroll_history_guard.py",
+    "backend/tests/test_employee_lifecycle_capability.py",
+    "backend/tests/test_employee_suspension_timeline.py",
+    "backend/tests/test_employee_payroll_context_directory.py",
+    "backend/tests/test_employee_operational_salary_integration.py",
+    "backend/operational_balance_engine.py", "backend/operational_balance_sources.py",
+    "backend/operational_balance_service.py", "backend/operational_salary_projection.py",
+    "backend/tests/test_operational_balance_salary_consistency.py",
 ]
 summary = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
            "production_writes": 0, "accounting_routes_installed_in_ui_fixture": False,

@@ -110,14 +110,17 @@ function errorMessage(error) {
         employee_status_invalid: "حالة الموظف يجب أن تكون نشط أو إجازة بدون راتب أو موقوف.",
         employee_payroll_status_confirmation_required: "تعذر اعتماد تغيير حالة الراتب؛ أعد فتح الموظف وحاول مرة أخرى.",
         employee_payroll_status_effective_date_invalid: "تاريخ بدء الحالة غير صحيح.",
-        employee_payroll_status_effective_date_future: "لا يمكن بدء إيقاف أو استئناف الراتب بتاريخ مستقبلي.",
+        employee_payroll_status_effective_date_future: "يمكن جدولة إيقاف أو استئناف الراتب حتى الغد فقط.",
         employee_payroll_return_before_leave: "تاريخ العودة يجب ألا يسبق بداية الإجازة أو الإيقاف.",
         employee_salary_amount_required: "أدخل الراتب الشهري قبل تاريخ السريان.",
         employee_salary_amount_invalid: "الراتب الشهري يجب أن يكون مبلغًا أكبر من صفر.",
         employee_salary_effective_date_required: "تاريخ بداية احتساب الراتب مطلوب.",
         employee_salary_effective_date_invalid: "تاريخ بداية احتساب الراتب غير صحيح.",
         employee_salary_before_cutover: "الفترات السابقة لـ 2026-10-01 تخص الأرصدة الافتتاحية.",
-        employee_salary_adjustment_required: "التاريخ يمس فترة مالية مرحّلة. يلزم إجراء تسوية مستقل؛ لم يُغيّر العقد.",
+        employee_salary_adjustment_required: "التاريخ يمس استحقاقًا محفوظًا أو فترة مالية مرحّلة. اختر تاريخًا لاحقًا أو نفّذ تسوية معتمدة؛ لم تُحفظ التغييرات.",
+        employee_payroll_suspension_history_invalid: "سجل الإجازات يحتوي تاريخًا غير صحيح؛ يلزم تصحيحه قبل تغيير الحالة.",
+        employee_payroll_suspension_overlap: "توجد فترات إجازة متداخلة؛ يلزم تصحيح السجل قبل تغيير الحالة.",
+        employee_payroll_transition_before_previous: "تاريخ الحالة لا يمكن أن يسبق آخر انتقال مسجل للإجازة أو العودة.",
         mz2_writes_paused: "الحفظ المالي متوقف حاليًا وفق إعدادات ميزان 2.",
         employee_salary_effective_date_before_hire: "تاريخ بداية الراتب لا يمكن أن يسبق تاريخ انضمام الموظف.",
         employee_salary_effective_date_not_after_previous: "تاريخ الراتب الجديد يجب أن يكون بعد تاريخ آخر راتب مسجل.",
@@ -239,7 +242,7 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                         name: form.name.trim(),
                         ...(editing ? { expected_version: employee.version } : {}),
                     };
-                    if (statusChanged) payload.status_effective_date = form.status_effective_date || riyadhToday;
+                    if (statusChanged) payload.status_effective_date = form.status_effective_date || proposedEffectiveDate;
                     else delete payload.status_effective_date;
                     if (salaryChanged) {
                         payload.monthly_salary = parsedSalary;
@@ -286,7 +289,7 @@ function EmployeeFormModal({ employee, busy, onClose, onSubmit }) {
                         {["before", "after"].map((side) => <div key={side} className="mt-2"><strong>{side === "before" ? "قبل التصحيح" : "بعد التصحيح"}</strong>{(correction[side] || []).map((revision) => <p key={revision.id || revision.effective_from} dir="ltr">{moneyFormatter.format(revision.monthly_amount || 0)} · {revision.effective_from} → {revision.effective_to || "مستمر"}</p>)}</div>)}
                     </details>)}
                 </section>}
-                {statusChanged && <section className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4" data-testid="employees-v2-payroll-status-warning"><label className="block text-xs font-black text-amber-950">تاريخ سريان الحالة<input type="date" max={riyadhToday} value={form.status_effective_date || riyadhToday} onChange={(event) => set("status_effective_date", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-status-effective-date" /></label><p className="mt-3 text-xs font-bold leading-6 text-amber-900">{form.status === "active" ? "يعود احتساب الراتب والدخول من هذا اليوم فقط، ولا تُحتسب أيام الإجازة أو الإيقاف بأثر رجعي." : "يصبح هذا اليوم أول يوم غير مدفوع، ويتوقف احتساب الراتب والدخول حتى إعادة التفعيل."}</p></section>}
+                {statusChanged && <section className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4" data-testid="employees-v2-payroll-status-warning"><label className="block text-xs font-black text-amber-950">تاريخ سريان الحالة<input type="date" max={proposedEffectiveDate} value={form.status_effective_date || proposedEffectiveDate} onChange={(event) => set("status_effective_date", event.target.value)} className={inputClass} dir="ltr" data-testid="employees-v2-status-effective-date" /></label><p className="mt-3 text-xs font-bold leading-6 text-amber-900">{form.status === "active" ? "يُفعّل الدخول فور الحفظ، ويعود احتساب الراتب من التاريخ المحدد. الافتراضي هو الغد مع حفظ استحقاق اليوم." : "يتوقف الدخول فور الحفظ، ويصبح التاريخ المحدد أول يوم غير مدفوع. الافتراضي هو الغد مع حفظ استحقاق اليوم."}</p></section>}
                 <label className="mt-4 block text-xs font-bold text-slate-600">ملاحظات<textarea value={form.notes} onChange={(event) => set("notes", event.target.value)} maxLength={1000} rows={4} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-emerald-500" /></label>
                 <footer className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-5 py-3 text-sm font-bold text-slate-700 disabled:opacity-40">إلغاء</button>
@@ -489,6 +492,7 @@ function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobil
     const linked = Boolean(employee.account?.user_id);
     const role = employee.operational_role || {};
     const salary = employee.salary_contract?.current_monthly_amount ?? employee.salary_contract?.monthly_amount;
+    const scheduledSalaries = employee.salary_contract?.scheduled_salary_revisions || [];
     const roleLabel = role.role_key ? management.role_labels?.[role.role_key] || ROLE_FALLBACK_LABELS[role.role_key] || role.role_key : "غير محدد";
     const statusLabel = employee.status === "active" ? "نشط" : employee.status === "unpaid_leave" ? "إجازة بدون راتب" : "موقوف";
     const statusClass = employee.status === "active" ? "bg-emerald-100 text-emerald-800" : employee.status === "unpaid_leave" ? "bg-amber-100 text-amber-900" : "bg-rose-100 text-rose-800";
@@ -499,7 +503,16 @@ function EmployeeCard({ employee, management, onEdit, onAccount, onRole, onMobil
                 <button type="button" onClick={onEdit} className="shrink-0 rounded-xl border p-2.5 text-slate-700" aria-label="تعديل الموظف"><PencilSimple /></button>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">عقد راتب ميزان 2</div><div className="mt-1 truncate text-sm font-black" dir="ltr">{salary == null ? "لم يُحدد راتب" : moneyFormatter.format(salary)}</div></div>
+                <div className="rounded-2xl border bg-slate-50 p-3">
+                    <div className="text-[10px] font-bold text-slate-500">الراتب الشهري الحالي</div>
+                    <div className="mt-1 text-sm font-black" dir="ltr" data-testid="employees-v2-card-current-salary">{salary == null ? "لم يُحدد راتب" : moneyFormatter.format(salary)}</div>
+                    {employee.payroll_status_effective_date && <div className="mt-2 text-xs text-amber-900" data-testid="employees-v2-card-payroll-status-date">سريان حالة الراتب: <span dir="ltr">{employee.payroll_status_effective_date}</span></div>}
+                    {scheduledSalaries.map((revision) => <div key={revision.id || revision.effective_from} className="mt-2 border-t border-sky-200 pt-2 text-xs font-bold text-sky-900" data-testid="employees-v2-card-scheduled-salary">
+                        <div>راتب مجدول</div>
+                        <div className="mt-1" dir="ltr">{moneyFormatter.format(revision.monthly_amount)}</div>
+                        <div className="mt-1">يسري من <span dir="ltr">{revision.effective_from}</span></div>
+                    </div>)}
+                </div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">حساب الدخول</div><div className={`mt-1 truncate text-sm font-black ${linked && employee.account.access_enabled ? "text-emerald-700" : "text-slate-700"}`}>{!linked ? "غير مرتبط" : employee.account.access_enabled ? "مفعّل" : "موقوف"}</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الدور</div><div className="mt-1 truncate text-sm font-black">{roleLabel}</div></div>
                 <div className="rounded-2xl border bg-slate-50 p-3"><div className="text-[10px] font-bold text-slate-500">الصلاحيات</div><div className="mt-1 text-sm font-black">{numberFormatter.format(role.effective_permissions?.length || 0)}</div></div>

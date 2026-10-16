@@ -906,10 +906,13 @@ def _employees(data, out):
             normalized = [{'effective_from': r['effective_from'], 'effective_to': r.get('effective_to'),
                            'salary': str(number(r.get('monthly_amount'))), 'status': 'active'}
                           for r in revisions]
+            from employee_payroll_status import first_salary_accrual_date
+            first = first_salary_accrual_date({**contract, 'start_date': max(
+                str(contract.get('effective_from') or ''), str(employee.get('hire_date') or '')) or None})
             out['employees'].append({'id': identity, 'currency': contract.get('currency') or 'SAR',
                 'salary_revisions': sorted(normalized, key=lambda r: r['effective_from']),
                 'hire_date': employee.get('hire_date'), 'effective_to': contract.get('effective_to'),
-                'accrual_start_date': contract.get('accrual_start_date') or contract.get('effective_from'),
+                'accrual_start_date': first.isoformat() if first else None,
                 'payroll_suspension_periods': suspensions})
         except (ValueError, KeyError, TypeError):
             issue(out, 'employee_salary_contract_incomplete', identity)
