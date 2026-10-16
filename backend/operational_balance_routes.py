@@ -25,7 +25,7 @@ class Request(Input):
     request_id: str = Field(min_length=8, max_length=160)
 
 
-PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_account",
+PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_account", "pos_receivable",
                     "supplier", "external_person", "bank", "cash", "employee_custody",
                     "operating_expense", "owner_withdrawal"]
 
