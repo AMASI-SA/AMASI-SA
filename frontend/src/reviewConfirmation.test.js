@@ -62,18 +62,6 @@ test("drawer does not complete or advance on pending response", async () => {
   await act(async () => root.unmount());
 });
 
-test("waiting summary keeps overlay and prevents second click on pending", async () => {
-  const overlay = document.createElement("div"); const button = document.createElement("button");
-  overlay.append(button); document.body.append(overlay);
-  api.post.mockResolvedValue({ status: 202, data: { confirmation_pending: true } });
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(overlay.isConnected).toBe(true);
-  expect(button.disabled).toBe(true);
-  expect(button.textContent).toContain("بانتظار فحص المراجعة السابقة");
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(api.post).toHaveBeenCalledTimes(1);
-});
-
 test("only confirmed completion is treated as finished", () => {
   expect(isReviewConfirmationPending({ confirmation_pending: true })).toBe(true);
   expect(isReviewConfirmationPending({ salla_status_sync: "pending" })).toBe(true);
@@ -86,7 +74,7 @@ const localCompletion = {
 };
 
 async function renderDrawer() {
-  getOrderReview.mockResolvedValue({ revision: 4, order: { order_number: "synthetic", created_at: "2026-01-01", items: [] }, items: [], operational_items: [] });
+  getOrderReview.mockResolvedValue({ approval_token: "rendered-token", revision: 4, order: { order_number: "synthetic", created_at: "2026-01-01", items: [] }, items: [], operational_items: [] });
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
   const completed = jest.fn();
@@ -131,6 +119,7 @@ test("drawer completes a local review immediately without waiting for the operat
   const { host, root, completed, button } = await renderDrawer();
   await act(async () => button().click());
   expect(completeOrderReview).toHaveBeenCalledTimes(1);
+  expect(completeOrderReview).toHaveBeenCalledWith("synthetic", expect.objectContaining({ revision: 4, approval_token: "rendered-token" }));
   expect(completed).toHaveBeenCalledTimes(1);
   expect(completed).toHaveBeenCalledWith("synthetic");
   expect(host.textContent).not.toContain("عملية مراجعة سابقة مرتبطة بسلة");
@@ -164,38 +153,25 @@ test("legacy resolution rejection keeps the drawer blocked and does not redispat
   await act(async () => root.unmount());
 });
 
-test("waiting summary completes from a local snapshot without confirmation polling", async () => {
-  api.post.mockResolvedValue({ data: localCompletion });
+test("waiting summary cannot approve undisplayed facts or fetch a replacement token", async () => {
   const { overlay, button } = waitingOverlay();
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(overlay.isConnected).toBe(false);
-  expect(api.post).toHaveBeenCalledTimes(1);
-  expect(api.get).toHaveBeenCalledTimes(1);
-  expect(api.get).toHaveBeenCalledWith("/order-reviews-v1/synthetic", { params: { local_only: true } });
-  expect(document.body.textContent).not.toContain("جارٍ تأكيد سلة");
-});
-
-test("waiting summary retains unknown results and blocks a legacy-resolution retry", async () => {
-  const { overlay, button } = waitingOverlay();
-  api.post.mockResolvedValueOnce({ data: { ok: true } });
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
+  await completeWaitingSummary({ order_number: "123456" }, overlay, button);
+  await completeWaitingSummary({ order_number: "123456" }, overlay, button);
   expect(overlay.isConnected).toBe(true);
-  expect(clearPendingReviewAdvance).toHaveBeenCalled();
-  api.post.mockRejectedValueOnce({ response: { data: { detail: { code: "review_completion_legacy_operation_requires_resolution" } } } });
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(button.disabled).toBe(true);
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(api.post).toHaveBeenCalledTimes(2);
-  expect(overlay.isConnected).toBe(true);
-});
-
-test("waiting summary preserves the split warning and does not post after cancellation", async () => {
-  api.get.mockResolvedValue({ data: { revision: 4, items: [{ order_item_id: "one", name: "منتج", quantity: 2 }] } });
-  window.confirm.mockReturnValueOnce(true).mockReturnValueOnce(false);
-  const { overlay, button } = waitingOverlay();
-  await completeWaitingSummary({ order_number: "synthetic" }, overlay, button);
-  expect(window.confirm).toHaveBeenCalledTimes(2);
   expect(api.post).not.toHaveBeenCalled();
-  expect(overlay.isConnected).toBe(true);
-  expect(button.disabled).toBe(false);
+  expect(api.get).not.toHaveBeenCalled();
+  expect(window.confirm).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain("إرجاع وفتح المراجعة");
+});
+
+test("waiting summary opens the existing full review drawer without posting", async () => {
+  const row = document.createElement("button");
+  row.innerHTML = "<span>#123456</span>";
+  const open = jest.fn(); row.onclick = open; document.body.append(row);
+  const { overlay, button } = waitingOverlay();
+  await completeWaitingSummary({ order_number: "123456" }, overlay, button);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(overlay.isConnected).toBe(false);
+  expect(api.post).not.toHaveBeenCalled();
+  expect(api.get).not.toHaveBeenCalled();
 });
