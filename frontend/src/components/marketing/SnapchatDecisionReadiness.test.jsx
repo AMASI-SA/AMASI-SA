@@ -4,12 +4,11 @@ import path from "path";
 import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import SnapchatDecisionReadiness from "./SnapchatDecisionReadiness";
-import MarketingDecisionReadiness from "./MarketingDecisionReadiness";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn() } }));
 const date = "2026-09-16";
 const response = () => ({
-    phase: "decision-intelligence-phase5-v1", mode: "recommendation_shadow", provider: "snapchat_ads",
+    phase: "decision-intelligence-phase5-v1", mode: "recommendation_shadow",
     account: { id: "account-a" }, period: { date_from: date, date_to: date, closed: true },
     decision_ready: true,
     gates: Object.fromEntries(["contract", "period_closed", "coverage", "reconciliation", "freshness", "attribution", "financial_coverage"].map(key => [key, { passed: true }])),
@@ -74,10 +73,9 @@ describe("SnapchatDecisionReadiness", () => {
         expect(container.textContent).toContain("حداثة المزامنة: لم يُتحقق منه");
         expect(container.textContent).not.toContain("اجتازت الفترة");
     });
-    test.each(["account", "period", "provider"])("rejects a response for a different %s", async field => {
+    test.each(["account", "period"])("rejects a response for a different %s", async field => {
         const data = response();
         if (field === "account") data.account.id = "other";
-        else if (field === "provider") data.provider = "other_ads";
         else data.period.date_to = "2026-09-17";
         api.get.mockResolvedValue({ data });
         await render(); await click();
@@ -104,19 +102,5 @@ describe("SnapchatDecisionReadiness", () => {
         await render("", undefined);
         expect(container.querySelector("button").disabled).toBe(true);
         expect(api.get).not.toHaveBeenCalled();
-    });
-    test("a future provider reuses the same scoped inspection and displays hierarchy blockers", async () => {
-        const data = response();
-        data.provider = "future_ads";
-        data.decision_ready = false;
-        data.gates.coverage = { passed: false, levels: { account: true, campaign: true, ad_group: false, ad: false } };
-        api.get.mockResolvedValue({ data });
-        await act(async () => root.render(<MarketingDecisionReadiness accountId="account-a" date={date} provider="future_ads" providerLabel="منصة مستقبلية" />));
-        await click();
-        expect(api.get.mock.calls[0][1].params.provider).toBe("future_ads");
-        expect(container.textContent).toContain("المجموعات: غير مكتمل");
-        expect(container.textContent).toContain("الحملات: مكتمل");
-        expect(container.querySelector("a").getAttribute("href")).toBe("/ads-manager/recommendations");
-        expect(container.textContent).not.toContain("اجتازت الفترة");
     });
 });

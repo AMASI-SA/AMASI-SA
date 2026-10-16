@@ -25,10 +25,14 @@ Production changed: **no**. No provider advertising writes performed.
   are retained. Source/parent commercial evidence is bound before model generation
   and rechecked on initial quality capture and approval execution. Routine sync
   timestamps do not change this binding; independent freshness checks remain.
-- Shared readiness UI validates provider/account/period, exposes hierarchy blockers,
+- Separate UI follow-up validates provider/account/period, exposes hierarchy blockers,
   and links to the existing recommendation/approval page. Removed the misleading
   static Snapchat "not connected" label. Passing diagnostic gates does not itself
   enable execution.
+
+The settings-only CI scope guard rejected combining the UI with backend changes.
+UI changes are preserved in a separate dependent branch/PR; the guard is retained.
+This PR contains the shared backend path and its reporting CI coverage only.
 
 ## Verification at initial checkpoint
 
