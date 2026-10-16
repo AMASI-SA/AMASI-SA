@@ -70,3 +70,24 @@ neither such side effect nor a data repair.
 An isolated rollback rehearsal must demonstrate that the reverted runtime/test
 files match J, with the current release intent untouched. The release controller
 must recheck the actual final Production history before using this recipe.
+
+## Replacement candidate after concurrent Production advance
+
+Before this task merged or created a lease, another authorized task merged
+PR #1386 and advanced both Production and /app to
+`d29b1a3ad0c61f7ace686b7709a7577ebda40d13`. The frozen candidate in
+PR #1384 remains preserved and must not be merged over that new intent.
+The replacement branch is `codex/supplier-invoice-current-release-20261016`,
+based directly on d29b. It keeps all Snapchat and Build44 changes. The three
+supplier commits to reverse on this replacement are, in reverse order:
+
+- `2ffec7e47f5bb9b0c1c4980b7493cb7b040141dd`
+- `c7a53ba78e2f2f81e0569234b66f51aa98ad7a5f`
+- `56c6e915a2510ca7d02c8ac96afac4432cba6557`
+
+Supplier runtime and tests are byte-identical to the validated #1384 source.
+Its 88-test rollback rehearsal is historical evidence; the final replacement
+requires its own ancestry/rollback comparison, CI, build identity and deployed
+verification. Preserve d29b Snapchat changes during rollback. Do not assume
+that a merge alone proves d29b is deployed; verify release ownership and runtime
+before publishing this replacement.
