@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from typing import Any, Callable
 from copy import deepcopy
+from decimal import Decimal, ROUND_HALF_UP
 from bson import json_util
+from fastapi import HTTPException
 
 
 FILL_BASED_TYPES = {"text", "textarea", "long_text", "number", "date", "time", "file"}
@@ -359,10 +361,14 @@ def install_product_field_cost_support() -> None:
                     live_services.append(_live_service_row(resource, binding, option_selected=False))
                     seen_service_ids.add(service_id)
 
-            tokens = snapshot_module.selected_option_tokens(_supplier_cost_item(piece))
+            # Snapshot and raw aliases describe the same customer choices. Match
+            # each binding once, rather than adding a second surcharge to the
+            # option-inclusive price already returned by the original resolver.
+            tokens = set(supplier_module._supplier_piece_option_tokens(piece))
+            tokens.update(snapshot_module.selected_option_tokens(_supplier_cost_item(piece)))
             option_halalas = 0
             for binding in option_links:
-                if not snapshot_module.binding_matches(binding, tokens):
+                if not supplier_module._supplier_option_binding_matches(binding, tokens):
                     continue
                 if _text(binding.get("mode")).casefold() == "resource":
                     resource = resource_map.get(_text(binding.get("resource_id"))) or {}
@@ -374,9 +380,14 @@ def install_product_field_cost_support() -> None:
                     # Resource-backed component costs are internal recipe costs;
                     # they never become supplier-invoice product surcharges.
                     continue
-                option_halalas += round(_number(binding.get("direct_amount")) * 100)
+                direct_halalas = supplier_module._halalas(binding.get("direct_amount"))
+                if direct_halalas is None:
+                    raise HTTPException(409, detail={"code": "supplier_receiving_option_cost_missing"})
+                option_halalas += int((
+                    Decimal(direct_halalas) * supplier_module._positive_quantity(binding.get("quantity"))
+                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
-            total = int(base.get("reference_product_unit_price_halalas") or 0) + option_halalas
+            total = int(base.get("reference_product_base_unit_price_halalas") or 0) + option_halalas
             return {
                 **base,
                 "reference_product_unit_price_halalas": total,
@@ -457,7 +468,10 @@ def install_product_field_cost_support() -> None:
                 )
                 # Request-local, exact inputs: choices and variant identity must
                 # never share a price merely because the product ID matches.
-                price_key = json_util.dumps({field: row.get(field) for field in (
+                # Scan/refresh/close must price the full current piece. Scan
+                # events intentionally omit some customer choice snapshots.
+                price_piece = current_piece if current_piece is not None else row
+                price_key = json_util.dumps({field: price_piece.get(field) for field in (
                     'product_id', 'variant_id', 'salla_variant_id', 'sku',
                     'options', 'options_raw', 'options_normalized', 'product_options',
                     'selected_options', 'custom_fields',
@@ -466,7 +480,7 @@ def install_product_field_cost_support() -> None:
                 )})
                 if price_key not in price_cache:
                     price_cache[price_key] = await supplier_module._supplier_product_reference_price(
-                        db, user_id=user_id, piece=row, mongo_session=mongo_session,
+                        db, user_id=user_id, piece=price_piece, mongo_session=mongo_session,
                     )
                 live_price = deepcopy(price_cache[price_key])
                 live_services = list(live_price.pop("live_invoice_services", []) or [])

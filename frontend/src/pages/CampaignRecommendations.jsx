@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
+import CampaignAccountAnalysis from "../components/marketing/CampaignAccountAnalysis";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle,
@@ -419,6 +420,8 @@ export default function CampaignRecommendations() {
                 <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-sm font-black text-red-900"><AlertTriangle className="h-5 w-5" />تنبيهات المنتجات المرتبطة بالإعلانات</h2><p className="mt-1 text-[10px] font-bold text-red-700">فحص مستقل للمنتج: مخفي، نفد، رابط معطل أو خيار غير متوفر.</p></div><span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-red-700">نشط {productAlerts.active_count} · حرج {productAlerts.critical_count || 0}</span></div>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">{(productAlerts.items || []).slice(0, 6).map((alert) => <div key={alert.alert_key} className="rounded-xl bg-white p-3 text-[10px] font-bold text-slate-700"><p className="font-black text-red-800">{alert.product_name || alert.product_id}</p><p className="mt-1">صرف الإعلان المرتبط {money(alert.current_spend_sar)} ر.س</p><p className="mt-1 text-slate-500">الحالة: {alert.code}</p><p className="mt-1 text-slate-400">لا يتم إيقاف أو تعديل شيء تلقائيًا.</p></div>)}</div>
             </section>}
+
+            <CampaignAccountAnalysis snapshot={snapshot} />
 
             <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="ملخص توصيات الحملات">
                 <MetricCard icon={ShieldCheck} label="جاهزة للموافقة والتنفيذ" value={executable} tone="bg-emerald-50 text-emerald-700" />

@@ -1,0 +1,25 @@
+{
+  "task": "MZ2 selected advertising opening catalog",
+  "branch": "codex/operational-ad-selection-fix",
+  "base": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
+  "status": "WIP_TARGETED_TESTS_PASS_REAL_MONGO_CI_PENDING",
+  "production_changed": false,
+  "completed": [
+    "Snapchat and Meta display only native mezan_selected=true accounts",
+    "Owner explicitly selects Google/TikTok opening catalog accounts; no integration or financial binding mutation",
+    "Selection version CAS, idempotency and audit reuse owner operational aggregate",
+    "Only public entity picker filtered; historical financial resolution unchanged"
+  ],
+  "verification": {
+    "backend_unit_and_source": "53 passed",
+    "frontend_affected": "57 passed",
+    "real_mongo_local": "BLOCKED: localhost:27305 not running; new HTTP isolation/concurrency test included in existing CI Replica Set job",
+    "production_ui": "not changed or tested"
+  },
+  "remaining": [
+    "CI integration and security verification",
+    "Owner bank setup and advertising financial-binding workflow remain separate unresolved gaps",
+    "No release intent frozen for this WIP; not merge/deploy ready"
+  ],
+  "next_safe_action": "Run Draft PR CI; inspect real Mongo HTTP/concurrency evidence before release preparation. Never activate ads or create balances automatically."
+}

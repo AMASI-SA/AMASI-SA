@@ -134,6 +134,55 @@ async def get_selected_account(db: Any, user_id: str) -> dict[str, Any] | None:
     )
 
 
+async def resolve_account(
+    db: Any, user_id: str, ad_account_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Resolve an authorized account without changing the display preference."""
+    if ad_account_id is None:
+        selected = await get_selected_account(db, user_id)
+        if selected and any(
+            row.get("ad_account_id") == selected.get("ad_account_id")
+            for row in await list_enabled_accounts(db, user_id)
+        ):
+            return selected
+        return None
+    account_id = str(ad_account_id).strip()
+    if not account_id or len(account_id) > 128:
+        raise LookupError("snapchat_account_not_found")
+    account = await db[SNAPCHAT_ACCOUNTS_COLLECTION].find_one(
+        {"user_id": str(user_id), "provider": SNAPCHAT_PROVIDER,
+         "ad_account_id": account_id, "active": True},
+        {"_id": 0},
+    )
+    if not account:
+        raise LookupError("snapchat_account_not_found")
+    if not any(row.get("ad_account_id") == account_id
+               for row in await list_enabled_accounts(db, user_id)):
+        raise LookupError("snapchat_account_not_found")
+    return account
+
+
+async def list_enabled_accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
+    """Intersect discovered V2 accounts with the user's Mezan activation list.
+
+    Older V2-only installations retain their selected default until an explicit
+    Mezan activation record exists. An explicitly empty selection stays empty.
+    """
+    discovered = await list_accounts(db, user_id)
+    legacy = await _to_list(db[LEGACY_INTEGRATION_ACCOUNTS_COLLECTION].find(
+        {"user_id": str(user_id), "provider": SNAPCHAT_PROVIDER}, {"_id": 0}))
+    configured = any("mezan_selected" in row for row in legacy)
+    enabled_ids = {
+        str(row.get("ad_account_id") or row.get("external_account_id") or "").strip()
+        for row in legacy
+        if row.get("mezan_selected") is True and row.get("connection_status") == "connected"
+    }
+    return [row for row in discovered
+            if row.get("connection_status") == "connected"
+            and (row.get("ad_account_id") in enabled_ids if configured
+                 else row.get("selected") is True)]
+
+
 async def select_account(db: Any, user_id: str, ad_account_id: str) -> dict[str, Any]:
     user_id = str(user_id)
     ad_account_id = clean_text(ad_account_id, limit=128)

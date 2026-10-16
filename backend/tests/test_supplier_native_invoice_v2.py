@@ -19,6 +19,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import monitoring
 import pytest
 import pytest_asyncio
+from test_supplier_refresh_wrapper import installed_live_cost_support
 
 from accounting_module_contract import EVIDENCE_SECTIONS
 from accounting_atomic import atomic_owner
@@ -410,6 +411,54 @@ async def test_real_concurrent_close_and_replay_commit_one_invoice_no_legacy(env
     assert response.status_code == 409, response.text
     assert response.json()["detail"]["code"] == "supplier_native_close_payload_conflict"
     assert len(await legs(db)) == 2
+
+
+@pytest.mark.asyncio
+async def test_installed_option_refresh_and_native_close_keep_product_and_added_service(env, http, installed_live_cost_support):
+    import supplier_receiving_routes as receiving
+    installed_live_cost_support()
+    db, commands = env
+    await identities(db)
+    await mapping(db)
+    await mapping(db, kind="service")
+    session, payload = await receiving_session(db)
+    await db[receiving.COST_PROFILES].update_one({"user_id": OWNER}, {"$set": {"base_cost": 40}})
+    choices = {"Customization": "Name"}
+    await db[receiving.PIECES].update_one({"piece_id": "piece"}, {"$set": {
+        "product_options_snapshot": choices, "options_normalized": choices}})
+    await db[receiving.BINDINGS].insert_one({"user_id": OWNER, "salla_product_id": "product",
+        "mode": "direct", "option_name": "Customization", "value_name": "Name",
+        "direct_amount": 10, "quantity": 1})
+    await db[receiving.RESOURCES].update_one({"id": "service"}, {"$set": {
+        "unit_cost": 3, "name": "Tailoring", "kind": "service", "status": "active"}})
+    await db[receiving.PRODUCT_RESOURCE_BINDINGS].insert_one({"user_id": OWNER,
+        "salla_product_id": "product", "resource_id": "service", "quantity": 1,
+        "supplier_invoice_required": True})
+    payload["invoice_lines"][0].update(product_unit_price_halalas=5000,
+        services=[{"service_id": "service", "unit_price_halalas": 300}])
+    payload["confirmed_total_halalas"] = 5300
+    commands.collections.clear()
+    path = f'/supplier-receiving-v1/sessions/{session["id"]}'
+    refreshed = await http.post(path + '/refresh', json={})
+    assert refreshed.status_code == 200, refreshed.text
+    scan = refreshed.json()['scans'][0]
+    assert scan['reference_product_unit_price_halalas'] == 5000
+    assert scan['reference_product_option_cost_halalas'] == 1000
+    assert scan['invoice_services'][0]['reference_unit_price_halalas'] == 300
+    closed = await http.post(path + '/close', json=payload)
+    assert closed.status_code == 200, closed.text
+    row = closed.json()['supplier_invoice']
+    assert row['total_halalas'] == 5300
+    assert row['lines'][0]['product_total_halalas'] == 5000
+    assert row['lines'][0]['services_total_halalas'] == 300
+    replay = await http.post(path + '/close', json=payload)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()['supplier_invoice']['id'] == row['id']
+    assert await db[receiving.SUPPLIER_INVOICES].count_documents({}) == 1
+    ledger = await legs(db)
+    assert sum(leg['amount_minor'] for leg in ledger if leg['side'] == 'credit') == 5300
+    assert sum(leg['amount_minor'] for leg in ledger if leg['side'] == 'debit') == 5300
+    assert not LEGACY.intersection(commands.collections)
 
 
 @pytest.mark.asyncio

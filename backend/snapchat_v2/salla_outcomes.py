@@ -29,6 +29,7 @@ from salla_marketing_attribution import (
 
 MAX_AUDIT_ROWS = 500
 MAX_ORDER_ROWS = 100_000
+MAX_OWNER_CAMPAIGN_ROWS = 100_000
 
 ORDER_PROJECTION = {
     **SALLA_RAW_ATTRIBUTION_PROJECTION,
@@ -260,6 +261,49 @@ async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
     return rows
 
 
+async def _owner_campaign_catalog(db: Any, user_id: str) -> list[dict[str, Any]]:
+    """Bounded owner/provider identities; never infer ownership from absence."""
+    from .entities import SNAPCHAT_ENTITY_FACTS_COLLECTION
+
+    collection = (db[SNAPCHAT_ENTITY_FACTS_COLLECTION] if hasattr(db, "__getitem__")
+                  else getattr(db, SNAPCHAT_ENTITY_FACTS_COLLECTION, None))
+    if collection is None:
+        # Lightweight legacy callers have no identity store. No foreign order
+        # can be excluded on that basis; their existing conservative proof stays.
+        return []
+    cursor = collection.find(
+        {"user_id": str(user_id), "provider": "snapchat_ads", "entity_type": "campaign"},
+        {"_id": 0, "ad_account_id": 1, "external_id": 1, "name": 1},
+    )
+    if hasattr(cursor, "limit"):
+        cursor = cursor.limit(MAX_OWNER_CAMPAIGN_ROWS + 1)
+    if hasattr(cursor, "max_time_ms"):
+        cursor = cursor.max_time_ms(15_000)
+    rows = await _to_list(cursor, MAX_OWNER_CAMPAIGN_ROWS)
+    if len(rows) > MAX_OWNER_CAMPAIGN_ROWS:
+        raise ValueError("Snapchat campaign catalog exceeded the safe row limit")
+    return [{"account_id": _text(row.get("ad_account_id")),
+             "campaign_id": _text(row.get("external_id")),
+             "campaign_name": row.get("name")} for row in rows]
+
+
+def _exact_order_account(order: dict[str, Any], owners: dict[str, set[str]]) -> tuple[str | None, bool]:
+    """Only exact ID evidence can exclude an order from another account."""
+    sources = order.get("raw_by_source")
+    raw = sources.get("salla_direct") if isinstance(sources, dict) else None
+    raw = raw if isinstance(raw, dict) else {}
+    platform = canonical_ad_platform(raw) or canonical_ad_platform(order)
+    if platform and platform != "snapchat":
+        return None, False
+    raw_candidates = campaign_id_candidates(raw) + campaign_name_candidates(raw)
+    evidence = raw if any(not is_salla_clickid_campaign_placeholder(value)
+                          for value in raw_candidates) else order
+    matches = [owners[_text(value)] for value in campaign_id_candidates(evidence)
+               if _text(value) in owners]
+    matched_owners = set().union(*matches) if matches else set()
+    return (next(iter(matched_owners)), False) if len(matched_owners) == 1 else (None, bool(matches))
+
+
 async def _load_report_settings(db: Any, user_id: str) -> dict[str, Any]:
     """Read the existing report policy without creating or mutating settings."""
     collection = getattr(db, "settings", None)
@@ -303,8 +347,20 @@ async def load_salla_campaign_outcomes(
     if len(orders) > MAX_ORDER_ROWS:
         raise ValueError("Salla order audit exceeded the safe row limit")
 
-    id_lookup = _unique_lookup(identities, "campaign_id")
-    name_lookup = _unique_lookup(identities, "campaign_name")
+    catalog = await _owner_campaign_catalog(db, str(user_id))
+    all_identities = [*catalog, *identities]
+    exact_owners: dict[str, set[str]] = defaultdict(set)
+    for identity in all_identities:
+        if _text(identity.get("campaign_id")) and _text(identity.get("account_id")):
+            exact_owners[_text(identity["campaign_id"])].add(_text(identity["account_id"]))
+    target_identities = [row for row in identities if _text(row.get("account_id")) == str(account_id)]
+    id_lookup = _unique_lookup(target_identities, "campaign_id")
+    name_lookup = _unique_lookup(target_identities, "campaign_name")
+    # A name repeated across accounts cannot become a unique target match.
+    global_names = _unique_lookup(all_identities, "campaign_name")
+    for name in name_lookup:
+        if global_names.get(name) is None:
+            name_lookup[name] = None
     identity_by_key = {
         (_text(row.get("account_id")), _text(row.get("campaign_id"))): row
         for row in identities
@@ -340,6 +396,9 @@ async def load_salla_campaign_outcomes(
     account_timezone_snapchat_attributed_financial_sales = 0.0
 
     for order in orders:
+        exact_account, ambiguous_account = _exact_order_account(order, exact_owners)
+        if exact_account is not None and exact_account != str(account_id):
+            continue
         local_date, local_created_at, date_source = _localized_order_period_date(
             order,
             zone=zone,
@@ -354,6 +413,8 @@ async def load_salla_campaign_outcomes(
             id_lookup=id_lookup,
             name_lookup=name_lookup,
         )
+        if ambiguous_account:
+            key, match_method = None, "ambiguous_id"
         reported_snapchat_source = source_platform == "snapchat"
         snapchat_attributed = reported_snapchat_source or key is not None
 

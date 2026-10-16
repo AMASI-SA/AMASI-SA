@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   scope-guard:
-    name: Fail-closed settings-only scope guard
+    name: Fail-closed settings and multi-account scope guard
     runs-on: ubuntu-latest
     outputs:
       run_tests: ${{ steps.scope.outputs.run_tests }}
@@ -28,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reject changes outside the approved settings-management surface
+      - name: Reject changes outside the approved settings and multi-account surfaces
         id: scope
         env:
           PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -119,6 +119,41 @@ jobs:
               frontend/src/components/marketing/SnapchatEntitySettingsTable.test.jsx|\
               frontend/src/services/snapchatCampaignManagement.js|\
               frontend/src/services/snapchatCampaignManagement.test.js|\
+              backend/campaign_ai_funnel_evidence_v3.py|\
+              backend/campaign_ai_product_intelligence_v3.py|\
+              backend/campaign_ai_temporal_evidence_v3.py|\
+              backend/campaign_ai_unified_execution_evidence.py|\
+              backend/campaign_ai_unified_source.py|\
+              backend/decision_intelligence/evidence_adapter.py|\
+              backend/decision_intelligence/phase5.py|\
+              backend/decision_intelligence/routes.py|\
+              backend/snapchat_v2/accounts.py|\
+              backend/snapchat_v2/connection.py|\
+              backend/snapchat_v2/routes.py|\
+              backend/snapchat_v2/scheduler.py|\
+              backend/snapchat_v2/status.py|\
+              backend/snapchat_v2/salla_outcomes.py|\
+              backend/tests/test_snapchat_salla_account_scope.py|\
+              backend/tests/test_campaign_ai_multi_account.py|\
+              backend/tests/test_campaign_ai_unified_cutover.py|\
+              backend/tests/test_campaign_ai_unified_execution_evidence.py|\
+              backend/tests/test_multi_account_readiness_routes.py|\
+              backend/tests/test_snapchat_multi_account_routes.py|\
+              backend/tests/test_snapchat_period_diagnostics_route.py|\
+              backend/tests/test_snapchat_reporting_v2_headline_total.py|\
+              backend/tests/test_snapchat_reporting_v2_multi_account_sync.py|\
+              backend/tests/test_snapchat_reporting_v2_refresh_visibility.py|\
+              backend/tests/test_snapchat_reporting_v2_scheduler.py|\
+              backend/tests/test_unified_marketing_multi_account_dashboard.py|\
+              backend/tests/test_unified_marketing_snapchat_range_proof.py|\
+              backend/tests/test_unified_marketing_snapchat_readiness.py|\
+              backend/unified_marketing/gateway.py|\
+              backend/unified_marketing/providers.py|\
+              backend/unified_marketing/readers/dashboard_portfolio.py|\
+              backend/unified_marketing/readers/snapchat_v2.py|\
+              backend/unified_marketing/readers/snapchat_v2_decision_evidence.py|\
+              backend/unified_marketing/readiness.py|\
+              docs/operations/SNAP-MULTI-ACCOUNT-20261016/STATUS.json|\
               scripts/emergent_deployment_adapter.py|\
               backend/tests/test_emergent_deployment_adapter_v5.py|\
               .github/workflows/mezan-production-release.yml|\
@@ -130,21 +165,21 @@ jobs:
               .github/workflows/snapchat-settings-management-v2.yml)
                 ;;
               *)
-                echo "::error file=${changed_path}::Path is outside the approved Snapchat settings-management allowlist."
+                echo "::error file=${changed_path}::Path is outside the approved Snapchat settings and multi-account allowlist."
                 rejected=1
                 ;;
             esac
           done
 
           if [[ "${rejected}" -ne 0 ]]; then
-            echo "Forbidden scope includes reporting/hourly facts, scheduler, reconciliation, Provider TOTAL, Dashboard spend, OAuth, timezone, Salla, Unified Marketing, and Decision Intelligence."
+            echo "Only the exact reviewed settings and multi-account integration files are allowed; all other paths remain forbidden."
             exit 1
           fi
 
           echo "run_tests=true" >> "${GITHUB_OUTPUT}"
 
           {
-            echo "### Snapchat settings-management diff scope"
+            echo "### Snapchat settings and multi-account integration diff scope"
             echo
             echo '```text'
             cat "${changed_paths_file}"

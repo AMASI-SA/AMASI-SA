@@ -19,6 +19,7 @@ from unified_marketing.decision_binding import source_evidence_fingerprint
 from decision_intelligence.evidence_adapter import evaluate_decision_evidence
 from unified_marketing.gateway import (
     load_unified_marketing_account_identity,
+    load_unified_marketing_account_identities,
     load_unified_marketing_account_report,
     load_unified_marketing_entity_report,
 )
@@ -263,12 +264,14 @@ async def load_unified_ai_entities(
     period_end_offset_days: int = 1,
     *,
     provider: str,
+    account_id: str | None = None,
 ) -> dict[str, Any]:
     provider = get_provider(provider).provider
+    scope = {"account_id": account_id} if account_id is not None else {}
     account = await load_unified_marketing_account_identity(
         db,
         str(user_id),
-        provider=provider,
+        provider=provider, **scope,
     )
     if not account:
         return {
@@ -289,13 +292,13 @@ async def load_unified_ai_entities(
     )
     calls = {
         level: load_unified_marketing_entity_report(
-            db, str(user_id), provider=provider, entity_level=level,
+            db, str(user_id), provider=provider, **scope, entity_level=level,
             date_from=local_start, date_to=local_end,
             timezone_name=str(account.get("timezone") or ""), include_stale=False,
         ) for level in ("campaign", "ad_group", "ad")
     }
     calls["account"] = load_unified_marketing_account_report(
-        db, str(user_id), provider=provider,
+        db, str(user_id), provider=provider, **scope,
         date_from=local_start, date_to=local_end,
         timezone_name=str(account.get("timezone") or ""),
     )
@@ -312,7 +315,8 @@ async def load_unified_ai_entities(
     # Readers enforce tenant scope. Reject cross-provider/account envelopes before
     # any report can become an AI candidate, including explicit owner mismatches.
     identity_errors = dict(load_errors)
-    if (account.get("provider") != provider or not str(account.get("id") or "")
+    if ((account_id is not None and str(account.get("id")) != str(account_id))
+            or account.get("provider") != provider or not str(account.get("id") or "")
             or (account.get("user_id") is not None
                 and str(account["user_id"]) != str(user_id))):
         identity_errors["account_identity"] = "identity_scope_mismatch"
@@ -470,11 +474,51 @@ async def load_snapchat_unified_ai_entities(
     db: Any, user_id: str, start: date, end: date,
     period_end_offset_days: int = 1,
 ) -> dict[str, Any]:
-    """Compatibility entry point; all providers share the same candidate pipeline."""
-    return await load_unified_ai_entities(
-        db, user_id, start, end, period_end_offset_days,
-        provider=UNIFIED_AI_PROVIDER,
+    """Evaluate accounts independently; a failed account cannot certify another."""
+    identities = await load_unified_marketing_account_identities(
+        db, str(user_id), provider=UNIFIED_AI_PROVIDER,
     )
+    bundles = []
+    seen = set()
+    for identity in identities:
+        account_id = str(identity.get("id") or "")
+        if not account_id or account_id in seen:
+            continue
+        seen.add(account_id)
+        try:
+            bundle = await load_unified_ai_entities(
+                db, user_id, start, end, period_end_offset_days,
+                provider=UNIFIED_AI_PROVIDER, account_id=account_id,
+            )
+        except Exception:  # One unavailable account must not hide healthy accounts.
+            bundle = {
+                "campaigns": [], "children": [], "account": identity, "period": None,
+                "levels": {level: [] for level in ("campaign", "ad_group", "ad")},
+                "decision_eligibility": {"eligible": False, "reason": "account_evidence_load_failed"},
+            }
+        bundles.append(bundle)
+    if len(bundles) == 1:
+        return {**bundles[0], "accounts": [bundles[0].get("account")],
+                "account_diagnostics": [{key: bundles[0].get(key) for key in
+                    ("account", "period", "decision_eligibility")}]}
+    diagnostics = [{key: bundle.get(key) for key in
+                   ("account", "period", "decision_eligibility")} for bundle in bundles]
+    ready = [bundle for bundle in bundles if (bundle.get("decision_eligibility") or {}).get("eligible")]
+    return {
+        "campaigns": [row for bundle in ready for row in bundle.get("campaigns") or []],
+        "children": [row for bundle in ready for row in bundle.get("children") or []],
+        "levels": {level: [row for bundle in ready for row in (bundle.get("levels") or {}).get(level) or []]
+                   for level in ("campaign", "ad_group", "ad")},
+        "account": None, "period": None,
+        "accounts": [bundle.get("account") for bundle in bundles],
+        "account_diagnostics": diagnostics,
+        "decision_eligibility": {
+            "eligible": bool(bundles) and len(ready) == len(bundles),
+            "reason": "all_accounts_ready" if bundles and len(ready) == len(bundles)
+                      else "some_accounts_blocked" if bundles else "connected_accounts_missing",
+            "ready_accounts": len(ready), "total_accounts": len(bundles),
+        },
+    }
 
 
 __all__ = [

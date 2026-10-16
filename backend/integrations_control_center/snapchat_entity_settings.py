@@ -205,6 +205,7 @@ def _settings_quality(
     now: datetime,
     mapping_status: str,
     required_financial_field_available: bool,
+    native_currency_verified: bool = False,
 ) -> dict[str, Any]:
     if row is None:
         status = _NOT_LOADED
@@ -256,17 +257,18 @@ def _settings_quality(
                     reason = "provider_snapshot_fresh"
 
     currency_is_usd = str(account_currency or "").upper() == "USD"
+    currency_supported = currency_is_usd or (account_currency == "SAR" and native_currency_verified)
     financial_controls_allowed = bool(
         status == _COMPLETE
         and mapping_status == "verified"
-        and currency_is_usd
+        and currency_supported
         and required_financial_field_available
     )
     if status == _COMPLETE and mapping_status != "verified":
         status = _SYNC_FAILED
         reason = "provider_identity_mapping_unverified"
         financial_controls_allowed = False
-    elif status == _COMPLETE and not currency_is_usd:
+    elif status == _COMPLETE and not currency_supported:
         reason = "account_currency_unknown_or_not_usd"
     elif status == _COMPLETE and not required_financial_field_available:
         reason = "required_provider_financial_field_missing"
@@ -360,6 +362,19 @@ def _base_item(
     )
     account_currency_raw = (account or {}).get("currency")
     account_currency = str(account_currency_raw or "").strip().upper() or None
+    native_currency_verified = bool(
+        account_currency in {"SAR", "USD"}
+        and (account or {}).get("connection_provenance") == "api_connection"
+        and (account or {}).get("connection_status") == "connected"
+        and str((account or {}).get("ad_account_id") or (account or {}).get("external_account_id") or "")
+        == str(row.get("ad_account_id") or "")
+    )
+    currency_proof = {
+        "ad_account_id": str(row.get("ad_account_id") or ""),
+        "currency": account_currency,
+        "source": "snapchat_api_discovery" if native_currency_verified else None,
+        "verified": native_currency_verified,
+    }
 
     daily_raw, daily_present = _provider_field(row, "daily_budget_micro")
     daily_micro = _micro_integer(daily_raw)
@@ -406,6 +421,7 @@ def _base_item(
         now=now,
         mapping_status=mapping_status,
         required_financial_field_available=daily_availability == "available",
+        native_currency_verified=native_currency_verified,
     )
     if (
         entity_type == "campaign"
@@ -416,7 +432,7 @@ def _base_item(
     bid_control_allowed = bool(
         quality["settings_status"] == _COMPLETE
         and mapping_status == "verified"
-        and account_currency == "USD"
+        and (account_currency == "USD" or (account_currency == "SAR" and native_currency_verified))
         and bid_availability == "available"
         and entity_type == "ad_squad"
     )
@@ -471,6 +487,7 @@ def _base_item(
         "display_name": provider_setting("name") or row.get("display_name"),
         "account_currency": account_currency,
         "account_currency_raw": account_currency_raw,
+        "account_currency_proof": currency_proof,
         "daily_budget_micro": deepcopy(daily_raw) if daily_present else None,
         "daily_budget_account_currency": (
             micro_to_account_currency(daily_micro)
@@ -974,6 +991,8 @@ async def list_financial_management_settings(
             "external_account_id": 1,
             "ad_account_id": 1,
             "currency": 1,
+            "connection_provenance": 1,
+            "connection_status": 1,
         },
         limit=100,
     )

@@ -15,6 +15,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 import supplier_receiving_routes as r
+from test_supplier_refresh_wrapper import installed_live_cost_support
 
 pytestmark = pytest.mark.asyncio
 
@@ -128,6 +129,45 @@ async def test_DE_order_selection_preserves_piece_product_sku_variant_options(en
     assert saved['supplier_id']=='supplier-A'
     assert saved['supplier_receiving_session_id']=='session-1'
     assert await env[0][r.SUPPLIER_INVOICES].count_documents({})==0
+
+
+@pytest.mark.parametrize('duplicate_alias', [False, True])
+async def test_installed_cost_support_keeps_40_plus_10_through_scan_refresh_and_invoice(
+    env, installed_live_cost_support, duplicate_alias
+):
+    installed_live_cost_support()
+    db, http = env
+    piece = await seed(env)
+    await db[r.COST_PROFILES].update_one({'salla_product_id': 'salla-1'}, {'$set': {'base_cost': 40}})
+    if duplicate_alias:
+        await db[r.PIECES].update_one({'piece_id': piece['piece_id']},
+            {'$set': {'options_normalized': piece['product_options_snapshot']}})
+    await db[r.BINDINGS].insert_one({'user_id': 'merchant', 'salla_product_id': 'salla-1',
+        'mode': 'direct', 'option_name': 'color', 'value_name': 'red', 'direct_amount': 10, 'quantity': 1})
+    response = await http.post('/supplier-receiving-v1/sessions/session-1/scan', json={
+        'barcode': 'MEZAN-PIECE:' + piece['piece_id'], 'quantity': 1,
+        'client_request_id': 'option-cost-scan'})
+    assert response.status_code == 200, response.text
+    first = response.json()['scans'][0]
+    for _ in range(2):
+        response = await http.post('/supplier-receiving-v1/sessions/session-1/refresh', json={})
+        assert response.status_code == 200, response.text
+        scan = response.json()['scans'][0]
+        assert scan['reference_product_unit_price_halalas'] == first['reference_product_unit_price_halalas'] == 5000
+        assert scan['reference_product_option_cost_halalas'] == first['reference_product_option_cost_halalas'] == 1000
+        assert len(scan['invoice_services']) == 1
+        assert scan['invoice_services'][0]['reference_unit_price_halalas'] == 300
+        session = await db[r.SESSIONS].find_one({'id': 'session-1'})
+        invoice = r.build_supplier_receiving_invoice(session=session, scans=[scan],
+            saved_at=datetime.now(timezone.utc), requested_lines=[r.SupplierReceivingInvoiceLineRequest(
+                piece_ids=[piece['piece_id']], product_unit_price_halalas=5000,
+                services=[r.SupplierReceivingInvoiceServiceRequest(service_id='service-1', unit_price_halalas=300)])])
+        assert invoice['total_halalas'] == 5300
+        assert invoice['price_changes'] == []
+    saved = await db[r.PIECES].find_one({'piece_id': piece['piece_id']})
+    assert saved['product_options_snapshot'] == piece['product_options_snapshot']
+    assert await db[r.RECEIVING_EVENTS].count_documents({'event_type': 'supplier_piece_scanned'}) == 1
+    assert await db[r.SUPPLIER_INVOICES].count_documents({}) == 0
 
 
 async def test_F_cost_service_and_draft_from_order_selection(env):

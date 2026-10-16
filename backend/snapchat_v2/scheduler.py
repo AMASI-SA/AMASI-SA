@@ -15,6 +15,8 @@ from typing import Any, Callable
 from .accounts import (
     LEGACY_INTEGRATION_ACCOUNTS_COLLECTION,
     SNAPCHAT_ACCOUNTS_COLLECTION,
+    MAX_ACCOUNTS,
+    list_enabled_accounts,
 )
 from .models import SNAPCHAT_PROVIDER
 from .sync_pipeline import SnapchatV2SyncPipeline
@@ -28,6 +30,9 @@ MIN_INTERVAL_SECONDS = 300
 MAX_INTERVAL_SECONDS = 3600
 DEFAULT_STARTUP_DELAY_SECONDS = 45
 MAX_SCHEDULER_ACCOUNTS = 50
+# Discovery includes disabled accounts; its bound must not consume the enabled
+# scheduling budget before applying the owner's activation choices.
+MAX_DISCOVERED_ACCOUNTS = MAX_SCHEDULER_ACCOUNTS * MAX_ACCOUNTS
 MAX_PARALLEL_ACCOUNTS = 1
 
 
@@ -87,20 +92,22 @@ async def _to_list(cursor: Any, limit: int) -> list[dict[str, Any]]:
 
 
 async def _selected_accounts(db: Any) -> list[dict[str, str]]:
+    """Schedule enabled Mezan accounts; discovery alone is not activation."""
     v2_rows = await _to_list(
         db[SNAPCHAT_ACCOUNTS_COLLECTION].find(
             {
                 "provider": SNAPCHAT_PROVIDER,
-                "selected": True,
                 "active": True,
                 "connection_status": "connected",
             },
             {"_id": 0, "user_id": 1, "ad_account_id": 1},
         ),
-        MAX_SCHEDULER_ACCOUNTS,
+        MAX_DISCOVERED_ACCOUNTS,
     )
-    source_rows = v2_rows
-    if not source_rows:
+    source_rows = []
+    for user_id in sorted({str(row.get("user_id") or "") for row in v2_rows} - {""}):
+        source_rows.extend(await list_enabled_accounts(db, user_id))
+    if not v2_rows:
         source_rows = await _to_list(
             db[LEGACY_INTEGRATION_ACCOUNTS_COLLECTION].find(
                 {
@@ -129,6 +136,8 @@ async def _selected_accounts(db: Any) -> list[dict[str, str]]:
             "user_id": user_id,
             "ad_account_id": account_id,
         }
+    if len(identities) > MAX_SCHEDULER_ACCOUNTS:
+        raise RuntimeError("Snapchat V2 shadow scheduler enabled account limit exceeded")
     return list(identities.values())
 
 

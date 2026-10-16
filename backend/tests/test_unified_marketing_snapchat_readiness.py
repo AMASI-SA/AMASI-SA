@@ -8,50 +8,31 @@ from unified_marketing.readers.snapchat_v2 import (
 )
 
 
-class _Collection:
-    def __init__(self, *, find_one=None, incomplete=False):
-        self.find_one_result = find_one
-        self.incomplete = incomplete
-
-    async def find_one(self, query, projection=None, sort=None):
-        if "coverage.status" in query:
-            return {"_id": "incomplete"} if self.incomplete else None
-        return self.find_one_result
-
-    async def count_documents(self, query):
-        return 3
-
-    async def distinct(self, field, query):
-        if field == "report_date":
-            return ["2026-08-26"]
-        if field == "external_id":
-            return ["c1", "c2", "c3"]
-        return []
+from tests.test_snapchat_reporting_v2_refresh_visibility import Database
+from snapchat_v2.models import build_attribution_key
 
 
-class _Db:
+class _Db(Database):
     def __init__(self, *, incomplete=False):
-        self.collections = {
-            "mezan_snapchat_accounts_v2": _Collection(
-                find_one={
-                    "user_id": "u1",
-                    "provider": "snapchat_ads",
-                    "ad_account_id": "a1",
-                    "timezone": "America/Los_Angeles",
-                    "selected": True,
-                    "active": True,
-                }
-            ),
-            "mezan_snapchat_sync_runs_v2": _Collection(
-                find_one={"sync_run_id": "r1", "campaign_sync_status": "complete"}
-            ),
-            "mezan_snapchat_daily_total_facts_v2": _Collection(
-                incomplete=incomplete
-            ),
-        }
-
-    def __getitem__(self, name):
-        return self.collections[name]
+        super().__init__()
+        self.raw.mezan_snapchat_accounts_v2.insert_one({
+            "user_id": "u1", "provider": "snapchat_ads", "ad_account_id": "a1",
+            "timezone": "America/Los_Angeles", "selected": True, "active": True, "connection_status": "connected",
+        })
+        self.raw.mezan_snapchat_sync_runs_v2.insert_one({
+            "sync_run_id": "r1", "user_id": "u1", "provider": "snapchat_ads",
+            "ad_account_id": "a1", "status": "complete",
+            "financial_sync_status": "complete", "campaign_sync_status": "complete",
+            "request_window": {"date_from": "2026-08-26", "date_to": "2026-08-26",
+                               "action_report_time": "conversion"},
+        })
+        self.raw.mezan_snapchat_daily_total_facts_v2.insert_many([{
+            "user_id": "u1", "provider": "snapchat_ads", "ad_account_id": "a1",
+            "entity_type": "campaign", "external_id": f"c{i}", "report_date": "2026-08-26",
+            "account_timezone": "America/Los_Angeles", "action_report_time": "conversion",
+            "attribution_key": build_attribution_key("conversion", {"swipe": "28_DAY", "view": "7_DAY"}),
+            "sync_run_id": "r1", "coverage": {"status": "partial" if incomplete else "complete"},
+        } for i in range(3)])
 
 
 def _report(level, *, complete=True, commerce_complete=True):

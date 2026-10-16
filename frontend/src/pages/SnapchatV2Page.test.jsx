@@ -73,7 +73,7 @@ import {
     getSnapchatManagementReadiness,
     listSnapchatManagementProposals,
 } from "../services/snapchatCampaignManagement";
-import SnapchatV2Page, { latestSnapchatSyncRange, snapchatSyncRangeAllowed } from "./SnapchatV2Page";
+import SnapchatAccountsPage, { SnapchatAccountDetail as SnapchatV2Page, latestSnapchatSyncRange, snapchatSyncRangeAllowed } from "./SnapchatV2Page";
 
 function deferred() {
     let resolve;
@@ -88,6 +88,30 @@ function deferred() {
 describe("SnapchatV2Page read-only load", () => {
     let container;
     let root;
+
+    test("account switch scopes every report request without changing persisted selection", async () => {
+        await act(async () => { root.render(<SnapchatAccountsPage />); });
+        const select = container.querySelector('[aria-label="الحساب الإعلاني المعروض"]');
+        expect(select.value).toBe("account-1");
+        api.get.mockClear();
+        await act(async () => { select.value = "account-2"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+        for (const suffix of ["status", "unified-readiness", "report", "hourly", "campaigns"]) {
+            const call = api.get.mock.calls.find(([url]) => url.endsWith(`/${suffix}`));
+            expect(call?.[1]?.params?.ad_account_id).toBe("account-2");
+        }
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    test("all accounts uses one common-period portfolio request without repeated commerce totals", async () => {
+        await act(async () => { root.render(<SnapchatAccountsPage />); });
+        const select = container.querySelector('[aria-label="الحساب الإعلاني المعروض"]');
+        api.get.mockClear();
+        await act(async () => { select.value = "all"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+        expect(api.get.mock.calls.some(([url]) => url.endsWith("/portfolio-spend"))).toBe(true);
+        expect(api.get.mock.calls.some(([url]) => url.endsWith("/campaigns"))).toBe(false);
+        expect(container.querySelector('[data-testid="snapchat-portfolio-total"]').textContent).toBe("—");
+        expect(api.post).not.toHaveBeenCalled();
+    });
 
     beforeEach(() => {
         global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -161,6 +185,10 @@ describe("SnapchatV2Page read-only load", () => {
         });
         listSnapchatManagementProposals.mockResolvedValue([]);
         api.get.mockImplementation((url) => {
+            if (url.endsWith("/accounts")) return Promise.resolve({ data: { accounts: [
+                { ad_account_id: "account-1", display_name: "AMASI", currency: "USD", timezone: "America/Los_Angeles" },
+                { ad_account_id: "account-2", display_name: "Saudi", currency: "SAR", timezone: "Asia/Riyadh" },
+            ], selected_account: { ad_account_id: "account-1" } } });
             if (url.endsWith("/status")) {
                 return Promise.resolve({
                     data: {

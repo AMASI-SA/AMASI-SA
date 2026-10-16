@@ -2,6 +2,8 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  adAccountSelection: () => data(api.get(`${base}/ad-account-selection`)),
+  saveAdAccountSelection: body => data(api.post(`${base}/ad-account-selection`, body)),
   inventoryAvailability: () => data(api.get(`${base}/inventory`)),
   supplierAdjustmentEntry: (supplier,number) => data(api.get(`${base}/supplier-adjustments/entry/${encodeURIComponent(supplier)}/${encodeURIComponent(number)}`)),
   saveSupplierAdjustment: body => data(api.post(`${base}/supplier-adjustments`,body)),
@@ -34,7 +36,7 @@ export const operationalApi = {
   reports: () => data(api.get(`${base}/reports`)),
   audit: () => data(api.get(`${base}/audit`))
 };
-export const entityKinds = [['employee', 'موظفين'], ['employee_custody', 'عهد الموظفين'], ['provider', 'منصات دفع'], ['courier', 'شركات شحن'], ['store_driver', 'مناديب المتجر'], ['ad_account', 'منصات إعلانية'], ['supplier', 'موردين'], ['external_person', 'جهات خارجية'], ['bank', 'بنوك'], ['cash', 'صناديق'], ['operating_expense', 'مصروفات تشغيلية'], ['owner_withdrawal', 'سحوبات المالك/المدير']];
+export const entityKinds = [['employee', 'موظفين'], ['employee_custody', 'عهد الموظفين'], ['provider', 'منصات دفع'], ['pos_receivable', 'ذمم شبكة سابقة'], ['courier', 'شركات شحن'], ['store_driver', 'مناديب المتجر'], ['ad_account', 'منصات إعلانية'], ['supplier', 'موردين'], ['external_person', 'جهات خارجية'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'], ['operating_expense', 'مصروفات تشغيلية'], ['owner_withdrawal', 'سحوبات المالك/المدير']];
 export const requestId = () => globalThis.crypto.randomUUID();
 export const feeIncomplete = issue => /(?:fee.*(?:policy|treatment|incomplete)|(?:refund|cancellation)_fee)/i.test(typeof issue === 'string' ? issue : issue?.code || '');
 export const messageFor = error => feeIncomplete(error?.response?.data?.detail) ? 'إعداد العمولة غير مكتمل' : typeof error?.response?.data?.detail?.message === 'string' ? error.response.data.detail.message : 'تعذر إتمام العملية. احتفظنا بالمدخلات؛ حاول مرة أخرى.';

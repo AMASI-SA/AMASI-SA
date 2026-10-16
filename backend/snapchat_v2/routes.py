@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import date, datetime, timedelta
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
 from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
 
-from .accounts import get_selected_account, list_accounts
+from .accounts import get_selected_account, resolve_account, list_enabled_accounts
 from .entities import list_entities
 from .facts import load_hourly_facts
 from .headline import resolve_report_headline_spend
@@ -95,11 +95,14 @@ def _ui_enabled() -> bool:
     }
 
 
-async def _selected_account_or_404(db: Any, user_id: str) -> dict[str, Any]:
-    account = await get_selected_account(db, user_id)
+async def _selected_account_or_404(db: Any, user_id: str, ad_account_id: str | None = None) -> dict[str, Any]:
+    try:
+        account = await resolve_account(db, user_id, ad_account_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="snapchat_account_not_found") from exc
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_404_NOT_FOUND if ad_account_id is not None else status.HTTP_409_CONFLICT,
             detail={
                 "code": "snapchat_v2_selected_account_missing",
                 "message": "شغّل مزامنة Snapchat V2 أولًا لاكتشاف الحساب الأساسي.",
@@ -483,9 +486,7 @@ def attach_snapchat_v2_routes(
         _read_days(date_from, date_to)
         if not date_from < split_on <= date_to:
             raise HTTPException(status_code=422, detail="invalid_period_split")
-        account = await _selected_account_or_404(db, user_id)
-        if str(account["ad_account_id"]) != ad_account_id:
-            raise HTTPException(status_code=409, detail="selected_account_changed")
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         try:
             result = await asyncio.wait_for(audit_period_partition(
                 db, user_id, date_from=date_from, date_to=date_to,
@@ -506,6 +507,8 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
+        if ad_account_id is not None:
+            await _selected_account_or_404(db, user_id, ad_account_id)
         result = await snapchat_v2_status(db, user_id, ad_account_id)
         return {
             **result,
@@ -527,6 +530,8 @@ def attach_snapchat_v2_routes(
                 },
             )
         user_id = _user_id(user, require_owner)
+        if payload.ad_account_id is not None:
+            await _selected_account_or_404(db, user_id, payload.ad_account_id)
         pipeline = SnapchatV2SyncPipeline(db)
         return await pipeline.run(
             user_id,
@@ -543,7 +548,7 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
-        rows = await list_accounts(db, user_id, active_only=not include_stale)
+        rows = await list_enabled_accounts(db, user_id)
         return {
             "provider": "snapchat_ads",
             "accounts": rows,
@@ -554,8 +559,23 @@ def attach_snapchat_v2_routes(
             "source_only": True,
         }
 
+    @router.get("/snapchat-v2/portfolio-spend")
+    async def snapchat_v2_portfolio_spend_route(
+        date_from: date = Query(...),
+        date_to: date = Query(...),
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        from unified_marketing.gateway import load_unified_marketing_dashboard_spend
+
+        _read_days(date_from, date_to)
+        return await load_unified_marketing_dashboard_spend(
+            db, _user_id(user, require_owner), provider="snapchat_ads",
+            date_from=date_from, date_to=date_to, timezone_name=RIYADH_TIMEZONE,
+        )
+
     @router.get("/snapchat-v2/report")
     async def snapchat_v2_report_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date = Query(...),
         date_to: date = Query(...),
         timezone: Literal["account", "riyadh"] = Query(default="riyadh"),
@@ -566,7 +586,7 @@ def attach_snapchat_v2_routes(
     ) -> dict[str, Any]:
         _read_days(date_from, date_to)
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         timezone_name = _projection_timezone(account, timezone)
         rows = await list_daily_projections(
             db,
@@ -636,6 +656,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/hourly")
     async def snapchat_v2_hourly_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         report_date: date = Query(...),
         timezone: Literal["account", "riyadh"] = Query(default="account"),
         action_report_time: Literal["conversion", "impression"] = Query(
@@ -644,7 +665,7 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         timezone_name = _projection_timezone(account, timezone)
         rows = await list_daily_projections(
             db,
@@ -674,6 +695,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/campaigns")
     async def snapchat_v2_campaigns_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date = Query(...),
         date_to: date = Query(...),
         timezone: Literal["account", "riyadh"] = Query(default="account"),
@@ -684,7 +706,7 @@ def attach_snapchat_v2_routes(
     ) -> dict[str, Any]:
         _read_days(date_from, date_to)
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         timezone_name = _projection_timezone(account, timezone)
         performance = await _entity_performance_report(
             db,
@@ -913,6 +935,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/ad-squads")
     async def snapchat_v2_ad_squads_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date | None = Query(default=None),
         date_to: date | None = Query(default=None),
         timezone: Literal["account", "riyadh"] = Query(default="account"),
@@ -924,7 +947,7 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         start, end = _resolved_range(account, date_from, date_to)
         timezone_name = _projection_timezone(account, timezone)
         performance = await _entity_performance_report(
@@ -979,6 +1002,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/ads")
     async def snapchat_v2_ads_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date | None = Query(default=None),
         date_to: date | None = Query(default=None),
         timezone: Literal["account", "riyadh"] = Query(default="account"),
@@ -991,7 +1015,7 @@ def attach_snapchat_v2_routes(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         start, end = _resolved_range(account, date_from, date_to)
         timezone_name = _projection_timezone(account, timezone)
         performance = await _entity_performance_report(
@@ -1048,6 +1072,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/reconciliation")
     async def snapchat_v2_reconciliation_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date = Query(...),
         date_to: date = Query(...),
         action_report_time: Literal["conversion", "impression"] = Query(
@@ -1057,7 +1082,7 @@ def attach_snapchat_v2_routes(
     ) -> dict[str, Any]:
         _read_days(date_from, date_to)
         user_id = _user_id(user, require_owner)
-        account = await _selected_account_or_404(db, user_id)
+        account = await _selected_account_or_404(db, user_id, ad_account_id)
         rows = await list_reconciliation(
             db,
             user_id=user_id,
@@ -1077,6 +1102,7 @@ def attach_snapchat_v2_routes(
 
     @router.get("/snapchat-v2/unified-readiness")
     async def snapchat_v2_unified_readiness_route(
+        ad_account_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         date_from: date | None = Query(default=None),
         date_to: date | None = Query(default=None),
         user: dict = Depends(current_user),
@@ -1094,6 +1120,7 @@ def attach_snapchat_v2_routes(
                 user_id,
                 date_from=date_from,
                 date_to=date_to,
+                account_id=str((await _selected_account_or_404(db, user_id, ad_account_id))["ad_account_id"]),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc

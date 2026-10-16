@@ -138,6 +138,7 @@ async def _daily_facts(
             db,
             user_id,
             provider="snapchat_ads",
+            account_id=str(candidate.get("account_id") or ""),
             entity_level=level,
             entity_ids=[entity_id],
             date_from=start,

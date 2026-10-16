@@ -1,0 +1,11 @@
+{
+  "task_id": "MZ2-BANK-TERMINAL-OPENINGS",
+  "branch": "codex/operational-bank-terminal-20261016",
+  "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
+  "state": "WIP_SOURCE_IMPLEMENTED_AWAITING_INTEGRATION_CI",
+  "completed": ["Owner-scoped identity-only existing bank catalog", "Independent named operational bank or terminal setup without driver or accounting activation", "Manual opening through existing bank liquidity contract", "Historical POS receivable data retained"],
+  "verification": {"source_boundary_unit_tests": "63 passed", "opening_and_movement_ui_tests": "57 passed", "isolated_mongo_integration": "pending CI"},
+  "limitations": ["No live owner-bank data queried", "No automatic matching by account name", "No native driver-payment or accounting activation changes", "Release Intent remains base intent; not deployable until final v5 release preparation"],
+  "next": "Review isolated Mongo creation/authorization/opening/transfer tests and full affected CI; retain latest Production before release integration",
+  "production_changed": false
+}

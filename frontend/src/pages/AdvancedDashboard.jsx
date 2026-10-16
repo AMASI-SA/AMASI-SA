@@ -9,6 +9,7 @@ import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
 import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
+import CampaignAccountAnalysis from "../components/marketing/CampaignAccountAnalysis";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
@@ -221,6 +222,7 @@ export function CampaignAdvisorCard() {
                 ? "Snapchat AI Shadow متطابق مع المصدر الموحد V2 · التحليل والقرارات ما زالت معزولة حتى اعتماد التحويل"
                 : `Snapchat AI Shadow قيد المطابقة · ${shadowErrors || shadowDiagnostics || "لا توجد صفوف متقاطعة"} · V2 مصدر التحليل وV1 مراقب فقط`}
         </div>}
+        <CampaignAccountAnalysis snapshot={snapshot} />
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
                 const action = aiActionMeta(item);

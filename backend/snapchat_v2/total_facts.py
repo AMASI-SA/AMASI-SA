@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
+from .committed_totals import committed_period_rows
+
 from .models import (
     DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
     DEFAULT_VIEW_ATTRIBUTION_WINDOW,
@@ -242,6 +244,13 @@ async def load_total_facts(
         "action_report_time": action,
         "attribution_key": build_attribution_key(action, windows),
     }
+    committed = await committed_period_rows(
+        db, user_id=user_id, account_id=ad_account_id, date_from=date_from,
+        date_to=date_to, timezone_name=account_timezone, action=action, windows=windows,
+        entity_type=entity_type,
+    )
+    if committed:
+        query["report_date"]["$nin"] = list(committed)
     cursor = db[SNAPCHAT_TOTAL_FACTS_COLLECTION].find(query, {"_id": 0})
     if hasattr(cursor, "sort"):
         cursor = cursor.sort([("report_date", 1), ("external_id", 1)])
@@ -256,6 +265,12 @@ async def load_total_facts(
         rows = [row async for row in cursor]
     if len(rows) > limit:
         raise ValueError("Snapchat TOTAL fact read was truncated")
+    if committed:
+        rows.extend(row for day_rows in committed.values() for row in day_rows
+                    if row["entity_type"] == entity_type)
+        if len(rows) > limit:
+            raise ValueError("Snapchat TOTAL fact read was truncated")
+        rows.sort(key=lambda row: (row["report_date"], row["external_id"]))
     return rows
 
 
