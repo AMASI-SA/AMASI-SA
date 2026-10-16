@@ -3,6 +3,7 @@ import { getProductV2, listProductsV2 } from "../../services/mezanProductsV2";
 import { getMezanComponentWorkspace } from "../../services/mezanComponentCatalog";
 import { loadMezanSuppliersWorkspace } from "../../services/mezanSuppliersV2";
 import { bundleError, bundleLeafCost, bundleMoney, bundleOptionVisible, getProductBundle, saveProductBundle, previewProductBundle } from "../../services/productBundles";
+import BundleComponentPicker from "./BundleComponentPicker";
 import CurrentProductSlots, { resizeCurrentSlots } from "./CurrentProductSlots";
 
 const control = "w-full rounded-lg border p-2 text-sm";
@@ -23,6 +24,8 @@ export default function BundleEditor({ productId, salePrice }) {
     const [resources, setResources] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [products, setProducts] = useState([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchError, setSearchError] = useState("");
     const [productNames, setProductNames] = useState({});
     const [query, setQuery] = useState("");
     const [kind, setKind] = useState("product");
@@ -63,6 +66,7 @@ export default function BundleEditor({ productId, salePrice }) {
 
     useEffect(() => {
         let live = true;
+        setSearchLoading(true); setSearchError("");
         const timer = setTimeout(() => {
             listProductsV2({ query, perPage: 50 }).then((result) => {
                 if (live) {
@@ -70,7 +74,7 @@ export default function BundleEditor({ productId, salePrice }) {
                     setProducts(found.filter((item) => idOf(item) !== String(productId)));
                     setProductNames((current) => ({ ...current, ...Object.fromEntries(found.flatMap((item) => [item.id, item.mezan_product_id, item.salla_product_id].filter(Boolean).map((id) => [String(id), item.name]))) }));
                 }
-            }).catch((err) => { if (live) setError(bundleError(err)); });
+            }).catch((err) => { if (live) { setProducts([]); setSearchError(bundleError(err)); } }).finally(() => { if (live) setSearchLoading(false); });
         }, 250);
         return () => { live = false; clearTimeout(timer); };
     }, [query, productId]);
@@ -137,6 +141,17 @@ export default function BundleEditor({ productId, salePrice }) {
         });
         setExpansion(null);
     }
+    function clearPreview(optionId) {
+        if (optionId == null) {
+            setChoices([]); setTextAnswers({}); setRootVariant("");
+        } else {
+            let next = choices.filter((entry) => entry.option_id !== String(optionId));
+            for (let i = 0; i < customerOptions.length; i += 1) next = next.filter((entry) => bundleOptionVisible(customerOptions.find((option) => String(option.id) === entry.option_id) || {}, next));
+            setChoices(next);
+            setTextAnswers((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== String(optionId) && bundleOptionVisible(customerOptions.find((option) => String(option.id) === id) || {}, next))));
+        }
+        setExpansion(null);
+    }
     async function loadChildOptions(id) {
         try {
             const result = await getProductV2(id);
@@ -153,9 +168,8 @@ export default function BundleEditor({ productId, salePrice }) {
             <label className="block">نوع التركيب<select className={control} value={definition.product_type} onChange={(e) => edit({ ...definition, product_type: e.target.value })}><option value="normal">منتج عادي</option><option value="composite">منتج مركّب / بكج</option></select></label>
             {definition.product_type === "composite" && <>
                 <div className="grid gap-2 sm:grid-cols-2">
-                    <label>مصدر المكوّن<select className={control} value={kind} onChange={(e) => { setKind(e.target.value); setSelected(""); }}><option value="product">منتجات ميزان 2</option><option value="resource">مكونات ميزان 2</option><option value="current_product">نفس المنتج الحالي</option></select></label>
-                    <label>بحث بالاسم أو الرمز<input className={control} value={query} onChange={(e) => { setQuery(e.target.value); setSelected(""); }} /></label>
-                    {kind !== "current_product" && <label>المكوّن<select className={control} value={selected} onChange={(e) => setSelected(e.target.value)}><option value="">اختر من النتائج</option>{options.map((item) => <option key={idOf(item)} value={idOf(item)}>{item.name} {item.sku || item.code || ""}</option>)}</select></label>}
+                    <label>مصدر المكوّن<select className={control} value={kind} onChange={(e) => { setKind(e.target.value); setSelected(""); setQuery(""); }}><option value="product">منتجات ميزان 2</option><option value="resource">مكونات ميزان 2</option><option value="current_product">نفس المنتج الحالي</option></select></label>
+                    {kind !== "current_product" && <BundleComponentPicker query={query} onQuery={(value) => { setQuery(value); setSelected(""); }} items={options} selected={selected} onSelect={setSelected} loading={kind === "product" && searchLoading} error={kind === "product" ? searchError : ""} />}
                     {kind === "product" && <label>المتغير<select className={control} value={variant} onChange={(e) => setVariant(e.target.value)}><option value="">المنتج الأساسي</option>{variants.map((item) => <option key={item.id} value={item.id}>{item.display_name || item.name || item.sku || item.id}</option>)}</select></label>}
                 </div>
                 <button type="button" className="rounded-lg border px-4 py-2" disabled={(kind !== "current_product" && (!selected || variantLoading || (variants.length > 0 && !variant))) || definition.items.length >= limits.max_items} onClick={add}>إضافة مكوّن ({definition.items.length}/{limits.max_items})</button>
@@ -187,7 +201,7 @@ export default function BundleEditor({ productId, salePrice }) {
         </fieldset>}
         {notice && <p role="status" className="text-sm text-emerald-800">{notice}</p>}
         {dirty && <p className="text-xs text-amber-800">احفظ التغييرات للتحقق من جميع المستويات وحساب التكلفة من الكتالوج.</p>}
-        {definition?.product_type === "composite" && <fieldset disabled={busy} className="space-y-3 rounded-xl border p-3"><legend>معاينة اختيارات العميل</legend><label>كمية سلة للمعاينة<input aria-label="كمية سلة للمعاينة" className={control} type="number" min="1" max="1000" step="1" value={saleQuantity} onChange={(e) => setSaleQuantity(e.target.value)} /></label>{rootVariants.length > 0 && <label>متغير البكج<select className={control} value={rootVariant} onChange={(e) => { setRootVariant(e.target.value); setExpansion(null); }}><option value="">اختر المتغير</option>{rootVariants.map((item) => <option key={item.id} value={item.id}>{item.display_name || item.name || item.sku || item.id}</option>)}</select></label>}<p className="text-xs">المكونات العامة تُضاف دائمًا، والمشروطة عند اختيار قيمتها. النصوص لا تنشئ مخزونًا؛ المقاسات المربوطة بالقطع تُعرض كتخصيص لدى المورد.</p>{customerOptions.filter((option) => bundleOptionVisible(option, choices)).map((option) => <fieldset key={option.id}><legend>{option.name}{option.required ? " *" : ""}</legend>{option.values?.length ? option.values.map((value) => <label key={value.id} className="ml-4 inline-flex gap-2"><input type={["checkbox", "multiple", "multi_select"].includes(option.type) ? "checkbox" : "radio"} name={`bundle-option-${productId}-${option.id}`} checked={choices.some((entry) => entry.option_id === String(option.id) && entry.value_id === String(value.id))} onChange={(e) => choose(option, value.id, e.target.checked)} />{value.name}</label>) : <input aria-label={option.name} className={control} placeholder="تخصيص تجريبي للمعاينة" value={textAnswers[option.id] || ""} onChange={(e) => { setTextAnswers((current) => ({ ...current, [option.id]: e.target.value })); setExpansion(null); }} />}</fieldset>)}<button type="button" disabled={dirty || busy} className="rounded-lg border p-2 disabled:opacity-50" onClick={preview}>معاينة المكونات والتكلفة للاختيارات</button></fieldset>}
+        {definition?.product_type === "composite" && <fieldset disabled={busy} className="space-y-3 rounded-xl border p-3"><legend>معاينة اختيارات العميل</legend><p className="text-sm text-slate-600">اختيارات تجريبية لحساب المكونات والتكلفة فقط؛ لا تغيّر إعدادات المنتج أو طلبات العملاء.</p><button type="button" className="text-sm underline" onClick={() => clearPreview()}>مسح جميع اختيارات المعاينة</button><label>كمية سلة للمعاينة<input aria-label="كمية سلة للمعاينة" className={control} type="number" min="1" max="1000" step="1" value={saleQuantity} onChange={(e) => setSaleQuantity(e.target.value)} /></label>{rootVariants.length > 0 && <label>متغير البكج<select className={control} value={rootVariant} onChange={(e) => { setRootVariant(e.target.value); setExpansion(null); }}><option value="">اختر المتغير</option>{rootVariants.map((item) => <option key={item.id} value={item.id}>{item.display_name || item.name || item.sku || item.id}</option>)}</select></label>}<p className="text-xs">المكونات العامة تُضاف دائمًا، والمشروطة عند اختيار قيمتها. النصوص لا تنشئ مخزونًا؛ المقاسات المربوطة بالقطع تُعرض كتخصيص لدى المورد.</p>{customerOptions.filter((option) => bundleOptionVisible(option, choices)).map((option) => <fieldset key={option.id}><legend>{option.name}{option.required ? " *" : ""}</legend><button type="button" className="mb-2 block text-sm underline" aria-label={`مسح اختيار ${option.name}`} onClick={() => clearPreview(option.id)}>مسح الاختيار</button>{option.values?.length ? option.values.map((value) => <label key={value.id} className="ml-4 inline-flex gap-2"><input type={["checkbox", "multiple", "multi_select"].includes(option.type) ? "checkbox" : "radio"} name={`bundle-option-${productId}-${option.id}`} checked={choices.some((entry) => entry.option_id === String(option.id) && entry.value_id === String(value.id))} onChange={(e) => choose(option, value.id, e.target.checked)} />{value.name}</label>) : <input aria-label={option.name} className={control} placeholder="تخصيص تجريبي للمعاينة" value={textAnswers[option.id] || ""} onChange={(e) => { setTextAnswers((current) => ({ ...current, [option.id]: e.target.value })); setExpansion(null); }} />}</fieldset>)}<button type="button" disabled={dirty || busy} className="rounded-lg border p-2 disabled:opacity-50" onClick={preview}>معاينة المكونات والتكلفة للاختيارات</button></fieldset>}
         {expansion?.needs_selection ? <p role="status">اختر قيم الخيارات والمقاسات المطلوبة لمعاينة التركيب النهائي.</p> : expansion && <div className="space-y-2 rounded-xl bg-slate-50 p-3">
             <h3 className="font-bold">تكلفة المكونات النهائية — الإصدار {definition.revision}</h3>
             {Number.isInteger(Number(saleQuantity)) && Number(saleQuantity) > 0 && <>
