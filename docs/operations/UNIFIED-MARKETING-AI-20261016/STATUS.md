@@ -133,3 +133,38 @@ No readiness or approval gates relaxed. No Production changes or ad writes.
 Next: fresh source checkpoint, independent cloud andCI build/intent agreement,
 reviewed PR with intent-only commit, production protocolv5, then verify committed
 snapshot creation and seven gates during a concurrent refresh in Production.
+
+## Production acceptance checkpoint 2026-10-16
+
+PR1386 merged as d29b1a3ad0c61f7ace686b7709a7577ebda40d13.
+Source A dee413ca228477869998c389e1db2b6aba1d794f; intent-only B
+beef9881b03d32dc677abeb22b4dbc021ec32224. Runtime identity:
+rg5-9493052c4972c4d32ccb8ac1bf44a5c86231c74541b9aae513a6349e85953737.
+All PR checks and isolated Cloud adapter rehearsal passed. Production adapter
+build passed after removing only generated backend __pycache__. Prepare and
+immediate prepublish both exit0. Emergent visibly reports Deployment finished
+2026-10-16 19:02 Saudi; publish version8eac6c8. Guard verify --url
+https://mezansalla.com exit0, verified=true, exact source/deployment/runtime
+identity above; internal three-probe verification succeeded, status active=false.
+Production changed YES. No advertising approvals or execution performed.
+
+Live acceptance: readiness for closed day2026-10-15 passes all seven gates,
+including all hierarchy levels and profitability; unmatched and missing-cost
+orders both0. Report13-15Oct is complete with matching totals and177/177 order
+attribution. Advanced dashboard states Snapchat AI uses Unified V2 with approval
+still required. Production committed snapshot collection exists with two days;
+15Oct snapshot sourced from completed run15e55f7a-f53f-4945-9fd6-45b8568daa71,
+finished16:42:47UTC. During subsequent refresh the snapshot remains available.
+Observed running runb3260724-e6dd-4ba5-9059-b853c48a9472 started16:47:23UTC,
+stageidentity_ad, financial/campaigncomplete, ad_squad/adpending. Readiness
+continued to pass during the refresh rather than losing completed evidence.
+
+Remaining acceptance: latest visible AI recommendations are still the17:08Saudi
+pre-deployment cycle (Meta-only), so post-deployment Snapchat model-generated
+recommendations are NOT yet demonstrated. Existing global cadence is five hours;
+do not reset or bypass it to manufacture proof. Inspect the next scheduled cycle,
+its source evidence and Snapchat outcomes; do not approve/execute ads. Preserve
+this documentation checkpoint on the task branch, not as a new release candidate.
+Rollback is possible by a reviewed source revert and fresh governed release;
+legacy raw facts remain intact and the additive snapshot collection need not be
+deleted. Do not use destructive database cleanup or clear another release lease.
