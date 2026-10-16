@@ -47,6 +47,7 @@ export function bundleError(error) {
         bundle_stock_customization_requires_variant: "المقاس النصي يحتاج موردًا أو متغير مخزون محددًا؛ لن ينشئ ميزان متغيرًا افتراضيًا.",
         bundle_component_scope_required: "حدد نطاق مكونات المنتج الأصلية: لكل بكج أو لكل وحدة فعلية.",
         bundle_nonstock_supplier_requires_service_receipt: "الخدمة غير المخزنية تحتاج مسار اعتماد استلام خدمة غير متاح حاليًا. استخدم تكلفة الخدمة الداخلية أو مكوّنًا مخزنيًا قابلًا للاستلام.",
+        bundle_cost_only_source_change_forbidden: "هذا البند تكلفة تشغيل مباشرة ولا يمثل مكوّنًا قابلًا لتغيير مصدر التوريد.",
         bundle_purchase_receipt_customization_mismatch: "تخصيص إيصال الشراء لا يطابق القطعة المطلوبة. تحقق من المقاس والخصائص ومعرّفات حقولها.",
         bundle_resource_cost_overlap: "المكوّن مرتبط أيضًا بتكلفة المنتج؛ أزل الربط المتكرر لمنع احتساب التكلفة مرتين.",
         bundle_parent_direct_cost_requires_component: "حوّل تكلفة البكج المباشرة إلى مكوّن مستقل لتجنب احتساب التكلفة مرتين.",

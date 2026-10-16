@@ -429,6 +429,10 @@ async def refresh_requirements(db, owner, order, *, actor_id, receipt=None, sour
             if source_change and row["order_line_id"] == source_change["order_line_id"]:
                 for leaf in leaves:
                     if leaf_key(leaf) == source_change["leaf_id"]:
+                        if leaf.get("cost_only"):
+                            fail("cost_only_source_change_forbidden")
+                        if leaf.get("kind") == "resource" and leaf.get("track_inventory") is False and source_change["sourcing_mode"] == "supplier":
+                            fail("nonstock_supplier_requires_service_receipt")
                         changed = True
                         history.append({"order_line_id": row["order_line_id"], "unit_index": row["unit_index"],
                             "leaf_id": leaf_key(leaf), "before": {k: leaf.get(k) for k in ("sourcing_mode", "supplier_id", "receipt_ids")},

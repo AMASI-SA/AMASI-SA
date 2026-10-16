@@ -1,6 +1,6 @@
 # ميزان 2 — تقرير مرشح إصدار البكجات
 
-تاريخ التنفيذ: 2026-10-16. الفرع: `codex/mz2-smart-bundles`، والأساس `8c9ef8cd9` من فرع الإنتاج. جميع بيانات الاختبار اصطناعية في قواعد محلية مؤقتة. لم يُنشر شيء إلى الإنتاج، ولم تُرسل منتجات أو مشتريات إلى سلة أو الموردين.
+تاريخ التنفيذ: 2026-10-16. الفرع: `codex/mz2-smart-bundles`، بدأ على `8c9ef8cd9` ثم أُعيد تأسيسه دون تعارض على `1674bb8b0` من فرع الإنتاج. Commit التنفيذ: `d20c44505cd9ada105ccb50a807db5a8afc36fca`. جميع بيانات الاختبار اصطناعية في قواعد محلية مؤقتة. لم يُنشر شيء إلى الإنتاج، ولم تُرسل منتجات أو مشتريات إلى سلة أو الموردين.
 
 ## ما أضيف
 
@@ -82,6 +82,46 @@ flowchart TD
 
 ![حجوزات الطلب محفوظة مع كمية البيع والتجهيز والتكلفة المتوقعة](evidence/mz2-bundles/current-product-six-units.png)
 
+![مخزون محجوز وست قطع وموردان مستقلان لطلب واحد](evidence/mz2-bundles/supplier-requirements.png)
+
 ## نتائج التحقق وحالة الإصدار
 
-سيُثبت سجل التحقق النهائي أدناه بعد انتهاء التشغيل المجمع. حالة النشر **BLOCKED** لحين اعتماد المالك وتطبيق بروتوكول الإنتاج الموجود في `AGENTS.md`؛ هذا العمل لا ينفذ دمجًا أو نشرًا.
+**PASS للنسخة المرشحة للمراجعة ضمن الحدود المعلنة أعلاه. النشر BLOCKED** لحين اعتماد المالك وتطبيق بروتوكول الإنتاج الموجود في `AGENTS.md`؛ هذا العمل لا ينفذ دمجًا أو نشرًا.
+
+| التحقق | النتيجة |
+| --- | --- |
+| تشغيل الخادم المجمع بعد إعادة التأسيس على `1674bb8b0` | 423 passed، و7 subtests، دون تخطي، 350.84 ثانية |
+| إعادة جميع اختبارات تكامل البكجات بعد إغلاق تجاوز سياسة الخدمة في تغيير المصدر | 26 passed، 58.96 ثانية؛ تتداخل مع التشغيل المجمع ولا تجمع كحالات مستقلة |
+| واجهة المستخدم، 6 مجموعات | 38 passed، 13.085 ثانية |
+| إعادة خدمة الواجهة بعد تحديث رسائل الرفض | 6 passed، 8.352 ثانية؛ ضمن الحالات السابقة |
+| بناء الواجهة بعد إعادة التأسيس | exit 0، 7622 modules، 20.64 ثانية |
+| فحص `git diff --check` | exit 0 |
+
+اختبار Mongo المستقل غير الداعم للمعاملات أُجري أيضًا وأثبت الرفض قبل أي أثر مخزني؛ لا يوجد اختبار متخطى في التشغيل النهائي. التحذيرات غير المانعة في البناء: ترتيب CSS import، حجم الحزمة، واستيرادات ثابتة/ديناميكية مشتركة. لم تُعدل هذه الموضوعات الخارجة عن نطاق البكجات.
+
+خلال التطوير ظهرت إعدادات اختبارات قديمة بمنفذ Mongo غير مشغل، وتوقع قراءة مجموعة واحدة في اختبار أدلة المخزون؛ شُغّل Mongo محلي معزول، وحُدث الاختبار ليتحقق أيضًا من قراءة حجوزات البكجات المقيدة بالمالك. كشف التشغيل المجمع غلاف فرز لا يمرر `order_number`، فأُصلح واختُبر. أُصلح كذلك تجاوز سياسة الخدمة عند تغيير مصدر الطلب مع إثبات عدم حدوث تعديل عند الرفض. فشل اختبار آخر بسبب إغلاق عميل HTTP قبل assertion أُصلح، وأعيدت مجموعة التكامل كاملة بنجاح. لا توجد إخفاقات اختبار معروفة متبقية في النطاق المشغّل.
+
+لإعادة تشغيل الخادم، اضبط `PYTHONPATH=backend;backend/tests` في PowerShell، و`MZ2_TEST_MONGO_URI` و`OPERATIONAL_TEST_MONGO_URI` على Mongo replica محلي معزول، و`MZ2_TEST_STANDALONE_URI` على Mongo مستقل محلي. ملفا اختبارات المخزون القديمان يستخدمان أيضًا منفذ 27462 وreplica باسم `operationalphysical`. ثم:
+
+```powershell
+$bundleTests = @(
+  'backend/tests/test_bundle_catalog_v2.py',
+  'backend/tests/test_bundle_fulfillment_v2.py',
+  'backend/tests/test_sold_bundles_v2.py',
+  'backend/tests/test_sold_products_report_v2.py',
+  'backend/tests/test_reviewed_products_catalog.py',
+  'backend/tests/test_preparation_piece_operations.py',
+  'backend/tests/test_reviewed_preparation_batches.py',
+  'backend/tests/test_operational_inventory_projection_eligibility.py',
+  'backend/tests/test_stock_eligibility_acceptance.py',
+  'backend/tests/test_order_option_cost_snapshots.py',
+  'backend/tests/test_g47_component_lifecycle_integration.py',
+  'backend/tests/test_stock_component_consumption.py',
+  'backend/tests/test_g47_purchase_receiving.py',
+  'backend/tests/test_product_fulfillment_rules.py',
+  'backend/tests/test_fulfillment_v2_contract.py'
+)
+python -m pytest @bundleTests -q --disable-warnings --maxfail=2
+```
+
+اختبارات الواجهة: `react-scripts test --watchAll=false --runInBand --runTestsByPath` للملفات `productBundles.test.js` و`BundleEditor.test.jsx` و`BundleReportPanel.test.jsx` و`BundleOperationalPanel.test.jsx` و`ProductCreationPanel.test.jsx` و`OrderDetailsV2.shippingIdentity.test.jsx`. البناء: `node node_modules/vite/bin/vite.js build --outDir build-bundle-verification` من مجلد frontend. مجلد البناء الناتج غير مشمول في التغيير.

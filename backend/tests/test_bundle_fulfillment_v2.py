@@ -178,6 +178,22 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.consume()
         self.assertEqual(Decimal((await self.view())["actual_cost"]), 10)
 
+    async def test_source_override_cannot_bypass_nonstock_and_direct_cost_policy(self):
+        await self.db[catalog.RESOURCES].insert_one({"user_id": "owner", "id": "internal",
+            "name": "internal work", "status": "active", "track_inventory": False, "unit_cost": 20})
+        await self.db[stock.PRODUCTS].update_one({"id": "root"}, {"$set": {
+            "options": [{"id": "o", "values": [{"id": "v"}]}]}})
+        await self.db[catalog.BINDINGS].insert_one({"id": "direct", "user_id": "owner", "salla_product_id": "root",
+            "option_id": "o", "value_id": "v", "mode": "direct", "direct_amount": 4, "quantity": 1})
+        await self.define([{"kind": "resource", "resource_id": "internal", "quantity": 1}])
+        await self.reserve(options=[{"option_id": "o", "value_id": "v"}])
+        before = await self.view()
+        for leaf in before["leaves"]:
+            expected = "bundle_cost_only_source_change_forbidden" if leaf.get("cost_only") else "bundle_nonstock_supplier_requires_service_receipt"
+            await self.assertCode(expected, bundle.refresh_requirements(self.db, "owner", "order", actor_id="owner", source_change={
+                "order_line_id": "line", "leaf_id": leaf["leaf_id"], "sourcing_mode": "supplier", "supplier_id": "supplier-a"}))
+            self.assertEqual(await self.view(), before)
+
     async def test_receipt_api_resolves_invoice_supplier_and_fresh_actor(self):
         await self.define([self.item("c", "supplier", "supplier-a")])
         await self.reserve()
