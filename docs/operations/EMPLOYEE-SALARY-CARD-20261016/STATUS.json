@@ -1,9 +1,9 @@
 {
   "task": "employee-salary-card-refresh-20261016",
-  "branch": "codex/employee-salary-release-1674-20261016",
-  "base_sha": "1674bb8b0a7a995e6ea87c83db93feb7d1a12e70",
+  "branch": "codex/employee-salary-current-20261017",
+  "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
   "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
-  "state": "Latest Production integration; source-only candidate, CI pending, Intent B not frozen",
+  "state": "Current-base source candidate; fresh verification pending; old Intent B not reused",
   "completed": [
     "Show current and scheduled salary on Employee OS cards immediately after save",
     "Verify employee account creation/reset accepts six digits or more",
@@ -35,15 +35,16 @@
     "Historical source discrepancies are detected and new affected movements blocked; no automatic settlement or retroactive rewriting",
     "Operational balances and accounting ledger remain separate; no automatic financial bridge"
   ],
-  "next_action": "Run candidate CI against current Production base, then freeze reviewed intent-only B if Production unchanged. No merge or deploy.",
+  "next_action": "Run payroll real Mongo/UI verification and current-base CI. No merge/deploy authorized.",
   "integration_verification": {
-    "deselected_real_mongo": 4,
-    "local_skipped": 19,
-    "local_passed": 44,
-    "conflict_resolution": "Preserve review_session binding and employee_lifecycle capability",
-    "previous_pr": 1382,
-    "previous_candidate": "9a94a7484dc8c1a01ed8153860df4aaf679cdee5",
-    "reason": "Mongo cases require disposable replica set; GitHub runner includes review_session_fence plus payroll transaction suite",
-    "first_ci": "38922379645:303 passed,28 review session cases failed due missing cryptography. Adopt existing pinned review CI dependency generator; no product/assertion changes."
-  }
+    "previous_pr": 1387,
+    "overlap": [
+      "operational_atomic.py bundle_catalog capability",
+      "operational_balance_service.py POS kind",
+      "operational_balance_sources.py bank and POS identity"
+    ],
+    "resolution": "Clean source-only cherry-pick; latest production additions preserved; no old intent carried forward",
+    "fresh_verification": "pending"
+  },
+  "previous_source": "29ae5117b0ad68e57213bae6d909a29c9fd62939"
 }
