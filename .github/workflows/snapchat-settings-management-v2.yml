@@ -71,6 +71,7 @@ jobs:
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
+              frontend/src/components/marketing/MarketingDecisionReadiness.jsx|\
               frontend/src/components/marketing/SnapchatDecisionReadiness.jsx|\
               frontend/src/components/marketing/SnapchatDecisionReadiness.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
@@ -105,6 +106,7 @@ jobs:
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
+              frontend/src/components/marketing/MarketingDecisionReadiness.jsx|\
               frontend/src/components/marketing/SnapchatDecisionReadiness.jsx|\
               frontend/src/components/marketing/SnapchatDecisionReadiness.test.jsx|\
               frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx|\
