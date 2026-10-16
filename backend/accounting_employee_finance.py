@@ -718,6 +718,28 @@ async def classify_employee_movement(
 
 async def payroll_context(db, owner: str) -> dict[str, Any]:
     employees = await employee_salary_rows(db, owner)
+    # Advances and custody belong to an employee identity, not a salary
+    # contract. Keep those identities selectable even before salary setup.
+    salary_employee_ids = {row["employee_v2_id"] for row in employees}
+    identities = await db.mezan_employees_v2.find(
+        {"user_id": owner}, {"_id": 0},
+    ).to_list(10000)
+    candidates = [row for row in identities
+                  if isinstance(row.get("id"), str) and row["id"].strip()
+                  and row["id"] == row["id"].strip()
+                  and row["id"] not in salary_employee_ids
+                  and not any(row.get(flag) for flag in ("archived", "is_archived", "deleted", "is_deleted"))]
+    if candidates:
+        contracts = await db.mezan_employee_salary_contracts_v2.find(
+            {"user_id": owner, "employee_id": {"$in": [row["id"] for row in candidates]}},
+            {"_id": 0, "employee_id": 1},
+        ).to_list(10000)
+        contracted_ids = {row.get("employee_id") for row in contracts}
+        employees.extend({
+            "employee_v2_id": row["id"], "contract_id": None,
+            "name": row.get("display_name") or row.get("name") or "",
+            "monthly_amount": 0,
+        } for row in candidates if row["id"] not in contracted_ids)
     employees.sort(key=lambda row: str(row.get("name") or ""))
     scope = await read_mz2_ledger(db, owner=owner)
     nets: dict[tuple[str, str], Decimal] = {}
