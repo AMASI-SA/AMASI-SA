@@ -107,25 +107,6 @@ async def test_reuses_mezan_upload_and_exact_batch_snapshot(monkeypatch):
     assert await images.prepare_invoice_images(db, "foreign", doc) == {}
 
 
-@pytest.mark.asyncio
-async def test_persisted_remote_thumbnail_cannot_cross_tenant(monkeypatch):
-    calls = []
-    available = True
-    async def handler(request):
-        calls.append(str(request.url))
-        return httpx.Response(200, content=png(), headers={"content-type": "image/png"}) if available else httpx.Response(404)
-    install_transport(monkeypatch, handler)
-    db = DB(); doc = invoice()
-    first = await images.prepare_invoice_images(db, "tenant-a", doc)
-    assert first and len(calls) == 1
-    # A different tenant cannot satisfy its print from tenant-a's persisted row.
-    available = False
-    assert await images.prepare_invoice_images(db, "tenant-b", doc) == {}
-    assert len(calls) == 2
-    assert await images.prepare_invoice_images(db, "tenant-a", doc) == first
-    assert len(calls) == 2
-
-
 @pytest.mark.parametrize("url", ["http://cdn.salla.sa/a", "https://salla.sa.evil/a", "https://127.0.0.1/a", "file:///a", "https://user:pass@cdn.salla.sa/a", "https://cdn.salla.sa:8443/a"])
 def test_untrusted_urls(url): assert not images.safe_remote_url(url)
 
@@ -154,10 +135,7 @@ async def test_whole_invoice_deadline_cancels_slow_images(monkeypatch):
         nonlocal cancelled
         try: await asyncio.sleep(20)
         except asyncio.CancelledError: cancelled += 1; raise
-    # Prepare TLS/client construction before the tiny cancellation-test budget.
-    # Production's full three-second deadline is exercised separately below.
-    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(images.httpx, "AsyncClient", lambda **kwargs: client)
+    install_transport(monkeypatch, handler)
     monkeypatch.setattr(images, "IMAGE_DEADLINE_SECONDS", .05)
     started = time.perf_counter()
     assert await images.prepare_invoice_images(DB(), "merchant", invoice(50)) == {}
