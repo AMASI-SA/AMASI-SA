@@ -1260,6 +1260,12 @@ async def collect_execution_quality_evidence(
 ) -> dict[str, Any]:
     """Collect the small, shared Meta/Snapchat execution-quality contract."""
     current = now().astimezone(timezone.utc)
+    if target.get("source_mode") == "unified_marketing_entity_report":
+        from campaign_ai_unified_execution_evidence import collect_unified_execution_evidence
+        return await collect_unified_execution_evidence(
+            db, user_id, target, snapshot_generated_at=snapshot_generated_at,
+            snapshot_range=snapshot_range, current=current, baseline=baseline,
+        )
     bound_target = {**target, "user_id": user_id}
     provider = _text(bound_target.get("provider"), limit=30).lower()
     provider_id = PROVIDER_IDS.get(provider)
@@ -1516,7 +1522,25 @@ def evaluate_execution_quality(
     provider_sync = (
         value.get("provider_sync") if isinstance(value.get("provider_sync"), dict) else {}
     )
-    if (
+    unified_sync = provider_sync.get("contract") == "unified_marketing_execution_evidence_v1"
+    if unified_sync:
+        from decision_intelligence.evidence_adapter import REQUIRED_DECISION_GATES
+        from unified_marketing.contract import CONTRACT_VERSION as unified_version
+        from unified_marketing.providers import PROVIDERS
+        decision = value.get("unified_decision") or {}
+        gates = decision.get("gates") or {}
+        if (provider_sync.get("source_mode") != "unified_marketing_entity_report"
+                or provider_sync.get("status") != "complete"
+                or provider_sync.get("account_bound") is not True
+                or _integer(provider_sync.get("errors_count")) != 0
+                or provider_sync.get("error_codes")
+                or not any(spec.ai_provider == value.get("provider") and spec.provider == value.get("provider_id")
+                           for spec in PROVIDERS.values())
+                or decision.get("contract_version") != unified_version
+                or decision.get("decision_ready") is not True
+                or any((gates.get(name) or {}).get("passed") is not True for name in REQUIRED_DECISION_GATES)):
+            blockers.append("execution_provider_sync_errors")
+    elif (
         provider_sync.get("status") != "complete"
         or provider_sync.get("source_mode")
         != RUN_SOURCE_MODES.get(str(value.get("provider") or ""))

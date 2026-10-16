@@ -30,7 +30,7 @@ def _row(
     }
 
 
-def test_exact_total_facts_are_complete_even_while_level_status_is_shadow_pending():
+def test_total_collection_name_alone_cannot_bypass_period_proof():
     row = {
         "delivery": {"spend_sar": {"amount": 375.0, "currency": "SAR"}},
         "quality": {
@@ -43,6 +43,8 @@ def test_exact_total_facts_are_complete_even_while_level_status_is_shadow_pendin
         },
     }
 
+    assert source._row_complete(row) is False
+    row["quality"].update(sync_status="complete", coverage_status="complete")
     assert source._row_complete(row) is True
 
 

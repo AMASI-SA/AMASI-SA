@@ -1285,6 +1285,10 @@ async def run_campaign_ai_monitor(
                     "pagination_complete",
                     "source_mode",
                     "source_fact_collection",
+                    "unified_contract_version",
+                    "source_evidence_fingerprint",
+                    "campaign_id",
+                    "ad_group_id",
                     "campaign_profitability",
                     "parent_campaign_profitability",
                 )

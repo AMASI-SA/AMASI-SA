@@ -7,14 +7,19 @@ owned by their existing guarded modules.
 """
 from __future__ import annotations
 
+import asyncio
 from datetime import date, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import campaign_ai_monitor_legacy as _legacy
 from unified_marketing.contract import CONTRACT_VERSION
+from unified_marketing.providers import get_provider
+from unified_marketing.decision_binding import source_evidence_fingerprint
+from decision_intelligence.evidence_adapter import evaluate_decision_evidence
 from unified_marketing.gateway import (
     load_unified_marketing_account_identity,
+    load_unified_marketing_account_report,
     load_unified_marketing_entity_report,
 )
 
@@ -38,7 +43,7 @@ def _local_range(
     timezone_name: str,
     requested_start: date,
     requested_end: date,
-    period_end_offset_days: int = 0,
+    period_end_offset_days: int = 1,
 ) -> tuple[date, date]:
     days = max(1, (requested_end - requested_start).days + 1)
     now = _legacy._utcnow()
@@ -145,20 +150,11 @@ def _platform_revenue_sar(row: dict[str, Any]) -> float | None:
 def _row_complete(row: dict[str, Any]) -> bool:
     quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
     delivery = row.get("delivery") if isinstance(row.get("delivery"), dict) else {}
-    lineage = row.get("lineage") if isinstance(row.get("lineage"), dict) else {}
-    exact_provider_total = (
-        lineage.get("source_collection") == SNAPCHAT_V2_EXACT_TOTAL_COLLECTION
-    )
     return bool(
         int(quality.get("source_fact_count") or 0) > 0
         and _amount(delivery.get("spend_sar")) is not None
-        and (
-            (
-                quality.get("sync_status") == "complete"
-                and quality.get("coverage_status") == "complete"
-            )
-            or exact_provider_total
-        )
+        and quality.get("sync_status") == "complete"
+        and quality.get("coverage_status") == "complete"
     )
 
 
@@ -171,6 +167,7 @@ def _to_candidate(
     management: dict[str, Any],
     campaign_names: dict[str, str],
     ad_group_names: dict[str, str],
+    provider: str = UNIFIED_AI_PROVIDER,
 ) -> dict[str, Any] | None:
     entity = row.get("entity") if isinstance(row.get("entity"), dict) else {}
     delivery = row.get("delivery") if isinstance(row.get("delivery"), dict) else {}
@@ -197,7 +194,7 @@ def _to_candidate(
     )
     status = management.get("status") or entity.get("status")
     candidate = _legacy._entity(
-        provider="snapchat",
+        provider=get_provider(provider).ai_provider,
         level=level,
         entity_id=identity,
         entity_name=entity.get("name"),
@@ -237,7 +234,7 @@ def _to_candidate(
             else None
         ),
         fx_source="unified_marketing_cost_contract",
-        provider_result_source=UNIFIED_AI_SOURCE,
+        provider_result_source=get_provider(provider).evidence_source,
         action_report_time="conversion",
         result_source="platform",
         source_date_from=local_start.isoformat(),
@@ -258,17 +255,20 @@ def _to_candidate(
     return candidate
 
 
-async def load_snapchat_unified_ai_entities(
+async def load_unified_ai_entities(
     db: Any,
     user_id: str,
     start: date,
     end: date,
-    period_end_offset_days: int = 0,
+    period_end_offset_days: int = 1,
+    *,
+    provider: str,
 ) -> dict[str, Any]:
+    provider = get_provider(provider).provider
     account = await load_unified_marketing_account_identity(
         db,
         str(user_id),
-        provider=UNIFIED_AI_PROVIDER,
+        provider=provider,
     )
     if not account:
         return {
@@ -287,19 +287,63 @@ async def load_snapchat_unified_ai_entities(
         end,
         period_end_offset_days,
     )
-    reports = {
-        level: await load_unified_marketing_entity_report(
-            db,
-            str(user_id),
-            provider=UNIFIED_AI_PROVIDER,
-            entity_level=level,
-            date_from=local_start,
-            date_to=local_end,
-            timezone_name=str(account.get("timezone") or ""),
-            include_stale=True,
-        )
-        for level in ("campaign", "ad_group", "ad")
+    calls = {
+        level: load_unified_marketing_entity_report(
+            db, str(user_id), provider=provider, entity_level=level,
+            date_from=local_start, date_to=local_end,
+            timezone_name=str(account.get("timezone") or ""), include_stale=False,
+        ) for level in ("campaign", "ad_group", "ad")
     }
+    calls["account"] = load_unified_marketing_account_report(
+        db, str(user_id), provider=provider,
+        date_from=local_start, date_to=local_end,
+        timezone_name=str(account.get("timezone") or ""),
+    )
+    loaded = await asyncio.gather(*calls.values(), return_exceptions=True)
+    load_errors = {}
+    reports = {}
+    for level, result in zip(calls, loaded, strict=True):
+        if not isinstance(result, dict):
+            load_errors[level] = type(result).__name__
+            reports[level] = {}
+        else:
+            reports[level] = result
+    account_report = reports.pop("account")
+    # Readers enforce tenant scope. Reject cross-provider/account envelopes before
+    # any report can become an AI candidate, including explicit owner mismatches.
+    identity_errors = dict(load_errors)
+    if (account.get("provider") != provider or not str(account.get("id") or "")
+            or (account.get("user_id") is not None
+                and str(account["user_id"]) != str(user_id))):
+        identity_errors["account_identity"] = "identity_scope_mismatch"
+    for level, report in {"account": account_report, **reports}.items():
+        report_account = report.get("account") or {}
+        if (str(report_account.get("id") or "") != str(account.get("id") or "")
+                or report.get("provider") != provider
+                or (report.get("user_id") is not None
+                    and str(report["user_id"]) != str(user_id))):
+            identity_errors[level] = "identity_scope_mismatch"
+    evidence = evaluate_decision_evidence(
+        account_identity=account, reports={"account": account_report, **reports},
+        provider=provider, date_from=local_start, date_to=local_end,
+        now=_legacy._utcnow(), loader_errors=identity_errors,
+    )
+    eligibility = {
+        "eligible": evidence["decision_ready"],
+        "reason": "unified_decision_evidence_ready" if evidence["decision_ready"]
+                  else "unified_decision_evidence_blocked",
+        "blocked_by": evidence["blocked_by"], "gates": evidence["gates"],
+    }
+    if not eligibility["eligible"]:
+        return {
+            "campaigns": [], "children": [],
+            "levels": {"campaign": [], "ad_group": [], "ad": []},
+            "account": account, "period": evidence["period"],
+            "decision_eligibility": eligibility,
+        }
+    eligible_campaign_ids = {str(item["entity"].get("id") or "")
+                             for item in evidence["candidates"]
+                             if item.get("decision_eligible")}
     campaign_names = {
         str((row.get("entity") or {}).get("id") or ""): str(
             (row.get("entity") or {}).get("name") or ""
@@ -317,10 +361,19 @@ async def load_snapchat_unified_ai_entities(
         "ad_group": [],
         "ad": [],
     }
+    campaign_rows_by_id: dict[str, list[dict[str, Any]]] = {}
+    for row in reports["campaign"].get("rows") or []:
+        campaign_rows_by_id.setdefault(str((row.get("entity") or {}).get("id") or ""), []).append(row)
     for level, report in reports.items():
         management = report.get("management_context") or {}
         for row in report.get("rows") or []:
-            entity_id = str((row.get("entity") or {}).get("id") or "")
+            entity = row.get("entity") or {}
+            entity_id = str(entity.get("id") or "")
+            campaign_id = entity_id if level == "campaign" else str(entity.get("campaign_id") or "")
+            if (campaign_id not in eligible_campaign_ids or not _row_complete(row)
+                    or row.get("provider") != provider
+                    or str((row.get("account") or {}).get("id") or "") != str(account["id"])):
+                continue
             candidate = _to_candidate(
                 row,
                 account=account,
@@ -329,8 +382,19 @@ async def load_snapchat_unified_ai_entities(
                 management=(management.get(entity_id) or {}),
                 campaign_names=campaign_names,
                 ad_group_names=ad_group_names,
+                provider=provider,
             )
             if candidate is None:
+                continue
+            parent_rows = campaign_rows_by_id.get(campaign_id) or []
+            if len(parent_rows) != 1:
+                continue
+            try:
+                candidate["source_evidence_fingerprint"] = source_evidence_fingerprint(
+                    str(user_id), row, management.get(entity_id) or {},
+                    parent_campaign=parent_rows[0] if level != "campaign" else None,
+                )
+            except ValueError:
                 continue
             if level == "campaign":
                 commerce = row.get("commerce_outcomes") or {}
@@ -368,6 +432,7 @@ async def load_snapchat_unified_ai_entities(
                         "abandoned_cart_outcomes"
                     ),
                 })
+            candidate["decision_eligibility"] = eligibility
             converted[level].append(candidate)
 
     campaign_context = {
@@ -397,14 +462,23 @@ async def load_snapchat_unified_ai_entities(
             "timezone": account.get("timezone"),
             "action_report_time": "conversion",
         },
-        "decision_eligibility": {
-            "eligible": True,
-            "reason": "ai_unified_v2_cutover_deployed",
-        },
+        "decision_eligibility": eligibility,
     }
+
+
+async def load_snapchat_unified_ai_entities(
+    db: Any, user_id: str, start: date, end: date,
+    period_end_offset_days: int = 1,
+) -> dict[str, Any]:
+    """Compatibility entry point; all providers share the same candidate pipeline."""
+    return await load_unified_ai_entities(
+        db, user_id, start, end, period_end_offset_days,
+        provider=UNIFIED_AI_PROVIDER,
+    )
 
 
 __all__ = [
     "UNIFIED_AI_SOURCE",
     "load_snapchat_unified_ai_entities",
+    "load_unified_ai_entities",
 ]

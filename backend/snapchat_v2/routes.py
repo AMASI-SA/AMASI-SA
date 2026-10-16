@@ -25,6 +25,7 @@ from .projections import (
 from .reconciliation import calculate_cost_components, list_reconciliation
 from .salla_outcomes import load_salla_campaign_outcomes
 from .period_diagnostics import audit_period_partition
+from .period_evidence import total_period_complete
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
 from .total_facts import (
@@ -293,17 +294,18 @@ async def _entity_performance_report(
             )
         except (AttributeError, KeyError, TypeError):
             total_facts = []
-        if (
-            total_facts
-            and level_status == "complete"
-            and _total_fact_date_coverage_complete(
-                total_facts,
-                date_from=date_from,
-                date_to=date_to,
-            )
+        if total_facts and await total_period_complete(
+            db, user_id=user_id, account_id=account_id, entity_type=entity_type,
+            date_from=date_from, date_to=date_to,
+            action_report_time=action_report_time, facts=total_facts,
         ):
             facts = total_facts
             source_collection = SNAPCHAT_TOTAL_FACTS_COLLECTION
+            level_status = "complete"
+        elif total_facts:
+            # Existing TOTAL evidence without its source proof must not be
+            # upgraded by an unrelated latest run or an hourly fallback.
+            level_status = "partial"
     identities = await list_entities(
         db,
         user_id=user_id,
