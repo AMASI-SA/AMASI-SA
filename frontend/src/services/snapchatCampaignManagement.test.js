@@ -1054,6 +1054,40 @@ describe("snapchatCampaignManagement", () => {
         expect(snapchatFinancialFieldReady(sar, "daily_budget_micro", "account-1")).toBe(false);
     });
 
+    test("enables native SAR controls only with matching API currency proof", () => {
+        const settings = {
+            unified_entity_id: "u-sar", provider_entity_id: "p-sar",
+            mapping_verified: true, ad_account_id: "sar-account", account_currency: "SAR",
+            settings_synced_at: new Date(Date.now() - 60_000).toISOString(),
+            daily_budget_micro: 50_000_000,
+            account_currency_proof: {
+                ad_account_id: "sar-account", currency: "SAR",
+                source: "snapchat_api_discovery", verified: true,
+            },
+            quality: {
+                settings_status: "settings_complete", freshness_seconds: 60,
+                freshness_threshold_seconds: 1800,
+                financial_field_controls: { daily_budget: { allowed: true } },
+            },
+        };
+        const normalized = normalizeSnapchatEntitySettings(settings);
+        expect(normalized.account_currency_proof).toEqual(settings.account_currency_proof);
+        expect(normalized.daily_budget_usd).toBeNull();
+        expect(nativeAmountToMicro(50)).toBe(50_000_000);
+        expect(snapchatFinancialSettingsReady(normalized, "sar-account")).toBe(true);
+        expect(snapchatFinancialFieldReady(normalized, "daily_budget_micro", "sar-account")).toBe(true);
+        expect(snapchatFinancialSettingsReady(normalized, "other-account")).toBe(false);
+        for (const proof of [null, {},
+            { ...settings.account_currency_proof, verified: false },
+            { ...settings.account_currency_proof, currency: "USD" },
+            { ...settings.account_currency_proof, ad_account_id: "other-account" },
+            { ...settings.account_currency_proof, source: "legacy_default" },
+        ]) {
+            expect(snapchatFinancialSettingsReady({ ...settings, account_currency_proof: proof }, "sar-account")).toBe(false);
+        }
+        expect(snapchatFinancialSettingsReady({ ...settings, account_currency: "EUR" }, "sar-account")).toBe(false);
+    });
+
     test("expires historical settings proof by timestamp and requires explicit mapping proof", () => {
         const stale = normalizeSnapchatEntitySettings({
             unified_entity_id: "unified-squad-1",
