@@ -13,9 +13,15 @@ on:
     paths:
       - "backend/snapchat_v2/**"
       - "backend/unified_marketing/**"
+      - "backend/campaign_ai_unified*.py"
+      - "backend/campaign_ai_execution_quality_gate.py"
+      - "backend/campaign_ai_policy_v2.py"
+      - "backend/tests/test_campaign_ai_unified*.py"
+      - "backend/tests/test_unified_marketing_provider_registry.py"
       - "backend/decision_intelligence/evidence_adapter.py"
       - "frontend/src/components/marketing/UnifiedMarketingOrdersPanel*"
       - "frontend/src/components/marketing/SnapchatDecisionReadiness*"
+      - "frontend/src/components/marketing/MarketingDecisionReadiness*"
       - "frontend/src/pages/SnapchatV2Page*"
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
@@ -81,6 +87,10 @@ jobs:
           tests/test_snapchat_clickid_attribution.py
           tests/test_unified_marketing_snapchat_readiness.py
           tests/test_decision_intelligence_phase5.py
+          tests/test_unified_marketing_provider_registry.py
+          tests/test_campaign_ai_unified_cutover.py
+          tests/test_campaign_ai_unified_execution_evidence.py
+          tests/test_campaign_ai_execution_quality_p0_3.py
           -q
           --tb=short
 
