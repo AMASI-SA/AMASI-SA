@@ -12,6 +12,16 @@ on:
       - ready_for_review
     paths:
       - "backend/snapchat_v2/**"
+      - "backend/campaign_ai_funnel_evidence_v3.py"
+      - "backend/campaign_ai_product_intelligence_v3.py"
+      - "backend/campaign_ai_temporal_evidence_v3.py"
+      - "backend/decision_intelligence/phase5.py"
+      - "backend/decision_intelligence/routes.py"
+      - "backend/tests/test_campaign_ai_multi_account.py"
+      - "backend/tests/test_multi_account_readiness_routes.py"
+      - "backend/tests/test_snapchat_multi_account_routes.py"
+      - "backend/tests/test_unified_marketing_multi_account_dashboard.py"
+      - "backend/tests/test_unified_marketing_snapchat_range_proof.py"
       - "backend/unified_marketing/**"
       - "backend/campaign_ai_unified*.py"
       - "backend/campaign_ai_execution_quality_gate.py"
@@ -89,6 +99,11 @@ jobs:
           tests/test_decision_intelligence_phase5.py
           tests/test_unified_marketing_provider_registry.py
           tests/test_campaign_ai_unified_cutover.py
+          tests/test_campaign_ai_multi_account.py
+          tests/test_multi_account_readiness_routes.py
+          tests/test_snapchat_multi_account_routes.py
+          tests/test_unified_marketing_multi_account_dashboard.py
+          tests/test_unified_marketing_snapchat_range_proof.py
           tests/test_campaign_ai_unified_execution_evidence.py
           tests/test_campaign_ai_execution_quality_p0_3.py
           -q
