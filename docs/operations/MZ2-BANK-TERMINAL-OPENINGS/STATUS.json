@@ -2,7 +2,7 @@
   "task_id": "MZ2-BANK-TERMINAL-OPENINGS",
   "branch": "codex/operational-bank-terminal-20261016",
   "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
-  "state": "MERGED_ARCHIVE_BUILD_IN_PROGRESS",
+  "state": "MERGED_DURABLE_ARTIFACT_READY_NOT_DEPLOYED",
   "completed": [
     "Owner-scoped identity-only existing bank catalog",
     "Independent named operational bank or terminal setup without driver or accounting activation",
@@ -22,7 +22,11 @@
     "final_release_rehearsal_run": 38955818734,
     "clean_clone_package_rehearsal": "PASS",
     "codeql": "PASS",
-    "security_gate": "PASS"
+    "security_gate": "PASS",
+    "archive_build": "PASS",
+    "archive_verify_packages": "PASS",
+    "archive_restore": "PASS:21 files",
+    "local_download_sha256": "PASS"
   },
   "limitations": [
     "No live owner-bank data queried",
@@ -30,7 +34,7 @@
     "No native driver-payment or accounting activation changes",
     "Emergent browser tool fails with kernel assets os error3; operator read-only preflight requested"
   ],
-  "next": "Wait archive38956947227; do not rerun on failure. Owner supplied guarded ff-only update command for36172c4a. Then hash-check/archive locally, restore generated outputs with old artifacts preserved, official verify-packages/prepare/prepublish; owner Publish once and official verify. No business writes.",
+  "next": "Owner executes guarded ff-only update to36172c4a (result pending), then download artifact38956947227 into /app/.git; check pinned hashes. Restore only3 generated roots preserving old outputs, verify-packages then prepare/prepublish, Publish once, official verify. No builds/install in /app. No live deployment yet.",
   "production_changed": false,
   "source_sha": "abaacdae8183a70be97e723494a59972d8f32f72",
   "intent_sha": "30c4901ed39c70a1f4f4c3b138c9d25a1790a793",
@@ -50,5 +54,10 @@
   "production_runtime_changed": false,
   "archive_run": 38956947227,
   "archive_tools_branch": "codex/bank-terminal-archive-36172c4a",
-  "archive_tools_sha": "a30b7a2bc9cd4f99c59368d67a6bfc101da096f9"
+  "archive_tools_sha": "a30b7a2bc9cd4f99c59368d67a6bfc101da096f9",
+  "archive_artifact_id": 12069899625,
+  "archive_path": "D:/codex-release-archives/mz2/36172c4a",
+  "archive_sha256": "2f6ca90f759486da8ff8a2ced46bbd75122769a38dc1945d1e83edfd1d3f1348",
+  "manifest_sha256": "0c24ebe6fb4be813aa18b957a22a2997857ba9f30651acc3ebf164cee8c85927",
+  "generated_bytes": 8300820
 }
