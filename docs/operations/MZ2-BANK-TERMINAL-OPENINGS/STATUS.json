@@ -2,7 +2,7 @@
   "task_id": "MZ2-BANK-TERMINAL-OPENINGS",
   "branch": "codex/operational-bank-terminal-20261016",
   "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
-  "state": "REVIEWED_INTENT_FROZEN_FINAL_CI_PENDING",
+  "state": "CI_READY_AWAITING_EMERGENT_RELEASE_PREFLIGHT",
   "completed": [
     "Owner-scoped identity-only existing bank catalog",
     "Independent named operational bank or terminal setup without driver or accounting activation",
@@ -16,21 +16,33 @@
     "frontend_ci": "PASS:161 tests",
     "shipping_ci": "PASS:16 tests and18 subtests",
     "source_run": 38955242573,
-    "git_intent_binding": "PASS"
+    "git_intent_binding": "PASS",
+    "final_checks": "15 SUCCESS,4 SKIPPED",
+    "final_operational_run": 38955818716,
+    "final_release_rehearsal_run": 38955818734,
+    "clean_clone_package_rehearsal": "PASS",
+    "codeql": "PASS",
+    "security_gate": "PASS"
   },
   "limitations": [
     "No live owner-bank data queried",
     "No automatic matching by account name",
     "No native driver-payment or accounting activation changes",
-    "Final B clean-clone rehearsal and checks pending",
     "Emergent browser tool fails with kernel assets os error3; operator read-only preflight requested"
   ],
-  "next": "Inspect final B CI; obtain fresh Emergent status/Git/disk and Manage Publishing before release actions; no Production balances changed.",
+  "next": "Obtain missing Release Guard/Manage Publishing state, then merge exact checked B if Production unchanged; use durable isolated artifact, never build/install in /app. Official publish and verify still required.",
   "production_changed": false,
   "source_sha": "abaacdae8183a70be97e723494a59972d8f32f72",
   "intent_sha": "30c4901ed39c70a1f4f4c3b138c9d25a1790a793",
   "release_id": "rg5-8bcf1cfbbe53c2fda7c71bbcc76f95b4a4ff95e74ca596c8b6fd5a05be1d321b",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1401",
   "evidence_branch": "codex/operational-bank-terminal-evidence",
-  "evidence_branch_is_not_deployable": true
+  "evidence_branch_is_not_deployable": true,
+  "emergent_preflight": {
+    "head": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
+    "tracked_clean": true,
+    "available_mb": 608,
+    "guard": "not supplied",
+    "manage_publishing": "not supplied"
+  }
 }
