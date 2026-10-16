@@ -28,7 +28,7 @@ from fulfillment_batch_pdf import generate_shipping_batch_pdf
 from fulfillment_carrier_label import sync_completed_carrier_label, _require_print_completed_workflow
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_engine.shipping_label_service import ShippingLabelError, refresh_shipping_label
+from order_engine.shipping_label_service import ShippingLabelError, refresh_shipping_label, refresh_saved_shipping_label
 from order_option_cost_snapshot_routes import binding_matches, selected_option_tokens
 from product_fulfillment_rules import (
     FULFILLMENT_DECISIONS,
@@ -2272,13 +2272,14 @@ def make_fulfillment_v2_router(
             )
         actor_name = _text(user.get("name") or user.get("email")) or "مستخدم ميزان"
         try:
-            if action == "refresh":
+            if action in {"refresh", "refresh_saved"}:
                 # Printing reads only; retain the existing access/completion
                 # checks without writing a label snapshot to the workflow.
                 await _require_print_completed_workflow(
                     db, user_id=context["merchant_id"], order_number=_text(order_number),
                 )
-                return await refresh_shipping_label(db, context["merchant_id"], _text(order_number))
+                reader = refresh_saved_shipping_label if action == "refresh_saved" else refresh_shipping_label
+                return await reader(db, context["merchant_id"], _text(order_number))
             return await sync_completed_carrier_label(
                 db,
                 user_id=context["merchant_id"],
@@ -2318,6 +2319,14 @@ def make_fulfillment_v2_router(
             user=user,
             action="refresh",
         )
+
+    @router.post("/completed/{order_number}/carrier-label/refresh-saved")
+    async def refresh_saved_completed_order_carrier_label(
+        order_number: str,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Opt-in Android candidate; the legacy refresh route stays unchanged."""
+        return await _carrier_label_action(order_number=order_number, user=user, action="refresh_saved")
 
     @router.post("/completed/{order_number}/carrier-label/confirm-print")
     async def confirm_completed_order_carrier_label_print(
