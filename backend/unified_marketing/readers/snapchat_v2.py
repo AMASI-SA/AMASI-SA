@@ -7,11 +7,6 @@ from zoneinfo import ZoneInfo
 
 from snapchat_v2.accounts import get_selected_account
 from snapchat_v2.entities import list_entities
-from snapchat_v2.models import (
-    DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
-    DEFAULT_VIEW_ATTRIBUTION_WINDOW,
-    build_attribution_key,
-)
 from snapchat_v2.projections import (
     RIYADH_TIMEZONE,
     SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
@@ -23,7 +18,8 @@ from snapchat_v2.reconciliation import (
 )
 from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
-from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION
+from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION, load_total_facts
+from snapchat_v2.period_evidence import total_period_complete
 from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
 from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
@@ -662,10 +658,9 @@ async def load_snapchat_v2_entity_readiness_evidence(
 ) -> dict[str, Any]:
     """Return a compact, period-specific hierarchy readiness proof.
 
-    Readiness must not build and serialize every Campaign, Ad Squad, and Ad
-    merely to prove coverage.  This reader stays behind the provider-neutral
-    gateway and inspects only the persisted V2 TOTAL evidence plus the sync run
-    that covered the requested closed period.
+    Readiness does not build commerce-enriched entity reports. It uses the same
+    bounded committed TOTAL rows as reporting and checks their producing runs,
+    so a mutable ingestion refresh cannot change this proof independently.
     """
     provider_types = {
         "campaign": "campaign",
@@ -687,70 +682,17 @@ async def load_snapchat_v2_entity_readiness_evidence(
             "unified_marketing_entity_readiness_requires_account_timezone"
         )
 
-    level_field = {
-        "campaign": "campaign_sync_status",
-        "ad_squad": "ad_squad_sync_status",
-        "ad": "ad_sync_status",
-    }[provider_type]
-    start = date_from.isoformat()
-    end = date_to.isoformat()
-    run = await db[SNAPCHAT_SYNC_RUNS_COLLECTION].find_one(
-        {
-            "user_id": str(user_id),
-            "provider": "snapchat_ads",
-            "ad_account_id": str(account["ad_account_id"]),
-            "status": "complete",
-            "financial_sync_status": "complete",
-            level_field: "complete",
-            "request_window.date_from": {"$lte": start},
-            "request_window.date_to": {"$gte": end},
-            "request_window.action_report_time": "conversion",
-        },
-        {"_id": 0, "sync_run_id": 1, level_field: 1},
-        sort=[("finished_at", -1), ("started_at", -1)],
+    facts = await load_total_facts(
+        db, user_id=str(user_id), ad_account_id=str(account["ad_account_id"]),
+        entity_type=provider_type, date_from=date_from, date_to=date_to,
+        account_timezone=account_timezone,
     )
-    attribution_key = build_attribution_key(
-        "conversion",
-        {
-            "swipe": DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
-            "view": DEFAULT_VIEW_ATTRIBUTION_WINDOW,
-        },
-    )
-    fact_query = {
-        "user_id": str(user_id),
-        "provider": "snapchat_ads",
-        "ad_account_id": str(account["ad_account_id"]),
-        "entity_type": provider_type,
-        "report_date": {"$gte": start, "$lte": end},
-        "account_timezone": account_timezone,
-        "action_report_time": "conversion",
-        "attribution_key": attribution_key,
-    }
-    collection = db[SNAPCHAT_TOTAL_FACTS_COLLECTION]
-    source_fact_count = int(await collection.count_documents(fact_query))
-    observed_dates = {
-        str(value)
-        for value in await collection.distinct("report_date", fact_query)
-        if value
-    }
-    entity_ids = {
-        str(value)
-        for value in await collection.distinct("external_id", fact_query)
-        if value
-    }
-    incomplete_fact = await collection.find_one(
-        {**fact_query, "coverage.status": {"$ne": "complete"}},
-        {"_id": 1},
-    )
-    expected_dates = {
-        (date_from + timedelta(days=offset)).isoformat()
-        for offset in range((date_to - date_from).days + 1)
-    }
-    complete = bool(
-        run
-        and source_fact_count > 0
-        and expected_dates.issubset(observed_dates)
-        and incomplete_fact is None
+    source_fact_count = len(facts)
+    entity_ids = {row["external_id"] for row in facts}
+    complete = await total_period_complete(
+        db, user_id=str(user_id), account_id=str(account["ad_account_id"]),
+        entity_type=provider_type, date_from=date_from, date_to=date_to,
+        action_report_time="conversion", facts=facts,
     )
     return {
         "contract_version": CONTRACT_VERSION,
@@ -760,7 +702,7 @@ async def load_snapchat_v2_entity_readiness_evidence(
         "complete": complete,
         "row_count": len(entity_ids),
         "source_fact_count": source_fact_count,
-        "sync_status": "complete" if run else "partial",
+        "sync_status": "complete" if complete else "partial",
         "coverage_status": "complete" if complete else "partial",
         "decision_eligibility": {
             "eligible": False,
@@ -803,41 +745,17 @@ async def load_snapchat_v2_entity_daily_series(
     days = (date_to - date_from).days + 1
     if days < 1 or days > 31:
         raise ValueError("unified_marketing_daily_series_range_invalid")
-    limit = len(ids) * days + 1
-    attribution_key = build_attribution_key(
-        "conversion",
-        {
-            "swipe": DEFAULT_SWIPE_ATTRIBUTION_WINDOW,
-            "view": DEFAULT_VIEW_ATTRIBUTION_WINDOW,
-        },
+    all_facts = await load_total_facts(
+        db, user_id=str(user_id), ad_account_id=str(account["ad_account_id"]),
+        entity_type=provider_type, date_from=date_from, date_to=date_to,
+        account_timezone=account_timezone,
     )
-    cursor = db[SNAPCHAT_TOTAL_FACTS_COLLECTION].find(
-        {
-            "user_id": str(user_id),
-            "provider": "snapchat_ads",
-            "ad_account_id": str(account["ad_account_id"]),
-            "entity_type": provider_type,
-            "external_id": {"$in": ids},
-            "report_date": {
-                "$gte": date_from.isoformat(),
-                "$lte": date_to.isoformat(),
-            },
-            "account_timezone": account_timezone,
-            "action_report_time": "conversion",
-            "attribution_key": attribution_key,
-        },
-        {"_id": 0},
+    period_complete = await total_period_complete(
+        db, user_id=str(user_id), account_id=str(account["ad_account_id"]),
+        entity_type=provider_type, date_from=date_from, date_to=date_to,
+        action_report_time="conversion", facts=all_facts,
     )
-    if hasattr(cursor, "sort"):
-        cursor = cursor.sort([("report_date", 1), ("external_id", 1)])
-    if hasattr(cursor, "limit"):
-        cursor = cursor.limit(limit)
-    try:
-        facts = list(await cursor.to_list(length=limit))
-    except TypeError:
-        facts = list(await cursor.to_list(limit))
-    if len(facts) >= limit:
-        raise ValueError("unified_marketing_daily_series_truncated")
+    facts = [fact for fact in all_facts if fact["external_id"] in ids]
     try:
         cost = await calculate_cost_components(
             db,
@@ -853,7 +771,7 @@ async def load_snapchat_v2_entity_daily_series(
     for fact in facts:
         value = dict(fact)
         coverage = value.get("coverage") if isinstance(value.get("coverage"), dict) else {}
-        sync_status = "complete" if coverage.get("status") == "complete" else "partial"
+        sync_status = "complete" if period_complete and coverage.get("status") == "complete" else "partial"
         value.update({
             "name": value.get("external_id"),
             "source_fact_count": 1,

@@ -42,6 +42,7 @@ from .sync_runs import (
     update_sync_stage,
 )
 from .total_facts import upsert_total_facts
+from .committed_totals import publish_committed_totals
 
 MAX_SYNC_DAYS = 30
 HEARTBEAT_SECONDS = 20.0
@@ -793,6 +794,8 @@ class SnapchatV2SyncPipeline:
                 or {}
             )
             outcome = str(finished.get("status") or "partial")
+            if outcome == "complete":
+                await publish_committed_totals(self.db, sync_run_id)
             success_at = self.now().astimezone(timezone.utc)
             await self.db["mezan_snapchat_connections_v2"].update_one(
                 {"user_id": str(user_id), "provider": "snapchat_ads"},
