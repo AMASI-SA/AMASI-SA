@@ -30,5 +30,30 @@
     "Optional image deadline may omit uncached photos; cache has no eviction policy"
   ],
   "next_safe_action": "Owner reviews Draft PR #1320 and refreshed CI; no merge, deployment, OTA, or release intent",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1320"
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1320",
+  "build44_compatibility": {
+    "recorded_on": "2026-10-16",
+    "branch": "codex/supplier-invoice-release-20261017",
+    "base_source_a": "f603b4ef8fd3c3a4238b5aafb7ae4f6fa73d5bba",
+    "production_base": "8c9ef8cd96bcef0f3b50c7c7928dad99698ba279",
+    "status": "LOCAL_PASS_REMOTE_CI_PENDING",
+    "production_changed": false,
+    "remote_ci": "pending new Draft PR",
+    "merge_release": "wait Android first release handoff and current Production verification",
+    "ledger": "Issue1006 fetch failed Transport closed; coordinator handling continuity",
+    "fresh_evidence": [
+      "BUILD44-COMPATIBILITY.md",
+      "build44-preservation.json",
+      "build44-pdf-benchmark.json",
+      "build44-auth.xml",
+      "build44-compatibility.xml"
+    ],
+    "results": {
+      "core": "135 passed, 0 failed, 0 skipped, exit 0, 138.29s",
+      "authorization": "16 passed, 0 failed, 0 skipped, exit 0, 21.10s",
+      "benchmark": "completed offline synthetic, 1/10/50 products",
+      "source_preservation": "PASS",
+      "diff_check": "PASS"
+    }
+  }
 }
