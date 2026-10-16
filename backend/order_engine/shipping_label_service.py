@@ -50,7 +50,7 @@ def _status(value: Any) -> str:
 def _order_is_completed(order: dict[str, Any]) -> bool:
     """Every supplied status signal must confirm completed, never conflict."""
     from assembly_status_policy import status_values
-    return status_values(order.get("status")) == {"completed"}
+    return (status_values(order.get("status")) | status_values(order.get("status_slug"))) == {"completed"}
 
 
 def _walk_dicts(value: Any):

@@ -140,6 +140,15 @@ def public_status(workflow, *, canonical=None):
             "label_status": "available" if available else "pending",
             "requires_attention": operation.get("state") == "requires_attention",
             "error_code": operation.get("error_code"),
+            "error_message": ({
+                "assembly_order_not_ready": "حالة الطلب في سلة لا تسمح بالاستكمال.",
+                "assembly_canonical_status_blocked": "تغيرت حالة الطلب؛ الاستكمال متوقف.",
+                "assembly_completion_evidence_changed": "تغيرت بيانات التجهيز؛ يلزم التحقق.",
+                "completion_label_pending": "لم تصبح البوليصة الحالية متاحة بعد.",
+                "completion_status_unconfirmed": "العملية السابقة غير مؤكدة؛ تحقق من سلة.",
+                "TimeoutError": "تعذر تأكيد استجابة سلة خلال المهلة.",
+            }.get(operation.get("error_code"), "تعذر تأكيد الاستكمال؛ أعد التحقق من الطلب والشحنة.")
+                if operation.get("state") == "requires_attention" else None),
             "ready": available, "order_status_completed": confirmed}
 
 

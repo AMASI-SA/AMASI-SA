@@ -495,6 +495,31 @@ export default function ReadyToShipOrders() {
         }
     };
 
+    useEffect(() => {
+        if (!result?.order_number || !result.assembly_completion_confirmed
+            || result.requires_attention || result.label_status === "available") return undefined;
+        const orderNumber = result.order_number;
+        const epoch = requestEpoch.current;
+        let stopped = false;
+        let timer;
+        const poll = async () => {
+            try {
+                const completion = await getAssemblyCompletion(orderNumber);
+                if (stopped || epoch !== requestEpoch.current || completion?.order_number !== orderNumber) return;
+                setResult((current) => current?.order_number !== orderNumber ? current : {
+                    ...current, ...completion,
+                    carrier_label: { ready: false, order_status_completed: false, ...(completion.carrier_label || completion) },
+                });
+            } catch {
+                // A read failure must never replay Ready or change its saved result.
+            } finally {
+                if (!stopped) timer = setTimeout(poll, 5000);
+            }
+        };
+        timer = setTimeout(poll, 5000);
+        return () => { stopped = true; clearTimeout(timer); };
+    }, [result?.order_number, result?.assembly_completion_confirmed, result?.requires_attention, result?.label_status]);
+
     const openLabelConfirmation = useCallback(() => {
         if (!result?.order_number || result.assembly_completion_confirmed !== true
             || result.carrier_label?.order_status_completed !== true || result.carrier_label?.ready !== true) return;
@@ -598,6 +623,9 @@ export default function ReadyToShipOrders() {
                     {result.assembly_completion_confirmed === true && (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4" data-testid="assembly-completion-status">
                             <p>جاهزية القطع مؤكدة · سلة: {result.order_completion_status === "confirmed" ? "تم التنفيذ مؤكد" : "بانتظار التأكيد"} · البوليصة: {result.label_status === "available" ? "متاحة" : "بانتظار التحقق"}</p>
+                            {result.requires_attention
+                                ? <p role="alert">تعذر الاستكمال تلقائيًا: {result.error_message || "يلزم التحقق من حالة الطلب والشحنة."}</p>
+                                : result.label_status !== "available" && <p>جارٍ التنفيذ تلقائيًا؛ لا يلزم الضغط على جاهز مرة أخرى.</p>}
                             <button type="button" disabled={Boolean(busy)} onClick={() => updateCompletion(false)} data-testid="assembly-refresh-completion" className="m-2 rounded-xl border bg-white p-3">تحديث الحالة</button>
                             {(result.order_completion_status !== "confirmed" || result.label_status !== "available") && <button type="button" disabled={Boolean(busy) || resumeUncertain} onClick={() => updateCompletion(true)} data-testid="assembly-resume-completion" className="m-2 rounded-xl border bg-white p-3">استكمال سلة والبوليصة</button>}
                         </div>

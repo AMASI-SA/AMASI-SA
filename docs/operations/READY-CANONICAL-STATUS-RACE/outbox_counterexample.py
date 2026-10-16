@@ -12,7 +12,7 @@ import test_assembly_completion_delivery as fixture
 from orders_db import upsert_order
 
 
-async def scenario(boundary):
+async def scenario(boundary, *, shipment_read_in_refresh=False):
     case = fixture.DeliveryTests()
     await case.asyncSetUp()
     try:
@@ -44,6 +44,10 @@ async def scenario(boundary):
             return [{"id": "current", "status": "draft", "type": "shipment"}]
 
         async def refresh(*args):
+            # New GET-only workers read shipments inside refresh, rather than
+            # a second issuance branch. Preserve the original diagnostic by default.
+            if boundary == "awb_post" and shipment_read_in_refresh:
+                await rows(*args)
             if boundary == "publication":
                 await delivered()
             return {"ready": boundary != "awb_post" or bool(posts),

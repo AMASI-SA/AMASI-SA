@@ -408,6 +408,25 @@ describe("ready acknowledges local save independently of shipping and reads", ()
         expect(resumeAssemblyCompletion).not.toHaveBeenCalled();
         if (last) expect(container.querySelector('[data-testid="assembly-print-carrier-frozen"]').disabled).toBe(true);
     });
+    test("last piece polls completion without another ready or resume POST", async () => {
+        jest.useFakeTimers();
+        try {
+            markAssemblyPieceReady.mockResolvedValue({ ok: true, piece: { ...piece, assembly_ready: true },
+                progress: { order_number: "42", order_completed: true, ready_count: 1, total_count: 1 },
+                order_completion_status: "pending", label_status: "pending" });
+            getAssemblyCompletion.mockResolvedValue({ order_number: "42", assembly_completion_confirmed: true,
+                order_completion_status: "confirmed", label_status: "available", ready: true });
+            await act(async () => container.querySelector('[data-testid="mark-assembly-piece-ready"]').click());
+            expect(container.textContent).toContain("جارٍ التنفيذ تلقائيًا");
+            await act(async () => jest.advanceTimersByTime(5000));
+            expect(getAssemblyCompletion).toHaveBeenCalledTimes(1);
+            expect(container.textContent).toContain("تم التنفيذ مؤكد");
+            await act(async () => jest.advanceTimersByTime(15000));
+            expect(getAssemblyCompletion).toHaveBeenCalledTimes(1);
+            expect(markAssemblyPieceReady).toHaveBeenCalledTimes(1);
+            expect(resumeAssemblyCompletion).not.toHaveBeenCalled();
+        } finally { jest.useRealTimers(); }
+    });
     test("lost response reads saved state without replaying POST", async () => {
         markAssemblyPieceReady.mockRejectedValue(new Error("timeout"));
         searchAssemblyOrder.mockResolvedValue({ order_number: "42", pieces: [{ ...piece, can_mark_ready: false, assembly_ready: true }] });

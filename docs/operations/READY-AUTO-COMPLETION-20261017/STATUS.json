@@ -5,9 +5,28 @@
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
   "state": "WIP_NOT_FOR_RELEASE",
   "production_changed": false,
-  "completed": ["Merged prior ready integration preserving latest production courier classification", "Added v2 read-first status dispatch with bounded transient retries and persisted dispatch count", "No separate shipment creation; existing v1 and historical enrollment remain readback-only"],
+  "completed": [
+    "Merged prior ready integration preserving latest production courier classification",
+    "Added v2 read-first status dispatch with bounded transient retries and persisted dispatch count",
+    "No separate shipment creation; existing v1 and historical enrollment remain readback-only",
+    "Added UI GET polling for pending completion and sanitized failure message; frontend CI pending"
+  ],
   "owner_acceptance": "Owner accepts limited provider GET-to-POST race; never knowingly post on terminal state; Ready requires in_progress",
-  "validation": {"print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto", "syntax": "PASS", "mongo_and_performance": "PENDING", "final_ci": "PENDING"},
-  "remaining": ["Run isolated Mongo acceptance and resolve failures", "Measure ready with synthetic 20-second provider and search at 1/10/50", "Review UI pending/error behavior and integration diff", "Fresh final CI, rollback and governed release gates"],
+  "validation": {
+    "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
+    "syntax": "PASS",
+    "mongo_and_performance": "PENDING",
+    "final_ci": "PENDING",
+    "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
+    "delivery": "28 passed, 9 subtests passed, 1 failure caused by obsolete shipment-read injection; corrected rerun pending",
+    "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
+    "search_performance": "Historical b99 baseline median ms 1 piece 7.845 -> 11.492; 10 pieces 34.055 -> 9.688; 50 pieces 150.027 -> 13.928; seven samples"
+  },
+  "remaining": [
+    "Run isolated Mongo acceptance and resolve failures",
+    "Measure ready with synthetic 20-second provider and search at 1/10/50",
+    "Review UI pending/error behavior and integration diff",
+    "Fresh final CI, rollback and governed release gates"
+  ],
   "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests"
 }

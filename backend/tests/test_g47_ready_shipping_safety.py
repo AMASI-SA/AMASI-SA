@@ -24,7 +24,7 @@ class CounterexampleTests(unittest.IsolatedAsyncioTestCase):
         await self.check("publication")
 
     async def check(self, boundary):
-        result = await counterexample.scenario(boundary)
+        result = await counterexample.scenario(boundary, shipment_read_in_refresh=True)
         self.assertEqual(result["canonical_status"], "delivered")
         self.assertEqual(result["mock_posts"], [])
         self.assertFalse(result["ready"])
