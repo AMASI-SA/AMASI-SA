@@ -73,6 +73,16 @@ async def test_other_owner_cannot_read_label_or_trigger_lookup(saved):
 
 
 @pytest.mark.asyncio
+async def test_received_cancellation_fences_saved_label_before_worker_runs(saved):
+    from salla_integration.shipping_label_inbox import COLLECTION
+    await saved[COLLECTION].insert_one({"user_id": "owner", "order_number": "3001",
+        "state": "pending", "observation": {"shipment_id": "new", "status": "cancelled"}})
+    result = await shipping.refresh_saved_shipping_label(saved, "owner", "3001")
+    assert not result["ready"] and result["label_url"] is None
+    assert result["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_saved_courier_preserves_provider_formatter(saved, monkeypatch):
     await saved.unified_orders.update_one({}, {"$set": {
         f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر",

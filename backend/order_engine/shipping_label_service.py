@@ -1570,6 +1570,17 @@ async def refresh_saved_shipping_label(
         "tracking_url": saved.tracking_url, "courier_name": saved.company,
         "courier_code": saved.company_code,
     })
+    # A cancellation can arrive before the original order/shipment baseline.
+    # Its durable receipt must also fence normal webhook redelivery, not only
+    # the retry worker, before the opt-in client opens a saved artifact.
+    if saved.shipment_id:
+        from salla_integration.shipping_label_inbox import COLLECTION
+        cancelled = await db[COLLECTION].find_one({"user_id": user_id,
+            "$or": [{"order_number": normalized}, {"order_id": str(order.order_id)}],
+            "observation.shipment_id": str(saved.shipment_id),
+            "observation.status": {"$in": list(_CANCELLED)}}, {"_id": 1})
+        if cancelled:
+            snapshot.update(ready=False, status="cancelled")
     if not snapshot["ready"]:
         snapshot["label_url"] = None
     return {

@@ -1,21 +1,38 @@
 """Verified label receipt survives processing failure without provider recovery."""
 from datetime import datetime, timedelta, timezone
+import os
+import uuid
+from urllib.parse import urlparse
 
 import pytest
 from mongomock_motor import AsyncMongoMockClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from salla_integration import shipping_label_inbox as inbox
 from salla_shipping import CURRENT_SHIPPING
 
 
-@pytest.fixture
-async def db(monkeypatch):
-    database = AsyncMongoMockClient(tz_aware=True).label_inbox
+@pytest.fixture(params=["memory", "mongo"])
+async def db(monkeypatch, request):
+    if request.param == "mongo":
+        uri = os.environ.get("BUILD37_TEST_MONGO_URI")
+        if not uri:
+            pytest.skip("isolated Mongo replica set not configured")
+        assert urlparse(uri).hostname in {"localhost", "127.0.0.1"}
+        client = AsyncIOMotorClient(uri, tz_aware=True, serverSelectionTimeoutMS=5000)
+        assert (await client.admin.command("hello")).get("setName")
+    else:
+        client = AsyncMongoMockClient(tz_aware=True)
+    database = client["label_inbox_" + uuid.uuid4().hex]
     await database.salla_integrations.insert_one({"user_id": "owner", "store_id": "merchant"})
     async def owner(scoped, _owner, callback, **kwargs):
         return await callback(scoped)
     monkeypatch.setattr(inbox, "operational_owner", owner)
-    return database
+    try:
+        yield database
+    finally:
+        await client.drop_database(database.name)
+        client.close()
 
 
 def event():
