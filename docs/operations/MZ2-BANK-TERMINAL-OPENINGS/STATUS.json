@@ -2,7 +2,7 @@
   "task_id": "MZ2-BANK-TERMINAL-OPENINGS",
   "branch": "codex/operational-bank-terminal-20261016",
   "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
-  "state": "CI_READY_AWAITING_EMERGENT_RELEASE_PREFLIGHT",
+  "state": "MERGED_ARCHIVE_BUILD_IN_PROGRESS",
   "completed": [
     "Owner-scoped identity-only existing bank catalog",
     "Independent named operational bank or terminal setup without driver or accounting activation",
@@ -30,7 +30,7 @@
     "No native driver-payment or accounting activation changes",
     "Emergent browser tool fails with kernel assets os error3; operator read-only preflight requested"
   ],
-  "next": "Await Manage Publishing Idle confirmation. Production branch remains726cc701bf120d8aa6f7b055f91ce7463c9626b9; PR1401 CLEAN and15 checks passed. Merge exact checked B only after coordination; archive/restore candidate outside /app then official prepare/prepublish/publish/verify. No business writes.",
+  "next": "Wait archive38956947227; do not rerun on failure. Owner supplied guarded ff-only update command for36172c4a. Then hash-check/archive locally, restore generated outputs with old artifacts preserved, official verify-packages/prepare/prepublish; owner Publish once and official verify. No business writes.",
   "production_changed": false,
   "source_sha": "abaacdae8183a70be97e723494a59972d8f32f72",
   "intent_sha": "30c4901ed39c70a1f4f4c3b138c9d25a1790a793",
@@ -43,6 +43,12 @@
     "tracked_clean": true,
     "available_mb": 608,
     "guard": "active=false (owner terminal output)",
-    "manage_publishing": "not supplied"
-  }
+    "manage_publishing": "Idle (owner confirmed)"
+  },
+  "merge_sha": "36172c4a237cce54cd8e89080020cac84ceccf29",
+  "production_branch_changed": true,
+  "production_runtime_changed": false,
+  "archive_run": 38956947227,
+  "archive_tools_branch": "codex/bank-terminal-archive-36172c4a",
+  "archive_tools_sha": "a30b7a2bc9cd4f99c59368d67a6bfc101da096f9"
 }
