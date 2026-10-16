@@ -1,0 +1,22 @@
+{
+  "task": "Operational salary consistency coordinated with employee salary task",
+  "branch": "codex/operational-salary-consistency-20261016",
+  "base": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
+  "status": "TARGETED_TESTS_PASS_INTEGRATION_PENDING",
+  "production_changed": false,
+  "completed": [
+    "Canonical next-day accrual boundary for max(hire,contract start)",
+    "Monthly cumulative rounding for eligible daily operational salary candidates",
+    "Existing salary days, obligations and settled allocations never rewritten",
+    "Changed or missing historical sources produce salary_source_changed issues and audited salary_conflicts",
+    "New employee movements blocked for recorded salary conflicts",
+    "No bridge to MZ2 ledger, no automatic adjustment or reversal"
+  ],
+  "verification": {"local_targeted":"75 passed", "integration":"pending"},
+  "coordination": "Employee task owns employees_v2_routes,employee_payroll_status,operational_atomic and employee UI. It will reject edits touching persisted operational days and invalidate stale operational CAS through revision metadata in its transaction.",
+  "remaining": [
+    "Integration with employee task transaction revision guard",
+    "Approved documented adjustment/reversal contract required for old conflicts; do not clear or rewrite them automatically",
+    "No financial-system transfer contract exists; systems remain mutually exclusive"
+  ]
+}

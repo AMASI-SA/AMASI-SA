@@ -185,6 +185,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         amount = money(payload["amount"])
         currency = payload["currency"]
         row = await entity(db, owner, payload["party_type"], payload["party_id"], currency)
+        if row['kind'] == 'employee' and any(
+                key.startswith('salary:' + row['id'] + ':')
+                for key in state.get('engine', {}).get('salary_conflicts', {})):
+            fail('operational_salary_adjustment_required', 'تغير مصدر استحقاق محفوظ؛ يلزم حل فرق الراتب بتسوية موثقة قبل تسجيل حركة جديدة')
         bank = None
         account_type = payload.get("source_account_type", "bank_auto")
         if account_type not in {"bank_auto", "bank", "cash", "employee_custody"}:

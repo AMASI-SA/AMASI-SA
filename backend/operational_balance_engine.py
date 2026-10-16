@@ -401,48 +401,45 @@ def reconcile(state, sources, as_of):
             engine["cod_reports"] = checkpoint[3]
             issue(str(error), oid)
 
+    from operational_salary_projection import candidates as salary_candidates
     first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
     today = now.astimezone(RIYADH).date()
+    current_salary = {}
     for employee in sources.get("employees", []):
         eid = str(employee.get("id", ""))
         try:
-            revisions = sorted(employee["salary_revisions"], key=lambda r: day(r["effective_from"]))
-            if len({day(r["effective_from"]) for r in revisions}) != len(revisions):
-                raise ValueError("salary_revision_ambiguous")
-            current = first_salary_day
-            while current <= today:
-                key = "salary:" + eid + ":" + str(current)
-                eligibility_start = max([first_salary_day] + [day(employee[f]) for f in ("hire_date", "accrual_start_date") if employee.get(f)])
-                if current < eligibility_start:
-                    current += timedelta(days=1)
-                    continue
-                if employee.get("effective_to") and current > day(employee["effective_to"]):
-                    break
-                if key not in engine["salary_days"]:
-                    active = [r for r in revisions if day(r["effective_from"]) <= current
-                              and (not r.get("effective_to") or current <= day(r["effective_to"]))]
-                    if not active:
-                        issue("salary_contract_missing", key)
-                    else:
-                        revision = active[-1]
-                        status = revision.get("status")
-                        if status not in {"active", "unpaid_leave", "inactive"}:
-                            raise ValueError("salary_status_missing")
-                        salary = money(revision["salary"]) if status == "active" else ZERO
-                        for period in employee.get("payroll_suspension_periods", []):
-                            period_start = period.get("started_on", period.get("start_date"))
-                            period_end = period.get("returned_on", period.get("end_date"))
-                            ends_after = not period_end or (current < day(period_end) if "returned_on" in period else current <= day(period_end))
-                            if day(period_start) <= current and ends_after:
-                                salary = ZERO
-                        days = Decimal(monthrange(current.year, current.month)[1])
-                        # Difference of rounded calendar cumulative entitlement conserves a full month's salary.
-                        earned = Decimal(amount(salary * current.day / days)) - Decimal(amount(salary * (current.day - 1) / days))
-                        engine["salary_days"][key] = {"amount": amount(earned), "revision": deepcopy(revision)}
-                        put(key, "salary", eid, "employee", employee["currency"], confirmed=earned, business_date=current)
-                current += timedelta(days=1)
+            projected, missing = salary_candidates(employee, first_salary_day, today)
+            current_salary.update(projected)
+            for key in missing:
+                issue("salary_contract_missing", key)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), eid)
+    conflicts = {}
+    for key, previous in engine["salary_days"].items():
+        proposed = current_salary.get(key)
+        previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
+        if (proposed is None or previous.get("amount") != proposed["amount"]
+                or previous.get("revision") != proposed["revision"]
+                or previous_currency != proposed["currency"]):
+            conflicts[key] = {"recorded": deepcopy(previous), "proposed": deepcopy(proposed),
+                              "action_required": "review_documented_salary_adjustment"}
+            issue("salary_source_changed", key)
+    previous_conflicts = engine.get("salary_conflicts", {})
+    for key, conflict in conflicts.items():
+        if previous_conflicts.get(key) != conflict:
+            event = {"action": "salary_source_changed", "obligation_id": key,
+                     "before": previous_conflicts.get(key), "after": deepcopy(conflict),
+                     "actor_id": "operational_worker", "source": "mz2", "at": now.isoformat()}
+            event["id"] = fingerprint({**event, "sequence": len(engine["audit"])})
+            engine["audit"].append(event)
+    if conflicts or "salary_conflicts" in engine:
+        engine["salary_conflicts"] = conflicts
+    for key, candidate in current_salary.items():
+        if key not in engine["salary_days"]:
+            engine["salary_days"][key] = candidate
+            eid, business_day = key[len("salary:"):].rsplit(":", 1)
+            put(key, "salary", eid, "employee", candidate["currency"],
+                confirmed=Decimal(candidate["amount"]), business_date=business_day)
 
     for snapshot in sorted(sources.get("ad_snapshots", sources.get("advertising", [])), key=lambda r: str(r.get("observed_at", ""))):
         key = "advertising:" + str(snapshot.get("account_id")) + ":" + str(snapshot.get("date"))
