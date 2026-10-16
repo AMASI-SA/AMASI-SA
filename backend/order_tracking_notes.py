@@ -191,6 +191,25 @@ async def enforce_stage_instructions(
         order_item_id=order_item_id,
         order_wide=order_wide,
     )
+    return enforce_instruction_rows(
+        rows, stage=stage, actor_id=actor_id, piece_id=piece_id,
+        order_item_id=order_item_id, order_wide=order_wide,
+    )
+
+
+def enforce_instruction_rows(
+    rows: list[dict[str, Any]], *, stage: str, actor_id: str,
+    piece_id: str = "", order_item_id: str = "", order_wide: bool = False,
+) -> list[dict[str, Any]]:
+    """Enforce a request-local instruction read using the same piece/actor policy.
+
+    Search may share one order-stage read across its pieces. Mutation callers
+    must continue using enforce_stage_instructions for fresh database evidence.
+    """
+    rows = [row for row in rows if instruction_applies_to(
+        row, stage=stage, piece_id=text(piece_id),
+        order_item_id=text(order_item_id), order_wide=order_wide,
+    )]
     blocking: list[dict[str, Any]] = []
     for row in rows:
         enforcement = text(row.get("enforcement")) or "notice"
@@ -225,6 +244,7 @@ __all__ = [
     "active_stage_instructions",
     "actor_has_acknowledged",
     "enforce_stage_instructions",
+    "enforce_instruction_rows",
     "instruction_snapshot",
     "instruction_targets",
     "public_instruction",

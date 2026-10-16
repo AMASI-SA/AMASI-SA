@@ -1,0 +1,26 @@
+SHIPPING CONTRACT VALIDATION
+
+Working tree: C:/Users/amasi/ready-shipping-final-integration
+Python: C:/Users/amasi/build37-test-venv/Scripts/python.exe
+PYTHONPATH: C:/Users/amasi/ready-shipping-final-integration/backend
+BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27943/?replicaSet=readyShipping
+
+Command:
+python -m pytest --noconftest -p no:cacheprovider --asyncio-mode=auto -q --tb=short backend/tests/test_shipping_print_legacy_path.py backend/tests/test_shipping_label_current_guard.py backend/tests/test_shipping_snapshot_bootstrap.py backend/tests/test_fulfillment_carrier_label.py
+
+Final result: 317 passed in 55.79s; exit code 0.
+Memory and isolated real-Mongo variants were both exercised. No skipped cases.
+Tests mocked Salla provider I/O. No live Salla calls.
+
+Before fixture adaptation (same four original test files against in-progress runtime changes; Mongo URI not configured): 126 failed, 63 passed, 128 skipped in 15.93s.
+Intermediate adaptation, before later cache-revocation wrapper: 189 passed, 128 skipped in 9.71s.
+Final adaptation includes exact cache-revocation assertions and real Mongo owner transactions.
+
+Authorized contract expectation changes:
+1. Legacy issue no longer expects unconditional POST /shipments; requires read-only legacy enrollment, zero provider POST and no local shipment identity replacement.
+2. Experimental force_store_courier cannot replace the authoritative provider carrier.
+3. Successful print remains business-read-only; rejected fresh reads may invalidate cached label success and increment shipping_status_epoch. Tests permit only this exact rejection patch, with other business data unchanged.
+4. Fixtures now contain completed local assembly and unambiguous root/raw canonical Salla status. Only mongomock has a test-local owner transaction adapter; Mongo variants retain operational_owner.
+
+Requested test_store_courier_completion.py does not exist in this checkout; no substitute file was modified.
+No commit or production code changes made by this test subtask.
