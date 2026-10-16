@@ -622,6 +622,13 @@ async def materialize_preparation_pieces(
             status_code=409,
             detail={"code": "preparation_batch_missing_for_piece_materialization"},
         )
+    from reviewed_products_catalog import bundle_parent_line_ids
+    bundle_lines = await bundle_parent_line_ids(db, user_id,
+        [_text(line.get("order_number")) for line in batch.get("lines", []) if isinstance(line, dict)])
+    if any(_text(line.get("order_item_id")) in bundle_lines[_text(line.get("order_number"))]
+           for line in batch.get("lines", []) if isinstance(line, dict)):
+        raise HTTPException(409, detail={"code": "bundle_parent_preparation_export_forbidden",
+            "requirements_route": "/fulfillment-v2/bundles/report"})
     history = await db[PIECES].find(
         {
             "user_id": user_id,

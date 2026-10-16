@@ -6,6 +6,8 @@ import {
 import { toast } from "sonner";
 
 import ProductControlCenterPanel from "../components/products/ProductControlCenterPanel";
+import BundleEditor from "../components/products/BundleEditor";
+import BundleReportPanel from "../components/products/BundleReportPanel";
 import ProductMediaDraftEditor from "../components/products/ProductMediaDraftEditor";
 import ProductOptionCostEditor from "../components/products/ProductOptionCostEditor";
 import ProductOperationsEditor from "../components/products/ProductOperationsEditor";
@@ -260,6 +262,7 @@ export default function MezanProductsWorkspace() {
     }
 
     return <div className="min-w-0 space-y-3 overflow-x-hidden sm:space-y-4" dir="rtl">
+        <BundleReportPanel />
         <SkuModal preview={skuPreview} busy={skuBusy} onClose={() => setSkuPreview(null)} onApply={applySkuBatch} />
 
         <section className="rounded-2xl border bg-white p-3 shadow-sm sm:rounded-3xl sm:p-4">
@@ -319,6 +322,7 @@ export default function MezanProductsWorkspace() {
                 {detailLoading ? <div className="flex h-72 items-center justify-center"><SpinnerGap className="animate-spin" /></div> : !selected ? <div className="flex h-72 flex-col items-center justify-center text-slate-400"><Cube size={54} /><p>اختر منتجًا</p></div> : <div className="min-w-0 space-y-4 sm:space-y-5">
                     <div className="flex min-w-0 items-center gap-3 border-b pb-4 sm:gap-4 sm:pb-5"><ProductThumb product={selected} size="lg" /><div className="min-w-0"><h1 className="break-words text-lg font-black sm:text-xl">{selected.name}</h1><p className="break-all text-xs text-slate-500">Salla #{selected.salla_product_id} · {selected.sku || "بدون SKU"}</p></div></div>
                     <ProductControlCenterPanel productId={selectedId} product={selected} onPublished={loadSelected} />
+                    <BundleEditor key={selectedId} productId={selectedId} salePrice={selected.sale_price ?? selected.price} />
                     <ProductMediaDraftEditor productId={selectedId} images={media} onPublished={loadSelected} />
                     <section className="rounded-2xl border p-3 sm:p-4"><h2 className="mb-3 font-black">معاينة وصف المنتج الحالي</h2><DescriptionPreview html={selected.description_html || selected.description} /></section>
                     <section id="mezan-product-cost-editor" className="rounded-2xl border border-emerald-200 p-3 sm:p-4"><div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-black">التكلفة الأساسية — Mezan</h2><p className="text-xs text-slate-500">مستقلة عن نشر بيانات المنتج إلى سلة.</p></div><button onClick={saveCosts} disabled={costSaving} className="rounded-xl bg-emerald-700 px-4 py-2 text-white"><FloppyDisk className="inline" /> حفظ</button></div><div className="grid gap-3 sm:grid-cols-2 sm:gap-4"><label className="text-sm">تكلفة سلة<input value={selected.cost_price_from_salla ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-50 p-3" /></label><label className="text-sm">تكلفة المنتج في ميزان<input type="number" min="0" step="0.01" value={costs.base_cost} onChange={(event) => setCosts((current) => ({ ...current, base_cost: event.target.value }))} className="mt-1 w-full rounded-xl border border-emerald-300 p-3" /></label></div></section>

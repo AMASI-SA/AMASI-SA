@@ -27,6 +27,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
+    "bundle_catalog": frozenset({"mezan_bundle_definitions_v2"}),
     "physical_receipt": frozenset({"warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "fulfillment": _OWNED | {"warehouse_locations", "mezan_inventory_receipts_v2", "products", "payment_transactions", "tamara_attribution_log", "order_review_auth_sessions_v2"},
     "employee_setup": frozenset({
