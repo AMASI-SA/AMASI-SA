@@ -1,8 +1,8 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "source_checkpoint_not_deployed",
-  "branch": "codex/snapchat-multi-account-integrated-20261016",
-  "production_base": "60096543ecd3e108504e3ca71e4ebfec0c8da143",
+  "state": "attribution_followup_verified_ready_for_v5",
+  "branch": "codex/snapchat-account-attribution-followup-20261016",
+  "production_base": "f8b49d0f7677adeeca2d8235766a5b87ca95a95d",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
   "implemented": [
     "Enabled accounts only; zero spend remains enabled",
@@ -10,24 +10,25 @@
     "Shared Riyadh portfolio dates and per-account FX",
     "Account-bound readiness, phase5, AI enrichment and execution evidence",
     "Creation account choice and original-account edit binding",
-    "Scheduler filters enabled accounts before execution cap"
+    "Scheduler filters enabled accounts before execution cap",
+    "Exact campaign ownership excludes only proven foreign-account orders from target attribution counters; unknown and ambiguous orders stay blocked"
   ],
   "verification": {
-    "integrated_backend": "251 passed, 1 skipped; exit 0",
+    "integrated_backend": "263 passed, 1 skipped; exit 0",
     "frontend": "54 passed in 3 suites; exit 0",
     "diff_check": "exit 0",
-    "prior_environment_failure": "7 legacy HTTP integration tests require configured disposable service URL; no URL was configured, so requests failed locally with MissingSchema before network. Excluded from local unit scope; no production registration performed."
+    "prior_environment_failure": "7 legacy HTTP integration tests require configured disposable service URL; no URL was configured, so requests failed locally with MissingSchema before network. Excluded from local unit scope; no production registration performed.",
+    "attribution_regression": "61 passed, 1 skipped across account scope, attribution readiness, period, entity and timezone suites; exit 0"
   },
   "live_read_only_evidence": "Exactly two Mezan-selected connected Snapchat accounts: Saudi/SAR/Asia-Riyadh and Self Service/USD/America-Los_Angeles; other seven disabled.",
-  "production_changed": false,
+  "production_changed": true,
   "advertising_writes": false,
   "remaining": [
-    "CI and governed clean source build",
-    "Freeze matching v5 intent-only commit",
-    "Review and merge preserving A/B ancestry",
-    "Check lease, prepare/prepublish and authorized deployment",
-    "Verify runtime and both account views/aggregate/AI in Production"
+    "Governed source/intent CI and production deployment of attribution fix",
+    "Recheck both live account readiness and remaining unknown orders"
   ],
-  "next_safe_action": "Push source checkpoint, open Draft PR, run candidate readiness workflow against exact production base; do not publish before v5 gates.",
-  "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate."
+  "next_safe_action": "Push verified source A; freeze independent governed intent and compare CI candidate before intent-only B and deployment.",
+  "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
+  "deployed_release": "rg5-415a9b55f1b9e4cd137cc3e990acca476f06244098002fc122800d8762f64dd2, source175252f9e, guardverified3checks, leaseinactive, Emergentgreen20:51Saudi",
+  "live_acceptance": "Only2enabledaccounts displayed, portfolio2663.59SAR(US2663.59+Saudi0) onOct16Riyadh; US7of7;Saudi6of7(64unlinked) day15. Exactforeignownershipof64notyetproven."
 }
