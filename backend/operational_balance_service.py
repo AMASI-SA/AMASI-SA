@@ -192,7 +192,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         if account_type not in {"bank_auto", "bank", "cash", "employee_custody"}:
             fail("operational_source_account_type_invalid", "نوع مصدر الحركة غير صحيح", 422)
         if payload.get("bank_id"):
-            # Exact financial ID, only bank/cash. No fuzzy fallback or old accounts.
+            # Exact catalog ID, only bank/cash. No name matching or imported balances.
             from operational_balance_sources import entities
             try:
                 account_kinds = ("bank", "cash") if account_type == "bank_auto" else (account_type,)

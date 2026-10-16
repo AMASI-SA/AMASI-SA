@@ -24,7 +24,7 @@ jest.mock('./api', () => ({
     movements: jest.fn(),
     audit: jest.fn()
   },
-  entityKinds: [['pos_receivable', 'جهاز الشبكة'], ['supplier', 'موردين'], ['bank', 'بنوك'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
+  entityKinds: [['supplier', 'موردين'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'],['employee_custody','عهد الموظفين'],['operating_expense','مصروفات تشغيلية'],['owner_withdrawal','سحوبات المالك/المدير'],['external_person','جهات خارجية']],
   requestId: jest.fn(() => `request-${Math.random()}`),
   messageFor: () => 'تعذر إتمام العملية', feeIncomplete: issue => /fee/.test(issue?.code||'')
 }));
@@ -115,20 +115,34 @@ test('successful opening clears form and increments counter', async () => {
   expect(host.querySelector('select').value).toBe('');
 });
 
-test('terminal opening is explicit receivable and never auto-imports an amount', async () => {
+test('terminal is an independent bank-like opening without driver setup', async () => {
   await render(<OpeningBalances context={{opening_count:0}}/>);
-  await input(host.querySelector('select'), 'pos_receivable');
-  await input(host.querySelectorAll('select')[1], 'pos_receivable1');
+  await input(host.querySelector('select'), 'bank');
+  await input(host.querySelectorAll('select')[1], 'bank1');
   expect(host.querySelector('input').value).toBe('');
-  expect(host.textContent).toContain('لا تكرره في البنك أو عهدة المندوب');
-  expect(button('له')).toBeUndefined();
+  expect(host.textContent).toContain('رصيد الشبكة مستقل');
+  expect(button('+ إضافة حساب بنك أو شبكة')).toBeDefined();
   expect(api.opening).not.toHaveBeenCalled();
-  await click('مبلغ لنا لدى الشبكة');
+  await click('عليه');
   await input(host.querySelector('input'), '250.00');
   await click('حفظ');
-  expect(api.opening).toHaveBeenCalledWith(expect.objectContaining({party_type:'pos_receivable',
-    party_id:'pos_receivable1', direction:'for_us', amount:'250.00', currency:'SAR'}));
+  expect(api.opening).toHaveBeenCalledWith(expect.objectContaining({party_type:'bank',
+    party_id:'bank1', direction:'for_us', amount:'250.00', currency:'SAR'}));
 });
+
+test('adding terminal identity does not save or import a balance', async () => {
+  api.addEntity.mockResolvedValue({id:'operational-bank:terminal',name:'الشبكة',currency:'SAR'});
+  await render(<OpeningBalances context={{opening_count:0}}/>);
+  await input(host.querySelector('select'), 'bank');
+  await click('+ إضافة حساب بنك أو شبكة');
+  await input(host.querySelector('.op-add input'), 'الشبكة');
+  await click('إضافة');
+  expect(api.addEntity).toHaveBeenCalledWith('bank', expect.objectContaining({name:'الشبكة',currency:'SAR'}));
+  expect(api.opening).not.toHaveBeenCalled();
+  expect(api.finish).not.toHaveBeenCalled();
+  expect(host.querySelector('input').value).toBe('');
+});
+
 test('ambiguous failure keeps values and same retry identity', async () => {
   api.opening.mockRejectedValueOnce(new Error('network'));
   await render(<OpeningBalances context={{
@@ -516,10 +530,10 @@ test('connected advertising account is visible but cannot bypass missing financi
  expect(api.opening).not.toHaveBeenCalled();expect(api.movement).not.toHaveBeenCalled();
 });
 
-test('empty bank picker explains order identity versus balance identity without creating records',async()=>{
+test('empty bank picker offers named account setup without importing balances',async()=>{
  api.entities.mockResolvedValue({items:[]});
  await render(<EntityPicker kind="bank" value="" onChange={jest.fn()}/>);
- expect(host.textContent).toContain('ظهور البنك في الطلبات لا يربطه تلقائيًا بالرصيد');
+ expect(host.textContent).toContain('اختر الحساب البنكي أو أضف حساب جهاز الشبكة باسمه');
  expect(api.addEntity).not.toHaveBeenCalled();
 });
 

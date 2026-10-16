@@ -252,12 +252,14 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
+    if permission == "bank_manage" and actor.get("role") != "owner":
+        fail("operational_bank_owner_required", "إضافة حساب بنك أو شبكة متاحة للمالك فقط", 403)
     if permission == "ad_selection_manage" and actor.get("role") != "owner":
         fail("operational_ad_selection_owner_required", "اختيار الحسابات متاح للمالك فقط", 403)
     if permission in {"cash_manage", "beneficiary_manage"} and actor.get("role") != "owner":
         fail("operational_cash_owner_required" if permission == "cash_manage" else "operational_beneficiary_owner_required",
              "إضافة الصندوق متاحة للمالك فقط" if permission == "cash_manage" else "إضافة مستفيد سحوبات متاحة للمالك فقط", 403)
-    if mobile and permission not in {"cash_manage", "beneficiary_manage"}:
+    if mobile and permission not in {"cash_manage", "beneficiary_manage", "bank_manage"}:
         access = await mobile_app_access_for_user(db, actor)
         granted = set(access.get("permissions") or []) if access.get("enabled") else set()
         required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
@@ -293,8 +295,8 @@ def make_operational_balance_router(db, current_user):
                 or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
                 or re.fullmatch(r"/customer-exchanges/[^/]+/actions",path)):
             permission = "move"
-        elif request.method == "POST" and path in {"/entities/cash", "/entities/owner_withdrawal"}:
-            permission = "cash_manage" if path.endswith("/cash") else "beneficiary_manage"
+        elif request.method == "POST" and path in {"/entities/cash", "/entities/owner_withdrawal", "/entities/bank"}:
+            permission = "bank_manage" if path.endswith("/bank") else "cash_manage" if path.endswith("/cash") else "beneficiary_manage"
         if permission is None:
             fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
         await scope(db, user, permission)
@@ -428,7 +430,7 @@ def make_operational_balance_router(db, current_user):
         return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
     async def entity_guard(request: HttpRequest, user=Depends(current_user)):
         from contextlib import asynccontextmanager
-        permission = {"cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(request.url.path.rstrip("/").split("/")[-1], "manage")
+        permission = {"bank": "bank_manage", "cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(request.url.path.rstrip("/").split("/")[-1], "manage")
         async with asynccontextmanager(guarded(permission))(request, user) as checked:
             yield checked
 
@@ -494,15 +496,15 @@ def make_operational_balance_router(db, current_user):
             fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
 
     @router.post("/entities/{kind}")
-    async def add_entity(kind: Literal["cash", "external_person", "operating_expense", "owner_withdrawal"], payload: AddEntity, user=Depends(entity_guard)):
-        actor, owner, _ = await scope(db, user, {"cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage"))
+    async def add_entity(kind: Literal["bank", "cash", "external_person", "operating_expense", "owner_withdrawal"], payload: AddEntity, user=Depends(entity_guard)):
+        actor, owner, _ = await scope(db, user, {"bank": "bank_manage", "cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage"))
         state = await read(db, owner)
         if state["status"] not in {"draft", "active"}:
             fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")
         from operational_balance_service import accounting_inactive
         await accounting_inactive(db, owner)
         identity = str(uuid5(NAMESPACE_URL, f"operational:{owner}:{kind}:{payload.request_id}"))
-        collection = {"cash": "mz2_financial_accounts", "external_person": "mz2_external_persons_v2",
+        collection = {"bank": "mz2_operational_bank_accounts", "cash": "mz2_financial_accounts", "external_person": "mz2_external_persons_v2",
                       "operating_expense": "expense_categories", "owner_withdrawal": "mz2_operational_owner_beneficiaries_v2"}[kind]
         if kind == "operating_expense":
             identity = "op_expense_" + identity.replace("-", "")
@@ -512,7 +514,9 @@ def make_operational_balance_router(db, current_user):
                "created_at": stamp, "created_by": actor["id"], "updated_at": stamp, "updated_by": actor["id"],
                "operational_request_hash": digest(payload.model_dump()),
                "audit": [{"action": "create", "actor_id": actor["id"], "at": stamp}]}
-        if kind == "cash":
+        if kind == "bank":
+            row.update(account_type="bank", source="operational_balance")
+        elif kind == "cash":
             row.update(account_type="cash", external_ref=None)
         elif kind == "external_person":
             row.update(kind="external_person", name_lower=" ".join(payload.name.split()).casefold(),
@@ -536,7 +540,7 @@ def make_operational_balance_router(db, current_user):
                 existing = await db[collection].find_one({"user_id": owner, "id": identity})
         if not existing or existing.get("operational_request_hash") != row["operational_request_hash"]:
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
-        return {"id": identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
+        return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
 
     @router.post("/openings")
     async def opening(payload: Opening, user=Depends(manage_guard)):

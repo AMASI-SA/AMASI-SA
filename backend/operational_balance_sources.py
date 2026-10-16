@@ -39,6 +39,7 @@ AD_SOURCES = {
     'google_ads': ('google_ads', 'mezan_google_ads_performance_daily_v2'),
 }
 ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
+    'accounts', 'mz2_operational_bank_accounts',  # Identity only; excluded from financial scans.
     'mz2_opening_facts_v2',  # POS identity only; never import native opening amounts.
     'settings',  # Projected courier identity only; excluded from financial-source scans.
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
@@ -257,7 +258,7 @@ def usable(row):
 
 
 async def rows(db, owner, collection):
-    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {'users', 'settings'}:
+    if not owner or collection not in ALLOWED_COLLECTIONS or collection in {'users', 'settings', 'accounts', 'mz2_operational_bank_accounts'}:
         raise ValueError('operational_source_rejected')
     result = await db[collection].find({'user_id': owner}).to_list(MAX_ROWS + 1)
     if len(result) > MAX_ROWS:
@@ -431,6 +432,9 @@ async def entities(db, owner, kind, *, include_unready=False):
                                platform_account_id=account.get('external_account_id'),
                                ready=False, settings_complete=False,
                                setup_issue='ad_financial_binding_required'))
+    elif kind == 'bank':
+        from operational_bank_catalog import bank_identities
+        source = await bank_identities(db, owner)
     elif kind == 'pos_receivable':
         from operational_pos_identity import pos_candidates
         source = pos_candidates(await rows(db, owner, 'mz2_opening_facts_v2'), owner)
@@ -593,7 +597,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
