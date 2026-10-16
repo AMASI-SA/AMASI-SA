@@ -1,6 +1,6 @@
 {
   "task_id": "SNAP-MULTI-ACCOUNT-20261016",
-  "state": "native_financial_deployed_verified_live_acceptance_in_progress",
+  "state": "native_financial_deployed_verified_both_account_previews_passed",
   "branch": "codex/snapchat-native-financial-evidence-20261016",
   "production_base": "36172c4a237cce54cd8e89080020cac84ceccf29",
   "scope": "Mezan-enabled Snapchat account selection, account-bound reports/AI/creation/edits, aggregate SAR dashboard and independent background sync",
@@ -27,15 +27,15 @@
   "production_changed": true,
   "advertising_writes": false,
   "remaining": [
-    "Postdeploy SARreadiness and bothaccountpreview acceptance",
-    "Monthlyadvertisingquality and actualmissingcosts remain scale blockers",
-    "Real provider execution requires specific approvedproposal"
+    "Monthly advertising quality remains incomplete; latest AI snapshot reports 77 missing-cost orders and 112 incomplete-profit orders. Actual costs require business data.",
+    "Real provider execution remains untested for this release and requires a specific approved proposal.",
+    "Broad product-name catalogue search failed earlier; exact SKU AMS11509 worked in both live previews. Root cause not yet proven."
   ],
-  "next_safe_action": "Complete read-only readiness and previewonly flows on deployed97aa64777. No newdeploymentneeded. Never deploythisevidencebranch.",
+  "next_safe_action": "Diagnose monthly advertising quality reason codes and catalogue broad-search failure. Preserve deployed release 97aa64777; never deploy this evidence branch. Do not invent product costs or execute unapproved advertisements.",
   "superseded_candidate": "PR1393/c5518f8e7: reviewed v5 CI passed but base advanced; never merge or deploy this stale candidate.",
   "deployed_release": "rg5-71ff2521a713e76d185bab55de959e1eaf1f14e9851d65c2698d5e12a5730c54; sourcef8c268396c77445761db5ca16da7c0e758729acc; deployment97aa64777a9bbd7b10bd6b0b8001aba26297b926; green23:03Saudi; verifytrue checks3; leaseinactive",
-  "live_acceptance": "Fresh postdeploy USD account7/7 forclosedOct15,unlinked0,costmissing0. SAR and previews pending. Latest AI19:15UTC monthlyadvertisingunknown,missingcost77,incomplete112; recommendation generationworks.",
+  "live_acceptance": "Postdeploy USD and SAR readiness both passed all 7 checks for closed 2026-10-15, unlinked 0 and missing cost 0. USD preview 9a48f7ea at 23:08 Saudi and SAR preview bfedabea at 23:11 Saudi succeeded; each native budget 50 = 50000000 micro, PAUSED, awaiting approval, no provider entity created. No advertising writes.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1402",
   "release_blocker": null,
-  "live_preview_blocker": "Broadproductquery failedearlier; exactSKU AMS11509 succeeds. No adwrite. Retry currentreleasepreview."
+  "live_preview_blocker": null
 }
