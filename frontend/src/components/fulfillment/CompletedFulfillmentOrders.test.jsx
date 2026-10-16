@@ -1,3 +1,6 @@
+import { pendingLabelPrint } from "../../lib/openCurrentCarrierLabel";
+beforeEach(() => { pendingLabelPrint.setScope(null); window.localStorage.clear(); pendingLabelPrint.setScope("test-api:actor"); });
+afterEach(() => pendingLabelPrint.setScope(null));
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -244,6 +247,7 @@ test("opening refreshes first and opens only the new provider artifact", async (
     const opened = jest.spyOn(window, "open").mockImplementation(() => labelWindow);
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
     await openCurrentCarrierLabel("1001");
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenLastCalledWith("1001");
     expect(opened).toHaveBeenCalledWith("about:blank", "_blank");
     expect(labelWindow.location.replace).toHaveBeenCalledWith("https://fresh.test/label");
@@ -251,13 +255,12 @@ test("opening refreshes first and opens only the new provider artifact", async (
     opened.mockRestore();
 });
 
-test("provider failure and missing artifact open nothing", async () => {
+test("provider failure retains intent without opening an artifact", async () => {
     const opened = jest.spyOn(window, "open").mockImplementation(() => null);
-    refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("salla_shipping_unavailable"));
-    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("salla_shipping_unavailable");
-    refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true });
-    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow();
-    expect(opened).not.toHaveBeenCalled();
+    refreshCompletedOrderCarrierLabel.mockRejectedValueOnce(new Error("transport unavailable"));
+    await expect(openCurrentCarrierLabel("1001")).resolves.toEqual({ pending: true });
+    expect(pendingLabelPrint.snapshot()[0].state).toBe("waiting");
+    expect(opened).toHaveBeenCalledTimes(1);
     opened.mockRestore();
 });
 
@@ -268,6 +271,7 @@ test("store courier also prints only freshly verified print data", async () => {
     printStoreCourierLabel.mockReturnValueOnce(true);
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_type: "store_courier", print_data: data });
     await openCurrentCarrierLabel("1001");
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
     expect(printStoreCourierLabel).toHaveBeenLastCalledWith(popup, data);
     opened.mockRestore();
 });
@@ -367,10 +371,12 @@ test.each([false, true])("current shipment button refreshes without issuance or 
 });
 
 
-test("blocked external popup reports action error after fresh verification", async () => {
+test("blocked external popup keeps a ready intent for explicit opening", async () => {
     const opened = jest.spyOn(window, "open").mockReturnValue(null);
     refreshCompletedOrderCarrierLabel.mockResolvedValueOnce({ ready: true, label_url: "https://fresh.test/label" });
-    await expect(openCurrentCarrierLabel("1001")).rejects.toThrow("اسمح بالنوافذ المنبثقة");
+    await expect(openCurrentCarrierLabel("1001")).resolves.toEqual({ pending: true });
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    expect(pendingLabelPrint.snapshot()[0].state).toBe("ready");
     expect(refreshCompletedOrderCarrierLabel).toHaveBeenCalledTimes(1);
     expect(opened).toHaveBeenCalledTimes(1);
     opened.mockRestore();
@@ -402,8 +408,8 @@ test.each(["same-order", "other-order", "permission"])("legacy print with stale 
             current_shipment: { ...order.current_shipment, shipment_id: "CHANGED", tracking_number: "CHANGED", carrier_updated_at: "2100" },
         }} permissions={{ ...permissions, can_print: change !== "permission" }} />));
         await act(async () => resolve({ ready: true, shipment_id: "PROVIDER", tracking_number: "PROVIDER-AWB", label_url: "https://salla.test/ready.pdf" }));
-        if (change === "same-order") expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
-        else expect(opened).not.toHaveBeenCalled();
+        if (change !== "permission") expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
+        else expect(popup.location.replace).not.toHaveBeenCalled();
         expect(issueCompletedOrderCarrierLabel).not.toHaveBeenCalled();
     } finally {
         await act(async () => root.unmount());

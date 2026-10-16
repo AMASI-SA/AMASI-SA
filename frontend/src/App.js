@@ -125,6 +125,7 @@ import ShippingLedger from "./pages/ShippingLedger";
 import AdAccountForensic from "./pages/AdAccountForensic";
 import BalanceDriftDiagnostic from "./pages/BalanceDriftDiagnostic";
 import AIControlCenter from "./pages/AIControlCenter";
+import PendingLabelPrints from "./components/PendingLabelPrints";
 import { Toaster } from "./components/ui/sonner";
 
 const OperationalBalances = lazy(() => import("./pages/operational/OperationalBalances"));
@@ -478,6 +479,7 @@ export default function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
+                <PendingLabelPrints />
                 <AppRoutes />
                 <Toaster richColors position="top-center" />
             </AuthProvider>

@@ -74,9 +74,10 @@ export async function refreshCompletedOrderCarrierLabel(orderNumber) {
     try {
         return (await api.post(
             `/fulfillment-v2/completed/${encodeURIComponent(normalized)}/carrier-label/refresh`,
+            undefined, { timeout: 15000 },
         )).data;
     } catch (error) {
-        throw new Error(detailMessage(error, "تعذر التحقق من رابط البوليصة في سلة."));
+        throw fulfillmentError(error, "تعذر قراءة رابط البوليصة المحفوظ في ميزان.");
     }
 }
 

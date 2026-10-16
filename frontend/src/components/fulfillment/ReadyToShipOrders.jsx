@@ -27,7 +27,7 @@ import {
     searchAssemblyOrder,
 } from "../../services/preparationWorkService";
 import { CameraScanner } from "./PreparationEmployeeReceivingWorkspace";
-import { openCurrentCarrierLabel } from "../../lib/openCurrentCarrierLabel";
+import { openCurrentCarrierLabel, pendingLabelPrint, subscribePendingLabelReady } from "../../lib/openCurrentCarrierLabel";
 import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner";
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
@@ -209,6 +209,12 @@ export function CompletedAssemblyOrderCard({
     const openingLock = useRef(false);
     const owner = useRef(null);
     owner.current = { orderNumber, allowed: canPrint && assemblyCompletionConfirmed === true };
+    useEffect(() => subscribePendingLabelReady((number, current) => {
+        if (owner.current.allowed && owner.current.orderNumber === number) onOpened?.(current);
+    }), [onOpened]);
+    useEffect(() => {
+        if (!canPrint || assemblyCompletionConfirmed !== true) pendingLabelPrint.cancel(orderNumber);
+    }, [canPrint, assemblyCompletionConfirmed, orderNumber]);
     const mounted = useRef(true);
     useEffect(() => {
         mounted.current = true;
@@ -223,7 +229,7 @@ export function CompletedAssemblyOrderCard({
         setOpenError("");
         try {
             const current = await openCurrentCarrierLabel(requestedOrder, isCurrent);
-            if (current && isCurrent()) onOpened?.(current);
+            if (current?.ready && isCurrent()) onOpened?.(current);
         } catch (failure) {
             if (isCurrent()) setOpenError(failure.message);
         } finally {

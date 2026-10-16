@@ -1,3 +1,6 @@
+import { pendingLabelPrint } from "../lib/openCurrentCarrierLabel";
+beforeEach(() => { pendingLabelPrint.setScope(null); window.localStorage.clear(); pendingLabelPrint.setScope("test-api:actor"); });
+afterEach(() => pendingLabelPrint.setScope(null));
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { ShippingCard } from "./OrderDetailsV2.jsx";
@@ -83,7 +86,7 @@ test("legacy store-courier printing always uses the read endpoint and formatter"
     expect(issueShippingLabel).not.toHaveBeenCalled();
 });
 
-test.each(["order", "unmount", "permission"])("late print cannot open after %s changes", async (change) => {
+test.each(["order", "unmount", "permission"])("pending intent survives navigation but respects %s changes", async (change) => {
     const pending = deferred();
     verifyShippingLabel.mockReturnValueOnce(pending.promise);
     await render();
@@ -92,20 +95,23 @@ test.each(["order", "unmount", "permission"])("late print cannot open after %s c
     if (change === "unmount") await act(async () => root.render(null));
     if (change === "permission") await act(async () => root.render(<ShippingCard shipping={carrier} customer={{}} orderNumber="A" allowPrinting={false} />));
     await act(async () => pending.resolve({ ready: true, label_url: "https://salla.test/ready.pdf" }));
-    expect(popup.location.replace).not.toHaveBeenCalled();
+    if (change === "permission") {
+        expect(popup.location.replace).not.toHaveBeenCalled();
+        expect(popup.close).toHaveBeenCalled();
+    } else expect(popup.location.replace).toHaveBeenCalledWith("https://salla.test/ready.pdf");
     expect(printStoreCourierLabel).not.toHaveBeenCalled();
-    expect(popup.close).toHaveBeenCalled();
 });
 
-test.each(["pending", "failure"])("%s closes the window without printing a cached label or issuing", async (kind) => {
+test.each(["pending", "failure"])("%s retains intent without printing a cached label or issuing", async (kind) => {
     if (kind === "failure") verifyShippingLabel.mockRejectedValueOnce(new Error("تعذّر التحقق من البوليصة الحالية في سلة."));
     else verifyShippingLabel.mockResolvedValueOnce({ ready: false, message: "لا توجد بوليصة فعّالة حاليًا في سلة؛ أوقفت الطباعة." });
     await render({ ...carrier, tracking_number: "OLD", label_url: "https://old.test/label" });
     await clickLabel();
-    expect(popup.close).toHaveBeenCalled();
+    expect(popup.close).not.toHaveBeenCalled();
     expect(popup.location.replace).not.toHaveBeenCalled();
     expect(issueShippingLabel).not.toHaveBeenCalled();
-    expect(host.textContent).toContain(kind === "failure" ? "تعذّر التحقق" : "لا توجد بوليصة فعّالة");
+    expect(pendingLabelPrint.snapshot()[0].state).toBe("waiting");
+    expect(host.textContent).toContain("طلب الطباعة محفوظ");
 });
 
 test("printing remains unavailable without permission", async () => {

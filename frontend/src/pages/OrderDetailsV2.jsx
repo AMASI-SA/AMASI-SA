@@ -32,13 +32,12 @@ import { useOrderItems } from "../hooks/useOrderItems";
 import {
     markOrderRead,
     refreshOrderFromSalla,
-    verifyShippingLabel,
 } from "../services/orderEngine";
 import ReturnDecisionCard from "../components/orders/ReturnDecisionCard";
 import OrderActivityPanel from "../components/orders/OrderActivityPanel";
 import BundleOperationalPanel from "../components/orders/BundleOperationalPanel";
 import FulfillmentExperimentPanel from "../components/fulfillment/FulfillmentExperimentPanel";
-import { printStoreCourierLabel } from "../lib/storeCourierLabelPrint";
+import { openCurrentCarrierLabel, pendingLabelPrint } from "../lib/openCurrentCarrierLabel";
 
 const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR"]);
 
@@ -376,7 +375,6 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
     orderRef.current = orderNumber;
     const permissionRef = useRef(allowPrinting);
     permissionRef.current = allowPrinting;
-    const pendingPrintWindowRef = useRef(null);
     const printingRef = useRef(false);
     const address = shipping.address || customer.shipping_address || {};
     const tracking = shipping.tracking_number || shipping.shipment_number || shipping.waybill_number;
@@ -386,8 +384,6 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
 
     useEffect(() => {
         requestRef.current += 1;
-        pendingPrintWindowRef.current?.close();
-        pendingPrintWindowRef.current = null;
         printingRef.current = false;
         setIssuing(false);
         setIssueError("");
@@ -398,9 +394,12 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
         return () => {
             mountedRef.current = false;
             requestRef.current += 1;
-            pendingPrintWindowRef.current?.close();
         };
     }, []);
+
+    useEffect(() => {
+        if (!allowPrinting) pendingLabelPrint.cancel(orderNumber);
+    }, [allowPrinting, orderNumber]);
 
     async function printCurrentLabel() {
         if (!allowPrinting || printingRef.current) return;
@@ -412,33 +411,12 @@ export function ShippingCard({ shipping, customer, orderNumber, allowPrinting = 
         setIssuing(true);
         setIssueError("");
         setIssueMessage("");
-        const printWindow = window.open("about:blank", "_blank");
-        pendingPrintWindowRef.current = printWindow;
-        if (printWindow) printWindow.opener = null;
         try {
-            const result = await verifyShippingLabel(requestedOrder);
-            if (!isCurrent()) { printWindow?.close(); return; }
-            setIssueMessage(result?.message || "");
-            if (!result?.ready) {
-                printWindow?.close();
-                setIssueError(result?.message || "البوليصة الحالية غير جاهزة");
-            } else if (result.label_type === "store_courier") {
-                if (!printStoreCourierLabel(printWindow, result.print_data)) {
-                    printWindow?.close();
-                    setIssueError("تعذّر تجهيز رمز رقم الطلب؛ لم تتم الطباعة.");
-                }
-            } else if (result.label_url) {
-                if (printWindow) printWindow.location.replace(result.label_url);
-                else window.open(result.label_url, "_blank", "noopener,noreferrer");
-            } else {
-                printWindow?.close();
-                setIssueError("رابط البوليصة الحالية غير متاح");
-            }
+            const result = await openCurrentCarrierLabel(requestedOrder, undefined, "owner");
+            if (isCurrent()) setIssueMessage(result?.pending ? "طلب الطباعة محفوظ؛ المتابعة مستمرة في الخلفية" : result?.message || "");
         } catch (error) {
-            printWindow?.close();
-            if (isCurrent()) setIssueError(error?.message || "تعذّر التحقق من البوليصة الحالية في سلة.");
+            if (isCurrent()) setIssueError(error?.message || "تعذر حفظ طلب الطباعة");
         } finally {
-            if (pendingPrintWindowRef.current === printWindow) pendingPrintWindowRef.current = null;
             if (requestId === requestRef.current && mountedRef.current) {
                 printingRef.current = false;
                 setIssuing(false);

@@ -1,3 +1,6 @@
+import { pendingLabelPrint } from "../../lib/openCurrentCarrierLabel";
+beforeEach(() => { pendingLabelPrint.setScope(null); window.localStorage.clear(); pendingLabelPrint.setScope("test-api:actor"); });
+afterEach(() => pendingLabelPrint.setScope(null));
 import { renderToStaticMarkup } from "react-dom/server";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -244,8 +247,8 @@ describe("assembly opens current labels without issuing or confirming", () => {
         refreshCompletedOrderCarrierLabel.mockResolvedValue({ ready: false, message: "البوليصة الحالية غير متاحة" });
         act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint orderNumber="synthetic-42" carrierLabel={{ ready: true, label_url: "https://labels.test/old.pdf" }} />));
         await act(async () => container.querySelector('[data-testid="assembly-download-official-carrier-label"]').click());
-        expect(window.open).not.toHaveBeenCalled();
-        expect(container.querySelector('[role="alert"]').textContent).toBe("البوليصة الحالية غير متاحة");
+        expect(popup.location.replace).not.toHaveBeenCalled();
+        expect(pendingLabelPrint.snapshot()[0].state).toBe("waiting");
     });
 
     test("permission denied never reads or opens", async () => {
@@ -255,14 +258,14 @@ describe("assembly opens current labels without issuing or confirming", () => {
         expect(window.open).not.toHaveBeenCalled();
     });
 
-    test("late result for another order is not opened", async () => {
+    test("navigation retains the original explicit print intent", async () => {
         let resolve;
         refreshCompletedOrderCarrierLabel.mockReturnValue(new Promise((done) => { resolve = done; }));
         act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint orderNumber="synthetic-42" carrierLabel={{}} />));
         act(() => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
         act(() => root.render(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint orderNumber="synthetic-43" carrierLabel={{}} />));
-        await act(async () => resolve({ ready: true, label_url: "https://labels.test/wrong-order.pdf" }));
-        expect(window.open).not.toHaveBeenCalled();
+        await act(async () => resolve({ ready: true, label_url: "https://labels.test/original-order.pdf" }));
+        expect(popup.location.replace).toHaveBeenCalledWith("https://labels.test/original-order.pdf");
     });
 });
 
@@ -325,7 +328,7 @@ describe("assembly completion is the independent print boundary", () => {
         act(() => container.querySelector('[data-testid="assembly-issue-carrier-label"]').click());
         act(() => root.render(<CompletedAssemblyOrderCard canPrint orderNumber="synthetic-42" carrierLabel={{}} />));
         await act(async () => resolve({ ready: true, label_url: "https://labels.test/current.pdf" }));
-        expect(window.open).not.toHaveBeenCalled();
+        expect(popup.location.replace).not.toHaveBeenCalled();
         expect(container.innerHTML).toBe("");
     });
 });
