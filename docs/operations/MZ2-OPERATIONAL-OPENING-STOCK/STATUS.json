@@ -1,0 +1,21 @@
+{
+  "task": "MZ2-OPERATIONAL-OPENING-STOCK",
+  "status": "WIP_IMPLEMENTATION",
+  "branch": "codex/operational-opening-stock-20261017",
+  "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
+  "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
+  "acceptance": [
+    "Owner can search the real MZ2 catalogue before any physical inventory exists.",
+    "Explicit product configuration, positive quantity, unit cost and storage location are reviewed before approval.",
+    "Preview has no writes; approval revalidates the preview and current owner permission.",
+    "The physical inventory writer remains default disabled; no automatic enablement.",
+    "One initial owner batch is atomic and idempotent; conflicting replay and existing stock fail closed.",
+    "No supplier debt, purchase invoice, native ledger, control changes or Salla writes.",
+    "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
+  ],
+  "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
+  "verification": "Pending implementation and isolated Mongo/HTTP/UI tests.",
+  "production_changed": false,
+  "release": "No prepare, prepublish, merge or publish performed for this task.",
+  "next": "Integrate backend and frontend, run isolated contracts and review privilege boundaries before candidate readiness."
+}
