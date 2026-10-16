@@ -353,6 +353,7 @@ async def _snapchat_destination(db: Any, user_id: str, row: dict[str, Any]) -> s
         db,
         user_id,
         provider="snapchat_ads",
+        account_id=str(row.get("account_id") or ""),
         entity_level="ad",
         entity_id=str(row.get("entity_id") or ""),
     )

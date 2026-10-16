@@ -35,7 +35,7 @@ describe("SnapchatDecisionReadiness", () => {
         expect(api.get).not.toHaveBeenCalled();
         await click();
         expect(api.get).toHaveBeenCalledWith("/ads-manager/decision-intelligence/phase5/shadow", { params: {
-            provider: "snapchat_ads", date_from: date, date_to: date, max_candidates: 1,
+            provider: "snapchat_ads", account_id: "account-a", date_from: date, date_to: date, max_candidates: 1,
         } });
         expect(container.textContent).toContain("اجتازت الفترة شروط البيانات للتوصيات التجريبية");
         expect(container.textContent).toContain("لا تعني تفعيل الربط أو التنفيذ الآلي");
@@ -91,6 +91,15 @@ describe("SnapchatDecisionReadiness", () => {
         await act(async () => finish({ data: response() }));
         expect(container.textContent).not.toContain("اجتازت الفترة");
         expect(container.querySelector("button").disabled).toBe(false);
+    });
+    test("switching accounts sends the selected identity on the next inspection", async () => {
+        api.get.mockResolvedValue({ data: response() });
+        await render(); await click();
+        const second = response(); second.account.id = "account-b";
+        api.get.mockResolvedValue({ data: second });
+        await render("account-b"); await click();
+        expect(api.get.mock.calls.map(call => call[1].params.account_id)).toEqual(["account-a", "account-b"]);
+        expect(container.textContent).toContain("اجتازت الفترة");
     });
     test("failed request remains unknown and permits retry", async () => {
         api.get.mockRejectedValue(new Error("unavailable"));

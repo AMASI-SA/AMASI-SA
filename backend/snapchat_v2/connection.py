@@ -15,6 +15,7 @@ from .accounts import (
     get_selected_account,
     import_existing_accounts,
     list_accounts,
+    resolve_account,
     select_account,
     sync_accounts,
 )
@@ -230,12 +231,11 @@ class SnapchatConnectionManager:
         ad_account_id: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
         user_id = str(user_id)
-        if ad_account_id:
-            await self.select_account(user_id, ad_account_id)
-        selected = await get_selected_account(self.db, user_id)
-        if not selected:
+        selected = await resolve_account(self.db, user_id, ad_account_id)
+        if (not selected and ad_account_id is None
+                and not await get_selected_account(self.db, user_id)):
             await self.bootstrap_shadow(user_id)
-            selected = await get_selected_account(self.db, user_id)
+            selected = await resolve_account(self.db, user_id)
         if not selected:
             raise SnapchatConnectionError(
                 "snapchat_selected_account_missing",

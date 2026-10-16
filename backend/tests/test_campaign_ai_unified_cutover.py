@@ -52,6 +52,7 @@ async def test_shared_ai_loader_requires_canonical_proof(monkeypatch, failure):
     elif failure == "candidate_finance":
         reports["campaign"]["rows"][0]["commerce_profitability"]["status"] = "partial"
     monkeypatch.setattr(source, "load_unified_marketing_account_identity", AsyncMock(return_value=identity))
+    monkeypatch.setattr(source, "load_unified_marketing_account_identities", AsyncMock(return_value=[identity]))
     account_read = AsyncMock(return_value=reports["account"])
     monkeypatch.setattr(source, "load_unified_marketing_account_report", account_read)
     calls = []
@@ -112,6 +113,7 @@ async def test_future_platform_uses_same_ai_pipeline(monkeypatch):
     async def entity_read(db, user, **kwargs):
         assert user == "owner"
         return reports[kwargs["entity_level"]]
+    monkeypatch.setattr(source, "load_unified_marketing_account_identities", AsyncMock(return_value=[identity]))
     account_read = AsyncMock(return_value=reports["account"])
     monkeypatch.setitem(PROVIDERS, "future_ads", MarketingProvider(
         "future_ads", "future", "future-contract", {

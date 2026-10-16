@@ -42,12 +42,15 @@ def evidence(monkeypatch):
     target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management)
     reads = []
     async def identity(db, user_id, **kwargs):
+        assert kwargs["account_id"] == "a1"
         reads.append(user_id)
         return deepcopy(account)
     async def report(db, user_id, **kwargs):
+        assert kwargs["account_id"] == "a1"
         reads.append(user_id)
         return {"rows": [deepcopy(row)], "management_context": {"c1": deepcopy(management)}}
     async def readiness(db, user_id, **kwargs):
+        assert kwargs["account_id"] == "a1"
         reads.append(user_id)
         assert kwargs["max_freshness_hours"] <= 1.5
         return deepcopy(decision)

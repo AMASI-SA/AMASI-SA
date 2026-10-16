@@ -60,17 +60,19 @@ async def collect_unified_execution_evidence(
         errors.append("unified_source_window_missing")
     if not spec:
         errors.append("unified_provider_unsupported")
-    if spec and start is not None and end is not None and end >= start:
+    if not target.get("account_id"):
+        errors.append("unified_account_mismatch")
+    if spec and target.get("account_id") and start is not None and end is not None and end >= start:
         try:
             identity = await gateway.load_unified_marketing_account_identity(
-                db, user_id, provider=provider_id,
+                db, user_id, provider=provider_id, account_id=target["account_id"],
             ) or {}
             decision = await load_decision_evidence(
-                db, user_id, provider=provider_id, date_from=start, date_to=end,
+                db, user_id, provider=provider_id, account_id=target["account_id"], date_from=start, date_to=end,
                 now=current, max_freshness_hours=_max_data_age_minutes() / 60,
             )
             report = await gateway.load_unified_marketing_entity_report(
-                db, user_id, provider=provider_id,
+                db, user_id, provider=provider_id, account_id=target["account_id"],
                 entity_level=target.get("entity_level"), date_from=start, date_to=end,
                 timezone_name=identity.get("timezone") or "", include_stale=False,
             )
@@ -83,7 +85,7 @@ async def collect_unified_execution_evidence(
             management = (report.get("management_context") or {}).get(target.get("entity_id")) or {}
             if target.get("entity_level") in {"ad_group", "ad"}:
                 parent_report = await gateway.load_unified_marketing_entity_report(
-                    db, user_id, provider=provider_id, entity_level="campaign",
+                    db, user_id, provider=provider_id, account_id=target["account_id"], entity_level="campaign",
                     date_from=start, date_to=end,
                     timezone_name=identity.get("timezone") or "", include_stale=False,
                 )
