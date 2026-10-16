@@ -112,12 +112,15 @@ only `release/release-intent-v5.json`; prior commits were preserved.
   isolated Backend/Frontend packages and JSON build metadata runtime route.
 - Independent cloud adapter rehearsal at B passed and emitted the same identity;
   log `/root/unified-marketing-ai-rehearsal.log`.
-- Latest PR check pending at this checkpoint: CodeQL Python. No known failed
-  checks for B. PR1378 not yet merged at this checkpoint.
+- All PR checks, including CodeQL Python, passed. PR1378 merged preserving
+  ancestry at `4561ef771676142d853104b433fc9dd2897dab46`.
 - No publish, no lease, no production financial/advertising write performed.
 
-Next: wait for CodeQL, merge PR1378 without squash/rebase, then follow the separate
-publication authorization and mandatory release gates. Do not publish older
+Next: separate publication authorization is pending from the user. Once received,
+fresh-check the /app lease, fetch/align clean tracked /app to the exact remote
+production head, prepare, prepublish, publish, require newer visible success and
+three successful identity probes, then inspect live readiness/recommendations.
+Do not publish older
 75d61325b/19dafa15b candidate. Runtime remains on the prior release.
 
 Rollback if a deployed regression is verified: create a new dedicated revert PR
