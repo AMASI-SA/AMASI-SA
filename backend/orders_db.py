@@ -662,7 +662,7 @@ async def _ensure_order_products_catalogued(
                 set_doc["needs_cost"] = True
 
             await db.products.update_one(
-                {"_id": existing["_id"]},
+                {"_id": existing["_id"], "user_id": user_id},
                 {
                     "$set": set_doc,
                     "$addToSet": {"seen_order_numbers": str(order_number)},
