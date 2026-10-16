@@ -94,6 +94,39 @@ def test_ad_selection_http_owner_isolation_and_concurrent_version():
     run(scenario)
 
 
+def test_pos_opening_is_receivable_not_cash_and_settles_once():
+    from test_operational_balance_pos import native_fact
+    async def scenario(db):
+        fact = native_fact()
+        await db.mz2_opening_facts_v2.insert_one(fact)
+        payload = opening('pos_receivable', fact['id'], '250', 'for_us', 'pos-opening')
+        await save_opening(db, 'owner', 'owner', payload, clock=START)
+        await save_opening(db, 'owner', 'owner', payload, clock=START)
+        state = await read(db, 'owner')
+        assert len(state['openings']) == 1
+        summary = report(state)['summary']
+        assert summary['receivable'] == '250.00' and summary['actual_liquidity'] == '0.00'
+        with pytest.raises(HTTPException):
+            await save_opening(db, 'owner', 'owner', {**payload, 'request_id':'duplicate-pos'})
+        other = native_fact(reference='terminal-2')
+        await db.mz2_opening_facts_v2.insert_one(other)
+        with pytest.raises(HTTPException):
+            await save_opening(db, 'owner', 'owner', opening('pos_receivable', other['id'], '100', 'for_party', 'pos-wrong-side'))
+        await save_opening(db, 'owner', 'owner', {'request_id':'finish-pos'}, finish=True, clock=START)
+        key = next(iter(state['openings']))
+        transfer = movement(); transfer.update(request_id='pos-bank-arrival', party_type='pos_receivable',
+            party_id=fact['id'], amount='250', direction='incoming', kind='settlement',
+            allocations=[{'obligation_id':key, 'amount':'250'}])
+        await create_movement(db, 'owner', 'owner', transfer, clock=NOW)
+        await create_movement(db, 'owner', 'owner', transfer, clock=NOW)
+        state = await read(db, 'owner'); summary = report(state)['summary']
+        assert summary['actual_liquidity'] == '250.00' and summary['receivable'] == '0.00'
+        assert len(state['movements']) == 1
+        assert await db.general_ledger.count_documents({}) == 0
+        assert (await db.mz2_opening_facts_v2.find_one({'_id':fact['id']}))['amount'] == '900'
+    run(scenario)
+
+
 async def started(db, supplier="500"):
     await save_opening(db, "owner", "owner", opening(), clock=START)
     await save_opening(db, "owner", "owner", opening("supplier", "supplier", supplier, "for_party", "baseline2"), clock=START)
