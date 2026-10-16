@@ -21,7 +21,7 @@
     "frontend_affected_tests": 117,
     "shipping_profit_tests": 16,
     "shipping_profit_subtests": 18,
-    "ci": "All applicable checks on reviewed B PASS, including official Linux clean-clone rehearsal run 38892121826. Post-merge push gates in progress.",
+    "ci": "Reviewed B and merged a0f03a73e PASS: Mezan Release Readiness (38892855393), Security Gate (38892855124), CodeQL (38892855195). Official Linux clean-clone rehearsal PASS. No deploy performed.",
     "production_authenticated_catalog": "NOT_INSPECTED",
     "browser_access": "BLOCKED: failed to write kernel assets, os error 3",
     "followup_frontend_tests": 108
