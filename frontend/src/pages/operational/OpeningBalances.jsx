@@ -3,8 +3,7 @@ import { operationalApi as api, entityKinds, requestId, messageFor } from './api
 import './operational.css';
 import AdAccountSelection from './AdAccountSelection';
 const setupHints = {
-  pos_receivable: 'اختر الذمة المدينة الموثقة الخاصة بجهاز الشبكة نفسه الذي تختاره عند مراجعة تحصيلات المندوب. أدخل فقط المبلغ الذي لم يصل للبنك؛ لا تكرره في البنك أو عهدة المندوب. لا يتم استيراد رصيد المحاسبة تلقائيًا.',
-  bank: 'ظهور البنك في الطلبات لا يربطه تلقائيًا بالرصيد. راجع تعريف البنك وربطه بهويته في ميزان 2؛ لا يلزم نقل رصيد قديم أو تفعيل المحاسبة.',
+  bank: 'اختر الحساب البنكي أو أضف حساب جهاز الشبكة باسمه. أدخل الرصيد الموجود فعليًا وقت البداية؛ لا يتطلب ذلك مندوبًا أو إيصالًا، ولا يُستورد أي رصيد سابق تلقائيًا.',
   courier: 'ظهور شركة الشحن في الطلبات لا يثبت ربط جهة الرصيد. راجع هوية الشركة وتأكيد ربطها في إعدادات الشحن بميزان 2.',
   ad_account: 'تظهر الحسابات المختارة للعرض فقط. استخدامها كرصيد يحتاج تأكيد ربطه وتحديد طريقة التمويل والعملة. الربط لا يعني تفعيل الكتابة المالية.',
 };
@@ -58,7 +57,7 @@ export function KindPicker({
   onChange,
   disabled
 }) {
-  return <Field label="نوع الرصيد"><select value={value} disabled={disabled} onChange={e => onChange(e.target.value)}><option value="">اختر النوع</option>{entityKinds.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></Field>;
+  return <Field label="نوع الرصيد"><select value={value} disabled={disabled} onChange={e => onChange(e.target.value)}><option value="">اختر النوع</option>{entityKinds.filter(([id]) => id !== 'pos_receivable').map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></Field>;
 }
 export function OpeningBalances({
   context,
@@ -158,13 +157,10 @@ export function OpeningBalances({
       setBusy(false);
     }
   };
-  return <section className="op-card"><h2>الأرصدة الافتتاحية</h2><p className="op-muted">أدخل رصيد كل جهة، ثم احفظ وأنهِ الإعداد لبدء الاحتساب التلقائي.</p><p className="op-muted">هذه الشاشة لأرصدة الجهات المالية. المخزون الافتتاحي يُسجّل بكمياته ومواقعه وإثبات تقييمه في مسار المخزون؛ لا تُكرر قيمته هنا كمصروف أو رصيد له/عليه.</p><Notice error={error} message={message} /><fieldset disabled={busy}><KindPicker value={form.party_type} onChange={kind => change({
-        ...empty,
-        party_type: kind
-      })} />{form.party_type === 'ad_account' && context.can_select_ad_accounts && <button type="button" onClick={() => setSelectingAds(true)}>اختيار الحسابات الإعلانية الظاهرة</button>}{selectingAds && <AdAccountSelection onClose={() => setSelectingAds(false)} onSaved={() => {setSelectingAds(false); setRevision(n => n + 1); change({party_id:'',currency:''});}} />}<EntityPicker key={revision} kind={form.party_type} value={form.party_id} onChange={(id, item) => change({
+  return <section className="op-card"><h2>الأرصدة الافتتاحية</h2><p className="op-muted">أدخل رصيد كل جهة، ثم احفظ وأنهِ الإعداد لبدء الاحتساب التلقائي.</p><p className="op-muted">هذه الشاشة لأرصدة الجهات المالية. المخزون الافتتاحي يُسجّل بكمياته ومواقعه وإثبات تقييمه في مسار المخزون؛ لا تُكرر قيمته هنا كمصروف أو رصيد له/عليه.</p><Notice error={error} message={message} /><fieldset disabled={busy}><KindPicker value={form.party_type} onChange={kind => { setAdding(false); setName(''); addRequest.current = null; change({ ...empty, party_type: kind }); }} />{form.party_type === 'ad_account' && context.can_select_ad_accounts && <button type="button" onClick={() => setSelectingAds(true)}>اختيار الحسابات الإعلانية الظاهرة</button>}{selectingAds && <AdAccountSelection onClose={() => setSelectingAds(false)} onSaved={() => {setSelectingAds(false); setRevision(n => n + 1); change({party_id:'',currency:''});}} />}<EntityPicker key={revision} kind={form.party_type} value={form.party_id} onChange={(id, item) => change({
         party_id: id,
         currency: item?.currency || ''
-      })} />{form.party_type === 'pos_receivable' && <p className="op-muted">{setupHints.pos_receivable} إذا لم تظهر ذمة الجهاز، يلزم تعريفها كذمة مدينة موثقة في إعداد المحاسبة أولًا، دون تفعيل المحاسبة.</p>}{['cash', 'external_person', 'operating_expense'].includes(form.party_type) && <button type="button" className="op-link" onClick={() => setAdding(true)}>+ إضافة {form.party_type === 'cash' ? 'صندوق' : form.party_type === 'operating_expense' ? 'نوع مصروف تشغيلي' : 'جهة خارجية'}</button>}{adding && <div className="op-add"><Field label="الاسم"><input value={name} onChange={e => { setName(e.target.value); addRequest.current = null; }} /></Field><p>العملة: SAR</p><button onClick={add}>إضافة</button><button onClick={() => setAdding(false)}>إلغاء</button></div>}<div className="op-field" role="group" aria-label="الاتجاه"><span>الاتجاه</span><span className="op-segment">{(form.party_type === 'pos_receivable' ? [['for_us', 'مبلغ لنا لدى الشبكة']] : [['for_party', 'له'], ['for_us', 'عليه']]).map(([value, label]) => <button key={value} type="button" aria-pressed={form.direction === value} onClick={() => change({
+      })} />{form.party_type === 'bank' && <p className="op-muted">رصيد الشبكة مستقل عن رصيد البنك وعهدة المندوب. عند تحويله للبنك، سجّل تحويلًا بين الحسابين.</p>}{['bank', 'cash', 'external_person', 'operating_expense'].includes(form.party_type) && <button type="button" className="op-link" onClick={() => setAdding(true)}>+ إضافة {form.party_type === 'bank' ? 'حساب بنك أو شبكة' : form.party_type === 'cash' ? 'صندوق' : form.party_type === 'operating_expense' ? 'نوع مصروف تشغيلي' : 'جهة خارجية'}</button>}{adding && <div className="op-add"><Field label="الاسم"><input value={name} onChange={e => { setName(e.target.value); addRequest.current = null; }} /></Field><p>العملة: SAR</p><button onClick={add}>إضافة</button><button onClick={() => setAdding(false)}>إلغاء</button></div>}<div className="op-field" role="group" aria-label="الاتجاه"><span>الاتجاه</span><span className="op-segment">{[['for_party', 'له'], ['for_us', 'عليه']].map(([value, label]) => <button key={value} type="button" aria-pressed={form.direction === value} onClick={() => change({
             direction: value
           })}>{label}</button>)}</span></div><p className="op-muted">{['bank', 'cash'].includes(form.party_type) ? 'عليه: رصيد متاح لأماسي. له: مديونية على أماسي.' : 'له: مستحق للجهة عند أماسي. عليه: مستحق لأماسي لدى الجهة.'}</p><p className="op-muted" role="status">{form.currency ? `عملة الرصيد: ${form.currency}` : "اختر الجهة لإظهار عملة الرصيد"}</p><Field label={`المبلغ${form.currency ? ' · ' + form.currency : ''}`}><input inputMode="decimal" value={form.amount} onChange={e => change({
           amount: e.target.value

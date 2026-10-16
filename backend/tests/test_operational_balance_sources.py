@@ -14,6 +14,8 @@ class Cursor:
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name in {'accounts', 'mz2_operational_bank_accounts'}:
+            assert projection == {'_id': 0, **{k: 1 for k in ('id', 'user_id', 'name', 'display_name', 'currency', 'account_type', 'status', 'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}
         if self.name == 'settings':
             assert projection and projection.get('_id') == 0
             assert set(projection) == {'_id', 'user_id', 'shipping_companies.name',
@@ -337,6 +339,7 @@ def test_ad_baseline_stale_snapshot_is_preserved_but_not_verified():
 # A future accidental source fallback must fail the runtime read, even if the
 # production developer also adds it to ALLOWED_COLLECTIONS.
 HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
+    'accounts', 'mz2_operational_bank_accounts',  # Explicit identity-only reads; never legacy financial values.
     'settings',  # Owner-scoped courier identity projection only; generic reader rejects it.
     'users', 'expense_categories', 'mz2_ad_automation_policies_v2',
     'mezan_employees_v2', 'mezan_suppliers_v2', 'store_drivers', 'mz2_external_persons_v2', 'mz2_financial_accounts',
