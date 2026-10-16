@@ -62,3 +62,20 @@ fresh frozen-lockfile dependencies. Junction is untracked and is not release inp
 
 Unrelated main-worktree Qoyod changes and operational selection PR #1376 are
 preserved. Existing production lease status has not been inspected in this task.
+
+## Production verification and follow-up response contract repair
+
+Deployment 58053cad completed Oct16 16:57 Saudi (green Deployment finished,
+Live in updated Emergent UI). Release Guard verify exited0 with verified=true
+for rg5-763513961fc3a4c3f2fba1d42935246388d0777a7268478c10bdc0808278bbf0,
+source290adba4793c8474f305a0edddf867953a1693b5, deployment4561ef771676142d853104b433fc9dd2897dab46.
+Three internal probes and frontend artifact checks passed; status activefalse.
+Production changed yes. No advertising writes performed.
+Live unified account contract now shows ready for closed day2026-10-15.
+Detailed UI check exposed a response contract regression: UI checks provider at
+response root, but phase5 only returned it in lineage. New branch
+codex/readiness-provider-response-20261016 adds root provider from evidence.
+Regression test failed twice with KeyError before fix; 52 focused tests passed
+afterward (phase5 plus unified execution evidence). Future provider is covered.
+No readiness gates weakened. Follow-up needs PR, new source/intent build pair,
+CI, deployment and live verification under existing authorization.
