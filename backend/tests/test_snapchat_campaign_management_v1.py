@@ -1249,11 +1249,17 @@ def test_settings_proof_preserves_freshness_reason_and_provider_timestamp():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("native_currency, changed_currency", [("USD", None), ("SAR", None), ("SAR", "USD"), ("SAR", "rollback_USD")])
 async def test_financial_preview_and_execute_use_only_verified_provider_ids(
-    monkeypatch,
+    monkeypatch, native_currency, changed_currency,
 ):
     db = DB()
     provider = Provider()
+    live_currency = [native_currency]
+    async def read_account(account_id):
+        assert account_id == "account-1"
+        return {"id": account_id, "currency": live_currency[0]}
+    provider.read_account = read_account
     provider.entities.update(
         {
             ("ad_squad", "provider-squad"): {
@@ -1276,7 +1282,9 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
         return {
             "ad_account_id": "account-1",
             "display_name": "AMASI",
-            "currency": "USD",
+            "currency": native_currency,
+            "connection_provenance": "api_connection",
+            "connection_status": "connected",
         }
 
     settings_versions = []
@@ -1314,7 +1322,9 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
                 "bid": {"allowed": True, "reason": "available"},
             },
             **timestamps,
-            "currency": "USD",
+            "currency": native_currency,
+            "connection_provenance": "api_connection",
+            "connection_status": "connected",
             "daily_budget_micro": 100_000_000,
             "daily_budget_usd": 100.0,
             "bid_micro": 20_000_000,
@@ -1338,7 +1348,7 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
         provider_target_id="provider-squad",
         provider_parent_id="provider-campaign",
         payload={
-            "daily_budget_micro": 90_000_000,
+            "daily_budget_micro": 50_000_000,
             "bid_micro": 15_000_000,
             "bid_strategy": "TARGET_COST",
         },
@@ -1364,9 +1374,9 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     assert ("campaign", "unified-campaign") not in provider.reads
     assert provider.executions == []
     assert preview["field_changes"]["daily_budget_micro"]["before_micro"] == 100_000_000
-    assert preview["field_changes"]["daily_budget_micro"]["after_usd"] == 90.0
-    assert preview["field_changes"]["bid_micro"]["before_usd"] == 20.0
-    assert preview["field_changes"]["bid_micro"]["after_usd"] == 15.0
+    assert preview["field_changes"]["daily_budget_micro"]["after_usd"] == (50.0 if native_currency == "USD" else None)
+    assert preview["field_changes"]["bid_micro"]["before_usd"] == (20.0 if native_currency == "USD" else None)
+    assert preview["field_changes"]["bid_micro"]["after_usd"] == (15.0 if native_currency == "USD" else None)
     assert preview["field_changes"]["bid_strategy"] == {
         "before": "LOWEST_COST_WITH_MAX_BID",
         "after": "TARGET_COST",
@@ -1384,6 +1394,19 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     )
     assert approved["status"] == "approved"
 
+    if changed_currency == "USD":
+        live_currency[0] = changed_currency
+        with pytest.raises(HTTPException) as raised:
+            await module.execute_snapchat_management_proposal(
+                db, "owner-1", "owner-1", preview["proposal_id"], provider=provider)
+        assert raised.value.detail["code"] == "snapchat_management_native_currency_unverified"
+        assert provider.executions == []
+        return
+    if native_currency == "SAR":
+        assert stored["native_currency_proof"]["currency"] == "SAR"
+        assert preview["field_changes"]["daily_budget_micro"]["after_native"] == 50
+        assert preview["field_changes"]["daily_budget_micro"]["after_usd"] is None
+        assert datetime.fromisoformat(stored["native_currency_proof"]["observed_at"]).tzinfo is not None
     completed = await module.execute_snapchat_management_proposal(
         db,
         "owner-1",
@@ -1392,6 +1415,18 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
         provider=provider,
     )
     assert completed["status"] == "completed"
+    if changed_currency == "rollback_USD":
+        live_currency[0] = "USD"
+        writes_before = len(provider.executions)
+        with pytest.raises(HTTPException) as raised:
+            await module.rollback_snapchat_management_proposal(
+                db, "owner-1", "owner-1", preview["proposal_id"],
+                module.SnapchatManagementRollbackInput(
+                    confirmation_phrase=completed["confirmation_phrase"], reason="currency mismatch regression"),
+                provider=provider)
+        assert raised.value.detail["code"] == "snapchat_management_native_currency_unverified"
+        assert len(provider.executions) == writes_before
+        return
     assert completed["provider_entity_id"] == "provider-squad"
     assert settings_versions == [1, 2, 3]
     assert completed["settings_proof"]["provider_updated_at"] == (
@@ -1406,8 +1441,8 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     )
     assert "unified-squad" not in str(provider.executions[0])
     assert completed["field_change_metadata"]["provider_reread_verified"] is True
-    assert completed["field_changes"]["daily_budget_micro"]["after_micro"] == 90_000_000
-    assert completed["field_changes"]["bid_micro"]["after_usd"] == 15.0
+    assert completed["field_changes"]["daily_budget_micro"]["after_micro"] == 50_000_000
+    assert completed["field_changes"]["bid_micro"]["after_usd"] == (15.0 if native_currency == "USD" else None)
     assert completed["field_changes"]["bid_strategy"] == {
         "before": "LOWEST_COST_WITH_MAX_BID",
         "after": "TARGET_COST",
@@ -1418,7 +1453,7 @@ async def test_financial_preview_and_execute_use_only_verified_provider_ids(
     assert completed["verification"]["field_changes_verified"] is True
     assert (
         completed["verification"]["provider_snapshot"]["daily_budget_micro"]
-        == 90_000_000
+        == 50_000_000
     )
     assert completed["verification"]["provider_snapshot"]["bid_micro"] == 15_000_000
     assert (
@@ -2527,3 +2562,39 @@ def test_legacy_financial_history_is_derived_without_migration_or_currency_guess
         without_currency_proof["field_changes"]["daily_budget_micro"]["currency"]
         is None
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raw,provenance", [
+    ({"id": "wrong-account", "currency": "SAR"}, "api_connection"),
+    ({"id": "account-1", "currency": "USD"}, "api_connection"),
+    ({"id": "account-1"}, "api_connection"),
+    ({"id": "account-1", "currency": "ZZZ"}, "api_connection"),
+    ({"id": "account-1", "currency": "SAR"}, None),
+])
+async def test_sar_missing_or_mismatched_native_account_proof_blocks_write(raw, provenance):
+    provider = Provider()
+    async def read_account(account_id):
+        return raw
+    provider.read_account = read_account
+    account = {"ad_account_id": "account-1", "currency": "SAR",
+               "connection_status": "connected", "connection_provenance": provenance}
+    with pytest.raises(HTTPException) as raised:
+        await module._verify_native_currency(provider, account, "account-1")
+    assert raised.value.detail["code"] == "snapchat_management_native_currency_unverified"
+    assert provider.executions == []
+
+
+@pytest.mark.asyncio
+async def test_native_account_reader_uses_exact_get_and_rejects_ambiguous_wrappers(monkeypatch):
+    provider = module.SnapchatManagementProvider(DB(), "owner-1")
+    calls = []
+    response = {"adaccounts": [{"adaccount": {"id": "account-1", "currency": "SAR"}}]}
+    async def request(method, path):
+        calls.append((method, path))
+        return response
+    monkeypatch.setattr(provider, "_request", request)
+    assert await provider.read_account("account-1") == {"id": "account-1", "currency": "SAR"}
+    assert calls == [("GET", "/adaccounts/account-1")]
+    response["adaccounts"].append(response["adaccounts"][0])
+    assert await provider.read_account("account-1") == {}
