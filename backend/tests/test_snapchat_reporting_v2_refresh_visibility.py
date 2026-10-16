@@ -100,6 +100,7 @@ async def test_refresh_write_keeps_last_completed_day_readable(refresh_status, m
     async def cost(*args, **kwargs):
         return {'exchange_rate_to_sar': 3.75}
     monkeypatch.setattr(reader, 'get_selected_account', selected)
+    monkeypatch.setattr(reader, 'resolve_account', selected)
     monkeypatch.setattr(reader, 'calculate_cost_components', cost)
     evidence = await reader.load_snapchat_v2_entity_readiness_evidence(
         db, 'u', entity_level='campaign', date_from=day, date_to=day, timezone_name='UTC')

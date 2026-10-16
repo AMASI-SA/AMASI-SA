@@ -30,7 +30,7 @@ DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_settlement_allocation_required", "operational_wallet_spend_not_payable",
 }
 
-KINDS = {"employee", "provider", "courier", "store_driver", "ad_account", "supplier",
+KINDS = {"employee", "provider", "courier", "store_driver", "ad_account", "supplier", "pos_receivable",
          "external_person", "bank", "cash", "employee_custody", "operating_expense", "owner_withdrawal"}
 
 
@@ -107,6 +107,8 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
                 fail("operational_opening_duplicate", "سبق حفظ رصيد هذه الجهة؛ التصحيح بحركة موثقة")
             if opening["direction"] not in {"for_party", "for_us"}:
                 fail("operational_direction_invalid", "حدد له أو عليه", 422)
+            if opening['party_type'] == 'pos_receivable' and opening['direction'] != 'for_us':
+                fail('operational_pos_receivable_direction', 'رصيد جهاز الشبكة مبلغ لنا بانتظار التسوية البنكية', 422)
             if hybrid:
                 key = digest([key, opening["direction"]])
             item = {"id": key, "party_type": opening["party_type"], "party_id": opening["party_id"],

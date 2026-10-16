@@ -17,7 +17,7 @@ class _Db(Database):
         super().__init__()
         self.raw.mezan_snapchat_accounts_v2.insert_one({
             "user_id": "u1", "provider": "snapchat_ads", "ad_account_id": "a1",
-            "timezone": "America/Los_Angeles", "selected": True, "active": True,
+            "timezone": "America/Los_Angeles", "selected": True, "active": True, "connection_status": "connected",
         })
         self.raw.mezan_snapchat_sync_runs_v2.insert_one({
             "sync_run_id": "r1", "user_id": "u1", "provider": "snapchat_ads",

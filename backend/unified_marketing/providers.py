@@ -28,7 +28,7 @@ PROVIDERS: dict[str, MarketingProvider] = {
         provider="snapchat_ads", ai_provider="snapchat",
         evidence_source="unified-marketing-data-v1:snapchat-v2",
         readers={name: partial(_snapchat_reader, "load_snapchat_v2_" + name) for name in (
-            "account_identity", "account_report", "entity_metadata", "dashboard_spend",
+            "account_identities", "account_identity", "account_report", "entity_metadata", "dashboard_spend",
             "entity_report", "entity_readiness_evidence", "entity_daily_series",
         )},
     ),

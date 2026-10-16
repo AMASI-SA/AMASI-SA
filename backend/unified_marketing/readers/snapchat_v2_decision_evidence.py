@@ -41,6 +41,7 @@ def _number(value: Any) -> float | None:
 async def load_snapchat_v2_account_identity(
     db: Any,
     user_id: str,
+    account_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Return account identity with a provable read-only freshness timestamp.
 
@@ -50,7 +51,7 @@ async def load_snapchat_v2_account_identity(
     invented: if no completed run exists, the field remains null and Phase 5
     continues to fail closed.
     """
-    identity = await base_reader.load_snapchat_v2_account_identity(db, user_id)
+    identity = await base_reader.load_snapchat_v2_account_identity(db, user_id, **({"account_id": account_id} if account_id is not None else {}))
     if not identity or identity.get("last_sync_at"):
         return identity
 
@@ -190,6 +191,7 @@ async def load_snapchat_v2_account_report(
     date_from: date,
     date_to: date,
     timezone_name: str,
+    account_id: str | None = None,
 ) -> dict[str, Any]:
     """Return the base account report with decision-grade profitability when provable."""
     account_report = await base_reader.load_snapchat_v2_account_report(
@@ -198,6 +200,7 @@ async def load_snapchat_v2_account_report(
         date_from=date_from,
         date_to=date_to,
         timezone_name=timezone_name,
+        **({"account_id": account_id} if account_id is not None else {}),
     )
     totals = _mapping(account_report.get("totals"))
     current = _mapping(totals.get("commerce_profitability"))
@@ -211,6 +214,7 @@ async def load_snapchat_v2_account_report(
         date_from=date_from,
         date_to=date_to,
         timezone_name=timezone_name,
+        **({"account_id": account_id} if account_id is not None else {}),
         include_stale=False,
     )
     profitability = _derive_account_profitability(account_report, campaign_report)
@@ -232,3 +236,18 @@ __all__ = [
     "load_snapchat_v2_account_identity",
     "load_snapchat_v2_account_report",
 ]
+
+
+async def load_snapchat_v2_account_identities(db: Any, user_id: str) -> list[dict[str, Any]]:
+    from snapchat_v2.accounts import list_enabled_accounts
+    accounts = await list_enabled_accounts(db, str(user_id))
+    identities = []
+    for account in accounts:
+        if account.get("connection_status") != "connected":
+            continue
+        identity = await load_snapchat_v2_account_identity(
+            db, str(user_id), account_id=str(account["ad_account_id"]),
+        )
+        if identity:
+            identities.append(identity)
+    return identities

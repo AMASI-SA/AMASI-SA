@@ -82,7 +82,8 @@ async def test_shadow_cycle_persists_source_only_result(monkeypatch):
     db = DB(
         {
             "mezan_snapchat_accounts_v2": Collection(
-                [{"user_id": "u1", "ad_account_id": "a1"}]
+                [{"user_id": "u1", "ad_account_id": "a1", "selected": True,
+                  "active": True, "connection_status": "connected"}]
             ),
             "mezan_snapchat_shadow_scheduler_v2": Collection(),
         }

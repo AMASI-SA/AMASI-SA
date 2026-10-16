@@ -188,6 +188,7 @@ async def build_snapchat_unified_readiness(
     db: Any,
     user_id: str,
     *,
+    account_id: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     now: datetime | None = None,
@@ -197,8 +198,9 @@ async def build_snapchat_unified_readiness(
         db,
         str(user_id),
         provider=PROVIDER,
+        **({"account_id": account_id} if account_id is not None else {}),
     )
-    if not account:
+    if not account or (account_id is not None and str(account.get("id")) != str(account_id)):
         return {
             "provider": PROVIDER,
             "contract_version": CONTRACT_VERSION,
@@ -232,6 +234,7 @@ async def build_snapchat_unified_readiness(
         db,
         str(user_id),
         provider=PROVIDER,
+        **({"account_id": account_id} if account_id is not None else {}),
         date_from=start,
         date_to=end,
         timezone_name=timezone_name,
@@ -241,6 +244,7 @@ async def build_snapchat_unified_readiness(
             db,
             str(user_id),
             provider=PROVIDER,
+            **({"account_id": account_id} if account_id is not None else {}),
             entity_level=level,
             date_from=start,
             date_to=end,

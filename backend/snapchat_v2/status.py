@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from .accounts import get_selected_account
+from .accounts import resolve_account
 from .connection import SNAPCHAT_CONNECTIONS_COLLECTION
 from .facts import SNAPCHAT_HOURLY_FACTS_COLLECTION
 from .lease import SNAPCHAT_LEASE_COLLECTION, get_lease_status
@@ -53,8 +53,8 @@ async def snapchat_v2_status(
 ) -> dict[str, Any]:
     current = (now or _utcnow()).astimezone(timezone.utc)
     user_id = str(user_id)
-    selected = await get_selected_account(db, user_id)
-    account_id = str(ad_account_id or (selected or {}).get("ad_account_id") or "").strip()
+    selected = await resolve_account(db, user_id, ad_account_id)
+    account_id = str((selected or {}).get("ad_account_id") or "").strip()
 
     connection = await db[SNAPCHAT_CONNECTIONS_COLLECTION].find_one(
         {"user_id": user_id, "provider": SNAPCHAT_PROVIDER},

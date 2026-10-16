@@ -123,7 +123,78 @@ function managementLevel(level) {
     return "campaigns";
 }
 
+function SnapchatPortfolio({ onSelect }) {
+    const today = localDateInTimezone("Asia/Riyadh");
+    const [from, setFrom] = useState(today);
+    const [to, setTo] = useState(today);
+    const [data, setData] = useState(null);
+    const [error, setError] = useState("");
+    const [busy, setBusy] = useState(false);
+    const epoch = useRef(0);
+    async function refresh(event) {
+        event?.preventDefault();
+        const current = ++epoch.current;
+        setBusy(true); setError(""); setData(null);
+        try {
+            const result = await api.get("/integrations-v2/snapchat-v2/portfolio-spend", {
+                params: { date_from: from, date_to: to },
+            });
+            if (epoch.current === current) setData(result.data);
+        } catch (_error) {
+            if (epoch.current === current) setError("تعذر تحميل إجمالي الحسابات. لا يمثل غياب البيانات صرفًا صفريًا.");
+        } finally {
+            if (epoch.current === current) setBusy(false);
+        }
+    }
+    useEffect(() => { refresh(); return () => { epoch.current += 1; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return <section className="space-y-4 rounded-xl border bg-white p-5" aria-label="إجمالي حسابات سناب">
+        <h1 className="text-xl font-black">كل حسابات سناب</h1>
+        <p>الفترة الموحدة بتوقيت الرياض. الصرف محوّل إلى الريال السعودي؛ تفاصيل كل حساب تستخدم توقيته وعملته المسجلين في سناب.</p>
+        <form onSubmit={refresh} className="flex flex-wrap gap-3">
+            <label>من <input aria-label="بداية فترة كل الحسابات" type="date" required value={from} onChange={e => setFrom(e.target.value)} /></label>
+            <label>إلى <input aria-label="نهاية فترة كل الحسابات" type="date" required min={from} value={to} onChange={e => setTo(e.target.value)} /></label>
+            <button disabled={busy} type="submit">تحديث الإجمالي</button>
+        </form>
+        {error && <p role="alert">{error}</p>}
+        <strong data-testid="snapchat-portfolio-total">{busy ? "جاري التحميل" : money(data?.total_sar, "SAR")}</strong>
+        {data?.total_sar == null && !busy && <p>الإجمالي غير مكتمل حتى تتوفر بيانات الصرف والتحويل لجميع الحسابات.</p>}
+        <div className="grid gap-3 md:grid-cols-2">{(data?.accounts || []).map(item => <article className="rounded-xl border p-4" key={item.account_id}>
+            <h2 className="font-bold">{item.display_name || item.account_id}</h2>
+            <p dir="ltr">{item.account_id} · {item.currency} · {item.timezone}</p>
+            <p>{money(item.total_sar, "SAR")}</p>
+            <button type="button" onClick={() => onSelect(item.account_id)}>عرض الحساب وحملاته</button>
+        </article>)}</div>
+    </section>;
+}
+
 export default function SnapchatV2Page() {
+    const [accounts, setAccounts] = useState([]);
+    const [selected, setSelected] = useState("");
+    const [error, setError] = useState("");
+    useEffect(() => {
+        let active = true;
+        api.get("/integrations-v2/snapchat-v2/accounts").then(({ data }) => {
+            if (!active) return;
+            const rows = data?.accounts || [];
+            setAccounts(rows);
+            setSelected(data?.selected_account?.ad_account_id || rows[0]?.ad_account_id || "");
+        }).catch(() => { if (active) setError("تعذر تحميل الحسابات الإعلانية. أعد تحميل الصفحة."); });
+        return () => { active = false; };
+    }, []);
+    return <div dir="rtl" className="space-y-4">
+        <label className="block rounded-xl border bg-white p-4 font-bold">الحساب الإعلاني المعروض
+            <select aria-label="الحساب الإعلاني المعروض" value={selected} onChange={e => setSelected(e.target.value)} className="mx-3 rounded border p-2">
+                {!selected && <option value="">اختر الحساب</option>}
+                <option value="all">كل الحسابات</option>
+                {accounts.map(item => <option key={item.ad_account_id} value={item.ad_account_id}>{item.display_name || item.ad_account_id} · {item.currency} · {item.timezone}</option>)}
+            </select>
+        </label>
+        {error && <p role="alert">{error}</p>}
+        {selected === "all" ? <SnapchatPortfolio onSelect={setSelected} /> : selected ? <SnapchatAccountDetail key={selected} requestedAccountId={selected} /> : null}
+    </div>;
+}
+
+export function SnapchatAccountDetail({ requestedAccountId = "" }) {
     const [status, setStatus] = useState(null);
     const [readiness, setReadiness] = useState(null);
     const [readinessLoading, setReadinessLoading] = useState(true);
@@ -156,7 +227,7 @@ export default function SnapchatV2Page() {
     const account = status?.selected_account || null;
     const accountId = account?.ad_account_id || "";
     const currency = account?.currency || report?.currency || "USD";
-    const accountTimezone = account?.timezone || "America/Los_Angeles";
+    const accountTimezone = account?.timezone || "";
     const activeContract = entityLevel === "campaign" ? campaignContract : childContract;
 
     const beginViewContext = useCallback(() => {
@@ -308,10 +379,10 @@ export default function SnapchatV2Page() {
         setReadiness(null);
         setError("");
         try {
-            const { data: statusData } = await api.get("/integrations-v2/snapchat-v2/status");
+            const { data: statusData } = await api.get("/integrations-v2/snapchat-v2/status", { params: { ad_account_id: requestedAccountId || undefined } });
             if (!loadRequestIsCurrent()) return;
             readinessStarted = true;
-            api.get("/integrations-v2/snapchat-v2/unified-readiness")
+            api.get("/integrations-v2/snapchat-v2/unified-readiness", { params: { ad_account_id: requestedAccountId || undefined } })
                 .then(({ data }) => {
                     if (loadRequestIsCurrent()) setReadiness(data || null);
                 })
@@ -323,13 +394,13 @@ export default function SnapchatV2Page() {
                 });
             if (!viewRequestIsCurrent()) return;
             setStatus(statusData);
-            const timezone = statusData?.selected_account?.timezone || "America/Los_Angeles";
+            const timezone = statusData?.selected_account?.timezone || "Asia/Riyadh";
             const today = localDateInTimezone(timezone);
             const range = requestedRange || appliedRange || { dateFrom: today, dateTo: today };
             if (!dateFrom) setDateFrom(range.dateFrom);
             if (!dateTo) setDateTo(range.dateTo);
             setAppliedRange(range);
-            const common = { action_report_time: "conversion", timezone: "account" };
+            const common = { ad_account_id: requestedAccountId || undefined, action_report_time: "conversion", timezone: "account" };
             const [reportResult, hourlyResult, campaignsResult] = await Promise.all([
                 api.get("/integrations-v2/snapchat-v2/report", { params: { ...common, date_from: range.dateFrom, date_to: range.dateTo } }),
                 api.get("/integrations-v2/snapchat-v2/hourly", { params: { ...common, report_date: range.dateTo } }),
@@ -360,7 +431,7 @@ export default function SnapchatV2Page() {
         } finally {
             if (reportRequestIsCurrent()) setLoading(false);
         }
-    }, [appliedRange, beginViewContext, dateFrom, dateTo, loadEntitySettings]);
+    }, [appliedRange, beginViewContext, dateFrom, dateTo, loadEntitySettings, requestedAccountId]);
 
     useEffect(() => {
         load();
@@ -382,6 +453,7 @@ export default function SnapchatV2Page() {
         setError("");
         try {
             const common = {
+                ad_account_id: accountId,
                 date_from: appliedRange.dateFrom,
                 date_to: appliedRange.dateTo,
                 timezone: "account",
@@ -568,7 +640,7 @@ export default function SnapchatV2Page() {
                             <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">التوصيات عبر مسار الذكاء المشترك</span>
                         </div>
                         <h1 className="text-3xl font-black tracking-tight">إعلانات سناب شات</h1>
-                        <p className="mt-2 text-sm font-semibold text-slate-600">Snapchat V2 · توقيت الحساب {accountTimezone} · الآن {localTimeInTimezone(accountTimezone, clockNow)}</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-600">Snapchat V2 · توقيت الحساب {accountTimezone || "غير متاح"} · الآن {localTimeInTimezone(accountTimezone, clockNow)}</p>
                     </div>
                     <form onSubmit={applyRange} className="flex flex-wrap items-end gap-2">
                         <label className="text-xs font-black text-slate-600">من<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1 block rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold" dir="ltr" /></label>
@@ -585,7 +657,7 @@ export default function SnapchatV2Page() {
 
             <SnapchatDecisionReadiness accountId={accountId} date={readiness?.period?.date_from} />
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">الحساب المعتمد</div><div className="mt-2 text-lg font-black">{account?.display_name || "—"}</div><div className="mt-1 truncate text-xs text-slate-500" dir="ltr">{accountId || "—"}</div></div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4"><div className="text-xs font-bold text-slate-500">الحساب المعروض</div><div className="mt-2 text-lg font-black">{account?.display_name || "—"}</div><div className="mt-1 truncate text-xs text-slate-500" dir="ltr">{accountId || "—"}</div></div>
                 <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4"><div className="text-xs font-bold text-amber-700">صرف الفترة</div><div className="mt-2 text-2xl font-black text-amber-950" data-testid="snapchat-v2-spend-headline">{money(accountSpendNative, currency)}</div><div className="mt-1 text-xs font-bold text-amber-700">{appliedRange?.dateFrom || "—"} — {appliedRange?.dateTo || "—"}</div>{hasUnallocatedSpend && <div className="mt-1 text-[11px] font-bold text-amber-800" data-testid="snapchat-v2-unallocated-spend">فرق غير موزع على الساعات: {money(unallocatedSpendNative, currency)}</div>}</div>
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4"><div className="text-xs font-bold text-violet-700">نتائج Snapchat (TOTAL)</div><div className="mt-2 text-2xl font-black text-violet-950">{number(snapchatPurchases)}</div><div className="mt-1 text-xs font-bold text-violet-700">قيمة {contractMoney(snapchatPurchaseValue)} · ROAS {number(snapchatRoas)}</div></div>
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><div className="text-xs font-bold text-emerald-700">نتائج سلة المنسوبة لـ Snapchat</div><div className="mt-2 text-2xl font-black text-emerald-950">{sallaTotals.status === "complete" ? number(sallaTotals.orders) : "—"}</div><div className="mt-1 text-xs font-bold text-emerald-700">قيمة الطلبات {contractMoney(sallaTotals.revenue)} · ROAS {number(sallaTotals.roas)}</div>{sallaTotals.status === "complete" && <div className="mt-1 text-[11px] font-bold text-emerald-700">ربط تفصيلي {number(sallaSummary.account_period_campaign_matched_orders)} من {number(sallaSummary.snapchat_attributed_orders)}{sallaSummary.campaign_match_coverage_pct !== null && sallaSummary.campaign_match_coverage_pct !== undefined && Number.isFinite(Number(sallaSummary.campaign_match_coverage_pct)) ? ` · تغطية ${number(sallaSummary.campaign_match_coverage_pct)}%` : ""}</div>}</div>

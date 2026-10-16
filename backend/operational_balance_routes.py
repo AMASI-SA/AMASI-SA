@@ -4,7 +4,7 @@ from mobile_app_permissions import mobile_app_access_for_user, OPERATIONAL_APP_W
 from hashlib import sha256
 from decimal import Decimal
 import re
-from typing import Literal
+from typing import Annotated, Literal
 from datetime import date
 from pydantic import field_validator
 from uuid import uuid5, NAMESPACE_URL
@@ -25,7 +25,7 @@ class Request(Input):
     request_id: str = Field(min_length=8, max_length=160)
 
 
-PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_account",
+PartyType = Literal["employee", "provider", "courier", "store_driver", "ad_account", "pos_receivable",
                     "supplier", "external_person", "bank", "cash", "employee_custody",
                     "operating_expense", "owner_withdrawal"]
 
@@ -78,6 +78,11 @@ class Movement(Request):
 class AddEntity(Request):
     name: str = Field(min_length=2, max_length=120)
     currency: Literal["SAR"] = "SAR"
+
+
+class AdCatalogSelection(Request):
+    version: int = Field(ge=0, strict=True)
+    account_ids: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(max_length=500)
 
 
 class ReturnItem(Input):
@@ -247,6 +252,8 @@ async def scope(db, principal, permission):
             or owner_account.get("is_active") is False or owner_account.get("deleted_at")):
         fail("operational_owner_inactive", "حساب المالك غير متاح", 403)
     mobile = principal.get("_session_client") == "amasi_mobile"
+    if permission == "ad_selection_manage" and actor.get("role") != "owner":
+        fail("operational_ad_selection_owner_required", "اختيار الحسابات متاح للمالك فقط", 403)
     if permission in {"cash_manage", "beneficiary_manage"} and actor.get("role") != "owner":
         fail("operational_cash_owner_required" if permission == "cash_manage" else "operational_beneficiary_owner_required",
              "إضافة الصندوق متاحة للمالك فقط" if permission == "cash_manage" else "إضافة مستفيد سحوبات متاحة للمالك فقط", 403)
@@ -328,6 +335,18 @@ def make_operational_balance_router(db, current_user):
 
     manage_guard = guarded("manage")
     move_guard = guarded("move")
+
+    @router.get('/ad-account-selection')
+    async def ad_selection(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, 'ad_selection_manage')
+        from operational_ad_selection import catalog
+        return await catalog(db, owner)
+
+    @router.post('/ad-account-selection')
+    async def save_ad_selection(payload: AdCatalogSelection, user=Depends(guarded('ad_selection_manage'))):
+        actor, owner, _ = await scope(db, user, 'ad_selection_manage')
+        from operational_ad_selection import save
+        return await save(db, owner, actor['id'], payload.model_dump())
 
     @router.get('/supplier-adjustments/entry/{supplier_id}/{invoice_number:path}')
     async def supplier_adjustment_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
@@ -432,6 +451,7 @@ def make_operational_balance_router(db, current_user):
         return {"status": state["status"], "started_at": state["started_at"],
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
+                "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
@@ -443,6 +463,10 @@ def make_operational_balance_router(db, current_user):
         from operational_balance_sources import entities
         try:
             rows = await entities(db, owner, kind, include_unready=source != "employee_app")
+            if kind == 'ad_account':
+                from operational_ad_selection import catalog
+                selected = {r['id'] for r in (await catalog(db, owner))['items'] if r['selected']}
+                rows = [r for r in rows if r.get('integration_account_id') in selected]
             if source == "employee_app" and kind == "employee_custody":
                 from operational_app_banks import assigned_custody
                 own = await assigned_custody(db, owner, actor)
