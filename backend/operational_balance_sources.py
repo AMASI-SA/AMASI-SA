@@ -39,6 +39,7 @@ AD_SOURCES = {
     'google_ads': ('google_ads', 'mezan_google_ads_performance_daily_v2'),
 }
 ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
+    'mz2_opening_facts_v2',  # POS identity only; never import native opening amounts.
     'settings',  # Projected courier identity only; excluded from financial-source scans.
     'mz2_shipping_setup_v2', 'mz2_provider_fee_policies_v2', 'mz2_bank_transfer_bindings',
     'mz2_ad_account_bindings_v2', 'mezan_integration_accounts_v2',
@@ -430,6 +431,9 @@ async def entities(db, owner, kind, *, include_unready=False):
                                platform_account_id=account.get('external_account_id'),
                                ready=False, settings_complete=False,
                                setup_issue='ad_financial_binding_required'))
+    elif kind == 'pos_receivable':
+        from operational_pos_identity import pos_candidates
+        source = pos_candidates(await rows(db, owner, 'mz2_opening_facts_v2'), owner)
     elif kind in ENTITY_COLLECTIONS:
         source = await rows(db, owner, ENTITY_COLLECTIONS[kind])
         if kind in ('bank', 'cash'):
@@ -589,7 +593,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
                                'ad_snapshots', 'recurring', 'fee_policies', 'issues')}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2'})}
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
