@@ -43,6 +43,7 @@
     "conflict_resolution": "Preserve review_session binding and employee_lifecycle capability",
     "previous_pr": 1382,
     "previous_candidate": "9a94a7484dc8c1a01ed8153860df4aaf679cdee5",
-    "reason": "Mongo cases require disposable replica set; GitHub runner includes review_session_fence plus payroll transaction suite"
+    "reason": "Mongo cases require disposable replica set; GitHub runner includes review_session_fence plus payroll transaction suite",
+    "first_ci": "38922379645:303 passed,28 review session cases failed due missing cryptography. Adopt existing pinned review CI dependency generator; no product/assertion changes."
   }
 }
