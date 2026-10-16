@@ -37,7 +37,7 @@ backend = [args.python, "-m", "pytest", "--noconftest", "-q", "-o", "asyncio_mod
                    "test_employee_suspension_timeline", "test_employee_payroll_context_directory",
                    "test_operational_balance_engine", "test_operational_balance_engine_fixes",
                    "test_operational_balance_sources", "test_operational_balance_salary_consistency",
-                   "test_employee_operational_salary_integration")]]
+                   "test_employee_operational_salary_integration", "test_review_session_fence")]]
 jest = """
 const base=process.env.NODE_PATH;
 const real=require('fs').realpathSync(base+'/react-scripts');

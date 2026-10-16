@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from ai_store_access_contract import effective_permissions, write_role_assignment
 from operational_atomic import OperationalDatabase
 from operational_atomic import employee_lifecycle_atomic_owner
+from operational_atomic import operational_owner
 
 
 class Collection:
@@ -35,12 +36,40 @@ def capability(profile="employee_lifecycle", legacy=False):
         assignment["owner_user_id"] = "owner"
     root = {"users": Collection("users", {"id": "login"}),
             "mezan_role_assignments_v2": Collection("mezan_role_assignments_v2", assignment)}
-    for name in ("general_ledger", "mz2_atomic_owners", "mezan_employee_events_v2"):
+    for name in ("general_ledger", "mz2_atomic_owners", "mezan_employee_events_v2", "order_review_auth_sessions_v2"):
         root[name] = Collection(name)
     root["operational_balance_states_v1"] = Collection("operational_balance_states_v1", {"_id": "owner"})
     state = {"profile": profile, "failed": False}
     db = OperationalDatabase(root, object(), state, "owner")
     return db, root, state
+
+
+@pytest.mark.asyncio
+async def test_employee_lifecycle_rejects_review_session_binding_before_database_access():
+    async def unreachable(_):
+        pytest.fail("callback must not run")
+
+    with pytest.raises(HTTPException) as error:
+        await operational_owner(object(), "owner", unreachable, profile="employee_lifecycle",
+                                review_session={"actor_id": "actor", "origin_session_ref": "a" * 64,
+                                                "origin_session_epoch": 1})
+    assert error.value.detail["code"] == "operational_review_session_scope_conflict"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("profile,collection", [
+    ("employee_lifecycle", "order_review_auth_sessions_v2"),
+    ("fulfillment", "users"),
+    ("fulfillment", "mezan_role_assignments_v2"),
+    ("fulfillment", "operational_balance_states_v1"),
+])
+async def test_review_and_employee_write_capabilities_remain_separate(profile, collection):
+    db, root, state = capability(profile)
+    with pytest.raises(HTTPException):
+        await db[collection].update_one({"_id": "owner", "owner_id": "owner", "revision": 4},
+                                        {"$inc": {"revision": 1, "salary_contract_revision": 1}})
+    assert state["failed"]
+    assert all(not row.writes for row in root.values())
 
 
 def account_change(active):

@@ -1,9 +1,9 @@
 {
   "task": "employee-salary-card-refresh-20261016",
-  "branch": "codex/employee-salary-card-refresh-20261016",
-  "base_sha": "a0f03a73ec364481e1995d8d35987fd99a85ac8e",
+  "branch": "codex/employee-salary-release-1674-20261016",
+  "base_sha": "1674bb8b0a7a995e6ea87c83db93feb7d1a12e70",
   "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
-  "state": "Verified source prepared for PR; user authorized GitHub checkpoint and PR",
+  "state": "Latest Production integration; source-only candidate, CI pending, Intent B not frozen",
   "completed": [
     "Show current and scheduled salary on Employee OS cards immediately after save",
     "Verify employee account creation/reset accepts six digits or more",
@@ -35,5 +35,14 @@
     "Historical source discrepancies are detected and new affected movements blocked; no automatic settlement or retroactive rewriting",
     "Operational balances and accounting ledger remain separate; no automatic financial bridge"
   ],
-  "next_action": "Create PR targeting hotfix/prod-snap-meta-final, monitor CI, record exact source commit and PR in Issue #1006; no merge or deployment."
+  "next_action": "Run candidate CI against current Production base, then freeze reviewed intent-only B if Production unchanged. No merge or deploy.",
+  "integration_verification": {
+    "deselected_real_mongo": 4,
+    "local_skipped": 19,
+    "local_passed": 44,
+    "conflict_resolution": "Preserve review_session binding and employee_lifecycle capability",
+    "previous_pr": 1382,
+    "previous_candidate": "9a94a7484dc8c1a01ed8153860df4aaf679cdee5",
+    "reason": "Mongo cases require disposable replica set; GitHub runner includes review_session_fence plus payroll transaction suite"
+  }
 }
