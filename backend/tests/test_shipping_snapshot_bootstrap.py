@@ -90,7 +90,7 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
     monkeypatch.setattr(labels, "_resolve_order", resolve)
     monkeypatch.setattr(labels, "_print_shipment_rows", rows)
     monkeypatch.setattr(labels, "_best_effort_resync", resync)
-    results = await asyncio.gather(*(labels.refresh_shipping_label(db, "preview", "synthetic-order") for _ in range(2)))
+    results = await asyncio.gather(*(labels._refresh_provider_shipping_label(db, "preview", "synthetic-order") for _ in range(2)))
     assert all(result["ready"] and result["shipment_id"] == shipment for result in results)
     after = await db.unified_orders.find_one({"user_id": "preview"})
     assert shipment not in after[CURRENT_SHIPPING]["superseded_shipment_ids"]

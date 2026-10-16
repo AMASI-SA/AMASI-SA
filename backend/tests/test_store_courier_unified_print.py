@@ -15,7 +15,7 @@ async def test_courier_refresh_cannot_bypass_salla_completion(setup, status):
     state["order"]["shipping"] = {"company_name": "مندوب الرياض"}
     before = await dump(db)
     with pytest.raises(shipping.ShippingLabelError) as caught:
-        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "order_status_not_completed"
     assert await dump(db) == before
 
@@ -54,7 +54,7 @@ async def test_external_order_carrier_cannot_use_old_courier_shipment(setup):
     state["order"]["shipping"] = {"company_name": "Aramex", "company_code": "aramex"}
     state["rows"] = [{"id": "200", "order_id": "salla-order", "courier_name": "مندوب الرياض"}]
     with pytest.raises(shipping.ShippingLabelError) as caught:
-        await shipping.refresh_shipping_label(db, OWNER, ORDER)
+        await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "shipping_snapshot_changed"
 
 
@@ -62,7 +62,7 @@ async def test_external_order_carrier_cannot_use_old_courier_shipment(setup):
 async def test_saved_document_keeps_current_courier_name_without_awb(setup):
     db, state = setup
     state["order"].update(status="completed", shipping={"company_name": "مندوب الرياض"})
-    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
     assert result["courier_name"] == result["print_data"]["courier_name"] == "مندوب الرياض"
     assert result["ready"] and result["shipment_id"] is None
     assert result["tracking_number"] is None and result["label_url"] is None

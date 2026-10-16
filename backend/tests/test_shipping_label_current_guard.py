@@ -134,7 +134,7 @@ async def test_legacy_print_returns_provider_label_without_overwriting_new_local
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_best_effort_resync", no_resync)
-    result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
+    result = await shipping._refresh_provider_shipping_label(db, OWNER, ORDER)
     assert result["ready"] and result["label_url"] == "https://labels.test/old.pdf"
     after = await db.unified_orders.find_one({"user_id": OWNER, "order_number": ORDER})
     assert after["salla_shipment_id"] == "new-id"
@@ -341,6 +341,11 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
     import fulfillment_carrier_label as workflow_shipping
 
     await seed(db)
+    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {
+        "order_date": "2026-10-01T00:00:00Z",
+        "raw_by_source.salla_direct": {"id": "9001", "reference_id": ORDER,
+            "date": "2026-10-01T00:00:00Z", "shipping": {"company": "iMile"}},
+    }})
     await db.order_review_workflows.insert_one({
         "user_id": OWNER, "order_number": ORDER, "stage": "completed",
         "assembly_status": "completed", "salla_order_status": "completed",
