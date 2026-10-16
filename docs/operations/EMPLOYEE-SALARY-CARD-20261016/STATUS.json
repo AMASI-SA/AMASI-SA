@@ -1,0 +1,51 @@
+{
+  "task": "employee-salary-card-refresh-20261016",
+  "branch": "codex/employee-salary-current-20261017",
+  "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
+  "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
+  "state": "Current-base source candidate; fresh verification pending; old Intent B not reused",
+  "completed": [
+    "Show current and scheduled salary on Employee OS cards immediately after save",
+    "Verify employee account creation/reset accepts six digits or more",
+    "Immediate access change; payroll stop/resume defaults to tomorrow preserving today",
+    "Atomic contract, employee, access and audit updates with operational revision fence",
+    "Reject malformed or overlapping unpaid leave; support repeated same-day undo",
+    "Keep employees without salary contracts in payroll directory",
+    "Align operational accrual dates/rounding; preserve and detect historical conflicts"
+  ],
+  "verification": {
+    "backend": {
+      "passed": 298,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "frontend": {
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "includes": "Real Mongo replica-set transaction rollback, concurrency, history preservation and operational movement rejection; UI create/edit/scheduled salary and password boundaries",
+    "runner": "scripts/testing/mz2_salary_effective_date/verify.py",
+    "diff_check": "PASS"
+  },
+  "production_changed": false,
+  "release_guard": "Not started; no deployment authorized",
+  "boundaries": [
+    "Historical source discrepancies are detected and new affected movements blocked; no automatic settlement or retroactive rewriting",
+    "Operational balances and accounting ledger remain separate; no automatic financial bridge"
+  ],
+  "next_action": "Run payroll real Mongo/UI verification and current-base CI. No merge/deploy authorized.",
+  "integration_verification": {
+    "previous_pr": 1387,
+    "overlap": [
+      "operational_atomic.py bundle_catalog capability",
+      "operational_balance_service.py POS kind",
+      "operational_balance_sources.py bank and POS identity"
+    ],
+    "resolution": "Clean source-only cherry-pick; latest production additions preserved; no old intent carried forward",
+    "fresh_verification": "48 operational engine/legacy upgrade tests PASS; 44 lifecycle capability tests including real Mongo PASS; comprehensive suite pending",
+    "legacy_compatibility": "Exact pre-upgrade calendar rounding accepted only for old rows without currency, matching revision salary/status and obligation currency. No tolerance or financial history rewrite."
+  },
+  "previous_source": "29ae5117b0ad68e57213bae6d909a29c9fd62939"
+}

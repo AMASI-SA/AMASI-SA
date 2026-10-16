@@ -198,7 +198,8 @@ test("opens full management for all 15 employees with V2 payroll authority", asy
 });
 
 
-test("unpaid leave shows its effective-date salary stop warning", async () => {
+test("unpaid leave defaults payroll to tomorrow while login changes immediately", async () => {
+    updateEmployeesV2.mockResolvedValue(workspace);
     const { container, root } = await renderPage();
     try {
         const firstCard = container.querySelector('[data-testid="employees-v2-employee-card"]');
@@ -215,7 +216,15 @@ test("unpaid leave shows its effective-date salary stop warning", async () => {
 
         expect(document.body.querySelector('[data-testid="employees-v2-payroll-status-warning"]')).not.toBeNull();
         expect(document.body.textContent).toContain("أول يوم غير مدفوع");
-        expect(document.body.querySelector('[data-testid="employees-v2-status-effective-date"]')).not.toBeNull();
+        const effective = document.body.querySelector('[data-testid="employees-v2-status-effective-date"]');
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const tomorrow = new Date(`${today}T00:00:00Z`);
+        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+        expect(effective.value).toBe(tomorrow.toISOString().slice(0, 10));
+        expect(effective.max).toBe(effective.value);
+        expect(document.body.textContent).toContain("يتوقف الدخول فور الحفظ");
+        await act(async () => effective.closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+        expect(updateEmployeesV2.mock.calls.at(-1)[1].status_effective_date).toBe(tomorrow.toISOString().slice(0, 10));
     } finally {
         await cleanup(container, root);
     }
@@ -381,7 +390,7 @@ test("linked employee password can be reset from the employee account dialog", a
 });
 
 describe("employee password minimum", () => {
-    test.each([0, 5, 6, 7, 10, 11, 12])("create and reset accept length %i only from six", async (length) => {
+    test.each([0, 5, 6, 7, 10, 11, 12].flatMap(length => ["a", "7"].map(symbol => [length, symbol])))("create and reset accept length %i (%s) only from six", async (length, symbol) => {
         createAndLinkEmployeesV2Account.mockResolvedValue(workspace);
         resetEmployeesV2AccountPassword.mockResolvedValue(workspace);
         for (const linked of [false, true]) {
@@ -397,7 +406,7 @@ describe("employee password minimum", () => {
                 });
                 const id = linked ? "employees-v2-new-password" : "employees-v2-account-password";
                 expect(document.body.querySelector(`[data-testid="${id}"]`).minLength).toBe(6);
-                await set(id, "a".repeat(length));
+                await set(id, symbol.repeat(length));
                 if (linked) {
                     const submit = document.body.querySelector('[data-testid="employees-v2-reset-password"]');
                     expect(submit.disabled).toBe(length < 6);
@@ -459,6 +468,10 @@ describe("MZ2 salary effective date editing", () => {
             if (date) await change("salary-effective-date", date);
             await save();
             expect(updateEmployeesV2).toHaveBeenCalledWith("employee-1", expect.objectContaining({ monthly_salary: expectedAmount, salary_effective_date: expectedDate, salary_revision_id: "future-rev" }));
+            const card = container.querySelector('[data-testid="employees-v2-employee-card"]');
+            expect(card.textContent).toContain(expectedAmount.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+            expect(card.textContent).toContain(expectedDate);
+            expect(card.textContent).toContain("راتب مجدول");
             await open(container);
             expect(field("salary-effective-date").value).toBe(expectedDate);
             expect(field("monthly-salary").value).toBe(String(expectedAmount));
@@ -506,6 +519,10 @@ describe("MZ2 salary effective date editing", () => {
         getEmployeesV2Management.mockResolvedValue(data);
         const { container, root } = await renderPage();
         try {
+            expect(container.querySelector('[data-testid="employees-v2-card-current-salary"]').textContent).toContain("1,200.00");
+            const scheduled = container.querySelector('[data-testid="employees-v2-card-scheduled-salary"]');
+            expect(scheduled.textContent).toContain("1,500.00");
+            expect(scheduled.textContent).toContain("2026-10-31");
             await open(container);
             expect(field("salary-effective-date").value).toBe("2026-10-31");
             expect(field("contract-effective-from").textContent).toContain("2026-10-01");
@@ -517,6 +534,24 @@ describe("MZ2 salary effective date editing", () => {
             expect(field("salary-corrections").textContent).toContain("2026-10-31");
             expect(field("salary-history").textContent).toContain("2026-10-01");
             expect(field("salary-history").textContent).toContain("2026-10-31");
+        } finally { await cleanup(container, root); }
+    });
+    test("adding a first scheduled salary immediately appears on the employee card", async () => {
+        const initial = fixture();
+        initial.management.employees[0].salary_contract = null;
+        getEmployeesV2Management.mockResolvedValue(initial);
+        updateEmployeesV2.mockResolvedValue(fixture("2026-10-31", 3500));
+        const { container, root } = await renderPage();
+        try {
+            expect(container.textContent).toContain("لم يُحدد راتب");
+            await open(container);
+            await change("monthly-salary", "3500");
+            await change("salary-effective-date", "2026-10-31");
+            await save();
+            const card = container.querySelector('[data-testid="employees-v2-employee-card"]');
+            expect(card.textContent).toContain("3,500.00");
+            expect(card.textContent).toContain("2026-10-31");
+            expect(card.textContent).toContain("راتب مجدول");
         } finally { await cleanup(container, root); }
     });
 });
