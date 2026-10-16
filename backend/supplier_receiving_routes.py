@@ -10,6 +10,7 @@ writes remain deliberately disabled.
 from __future__ import annotations
 
 import uuid
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable
@@ -64,6 +65,8 @@ from product_option_cost_routes import (
 from product_v2_details_routes import COST_PROFILES
 from product_v2_routes import PRODUCTS
 from supplier_invoice_pdf import generate_supplier_invoice_pdf
+from supplier_invoice_images import prepare_invoice_images, measured, profiled
+from starlette.concurrency import run_in_threadpool
 from supplier_invoice_display_routes import register_display_routes, load_invoice_display, public_display_error
 from supplier_invoice_history import register_invoice_history_routes
 from supplier_invoice_history import register_invoice_history_routes
@@ -131,6 +134,7 @@ RECEIPT_PIECE_FIELDS = (
 )
 
 
+@profiled("actor")
 async def _actor_context(db: Any, user: dict[str, Any]) -> dict[str, Any]:
     """Resolve the real receiving employee behind a native merchant principal.
 
@@ -1067,6 +1071,7 @@ def _public_supplier_invoice(row: dict[str, Any] | None) -> dict[str, Any] | Non
     return public
 
 
+@profiled("invoice_read")
 async def _supplier_invoice_for_viewer(
     db: Any,
     *,
@@ -1318,6 +1323,7 @@ def supplier_receipt_piece_rollback_update(
     return update
 
 
+@profiled("service_catalog")
 async def _supplier_service_catalog(
     db: Any,
     *,
@@ -2512,6 +2518,7 @@ async def _apply_permanent_supplier_invoice_service(
     }
 
 
+@profiled("indexes")
 async def ensure_supplier_receiving_indexes(db: Any) -> None:
     await db[SESSIONS].create_index(
         [("user_id", ASCENDING), ("client_request_id", ASCENDING)],
@@ -2581,6 +2588,7 @@ async def ensure_supplier_receiving_indexes(db: Any) -> None:
     )
 
 
+@profiled("session_read")
 async def _session_for_actor(
     db: Any,
     *,
@@ -3152,6 +3160,7 @@ async def supplier_scan_group_candidates(
     return candidates
 
 
+@profiled("session_events")
 async def _recent_session_events(
     db: Any,
     *,
@@ -3674,6 +3683,20 @@ def make_supplier_receiving_router(
         tags=["Supplier Receiving V1"],
     )
 
+    indexes_ready = False
+    indexes_lock = asyncio.Lock()
+
+    async def ensure_indexes_once():
+        # Successful definitions persist in Mongo. Only skip repeated DDL for
+        # this router/database, never a failed or partially completed setup.
+        nonlocal indexes_ready
+        if indexes_ready:
+            return
+        async with indexes_lock:
+            if not indexes_ready:
+                await ensure_supplier_receiving_indexes(db)
+                indexes_ready = True
+
     register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
 
     register_invoice_history_routes(router, db, current_user, _actor_context, _require_permission, RECEIVE_PERMISSION)
@@ -3687,7 +3710,7 @@ def make_supplier_receiving_router(
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        await ensure_supplier_receiving_indexes(db)
+        await ensure_indexes_once()
         merchant_id = context["merchant_id"]
 
         # My Products is personal: both drafts and closed invoice history
@@ -4030,10 +4053,10 @@ def make_supplier_receiving_router(
             invoice_id=invoice_id,
         )
         if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
-            invoice = await verify_persisted_supplier_invoice(
+            invoice = await measured("integrity_read", verify_persisted_supplier_invoice(
                 db, user_id=context["merchant_id"], invoice_id=invoice_id,
                 session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
-            )
+            ))
         # Presentation is additive. A missing historical snapshot must not
         # invalidate a verified financial readback or fabricate piece metadata.
         public = _public_supplier_invoice(invoice)
@@ -4068,63 +4091,19 @@ def make_supplier_receiving_router(
             invoice_id=invoice_id,
         )
         if invoice.get("financial_integrity_contract") == INVOICE_INTEGRITY_CONTRACT:
-            invoice = await verify_persisted_supplier_invoice(
+            invoice = await measured("integrity_read", verify_persisted_supplier_invoice(
                 db, user_id=context["merchant_id"], invoice_id=invoice_id,
                 session_id=invoice.get("session_id"), supplier_id=invoice.get("supplier_id"),
-            )
-        # Historical invoices may predate the persisted selected image URL.
-        # Enrich a copy at download time from the current Mezan V2 catalog so
-        # reprints and newly-created invoices both show the product thumbnail.
-        invoice_lines = [dict(line) for line in (invoice.get("lines") or [])]
-        missing_product_ids = {
-            _text(line.get("product_id"))
-            for line in invoice_lines
-            if not _text(line.get("selected_image_url"))
-            and _text(line.get("product_id"))
-        }
-        if missing_product_ids:
-            products = await db[PRODUCTS].find(
-                {
-                    "user_id": context["merchant_id"],
-                    "$or": [
-                        {"id": {"$in": list(missing_product_ids)}},
-                        {"mezan_product_id": {"$in": list(missing_product_ids)}},
-                        {"salla_product_id": {"$in": list(missing_product_ids)}},
-                    ],
-                },
-                {
-                    "_id": 0,
-                    "id": 1,
-                    "mezan_product_id": 1,
-                    "salla_product_id": 1,
-                    "main_image": 1,
-                },
-            ).to_list(length=max(len(missing_product_ids), 1))
-            image_by_product_id: dict[str, str] = {}
-            for product in products:
-                image_url = _text(product.get("main_image"))
-                if not image_url:
-                    continue
-                for identifier in (
-                    product.get("id"),
-                    product.get("mezan_product_id"),
-                    product.get("salla_product_id"),
-                ):
-                    normalized_identifier = _text(identifier)
-                    if normalized_identifier:
-                        image_by_product_id[normalized_identifier] = image_url
-            for line in invoice_lines:
-                if _text(line.get("selected_image_url")):
-                    continue
-                image_url = image_by_product_id.get(_text(line.get("product_id")))
-                if image_url:
-                    line["selected_image_url"] = image_url
-        invoice_for_pdf = {**invoice, "lines": invoice_lines}
+            ))
+        # Canonical finalized piece snapshots select the product/variant image.
+        # Do not replace that historical selection with a current catalog image.
+        invoice_for_pdf = {**invoice}
         try:
             invoice_for_pdf["display"] = await load_invoice_display(db, invoice_for_pdf, context["merchant_id"])
         except ValueError as exc:
             raise HTTPException(409, detail={"code": public_display_error(exc)}) from None
-        content = generate_supplier_invoice_pdf(invoice_for_pdf)
+        images = await measured("pdf_images", prepare_invoice_images(db, context["merchant_id"], invoice_for_pdf))
+        content = await measured("pdf_render", run_in_threadpool(generate_supplier_invoice_pdf, invoice_for_pdf, images=images))
         filename = _supplier_invoice_filename(invoice)
         fallback = f"supplier-invoice-{_text(invoice.get('invoice_number')) or invoice_id}.pdf"
         return Response(
@@ -4344,7 +4323,7 @@ def make_supplier_receiving_router(
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        await ensure_supplier_receiving_indexes(db)
+        await ensure_indexes_once()
         merchant_id = context["merchant_id"]
         existing_request = await db[SESSIONS].find_one(
             {
@@ -5734,7 +5713,7 @@ def make_supplier_receiving_router(
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         _require_permission(context, RECEIVE_PERMISSION)
-        await ensure_supplier_receiving_indexes(db)
+        await ensure_indexes_once()
         session = await _session_for_actor(
             db,
             context=context,

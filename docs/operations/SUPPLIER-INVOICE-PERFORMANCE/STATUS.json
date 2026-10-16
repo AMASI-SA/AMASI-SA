@@ -1,0 +1,34 @@
+{
+  "task_id": "SUPPLIER-INVOICE-PERFORMANCE",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/supplier-invoice-performance-20261010",
+  "base_sha": "d55b1b86bbf24572debc700d7bf462bd40e87b3b",
+  "state": "ready_for_draft_owner_review",
+  "production_changed": false,
+  "merge": "not_authorized_not_done",
+  "release_intent": "not_authorized_not_done",
+  "deploy_ota": "not_authorized_not_done",
+  "verification": {
+    "focused_financial_native_display_pdf_suite": "162 passed, 0 skipped, exit 0",
+    "latest_image_index_suite_after_stream_chunk_and_font_lock": "27 passed, exit 0",
+    "real_native_baseline_current_save_profiles": "6 passed, exit 0",
+    "pdf_benchmark": "exit 0; 1/10/50 products, unique/repeated/missing images",
+    "diff_check": "exit 0",
+    "display_ci_followup": "149 passed, 0 skipped, exit 0; complete display CI list plus 6 native save profiles, 134.28s",
+    "boundary_and_index_focused": "2 passed, 26 deselected, exit 0; original financial hashes preserved"
+  },
+  "evidence": [
+    "REPORT.md",
+    "pytest.xml",
+    "pdf-benchmark.json",
+    "save-profile.txt",
+    "display-ci-followup.xml"
+  ],
+  "limitations": [
+    "No Production measurement or Android installed-device verification",
+    "Total save wall time improvement is not established; proven repeated index DDL reduction 36 to 12 including replay",
+    "Optional image deadline may omit uncached photos; cache has no eviction policy"
+  ],
+  "next_safe_action": "Owner reviews Draft PR #1320 and refreshed CI; no merge, deployment, OTA, or release intent",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1320"
+}
