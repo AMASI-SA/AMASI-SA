@@ -635,6 +635,7 @@ def _safe_settings_proof(settings: dict[str, Any]) -> dict[str, Any]:
             _settings_value(settings, "currency")
             or _settings_value(settings, "account_currency")
         ),
+        "account_currency_proof": _settings_value(settings, "account_currency_proof"),
         "daily_budget_micro": _settings_value(settings, "daily_budget_micro"),
         "daily_budget_usd": _settings_value(settings, "daily_budget_usd"),
         "bid_micro": _settings_value(settings, "bid_micro"),
@@ -906,6 +907,9 @@ def _structured_field_changes(
                     "currency": str(currency or "").strip().upper() or None,
                 }
             )
+        if field.endswith("_micro") and str(currency or "").upper() == "SAR":
+            entry["before_native"] = round(before_value / 1_000_000, 6) if isinstance(before_value, int) and not isinstance(before_value, bool) else None
+            entry["after_native"] = round(after_value / 1_000_000, 6) if isinstance(after_value, int) and not isinstance(after_value, bool) else None
         changes[field] = entry
     return {
         "fields": changes,
@@ -1531,6 +1535,16 @@ class SnapchatManagementProvider:
         self.user_id = user_id
         self.context = SnapchatSyncContext(db=db, user_id=user_id)
         self._management_roles_cache: dict[str, tuple[set[str], set[str]]] = {}
+
+    async def read_account(self, account_id: str) -> dict[str, Any]:
+        payload = await self._request("GET", f"/adaccounts/{account_id}")
+        rows = payload.get("adaccounts")
+        if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+            return {}
+        if rows[0].get("sub_request_status") not in (None, "SUCCESS"):
+            return {}
+        entity = rows[0].get("adaccount")
+        return entity if isinstance(entity, dict) else {}
 
     async def _request(
         self,
@@ -2233,6 +2247,54 @@ async def _selected_account(db: Any, user_id: str, account_id: str) -> dict[str,
     )
 
 
+def _native_financial_operation(operation: dict[str, Any]) -> bool:
+    if _operation_financial_fields(operation):
+        return True
+    body = operation.get("body") or {}
+    rows = body.get(operation.get("plural"), []) if isinstance(body, dict) else []
+    return isinstance(rows, list) and any(
+        isinstance(item, dict) and set(item).intersection(FINANCIAL_CONTROL_FIELDS)
+        for item in rows
+    )
+
+
+async def _verify_native_currency(
+    client: Any, account: dict[str, Any], account_id: str,
+    *, expected: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """SAR writes require exact live provider proof, never a legacy SAR default.
+
+    Preserve the established USD path. A stored SAR approval still requires
+    verification if cached metadata changes to USD after approval.
+    """
+    currency = str(account.get("currency") or "").strip().upper()
+    expected = expected or {}
+    if currency != "SAR" and expected.get("currency") != "SAR":
+        return {}
+    def reject() -> None:
+        raise HTTPException(status_code=409, detail={
+            "code": "snapchat_management_native_currency_unverified",
+            "message": "تعذر إثبات عملة الحساب من Snapchat؛ أعد التحقق قبل التعديل المالي.",
+        })
+    if (currency != "SAR" or account.get("connection_provenance") != "api_connection"
+            or account.get("connection_status") != "connected"
+            or str(account.get("ad_account_id") or "") != account_id):
+        reject()
+    if expected and (expected.get("currency") != currency
+            or expected.get("ad_account_id") != account_id
+            or expected.get("source") != "snapchat_adaccount_api"):
+        reject()
+    reader = getattr(client, "read_account", None)
+    if not callable(reader):
+        reject()
+    raw = await reader(account_id)
+    if (not isinstance(raw, dict) or raw.get("id") != account_id
+            or raw.get("currency") != currency):
+        reject()
+    return {"ad_account_id": account_id, "currency": currency,
+            "source": "snapchat_adaccount_api", "observed_at": _iso()}
+
+
 async def _audit(
     db: Any,
     *,
@@ -2916,6 +2978,9 @@ async def create_snapchat_management_proposal(
             },
         )
 
+    native_currency_proof = {}
+    if set(payload.payload).intersection(FINANCIAL_CONTROL_FIELDS):
+        native_currency_proof = await _verify_native_currency(client, account, payload.account_id)
     settings_proof: dict[str, Any] = {}
     effective_payload = payload
     if payload.action in SETTINGS_MANAGED_UPDATE_ACTIONS:
@@ -2937,6 +3002,8 @@ async def create_snapchat_management_proposal(
                 ),
             }
         )
+    if native_currency_proof and settings_proof and settings_proof.get("currency") != native_currency_proof["currency"]:
+        raise HTTPException(status_code=409, detail={"code": "snapchat_management_native_currency_unverified"})
     try:
         operation = build_snapchat_operation(effective_payload)
     except ValueError as exc:
@@ -3255,6 +3322,7 @@ async def create_snapchat_management_proposal(
             or payload.parent_id
         ),
         "settings_proof": settings_proof,
+        "native_currency_proof": native_currency_proof,
         "field_changes": field_changes,
         "reason": payload.reason,
         "idempotency_key": payload.idempotency_key,
@@ -4949,6 +5017,11 @@ async def _execute_snapchat_management_proposal_under_lease(
         )
     account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
     client = provider or SnapchatManagementProvider(db, user_id)
+    if row.get("native_currency_proof") or _native_financial_operation(operation):
+        if str(account.get("currency") or "").upper() == "SAR" and not row.get("native_currency_proof"):
+            raise HTTPException(status_code=409, detail={"code": "snapchat_management_native_currency_unverified"})
+        await _verify_native_currency(client, account, str(row.get("account_id") or ""),
+                                      expected=row.get("native_currency_proof"))
     role = await client.management_role(account, str(row.get("action") or ""))
     if not role.get("allowed"):
         raise HTTPException(
@@ -5223,6 +5296,11 @@ async def _execute_snapchat_management_proposal_under_lease(
                 operation=operation,
                 require_financial=True,
             )
+            if row.get("native_currency_proof"):
+                if final_settings_proof.get("currency") != row["native_currency_proof"].get("currency"):
+                    raise HTTPException(status_code=409, detail={"code": "snapchat_management_native_currency_unverified"})
+                await _verify_native_currency(client, account, str(row.get("account_id") or ""),
+                                              expected=row["native_currency_proof"])
             final_settings_proof = _settings_proof_at_provider_write(
                 final_settings_proof
             )
@@ -6327,6 +6405,11 @@ async def _rollback_snapchat_management_proposal_under_lease(
         ) from exc
     client = provider or SnapchatManagementProvider(db, user_id)
     account = await _selected_account(db, user_id, str(row.get("account_id") or ""))
+    if row.get("native_currency_proof") or _native_financial_operation(operation):
+        if str(account.get("currency") or "").upper() == "SAR" and not row.get("native_currency_proof"):
+            raise HTTPException(status_code=409, detail={"code": "snapchat_management_native_currency_unverified"})
+        await _verify_native_currency(client, account, str(row.get("account_id") or ""),
+                                      expected=row.get("native_currency_proof"))
     role = await client.management_role(account, str(row.get("action") or ""))
     if not role.get("allowed"):
         raise HTTPException(

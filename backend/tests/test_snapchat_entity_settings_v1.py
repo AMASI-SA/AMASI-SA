@@ -1552,3 +1552,27 @@ def test_micro_conversion_rejects_missing_invalid_or_fractional_raw_values():
     assert module.micro_to_usd(1.5, "USD") is None
     assert module.micro_to_usd(0, "USD") == 0.0
     assert module.micro_to_usd(1_234_567, "USD") == 1.234567
+
+
+@pytest.mark.asyncio
+async def test_sar_financial_controls_require_api_account_currency_proof():
+    row = entity("ad_squad", AD_SQUAD_ID, campaign_id=CAMPAIGN_ID,
+                 snapshot={"daily_budget_micro": 50_000_000, "bid_micro": 4_000_000,
+                           "bid_strategy": "LOWEST_COST_WITH_MAX_BID"})
+    proven = {**account("SAR"), "connection_provenance": "api_connection",
+              "connection_status": "connected"}
+    result = await module.list_financial_management_settings(
+        DB(entities=[row], accounts=[proven]), USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
+    item = result["items"][0]
+    assert item["quality"]["financial_controls_allowed"] is True
+    assert item["quality"]["financial_field_controls"]["bid"]["allowed"] is True
+    assert item["account_currency_proof"]["verified"] is True
+    assert item["account_currency_proof"]["ad_account_id"] == ACCOUNT_ID
+    assert item["daily_budget_account_currency"] == 50
+    assert item["daily_budget_usd"] is None
+    for invalid in ({**proven, "connection_provenance": None},
+                    {**proven, "connection_status": "disconnected"},
+                    {**proven, "currency": None}, {**proven, "currency": "ZZZ"}):
+        result = await module.list_financial_management_settings(
+            DB(entities=[row], accounts=[invalid]), USER_ID, "ad_squad", AD_SQUAD_ID, now=NOW)
+        assert result["items"][0]["quality"]["financial_controls_allowed"] is False
