@@ -2,10 +2,35 @@
   "task_id": "MZ2-BANK-TERMINAL-OPENINGS",
   "branch": "codex/operational-bank-terminal-20261016",
   "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
-  "state": "WIP_SOURCE_IMPLEMENTED_AWAITING_INTEGRATION_CI",
-  "completed": ["Owner-scoped identity-only existing bank catalog", "Independent named operational bank or terminal setup without driver or accounting activation", "Manual opening through existing bank liquidity contract", "Historical POS receivable data retained"],
-  "verification": {"source_boundary_unit_tests": "63 passed", "opening_and_movement_ui_tests": "57 passed", "isolated_mongo_integration": "pending CI"},
-  "limitations": ["No live owner-bank data queried", "No automatic matching by account name", "No native driver-payment or accounting activation changes", "Release Intent remains base intent; not deployable until final v5 release preparation"],
-  "next": "Review isolated Mongo creation/authorization/opening/transfer tests and full affected CI; retain latest Production before release integration",
-  "production_changed": false
+  "state": "REVIEWED_INTENT_FROZEN_FINAL_CI_PENDING",
+  "completed": [
+    "Owner-scoped identity-only existing bank catalog",
+    "Independent named operational bank or terminal setup without driver or accounting activation",
+    "Manual opening through existing bank liquidity contract",
+    "Historical POS receivable data retained"
+  ],
+  "verification": {
+    "source_boundary_unit_tests": "63 passed",
+    "opening_and_movement_ui_tests": "57 passed",
+    "isolated_mongo_integration": "PASS:437 backend tests including owner-only/idempotent creation and conserved terminal-bank transfers",
+    "frontend_ci": "PASS:161 tests",
+    "shipping_ci": "PASS:16 tests and18 subtests",
+    "source_run": 38955242573,
+    "git_intent_binding": "PASS"
+  },
+  "limitations": [
+    "No live owner-bank data queried",
+    "No automatic matching by account name",
+    "No native driver-payment or accounting activation changes",
+    "Final B clean-clone rehearsal and checks pending",
+    "Emergent browser tool fails with kernel assets os error3; operator read-only preflight requested"
+  ],
+  "next": "Inspect final B CI; obtain fresh Emergent status/Git/disk and Manage Publishing before release actions; no Production balances changed.",
+  "production_changed": false,
+  "source_sha": "abaacdae8183a70be97e723494a59972d8f32f72",
+  "intent_sha": "30c4901ed39c70a1f4f4c3b138c9d25a1790a793",
+  "release_id": "rg5-8bcf1cfbbe53c2fda7c71bbcc76f95b4a4ff95e74ca596c8b6fd5a05be1d321b",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1401",
+  "evidence_branch": "codex/operational-bank-terminal-evidence",
+  "evidence_branch_is_not_deployable": true
 }
