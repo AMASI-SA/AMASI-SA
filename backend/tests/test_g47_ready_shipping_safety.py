@@ -51,9 +51,11 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         search = await self.client.get("/preparation-work-v1/assembly/search?q=local-assembly")
         self.assertFalse(any(p["can_mark_ready"] for p in search.json()["pieces"]))
 
-    async def test_no_remote_precondition_stops_without_any_post_or_replay(self):
+    async def test_version_one_remains_readback_only(self):
         await self.finish()
         delivery = fixture.delivery
+        await self.db[delivery.WORKFLOWS].update_one({"user_id": "owner"},
+            {"$set": {"assembly_delivery.version": 1}})
         with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
             "id": "internal", "reference_id": "local-assembly", "status": {"slug": "in_progress"}}))), \
              patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
@@ -61,7 +63,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
             second = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertFalse(first["ready"])
         self.assertFalse(second["ready"])
-        self.assertEqual(first["error_code"], "completion_remote_precondition_unavailable")
+        self.assertEqual(first["error_code"], "completion_status_unconfirmed")
         self.assertTrue(first["requires_attention"])
         post.assert_not_awaited()
         self.assertEqual(await self.on_hand(), 16)

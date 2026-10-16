@@ -1,0 +1,13 @@
+{
+  "task": "READY-AUTO-COMPLETION-20261017",
+  "branch": "codex/ready-auto-completion-20261017",
+  "base": "7da8b95c5bf79cd001d0714439dc5b7f89e18f31",
+  "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
+  "state": "WIP_NOT_FOR_RELEASE",
+  "production_changed": false,
+  "completed": ["Merged prior ready integration preserving latest production courier classification", "Added v2 read-first status dispatch with bounded transient retries and persisted dispatch count", "No separate shipment creation; existing v1 and historical enrollment remain readback-only"],
+  "owner_acceptance": "Owner accepts limited provider GET-to-POST race; never knowingly post on terminal state; Ready requires in_progress",
+  "validation": {"print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto", "syntax": "PASS", "mongo_and_performance": "PENDING", "final_ci": "PENDING"},
+  "remaining": ["Run isolated Mongo acceptance and resolve failures", "Measure ready with synthetic 20-second provider and search at 1/10/50", "Review UI pending/error behavior and integration diff", "Fresh final CI, rollback and governed release gates"],
+  "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests"
+}

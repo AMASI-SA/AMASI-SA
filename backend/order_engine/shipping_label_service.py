@@ -1681,7 +1681,7 @@ async def issue_shipping_label(
     # Legacy enrollment is readback-only: past provider delivery is unknown.
     # Experiments cannot bypass the same production safety policy.
     enrolled = await db.order_review_workflows.find_one({
-        "user_id": user_id, "order_number": normalized, "assembly_delivery.version": 1})
+        "user_id": user_id, "order_number": normalized, "assembly_delivery.version": {"$in": [1, 2]}})
     if not enrolled:
         # Preserve the historic read-only source reconciliation before freezing
         # a legacy print attempt. No provider POST is part of this operation.

@@ -96,14 +96,54 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={"ready": True, "label_url": "https://example.test/current.pdf"})):
             first = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertFalse(first["ready"])
-            self.assertEqual(first["error_code"], "completion_remote_precondition_unavailable")
-            self.assertEqual(posts, [])
-            state = "completed"  # Merchant completed in Salla, outside this worker.
+            self.assertEqual(first["error_code"], "TimeoutError")
+            self.assertFalse(first["requires_attention"])
+            self.assertEqual(posts, ["/orders/internal/status"])
             second = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertTrue(second["ready"])
             third = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertTrue(third["ready"])
-        self.assertEqual(posts, [])
+        self.assertEqual(posts, ["/orders/internal/status"])
+
+    async def test_status_retry_reads_first_and_never_creates_awb(self):
+        await self.finish()
+        state = "in_progress"
+        calls = []
+        async def resolve(*args):
+            calls.append("GET:" + state)
+            return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": state}}
+        async def post(*args, **kwargs):
+            calls.append("POST:" + args[3])
+            self.assertEqual(kwargs["json"], {"slug": "completed"})
+            self.assertTrue(kwargs["single_post_attempt"])
+            raise TimeoutError("synthetic request not delivered")
+        with patch.object(delivery.shipping, "_resolve_order", resolve), \
+             patch.object(delivery.shipping, "call_salla", post):
+            for _ in range(2):
+                result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+                self.assertFalse(result["requires_attention"])
+            state = "delivered"
+            rejected = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+        self.assertTrue(rejected["requires_attention"])
+        self.assertFalse(rejected["ready"])
+        self.assertEqual(calls, ["GET:in_progress", "POST:/orders/internal/status",
+                                 "GET:in_progress", "POST:/orders/internal/status", "GET:delivered"])
+        self.assertEqual((await self.workflow())[delivery.FIELD]["status_dispatch_count"], 2)
+        self.assertEqual(await self.on_hand(), 16)
+
+    async def test_successful_post_waits_for_readback_before_confirmation(self):
+        await self.finish()
+        with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("internal", {
+                "id": "internal", "reference_id": "local-assembly", "status": {"slug": "in_progress"}}))), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock(return_value={"success": True})) as post, \
+             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock()) as label:
+            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+        post.assert_awaited_once()
+        label.assert_not_awaited()
+        self.assertEqual(result["order_completion_status"], "pending")
+        self.assertEqual(result["error_code"], "completion_readback_pending")
+        self.assertFalse(result["requires_attention"])
+        self.assertFalse(result["ready"])
 
     async def test_crashed_worker_new_client_resumes_expired_lease_and_budget(self):
         await self.finish()
@@ -143,7 +183,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["order_completion_status"], "pending")
             self.assertFalse(result["ready"])
 
-    async def test_first_awb_once_response_loss_then_current_readback(self):
+    async def test_provider_draft_waits_for_current_label_without_awb_post(self):
         await self.finish()
         label_ready = False
         posts = []
@@ -165,7 +205,7 @@ class DeliveryTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery.shipping, "call_salla", post):
             first = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             self.assertFalse(first["ready"])
-            self.assertEqual(first["error_code"], "completion_remote_precondition_unavailable")
+            self.assertEqual(first["error_code"], "completion_label_pending")
             self.assertEqual(posts, [])
             label_ready = True  # Label reconciled externally, GET-only here.
             for _ in range(2):

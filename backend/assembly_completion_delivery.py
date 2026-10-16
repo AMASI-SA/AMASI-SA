@@ -11,10 +11,12 @@ import hashlib
 import json
 import uuid
 
+import httpx
+
 from pymongo import ReturnDocument
 
 from operational_atomic import operational_owner
-from assembly_status_policy import canonical_status, source_status
+from assembly_status_policy import canonical_status, source_status, status_values
 from order_engine import shipping_label_service as shipping
 
 WORKFLOWS = "order_review_workflows"
@@ -30,7 +32,7 @@ def now():
 
 
 def pending_operation(actor_id, actor_name):
-    return {"version": 1, "state": "pending", "attempts": 0,
+    return {"version": 2, "state": "pending", "attempts": 0,
             "due_at": now().isoformat(), "lease_until": "", "claim": None,
             "status_attempted": False, "awb_attempted": False, "order_confirmed": False,
             "actor_id": actor_id, "actor_name": actor_name}
@@ -112,7 +114,10 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
             if effect:
                 if legacy:
                     raise shipping.ShippingLabelError("completion_effect_unconfirmed", "المحاولة السابقة غير مؤكدة؛ لن يتكرر الإرسال.")
-                selector[f"{FIELD}.{effect}_attempted"] = False
+                if effect != "status" or outbox.get("version") != 2:
+                    selector[f"{FIELD}.{effect}_attempted"] = False
+                else:
+                    updates[f"{FIELD}.status_dispatch_count"] = outbox.get("status_dispatch_count", 0) + 1
                 updates.update({f"{FIELD}.{effect}_attempted": True,
                                 f"{FIELD}.{effect}_attempted_at": now().isoformat()})
             # Use the current revision only for atomic CAS, never as material
@@ -170,43 +175,33 @@ async def _deliver(db, operation):
         await guard_effect(db, operation, patch={
             f"{FIELD}.order_confirmed": False, "salla_order_status": "unknown",
             "salla_order_status_verified_at": None, "carrier_label_ready": False})
-        status = order.get("status") or {}
-        status_values = {shipping._status(status).replace("_", " ")}
-        if isinstance(status, dict) and status.get("name"):
-            status_values.add(str(status["name"]).strip())
-        if not status_values or not status_values.issubset({"in progress", "قيد التنفيذ"}):
+        observed = status_values(order.get("status")) | status_values(order.get("status_slug"))
+        if observed != {"in_progress"}:
             raise shipping.ShippingLabelError("assembly_order_not_ready", "الطلب ليس قيد التنفيذ في سلة.")
-        if operation[FIELD].get("status_attempted"):
-            raise shipping.ShippingLabelError("completion_status_unconfirmed", "تحديث الحالة غير مؤكد؛ لن يتكرر الإرسال.")
-        # Fence BEFORE sending. A crash here deliberately requires readback,
-        # never an automatic repeated POST, even if no bytes reached Salla.
+        if operation[FIELD].get("version") != 2 or operation[FIELD].get("legacy_readback_only"):
+            raise shipping.ShippingLabelError("completion_status_unconfirmed", "المحاولة السابقة غير مؤكدة؛ يلزم الاستكمال في سلة.")
+        # Journal before dispatch, with current local evidence and a fresh
+        # provider in_progress read on EVERY attempt. The owner accepts the
+        # remaining remote GET/POST race: Salla has no conditional-write API.
+        # A later attempt reads first; completed never causes another POST.
         await guard_effect(db, operation, effect="status")
-        # Salla documents no expected-status/version precondition. A Mongo
-        # check cannot fence a later remote transition. Never dispatch this
-        # unconditional write; a merchant must reconcile in Salla then GET.
-        raise shipping.ShippingLabelError("completion_remote_precondition_unavailable",
-            "تعذر ضمان تحديث مشروط لدى سلة؛ راجع الطلب في سلة ثم أعد التحقق بالقراءة.")
+        await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
+                                  json={"slug": "completed"}, single_post_attempt=True)
+        # An acknowledgement alone is not completion proof. Release the lease
+        # for a durable readback attempt; never send another POST in this run.
+        raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
     await guard_effect(db, operation, patch={
         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
         "salla_order_status_verified_at": now().isoformat()})
     # Refresh verifies status and the current active shipment before any AWB IO.
     result = await shipping.refresh_shipping_label(db, owner, number)
-    if not result.get("ready") and not operation[FIELD].get("awb_attempted"):
-        rows = await shipping._print_shipment_rows(db, owner, internal_id)
-        active = shipping._active_outbound(rows)
-        source = active[0] if active else {}
-        # Preserve the provider rule: pending/tracked shipments are already
-        # being issued by Salla. Only a current unissued row qualifies.
-        if (source and shipping._status(source.get("status")) == "draft"
-                and not shipping._tracking(source)):
-            await guard_effect(db, operation, effect="awb")
-            raise shipping.ShippingLabelError("completion_remote_precondition_unavailable",
-                "تعذر ضمان إصدار مشروط لدى سلة؛ راجع الشحنة في سلة ثم أعد التحقق بالقراءة.")
+    # Salla creates the shipment on completed. Only read its current label;
+    # never create a separate AWB, including when a draft has no tracking yet.
     from fulfillment_carrier_label import _workflow_patch
     patch = _workflow_patch({**result, "order_status_completed": True}, now=now().isoformat())
     patch.update({f"{FIELD}.state": "confirmed" if result.get("ready") else (
                       "requires_attention" if operation[FIELD]["attempts"] >= MAX_ATTEMPTS else "pending"),
-                  f"{FIELD}.error_code": None, f"{FIELD}.lease_until": "",
+                  f"{FIELD}.error_code": None if result.get("ready") else "completion_label_pending", f"{FIELD}.lease_until": "",
                   f"{FIELD}.claim": None,
                   f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat()})
     await guard_effect(db, operation, patch=patch)
@@ -220,6 +215,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
             pending = pending_operation(actor_id, actor_name)
             # Historic issue paths did not all journal before provider POST.
             # Enrollment cannot prove non-delivery: only readback is safe.
+            pending["version"] = 1
             pending["status_attempted"] = True
             pending["awb_attempted"] = True
             pending["legacy_readback_only"] = True
@@ -229,7 +225,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
         await operational_owner(db, user_id, enroll)
     instant = now()
     query = {"user_id": user_id, "order_number": order_number, "assembly_status": "completed",
-             f"{FIELD}.version": 1, f"{FIELD}.lease_until": {"$lte": instant.isoformat()}}
+             f"{FIELD}.version": {"$in": [1, 2]}, f"{FIELD}.lease_until": {"$lte": instant.isoformat()}}
     if not manual:
         query.update({f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": instant.isoformat()},
                       f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}})
@@ -244,11 +240,18 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
         except Exception as exc:
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
+            status = getattr(exc, "status_code", 0) or 0
+            retryable = (code == "completion_readback_pending"
+                         or isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError))
+                         or status in {408, 429} or status >= 500)
+            retry = (retryable and operation[FIELD].get("version") == 2
+                     and operation[FIELD]["attempts"] < MAX_ATTEMPTS)
+            delay = min(120, 5 * 2 ** min(operation[FIELD]["attempts"] - 1, 5))
             await db[WORKFLOWS].update_one(
                 {"user_id": user_id, "order_number": order_number, f"{FIELD}.claim": token},
-                {"$set": {f"{FIELD}.state": "requires_attention",
+                {"$set": {f"{FIELD}.state": "pending" if retry else "requires_attention",
                           f"{FIELD}.error_code": code, f"{FIELD}.claim": None, f"{FIELD}.lease_until": "",
-                          f"{FIELD}.due_at": (now() + timedelta(seconds=30)).isoformat(),
+                          f"{FIELD}.due_at": (now() + timedelta(seconds=delay)).isoformat(),
                           f"{FIELD}.order_confirmed": False,
                           "salla_order_status": "unknown", "salla_order_status_verified_at": None,
                           "carrier_label_ready": False}})
@@ -257,12 +260,12 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
 
 
 async def run_once(db):
-    await db[WORKFLOWS].update_many({"assembly_status": "completed", f"{FIELD}.version": 1,
+    await db[WORKFLOWS].update_many({"assembly_status": "completed", f"{FIELD}.version": {"$in": [1, 2]},
         f"{FIELD}.state": "pending", f"{FIELD}.attempts": {"$gte": MAX_ATTEMPTS},
         f"{FIELD}.lease_until": {"$lte": now().isoformat()}},
         {"$set": {f"{FIELD}.state": "requires_attention", f"{FIELD}.claim": None,
                   f"{FIELD}.error_code": "completion_attempt_budget_exhausted"}})
-    candidates = await db[WORKFLOWS].find({"assembly_status": "completed", f"{FIELD}.version": 1,
+    candidates = await db[WORKFLOWS].find({"assembly_status": "completed", f"{FIELD}.version": {"$in": [1, 2]},
         f"{FIELD}.state": "pending", f"{FIELD}.due_at": {"$lte": now().isoformat()},
         f"{FIELD}.lease_until": {"$lte": now().isoformat()}, f"{FIELD}.attempts": {"$lt": MAX_ATTEMPTS}},
         {"user_id": 1, "order_number": 1}).limit(4).to_list(4)
