@@ -95,3 +95,32 @@ and exact intent/merge SHA must be read from Issue #1006 before continuing.
 
 Unrelated main-worktree Qoyod changes and operational selection PR #1376 are
 preserved. Do not clear another conversation's lease.
+
+## Final release candidate (supersedes earlier identities)
+
+The first intent was rejected because its source preceded the PR base merge.
+New source A `290adba4793c8474f305a0edddf867953a1693b5` includes that merge
+without changing the reviewed source tree. Intent B is
+`457f66e4e6975b974d75ac6787b3b7f6a32b4ba2` on the UI branch. A..B changes
+only `release/release-intent-v5.json`; prior commits were preserved.
+
+- Runtime release: `rg5-763513961fc3a4c3f2fba1d42935246388d0777a7268478c10bdc0808278bbf0`.
+- Intent SHA256: `c8274ca3c6323029c69ceb058fc4531efcb277ff5e72c98de1141297c1889a79`.
+- Source workflow 38908904404 passed. CI intent bytes match independent cloud
+  arm64 freeze exactly.
+- Release workflow 38909195999 passed, including clean-clone Host Node20 adapter,
+  isolated Backend/Frontend packages and JSON build metadata runtime route.
+- Independent cloud adapter rehearsal at B passed and emitted the same identity;
+  log `/root/unified-marketing-ai-rehearsal.log`.
+- Latest PR check pending at this checkpoint: CodeQL Python. No known failed
+  checks for B. PR1378 not yet merged at this checkpoint.
+- No publish, no lease, no production financial/advertising write performed.
+
+Next: wait for CodeQL, merge PR1378 without squash/rebase, then follow the separate
+publication authorization and mandatory release gates. Do not publish older
+75d61325b/19dafa15b candidate. Runtime remains on the prior release.
+
+Rollback if a deployed regression is verified: create a new dedicated revert PR
+for this task's source changes (backend1377 and UI1378), retain unrelated later
+changes, build a fresh source/intent pair and pass the same deployment gates.
+Do not reset the production branch or bypass validation with a stale artifact.
