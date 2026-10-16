@@ -1,8 +1,9 @@
 # MZ2 smart bundles: architecture audit and acceptance contract
 
-Status: design and source audit; acceptance below is pending. This document does
-not certify implementation, production readiness, deployment, or live provider
-behavior. Audit performed on 2026-10-16. Production was not changed.
+This is the initial design/source audit from 2026-10-16. Its pending matrix is
+preserved as the original acceptance contract. Implemented behavior, executed
+evidence, and remaining boundaries are recorded in
+[the release-candidate report](mz2-bundles-release-candidate.md). Production was not changed.
 
 ## Existing authorities and extension seams
 
