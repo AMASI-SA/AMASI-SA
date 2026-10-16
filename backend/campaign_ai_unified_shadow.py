@@ -250,6 +250,7 @@ async def build_campaign_ai_unified_shadow(
         "period_closed": True,
         "period": unified.get("period"),
         "account": unified.get("account"),
+        "account_diagnostics": unified.get("account_diagnostics") or [],
         "levels": levels,
         "errors": errors,
         "writes_performed": False,
