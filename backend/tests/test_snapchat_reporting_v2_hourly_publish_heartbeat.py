@@ -256,6 +256,10 @@ def _install_pipeline_fakes(
         run["summary"] = deepcopy(summary or {})
         run["stage_history"].append({"stage": "completed", "status": run["status"]})
 
+    async def publish_totals(_db, _run_id):
+        assert state["run"]["status"] == "complete"
+        return 0  # This fixture deliberately has no hierarchy fact rows.
+
     async def fail_run(_db, _run_id, error, *, stage=None, **_kwargs):
         run = state["run"]
         run["status"] = "failed"
@@ -317,6 +321,7 @@ def _install_pipeline_fakes(
     monkeypatch.setattr(pipeline_module, "heartbeat_sync_run", run_heartbeat)
     monkeypatch.setattr(pipeline_module, "set_level_status", set_level)
     monkeypatch.setattr(pipeline_module, "complete_sync_run", complete_run)
+    monkeypatch.setattr(pipeline_module, "publish_committed_totals", publish_totals)
     monkeypatch.setattr(pipeline_module, "fail_sync_run", fail_run)
     monkeypatch.setattr(
         SnapchatV2SyncPipeline,

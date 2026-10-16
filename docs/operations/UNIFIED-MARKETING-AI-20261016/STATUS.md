@@ -107,3 +107,29 @@ TOTAL fact snapshots only after a successful run; all intelligence readers use
 that same complete snapshot while subsequent refreshes run. Retain all source
 proof, ownership, period, freshness, financial and approval checks. Add failure,
 first-run and successful-refresh tests; then follow protocolv5 for approved release.
+
+## Committed account-day snapshot implementation
+
+A successful sync now publishes each account-day hierarchy atomically into
+mezan_snapchat_committed_totals_v1 after complete_sync_run. All three hierarchy
+levels switch together; running/partial/failed runs cannot publish. The bounded
+snapshot contains only rows produced by that exact successful run, so older
+rows absent from a replacement provider report are not mixed into that snapshot.
+Documents are limited to12MiB, reads/writes to100000 rows; publication validates
+source scope, coverage and request window. Legacy facts remain untouched for
+compatibility and rollback. No destructive migration or credential change.
+
+Report loading, compact readiness and daily-series loading now share the same
+committed reader and source-run proof. Before the first successful publication,
+legacy proof remains conservative. A day missing one hierarchy level is not
+published. Snapshot reads project only the requested hierarchy level.
+
+Verification: actual mutable-upsert regression failed before implementation.
+After implementation, affected Snapchat reporting/unified marketing/Campaign AI
+and phase5 tests:214 passed,1 skipped; exit0. Tests cover running/partial/failed
+refreshes, complete replacement, shared readiness/daily-series values, owner
+isolation, first-run refusal and bounded publication preserving prior data.
+No readiness or approval gates relaxed. No Production changes or ad writes.
+Next: fresh source checkpoint, independent cloud andCI build/intent agreement,
+reviewed PR with intent-only commit, production protocolv5, then verify committed
+snapshot creation and seven gates during a concurrent refresh in Production.

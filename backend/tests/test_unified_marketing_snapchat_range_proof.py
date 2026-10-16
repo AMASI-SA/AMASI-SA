@@ -144,6 +144,7 @@ async def test_entity_daily_series_uses_exact_v2_total_facts(monkeypatch):
     monkeypatch.setattr(reader, "get_selected_account", selected)
     monkeypatch.setattr(reader, "calculate_cost_components", cost)
     db = Database({
+        "mezan_snapchat_committed_totals_v1": DailyCollection([]),
         "mezan_snapchat_daily_total_facts_v2": DailyCollection([{
             "external_id": "campaign-1",
             "entity_type": "campaign",
