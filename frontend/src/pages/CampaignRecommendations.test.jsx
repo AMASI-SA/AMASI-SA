@@ -77,3 +77,29 @@ test("execution still requires explicit owner confirmation", () => {
     expect(page).toContain("موافقة وتنفيذ");
     expect(page).toContain("snapshot_id: snapshot.snapshot_id");
 });
+
+test("periodic Google advice shares the list but cannot execute through the Snapchat or Meta gateway", async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const google = { recommendation_id: "google-cycle", provider: "google", account_id: "123",
+        entity_level: "campaign", entity_name: "مراجعة التتبع في جوجل", account_name: "حساب جوجل",
+        recommended_action: "REVIEW_TRACKING", action_type: "ads_write", priority: "high",
+        executable: true, approval_available: true, diagnosis: "راجع التحويلات المثبتة" };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/latest")
+        ? { snapshot_id: "cycle", recommendations: [google, { ...google, recommendation_id: "snap", provider: "snapchat", entity_name: "سناب", executable: false }] } : {} }));
+    api.post.mockReset();
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<CampaignRecommendations />));
+        const cards = container.querySelectorAll('[data-testid="campaign-recommendations-list"] article');
+        expect(cards).toHaveLength(2);
+        expect(cards[0].textContent).toContain("جوجل");
+        expect(cards[0].querySelector('a[href="/ads-manager?provider=google&tab=ai&account=123"]')).not.toBeNull();
+        expect([...cards[0].querySelectorAll("button")].some((button) => button.textContent === "موافقة وتنفيذ")).toBe(false);
+        expect([...container.querySelectorAll("option")].some((option) => option.value === "google")).toBe(true);
+        expect(api.post).not.toHaveBeenCalled();
+    } finally {
+        await act(async () => root.unmount()); container.remove(); globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+
