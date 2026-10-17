@@ -89,6 +89,13 @@ class SourceContract(unittest.TestCase):
                     hashlib.sha256(before.replace(b'\r\n', b'\n')).hexdigest(),
                     'cc94fc8faeb0f811735f22423c7e6e501df1718faec5974904ec1eefe6e5a659',
                 })
+            elif file == 'sold_products_report_v2.py':
+                # The deployed nested-bundle change (113f5e6f) supersedes this
+                # file's old transplant baseline. Pin exact approved Production
+                # bytes; Ready must not change report policy or data access.
+                approved = subprocess.check_output(['git', 'show',
+                    '2a7740359451a538be8df373266c4c92ca1a57c8:backend/' + file], cwd=ROOT)
+                self.assertEqual(approved.replace(b'\r\n', b'\n'), current)
             else:
                 self.assertEqual(before.replace(b'\r\n', b'\n'), current)
 

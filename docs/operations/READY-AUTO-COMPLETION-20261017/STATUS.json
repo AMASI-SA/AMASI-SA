@@ -25,7 +25,7 @@
     "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
     "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed",
     "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
-    "dashboard_fix": "Preserve historical JSON oracle; add immutable Production read baseline with exact equality and all164cases/no skips; three-arm local validation running"
+    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required"
   },
   "remaining": [
     "Finish three-arm dashboard validation",

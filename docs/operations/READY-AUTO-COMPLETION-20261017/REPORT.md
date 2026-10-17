@@ -22,7 +22,7 @@ Historical b99 search baseline, seven interleaved warm samples: 1piece7.845ms ->
 Local canonical race suite21 passed. Worker/safety suite28 passed plus9 subtests; a retired AWB-branch injection failed to execute. The original diagnostic remains unchanged by default; opt-in injection at the current shipment refresh boundary passed all3 counterexamples. Local print suite297 passed/1 intentional skip. After latest Production integration, saved-label/inbox/boundary suites87 passed/1 intentional skip. Fresh full HEAD CI remains mandatory; earlier suite results are not final release acceptance.
 
 ## Integration and release
-Latest source base6f4877922747350189d2f45c676083cc791ac670 includes the parallel saved-label pilot. Its opt-in saved-label reader and provider courier helper are preserved separately from the strict Ready delivery reader; pilot policy is not silently changed. Supplier performance and financial code are unchanged by this patch.
+Latest source base2a7740359451a538be8df373266c4c92ca1a57c8 includes the parallel saved-label pilot and the subsequently released payroll changes. Its opt-in saved-label reader and provider courier helper are preserved separately from the strict Ready delivery reader; pilot policy is not silently changed. Supplier performance and financial code are unchanged by this patch.
 
 The old integration merge ancestry triggered the release source-only guard despite unchanged intent bytes. History is retained on codex/ready-auto-history-checkpoint-20261017; the same integrated source tree was rebuilt with latest Production as sole parent. No release guard was weakened. Candidate source-base resolution now passes. No new release intent, merge, deployment or lease has been created.
 
@@ -30,3 +30,10 @@ Before release: resolve all final HEAD CI, verify Android, freeze a fresh govern
 
 ## Accepted residual remote race
 Salla does not expose a conditional status write. A remote terminal transition after the last GET/local fence but before POST may still receive completed. The owner explicitly accepted this limited race and repeated completed status delivery. Known terminal observations must never dispatch, and current-label publication remains fenced. This is not an exactly-once or remote atomicity guarantee. No provider idempotency guarantee was independently proven here.
+
+## CI corrections after the payroll release
+Prior candidate d058f09d1 passed24/26 workflows. The complete shipping command now passes527tests with1intentional mock transaction skip. Courier tests retain rejected status/cache revocation assertions and test historical readback rather than an unsafe unjournaled automatic POST.
+
+The dashboard gate also failed on untouched Production2a774035: its first response matched the historical oracle, with43find on both Production and this candidate versus41on the old oracle. The gate retains all164historical JSON responses and compares exact read/document/collection evidence to a third immutable Production arm. All three arms passed in GitHub on0b80b6fb; a later source check still expected pre-bundle report bytes. That check now pins the exact deployed2a774035 sold-products report; no report, governor or financial implementation changed. Related regression tests80passed with5subtests locally. A fresh complete CI run is still required.
+
+Android9bddf702 was read without modifying its worktree. Native transport is single-shot and uncertain results reconcile with GET. Its Ready acknowledgement currently discards outbox fields, and the completion progress endpoint was not found in that screen. The designated Android task was sent these exact compatibility findings. Backend latency evidence alone does not prove the complete Android progress/error experience.
