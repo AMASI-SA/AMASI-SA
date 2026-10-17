@@ -271,6 +271,8 @@ async def test_concurrent_old_intake_cannot_overwrite_new_carrier(db, already_ex
 
     class PausedDB:
         unified_orders = PausedCollection()
+        def __getitem__(self, name):
+            return self.unified_orders if name == "unified_orders" else db[name]
         def __getattr__(self, name):
             return getattr(db, name)
 

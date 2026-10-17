@@ -5376,6 +5376,8 @@ async def _local_startup() -> None:
     app.state.operational_balance_task = _asyncio.create_task(run_operational_balances(db))
     from order_review_resume_worker import start_worker as start_review_resume
     app.state.review_completion_resume_task = await start_review_resume(db)
+    from assembly_completion_delivery import start_worker as start_assembly_delivery
+    app.state.assembly_completion_delivery_task = await start_assembly_delivery(db)
     from salla_integration.shipping_label_inbox import start_worker as start_label_inbox
     app.state.shipping_label_inbox_task = await start_label_inbox(db)
     app.state.startup_phase = "ready"
@@ -5449,7 +5451,7 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task", "operational_balance_task", "shipping_label_inbox_task"):
+    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()

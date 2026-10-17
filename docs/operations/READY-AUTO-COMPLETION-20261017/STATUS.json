@@ -1,0 +1,39 @@
+{
+  "task": "READY-AUTO-COMPLETION-20261017",
+  "branch": "codex/ready-prod177-integration-20261017",
+  "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
+  "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
+  "state": "INTEGRATION_REVALIDATION_NOT_FOR_RELEASE",
+  "production_changed": false,
+  "completed": [
+    "Merged prior ready integration preserving latest production courier classification",
+    "Added v2 read-first status dispatch with bounded transient retries and persisted dispatch count",
+    "No separate shipment creation; existing v1 and historical enrollment remain readback-only",
+    "Added UI GET polling for pending completion and sanitized failure message; frontend CI pending"
+  ],
+  "owner_acceptance": "Owner accepts limited provider GET-to-POST race; never knowingly post on terminal state; Ready requires in_progress",
+  "validation": {
+    "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
+    "syntax": "PASS",
+    "mongo_and_performance": "PENDING",
+    "final_ci": "PENDING after latest production integration",
+    "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
+    "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
+    "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
+    "search_performance": "Historical b99 baseline median ms 1 piece 7.845 -> 11.492; 10 pieces 34.055 -> 9.688; 50 pieces 150.027 -> 13.928; seven samples",
+    "canonical_race": "21 passed on isolated replica set",
+    "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
+    "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed",
+    "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
+    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required",
+    "previous_head_ci": "255e1ecfe847a194b6e024bdf4609f8b268317a4:26/26 successful"
+  },
+  "remaining": [
+    "Fresh integration and release intent on Production177f5f6",
+    "Reviewed new APK explicitly authorized by owner, no OTA",
+    "Governed deployment and verification"
+  ],
+  "next": "Run fresh isolated Mongo and CI against latest bundle composition Production; freeze new intent only after acceptance",
+  "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
+  "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten."
+}

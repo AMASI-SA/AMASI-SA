@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from unittest.mock import patch
+import pytest
 
 from qoyod_auto_payment_freshness import (
     _canonical_from_unified,
@@ -120,12 +121,30 @@ class _DB:
     def __init__(self, unified, *, snapshot=None, markers=None,
                  existing_projection=None, projection_error=None):
         self.unified_orders = _UnifiedOrders(unified)
+        # Payment projection fixtures have no completed assembly workflow.
+        # Canonical status invalidation must neither invent one nor fail when
+        # the legitimately empty workflow collection is consulted.
+        self.order_review_workflows = _UnifiedOrders(None)
         self.integration_inbox = _IntegrationInbox(
             snapshot=snapshot,
             markers=markers,
             existing_projection=existing_projection,
             projection_error=projection_error,
         )
+
+    def __getitem__(self, name):
+        return getattr(self, name)
+
+
+@pytest.fixture(autouse=True)
+def unit_source_transaction(monkeypatch):
+    # This file verifies mapping/sender behavior using its explicit in-memory
+    # _DB, not Mongo isolation. Real promotion serialization is exercised by
+    # test_g47_ready_canonical_status_race on a replica set.
+    async def owner(database, merchant, callback, **kwargs):
+        assert isinstance(database, _DB)
+        return await callback(database)
+    monkeypatch.setattr("operational_atomic.operational_owner", owner)
 
 
 def _paid_order():
