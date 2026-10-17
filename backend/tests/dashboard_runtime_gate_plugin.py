@@ -41,7 +41,10 @@ def pytest_collection_modifyitems(session, config, items):
                    product_catalog_cost_resolution, dashboard_v2_ads_executive):
         assert Path(module.__file__).resolve().parent == Path.cwd().resolve(), module.__file__
     original_invoke = cases.invoke
-    expected = json.loads(GOLDEN.read_text()) if ARM == 'runtime' else None
+    expected = json.loads(GOLDEN.read_text()) if ARM != 'reference' else None
+    read_baseline_path = os.environ.get('DASHBOARD_ADOPTION_READ_BASELINE')
+    read_baseline = (json.loads(Path(read_baseline_path).read_text())
+                     if ARM == 'runtime' and read_baseline_path else None)
 
     async def recorded(*args, **kwargs):
         global sequence
@@ -57,11 +60,15 @@ def pytest_collection_modifyitems(session, config, items):
         }
         records[key] = value
         if expected is not None:
-            assert value == expected[key], key
+            # Keep the immutable historical JSON contract. Later approved
+            # production changes may add reads without changing the response.
+            assert value['json'] == expected[key]['json'], key
+            if ARM == 'runtime':
+                assert value == (read_baseline or expected)[key], key
         return result, metrics
 
     cases.invoke = recorded
-    if ARM != 'runtime':
+    if ARM == 'reference':
         return
     import dashboard_cpu_budget as cpu
     import dashboard_v2_routes as dash
@@ -126,7 +133,7 @@ def pytest_sessionfinish(session, exitstatus):
     output.write_text(json.dumps(records, ensure_ascii=False, indent=2))
     if exitstatus == 0:
         assert len(records) == 164, len(records)
-        if ARM == 'runtime':
+        if ARM != 'reference':
             assert set(records) == set(json.loads(GOLDEN.read_text()))
             assert all(calls[name] > 0 for name in ('parser', 'index', 'cost', 'advertising', 'forced_index_checkpoints'))
             output.with_suffix('.calls.json').write_text(json.dumps(calls, indent=2))
