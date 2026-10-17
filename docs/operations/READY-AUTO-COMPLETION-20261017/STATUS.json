@@ -1,7 +1,7 @@
 {
   "task": "READY-AUTO-COMPLETION-20261017",
   "branch": "codex/ready-auto-completion-20261017",
-  "base": "7da8b95c5bf79cd001d0714439dc5b7f89e18f31",
+  "base": "6f4877922747350189d2f45c676083cc791ac670",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
   "state": "WIP_NOT_FOR_RELEASE",
   "production_changed": false,
@@ -18,9 +18,12 @@
     "mongo_and_performance": "PENDING",
     "final_ci": "PENDING",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
-    "delivery": "28 passed, 9 subtests passed, 1 failure caused by obsolete shipment-read injection; corrected rerun pending",
+    "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
-    "search_performance": "Historical b99 baseline median ms 1 piece 7.845 -> 11.492; 10 pieces 34.055 -> 9.688; 50 pieces 150.027 -> 13.928; seven samples"
+    "search_performance": "Historical b99 baseline median ms 1 piece 7.845 -> 11.492; 10 pieces 34.055 -> 9.688; 50 pieces 150.027 -> 13.928; seven samples",
+    "canonical_race": "21 passed on isolated replica set",
+    "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
+    "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed"
   },
   "remaining": [
     "Run isolated Mongo acceptance and resolve failures",
@@ -28,5 +31,7 @@
     "Review UI pending/error behavior and integration diff",
     "Fresh final CI, rollback and governed release gates"
   ],
-  "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests"
+  "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
+  "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
+  "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten."
 }
