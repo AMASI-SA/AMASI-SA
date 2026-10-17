@@ -38,6 +38,13 @@ jobs:
           ref: 05b159dc4183f14adc7c370bfbd8014d8858e6b8
           path: .reference
           persist-credentials: false
+      # Immutable current Production baseline: preserves the original response
+      # oracle while detecting read regressions against approved runtime code.
+      - uses: actions/checkout@v4
+        with:
+          ref: 2a7740359451a538be8df373266c4c92ca1a57c8
+          path: .read-baseline
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -65,6 +72,7 @@ jobs:
         run: |
           git rev-parse HEAD HEAD^{tree} > adoption-identity.txt
           git -C .reference rev-parse HEAD HEAD^{tree} >> adoption-identity.txt
+          git -C .read-baseline rev-parse HEAD HEAD^{tree} >> adoption-identity.txt
           python --version >> adoption-identity.txt
           uname -a >> adoption-identity.txt
           docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'JSON.stringify({version:db.version(),setName:db.hello().setName})' >> adoption-identity.txt
@@ -79,11 +87,24 @@ jobs:
           --rootdir . -q -x tests/test_dashboard_b_index_cooperative_correctness.py
           -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
           --junitxml=../../reference.xml
+      - name: Freeze approved Production read evidence against historical JSON
+        working-directory: .read-baseline/backend
+        env:
+          PYTHONPATH: '.:${{ github.workspace }}/.reference/backend/tests:${{ github.workspace }}/backend/tests'
+          DASHBOARD_ADOPTION_ARM: baseline
+          DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/production-read-baseline.json'
+        run: >-
+          python -m pytest --noconftest --import-mode=importlib -p no:cacheprovider -p dashboard_runtime_gate_plugin
+          --rootdir '${{ github.workspace }}/.reference/backend' -q -x
+          '${{ github.workspace }}/.reference/backend/tests/test_dashboard_b_index_cooperative_correctness.py'
+          -k 'test_dashboard_mixed_permissions_and_tenants or test_existing_independent_read_mutations or test_mutations_during_index'
+          --junitxml=../../production-read-baseline.xml
       - name: Actual runtime against frozen JSON and Mongo-read evidence
         working-directory: backend
         env:
           PYTHONPATH: '.:${{ github.workspace }}/.reference/backend/tests:tests'
           DASHBOARD_ADOPTION_ARM: runtime
+          DASHBOARD_ADOPTION_READ_BASELINE: '${{ github.workspace }}/production-read-baseline.json'
           DASHBOARD_ADOPTION_OUTPUT: '${{ github.workspace }}/runtime-responses.json'
         run: >-
           python -m pytest --noconftest --import-mode=importlib -p no:cacheprovider -p dashboard_runtime_gate_plugin
@@ -112,12 +133,18 @@ jobs:
           import json
           import xml.etree.ElementTree as ET
           from pathlib import Path
-          for name in ('reference','runtime','regression'):
+          for name in ('reference','production-read-baseline','runtime','regression'):
               root=ET.parse(name+'.xml').getroot()
               assert not root.findall('.//skipped')
               assert not root.findall('.//failure')
               assert not root.findall('.//error')
-          assert json.loads(Path('reference-responses.json').read_text()) == json.loads(Path('runtime-responses.json').read_text())
+          reference = json.loads(Path('reference-responses.json').read_text())
+          baseline = json.loads(Path('production-read-baseline.json').read_text())
+          runtime = json.loads(Path('runtime-responses.json').read_text())
+          assert len(reference) == len(baseline) == len(runtime) == 164
+          assert set(reference) == set(baseline) == set(runtime)
+          assert {k: v['json'] for k, v in reference.items()} == {k: v['json'] for k, v in runtime.items()}
+          assert baseline == runtime
           print(Path('runtime-responses.calls.json').read_text())
           PY
       - uses: actions/upload-artifact@v4
@@ -129,6 +156,9 @@ jobs:
             reference.xml
             runtime.xml
             regression.xml
+            production-read-baseline.json
+            production-read-baseline.xml
+            production-read-baseline.calls.json
             reference-responses.json
             runtime-responses.json
             runtime-responses.calls.json
