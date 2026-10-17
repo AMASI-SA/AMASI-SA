@@ -25,7 +25,9 @@
     "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
     "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed",
     "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
-    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required"
+    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required",
+    "after_payroll_race_delivery": "50 passed,9subtests,zero failures/errors/skips",
+    "dashboard_three_arm": "reference40PASS,production40PASS,candidate40PASS;164records exacthistoricalJSON and productionreadcomparison"
   },
   "remaining": [
     "Finish three-arm dashboard validation",
@@ -35,5 +37,8 @@
   ],
   "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
-  "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten."
+  "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
+  "source_head": "255e1ecfe847a194b6e024bdf4609f8b268317a4",
+  "source_tree": "ef9b704e53c3fd992ad9364cdddaa6daf8078941",
+  "evidence_branch": "codex/ready-auto-evidence-20261017 (documentation only, do not deploy)"
 }

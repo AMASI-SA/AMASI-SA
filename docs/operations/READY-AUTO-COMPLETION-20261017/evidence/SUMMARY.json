@@ -1,0 +1,26 @@
+{
+  "source_head": "255e1ecfe847a194b6e024bdf4609f8b268317a4",
+  "source_tree": "ef9b704e53c3fd992ad9364cdddaa6daf8078941",
+  "runtime_tests_started_at": "0b80b6fbdb517400ef5e613f75730599c4ecd364",
+  "subsequent_change": "Only protected-source test and docs; no runtime code changed",
+  "production_base": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "responses": 164,
+  "historical_json_equal": true,
+  "production_candidate_reads_exactly_equal": true,
+  "synthetic_data_only": true,
+  "production_changed": false,
+  "sha256": {
+    "dashboard-reference.xml": "3ed13415423135fc5384b07be47492a3f4cd8ffe233f37e56830f9134b6fdea4",
+    "dashboard-production.xml": "c3d210995af1b9225407c6b2d6c72a14a8931e70c59ddf7e0db7c016057bfcea",
+    "dashboard-candidate.xml": "d0cc97271ecb14f1a5af3173ac03d4b7bace2e757bdcf2e5d95a60945dc35096",
+    "after-payroll-race-delivery.xml": "f1a8e42c273eaae80fa53f626e9ed27dff4aa3c47400abe86325c2bdc40704db",
+    "full-shipping.xml": "e031a6f06bae95e88a3395a5d3aa31c1b3f3cc90e8852b73c2a151274509f6b6",
+    "dashboard-regression.xml": "e7fb47eb01b60156a8bbb35ed38a6f786332d64ef09119e17775e405b944ebc6",
+    "dashboard-reference.json": "355b2daa59d22435284d0aeb9b4d4859b7905a7249410659a1b930af229edc8e",
+    "dashboard-production.json": "3ca9468924ea28977242878ff7fbfcaaaa23a3180b6933ad40d6f20747118d6a",
+    "dashboard-candidate.json": "a2ddee96c093c2bb9ea9d58712a9d1cef60512dfe30af098a5dcb5d1c04f55b4"
+  },
+  "final_ci": "PENDING",
+  "android_compatibility": "GAP IDENTIFIED; designated Android task notified; no Android files edited",
+  "decision": "NOT_RELEASE_READY"
+}
