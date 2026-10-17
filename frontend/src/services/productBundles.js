@@ -1,5 +1,9 @@
 import api from "../lib/api";
 
+export async function getProductBundleComponents(id) {
+    return (await api.get(`/products-v2/${encodeURIComponent(id)}/bundle-components`)).data;
+}
+
 export async function getProductBundle(id) {
     return (await api.get(`/products-v2/${encodeURIComponent(id)}/bundle`)).data;
 }
