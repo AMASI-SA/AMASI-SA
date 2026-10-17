@@ -86,6 +86,8 @@ async def setup(monkeypatch, request):
             assert owner == OWNER
             return await callback(scoped)
         monkeypatch.setattr(shipping, "operational_owner", local_owner)
+        import assembly_completion_delivery
+        monkeypatch.setattr(assembly_completion_delivery, "operational_owner", local_owner)
     try:
         yield db, state
     finally:
