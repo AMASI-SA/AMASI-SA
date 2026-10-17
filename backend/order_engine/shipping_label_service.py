@@ -1572,6 +1572,142 @@ async def refresh_shipping_label(
         raise
 
 
+async def refresh_saved_shipping_label(
+    db: Any,
+    user_id: str,
+    order_number: str,
+) -> dict[str, Any]:
+    """Print external labels from saved order data, with no provider fallback."""
+    from .repository import MongoOrderRepository
+    from .service import OrderNotFoundError, get_order
+
+    normalized = _text(order_number)
+    if not normalized:
+        raise ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
+    try:
+        order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=normalized)
+    except OrderNotFoundError as exc:
+        raise ShippingLabelError("order_not_found", "الطلب غير موجود في ميزان.", status_code=404) from exc
+
+    saved = order.shipping
+    if _is_store_courier({"company": saved.company, "meta": {"app_id": saved.company_code}}):
+        # Keep merchant-courier generation and its provider checks unchanged.
+        return await _refresh_provider_shipping_label(db, user_id, normalized, store_courier_only=True)
+
+    snapshot = _snapshot({
+        "id": saved.shipment_id, "status": saved.status,
+        "label_url": saved.label_url, "tracking_number": saved.tracking_number,
+        "tracking_url": saved.tracking_url, "courier_name": saved.company,
+        "courier_code": saved.company_code,
+    })
+    # A cancellation can arrive before the original order/shipment baseline.
+    # Its durable receipt must also fence normal webhook redelivery, not only
+    # the retry worker, before the opt-in client opens a saved artifact.
+    if saved.shipment_id:
+        from salla_integration.shipping_label_inbox import COLLECTION
+        cancelled = await db[COLLECTION].find_one({"user_id": user_id,
+            "$or": [{"order_number": normalized}, {"order_id": str(order.order_id)}],
+            "observation.shipment_id": str(saved.shipment_id),
+            "observation.status": {"$in": list(_CANCELLED)}}, {"_id": 1})
+        if cancelled:
+            snapshot.update(ready=False, status="cancelled")
+    if not snapshot["ready"]:
+        snapshot["label_url"] = None
+    return {
+        "ok": True, "source": "mezan", **snapshot,
+        "message": "البوليصة المحفوظة جاهزة للطباعة." if snapshot["ready"] else
+            "رابط البوليصة الحالية غير متوفر في بيانات الطلب المحفوظة في ميزان.",
+    }
+
+
+async def _refresh_provider_shipping_label(
+    db: Any,
+    user_id: str,
+    order_number: str,
+    *,
+    store_courier_only: bool = False,
+) -> dict[str, Any]:
+    """Read/select/print current provider data without local writes or comparisons."""
+    normalized = _text(order_number)
+    if not normalized:
+        raise ShippingLabelError(
+            "order_number_required",
+            "رقم الطلب مطلوب.",
+            status_code=400,
+        )
+
+    try:
+        internal_id, order = await _resolve_order(
+            db, user_id, normalized
+        )
+        if _text(order.get("reference_id")) != normalized or _text(order.get("id")) != internal_id:
+            raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+        if store_courier_only:
+            carrier = extract_shipping({"shipping": order.get("shipping"),
+                "shipping_company": order.get("shipping_company"),
+                "shipping_company_code": order.get("shipping_company_code")}) or {}
+            if (carrier.get("company_name") or carrier.get("company_code")) and not _is_store_courier({
+                "company": carrier.get("company_name"), "meta": {"app_id": carrier.get("company_code")},
+            }):
+                raise _stale_label()
+        source, rows = await _current_courier_source(db, user_id, internal_id, order)
+    except SallaError as exc:
+        if exc.status_code == 403:
+            raise ShippingLabelError(
+                "shipping_scope_required",
+                "صلاحية قراءة الشحن غير مفعلة في ربط سلة.",
+                status_code=403,
+            ) from exc
+        raise ShippingLabelError(
+            "salla_shipping_unavailable",
+            "تعذّر التحقق من البوليصة الحالية في سلة.",
+            status_code=502,
+        ) from exc
+
+    active = _active_outbound(rows)
+    if source is not None:
+        if not _order_is_completed(order):
+            raise ShippingLabelError(
+                "order_status_not_completed",
+                "لم تؤكد سلة أن حالة الطلب أصبحت «تم التنفيذ»؛ لم تُفتح بوليصة المندوب.",
+            )
+        # Use the pre-guard courier formatter, without the issue path's status
+        # transition or resync. Old external shipments do not supply its data.
+        store = await _store_identity(db, user_id)
+        print_order = {**order, "shipments": []} if not source else order
+        print_data = _store_courier_print_data(normalized, print_order, source, store)
+        if not source:
+            carrier = extract_shipping({"shipping": order.get("shipping"),
+                "shipping_company": order.get("shipping_company"),
+                "shipping_company_code": order.get("shipping_company_code")}) or {}
+            print_data["courier_name"] = _text(carrier.get("company_name")) or "مندوب المتجر"
+        return {
+            "ok": True, "source": "mezan", "ready": True,
+            "order_status_completed": True,
+            "label_type": "store_courier", "shipment_id": _text(source.get("id")) or None,
+            "status": "store_courier", "courier_name": print_data["courier_name"],
+            "label_url": None, "tracking_number": None, "shipping_number": None,
+            "print_data": print_data,
+            "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
+        }
+    if store_courier_only:
+        raise _stale_label()
+    current = active[0] if active else {}
+
+    snapshot = _snapshot(current)
+
+    return {
+        "ok": True,
+        "source": "salla",
+        **snapshot,
+        "message": (
+            "تم التحقق من سلة والبوليصة الحالية جاهزة."
+            if snapshot["ready"]
+            else "البوليصة الحالية غير متاحة"
+        ),
+    }
+
+
 async def _refresh_shipping_label(
     db: Any,
     user_id: str,
@@ -1639,6 +1775,8 @@ async def _refresh_shipping_label(
             "print_data": print_data,
             "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
         }
+    if store_courier_only:
+        raise _stale_label()
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
