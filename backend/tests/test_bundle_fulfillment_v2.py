@@ -19,6 +19,83 @@ from purchase_receiving_service import COST_POLICY, COST_STATES, identity_key
 from supplier_identity_service import SUPPLIERS_V2
 
 
+class AutomaticAllocationTests(unittest.IsolatedAsyncioTestCase):
+    def leaf(self, **updates):
+        return {"leaf_id": "leaf", "kind": "product", "product_id": "a", "quantity": "4",
+                "sourcing_mode": "auto", "unit_cost": "10", "sourcing_policy": {
+                    "revision": 1, "supplier_id": "supplier-a", "allow_split": True}, **updates}
+
+    def lots(self, quantity=2, receipt="stock"):
+        return [{"location_id": "loc", "lot_id": receipt, "available": Decimal(quantity),
+                 "item": {"item_type": "product", "product_id": "a", "salla_product_id": "a"}}]
+
+    async def allocate(self, leaf, lots, previous=None):
+        with patch("supplier_identity_service.require_supplier_v2", new=AsyncMock(return_value={"id": "supplier-a"})):
+            return await bundle.allocate_leaves(None, "owner", [leaf], lots, unit_id="u", previous=previous)
+
+    async def test_stock_two_supplier_two_and_receipt_retry(self):
+        leaves, allocations = await self.allocate(self.leaf(), self.lots())
+        self.assertEqual(leaves[0]["reserved_quantity"], "2")
+        self.assertEqual(leaves[0]["supplier_quantity"], "2")
+        self.assertEqual(leaves[0]["state"], "awaiting_supplier")
+        old = {**leaves[0], "receipt_ids": ["purchase"]}
+        leaves, allocations = await self.allocate(self.leaf(), self.lots() + self.lots(2, "purchase"), [old])
+        self.assertEqual(leaves[0]["reserved_quantity"], "4")
+        self.assertEqual(leaves[0]["received_quantity"], "2")
+        self.assertEqual(len({a["id"] for a in allocations}), 2)
+        again, replay = await self.allocate(self.leaf(), self.lots() + self.lots(2, "purchase"), leaves)
+        self.assertEqual(again, leaves)
+        self.assertEqual(replay, allocations)
+        totals = bundle.report_totals([{"state": "reserved", "order_number": "o", "order_line_id": "l",
+            "product_id": "root", "leaves": [{**leaves[0], "unit_state": "reserved", "unit_index": 1}]}])
+        self.assertEqual(totals["supplier_requirements"], [])
+
+    async def test_no_policy_keeps_stock_and_unresolved_shortage(self):
+        leaves, _ = await self.allocate(self.leaf(sourcing_policy={}), self.lots())
+        self.assertEqual(leaves[0]["state"], "needs_source")
+        self.assertEqual(leaves[0]["unresolved_quantity"], "2")
+        self.assertIsNone(leaves[0]["supplier_id"])
+
+    async def test_full_stock_needs_no_supplier_and_wrong_variant_never_allocates(self):
+        leaves, _ = await self.allocate(self.leaf(sourcing_policy={}), self.lots(4))
+        self.assertEqual(leaves[0]["state"], "reserved")
+        leaves, allocations = await self.allocate(self.leaf(variant_id="different", sourcing_policy={}), self.lots(4))
+        self.assertEqual(leaves[0]["unresolved_quantity"], "4")
+        self.assertEqual(allocations, [])
+
+    async def test_refresh_does_not_replace_committed_supplier_need_with_new_stock(self):
+        leaves, _ = await self.allocate(self.leaf(), self.lots())
+        leaves, allocations = await self.allocate(self.leaf(), self.lots(20), leaves)
+        self.assertEqual(leaves[0]["supplier_quantity"], "2")
+        self.assertEqual(leaves[0]["reserved_quantity"], "2")
+        self.assertEqual(sum(Decimal(a["quantity"]) for a in allocations), 2)
+
+    async def test_changed_customization_reselects_supplier_without_old_receipt_claims(self):
+        policy = {"rules": [
+            {"rule_id": "ali", "customization": {"gift": "Ali"}, "supplier_id": "supplier-a"},
+            {"rule_id": "sara", "customization": {"gift": "Sara"}, "supplier_id": "supplier-b"}]}
+        leaves, _ = await self.allocate(self.leaf(customization={"gift": "Ali"}, sourcing_policy=policy), [])
+        leaves[0]["receipt_ids"] = ["old-gift-receipt"]
+        changed, _ = await self.allocate(self.leaf(customization={"gift": "Sara"}, sourcing_policy=policy), [], leaves)
+        self.assertEqual(changed[0]["supplier_id"], "supplier-b")
+        self.assertEqual(changed[0]["receipt_ids"], [])
+
+    async def test_no_split_routes_whole_shortage_to_approved_supplier(self):
+        leaves, allocations = await self.allocate(self.leaf(sourcing_policy={"supplier_id": "supplier-a", "allow_split": False}), self.lots())
+        self.assertEqual(leaves[0]["supplier_quantity"], "4")
+        self.assertEqual(allocations, [])
+
+    async def test_rules_match_variant_and_exact_customization_and_conflicts(self):
+        from bundle_sourcing_v2 import resolve_policy
+        rule = {"rule_id": "r", "variant_id": "v", "customization": {"gift": "Ali"},
+                "conditions": [{"option_id": "color", "value_id": "blue"}], "supplier_id": "supplier-b"}
+        leaf = self.leaf(variant_id="v", customization={"gift": "Ali"}, selected_options=[{"option_id": "color", "value_id": "blue"}], sourcing_policy={"rules": [rule]})
+        self.assertEqual(resolve_policy(leaf)["supplier_id"], "supplier-b")
+        self.assertIsNone(resolve_policy({**leaf, "customization": {"gift": "ALI"}})["supplier_id"])
+        leaf["sourcing_policy"]["rules"].append({**rule, "rule_id": "r2"})
+        self.assertEqual(resolve_policy(leaf)["reason"], "conflicting_sourcing_rules")
+
+
 @unittest.skipUnless(os.environ.get("MZ2_TEST_MONGO_URI"), "requires isolated loopback replica set")
 class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -126,6 +203,27 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(location["occupancy"]["total_quantity"], 0)
         result = await stock.release_component_stock(self.db, merchant_id="owner", order_id="order", source_version=2)
         self.assertTrue(result["reconciliation_required"])
+        self.assertEqual((await self.db[stock.LOCATIONS].find_one({"id": "loc"}))["occupancy"]["total_quantity"], 0)
+
+    async def test_automatic_split_native_receipt_cost_and_replay(self):
+        from product_fulfillment_rules import PRODUCT_OPERATION_PROFILES
+        await self.db[PRODUCT_OPERATION_PROFILES].insert_one({"user_id": "owner", "salla_product_id": "a",
+            "bundle_sourcing": {"revision": 1, "supplier_id": "supplier-a", "allow_split": True}})
+        await self.define([self.item("a", "auto", qty=4)])
+        await self.lot("a", qty=2)
+        await self.reserve()
+        leaf = (await self.view())["leaves"][0]
+        self.assertEqual(leaf["supplier_quantity"], "2")
+        self.assertEqual(leaf["reserved_quantity"], "2")
+        totals = bundle.report_totals([{**await self.view(), "order_number": "order"}])
+        self.assertEqual(totals["supplier_requirements"][0]["requirements"][0]["quantity"], "2")
+        receipt = await self.lot("a", qty=2, supplier="supplier-a")
+        await self.attach("a", receipt)
+        await self.attach("a", receipt)
+        self.assertTrue((await self.view())["ready"])
+        await self.consume()
+        self.assertTrue((await self.consume())["duplicate"])
+        self.assertEqual(Decimal((await self.view())["actual_cost"]), Decimal(46))
         self.assertEqual((await self.db[stock.LOCATIONS].find_one({"id": "loc"}))["occupancy"]["total_quantity"], 0)
 
     async def test_wrong_tenant_or_supplier_receipt_cannot_satisfy_requirement(self):
@@ -299,7 +397,7 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_operational_view_hides_costs_without_cost_permission(self):
         from ai_store_access_contract import ROLE_ASSIGNMENTS, ROLE_ASSIGNMENT_OWNER_FIELD
-        await self.define([self.item("a")])
+        await self.define([self.item("a", "auto")])
         await self.lot("a")
         await self.reserve()
         await self.db.users.insert_one({"id": "viewer", "role": "employee", "created_by": "owner"})
@@ -318,6 +416,10 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("actual_cost", view)
             self.assertNotIn("expected_cost", view)
             self.assertNotIn("unit_cost", view["leaves"][0])
+            self.assertTrue(view["leaves"][0]["sourcing_segments"])
+            for segment in view["leaves"][0]["sourcing_segments"]:
+                self.assertNotIn("unit_cost", segment)
+                self.assertNotIn("actual_cost", segment)
             self.assertEqual((await client.get("/fulfillment-v2/bundles/report")).status_code, 403)
 
     async def test_failure_after_allocation_rolls_back_and_retry_reserves_once(self):
@@ -557,6 +659,30 @@ class BundleMongoTests(unittest.IsolatedAsyncioTestCase):
         await self.consume()
         await self.assertCode("bundle_consumed_amendment_requires_reconciliation",
             self.reserve(version=3, options=[{"option_id": "text", "value": "TOO LATE"}]))
+
+    async def test_automatic_customization_amendment_retains_history_not_receipts(self):
+        from product_fulfillment_rules import PRODUCT_OPERATION_PROFILES
+        await self.db[stock.PRODUCTS].update_one({"id": "root"}, {"$set": {
+            "options": [{"id": "text", "type": "text", "required": True}]}})
+        await self.db[PRODUCT_OPERATION_PROFILES].insert_one({"user_id": "owner", "salla_product_id": "root",
+            "bundle_sourcing": {"revision": 1, "rules": [
+                {"rule_id": "first", "customization": {"text": "FIRST"}, "supplier_id": "supplier-a"},
+                {"rule_id": "changed", "customization": {"text": "CHANGED"}, "supplier_id": "supplier-b"}]}})
+        await self.define([{"kind": "current_product", "quantity": 1, "sourcing_mode": "auto",
+            "slots": [{"slot_id": "first", "customization_option_ids": ["text"]}]}])
+        await self.reserve(options=[{"option_id": "text", "value": "FIRST"}])
+        receipt = await self.lot("root", supplier="supplier-a", specifications={"text": "FIRST"})
+        await self.attach("root", receipt)
+        await self.reserve(version=2, options=[{"option_id": "text", "value": "CHANGED"}])
+        leaf = (await self.view())["leaves"][0]
+        self.assertEqual(leaf["supplier_id"], "supplier-b")
+        self.assertEqual(leaf["receipt_ids"], [])
+        self.assertEqual(leaf["reserved_quantity"], "0")
+        await self.assertCode("bundle_purchase_receipt_customization_mismatch", self.attach("root", receipt))
+        plan = await self.db[stock.PLANS].find_one({"order_id": "order"})
+        self.assertEqual(plan["bundle_amendments"][-1]["units"][0]["bundle_leaves"][0]["receipt_ids"], [receipt])
+        await stock.release_component_stock(self.db, merchant_id="owner", order_id="order", source_version=3)
+        self.assertEqual((await bundle.inventory_lots(self.db, "owner", []))[0]["available"], 1)
 
     async def test_current_product_readiness_does_not_reserve_parent_twice(self):
         from fulfillment_v2_routes import build_order_fulfillment_decision, INVENTORY_RESERVATIONS

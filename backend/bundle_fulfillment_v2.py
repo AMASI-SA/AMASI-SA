@@ -169,6 +169,11 @@ async def allocate_leaves(db, owner, leaves, lots, *, unit_id, previous=None):
             leaf["source_override"] = deepcopy(old["source_override"])
         leaf["receipt_ids"] = old.get("receipt_ids", [])
         leaf["actual_cost"] = None
+        if leaf["sourcing_mode"] == "auto":
+            resolved, parts = await allocate_automatic(db, owner, leaf, lots, unit_id=unit_id, old=old)
+            result.append(resolved)
+            allocations.extend(parts)
+            continue
         # Non-stock services are explicitly cost-only; text fields never arrive here.
         if leaf.get("cost_only") or (leaf.get("kind") == "resource" and leaf.get("track_inventory") is False and leaf["sourcing_mode"] == "stock"):
             leaf.update(state="ready", reserved_quantity="0", received_quantity="0", consumed_quantity="0")
@@ -200,6 +205,75 @@ async def allocate_leaves(db, owner, leaves, lots, *, unit_id, previous=None):
                     state=("reserved" if not remaining else "awaiting_supplier" if leaf["sourcing_mode"] == "supplier" else "shortage"))
         result.append(leaf)
     return result, allocations
+
+
+async def allocate_automatic(db, owner, leaf, lots, *, unit_id, old):
+    """Keep one requirement with stable stock/supplier segments, using native lots."""
+    from bundle_sourcing_v2 import resolve_policy
+    from purchase_receiving_service import same_identity
+    from product_inventory_rules import specifications_are_exact
+    from supplier_identity_service import require_supplier_v2
+    def context(row):
+        return _digest({"identity": identity(row), "customization": row.get("customization") or {},
+            "selected_options": sorted((str(r.get("option_id")), str(r.get("value_id")))
+                for r in row.get("selected_options", []) if isinstance(r, dict)),
+            "sourcing_policy": row.get("sourcing_policy") or {}})
+    current_context = context(leaf)
+    if old and old.get("sourcing_context", context(old)) != current_context:
+        # The amendment history retains the old evidence; a new physical
+        # configuration must never inherit its supplier or receipt claims.
+        old = {}
+        leaf["receipt_ids"] = []
+    leaf["sourcing_context"] = current_context
+    policy = deepcopy(old.get("resolved_sourcing") or resolve_policy(leaf))
+    supplier = policy.get("supplier_id")
+    if supplier:
+        try:
+            await require_supplier_v2(db, owner, supplier)
+        except HTTPException:
+            supplier = None
+            policy.update(supplier_id=None, reason="supplier_unavailable")
+    wanted = quantity_decimal(leaf["quantity"], positive=True)
+    available = sum((lot["available"] for lot in lots
+        if same_identity(lot["item"], identity(leaf))
+        and (not leaf.get("location_id") or leaf["location_id"] == lot["location_id"])
+        and (not leaf.get("customization") or specifications_are_exact(lot["item"].get("specifications"), leaf["customization"]))
+        and lot["lot_id"] not in leaf["receipt_ids"]), Decimal(0))
+    previous_segments = old.get("sourcing_segments") or []
+    # Once procurement has been decided, refresh cannot silently buy/hold twice.
+    previous_supplier = next((s for s in previous_segments if s["sourcing_mode"] == "supplier"), None)
+    if previous_supplier:
+        supplier_quantity = min(wanted, quantity_decimal(previous_supplier["quantity"]))
+        stock_quantity = wanted - supplier_quantity
+    else:
+        stock_quantity = min(wanted, available)
+        if stock_quantity < wanted and supplier and not policy.get("allow_split"):
+            stock_quantity = Decimal(0)
+        supplier_quantity = wanted - stock_quantity
+    segments, allocations = [], []
+    for mode, amount in (("stock", stock_quantity), ("supplier", supplier_quantity)):
+        if not amount or (mode == "supplier" and not supplier):
+            continue
+        segment_id = _id("bundle_source_segment", leaf_key(leaf), mode)
+        segment = {**deepcopy(leaf), "leaf_id": segment_id, "quantity": str(amount),
+                   "sourcing_mode": mode, "supplier_id": supplier if mode == "supplier" else None}
+        segment.pop("source_override", None)
+        segment.pop("sourcing_segments", None)
+        previous_segment = {**segment, "receipt_ids": leaf["receipt_ids"] if mode == "supplier" else []}
+        # A linked procurement receipt is never consumed as ordinary stock.
+        eligible = lots if mode == "supplier" else [r for r in lots if r["lot_id"] not in leaf["receipt_ids"]]
+        resolved, parts = await allocate_leaves(db, owner, [segment], eligible,
+            unit_id=unit_id, previous=[previous_segment])
+        segments.extend(resolved)
+        allocations.extend({**p, "bundle_leaf_id": leaf_key(leaf), "sourcing_segment_id": segment_id,
+                            "sourcing_mode": mode} for p in parts)
+    reserved = sum((Decimal(s.get("reserved_quantity", "0")) for s in segments), Decimal(0))
+    received = sum((Decimal(s.get("received_quantity", "0")) for s in segments), Decimal(0))
+    leaf.update(sourcing_segments=segments, resolved_sourcing=policy, supplier_id=supplier,
+        supplier_quantity=str(supplier_quantity if supplier else 0), reserved_quantity=str(reserved),
+        received_quantity=str(received), consumed_quantity="0", unresolved_quantity=str(supplier_quantity if not supplier else 0),
+        state="reserved" if reserved == wanted else "awaiting_supplier" if supplier else "needs_source")
+    return leaf, allocations
 
 
 def ready(leaves):
@@ -286,6 +360,18 @@ async def capture_actual_cost(db, owner, row):
     if not ready(leaves):
         fail("components_incomplete", order_line_id=row["order_line_id"])
     for leaf in leaves:
+        if leaf.get("sourcing_mode") == "auto":
+            segment_rows = []
+            for segment in leaf.get("sourcing_segments", []):
+                parts = [{**a, "bundle_leaf_id": segment["leaf_id"]} for a in row.get("allocations", [])
+                         if a.get("sourcing_segment_id") == segment["leaf_id"]]
+                segment_rows.extend(await capture_actual_cost(db, owner,
+                    {**row, "bundle_leaves": [segment], "allocations": parts}))
+            leaf["sourcing_segments"] = segment_rows
+            leaf["actual_cost"] = (str(sum((Decimal(s["actual_cost"]) for s in segment_rows), Decimal(0)))
+                if all(s.get("actual_cost") is not None for s in segment_rows) else None)
+            leaf.update(state="consumed", consumed_quantity=leaf.get("reserved_quantity", "0"), cost_policy="mixed_native_sources")
+            continue
         if leaf.get("state") not in {"reserved", "ready"}:
             if not leaf.get("required", True):
                 # Optional, unavailable leaves are omitted from this physical
@@ -391,8 +477,8 @@ def report_totals(rows):
             summary["consumed_quantity"] += Decimal(leaf.get("consumed_quantity", "0"))
             if leaf.get("unit_state") == "reserved":
                 summary["reserved_quantity"] += Decimal(leaf.get("reserved_quantity", "0"))
-            if row.get("state") != "cancelled" and leaf["sourcing_mode"] == "supplier" and leaf.get("unit_state") == "reserved":
-                missing = Decimal(leaf["quantity"]) - Decimal(leaf.get("received_quantity", "0"))
+            if row.get("state") != "cancelled" and leaf["sourcing_mode"] in {"supplier", "auto"} and leaf.get("supplier_id") and leaf.get("unit_state") == "reserved":
+                missing = Decimal(leaf.get("supplier_quantity", leaf["quantity"])) - Decimal(leaf.get("received_quantity", "0"))
                 if missing > 0:
                     supplier = suppliers.setdefault(leaf["supplier_id"], {"supplier_id": leaf["supplier_id"], "requirements": []})
                     supplier["requirements"].append({"order_number": row["order_number"], "order_line_id": row["order_line_id"],
@@ -441,11 +527,13 @@ async def refresh_requirements(db, owner, order, *, actor_id, receipt=None, sour
                             fail("source_change_history_limit")
                         override = {"sourcing_mode": source_change["sourcing_mode"], "supplier_id": source_change.get("supplier_id")}
                         leaf.update(**override, source_override=override, receipt_ids=[])
+                        for stale in ("sourcing_segments", "resolved_sourcing", "supplier_quantity", "unresolved_quantity"):
+                            leaf.pop(stale, None)
             if receipt and row["order_line_id"] == receipt["order_line_id"]:
                 for leaf in leaves:
                     if leaf_key(leaf) != receipt["leaf_id"]:
                         continue
-                    if leaf["sourcing_mode"] != "supplier":
+                    if leaf["sourcing_mode"] not in {"supplier", "auto"} or not leaf.get("supplier_id"):
                         fail("supplier_requirement_required")
                     proof = await scoped[RECEIPTS].find_one({"user_id": owner, "id": receipt["receipt_id"], "status": "posted"})
                     from purchase_receiving_service import same_identity
@@ -508,8 +596,12 @@ def make_bundle_operations_router(db: Any, current_user):
                 for key in ("estimated_cost", "expected_cost", "actual_cost"):
                     row.pop(key, None)
                 for leaf in row.get("leaves", []):
-                    for key in ("unit_cost", "direct_unit_cost", "actual_cost", "cost_source", "cost_policy"):
-                        leaf.pop(key, None)
+                    pending = [leaf]
+                    while pending:
+                        entry = pending.pop()
+                        for key in ("unit_cost", "direct_unit_cost", "actual_cost", "cost_source", "cost_policy"):
+                            entry.pop(key, None)
+                        pending.extend(entry.get("sourcing_segments") or [])
         return view
 
     @router.get("/orders/{order_number}/bundles")

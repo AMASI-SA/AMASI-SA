@@ -26,6 +26,298 @@ def item(key, **kwargs):
     return {'kind': 'product', 'product_id': key, 'quantity': '1', **kwargs}
 
 
+async def save_v2(db, rows, revision=0):
+    return await b.save_bundle(db, 'owner', 'root', {'expected_revision': revision, 'product_type': 'composite', 'schema_version': 2, 'items': rows}, 'actor')
+
+
+async def native_component(db, product, rid, cost, policy=None):
+    await db[b.RESOURCES].insert_one({'user_id': 'owner', 'id': rid, 'name': rid, 'unit_cost': cost, 'track_inventory': True, 'unit': 'piece'})
+    await db[b.PRODUCT_RESOURCE_BINDINGS].insert_one({'user_id': 'owner', 'salla_product_id': product, 'resource_id': rid, 'id': 'bind-' + rid, 'quantity': 1})
+    if policy is not None:
+        await db[b.COST_PROFILES].update_one({'user_id': 'owner', 'salla_product_id': product}, {'$set': {'composition_components.product_resource:bind-' + rid: policy}}, upsert=True)
+
+
+def excluded(rid):
+    return {'binding_kind': 'product_resource', 'binding_id': 'bind-' + rid, 'use': False}
+
+
+@pytest.mark.asyncio
+async def test_v2_hoodie_necklace_exclusions_and_frozen_evidence(db):
+    independent = {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'owner-approved'}
+    for product, rid, cost in [('p1', 'hoodie-bag', 2), ('p2', 'necklace-box', 3), ('p2', 'necklace-bag', 1)]:
+        await native_component(db, product, rid, cost, independent)
+    for product, cost in [('p1', 50), ('p2', 30)]:
+        await db[b.COST_PROFILES].update_one({'user_id': 'owner', 'salla_product_id': product}, {'$set': {'base_cost': cost}})
+    await db[b.RESOURCES].insert_one({'user_id': 'owner', 'id': 'wrap', 'name': 'wrap', 'unit_cost': 5, 'track_inventory': True})
+    originals = await db[b.PRODUCT_RESOURCE_BINDINGS].find({}, {'_id': 0}).to_list(20)
+    result = await save_v2(db, [item('p1', component_overrides=[excluded('hoodie-bag')]), item('p2', component_overrides=[excluded('necklace-bag')]), {'kind': 'resource', 'resource_id': 'wrap'}])
+    expansion = result['expansion']
+    assert b.number(expansion['estimated_cost']) == 88
+    assert {x['resource_id'] for x in expansion['leaves'] if x['kind'] == 'resource'} == {'necklace-box', 'wrap'}
+    assert len([x for x in expansion['component_decisions'] if not x['use']]) == 2
+    assert await db[b.PRODUCT_RESOURCE_BINDINGS].find({}, {'_id': 0}).to_list(20) == originals
+    await db[b.COST_PROFILES].update_many({}, {'$set': {'composition_components': {}, 'base_cost': 100}})
+    replay = await b.expand_bundle(db, 'owner', 'root', frozen_definitions=expansion['frozen_definitions'])
+    assert replay['component_decisions'] == expansion['component_decisions']
+    assert b.number(replay['estimated_cost']) == 88
+
+
+@pytest.mark.asyncio
+async def test_v2_fixed_purchase_price_exclusion_no_extra_resource(db):
+    await native_component(db, 'p1', 'bag', 2, {'cost_treatment': 'included_in_base', 'assembly_origin': 'purchased_complete', 'evidence_ref': 'fixed-quote'})
+    result = await save_v2(db, [item('p1', component_overrides=[excluded('bag')])])
+    assert b.number(result['expansion']['estimated_cost']) == 10
+    assert [x['kind'] for x in result['expansion']['leaves']] == ['product']
+
+
+@pytest.mark.asyncio
+async def test_v2_missing_policy_is_unresolved_and_blocks_execution(db):
+    await native_component(db, 'p1', 'bag', 2)
+    result = await save_v2(db, [item('p1')])
+    assert result['expansion']['estimated_cost'] is None
+    assert result['expansion']['unresolved_components'][0]['reason'] == 'component_provenance_required'
+    with pytest.raises(HTTPException) as exc:
+        await b.expand_bundle(db, 'owner', 'root')
+    assert exc.value.detail['code'] == 'bundle_component_policy_unresolved'
+
+
+@pytest.mark.asyncio
+async def test_v2_intentional_rules_sum_and_duplicate_rule_rejected(db):
+    result = await save_v2(db, [item('p1', rule_id='one'), item('p1', rule_id='two')])
+    assert result['expansion']['leaves'][0]['quantity'] == '2'
+    with pytest.raises(HTTPException) as exc:
+        await save_v2(db, [item('p1', rule_id='same'), item('p2', rule_id='same')], revision=1)
+    assert exc.value.detail['code'] == 'bundle_duplicate_item'
+
+
+@pytest.mark.asyncio
+async def test_v2_same_variant_different_options_keep_independent_supplier_resolution(db):
+    from product_fulfillment_rules import PRODUCT_OPERATION_PROFILES
+    from bundle_fulfillment_v2 import allocate_leaves
+    await db[PRODUCTS].update_one({'salla_product_id': 'p1'}, {'$set': {
+        'variants': [{'id': 'same'}], 'options': [{'id': 'work', 'values': [{'id': 'a'}, {'id': 'b'}]}]}})
+    await db[PRODUCT_OPERATION_PROFILES].insert_one({'user_id': 'owner', 'salla_product_id': 'p1',
+        'bundle_sourcing': {'revision': 1, 'rules': [
+            {'rule_id': value, 'conditions': [{'option_id': 'work', 'value_id': value}], 'supplier_id': supplier}
+            for value, supplier in [('a', 's1'), ('b', 's2')]]}})
+    def selected(value):
+        return item('p1', variant_id='same', selected_options=[{'option_id': 'work', 'value_id': value}])
+    result = await save_v2(db, [selected('a'), selected('b')])
+    leaves = result['expansion']['leaves']
+    assert len(leaves) == 2
+    assert [leaf['quantity'] for leaf in leaves] == ['1', '1']
+    resolved, _ = await allocate_leaves(db, 'owner', leaves, [], unit_id='synthetic-unit')
+    assert {leaf['supplier_id']: leaf['supplier_quantity'] for leaf in resolved} == {'s1': '1', 's2': '1'}
+    identical = await save_v2(db, [selected('a'), selected('a')], revision=1)
+    assert len(identical['expansion']['leaves']) == 1
+    assert identical['expansion']['leaves'][0]['quantity'] == '2'
+
+
+@pytest.mark.asyncio
+async def test_v2_supplier_omission_requires_evidence_and_foreign_override_rejected(db):
+    await native_component(db, 'p1', 'bag', 2, {'cost_treatment': 'included_in_base', 'assembly_origin': 'supplier'})
+    result = await save_v2(db, [item('p1', component_overrides=[excluded('bag')])])
+    assert result['expansion']['unresolved_components'][0]['reason'] == 'supplier_omission_unconfirmed'
+    with pytest.raises(HTTPException) as exc:
+        await save_v2(db, [item('p2', component_overrides=[excluded('bag')])], revision=1)
+    assert exc.value.detail['code'] == 'bundle_component_override_not_found'
+
+
+@pytest.mark.asyncio
+async def test_v2_extra_explicit_packaging_and_product_supplier_are_independent(db):
+    await native_component(db, 'p1', 'bag', 2, {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'approved'})
+    result = await save_v2(db, [item('p1', sourcing_mode='supplier', supplier_id='s1'), {'kind': 'resource', 'resource_id': 'bag'}])
+    expansion = result['expansion']
+    bag = next(x for x in expansion['leaves'] if x['kind'] == 'resource')
+    assert bag['quantity'] == '2'
+    assert bag['sourcing_mode'] == 'stock' and bag['supplier_id'] is None
+    assert b.number(expansion['estimated_cost']) == 14
+
+
+@pytest.mark.asyncio
+async def test_v2_current_product_binding_scope_and_exclusion(db):
+    await native_component(db, 'root', 'bag', 2, {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'approved'})
+    result = await b.save_bundle(db, 'owner', 'root', {'expected_revision': 0, 'product_type': 'composite', 'schema_version': 2,
+        'component_scopes': {'bag': 'per_unit'}, 'items': [
+            {'kind': 'current_product', 'quantity': '2', 'rule_id': 'two'},
+            {'kind': 'current_product', 'quantity': '1', 'rule_id': 'excluded', 'component_overrides': [excluded('bag')]}]}, 'actor')
+    assert b.number(result['expansion']['estimated_cost']) == 34
+    bag = next(x for x in result['expansion']['leaves'] if x['kind'] == 'resource')
+    assert bag['quantity'] == '2'
+    assert result['expansion']['current_product_units_per_selection'] == '3'
+
+
+@pytest.mark.asyncio
+async def test_v2_auto_policy_and_options_are_frozen(db):
+    policy = {'revision': 1, 'stock_first': True, 'allow_split': True, 'supplier_id': 's1'}
+    await db[b.PRODUCT_OPERATION_PROFILES].insert_one({'user_id': 'owner', 'salla_product_id': 'p1', 'bundle_sourcing': policy})
+    result = await save_v2(db, [item('p1')])
+    assert result['expansion']['leaves'][0]['sourcing_mode'] == 'auto'
+    assert result['expansion']['leaves'][0]['sourcing_policy'] == policy
+    await db[b.PRODUCT_OPERATION_PROFILES].update_one({'salla_product_id': 'p1'}, {'$set': {'bundle_sourcing': {}}})
+    replay = await b.expand_bundle(db, 'owner', 'root', frozen_definitions=result['expansion']['frozen_definitions'])
+    assert replay['leaves'][0]['sourcing_policy'] == policy
+
+
+@pytest.mark.asyncio
+async def test_v2_preview_projects_split_without_writing_or_mutating_snapshot(db, monkeypatch):
+    from decimal import Decimal
+    import bundle_fulfillment_v2 as fulfillment
+    policy = {'revision': 1, 'stock_first': True, 'allow_split': True, 'supplier_id': 's1'}
+    await db[b.PRODUCT_OPERATION_PROFILES].insert_one({'user_id': 'owner', 'salla_product_id': 'p1', 'bundle_sourcing': policy})
+    await native_component(db, 'p1', 'unused-bag', 2, {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'approved'})
+    expansion = (await save_v2(db, [item('p1', quantity='4', component_overrides=[excluded('unused-bag')])]))['expansion']
+    original = deepcopy(expansion)
+    lots = [{'location_id': 'a', 'lot_id': 'receipt', 'item': {'item_type': 'product', 'product_id': 'mpv2_p1', 'salla_product_id': 'p1', 'variant_id': None}, 'available': Decimal(2)}]
+    async def read_lots(*args, **kwargs):
+        assert kwargs['pin'] is False
+        return lots
+    monkeypatch.setattr(fulfillment, 'inventory_lots', read_lots)
+    async def snapshot():
+        return {name: await db[name].find({}).to_list(1000) for name in await db.list_collection_names()}
+    before = await snapshot()
+    projected = await b.annotate_inventory(db, 'owner', expansion)
+    assert await snapshot() == before
+    assert expansion == original and lots[0]['available'] == Decimal(2)
+    assert projected['component_decisions'] == original['component_decisions']
+    assert projected['estimated_cost'] == original['estimated_cost']
+    leaf = projected['leaves'][0]
+    assert leaf['preview_only'] is True
+    assert leaf['reserved_quantity'] == '2' and leaf['supplier_quantity'] == '2'
+    assert leaf['pending_quantity'] == '2' and leaf['state'] == 'awaiting_supplier'
+    assert {s['sourcing_mode'] for s in leaf['sourcing_segments']} == {'stock', 'supplier'}
+
+
+@pytest.mark.asyncio
+async def test_v2_preview_unknown_source_reports_needs_source_without_writes(db):
+    expansion = (await save_v2(db, [item('p1')]))['expansion']
+    before = {name: await db[name].find({}).to_list(1000) for name in await db.list_collection_names()}
+    projected = await b.annotate_inventory(db, 'owner', expansion)
+    after = {name: await db[name].find({}).to_list(1000) for name in await db.list_collection_names()}
+    assert {name: rows for name, rows in after.items() if rows} == {name: rows for name, rows in before.items() if rows}
+    assert projected['leaves'][0]['state'] == 'needs_source'
+    assert projected['leaves'][0]['pending_quantity'] == '1'
+
+
+@pytest.mark.asyncio
+async def test_v2_nested_composite_native_exclusion_is_local(db):
+    await native_component(db, 'nested', 'outer-bag', 2, {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'approved'})
+    await save(db, 'nested', [item('p1')])
+    standalone = await b.expand_bundle(db, 'owner', 'nested')
+    result = await save_v2(db, [item('nested', component_overrides=[excluded('outer-bag')])])
+    assert b.number(result['expansion']['estimated_cost']) == 10
+    assert result['expansion']['component_decisions'][0]['use'] is False
+    assert (await b.expand_bundle(db, 'owner', 'nested')) == standalone
+
+
+@pytest.mark.asyncio
+async def test_v2_current_unknown_policy_saves_then_blocks_execution(db):
+    await native_component(db, 'root', 'bag', 2)
+    result = await b.save_bundle(db, 'owner', 'root', {'expected_revision': 0, 'product_type': 'composite', 'schema_version': 2,
+        'component_scopes': {'bag': 'per_unit'}, 'items': [{'kind': 'current_product', 'quantity': '2'}]}, 'actor')
+    assert result['definition']['revision'] == 1
+    assert result['expansion']['estimated_cost'] is None
+    assert result['expansion']['unresolved_components'][0]['quantity'] == '2'
+    with pytest.raises(HTTPException) as exc:
+        await b.expand_bundle(db, 'owner', 'root')
+    assert exc.value.detail['code'] == 'bundle_component_policy_unresolved'
+
+
+@pytest.mark.asyncio
+async def test_v2_current_shared_override_is_applied_or_conflict_visible(db):
+    await native_component(db, 'root', 'bag', 2, {'cost_treatment': 'independent', 'assembly_origin': 'inhouse', 'evidence_ref': 'approved'})
+    payload = {'expected_revision': 0, 'product_type': 'composite', 'schema_version': 2, 'component_scopes': {'bag': 'per_bundle'},
+               'items': [{'kind': 'current_product', 'quantity': '2', 'component_overrides': [excluded('bag')]}]}
+    result = await b.save_bundle(db, 'owner', 'root', payload, 'actor')
+    assert b.number(result['expansion']['estimated_cost']) == 20
+    assert not any(x['kind'] == 'resource' for x in result['expansion']['leaves'])
+    payload['expected_revision'] = 1
+    payload['items'].append({'kind': 'current_product', 'quantity': '1'})
+    result = await b.save_bundle(db, 'owner', 'root', payload, 'actor')
+    assert result['expansion']['estimated_cost'] is None
+    assert result['expansion']['unresolved_components'][0]['reason'] == 'shared_component_override_conflict'
+
+
+async def mapping_catalog(db):
+    await db[PRODUCTS].update_one({'salla_product_id': 'root'}, {'$set': {'options': [
+        {'id': 'size', 'values': [{'id': 'm'}, {'id': 'l'}]},
+        {'id': 'color', 'values': [{'id': 'silver'}, {'id': 'gold'}]}, {'id': 'gift', 'type': 'text'}]}})
+    await db[PRODUCTS].update_one({'salla_product_id': 'p1'}, {'$set': {'options': [
+        {'id': 'child-color', 'required': True, 'values': [{'id': 's'}, {'id': 'g'}]},
+        {'id': 'engraving', 'type': 'text', 'required': True}], 'variants': [{'id': 'M'}, {'id': 'L'}]}})
+    return item('p1', variant_rules=[{'conditions': [{'option_id': 'size', 'value_id': 'm'}], 'variant_id': 'M'}, {'conditions': [{'option_id': 'size', 'value_id': 'l'}], 'variant_id': 'L'}],
+        option_mappings=[{'option_id': 'color', 'value_id': 'silver', 'target_option_id': 'child-color', 'target_value_id': 's'}, {'option_id': 'color', 'value_id': 'gold', 'target_option_id': 'child-color', 'target_value_id': 'g'}],
+        customization_mappings=[{'option_id': 'gift', 'target_option_id': 'engraving'}])
+
+
+@pytest.mark.asyncio
+async def test_v2_maps_parent_size_color_and_text_to_existing_child(db):
+    row = await mapping_catalog(db)
+    result = await save_v2(db, [row])
+    assert result['expansion']['needs_selection'] and result['expansion']['estimated_cost'] is None
+    selected = [{'option_id': 'size', 'value_id': 'm'}, {'option_id': 'color', 'value_id': 'silver'}]
+    expansion = await b.expand_bundle(db, 'owner', 'root', selected_options=selected, option_answers={'gift': 'عبير'}, present_option_ids=['gift'], filled_option_ids=['gift'])
+    leaf = expansion['leaves'][0]
+    assert leaf['variant_id'] == 'M'
+    assert leaf['selected_options'] == [{'option_id': 'child-color', 'value_id': 's'}]
+    assert leaf['customization'] == {'engraving': 'عبير'}
+    assert leaf['sourcing_mode'] == 'auto'
+    assert expansion['cost_complete'] is True
+    assert (await db[PRODUCTS].find_one({'salla_product_id': 'p1'}))['variants'] == [{'id': 'M'}, {'id': 'L'}]
+
+
+@pytest.mark.asyncio
+async def test_v2_mapping_conflicts_preview_unresolved_and_strict_rejected(db):
+    row = await mapping_catalog(db)
+    row['variant_rules'].append({'conditions': [{'option_id': 'size', 'value_id': 'm'}], 'variant_id': 'L'})
+    await save_v2(db, [row])
+    selected = [{'option_id': 'size', 'value_id': 'm'}]
+    preview = await b.expand_bundle(db, 'owner', 'root', selected_options=selected, strict=False)
+    assert preview['missing_options'][0]['reason'] == 'variant_mapping_conflict'
+    assert preview['estimated_cost'] is None
+    with pytest.raises(HTTPException) as exc:
+        await b.expand_bundle(db, 'owner', 'root', selected_options=selected)
+    assert exc.value.detail['code'] == 'bundle_selection_required'
+
+
+@pytest.mark.asyncio
+async def test_v2_mapping_rejects_foreign_alternative_even_when_not_selected(db):
+    row = await mapping_catalog(db)
+    row['option_mappings'][1]['target_value_id'] = 'foreign'
+    with pytest.raises(HTTPException) as exc:
+        await save_v2(db, [row])
+    assert exc.value.detail['code'] == 'bundle_option_value_not_found'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('side,field_type', [('root', 'file'), ('root', 'date'), ('p1', 'file'), ('p1', 'date')])
+async def test_v2_text_mapping_rejects_nontext_source_and_target(db, side, field_type):
+    row = await mapping_catalog(db)
+    product = await db[PRODUCTS].find_one({'salla_product_id': side})
+    oid = 'gift' if side == 'root' else 'engraving'
+    for option in product['options']:
+        if option['id'] == oid:
+            option['type'] = field_type
+    await db[PRODUCTS].update_one({'salla_product_id': side}, {'$set': {'options': product['options']}})
+    with pytest.raises(HTTPException) as exc:
+        await save_v2(db, [row])
+    assert exc.value.detail['code'] == 'bundle_invalid_customization_mapping'
+
+
+@pytest.mark.asyncio
+async def test_v2_text_mapping_preserves_historical_missing_field_type(db):
+    row = await mapping_catalog(db)
+    for key in ['root', 'p1']:
+        product = await db[PRODUCTS].find_one({'salla_product_id': key})
+        for option in product['options']:
+            option.pop('type', None)
+        await db[PRODUCTS].update_one({'salla_product_id': key}, {'$set': {'options': product['options']}})
+    await save_v2(db, [row])
+    result = await b.expand_bundle(db, 'owner', 'root', selected_options=[{'option_id': 'size', 'value_id': 'm'}, {'option_id': 'color', 'value_id': 'gold'}],
+                                   option_answers={'gift': 'عبير'}, present_option_ids=['gift'], filled_option_ids=['gift'])
+    assert result['leaves'][0]['customization'] == {'engraving': 'عبير'}
+
+
 async def save(db, key, items, revision=0):
     return await b.save_bundle(db, 'owner', key, {'expected_revision': revision, 'product_type': 'composite', 'items': items}, 'actor')
 

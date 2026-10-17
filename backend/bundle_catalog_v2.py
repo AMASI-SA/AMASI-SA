@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -19,10 +20,12 @@ from operational_atomic import operational_owner
 from order_option_cost_snapshot_routes import resolve_base_unit_cost
 from product_fulfillment_routes import _product, _product_key
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS
+from product_fulfillment_rules import PRODUCT_OPERATION_PROFILES
 from product_option_cost_routes import BINDINGS, RESOURCES
 from product_v2_details_routes import COST_PROFILES
 from supplier_identity_service import require_supplier_v2
 from security_sensitive_routes import require_product_permission
+from product_bundle_policy_routes import is_text_option
 
 BUNDLES = "mezan_bundle_definitions_v2"
 LIMITS = {"max_items": 100, "max_depth": 5, "max_leaves": 500, "max_revisions": 100, "max_total_quantity": 100000}
@@ -89,6 +92,9 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     provenance = []
     explicit_resources = set()
     automatic_resources = set()
+    component_decisions = []
+    unresolved_components = []
+    composition_v2 = False
 
     async def definition(key):
         if key not in definitions:
@@ -223,7 +229,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             if not isinstance(custom, list) or len(custom) > 100 or any(not isinstance(v, str) for v in custom) or len(set(custom)) != len(custom):
                 reject("bundle_invalid_customization")
             for oid in custom:
-                if not isinstance(oid, str) or oid not in options or options[oid].get("values"):
+                if not isinstance(oid, str) or oid not in options or options[oid].get("values") or composition_v2 and not is_text_option(options[oid]):
                     reject("bundle_invalid_text_option")
 
     async def gather(product, ancestors):
@@ -250,6 +256,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             else:
                 query = {"user_id": owner, "salla_product_id": key}
                 metadata[key] = {"profile": await db[COST_PROFILES].find_one(query, {"_id": 0}),
+                    "operation_profile": await db[PRODUCT_OPERATION_PROFILES].find_one(query, {"_id": 0}) or {},
                     "bindings": await db[PRODUCT_RESOURCE_BINDINGS].find(query, {"_id": 0}).to_list(length=501),
                     "options": await db[BINDINGS].find(query, {"_id": 0}).to_list(length=501), "resources": {}}
                 links = metadata[key]["bindings"] + metadata[key]["options"] + ((doc or {}).get("items", []))
@@ -290,6 +297,10 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                 if item.get("variant_id") and not any(str(v.get("id")) == item["variant_id"] for v in (child_product.get("variants") or child_product.get("skus") or [])):
                     reject("bundle_variant_not_found")
                 await gather(child_product, ancestors + [key])
+                validate_overrides(item, _product_key(child_product))
+                validate_mappings(product, child_product, item)
+            elif item.get("kind") == "current_product":
+                validate_overrides(item, key)
             elif item.get("kind") == "resource":
                 component = await db[RESOURCES].find_one({"user_id": owner, "id": item.get("resource_id")})
                 require_active_component(component)
@@ -297,9 +308,37 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     reject("bundle_nonstock_supplier_requires_service_receipt", 409)
             await source(item)
 
+    def validate_overrides(item, key):
+        available = {(kind, str(b.get("id"))) for kind, rows in (("product_resource", metadata[key].get("bindings", [])), ("option_resource", metadata[key].get("options", []))) for b in rows if b.get("resource_id")}
+        for override in item.get("component_overrides", []):
+            if (override["binding_kind"], override["binding_id"]) not in available:
+                reject("bundle_component_override_not_found")
+
+    def validate_mappings(parent, child, item):
+        variants = {str(v.get("id")) for v in child.get("variants") or child.get("skus") or []}
+        for rule in item.get("variant_rules", []):
+            if not isinstance(rule, dict) or set(rule) != {"conditions", "variant_id"} or text_id(rule["variant_id"]) not in variants or not isinstance(rule["conditions"], list) or not rule["conditions"]:
+                reject("bundle_invalid_variant_rule")
+            selections_for(parent, rule["conditions"], validate_required=False)
+        for mapping in item.get("option_mappings", []):
+            if not isinstance(mapping, dict) or set(mapping) != {"option_id", "value_id", "target_option_id", "target_value_id"}:
+                reject("bundle_invalid_option_mapping")
+            selections_for(parent, [{"option_id": mapping["option_id"], "value_id": mapping["value_id"]}], validate_required=False)
+            selections_for(child, [{"option_id": mapping["target_option_id"], "value_id": mapping["target_value_id"]}], validate_required=False)
+        parent_options = {str(o.get("id")): o for o in parent.get("options", [])}
+        child_options = {str(o.get("id")): o for o in child.get("options", [])}
+        targets = set()
+        for mapping in item.get("customization_mappings", []):
+            if not isinstance(mapping, dict) or set(mapping) != {"option_id", "target_option_id"}:
+                reject("bundle_invalid_customization_mapping")
+            source_id, target = text_id(mapping["option_id"]), text_id(mapping["target_option_id"])
+            if source_id not in parent_options or target not in child_options or not is_text_option(parent_options[source_id]) or not is_text_option(child_options[target]) or target in targets:
+                reject("bundle_invalid_customization_mapping")
+            targets.add(target)
+
     async def source(item):
         mode = item.get("sourcing_mode", "stock")
-        if mode not in {"stock", "supplier"}:
+        if mode not in {"stock", "supplier", "auto"} or mode == "auto" and item.get("kind") not in {"product", "current_product"}:
             reject("bundle_invalid_sourcing_mode")
         supplier = text_id(item.get("supplier_id"))
         if mode == "supplier" and not supplier:
@@ -329,7 +368,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         row = await db[RESOURCES].find_one({"user_id": owner, "id": rid})
         require_active_component(row)
         (automatic_resources if automatic else explicit_resources).add(rid)
-        if rid in automatic_resources and rid in explicit_resources:
+        if not composition_v2 and rid in automatic_resources and rid in explicit_resources:
             reject("bundle_resource_cost_overlap", 409)
         snapshot_row = resource_snapshots.get(rid, row)
         cost = _current_cost(snapshot_row)
@@ -342,7 +381,40 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                 "unit_cost": str(number(cost)) if cost is not None else None,
                 "cost_source": "components_v2", "automatic_binding_scope": dedup_scope, **await source(item)}, path)
 
-    async def current_units(product, row, multiplier, path, pairs):
+    async def inherited(product_key, item, binding, binding_kind, multiplier, path, scope):
+        """Resolve physical use independently from price inclusion and assembly."""
+        bid = str(binding.get("id") or "")
+        if not bid:
+            reject("bundle_binding_identity_required", 409)
+        policy = ((metadata[product_key].get("profile") or {}).get("composition_components") or {}).get(binding_kind + ":" + bid, {})
+        use = next((o["use"] for o in item.get("component_overrides", []) if o["binding_kind"] == binding_kind and o["binding_id"] == bid), True)
+        cost = policy.get("cost_treatment", "unknown")
+        origin = policy.get("assembly_origin", "unknown")
+        rid = binding["resource_id"]
+        record = metadata[product_key].get("resources", {}).get(rid, {})
+        decision = {"product_id": product_key, "path": list(path), "binding_kind": binding_kind, "binding_id": bid,
+                    "resource_id": rid, "name": record.get("name"), "quantity": str(multiplier), "use": use,
+                    "policy": deepcopy(policy), "cost_treatment": cost, "assembly_origin": origin,
+                    "status": "used" if use else "excluded", "unit_cost": _current_cost(record)}
+        component_decisions.append(decision)
+        reason = None
+        if cost not in {"independent", "included_in_base"} or origin not in {"inhouse", "supplier", "purchased_complete"}:
+            reason = "component_provenance_required"
+        elif origin == "supplier" and not use and not (policy.get("supplier_omission_supported") is True and policy.get("evidence_ref")):
+            reason = "supplier_omission_unconfirmed"
+        elif origin != "inhouse" and cost == "independent" and use:
+            reason = "supplier_component_execution_required"
+        elif origin == "inhouse" and cost == "included_in_base" and use:
+            reason = "included_component_inventory_cost_basis_required"
+        if reason:
+            decision.update(status="unresolved", reason=reason)
+            unresolved_components.append(deepcopy(decision))
+            return
+        if not use or origin in {"supplier", "purchased_complete"}:
+            return
+        await resource({"resource_id": rid, "sourcing_mode": "stock", "required": item.get("required", True), "repeat_policy": "sum"}, multiplier, path + [binding_kind + ":" + bid], True, scope)
+
+    async def current_units(product, row, multiplier, path, pairs, scoped_answers=None):
         key = _product_key(product)
         count = quantity(row.get("quantity", 1))
         if count != count.to_integral_value() or count > LIMITS["max_items"]:
@@ -364,7 +436,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             if vid and selected is None:
                 reject("bundle_variant_not_found")
             customization = {}
-            local_answers = answers if key == root_key else {}
+            local_answers = answers if key == root_key else (scoped_answers or {})
             for oid in slot.get("customization_option_ids", []):
                 if not local_answers.get(oid):
                     needs_selection.append({"product_id": key, "slot_id": slot["slot_id"], "option_id": oid})
@@ -378,6 +450,8 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     "salla_product_id": product.get("salla_product_id"), "variant_id": vid,
                     "name": product.get("name"), "sku": (selected or product).get("sku"), "track_inventory": True,
                     "current_product_reference": True, "slot_id": slot["slot_id"], "customization": customization,
+                    "sourcing_policy": deepcopy((metadata[key].get("operation_profile") or {}).get("bundle_sourcing", {})),
+                    "selected_options": [{"option_id": a, "value_id": b} for a, b in sorted(pairs)],
                     "quantity": str(multiplier), "unit": row.get("unit", "unit"), "required": row.get("required", True),
                     "repeat_policy": row.get("repeat_policy", "once"), "unit_cost": str(number(cost)) if cost is not None else None,
                     "cost_source": cost_source, "direct_unit_cost": "0", "automatic_binding_scope": path[:-1], **sourcing}, path + ["slot:" + slot["slot_id"]])
@@ -393,13 +467,14 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         variants = product.get("variants") or product.get("skus") or []
         selected = next((v for v in variants if str(v.get("id")) == vid), None) if vid else None
         if not vid and (variants or product.get("variants_count", 0)) and not has_current:
-            if strict or path:
+            if strict or path and not composition_v2:
                 reject("bundle_variant_required", 409)
             needs_selection.append({"product_id": key, "variant_required": True})
         if vid and selected is None:
             reject("bundle_variant_not_found")
         doc = await definition(key)
         pairs = selections_for(product, item.get("selected_options"), present_ids=item.get("present_option_ids"), filled_ids=item.get("filled_option_ids"))
+        local_answers = answers if key == root_key else item.get("option_answers", {})
         if doc and doc.get("product_type") == "composite":
             if len(ancestors) >= LIMITS["max_depth"]:
                 reject("bundle_depth_limit")
@@ -411,7 +486,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             current_start = len(leaves)
             for index, child in active:
                 if child.get("kind") == "current_product":
-                    await current_units(product, {**child, "required": item.get("required", True) and child.get("required", True)}, multiplier, path + [f"{key}@{doc['revision']}:{index}"], pairs)
+                    await current_units(product, {**child, "required": item.get("required", True) and child.get("required", True)}, multiplier, path + [f"{key}@{doc['revision']}:{child.get('rule_id', index)}"], pairs, local_answers)
             current_counts = {}
             for leaf in leaves[current_start:]:
                 signature = (leaf.get("slot_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), json.dumps(leaf.get("customization", {}), sort_keys=True))
@@ -430,7 +505,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     continue
                 child = {**child, "required": item.get("required", True) and child.get("required", True)}
                 count = quantity(multiplier * quantity(child.get("quantity", 1)))
-                child_path = path + [f"{key}@{doc['revision']}:{index}"]
+                child_path = path + [f"{key}@{doc['revision']}:{child.get('rule_id', index)}"]
                 if child.get("kind") == "resource":
                     if child.get("component_scope", "per_bundle") == "per_unit":
                         if not has_current:
@@ -440,7 +515,28 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                         count = quantity(count * current_count)
                     await resource(child, count, child_path)
                 else:
-                    await walk(await catalog_product(child["product_id"]), child, count, child_path, ancestors + [key])
+                    child_product = await catalog_product(child["product_id"])
+                    if composition_v2:
+                        matching = {rule["variant_id"] for rule in child.get("variant_rules", []) if all((c["option_id"], c["value_id"]) in pairs for c in rule["conditions"])}
+                        if len(matching) > 1:
+                            needs_selection.append({"product_id": child["product_id"], "rule_id": child.get("rule_id"), "reason": "variant_mapping_conflict"})
+                            continue
+                        if matching:
+                            child["variant_id"] = next(iter(matching))
+                        mapped = {(s["option_id"], s["value_id"]) for s in child.get("selected_options", [])}
+                        for mapping in child.get("option_mappings", []):
+                            if (mapping["option_id"], mapping["value_id"]) in pairs:
+                                mapped.add((mapping["target_option_id"], mapping["target_value_id"]))
+                        child["selected_options"] = [{"option_id": a, "value_id": b} for a, b in sorted(mapped)]
+                        child["option_answers"] = {m["target_option_id"]: local_answers[m["option_id"]] for m in child.get("customization_mappings", []) if local_answers.get(m["option_id"])}
+                        child["present_option_ids"] = list(child["option_answers"])
+                        child["filled_option_ids"] = list(child["option_answers"])
+                        child_options = {str(o.get("id")): o for o in child_product.get("options", [])}
+                        conflicting = [oid for oid in child_options if len({v for o, v in mapped if o == oid}) > 1 and child_options[oid].get("type") not in {"checkbox", "multiple", "multi_select"}]
+                        if conflicting:
+                            needs_selection.append({"product_id": child["product_id"], "reason": "option_mapping_conflict", "option_ids": conflicting})
+                            continue
+                    await walk(child_product, child, count, child_path, ancestors + [key])
             bindings = metadata[key].get("bindings", [])
             options = [o for o in metadata[key].get("options", []) if (str(o.get("option_id")), str(o.get("value_id"))) in pairs]
             seen_resources = set()
@@ -460,6 +556,29 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                            path + [f"{key}@{doc['revision']}:direct:{binding_id}"])
                     continue
                 rid = binding.get("resource_id")
+                if composition_v2:
+                    binding_kind = "product_resource" if binding in bindings else "option_resource"
+                    scope = (doc.get("component_scopes") or {}).get(rid)
+                    if has_current and scope == "per_unit":
+                        for _, current in active:
+                            if current.get("kind") == "current_product":
+                                await inherited(key, current, binding, binding_kind, quantity(multiplier * quantity(current.get("quantity", 1)) * quantity(binding.get("quantity", 1))), path + ["current:" + str(current.get("rule_id"))], path)
+                    else:
+                        effective_item = item
+                        if has_current and not any(o["binding_kind"] == binding_kind and o["binding_id"] == str(binding.get("id")) for o in item.get("component_overrides", [])):
+                            choices = {next((o["use"] for o in current.get("component_overrides", []) if o["binding_kind"] == binding_kind and o["binding_id"] == str(binding.get("id"))), True)
+                                       for _, current in active if current.get("kind") == "current_product"}
+                            if len(choices) > 1:
+                                conflict = {"product_id": key, "path": list(path), "binding_kind": binding_kind,
+                                            "binding_id": binding.get("id"), "resource_id": rid,
+                                            "status": "unresolved", "reason": "shared_component_override_conflict"}
+                                component_decisions.append(conflict)
+                                unresolved_components.append(deepcopy(conflict))
+                                continue
+                            if choices:
+                                effective_item = {**item, "component_overrides": [{"binding_kind": binding_kind, "binding_id": str(binding.get("id")), "use": next(iter(choices))}]}
+                        await inherited(key, effective_item, binding, binding_kind, quantity(multiplier * quantity(binding.get("quantity", 1))), path, path)
+                    continue
                 if rid in seen_resources:
                     reject("bundle_resource_cost_overlap", 409)
                 seen_resources.add(rid)
@@ -495,6 +614,9 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                 option_direct += number(binding.get("direct_amount")) * amount
                 continue
             rid = binding.get("resource_id")
+            if composition_v2:
+                await inherited(key, item, binding, "product_resource" if binding in bindings else "option_resource", quantity(multiplier * amount), path, path)
+                continue
             if rid in resource_ids:
                 reject("bundle_resource_cost_overlap", 409)
             resource_ids.add(rid)
@@ -503,6 +625,9 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                 "salla_product_id": product.get("salla_product_id"), "variant_id": vid,
                 "name": product.get("name"), "track_inventory": True, "sku": (selected or product).get("sku"),
                 "quantity": str(multiplier), "unit": item.get("unit", "unit"),
+                "sourcing_policy": deepcopy((metadata[key].get("operation_profile") or {}).get("bundle_sourcing", {})),
+                "selected_options": [{"option_id": a, "value_id": b} for a, b in sorted(selected_pairs)],
+                "customization": deepcopy(local_answers) if composition_v2 else {},
                 "required": item.get("required", True), "repeat_policy": item.get("repeat_policy", "once"),
                 "unit_cost": str(number(cost) + option_direct) if cost is not None else None,
                 "cost_source": cost_source, "direct_unit_cost": str(option_direct), **sourcing}, path)
@@ -510,12 +635,13 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     root_doc = await definition(root_key)
     if not root_doc or root_doc.get("product_type") != "composite":
         return None
+    composition_v2 = root_doc.get("schema_version", 1) == 2
     if option_answers is not None and (not isinstance(option_answers, dict) or len(option_answers) > 100):
         reject("bundle_invalid_option_answers")
     root_product = (root_doc or {}).get("catalog_product") or root
     root_options = {str(o.get("id")): o for o in root_product.get("options", [])}
     for oid, answer in (option_answers or {}).items():
-        if not isinstance(oid, str) or oid not in root_options or root_options[oid].get("values"):
+        if not isinstance(oid, str) or oid not in root_options or root_options[oid].get("values") or composition_v2 and not is_text_option(root_options[oid]):
             reject("bundle_invalid_text_option")
         if not isinstance(answer, str) or len(answer) > 2000:
             reject("bundle_invalid_option_answer")
@@ -532,7 +658,14 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         raise HTTPException(409, detail={"code": "bundle_selection_required", "options": needs_selection})
     merged = {}
     for leaf in leaves:
-        identity = (leaf["kind"], leaf.get("product_id"), leaf.get("resource_id") or leaf.get("binding_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), leaf.get("unit"), leaf.get("slot_id"), json.dumps(leaf.get("customization", {}), sort_keys=True), tuple(leaf["dedup_scopes"][0]))
+        # Equal physical variants can still require different supplier work.
+        # Keep stable customer selections and the frozen sourcing evidence in
+        # both merge stages; otherwise the first rule silently wins for all units.
+        sourcing_context = (
+            tuple(sorted((str(s["option_id"]), str(s["value_id"])) for s in leaf.get("selected_options", []))),
+            json.dumps(leaf.get("sourcing_policy") or {}, sort_keys=True, default=str),
+        ) if composition_v2 else None
+        identity = (leaf["kind"], leaf.get("product_id"), leaf.get("resource_id") or leaf.get("binding_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), leaf.get("unit"), leaf.get("slot_id"), json.dumps(leaf.get("customization", {}), sort_keys=True), sourcing_context, tuple(leaf["dedup_scopes"][0]))
         previous = merged.get(identity)
         if previous is None:
             merged[identity] = leaf
@@ -564,11 +697,14 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     leaves = list(combined.values())
     if sum((quantity(leaf["quantity"]) for leaf in leaves), Decimal(0)) > LIMITS["max_total_quantity"]:
         reject("bundle_total_quantity_limit")
-    known = all(leaf["unit_cost"] is not None for leaf in leaves)
+    if strict and unresolved_components:
+        raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved", "components": unresolved_components})
+    known = not unresolved_components and all(leaf["unit_cost"] is not None for leaf in leaves)
     total = sum((number(l["quantity"]) * number(l["unit_cost"]) for l in leaves if l["unit_cost"] is not None), Decimal(0))
     result = {"product_id": root_key, "revision": root_doc["revision"], "leaves": leaves,
             "estimated_cost": str(total) if known and not needs_selection else None, "known_cost": str(total),
-            "cost_complete": known and not needs_selection, "provenance": provenance, "schema_version": 1,
+            "cost_complete": known and not needs_selection, "provenance": provenance, "schema_version": 2 if composition_v2 else 1,
+            "component_decisions": component_decisions, "unresolved_components": unresolved_components,
             "needs_selection": bool(needs_selection), "missing_options": needs_selection,
             "selected_options": deepcopy(selected_options or []),
             "present_option_ids": deepcopy(present_option_ids or []),
@@ -583,8 +719,11 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
 
 
 async def save_bundle(db, owner, product_id, payload, actor_id):
-    if not isinstance(payload, dict) or set(payload) - {"expected_revision", "product_type", "items", "component_scopes"}:
+    if not isinstance(payload, dict) or set(payload) - {"expected_revision", "product_type", "items", "component_scopes", "schema_version"}:
         reject("bundle_invalid_payload")
+    schema_version = payload.get("schema_version", 1)
+    if type(schema_version) is not int or schema_version not in {1, 2}:
+        reject("bundle_invalid_schema_version")
     scopes = payload.get("component_scopes", {})
     if not isinstance(scopes, dict) or len(scopes) > 500 or any(not isinstance(k, str) or not k or len(k) > 200 or not isinstance(v, str) or v not in {"per_bundle", "per_unit"} for k, v in scopes.items()):
         reject("bundle_invalid_component_scopes")
@@ -610,9 +749,28 @@ async def save_bundle(db, owner, product_id, payload, actor_id):
         cleaned = []
         seen = set()
         for item in items:
-            if not isinstance(item, dict) or set(item) - {"kind", "product_id", "resource_id", "variant_id", "quantity", "sourcing_mode", "supplier_id", "location_id", "unit", "required", "condition", "repeat_policy", "selected_options", "slots", "component_scope"}:
+            if not isinstance(item, dict) or set(item) - {"kind", "product_id", "resource_id", "variant_id", "quantity", "sourcing_mode", "supplier_id", "location_id", "unit", "required", "condition", "repeat_policy", "selected_options", "slots", "component_scope", "component_overrides", "rule_id", "variant_rules", "option_mappings", "customization_mappings"}:
                 reject("bundle_invalid_item")
             row = dict(item)
+            for mapping_field in ("variant_rules", "option_mappings", "customization_mappings"):
+                if mapping_field in row and (schema_version != 2 or row.get("kind") != "product" or not isinstance(row[mapping_field], list) or len(row[mapping_field]) > 100):
+                    reject("bundle_invalid_mapping")
+            if schema_version == 1 and ("component_overrides" in row or "rule_id" in row):
+                reject("bundle_composition_v2_required")
+            if schema_version == 2:
+                row["rule_id"] = text_id(row.get("rule_id") or uuid.uuid4().hex)
+                row["repeat_policy"] = "sum"
+                overrides = row.get("component_overrides", [])
+                if not isinstance(overrides, list) or len(overrides) > 500 or row.get("kind") == "resource" and overrides:
+                    reject("bundle_invalid_component_overrides")
+                override_ids = set()
+                for override in overrides:
+                    if not isinstance(override, dict) or set(override) != {"binding_kind", "binding_id", "use"} or override["binding_kind"] not in {"product_resource", "option_resource"} or type(override["use"]) is not bool:
+                        reject("bundle_invalid_component_overrides")
+                    oid = (override["binding_kind"], text_id(override["binding_id"]))
+                    if not oid[1] or oid in override_ids:
+                        reject("bundle_duplicate_component_override")
+                    override_ids.add(oid)
             if row.get("kind") != "current_product" and "slots" in row:
                 reject("bundle_slots_require_current_product")
             if row.get("repeat_policy", "once") not in {"once", "sum"}:
@@ -624,7 +782,7 @@ async def save_bundle(db, owner, product_id, payload, actor_id):
             row["quantity"] = str(quantity(row.get("quantity", 1)))
             row["unit"] = text_id(row.get("unit", "unit"))
             row["required"] = row.get("required", True)
-            row["sourcing_mode"] = row.get("sourcing_mode", "stock")
+            row["sourcing_mode"] = row.get("sourcing_mode", "auto" if schema_version == 2 and row["kind"] in {"product", "current_product"} else "stock")
             if row["kind"] == "product":
                 if row.get("resource_id"):
                     reject("bundle_ambiguous_reference")
@@ -645,11 +803,14 @@ async def save_bundle(db, owner, product_id, payload, actor_id):
                 if not row["resource_id"]:
                     reject("bundle_reference_required")
             identity = (row["kind"], row.get("product_id") or row.get("resource_id"), row.get("variant_id"), row.get("supplier_id"), row.get("location_id"), str(row.get("condition")))
+            if schema_version == 2:
+                identity = row["rule_id"]
             if identity in seen:
                 reject("bundle_duplicate_item")
             seen.add(identity)
             cleaned.append(row)
         doc = {"user_id": owner, "product_id": key, "revision": expected + 1,
+               "schema_version": schema_version,
                "product_type": kind, "items": cleaned, "component_scopes": deepcopy(payload.get("component_scopes", {})), "updated_by": actor_id,
                "updated_at": datetime.now(timezone.utc).isoformat()}
         expansion = await expand_bundle(scoped, owner, key, _overrides={key: doc}, strict=False)
@@ -683,7 +844,7 @@ async def annotate_inventory(db, owner, expansion):
     """Decorate editor responses without pinning locations or reserving stock."""
     if expansion is None:
         return None
-    from bundle_fulfillment_v2 import inventory_lots, identity
+    from bundle_fulfillment_v2 import inventory_lots, identity, allocate_leaves
     from purchase_receiving_service import same_identity
     from product_inventory_rules import specifications_are_exact
     result = deepcopy(expansion)
@@ -706,11 +867,51 @@ async def annotate_inventory(db, owner, expansion):
                       and (not leaf.get("customization") or specifications_are_exact(lot["item"].get("specifications"), leaf["customization"]))
                       and (not leaf.get("location_id") or leaf["location_id"] == lot["location_id"])), Decimal(0))
         leaf["available_quantity"] = str(amount)
+    if result.get("schema_version") == 2:
+        # The allocator mutates only its detached lot list. Never pin locations,
+        # persist units, or invoke purchasing from an editor preview.
+        projected, _ = await allocate_leaves(db, owner, result.get("leaves", []), deepcopy(lots),
+                                             unit_id="bundle-preview:" + str(result.get("product_id", "")))
+        result["leaves"] = projected
+        result["sourcing_preview"] = True
+        for leaf in projected:
+            leaf["preview_only"] = True
+            leaf["projected_reserved_quantity"] = leaf.get("reserved_quantity", "0")
+            leaf["pending_quantity"] = str(max(Decimal(0), quantity(leaf["quantity"]) - number(leaf.get("reserved_quantity", 0)))) if not leaf.get("cost_only") and leaf.get("track_inventory") is not False else "0"
+            supplier_id = leaf.get("supplier_id")
+            if supplier_id and supplier_id not in suppliers:
+                suppliers[supplier_id] = await db["mezan_suppliers_v2"].find_one(
+                    {"user_id": owner, "id": supplier_id}, {"_id": 0, "name": 1, "company_name": 1}) or {}
+            supplier = suppliers.get(supplier_id, {})
+            leaf["supplier_name"] = supplier.get("company_name") or supplier.get("name") or None
     return result
 
 
 def make_bundle_router(db, current_user):
     router = APIRouter(prefix="/products-v2", tags=["Product V2 Bundles"])
+    from product_bundle_policy_routes import register_bundle_policy_routes
+    register_bundle_policy_routes(router, db, current_user)
+
+    @router.get("/{product_id}/bundle-components")
+    async def get_bundle_components(product_id: str, user=Depends(current_user)):
+        owner = await require_product_permission(db, user, "products.cost.read")
+        product = await _product(db, owner, product_id)
+        key = _product_key(product)
+        query = {"user_id": owner, "salla_product_id": key}
+        profile = await db[COST_PROFILES].find_one(query, {"_id": 0}) or {}
+        components = []
+        for kind, collection in (("product_resource", PRODUCT_RESOURCE_BINDINGS), ("option_resource", BINDINGS)):
+            for binding in await db[collection].find(query, {"_id": 0}).to_list(length=501):
+                if not binding.get("resource_id"):
+                    continue
+                resource_row = await db[RESOURCES].find_one({"user_id": owner, "id": binding["resource_id"]}, {"_id": 0}) or {}
+                bid = str(binding.get("id") or "")
+                policy = (profile.get("composition_components") or {}).get(kind + ":" + bid, {})
+                components.append({"binding_kind": kind, "binding_id": bid, "resource_id": binding["resource_id"],
+                    "name": resource_row.get("name"), "quantity": binding.get("quantity", 1), "unit": resource_row.get("unit"),
+                    "unit_cost": _current_cost(resource_row), "policy": deepcopy(policy),
+                    "condition": {"option_id": binding.get("option_id"), "value_id": binding.get("value_id")} if kind == "option_resource" else None})
+        return {"product_id": key, "components": components}
 
     @router.get("/{product_id}/bundle")
     async def get_bundle(product_id: str, user=Depends(current_user)):

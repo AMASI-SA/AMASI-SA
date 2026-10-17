@@ -25,15 +25,23 @@ async def lifespan(app):
     await db.mezan_products_v2.update_one({"id": "root"}, {"$set": {"name": "بكج الهدية الشتوية", "options": [{
         "id": "size", "name": "اختر نوع البكج", "type": "radio", "required": True,
         "values": [{"id": "two", "name": "بكج منتجين"}, {"id": "three", "name": "بكج 3 منتجات"}, {"id": "four", "name": "بكج 4 منتجات"}]}]}})
-    for pid, name, cost in [("a", "هودي شتوي", 50), ("b", "سلسال", 15), ("c", "عطر", 25), ("d", "ساعة", 40)]:
+    for pid, name, cost in [("a", "هودي شتوي", 50), ("b", "سلسال", 30), ("c", "عطر", 25), ("d", "ساعة", 40)]:
         await db.mezan_products_v2.update_one({"id": pid}, {"$set": {"name": name, "cost_price": cost}})
+    from bundle_catalog_v2 import COST_PROFILES, PRODUCT_RESOURCE_BINDINGS, RESOURCES
+    for pid, rid, name, cost in [("a", "hoodie-bag", "كيس الهودي", 2), ("b", "necklace-box", "علبة السلسال", 3), ("b", "necklace-bag", "كيس السلسال", 1)]:
+        await db[RESOURCES].insert_one({"user_id": "owner", "id": rid, "name": name, "unit_cost": cost, "track_inventory": True, "unit": "piece", "status": "active"})
+        await db[PRODUCT_RESOURCE_BINDINGS].insert_one({"user_id": "owner", "salla_product_id": pid, "id": "bind-" + rid, "resource_id": rid, "quantity": 1})
+        await db[COST_PROFILES].update_one({"user_id": "owner", "salla_product_id": pid}, {"$set": {"composition_components.product_resource:bind-" + rid: {"cost_treatment": "independent", "assembly_origin": "inhouse", "evidence_ref": "Synthetic acceptance fixture"}}}, upsert=True)
     await db.mezan_cost_resources_v2.insert_one({"user_id": "owner", "id": "pack", "name": "كيس وتغليف وبطاقة", "kind": "service", "track_inventory": False, "unit_cost": 20, "status": "active"})
-    items = [{"kind": "resource", "resource_id": "pack", "quantity": 1, "sourcing_mode": "stock"}, fixture.item("a"), fixture.item("b")]
+    await db[RESOURCES].update_one({"id": "pack"}, {"$set": {"name": "تغليف البكج الخاص", "unit_cost": 5}})
+    def linked(pid, bag):
+        return {**fixture.item(pid, "auto"), "component_overrides": [{"binding_kind": "product_resource", "binding_id": "bind-" + bag, "use": False}]}
+    items = [{"kind": "resource", "resource_id": "pack", "quantity": 1, "sourcing_mode": "stock"}, linked("a", "hoodie-bag"), linked("b", "necklace-bag")]
     for option, products in [("three", ["c"]), ("four", ["c", "d"])]:
         for pid in products:
             items.append({**fixture.item(pid, "supplier", "supplier-a" if pid == "c" else "supplier-b"),
                           "condition": {"option_id": "size", "value_id": option}})
-    await fixture.define(items)
+    await fixture.define(items, schema_version=2)
     await fixture.lot("a", 5)
     await fixture.lot("b", 5)
     from stock_component_consumption_service import reserve_component_stock

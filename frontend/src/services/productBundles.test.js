@@ -1,5 +1,5 @@
 import api from "../lib/api";
-import { bundleLeafCost, bundleMoney, bundleOptionVisible, changeBundleSource, linkBundleReceipt, getOrderBundles, getProductBundle, previewProductBundle, saveProductBundle } from "./productBundles";
+import { bundleError, bundleLeafCost, bundleMoney, bundleOptionVisible, changeBundleSource, linkBundleReceipt, getOrderBundles, getProductBundle, previewProductBundle, saveProductBundle } from "./productBundles";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
 
@@ -43,4 +43,23 @@ test("conditional options appear only when the stable prerequisite is selected",
     const option = { show_if: [{ option_id: "size", value_id: "4" }] };
     expect(bundleOptionVisible(option, [{ option_id: "size", value_id: "2" }])).toBe(false);
     expect(bundleOptionVisible(option, [{ option_id: "size", value_id: "4" }])).toBe(true);
+});
+
+test.each([
+    ["bundle_policy_revision_conflict", "إعادة تحميل السياسة"],
+    ["bundle_policy_evidence_required", "مرجع فاتورة"],
+    ["supplier_v2_identity_required", "اختر موردًا صالحًا"],
+    ["supplier_verified_identity_required", "أكمل توثيق المورد"],
+    ["bundle_component_policy_unresolved", "غير محسومة"],
+    ["bundle_invalid_option_mapping", "خيار المنتج الداخلي"],
+    ["bundle_invalid_customization_mapping", "الملفات أو التواريخ"],
+    ["bundle_invalid_mapping", "غير صالح"],
+    ["bundle_policy_unknown_option", "صحح الربط"],
+    ["bundle_policy_unknown_variant", "اختر نسخة موجودة"],
+    ["bundle_policy_unknown_component", "أعد تحميل السياسة"],
+    ["bundle_policy_invalid_rule", "احذف القاعدة الفارغة"],
+    ["bundle_policy_duplicate_rule", "قاعدة توريد مكررة"],
+    ["bundle_policy_invalid_customization", "حقلًا نصيًا"]
+])("explains %s with an actionable correction", (code, expected) => {
+    expect(bundleError({ response: { data: { detail: { code } } } })).toContain(expected);
 });

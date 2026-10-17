@@ -1,5 +1,9 @@
 import api from "../lib/api";
 
+export async function getProductBundleComponents(id) {
+    return (await api.get(`/products-v2/${encodeURIComponent(id)}/bundle-components`)).data;
+}
+
 export async function getProductBundle(id) {
     return (await api.get(`/products-v2/${encodeURIComponent(id)}/bundle`)).data;
 }
@@ -34,6 +38,20 @@ export function bundleOptionVisible(option, choices) {
 export function bundleError(error) {
     const detail = error?.response?.data?.detail;
     const messages = {
+        bundle_policy_revision_conflict: "تغيرت سياسة المنتج في جلسة أخرى. اضغط «إعادة تحميل السياسة» ثم راجع التغييرات وأعد الحفظ.",
+        bundle_policy_evidence_required: "أدخل مرجع فاتورة أو اتفاق مورد يثبت أساس التكلفة والتجهيز قبل حفظ السياسة.",
+        bundle_policy_unknown_component: "تغيرت مكونات المنتج الأصلية. أعد تحميل السياسة للتحقق من الروابط المتاحة.",
+        bundle_policy_unknown_variant: "نسخة المنتج المرتبطة بالسياسة لم تعد متاحة. اختر نسخة موجودة أو احذف القاعدة.",
+        bundle_policy_unknown_option: "أحد خيارات السياسة أو قيمه لم يعد متاحًا. أعد تحميل السياسة وصحح الربط.",
+        bundle_policy_invalid_rule: "أكمل شروط قاعدة التوريد أو نسخة المنتج أو نص التخصيص، أو احذف القاعدة الفارغة.",
+        bundle_policy_duplicate_rule: "توجد قاعدة توريد مكررة. احذف القاعدة المكررة ثم أعد الحفظ.",
+        bundle_policy_invalid_customization: "ربط التخصيص يحتاج حقلًا نصيًا مدعومًا وقيمة نصية صحيحة.",
+        bundle_component_policy_unresolved: "تكلفة بعض المكونات غير محسومة. افتح سياسة المنتج الأصلية وحدد أساس التكلفة والتجهيز مع مرجع موثوق.",
+        bundle_invalid_option_mapping: "صحح ربط حقل البكج وقيمته بخيار المنتج الداخلي وقيمته.",
+        bundle_invalid_customization_mapping: "صحح ربط النص بين البكج والمنتج الداخلي؛ لا يمكن ربط الملفات أو التواريخ كنص تخصيص.",
+        bundle_invalid_mapping: "أحد روابط اختيارات المنتج الداخلي غير صالح. راجع الحقول والقيم والنسخة المطلوبة.",
+        supplier_v2_identity_required: "المورد المحدد غير موجود في سجل الموردين الحالي. أعد تحميل الموردين واختر موردًا صالحًا.",
+        supplier_verified_identity_required: "هوية المورد غير موثقة. أكمل توثيق المورد قبل استخدامه في التوريد.",
         bundle_cycle: "لا يمكن حفظ التركيب: يوجد ربط دائري بين البكجات.",
         bundle_revision_conflict: "تغير تركيب البكج في جلسة أخرى. أعد تحميل التركيب قبل الحفظ.",
         bundle_depth_limit: "تجاوز التركيب الحد الآمن: خمسة مستويات تداخل.",
