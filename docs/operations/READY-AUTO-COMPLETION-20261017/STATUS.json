@@ -1,9 +1,9 @@
 {
   "task": "READY-AUTO-COMPLETION-20261017",
   "branch": "codex/ready-auto-completion-20261017",
-  "base": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "base": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "WIP_NOT_FOR_RELEASE",
+  "state": "INTEGRATION_REVALIDATION_NOT_FOR_RELEASE",
   "production_changed": false,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -16,7 +16,7 @@
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
     "mongo_and_performance": "PENDING",
-    "final_ci": "Previous d058f09d1:24success/2failure; courier tests corrected (22passed); dashboard baseline failure independently reproduced on Production and candidate with identical response and43find vs historical41find",
+    "final_ci": "PENDING after latest production integration",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
@@ -25,15 +25,15 @@
     "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
     "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed",
     "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
-    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required"
+    "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required",
+    "previous_head_ci": "255e1ecfe847a194b6e024bdf4609f8b268317a4:26/26 successful"
   },
   "remaining": [
-    "Finish three-arm dashboard validation",
-    "Fresh CI on final rebased HEAD",
-    "Android review",
+    "Fresh integrated Mongo/queue/shipping and CI checks",
+    "Android completion contract implementation and acceptance",
     "Rollback rehearsal and governed release"
   ],
-  "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
+  "next": "Verify integrated canonical writer preserves allow_billing_eligibility flag; run fresh affected suites",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten."
 }
