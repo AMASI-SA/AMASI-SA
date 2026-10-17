@@ -124,7 +124,7 @@ export function DashboardAdsSpendCardContent({
                         <h2 className="truncate text-base font-extrabold sm:text-lg">
                             صرفيات منصات الإعلانات
                         </h2>
-                        <p className="truncate text-[10px] font-bold text-black/70 sm:text-xs">
+                        <p className="dashboard-header-details truncate text-[10px] font-bold text-black/70 sm:text-xs">
                             مرتبطة بتاريخ الملخص التنفيذي للأرباح
                         </p>
                     </div>
@@ -146,6 +146,7 @@ export function DashboardAdsSpendCardContent({
             </div>
 
             <div className="p-3 sm:p-4">
+                {collapsible && <p className="mb-2 text-[10px] text-slate-500 md:hidden">مرتبطة بتاريخ الملخص التنفيذي للأرباح</p>}
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
                         <div className="text-xs font-extrabold text-slate-800" data-testid="dashboard-ads-spend-period">

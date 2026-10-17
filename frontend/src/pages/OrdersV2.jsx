@@ -25,6 +25,18 @@ import {
 import { useOrders } from "../hooks/useOrders";
 import { getOrderFilterSummary } from "../services/orderEngine";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
+import ArabicDateRangePicker from "../components/ArabicDateRangePicker";
+import { addDaysISO, toRiyadhISO } from "../lib/dates";
+
+function searchBoundDate(value, exclusive = false) {
+    if (!value) return "";
+    // Explicit-offset links keep their precise API bounds; display their Saudi days.
+    if (/(Z|[+-]\d{2}:\d{2})$/.test(value)) {
+        const timestamp = Date.parse(value);
+        return Number.isFinite(timestamp) ? toRiyadhISO(new Date(timestamp - (exclusive ? 1 : 0))) : "";
+    }
+    return value.slice(0, 10);
+}
 
 const STATUS_PRIORITY = [
     ["بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review"],
@@ -195,7 +207,6 @@ export default function OrdersV2() {
     const navigate = useNavigate();
     const [urlParams] = useSearchParams();
     const loadMoreRef = useRef(null);
-    const initialUrlSearchRef = useRef(false);
     const [activeStatus, setActiveStatus] = useState(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [draftStatus, setDraftStatus] = useState(null);
@@ -206,9 +217,13 @@ export default function OrdersV2() {
         provider: urlParams.get("provider") || "", campaign: urlParams.get("campaign") || "",
         campaign_id: urlParams.get("campaign_id") || "", ad_squad: urlParams.get("ad_squad") || "",
         ad_squad_id: urlParams.get("ad_squad_id") || "", ad: urlParams.get("ad") || "",
-        ad_id: urlParams.get("ad_id") || "", product: "", sku: "", payment_status: "",
+        ad_id: urlParams.get("ad_id") || "", product: "", product_id: urlParams.get("product_id") || "", sku: urlParams.get("sku") || "", payment_status: "", status_exact: null,
         utm: "", attribution_status: "", created_from: urlParams.get("created_from") || "",
         created_to: urlParams.get("created_to") || "", baseline_cutoff_at: urlParams.get("baseline_cutoff_at") || "",
+    }));
+    const [dateRange, setDateRange] = useState(() => ({
+        dateFrom: searchBoundDate(urlParams.get("created_from")),
+        dateTo: searchBoundDate(urlParams.get("created_to"), true),
     }));
     const [selected, setSelected] = useState(() => new Set());
     const [allMatchingSelected, setAllMatchingSelected] = useState(false);
@@ -219,13 +234,7 @@ export default function OrdersV2() {
 
     const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
 
-    useEffect(() => {
-        if (initialUrlSearchRef.current) return;
-        initialUrlSearchRef.current = true;
-        if (Object.values(filters).some((value) => String(value || "").trim())) {
-            searchCombined(filters);
-        }
-    }, [filters, searchCombined]);
+    // URL parameters and all form edits are drafts. Only submit starts search.
 
     useEffect(() => {
         const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -297,8 +306,25 @@ export default function OrdersV2() {
         setTargetStatus("");
     }
 
-    function submitSearch(event) { event.preventDefault(); searchCombined({ ...filters, q: searchDraft, status_exact: activeStatus || "" }); }
-    async function clearSearch() { setSearchDraft(""); await reload(); }
+    function submitSearch(event) {
+        event.preventDefault();
+        if (loading) return;
+        searchCombined({ ...filters, q: searchDraft, status_exact: filters.status_exact ?? activeStatus ?? "" });
+    }
+    function applyDateRange(range) {
+        setDateRange(range);
+        // Include the entire last selected Saudi day; backend upper bound is exclusive.
+        setFilters(current => ({ ...current,
+            created_from: `${range.dateFrom}T00:00:00+03:00`,
+            created_to: `${addDaysISO(range.dateTo, 1)}T00:00:00+03:00`,
+        }));
+    }
+    async function clearSearch() {
+        setSearchDraft("");
+        setFilters(current => Object.fromEntries(Object.keys(current).map(key => [key, ""])));
+        setDateRange({ dateFrom: "", dateTo: "" });
+        await reload();
+    }
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="orders-v2-page">
@@ -310,13 +336,15 @@ export default function OrdersV2() {
                 <div className="mt-5 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">{statusCards.map((card) => <CountCard key={card.key || "all"} label={card.label} count={card.count} isAll={card.isAll} active={activeStatus === card.key} onClick={() => setActiveStatus(card.key)} />)}</div>
                 {summaryError && <div className="mt-2 text-xs text-rose-600">{summaryError}</div>}
                 <form onSubmit={submitSearch} className="mt-5 space-y-3">
-                    <div className="flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="رقم الطلب أو أي نص إسناد" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus(activeStatus); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> الحالة</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث مركب</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</div>
+                    <div className="flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="رقم الطلب أو المنتج أو SKU أو الحملة" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus((filters.status_exact ?? activeStatus) || null); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> الحالة</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</div>
                     <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
-                        {[["product","اسم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
+                        {[["product","اسم المنتج"],["product_id","رقم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
                         <select value={filters.payment_status} onChange={(event) => setFilters((current) => ({ ...current, payment_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="partial">مدفوع جزئيًا</option></select>
                         <select value={filters.attribution_status} onChange={(event) => setFilters((current) => ({ ...current, attribution_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الإسناد</option><option value="matched">مطابق</option><option value="unattributed">غير منسوب</option><option value="conflicted">متعارض</option></select>
-                        <input type="datetime-local" value={filters.created_from} onChange={(event) => setFilters((current) => ({ ...current, created_from: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="من تاريخ الإنشاء الأصلي" />
-                        <input type="datetime-local" value={filters.created_to} onChange={(event) => setFilters((current) => ({ ...current, created_to: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="إلى تاريخ الإنشاء الأصلي" />
+                        <div className="min-w-0 md:col-span-2" data-testid="orders-search-date-range">
+                            <ArabicDateRangePicker valueFrom={dateRange.dateFrom} valueTo={dateRange.dateTo} onApply={applyDateRange} emitAppliedEvent={false} />
+                            <p className="mt-1 text-xs text-slate-500">{filters.created_from || filters.created_to ? "الفترة حسب تاريخ إنشاء الطلب؛ تُطبّق عند الضغط على بحث." : "كل التواريخ؛ اختر فترة لتضييق البحث."}</p>
+                        </div>
                     </div>
                 </form>
             </section>
@@ -361,10 +389,10 @@ export default function OrdersV2() {
                         );
                     })}</div>
                 )}
-                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>تحميل 15 طلبًا إضافيًا…</span>}</div>
+                <div ref={loadMoreRef} className="flex min-h-20 items-center justify-center border-t">{loading && !initialLoading && <span>جارٍ تحميل الطلبات…</span>}{searchMode && hasMore && !loading && <button type="button" onClick={loadMore} className="rounded-xl border px-5 py-3 font-bold">عرض المزيد من نتائج البحث</button>}</div>
             </section>
 
-            {drawerOpen && <div className="fixed inset-0 z-50 flex bg-slate-950/30"><button className="flex-1" onClick={() => setDrawerOpen(false)} /><aside className="h-full w-full max-w-sm overflow-y-auto bg-white p-5"><div className="flex justify-between"><b>فرز الطلبات حسب</b><button onClick={() => setDrawerOpen(false)}><X /></button></div><div className="mt-6 space-y-2">{statusCards.map((card) => <label key={card.key || "all"} className="flex justify-between rounded-xl border p-3"><span>{card.label}</span><input type="radio" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} /></label>)}</div><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={() => { setDraftStatus(null); setActiveStatus(null); setDrawerOpen(false); }} className="rounded-xl border p-3">إعادة تعيين</button><button onClick={() => { setActiveStatus(draftStatus); setDrawerOpen(false); }} className="rounded-xl bg-violet-700 p-3 text-white">عرض النتائج</button></div></aside></div>}
+            {drawerOpen && <div className="fixed inset-0 z-50 flex bg-slate-950/30"><button className="flex-1" onClick={() => setDrawerOpen(false)} /><aside className="h-full w-full max-w-sm overflow-y-auto bg-white p-5"><div className="flex justify-between"><b>فرز الطلبات حسب</b><button onClick={() => setDrawerOpen(false)}><X /></button></div><div className="mt-6 space-y-2">{statusCards.map((card) => <label key={card.key || "all"} className="flex justify-between rounded-xl border p-3"><span>{card.label}</span><input type="radio" checked={draftStatus === card.key} onChange={() => setDraftStatus(card.key)} /></label>)}</div><div className="mt-6 grid grid-cols-2 gap-3"><button onClick={() => { setDraftStatus(null); setFilters(current => ({ ...current, status_exact: "" })); setDrawerOpen(false); }} className="rounded-xl border p-3">إعادة تعيين</button><button onClick={() => { setFilters(current => ({ ...current, status_exact: draftStatus || "" })); setDrawerOpen(false); }} className="rounded-xl bg-violet-700 p-3 text-white">اختيار الحالة</button></div></aside></div>}
 
             {quickEditOpen && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"><div className="flex items-center justify-between border-b bg-teal-100 px-5 py-4"><h3 className="text-lg font-extrabold">تحرير سريع للطلبات المحددة</h3><button onClick={() => setQuickEditOpen(false)}><X /></button></div><div className="space-y-4 p-5"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800"><WarningCircle size={22} className="inline ml-2" />عدد الطلبات المحددة: <b>{selectedCount.toLocaleString("en-US")}</b></div><label className="block"><span className="mb-2 block text-sm font-bold">تغيير الحالة إلى</span><select value={targetStatus} onChange={(event) => setTargetStatus(event.target.value)} className="w-full rounded-xl border p-3"><option value="">اختر الحالة الجديدة</option>{statusCards.filter((card) => card.key && card.key !== activeStatus).map((card) => <option key={card.key} value={card.key}>{card.label}</option>)}</select></label>{riskyTransition && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800"><WarningCircle size={20} className="inline ml-2" />هذا انتقال عكسي من حالة مغلقة إلى حالة تشغيلية، وقد ترفضه سلة.</div>}<div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">هذه واجهة Preview فقط. لن يتم إرسال أي تعديل إلى سلة في هذه المرحلة.</div></div><div className="flex justify-between border-t bg-slate-50 p-5"><button onClick={() => setQuickEditOpen(false)} className="rounded-xl border px-5 py-3">إغلاق</button><button disabled={!targetStatus} onClick={() => { setQuickEditOpen(false); setPreviewOpen(true); }} className="rounded-xl bg-teal-500 px-5 py-3 font-bold text-white disabled:opacity-40">معاينة التأكيد</button></div></div></div>}
 
