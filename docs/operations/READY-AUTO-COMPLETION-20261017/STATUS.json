@@ -1,7 +1,7 @@
 {
   "task": "READY-AUTO-COMPLETION-20261017",
   "branch": "codex/ready-auto-completion-20261017",
-  "base": "6f4877922747350189d2f45c676083cc791ac670",
+  "base": "2a7740359451a538be8df373266c4c92ca1a57c8",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
   "state": "WIP_NOT_FOR_RELEASE",
   "production_changed": false,
@@ -16,20 +16,22 @@
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
     "mongo_and_performance": "PENDING",
-    "final_ci": "PENDING",
+    "final_ci": "Previous d058f09d1:24success/2failure; courier tests corrected (22passed); dashboard baseline failure independently reproduced on Production and candidate with identical response and43find vs historical41find",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
     "search_performance": "Historical b99 baseline median ms 1 piece 7.845 -> 11.492; 10 pieces 34.055 -> 9.688; 50 pieces 150.027 -> 13.928; seven samples",
     "canonical_race": "21 passed on isolated replica set",
     "source_transition": "resolve_candidate_source_base passes on rebuilt 78d0b40a43095826c414503360f332742a550667",
-    "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed"
+    "pilot_compat": "87 passed, 1 intentional mock transaction skip on latest production saved-label pilot; initial integration NameError fixed",
+    "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
+    "dashboard_fix": "Preserve historical JSON oracle; add immutable Production read baseline with exact equality and all164cases/no skips; three-arm local validation running"
   },
   "remaining": [
-    "Run isolated Mongo acceptance and resolve failures",
-    "Measure ready with synthetic 20-second provider and search at 1/10/50",
-    "Review UI pending/error behavior and integration diff",
-    "Fresh final CI, rollback and governed release gates"
+    "Finish three-arm dashboard validation",
+    "Fresh CI on final rebased HEAD",
+    "Android review",
+    "Rollback rehearsal and governed release"
   ],
   "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
