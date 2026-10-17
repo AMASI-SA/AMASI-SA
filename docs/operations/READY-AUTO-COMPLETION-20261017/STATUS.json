@@ -3,7 +3,7 @@
   "branch": "codex/ready-prod177-integration-20261017",
   "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "BACKEND_VERIFIED_APK_PREFLIGHT_PENDING",
+  "state": "BACKEND_VERIFIED_APK_BUILD_SUBMITTED",
   "production_changed": true,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -15,7 +15,7 @@
   "validation": {
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
-    "mongo_and_performance": "PENDING",
+    "mongo_and_performance": "See current_prod_integration and historical explicitly scoped performance measurements below",
     "final_ci": "26 applicable PASS +1 nonapplicable TikTok skip on20d8eeae1",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
@@ -37,10 +37,9 @@
     "verify_output_sha256": "9eb930137d2b4c6cda729e49085e82dc2817e517d026568fd7ed9a5e565ce8fe"
   },
   "remaining": [
-    "Android final tested HEAD and coordinated compatible client release",
-    "Production merge and local governed rehearsal, prepare/prepublish/deploy/verify"
+    "Verify APK46 artifact and provide download link to owner for employee-device installation"
   ],
-  "next": "Require preflightPASS, fresh provider inventory, submitoneAPK46, verifyartifact, installavailabledevices; noOTA",
+  "next": "Follow single existing build; verify artifact; deliver APK link; no duplicate submit or OTA",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
   "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
@@ -53,22 +52,22 @@
   "previous_verified_release": "ff442eb34a91fa618d10d0b3e1484e0be1e3a313 (historical, Production base advanced)",
   "android": {
     "source": "7e0db37c59f58785e7344a5f647089a221f6faf5",
-    "pr": 274,
+    "pr": 275,
     "source_audit": "PASS_NOT_DEPLOYED",
     "receipt_tests": "6 PASS",
     "ci": "39062907673 PASS",
-    "owner_decision": "new isolated reviewed APK then installation, no OTA",
+    "owner_decision": "Owner requests APK download link and will install on employee devices; no OTA",
     "candidate": "5e4a4907dd71deeedad46fda0f282b3ca12898cf",
     "devices": "emulator only, no physical employee device attached",
     "source_guard": "Independent604filesPASS;13negative/reference testsPASS,1Windows symlink skip (Linux CI required)",
     "candidate_ci": "39065342410 and39065371787 SUCCESS; Linux14negative testsPASS; fullquality52checksPASS andAndroidexport",
     "receipt_digest": "884909af45cd837650a960e46b3e41f7078f2b75918f42e300cc3ad7fa4e3902",
     "runner_digest": "0083d0713f31d1d668f5c088f64b76b35841251b60c9336b56a4e4362e0bc477",
-    "build": "NOT_SUBMITTED;preflight-onlyrunning"
+    "build": "b4e241ee-dd85-4a93-a302-fcf835c84f7e; single submission acknowledged exit0"
   },
   "production_change_scope": "PR1430 merged; live Backend/Frontend verified3 and matching lease inactive",
   "deployment_head": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1",
   "release_id": "rg5-10f2364c7514588f61b5d39fa1f736e78402a9954cb7660cdf8c7140a53f3c6c",
   "lease_actor": "codex-ready-auto-apk46-20261017",
-  "prepared_at": "2026-10-17T19:56:47.701914+00:00"
+  "prepared_at": "2026-10-17T22:56:47.701914+03:00"
 }
