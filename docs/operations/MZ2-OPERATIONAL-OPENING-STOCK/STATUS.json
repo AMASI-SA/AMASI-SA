@@ -1,0 +1,21 @@
+{
+  "task": "MZ2-OPERATIONAL-OPENING-STOCK",
+  "status": "SOURCE_CANDIDATE",
+  "branch": "codex/operational-opening-stock-candidate-20261017",
+  "base_sha": "196adb36d64f5bb595a52a4371efd38034941173",
+  "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
+  "acceptance": [
+    "Owner can search the real MZ2 catalogue before any physical inventory exists.",
+    "Explicit product configuration, positive quantity, unit cost and storage location are reviewed before approval.",
+    "Preview has no writes; approval revalidates the preview and current owner permission.",
+    "The physical inventory writer remains default disabled; no automatic enablement.",
+    "One initial owner batch is atomic and idempotent; conflicting replay and existing stock fail closed.",
+    "No supplier debt, purchase invoice, native ledger, control changes or Salla writes.",
+    "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
+  ],
+  "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
+  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS. Review fix: full product/location/warehouse identities fail closed including archived/disabled duplicates; final new suite36 PASS. Independent read-only review confirms duplicate identity finding resolved, no further actionable findings.",
+  "production_changed": false,
+  "release": "No prepare, prepublish, merge or publish performed for this task.",
+  "next": "Inspect candidate CI and governed build. Freeze intent-only B only after governed artifacts verified. No Production changes or writer activation authorized by this implementation."
+}
