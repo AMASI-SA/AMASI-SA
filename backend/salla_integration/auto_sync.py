@@ -275,10 +275,21 @@ async def _reconcile_status_page(
         if provider_updated_at is not None:
             patch["raw_by_source.salla_direct.updated_at"] = provider_updated_at
 
-        await db.unified_orders.update_one(
-            {"user_id": str(user_id), "order_number": order_number},
-            {"$set": patch},
-        )
+        from operational_atomic import operational_owner
+
+        async def persist(scoped):
+            # Re-read after acquiring Ready's owner fence. Do not overwrite a
+            # webhook which changed the row since this page was inspected.
+            selector = {"user_id": str(user_id), "order_number": order_number}
+            current = await scoped.unified_orders.find_one(selector)
+            if not current or any(current.get(key) != local.get(key)
+                                  for key in ("order_status", "order_status_slug")):
+                return False
+            await scoped.unified_orders.update_one(selector, {"$set": patch})
+            return True
+
+        if not await operational_owner(db, str(user_id), persist):
+            continue
 
         # Update the read-only status snapshot only when the status actually
         # changed. This performs no Qoyod API call and remains ineligible to send.

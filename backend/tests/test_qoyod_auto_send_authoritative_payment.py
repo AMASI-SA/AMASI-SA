@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 from unittest.mock import patch
+import pytest
 
 from qoyod_auto_payment_freshness import (
     _canonical_from_unified,
@@ -126,6 +127,17 @@ class _DB:
             existing_projection=existing_projection,
             projection_error=projection_error,
         )
+
+
+@pytest.fixture(autouse=True)
+def unit_source_transaction(monkeypatch):
+    # This file verifies mapping/sender behavior using its explicit in-memory
+    # _DB, not Mongo isolation. Real promotion serialization is exercised by
+    # test_g47_ready_canonical_status_race on a replica set.
+    async def owner(database, merchant, callback, **kwargs):
+        assert isinstance(database, _DB)
+        return await callback(database)
+    monkeypatch.setattr("operational_atomic.operational_owner", owner)
 
 
 def _paid_order():
