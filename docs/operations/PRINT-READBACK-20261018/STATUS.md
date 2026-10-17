@@ -1,4 +1,4 @@
-# Completed-order print readback — WIP checkpoint
+# Completed-order print readback — integrated candidate
 
 Scope: restore current saved-label access for legacy completed orders and safe recovery of v2 completion status transitions. APK46 source remains frozen. No Production, live Salla, APK, OTA or financial writes.
 
@@ -12,8 +12,20 @@ Proven mechanisms:
 - The component source snapshot/reconciliation window is temporary, but the worker used to stop permanently during that window.
 - Pre-outbox completed workflows always appear pending to APK46 even when a current saved label exists.
 
-Current implementation is still under test/review. A v2 already-blocked recovery helper and versioned status-only repair are in progress. Do not merge or deploy this checkpoint.
+The legacy and inactive v2 readback paths are integrated. Both require a fresh exact provider order observation and recheck local material, shipment, cancellation, epoch and ownership evidence before returning. An active outbox claim is never bypassed. Healthy reads write no business state. The only recovery write is an explicitly authorized versioned in-progress/completed source-alias repair under the owner transaction, with permissions rechecked inside that transaction. It does not change the workflow, outbox, items, address, stock or financial data.
 
-Verified so far: first five transition tests PASS after the narrow fix; legacy helper 23/23 and existing saved-label suite 18/18 PASS independently. Expanded integrated tests are running. One run against the old C: Mongo failed fixture setup due to disk exhaustion, not an accepted product result; subsequent verification uses the separate loopback D: fixture.
+Fresh verification (synthetic provider, isolated real Mongo replica set):
+- Baseline regression checkpoint: 4 intended failures, 1 control pass; independently reproduced.
+- Integrated affected suites: 421 passed, 1 intentionally unsupported memory-transaction case skipped, 93 subtests passed; exit 0, 388.42 seconds. The corresponding real Mongo case ran. This broad run started before the final embedded-shipment and route tests below.
+- Latest legacy/v2/actual route tests after those additions: 53 passed, 84 subtests passed; exit 0, 63.64 seconds. This includes current cancelled or conflicting shipments, returns/old cancelled shipments, claim/lease races, material changes, exact identity, terminal status, transaction rollback, late permissions, timeouts and cancellation.
+- Existing saved-label tests: 18 passed within the integrated run.
+- Android actual screen/hook/controller compatibility tests passed on frozen APK46 source plus test-only changes, mobile PR 276, commit 7ab293d. Exact old response stays blocked; corrected first GET exposes existing print actions; no resume/Ready/old-issuance call. Synthetic 80/120/60 ms stage delays produced 200 ms to the label action and 260 ms to the enqueue boundary. These are not live/device printing timings; native PDF open was not exercised.
+- CI adds the new suites and exact minimum counts, retaining all existing gates. Remote CI and independent candidate review remain required.
 
-Next: integrate v2 readback, complete race/permission/terminal tests, run combined regression and Android compatibility checks, then send immutable candidate to release coordinator. Release coordinator alone owns any later lease/deploy.
+One earlier run against the old C: fixture failed setup due to disk exhaustion. It is not accepted product evidence. Subsequent verification used a separate loopback D: fixture without changing or cleaning the old shared database.
+
+Known limits: exact live customer-order cause is unverified. Store courier remains on its existing explicit print path; confirmed completion honestly reports a pending label until that path generates the document. APK46's pending wording and 30-second completion polling remain unchanged. No authentication source, APK, OTA, Production, live provider or financial write was performed in this change.
+
+Backend PR: https://github.com/AMASI-SA/AMASI-SA/pull/1431 (Draft). Mobile test-only PR: https://github.com/AMASI-SA/amasi-mobile/pull/276 (Draft).
+
+Next: push this candidate, inspect CI, and send exact HEAD/TREE to the release coordinator for independent review. Evaluate the separate one-read-after-status-ACK latency improvement with a focused regression before deciding whether to include it. The release coordinator alone owns merge, governed A/B build, lease and deployment. Rollback baseline is bb23 above, preserving already-published fixes; no return to an older update.

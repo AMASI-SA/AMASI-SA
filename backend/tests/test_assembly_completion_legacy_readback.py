@@ -356,3 +356,27 @@ class LegacyCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code, "completion_readback_unavailable")
         self.assertNotIn("private", str(error.exception))
         self.assertEqual(await self.snapshot(), before)
+
+    async def test_current_cancelled_embedded_shipment_cannot_disappear_during_extraction(self):
+        self.order["shipments"] = [{"id": "shipment-a", "status": "cancelled", "type": "shipment"}]
+        before = await self.snapshot()
+        with self.assertRaises(shipping.ShippingLabelError) as error:
+            await self.read()
+        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+        self.assertEqual(await self.snapshot(), before)
+
+    async def test_conflicting_active_shipments_cannot_authorize_cached_file(self):
+        self.order["shipments"] = [
+            {"id": "shipment-a", "status": "created", "type": "shipment", "company": "iMile"},
+            {"id": "shipment-b", "status": "created", "type": "shipment", "company": "iMile"},
+        ]
+        with self.assertRaises(shipping.ShippingLabelError) as error:
+            await self.read()
+        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+
+    async def test_previous_cancelled_or_return_shipment_does_not_block_current_label(self):
+        self.order["shipments"] = [
+            {"id": "old", "status": "cancelled", "type": "shipment"},
+            {"id": "return", "status": "created", "type": "return"},
+        ]
+        self.assertTrue((await self.read())["ready"])

@@ -158,7 +158,7 @@ def public_status(workflow, *, canonical=None):
             "ready": available, "order_status_completed": confirmed}
 
 
-async def read_status(db, user_id, order_number):
+async def read_status(db, user_id, order_number, *, authorize_repair=None):
     workflow = await shipping_workflow(db, user_id, order_number)
     if FIELD not in workflow:
         from assembly_completion_legacy_readback import read_legacy_completion
@@ -166,6 +166,13 @@ async def read_status(db, user_id, order_number):
         if legacy is not None:
             return legacy
         # An outbox was enrolled concurrently. Use its current authority.
+        workflow = await shipping_workflow(db, user_id, order_number)
+    operation = workflow.get(FIELD) or {}
+    if operation.get("version") == 2 and operation.get("state") == "requires_attention":
+        from assembly_completion_v2_readback import read_blocked_completion
+        recovered = await read_blocked_completion(db, user_id, order_number, authorize_repair=authorize_repair)
+        if recovered is not None:
+            return recovered
         workflow = await shipping_workflow(db, user_id, order_number)
     return {**label_fields(workflow), **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 

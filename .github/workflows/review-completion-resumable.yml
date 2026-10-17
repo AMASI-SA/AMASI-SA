@@ -8,8 +8,17 @@ on:
       - "backend/review_local_policy.py"
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_completion_delivery.py"
+      - "backend/assembly_completion_legacy_readback.py"
+      - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
+      - "backend/salla_integration/auto_sync.py"
+      - "backend/order_engine/shipping_label_service.py"
       - "backend/tests/test_assembly_completion_delivery.py"
+      - "backend/tests/test_assembly_completion_legacy_readback.py"
+      - "backend/tests/test_assembly_completion_v2_readback.py"
+      - "backend/tests/test_assembly_completion_status_transition.py"
+      - "backend/tests/test_assembly_completion_readback_routes.py"
+      - "backend/tests/test_shipping_saved_label_print.py"
       - "backend/tests/test_assembly_search_instruction_batch.py"
       - "backend/order_tracking_notes.py"
       - "backend/preparation_route_history.py"
@@ -88,6 +97,11 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
+          tests/test_assembly_completion_legacy_readback.py
+          tests/test_assembly_completion_v2_readback.py
+          tests/test_assembly_completion_status_transition.py
+          tests/test_assembly_completion_readback_routes.py
+          tests/test_shipping_saved_label_print.py
           tests/test_g47_ready_shipping_safety.py
           tests/test_g47_ready_canonical_status_race.py
           tests/test_assembly_search_instruction_batch.py
@@ -111,7 +125,7 @@ jobs:
           tests/test_order_review_export_controls.py
           tests/test_order_review_mobile_app_permissions.py
           tests/test_reviewed_products_catalog.py
-          --junitxml="${{ runner.temp }}/review-completion.xml"
+          --asyncio-mode=auto --junitxml="${{ runner.temp }}/review-completion.xml"
       - name: Preserve the acceptance configuration conflict guard
         if: ${{ !cancelled() }}
         run: >-
@@ -125,7 +139,7 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 174), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 254), ("review-acceptance-guard.xml", 1)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
@@ -137,6 +151,11 @@ jobs:
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
+                                         ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 26),
+                                         ("test_assembly_completion_v2_readback.BlockedCompletionTests", 24),
+                                         ("test_assembly_completion_status_transition.StatusTransitionTests", 9),
+                                         ("test_assembly_completion_readback_routes.CompletionReadbackRouteTests", 3),
+                                         ("test_shipping_saved_label_print", 18),
                                          ("test_g47_ready_shipping_safety.CounterexampleTests", 3),
                                          ("test_g47_ready_shipping_safety.SafetyTests", 10),
                                          ("test_g47_ready_shipping_safety.StatusPolicyTests", 1),

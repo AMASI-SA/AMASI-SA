@@ -168,7 +168,7 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         await self.finish()
         context = deepcopy(self.context)
         context.update(is_owner=False, permissions={"fulfillment.ready.read"}, responsibilities={"instant_ready"})
-        async def revoke(*args):
+        async def revoke(*args, **kwargs):
             context["permissions"].clear()
             context["responsibilities"].clear()
             return {"ready": True}
@@ -176,3 +176,15 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
              patch.object(delivery, "read_status", revoke):
             response = await self.client.get("/preparation-work-v1/assembly/orders/local-assembly/completion")
         self.assertEqual(response.status_code, 403, response.text)
+
+    async def test_light_reconcile_never_reopens_terminal_order_for_alias_repair(self):
+        await self.finish()
+        for status in ("delivered", "cancelled"):
+            await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+                "order_status": status, "order_status_slug": status,
+                "raw_by_source.salla_direct.status": {"slug": status},
+                "raw_by_source.salla_direct.status_slug": status,
+            }})
+            before = await self.db.unified_orders.find_one({"user_id": "owner"})
+            await self.reconcile_completed()
+            self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)

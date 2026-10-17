@@ -115,7 +115,26 @@ def _assert_provider_identity(order, internal_id, number):
 def _assert_provider_shipping(order, current):
     # Missing shipping in a light response does not initiate a shipment lookup.
     # Positive contradictions, however, cannot authorize the cached old label.
-    observed = extract_shipping(order) or {}
+    if _courier(current):
+        # Old external shipments do not define the current store-courier route.
+        # Keep the existing explicit courier document path and its assignment.
+        observed = extract_shipping({key: order.get(key) for key in (
+            "shipping", "shipping_company", "shipping_company_code")}) or {}
+    else:
+        rows = order.get("shipments")
+        rows = rows if isinstance(rows, list) else [rows] if isinstance(rows, dict) else [order.get("shipment")]
+        outbound = [row for row in rows if isinstance(row, dict)
+                    and shipping._status(row.get("type") or row.get("shipment_type")) not in
+                    {"return", "return_shipment", "reverse"}]
+        current_id = shipping._text(current.get("shipment_id"))
+        if any(current_id and shipping._text(row.get("id")) == current_id
+               and shipping._status(row.get("status")) in shipping._CANCELLED for row in outbound):
+            raise shipping._stale_label()
+        active_ids = {shipping._text(row.get("id")) for row in outbound
+                      if shipping._text(row.get("id")) and shipping._status(row.get("status")) not in shipping._CANCELLED}
+        if len(active_ids) > 1:
+            raise shipping._stale_label()
+        observed = extract_shipping(order) or {}
     for key in ("shipment_id", "tracking_number"):
         if observed.get(key) and current.get(key) and str(observed[key]) != str(current[key]):
             raise shipping._stale_label()
@@ -123,7 +142,7 @@ def _assert_provider_shipping(order, current):
     right = {"code": shipping._text(observed.get("company_code")), "name": shipping._text(observed.get("company_name"))}
     if shipping._label_carriers_match(left, right) is False:
         raise shipping._stale_label()
-    if observed.get("status") in shipping._CANCELLED:
+    if observed.get("status") in shipping._CANCELLED | shipping._PENDING:
         raise shipping._stale_label()
 
 
