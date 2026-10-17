@@ -1,3 +1,4 @@
+import DashboardTableScroll from "./DashboardTableScroll";
 const PROVIDERS = [
     { key: "snapchat", label: "Snapchat" },
     { key: "tiktok", label: "TikTok" },
@@ -119,7 +120,7 @@ export default function AdsExecutiveBreakdownTable({ data }) {
                 </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <DashboardTableScroll label="أداء المنصات الإعلانية">
                 <table
                     className="w-full min-w-[920px] text-[11px]"
                     data-testid="ads-executive-breakdown-table"
@@ -162,7 +163,7 @@ export default function AdsExecutiveBreakdownTable({ data }) {
                         ))}
                     </tbody>
                 </table>
-            </div>
+            </DashboardTableScroll>
 
             <div className="mt-2 flex flex-wrap justify-between gap-2 text-[10px] leading-relaxed text-slate-500">
                 <span>

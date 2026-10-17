@@ -1,0 +1,33 @@
+{
+  "task": "DASHBOARD-MOBILE-20261017",
+  "scope": "Dashboard phone-width containment, icon-only independent card collapse, and horizontal access to all profit detail table columns.",
+  "branch": "codex/dashboard-mobile-collapse-20261017",
+  "base": "342bbefaba5d4a59e3a2988589d02a7efdb07aa4",
+  "state": "source_verified_not_deployed",
+  "completed": [
+    "Explicit shrinkable one-column grid tracks and min-width:0 on dashboard columns.",
+    "Independent accessible chevron controls preserve original headers and mounted body state.",
+    "Phone-only reflow of profit KPIs, cost rows, net profit, and latest orders; original currencies retained.",
+    "Advertising, shipping and payment details have named focusable horizontal scroll regions; mobile containment and touch scrolling; all columns retained.",
+    "Existing shared cards outside this dashboard keep their original section structure."
+  ],
+  "verification": {
+    "focused_jest": {
+      "suites": 8,
+      "tests": 48,
+      "exit": 0,
+      "runtime": "Isolated React19/Jest29/Babel/jsdom toolchain; not the governed release build"
+    },
+    "dashboard_bundle": "Actual AdvancedDashboard import graph and Tailwind compiled using esbuild with synthetic read-only service fixtures; exit0",
+    "diff_check": "passed",
+    "mobile_visual": "unverified: Cloud Browser rejected the local-file preview protocol. No bypass attempted. No real phone or mobile Safari result claimed."
+  },
+  "production_changed": false,
+  "release_guard": "No lease or production workspace change",
+  "remaining": [
+    "Inspect PR CI on exact source SHA.",
+    "Mobile rendered QA at 320,360,393,430 CSS px: all cards inside viewport; ads/shipping/payment tables scroll to both ends; arrow-only independent collapse.",
+    "Separately authorized integration and protocol-v5 release, then live readback."
+  ],
+  "next_safe_action": "Review source diff and CI. Preserve any newer Production changes. Do not infer publication from this checkpoint."
+}

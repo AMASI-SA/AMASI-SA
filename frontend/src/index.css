@@ -344,14 +344,14 @@ aside { scrollbar-width: thin; }
 }
 
 /* Top KPI cards */
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) {
     gap: 0.8rem !important;
     padding: 1rem !important;
     border-bottom: 0 !important;
     background: transparent !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div {
     position: relative;
     display: block !important;
     min-height: 142px;
@@ -364,32 +364,32 @@ aside { scrollbar-width: thin; }
         inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(1) {
     border-color: rgba(245, 158, 11, 0.34) !important;
     background: linear-gradient(145deg, rgba(255, 251, 235, 0.98), rgba(254, 243, 199, 0.74)) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(2) {
     border-color: rgba(56, 189, 248, 0.34) !important;
     background: linear-gradient(145deg, rgba(240, 249, 255, 0.98), rgba(224, 242, 254, 0.78)) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(3) {
     border-color: rgba(16, 185, 129, 0.32) !important;
     background: linear-gradient(145deg, rgba(240, 253, 250, 0.98), rgba(209, 250, 229, 0.76)) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(4) {
     border-color: rgba(139, 92, 246, 0.28) !important;
     background: linear-gradient(145deg, rgba(250, 245, 255, 0.98), rgba(237, 233, 254, 0.74)) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > div:first-child {
     min-width: 0;
     padding-top: 0.1rem;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:first-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > div:first-child > p:first-child {
     min-height: 2.35rem;
     padding-inline-end: 3.25rem;
     color: #334155 !important;
@@ -399,7 +399,7 @@ aside { scrollbar-width: thin; }
     text-align: right;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > div:first-child > p:last-child {
     display: block !important;
     margin-top: 0.7rem !important;
     color: #0f172a;
@@ -410,12 +410,12 @@ aside { scrollbar-width: thin; }
     letter-spacing: -0.025em;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) > div:first-child > p:last-child { color: #b45309 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) > div:first-child > p:last-child { color: #0369a1 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) > div:first-child > p:last-child { color: #047857 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) > div:first-child > p:last-child { color: #6d28d9 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(1) > div:first-child > p:last-child { color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(2) > div:first-child > p:last-child { color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(3) > div:first-child > p:last-child { color: #047857 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(4) > div:first-child > p:last-child { color: #6d28d9 !important; }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > span:last-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > span:last-child {
     position: absolute;
     top: 0.9rem;
     right: 0.9rem;
@@ -427,18 +427,18 @@ aside { scrollbar-width: thin; }
         0 5px 12px rgba(15, 23, 42, 0.08);
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > span:last-child svg {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > span:last-child svg {
     width: 1.25rem !important;
     height: 1.25rem !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(1) > span:last-child { background: #fef3c7 !important; color: #b45309 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(2) > span:last-child { background: #e0f2fe !important; color: #0369a1 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(3) > span:last-child { background: #d1fae5 !important; color: #047857 !important; }
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div:nth-child(4) > span:last-child { background: #ede9fe !important; color: #6d28d9 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(1) > span:last-child { background: #fef3c7 !important; color: #b45309 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(2) > span:last-child { background: #e0f2fe !important; color: #0369a1 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(3) > span:last-child { background: #d1fae5 !important; color: #047857 !important; }
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div:nth-child(4) > span:last-child { background: #ede9fe !important; color: #6d28d9 !important; }
 
 /* Profit / cost breakdown surface */
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(3) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(2) {
     margin: 0.2rem 1rem 0;
     padding: 0.35rem 1rem !important;
     border: 1px solid rgba(148, 163, 184, 0.16);
@@ -526,7 +526,7 @@ aside { scrollbar-width: thin; }
 [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid="advanced-profit-row-operating"] > div:last-child > span:last-child { border-color: #fed7aa !important; background: #ffedd5 !important; color: #c2410c !important; }
 
 /* Net profit hero card */
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) {
     position: relative;
     isolation: isolate;
     min-height: 138px !important;
@@ -543,8 +543,8 @@ aside { scrollbar-width: thin; }
         inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::before,
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::after {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3)::before,
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3)::after {
     content: "";
     position: absolute;
     z-index: -1;
@@ -552,7 +552,7 @@ aside { scrollbar-width: thin; }
     border-radius: 50%;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::before {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3)::before {
     width: 72%;
     height: 105%;
     left: -12%;
@@ -561,7 +561,7 @@ aside { scrollbar-width: thin; }
     transform: rotate(-5deg);
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4)::after {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3)::after {
     width: 58%;
     height: 78%;
     right: -18%;
@@ -570,7 +570,7 @@ aside { scrollbar-width: thin; }
     box-shadow: 0 -8px 0 rgba(16, 185, 129, 0.10);
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > p:first-child {
     display: flex !important;
     align-items: center;
     gap: 0.55rem !important;
@@ -600,19 +600,19 @@ aside { scrollbar-width: thin; }
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 7px 16px rgba(4, 84, 61, 0.18);
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child > span:last-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > p:first-child > span:last-child {
     font-size: 0.95rem !important;
     font-weight: 800 !important;
     opacity: 0.92;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > div:last-child {
     position: relative;
     z-index: 1;
     min-width: 0;
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:first-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > div:last-child > p:first-child {
     color: #ffffff;
     font-size: clamp(1.2rem, 2.3vw, 1.65rem) !important;
     font-weight: 900 !important;
@@ -620,7 +620,7 @@ aside { scrollbar-width: thin; }
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
 }
 
-[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > div:last-child > p:last-child {
+[data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > div:last-child > p:last-child {
     margin-top: 0.35rem;
     color: rgba(236, 253, 245, 0.88) !important;
     font-size: 0.76rem !important;
@@ -641,15 +641,15 @@ aside { scrollbar-width: thin; }
         font-size: 1.12rem !important;
     }
 
-    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div {
         min-height: 126px;
     }
 
-    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(2) > div > div:first-child > p:last-child {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(1) > div > div:first-child > p:last-child {
         font-size: 1.6rem !important;
     }
 
-    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(3) {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(2) {
         margin-inline: 0.7rem;
         padding-inline: 0.65rem !important;
     }
@@ -674,13 +674,13 @@ aside { scrollbar-width: thin; }
         font-size: 0.62rem !important;
     }
 
-    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) {
         min-height: 120px !important;
         margin: 0.8rem !important;
         padding: 1rem !important;
     }
 
-    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > div:nth-child(4) > p:first-child {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > p:first-child {
         gap: 0.4rem !important;
         font-size: 1.8rem !important;
     }
@@ -689,5 +689,68 @@ aside { scrollbar-width: thin; }
         min-width: 4rem;
         padding: 0.45rem 0.52rem !important;
         font-size: 0.68rem !important;
+    }
+}
+
+/* Keep the desktop composition; reflow profit cards only on phones. */
+@media (max-width: 767px) {
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:first-child {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.6rem !important;
+        padding: 0.75rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:first-child > div {
+        display: flex !important;
+        flex-direction: column-reverse;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.75rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:first-child > div > span:last-child {
+        position: static;
+        flex-shrink: 0;
+        align-self: flex-start;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:first-child > div > div:first-child > p:first-child {
+        display: block;
+        padding-inline: 0;
+        overflow: visible;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:first-child > div > div:first-child > p:last-child {
+        font-size: 1.25rem !important;
+        line-height: 1.3 !important;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] {
+        display: grid;
+        grid-template-columns: 2.65rem minmax(0, 1fr);
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] [data-testid^="advanced-profit-row-"] > div:last-child {
+        grid-column: 2;
+        min-width: 0;
+        flex-wrap: wrap;
+        overflow-wrap: anywhere;
+        font-size: 1rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) {
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: center;
+        gap: 1rem;
+        padding: 1rem !important;
+    }
+
+    [data-testid="advanced-dashboard-page"] [data-testid="advanced-profit-summary"] > .dashboard-panel-content > div:nth-child(3) > p:first-child {
+        flex-wrap: wrap;
+        overflow-wrap: anywhere;
+        font-size: 1.7rem !important;
     }
 }

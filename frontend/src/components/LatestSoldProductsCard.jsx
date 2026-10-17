@@ -1,3 +1,4 @@
+import DashboardPanel from "./DashboardPanel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, PackageOpen, RefreshCw } from "lucide-react";
@@ -108,6 +109,7 @@ export default function LatestSoldProductsCard({
     hasMoreOrders: suppliedHasMoreOrders = false,
     ordersLoading: suppliedOrdersLoading = false,
     onLoadMoreOrders,
+    collapsible = false,
 }) {
     const usesDedicatedFeed = suppliedOrders === undefined;
     const [feedOrders, setFeedOrders] = useState([]);
@@ -218,7 +220,7 @@ export default function LatestSoldProductsCard({
         }
     };
 
-    return <section data-testid="advanced-latest-sold-products" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+    return <DashboardPanel title={collapsible ? "أحدث المنتجات المباعة" : undefined} data-testid="advanced-latest-sold-products" className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
         <div className="flex min-h-14 items-center justify-between gap-3 border-b border-emerald-800 bg-emerald-700 px-4 py-3 text-white">
             <h2 className="flex items-center gap-2 font-extrabold"><PackageOpen className="h-5 w-5" />أحدث المنتجات المباعة</h2>
             <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => void loadFirstPage(false)} disabled={ordersLoading} aria-label="تحديث أحدث المنتجات المباعة" title="تحديث أحدث المنتجات المباعة" className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-extrabold text-white transition hover:bg-white/25 disabled:cursor-wait disabled:opacity-60"><RefreshCw className={"h-3.5 w-3.5" + (ordersLoading ? " animate-spin" : "")} />تحديث</button><span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold">{visibleOrders.length} طلبات</span></div>
@@ -279,5 +281,5 @@ export default function LatestSoldProductsCard({
                 {ordersLoading ? "جارٍ تحميل الطلبات الأقدم…" : "المزيد"}
             </button>
         </div>}
-    </section>;
+    </DashboardPanel>;
 }
