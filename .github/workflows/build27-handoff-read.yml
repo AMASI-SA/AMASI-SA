@@ -1,0 +1,52 @@
+name: Build27 My Products Handoff Read
+
+on:
+  pull_request:
+    branches:
+      - hotfix/prod-snap-meta-final
+    paths:
+      - "backend/preparation_supplier_dispatch.py"
+      - "backend/tests/test_build27_handoff_projection.py"
+      - ".github/workflows/build27-handoff-read.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  handoff-read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: >-
+          python -m pip install -q
+          fastapi==0.110.1
+          pydantic==2.13.4
+          pymongo==4.5.0
+          motor==3.3.1
+          httpx
+          pytest
+          pytest-asyncio
+          openpyxl
+          cryptography
+          reportlab
+          python-multipart
+          pymupdf
+          pillow
+          qrcode
+          arabic-reshaper
+          python-bidi
+      - name: Compile projection source
+        run: python -m py_compile backend/preparation_supplier_dispatch.py backend/tests/test_build27_handoff_projection.py
+      - name: Verify read-only handoff projection
+        run: python -m pytest -q backend/tests/test_build27_handoff_projection.py --tb=short
+      - name: Enforce no external writes in projection module
+        run: |
+          set -euo pipefail
+          ! grep -Eq 'requests\.(post|put|patch|delete)|httpx\.(post|put|patch|delete)' backend/preparation_supplier_dispatch.py

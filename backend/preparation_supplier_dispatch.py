@@ -890,6 +890,21 @@ def _piece_products(
                 and not _text(piece.get("branch_handoff_at"))
             ) else 0,
             "supplier_received_quantity": int(_supplier_receipt_awaiting_handoff(piece)),
+            # Build27 read-only custody projection. These facts already exist on
+            # the physical piece; exposing them does not mutate workflow state.
+            "assigned_at": piece.get("assigned_at"),
+            "branch_handoff_at": piece.get("branch_handoff_at"),
+            "branch_handoff_status": _text(piece.get("branch_handoff_status")) or None,
+            "preparation_received_at": piece.get("preparation_received_at"),
+            "preparation_received_by_name": _text(
+                piece.get("preparation_received_by_name")
+            ) or None,
+            "assembly_status": _text(piece.get("assembly_status")) or None,
+            "assembly_ready_at": piece.get("assembly_ready_at"),
+            "handoff_awaiting_assembly": bool(
+                _text(piece.get("branch_handoff_at"))
+                and _text(piece.get("assembly_status")) != "ready"
+            ),
             "order_numbers": (
                 [_text(piece.get("order_number"))]
                 if _text(piece.get("order_number"))
@@ -985,6 +1000,14 @@ def employee_workspace_summary(
         for row in received_awaiting_handoff
         if _text(row.get("order_number"))
     }
+    handed_to_receiving_employee = [
+        row
+        for row in pieces
+        if (
+            _text(row.get("branch_handoff_at"))
+            and _text(row.get("assembly_status")) != "ready"
+        )
+    ]
     return {
         "new_files": sum(1 for row in files if row["is_new"]),
         "available_to_send": sum(row["available_quantity"] for row in files),
@@ -1002,6 +1025,11 @@ def employee_workspace_summary(
         "supplier_received_pieces_awaiting_handoff": len(supplier_received),
         "supplier_received_orders_awaiting_handoff": len({
             _text(row.get("order_number")) for row in supplier_received
+            if _text(row.get("order_number"))
+        }),
+        "handoff_pieces_awaiting_assembly": len(handed_to_receiving_employee),
+        "handoff_orders_awaiting_assembly": len({
+            _text(row.get("order_number")) for row in handed_to_receiving_employee
             if _text(row.get("order_number"))
         }),
         "total_assigned_pieces": sum(
