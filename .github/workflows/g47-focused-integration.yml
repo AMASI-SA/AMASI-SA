@@ -78,6 +78,8 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             tests/test_g47*.py tests/test_stock_component_consumption.py \
             tests/test_bundle_catalog_v2.py tests/test_bundle_fulfillment_v2.py tests/test_sold_bundles_v2.py \
+            tests/test_product_bundle_policy.py tests/test_bundle_composition_lifecycle.py \
+            tests/test_bundle_composition_acceptance.py \
             --junitxml="$RUNNER_TEMP/g47-backend.xml"
       - name: Require executed passing tests with no skips
         if: always()
@@ -94,6 +96,8 @@ jobs:
           assert not rejected, f"G47 skipped or failed cases: {rejected}"
           expected = {path.stem for path in Path("tests").glob("test_g47*.py")} | {"test_stock_component_consumption"}
           expected |= {"test_bundle_catalog_v2", "test_bundle_fulfillment_v2", "test_sold_bundles_v2"}
+          expected |= {"test_product_bundle_policy", "test_bundle_composition_lifecycle"}
+          expected |= {"test_bundle_composition_acceptance"}
           observed = {part for row in cases for part in row.attrib.get("classname", "").split(".")}
           assert expected <= observed, f"Suites without executed cases: {sorted(expected - observed)}"
           print(f"G47: {len(cases)} executed test cases, zero skips/failures/errors")
@@ -139,6 +143,7 @@ jobs:
           src/pages/PurchaseInvoices.test.jsx src/pages/InventoryReceivingWorkspace.test.jsx
           src/services/productBundles.test.js
           src/components/products/BundleEditor.test.jsx
+          src/components/products/BundleProductPolicy.test.jsx
           src/components/products/BundleReportPanel.test.jsx
           src/components/products/ProductCreationPanel.test.jsx
           src/components/orders/BundleOperationalPanel.test.jsx
