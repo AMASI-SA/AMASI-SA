@@ -1,0 +1,18 @@
+{
+  "state": "WIP independently verified before final commit; compare hashes after checkpoint",
+  "tests": {
+    "controller_repository": 20,
+    "actual_ui": "PASS",
+    "exit_code": 0
+  },
+  "live_writes": 0,
+  "sha256": {
+    "frontend/src/features/assemblyShipping/assemblyCompletion.ts": "5b99b47f7042b937a623738e99a9b93dfa1c2ff6ca15b2085dee72cdfabb1642",
+    "frontend/src/features/assemblyShipping/useAssemblyCompletion.ts": "458c9161b3e812bdccd9a8181885480829d00897ae018e68cd60b5dac21097f4",
+    "frontend/src/features/assemblyShipping/repository.ts": "ce32ae83b57df677f929c649320eec61bc5ddab1d0017e50bf2444e2bcf9a49a",
+    "frontend/src/features/assemblyShipping/readyOperations.ts": "6fa26531f551a808933848029ff327100316deb0f05f8a66b22168914d925453",
+    "frontend/src/features/assemblyShipping/AssemblyShippingStage.tsx": "d4aed6b1ec410491a1cf4fadac3618e3e5ec8a43bbd767f9fbb59c3386b32f3c",
+    "frontend/scripts/verify-assembly-completion.cjs": "ebef81ba024010e5507aa268579920a4139af15232fb740bd410f83175d2d2cd",
+    "frontend/scripts/verify-assembly-completion-ui.cjs": "e6c066d7d00626c69afc5cce0e0c5349c11d6af759cd136a715c52c8baacc105"
+  }
+}
