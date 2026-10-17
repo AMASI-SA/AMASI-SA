@@ -139,7 +139,7 @@ jobs:
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
-          for name, minimum in (("review-completion.xml", 254), ("review-acceptance-guard.xml", 1)):
+          for name, minimum in (("review-completion.xml", 256), ("review-acceptance-guard.xml", 1)):
               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
               rejected = [row.attrib.get("name") for row in cases
@@ -151,7 +151,7 @@ jobs:
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
-                                         ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 26),
+                                         ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 28),
                                          ("test_assembly_completion_v2_readback.BlockedCompletionTests", 24),
                                          ("test_assembly_completion_status_transition.StatusTransitionTests", 9),
                                          ("test_assembly_completion_readback_routes.CompletionReadbackRouteTests", 3),

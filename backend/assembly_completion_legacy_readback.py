@@ -146,6 +146,19 @@ def _assert_provider_shipping(order, current):
         raise shipping._stale_label()
 
 
+def _assert_provider_material(order, raw):
+    # A light GET may omit material, but positive changed material cannot
+    # authorize the old completion. Never enrich or resync from this read.
+    for key in ("items", "shipping_address", "payment_method", "payment_status"):
+        if key in order and order[key] != raw.get(key):
+            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+    observed = order.get("shipping") if isinstance(order.get("shipping"), dict) else {}
+    saved = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
+    for key in ("address", "recipient", "receiver"):
+        if key in observed and observed[key] != saved.get(key):
+            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+
+
 async def _read(db, owner, number, before):
     try:
         response = await shipping.call_salla(db, owner, "GET", "/orders/" + quote(before["internal_id"], safe=""))
@@ -154,6 +167,7 @@ async def _read(db, owner, number, before):
     order = response.get("data") if isinstance(response, dict) else None
     _assert_provider_identity(order, before["internal_id"], number)
     _assert_provider_shipping(order, before["shipping"])
+    _assert_provider_material(order, before["fence"]["raw"])
     # The final snapshot is the local read linearization point. Its label and
     # cancellation receipt belong to the same observation as the material fence.
     label = await _snapshot(db, owner, number, expected=before)

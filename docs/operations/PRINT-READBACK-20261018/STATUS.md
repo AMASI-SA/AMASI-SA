@@ -14,6 +14,10 @@ Proven mechanisms:
 
 The legacy and inactive v2 readback paths are integrated. Both require a fresh exact provider order observation and recheck local material, shipment, cancellation, epoch and ownership evidence before returning. An active outbox claim is never bypassed. Healthy reads write no business state. The only recovery write is an explicitly authorized versioned in-progress/completed source-alias repair under the owner transaction, with permissions rechecked inside that transaction. It does not change the workflow, outbox, items, address, stock or financial data.
 
+Candidate 9d74aec417238050201f6b1db995128f8f6a533c is superseded: final review demonstrated that a positive material/address contradiction in the fresh provider response could pass the legacy reader while the unchanged local fence still matched. Seven counterexamples failed for that reason. Legacy and v2 now share the same bounded material comparison. It rejects supplied contradictory items/address/payment/recipient evidence, does not require fields omitted by a light response, and performs no enrichment or writes. The focused regression and omitted-field control passed (2 tests, 7 subtests). The previous CI/artifact is not authority for this new source.
+
+Replacement integrated readback verification: 55 passed, 91 subtests passed, zero skips/failures/errors, exit 0 in 72.18 seconds. Command: `python -m pytest --noconftest backend/tests/test_assembly_completion_legacy_readback.py backend/tests/test_assembly_completion_v2_readback.py backend/tests/test_assembly_completion_readback_routes.py -q --asyncio-mode=auto --tb=line --log-level=ERROR` against the isolated loopback replica set. CI now requires 28 legacy cases and at least 256 total cases; all previous gates remain.
+
 Fresh verification (synthetic provider, isolated real Mongo replica set):
 - Baseline regression checkpoint: 4 intended failures, 1 control pass; independently reproduced.
 - Integrated affected suites: 421 passed, 1 intentionally unsupported memory-transaction case skipped, 93 subtests passed; exit 0, 388.42 seconds. The corresponding real Mongo case ran. This broad run started before the final embedded-shipment and route tests below.
@@ -28,4 +32,4 @@ Known limits: exact live customer-order cause is unverified. Store courier remai
 
 Backend PR: https://github.com/AMASI-SA/AMASI-SA/pull/1431 (Draft). Mobile test-only PR: https://github.com/AMASI-SA/amasi-mobile/pull/276 (Draft).
 
-Next: push this candidate, inspect CI, and send exact HEAD/TREE to the release coordinator for independent review. Evaluate the separate one-read-after-status-ACK latency improvement with a focused regression before deciding whether to include it. The release coordinator alone owns merge, governed A/B build, lease and deployment. Rollback baseline is bb23 above, preserving already-published fixes; no return to an older update.
+Next: push this verified replacement source, inspect fresh CI, and send exact HEAD/TREE to the release coordinator for independent review. The separate one-read-after-status-ACK latency improvement is deferred from this correction. The release coordinator alone owns merge, governed A/B build, lease and deployment. Rollback baseline is bb23 above, preserving already-published fixes; no return to an older update.

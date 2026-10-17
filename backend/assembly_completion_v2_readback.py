@@ -16,7 +16,7 @@ import httpx
 from accounting_atomic import SessionDatabase
 from assembly_completion_delivery import source_fingerprint, workflow_fingerprint
 from assembly_completion_legacy_readback import (
-    _assert_provider_identity, _assert_provider_shipping, _courier, _root_database,
+    _assert_provider_identity, _assert_provider_material, _assert_provider_shipping, _courier, _root_database,
 )
 from assembly_status_policy import canonical_status, status_values
 from fulfillment_v2_routes import (
@@ -117,20 +117,6 @@ async def _snapshot(db, owner, number, *, expected=None):
         return await shipping.read_saved_external_shipping_label(scoped, owner, number)
 
 
-def _assert_material(order, before):
-    raw = (before["source"].get("raw_by_source") or {}).get("salla_direct") or {}
-    # A light GET may omit material, but positive newer material evidence cannot
-    # silently authorize the old completion. No enrichment/refresh is attempted.
-    for key in ("items", "shipping_address", "payment_method", "payment_status"):
-        if key in order and order[key] != raw.get(key):
-            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
-    observed = order.get("shipping") if isinstance(order.get("shipping"), dict) else {}
-    saved = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
-    for key in ("address", "recipient", "receiver"):
-        if key in observed and observed[key] != saved.get(key):
-            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
-
-
 def _repair_version(order, before):
     version = component_provider_version(order)
     source = before["source"]
@@ -188,7 +174,7 @@ async def _read(db, owner, number, *, authorize_repair=None):
     order = response.get("data") if isinstance(response, dict) else None
     _assert_provider_identity(order, before["internal_id"], number)
     _assert_provider_shipping(order, before["shipping"])
-    _assert_material(order, before)
+    _assert_provider_material(order, (before["source"].get("raw_by_source") or {}).get("salla_direct") or {})
     if before["repair_needed"]:
         before = await _repair_aliases(db, owner, number, order, before, authorize_repair=authorize_repair)
         if before is None:

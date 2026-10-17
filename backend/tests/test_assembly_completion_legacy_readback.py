@@ -124,6 +124,32 @@ class LegacyCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result["label_url"])
         self.assertEqual(self.provider.await_count, 1)
 
+    async def test_positive_provider_material_changes_block_unchanged_legacy_snapshot(self):
+        original = deepcopy(self.order)
+        before = await self.snapshot()
+        for change in ({"items": [{"quantity": 99, "sku": "synthetic-changed"}]},
+                       {"shipping_address": {"city": "synthetic-changed"}},
+                       {"payment_method": "synthetic-changed"},
+                       {"payment_status": "synthetic-changed"},
+                       {"shipping": {"company": "iMile", "address": {"city": "synthetic-changed"}}},
+                       {"shipping": {"company": "iMile", "recipient": {"name": "synthetic-changed"}}},
+                       {"shipping": {"company": "iMile", "receiver": {"name": "synthetic-changed"}}}):
+            with self.subTest(change=change):
+                self.order = {**original, **change}
+                with self.assertRaises(shipping.ShippingLabelError) as error:
+                    await self.read()
+                self.assertEqual(error.exception.code, "assembly_completion_evidence_changed")
+                self.assertEqual(await self.snapshot(), before)
+
+    async def test_light_provider_response_does_not_require_absent_material_fields(self):
+        before = await self.snapshot()
+        self.order = {key: self.order[key] for key in ("id", "reference_id", "status")}
+        result = await self.read()
+        self.assertTrue(result["ready"])
+        self.assertTrue(result["order_status_completed"])
+        self.assertEqual(await self.snapshot(), before)
+        self.assertEqual(self.provider.await_count, 1)
+
     async def test_courier_get_confirms_completion_without_building_pdf(self):
         await self.db.unified_orders.update_one({}, {"$set": {
             f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر", f"{CURRENT_SHIPPING}.company_code": "0"}})

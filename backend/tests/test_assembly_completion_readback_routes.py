@@ -61,4 +61,3 @@ class CompletionReadbackRouteTests(unittest.IsolatedAsyncioTestCase):
         result = await self.get()
         self.assertEqual(result.status_code, 403, result.text)
         self.assertEqual(await self.snapshot(), before)
-
