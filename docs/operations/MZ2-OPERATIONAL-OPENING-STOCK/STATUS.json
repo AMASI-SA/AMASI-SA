@@ -1,8 +1,8 @@
 {
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
-  "status": "VERIFIED_CANDIDATE_NOT_DEPLOYED",
-  "branch": "codex/operational-opening-stock-candidate-20261017",
-  "base_sha": "196adb36d64f5bb595a52a4371efd38034941173",
+  "status": "EXPANDED_INTENT_CI_PENDING",
+  "branch": "codex/opening-stock-expanded-source-20261017",
+  "base_sha": "342bbefaba5d4a59e3a2988589d02a7efdb07aa4",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
   "acceptance": [
     "Owner can search the real MZ2 catalogue before any physical inventory exists.",
@@ -13,13 +13,13 @@
     "No supplier debt, purchase invoice, native ledger, control changes or Salla writes.",
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
-  "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
-  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS. Review fix: full product/location/warehouse identities fail closed including archived/disabled duplicates; final new suite36 PASS. Final36 tests rerun independently on Source A PASS. Source CI39029750215 PASS; Linux candidate intent artifact12100430152 archived at D:/codex-release-archives/mz2/opening-stock-ed89dd61. Windows file-mode validation not counted. Exact Intent B CI passed all applicable checks; release run39030643636 success including governed frontend build, backend preflight and Emergent Host Node20 clean-clone adapter rehearsal.",
+  "compatibility": "Supports product image/SKU/option+name rows and MZ2 tracked components with meter/kg6decimal quantities and exacthalfup costtotals. No financialjournals/nativeactivation; hold remains. Existing stock needs reconciliation. Legacywarehouseplacement integeraggregate truncation predates patch and remains separate knownrisk.",
+  "verification": "Expanded scope:131 independent backendtests,87 frontendtests PASS; latestbase102 affectedtests PASS; all SourceA CI includingCodeQL/security/governedbuild PASS. Candidateartifact12102096034 Linuxrun39034881548; intentSHA256 e49e05ecb2b687ded56839935a72641c4c2f92eb61ec57d82bfbc9dbe93f43af. ExactB rehearsal pending.",
   "production_changed": false,
   "release": "No prepare, prepublish, merge or publish performed for this task.",
-  "next": "Review PR1420 for merge; before any separately scoped Production action recheck latest Git source, Release Guard, Manage Publishing and writer status. Keep writer disabled and do not enter business stock.",
-  "source_sha": "ed89dd61894ba4b99eb5a79fbbb9e26ccf749845",
-  "intent_sha": "8074341157888dc805a909e4932e6e41eccc531c",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1420",
-  "release_id": "rg5-95d63b5d8c0971f54cf9962f39f623d6975274523b2e371f5e7a0c499d052669"
+  "next": "Inspect exactB CI and Linuxpackage rehearsal. Do not deploy or enablewriter from this task. Product-onlyPR1420 closed superseded.",
+  "source_sha": "3705eaf7ff0d84bbf9904a89198c84b392b38ed0",
+  "intent_sha": "d4c498813cd09dec2069bbc9f4ea1fb995dfda78",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1422",
+  "release_id": "rg5-5901190e7bbaa6a8bf810a33a86b747d15f5477561ee554132a4cb0c80d08d1d"
 }
