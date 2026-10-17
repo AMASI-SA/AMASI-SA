@@ -8,12 +8,13 @@ import {
 import { User } from "@phosphor-icons/react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import api from "../lib/api";
+import DashboardPanel from "../components/DashboardPanel";
+import DashboardTableScroll from "../components/DashboardTableScroll";
 import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
 import CampaignAccountAnalysis from "../components/marketing/CampaignAccountAnalysis";
 import AdvancedFilters, { defaultFilters, filtersToQueryString } from "../components/AdvancedFilters";
 import AdsExecutiveBreakdownTable from "../components/AdsExecutiveBreakdownTable";
 import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
-import GoogleAdsIntelligenceCard from "../components/marketing/GoogleAdsIntelligenceCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
@@ -82,11 +83,21 @@ export function aggregateDashboardAdsHistoryByMonth(daily = []) {
     return Object.values(grouped);
 }
 
-function Panel({ children, className = "", testid }) {
-    return <section data-testid={testid} className={`overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
+function Panel({ children, className = "", testid, title }) {
+    return <DashboardPanel title={title} data-testid={testid} className={`min-w-0 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</DashboardPanel>;
 }
 
 const AI_ACTIONS = {
+    REVIEW_TRACKING: { label: "مراجعة التتبع", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_ATTRIBUTION: { label: "مراجعة إسناد التحويلات", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_TARGETING: { label: "مراجعة الاستهداف", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT_PRICE: { label: "مراجعة سعر المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    REVIEW_PRODUCT_PAGE: { label: "مراجعة صفحة المنتج", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CREATE_TEST_DRAFT: { label: "تجهيز مسودة اختبار", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    RESUME_CAMPAIGN: { label: "تفعيل مقترح للحملة", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CHANGE_BUDGET: { label: "مراجعة الميزانية", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+    CHANGE_BIDDING: { label: "مراجعة المزايدة", tone: "border-violet-200 bg-violet-50 text-violet-700" },
+
     CONTINUE: { label: "استمرار", tone: "border-sky-200 bg-sky-50 text-sky-700" },
     MONITOR: { label: "مراقبة", tone: "border-amber-200 bg-amber-50 text-amber-700" },
     NO_ACTION_INSUFFICIENT_DATA: { label: "بيانات غير كافية", tone: "border-slate-200 bg-slate-50 text-slate-600" },
@@ -165,8 +176,8 @@ export function CampaignAdvisorCard() {
         const timer = window.setInterval(load, 5 * 60 * 1000);
         return () => { active = false; window.clearInterval(timer); };
     }, []);
-    const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta"].includes(item.provider));
-    const visible = recommendations.slice(0, 5);
+    const recommendations = (snapshot?.recommendations || []).filter((item) => ["snapchat", "meta", "google"].includes(item.provider));
+    const visible = [...recommendations].sort((a, b) => ({ critical: 4, high: 3, medium: 2, low: 1 }[b.priority] || 0) - ({ critical: 4, high: 3, medium: 2, low: 1 }[a.priority] || 0)).slice(0, 5);
     const urgent = recommendations.filter((item) => ["PAUSE_AD", "PAUSE_ADSET", "PAUSE_CAMPAIGN", "DECREASE_BUDGET"].includes(item.recommended_action)).length;
     const scale = recommendations.filter((item) => item.recommended_action === "INCREASE_BUDGET").length;
     const shadowDiagnostics = (unifiedShadow?.levels || []).map((level) =>
@@ -197,11 +208,11 @@ export function CampaignAdvisorCard() {
             setApproving((value) => ({ ...value, [item.recommendation_id]: false }));
         }
     };
-    return <Panel className="border-violet-200" testid="advanced-campaign-ai-advisor">
+    return <Panel className="border-violet-200" testid="advanced-campaign-ai-advisor" title="ملاحظات الذكاء على الحملات">
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta · قرار مستقل كل 5 ساعات · التشخيص منفصل عن التنفيذ</p>
+                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta وجوجل · تحليل وتوصيات في مكان واحد · التنفيذ بعد الاعتماد</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
@@ -226,20 +237,21 @@ export function CampaignAdvisorCard() {
         {visible.length ? <div className="grid gap-2 p-3 lg:grid-cols-5">
             {visible.map((item) => {
                 const action = aiActionMeta(item);
-                const provider = item.provider === "meta" ? "Meta" : "سناب";
+                const provider = item.provider === "google" ? "جوجل" : item.provider === "meta" ? "Meta" : "سناب";
                 const executionLabel = item.execution_status === "completed" ? "تم التنفيذ" : item.execution_status === "verification_required" ? "بانتظار التحقق" : item.execution_status === "failed" ? "تعذر التنفيذ" : item.execution_status === "executing" ? "جارٍ التنفيذ…" : null;
                 const blocked = Boolean(executionLabel);
-                const canApprove = item.action_type === "ads_write" && item.executable && item.approval_available;
+                const canApprove = ["snapchat", "meta"].includes(item.provider) && item.action_type === "ads_write" && item.executable && item.approval_available;
                 const rootCause = AI_ROOT_CAUSES[item.root_cause_category] || item.root_cause_category;
                 return <div key={item.recommendation_id} className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:bg-violet-50/30">
                     <div className="flex items-center justify-between gap-2"><span className="text-[9px] font-black text-slate-400">{provider} · {AI_LEVELS[item.entity_level] || item.entity_level}</span><span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black ${action.tone}`}>{action.label}</span></div>
                     {item.account_name && <p className="mt-1 truncate text-[9px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}
-                    <Link to={`/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
+                    <Link to={item.provider === "google" ? `/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}` : `/ads-manager?provider=${item.provider}`} className="mt-2 block truncate text-xs font-extrabold text-slate-900 hover:text-violet-700">{item.provider === "meta" && Number(item.campaign_ad_group_count) === 1 && Number(item.campaign_ad_count) === 1 && item.campaign_name ? item.campaign_name : item.entity_name}</Link>
                     {item.provider === "meta" && item.entity_level === "ad" && <p className="mt-1 truncate text-[9px] font-bold text-slate-400">الإعلان: {item.entity_name}</p>}
+                    {item.provider === "google" && <p className="mt-1 text-[9px] text-slate-500">{item.campaign_name} · {item.period_native?.date_from} ← {item.period_native?.date_to} · {item.period_native?.currency_code}</p>}
                     <CampaignResearchStatus research={item.external_research} />
                     {rootCause && <p className="mt-1 truncate text-[9px] font-extrabold text-rose-700">السبب الجذري: {rootCause}</p>}
                     <p className="mt-1 line-clamp-2 text-[10px] leading-5 text-slate-600">{item.diagnosis || item.rationale}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
+                    <div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] font-bold text-violet-700">الثقة: {item.confidence === "high" ? "عالية" : item.confidence === "medium" ? "متوسطة" : "منخفضة"}</p>{item.provider === "google" && <Link to={`/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}`} className="text-[10px] font-bold text-violet-700">مراجعة في جوجل</Link>}{canApprove && <button type="button" disabled={approving[item.recommendation_id] || blocked} onClick={() => approve(item)} className="rounded-lg bg-violet-700 px-2 py-1 text-[9px] font-extrabold text-white disabled:bg-slate-300">{executionLabel || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button>}</div>
                 </div>;
             })}
         </div> : <div className="p-5 text-center text-xs text-slate-400">{loading ? "جارٍ التحميل…" : "لا توجد الآن توصيات جديدة موثوقة."}</div>}
@@ -272,7 +284,7 @@ export function AbandonedCartsCard({ carts, summary = {} }) {
         return () => window.clearInterval(timer);
     }, []);
     return (
-        <Panel className="border-teal-200" testid="advanced-abandoned-carts">
+        <Panel className="border-teal-200" testid="advanced-abandoned-carts" title="السلات المتروكة">
             <div className="flex h-14 items-center justify-between border-b border-slate-900 bg-slate-800 px-4 text-white">
                 <h2 className="flex items-center gap-2 font-extrabold"><ShoppingCart className="h-5 w-5" />السلات المتروكة</h2>
                 <div className="flex items-center gap-1.5 text-[10px] font-black">
@@ -331,9 +343,9 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     const hasMore = visibleCount < products.length;
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
-        <Panel className="border-indigo-200" testid="advanced-top-products">
+        <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا">
             <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
-            <div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
+            <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
                 <span>القطع</span>
                 <span>إجمالي المبيعات</span>
@@ -382,6 +394,7 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
                 </div>;
             }) : <div className="p-8 text-center text-xs text-slate-400">{loading ? "جارٍ مزامنة المنتجات المباعة…" : "لا توجد منتجات مباعة في الفترة."}</div>}
             </div>
+            </div>
             {products.length > 5 && <button type="button" onClick={() => hasMore ? setVisibleCount((value) => Math.min(value + 5, products.length)) : setVisibleCount(5)} className="w-full border-t border-indigo-200 bg-indigo-50/60 px-4 py-3 text-xs font-extrabold text-indigo-700 hover:bg-indigo-100">{hasMore ? "المزيد" : "عرض أقل"}</button>}
             {products.length > 0 && (
                 <div className="border-t-2 border-indigo-600 bg-indigo-50/70 px-3 py-3" data-testid="advanced-top-products-footer">
@@ -413,7 +426,7 @@ function TopProductsTotal({ label, value, tone = "slate" }) {
 }
 
 function Metric({ label, value, Icon, tone, className = "", valueClassName = "" }) {
-    return <div className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-3 shadow-sm ${className}`}><div className="min-w-0"><p className="line-clamp-2 text-[11px] font-bold text-slate-500">{label}</p><p className={`num mt-1 whitespace-nowrap text-[17px] font-black leading-tight ${valueClassName}`}>{value}</p></div><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="h-[18px] w-[18px]" /></span></div>;
+    return <div className={`dashboard-metric flex min-w-0 items-center justify-between gap-2 rounded-xl border bg-white px-3 py-3 shadow-sm ${className}`}><div className="min-w-0"><p className="line-clamp-2 text-[11px] font-bold text-slate-500">{label}</p><p className={`num mt-1 whitespace-nowrap text-[17px] font-black leading-tight ${valueClassName}`}>{value}</p></div><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="h-[18px] w-[18px]" /></span></div>;
 }
 
 function PlatformPeriodSummary({ ads }) {
@@ -432,7 +445,7 @@ function PlatformPeriodSummary({ ads }) {
             const provider = meta[key];
             return <div key={key} className="flex min-w-0 items-center justify-center gap-2 border-l px-2 py-2 last:border-l-0">
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-black ${provider.tone}`}>{provider.mark}</span>
-                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{orderCount == null ? "—" : integer(orderCount)}</b></p><p className="whitespace-nowrap">متوسط: <b className="num text-[10px] text-slate-950">{average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
+                <div className="min-w-0 text-[9px] font-bold leading-4 text-slate-500"><p className="truncate text-slate-700">{provider.label}: <b className="num text-[11px] text-slate-950">{orderCount == null ? "—" : integer(orderCount)}</b></p><p className="break-words">متوسط: <b className="num text-[10px] text-slate-950">{average == null ? "—" : `${money(average)} ر.س`}</b></p></div>
             </div>;
         })}
     </div>;
@@ -442,7 +455,7 @@ export function SummaryStrip({ data, filters, loading = false }) {
     const totals = data?.totals || {};
     const monthTotals = data?.month_kpis || {};
     const missing = Number(data?.product_cost_v2?.missing_products_count || totals.missing_product_cost_count || 0);
-    return <div dir="ltr" className="grid gap-3 min-[1180px]:grid-cols-[minmax(0,1.75fr)_minmax(260px,.7fr)]" data-testid="advanced-date-summary">
+    return <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 gap-3 min-[1180px]:grid-cols-[minmax(0,1.75fr)_minmax(260px,.7fr)]" data-testid="advanced-date-summary">
         <div dir="rtl" className="grid grid-cols-2 gap-2 min-[1180px]:grid-cols-[minmax(118px,.46fr)_minmax(180px,.78fr)_minmax(0,2fr)]">
             <Metric label="طلبات الشهر" value={loading && !data ? "—" : integer(monthTotals.total_orders)} Icon={ShoppingCart} tone="bg-teal-50 text-teal-700" />
             <Metric label="مبيعات الشهر" value={loading && !data ? "—" : monthTotals.total_sales == null ? "غير مكتمل" : `${money(monthTotals.total_sales)} ر.س`} Icon={CircleDollarSign} tone="bg-cyan-50 text-cyan-700" className="px-4" valueClassName="text-[19px]" />
@@ -481,7 +494,7 @@ function AdsCard({ ads, unifiedShadow }) {
         shadowDelta === null ? null : `الفرق ${money(shadowDelta)}`,
         unifiedShadow?.comparison && !shadowCoverageComplete ? "التغطية غير مكتملة" : null,
     ].filter(Boolean).join(" · ");
-    return <Panel className="border-amber-200" testid="advanced-ads-chart">
+    return <Panel className="border-amber-200" testid="advanced-ads-chart" title="صرفيات الإعلانات">
         <div className="flex h-14 items-center justify-between border-b border-amber-700 bg-amber-600 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><CircleDollarSign className="h-5 w-5" />مصروفات منصات الإعلانات</h2><div className="rounded-lg border border-white/30 bg-white/15 p-1 text-[10px] font-bold"><button onClick={() => setMonthly(false)} className={`rounded-md px-2 py-1 ${!monthly ? "bg-white text-amber-800" : ""}`}>يومي</button><button onClick={() => setMonthly(true)} className={`rounded-md px-2 py-1 ${monthly ? "bg-white text-amber-800" : ""}`}>شهري</button></div></div>
         <div data-testid="advanced-snapchat-unified-shadow" className={`border-b px-3 py-2 text-[10px] font-extrabold ${!unifiedShadow ? "bg-slate-50 text-slate-500" : shadowPassed ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
             {!unifiedShadow
@@ -499,12 +512,12 @@ function AdsCard({ ads, unifiedShadow }) {
 }
 
 function ProfitDetailBox({ children, testid }) {
-    return <div data-testid={testid} className="mx-2 mb-3 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">{children}</div>;
+    return <div data-testid={testid} className="dashboard-profit-details mx-2 mb-3 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">{children}</div>;
 }
 
 function ShippingProfitDetails({ rows = [], total = 0 }) {
     const visible = rows.filter((row) => Number(row?.total_cost || 0) > 0);
-    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد بيانات شحن في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+    return <ProfitDetailBox testid="advanced-profit-shipping-details"><DetailTitle title="🚚 تفاصيل تكاليف الشحن (لكل شركة)" count={`${integer(visible.length)} شركة`} tone="text-sky-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد بيانات شحن في هذه الفترة" /> : <DashboardTableScroll label="تفاصيل تكاليف الشحن"><table className="w-full min-w-[620px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">الشركة</th><th>الشحنات</th><th>سعر الوحدة</th><th>ضريبة الوحدة</th><th>الإجمالي</th></tr></thead><tbody>{visible.map((row, index) => { const count = Number(row.orders_count || 0); const base = Number(row.cost_per_unit ?? row.cost_per_order ?? 0); const tax = Number(row.tax_per_unit ?? (count > 0 ? Number(row.vat_amount || 0) / count : 0)); return <tr key={`${row.name}-${index}`} className="border-t"><td className="p-2 font-bold">{row.name}{row.is_deferred && <span className="mr-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700">آجل</span>}</td><td className="text-center num">{integer(count)}</td><td className="text-center num">{money(base)}</td><td className="text-center num text-violet-700">{money(tax)}</td><td className="text-center num font-black text-sky-700">{money(row.total_cost)}</td></tr>; })}<tr className="border-t-2 border-sky-200 bg-sky-50"><td colSpan="4" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-sky-800">{money(total)}</td></tr></tbody></table></DashboardTableScroll>}</ProfitDetailBox>;
 }
 
 function DetailTitle({ title, count, tone }) {
@@ -517,7 +530,7 @@ function EmptyDetails({ text }) {
 
 function PaymentProfitDetails({ rows = [], total = 0 }) {
     const visible = buildPaymentFeeRows(rows).filter((row) => row.ordersCount > 0 || row.baseAmount > 0 || row.feeAmount > 0);
-    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(visible.length)} طريقة / حساب`} tone="text-violet-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الفترة" /> : <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead><tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}<tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tbody></table></div>}</ProfitDetailBox>;
+    return <ProfitDetailBox testid="advanced-profit-payment-details"><DetailTitle title="💳 تفاصيل رسوم طرق الدفع والعمولات البنكية" count={`${integer(visible.length)} طريقة / حساب`} tone="text-violet-900" />{visible.length === 0 ? <EmptyDetails text="لا توجد رسوم طرق دفع في هذه الفترة" /> : <DashboardTableScroll label="تفاصيل رسوم طرق الدفع"><table className="w-full min-w-[760px] text-[11px]"><thead className="bg-slate-50"><tr><th className="p-2 text-right">طريقة الدفع / الحساب</th><th>الطلبات</th><th>المبلغ الخاضع</th><th>نسبة العمولة</th><th>VAT</th><th>إجمالي الرسوم</th></tr></thead><tbody>{visible.map((row) => <tr key={row.key} className="border-t"><td className="p-2 font-bold">{row.name}{row.parentName && row.parentName !== row.name && <small className="block text-slate-400">{row.parentName}</small>}</td><td className="text-center num">{row.kind === "ad_bank_commission" ? "—" : integer(row.ordersCount)}</td><td className="text-center num">{money(row.baseAmount)}</td><td className="text-center num text-violet-700">{row.commissionPercent == null ? "—" : `${row.commissionPercent.toFixed(2)}%`}</td><td className="text-center num">{row.vatAmount > 0 ? money(row.vatAmount) : row.vatPercent > 0 ? `${row.vatPercent.toFixed(0)}%` : "—"}</td><td className="text-center num font-black text-violet-800">{money(row.feeAmount)}</td></tr>)}<tr className="border-t-2 border-violet-200 bg-violet-50"><td colSpan="5" className="p-2 font-black">الإجمالي</td><td className="text-center num font-black text-violet-900">{money(total)}</td></tr></tbody></table></DashboardTableScroll>}</ProfitDetailBox>;
 }
 
 function OperatingProfitDetails({ totals = {}, total = 0 }) {
@@ -576,7 +589,7 @@ export function ProfitCard({ data, loading = false }) {
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary" title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
 
 function orderSource(order) {
@@ -643,7 +656,7 @@ export function LatestOrders({ orders, totals = {} }) {
     const average = orderCount > 0 && totalSales !== null
         ? totalSales / orderCount
         : null;
-    return <Panel className="border-sky-200" testid="advanced-latest-orders">
+    return <Panel className="border-sky-200" testid="advanced-latest-orders" title="أحدث الطلبات">
         <div className="flex h-14 items-center justify-between border-b border-sky-700 bg-sky-600 px-4 text-white">
             <h2 className="flex items-center gap-2 font-extrabold"><ShoppingBag className="h-5 w-5" />أحدث الطلبات</h2>
             <div className="flex items-center gap-3 text-[10px] font-bold"><span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-1"><ShoppingBag className="h-3.5 w-3.5" />{integer(orderCount)} طلب</span><span className="whitespace-nowrap">متوسط: <b className="num">{average == null ? "—" : `${money(average)} ر.س`}</b></span></div>
@@ -657,7 +670,7 @@ export function LatestOrders({ orders, totals = {} }) {
                 key={id}
                 to={`/orders-v2/${encodeURIComponent(id)}?returnTo=${encodeURIComponent("/dashboard-advanced")}`}
                 dir="rtl"
-                className="flex min-h-[88px] items-center gap-3 px-4 py-4 text-right hover:bg-slate-50 sm:px-5"
+                className="dashboard-order-row flex min-h-[88px] items-center gap-3 px-4 py-4 text-right hover:bg-slate-50 sm:px-5"
             >
                 <CustomerAvatar customer={order.customer} />
                 <div className="min-w-0 flex-1">
@@ -673,7 +686,7 @@ export function LatestOrders({ orders, totals = {} }) {
                         <span className="whitespace-nowrap">{payment}</span>
                     </div>
                 </div>
-                <div className="shrink-0 text-left">
+                <div className="dashboard-order-amount shrink-0 text-left">
                     <div className="flex items-center justify-end gap-1.5"><SourceBadge order={order} /><OrderCurrencyAmount order={order} /></div>
                     <div className="mt-1 whitespace-nowrap text-[11px] text-slate-400 sm:text-xs">{relativeTime(order.created_at || order.order_date)}</div>
                 </div>
@@ -683,7 +696,7 @@ export function LatestOrders({ orders, totals = {} }) {
     </Panel>;
 }
 
-function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
+function GaLive({ data }) { const pages = data?.top_pages || []; const minutes = data?.active_users?.per_minute || []; const max = Math.max(1, ...pages.map((p) => Number(p.views || 0))); const minuteMax = Math.max(1, ...minutes.map((m) => Number(m.active_users || 0))); return <div className="space-y-4"><Panel className="border-blue-200" testid="advanced-ga-pages" title="Google Analytics 4 — مباشر"><div className="flex h-14 items-center gap-2 border-b border-blue-800 bg-blue-700 px-4 text-white"><BarChart3 className="h-5 w-5" /><h2 className="text-sm font-black">Google Analytics 4 — مباشر</h2></div><div className="p-4"><h3 className="mb-3 text-sm font-extrabold">الصفحات الأكثر مشاهدة</h3>{pages.slice(0, 6).map((p, i) => <div key={`${p.title}-${i}`} className="mb-3"><div className="flex justify-between gap-2 text-[10px]"><span className="truncate">{p.title}</span><b>{p.views}</b></div><div className="mt-1 h-1.5 rounded bg-slate-100"><div className="h-full rounded bg-blue-500" style={{ width: `${Number(p.views || 0) / max * 100}%` }} /></div></div>)}</div></Panel><Panel className="border-violet-200" testid="advanced-ga-users" title="المستخدمون النشطون الآن"><div className="flex h-14 items-center gap-2 border-b border-violet-800 bg-violet-700 px-4 text-white"><UsersRound className="h-5 w-5" /><h2 className="font-black">المستخدمون النشطون الآن</h2></div><div className="grid grid-cols-2 gap-2 p-4"><Metric label="آخر 30 دقيقة" value={integer(data?.active_users?.last_30_minutes)} Icon={UsersRound} tone="bg-blue-50 text-blue-600" /><Metric label="آخر 5 دقائق" value={integer(data?.active_users?.last_5_minutes)} Icon={UsersRound} tone="bg-violet-50 text-violet-600" /></div><div className="flex h-36 items-end gap-1 overflow-hidden px-4 pb-4" dir="ltr" data-testid="advanced-ga-active-chart">{minutes.map((m, i) => <div key={i} className="max-h-full flex-1 rounded-t bg-violet-600" style={{ height: `${Math.min(100, Math.max(4, Number(m.active_users || 0) / minuteMax * 100))}%` }} />)}</div></Panel></div>; }
 
 export async function loadDashboardPeriodSnapshot({
     next,
@@ -864,10 +877,11 @@ export default function AdvancedDashboard() {
         <div className="flex items-stretch gap-2"><div className="min-w-0 flex-1"><AdvancedFilters value={filters} onChange={setFilters} defaultPreset="today" /></div><button onClick={() => loadPeriod(filters)} className="rounded-xl border bg-white px-4 text-blue-700" aria-label="تحديث بيانات الفترة"><RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} /></button></div>
         {!loading && loadError && <Panel className="border-amber-200 bg-amber-50 p-5 text-sm font-bold text-amber-900"><span role="alert">{loadError} — {data ? "تم الاحتفاظ بآخر بيانات موثوقة." : "لم تُعرض أرقام بديلة أو بيانات من فترة سابقة."}</span></Panel>}
         {(Boolean(data) || loading) && <>
-        <SummaryStrip data={data} filters={filters} loading={loading} />
+        <Panel title="ملخص الفترة" testid="advanced-period-summary"><div className="bg-slate-50 px-4 text-slate-800"><h2 className="font-extrabold">ملخص الفترة</h2></div><div className="p-3"><SummaryStrip data={data} filters={filters} loading={loading} /></div></Panel>
         <CampaignAdvisorCard />
-        <GoogleAdsIntelligenceCard dateFrom={filters.from} dateTo={filters.to} />
-        <div dir="ltr" className="grid items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="space-y-4"><DashboardAdsSpendCard fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen"><h2 className="font-bold">السلات المتروكة</h2><p role="status">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="grid min-w-0 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="space-y-4"><GaLive data={ga} /><LatestSoldProductsCard /></div></div></main></div>
+        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div></div></main></div>
         </>}
     </div>;
 }
+
+

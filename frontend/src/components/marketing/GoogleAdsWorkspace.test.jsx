@@ -21,6 +21,14 @@ afterEach(async () => { await act(async () => root.unmount()); container.remove(
 const button = (name) => [...container.querySelectorAll("button")].find((element) => element.textContent === name);
 async function render(props = {}) { await act(async () => root.render(<GoogleAdsWorkspace dateFrom="2026-10-01" dateTo="2026-10-13" initialAccountId="123" {...props} />)); }
 
+test("Google's saved intelligence card is read in its native page with the selected account and period", async () => {
+    await render();
+    expect(container.querySelector('[data-testid="google-ads-intelligence-card"]')).not.toBeNull();
+    const request = api.get.mock.calls.find(([url]) => url.endsWith("/ai/analyses"));
+    expect(request[1].params).toMatchObject({ account_id: "123", date_from: "2026-10-01", date_to: "2026-10-13" });
+    expect(api.post).not.toHaveBeenCalled();
+});
+
 test("one provider-readable owned account is selected instead of an inaccessible first link", async () => {
     const missing = { account_id: "999", account_name: "حساب غير متاح", readable: false };
     const readable = { ...account, readable: true };
@@ -137,3 +145,4 @@ test("typed campaign context normalizes the install alias and preserves Merchant
     expect(context.app.subtype).toBe("INSTALLS"); expect(context.shopping.merchant_id).toBe("88"); expect(context.hotel.hotel_center_id).toBe("99");
     expect(googleTypedCampaignContext({ app: { subtype: "ENGAGEMENT", app_id: "com.amasi.app" } }).app.subtype).toBe("ENGAGEMENT");
 });
+
