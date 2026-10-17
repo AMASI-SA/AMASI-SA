@@ -1,0 +1,24 @@
+{
+  "environment": "local Mongo replica set; synthetic products; provider awaited sleep20; no production calls",
+  "baseline_source": "d55b1b86",
+  "before": {
+    "ordinary_ready_seconds": 0.14459539999370463,
+    "last_ready_seconds": 20.192038600012893,
+    "progress_seconds": 0.13860859998385422,
+    "decision_seconds": 0.06150910002179444,
+    "progress_calls": 2,
+    "decision_calls": 1,
+    "provider_seconds": 20.015625300002284,
+    "provider_calls": 1
+  },
+  "after": {
+    "ordinary_ready_seconds": 0.14518769999267533,
+    "last_ready_seconds": 0.10878830001456663,
+    "progress_seconds": 0.0422301999933552,
+    "decision_seconds": 0.023270899982890114,
+    "progress_calls": 2,
+    "decision_calls": 1,
+    "provider_seconds": 0,
+    "provider_calls": 0
+  }
+}
