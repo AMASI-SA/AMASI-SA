@@ -102,6 +102,7 @@ async def compile_preview(db, owner, request):
     metadata = await products(db, owner)
     candidates = {p['id']: p for p in metadata}
     raw_products = await records(db, owner, 'mezan_products_v2')
+    raw_warehouses = await records(db, owner, 'warehouse_locations_warehouses')
     available = {l['id']: l for l in await locations(db, owner)}
     rows = []; used = set(); capacity = {}; snapshots = []
     for line in request['lines']:
@@ -109,8 +110,20 @@ async def compile_preview(db, owner, request):
         location = available.get(line['location_id'])
         if not product or not location:
             fail('opening_inventory_identity_invalid', 'اختر منتجًا وموقعًا متاحين من ميزان 2', 422)
-        raw = next(p for p in raw_products if p.get('mezan_product_id') == product['id'])
-        stored = next(l for l in locs if l.get('id') == location['id'])
+        # Resolve against the full tenant catalog, not only visible metadata.
+        # An archived/disabled duplicate is still an ambiguous physical identity
+        # and would be excluded by the inventory projection after approval.
+        product_matches = [p for p in raw_products if p.get('mezan_product_id') == product['id']]
+        location_matches = [l for l in locs if l.get('id') == location['id']]
+        warehouse_matches = [w for w in raw_warehouses if w.get('id') == location['warehouse_id']]
+        if len(product_matches) != 1 or len(location_matches) != 1 or len(warehouse_matches) != 1:
+            fail('opening_inventory_identity_ambiguous', 'هوية المنتج أو الموقع مكررة؛ يلزم تصحيحها قبل الافتتاحية', 409)
+        raw = product_matches[0]
+        stored = location_matches[0]
+        warehouse = warehouse_matches[0]
+        from operational_balance_sources import usable
+        if not usable(warehouse) or warehouse.get('status') == 'disabled' or warehouse.get('deleted_at'):
+            fail('opening_inventory_warehouse_unavailable', 'المستودع غير متاح؛ اختر موقعًا في مستودع نشط', 409)
         if stored.get('purpose') in {'returns', 'damaged'}:
             fail('opening_inventory_location_held', 'لا تسجل مخزونًا افتتاحيًا في موقع تالف أو مرتجعات', 422)
         if product.get('configuration_issues'):
@@ -157,7 +170,7 @@ async def compile_preview(db, owner, request):
                      'location_name': location['name'], 'quantity': quantity, 'unit_cost': format(cost, '.2f'),
                      'total_cost': format(cost * quantity, '.2f'), 'inventory_identity': identity,
                      'preparation_state': state, 'specifications': specs, 'purchase_configuration': config})
-        snapshots.append([raw, stored, definition, location])
+        snapshots.append([raw, stored, definition, location, warehouse])
     result = {'lines': rows, 'total_quantity': sum(r['quantity'] for r in rows),
               'total_cost': format(sum((Decimal(r['total_cost']) for r in rows), Decimal(0)), '.2f'),
               'currency': 'SAR', 'financial_effect': 'none', 'fulfillment_eligible': False,

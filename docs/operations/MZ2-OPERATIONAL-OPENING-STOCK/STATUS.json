@@ -2,7 +2,7 @@
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
   "status": "DRAFT_REVIEW",
   "branch": "codex/operational-opening-stock-20261017",
-  "base_sha": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "base_sha": "196adb36d64f5bb595a52a4371efd38034941173",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
   "acceptance": [
     "Owner can search the real MZ2 catalogue before any physical inventory exists.",
@@ -14,8 +14,8 @@
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
   "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
-  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS.",
+  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS. Review fix: full product/location/warehouse identities fail closed including archived/disabled duplicates; final new suite36 PASS.",
   "production_changed": false,
   "release": "No prepare, prepublish, merge or publish performed for this task.",
-  "next": "Resolve independent review findings and inspect Draft PR CI. Release intent remains inherited and is not frozen for this source; no merge or deploy readiness claimed."
+  "next": "Create fresh source candidate on latest Production without carrying intent-changing merge history, preserving this WIP branch; run candidate CI before v5 intent freeze."
 }

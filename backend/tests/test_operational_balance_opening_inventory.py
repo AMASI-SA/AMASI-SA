@@ -277,3 +277,75 @@ def test_context_and_preview_leave_all_collections_unchanged():
         await preview(db,OWNER,request())
         assert await snapshot() == before
     run(scenario)
+
+
+@pytest.mark.parametrize('duplicate_kind', ['archived_product', 'disabled_location'])
+@pytest.mark.parametrize('duplicate_first', [False, True])
+def test_hidden_duplicate_identity_cannot_bind_opening_stock(duplicate_kind, duplicate_first):
+    async def scenario(db):
+        hidden_product = {'user_id':'owner', 'mezan_product_id':'product', 'name':'Archived duplicate',
+                          'sku':'WRONG-SKU', 'archived':True, 'options':[], 'variants':[]}
+        hidden_location = {'user_id':'owner', 'id':'shelf', 'warehouse_id':'warehouse',
+                           'state':'disabled', 'occupancy':None, 'max_items':20}
+        collection = db.mezan_products_v2 if duplicate_kind == 'archived_product' else db.warehouse_locations
+        duplicate = hidden_product if duplicate_kind == 'archived_product' else hidden_location
+        if duplicate_first:
+            await collection.insert_one(deepcopy(duplicate))
+        await seed(db)
+        if not duplicate_first:
+            await collection.insert_one(deepcopy(duplicate))
+        with pytest.raises(HTTPException) as error:
+            await preview(db, OWNER, request())
+        assert error.value.status_code == 409
+        assert error.value.detail['code'] == 'opening_inventory_identity_ambiguous'
+        assert await db[BATCHES].count_documents({}) == 0
+        assert await db[RECEIPTS].count_documents({}) == 0
+        assert all(row['occupancy'] is None for row in await db.warehouse_locations.find({}).to_list(20))
+    run(scenario)
+
+
+@pytest.mark.parametrize('duplicate_kind', ['archived_product', 'disabled_location'])
+def test_hidden_duplicate_added_after_preview_blocks_approval(duplicate_kind):
+    async def scenario(db):
+        await seed(db)
+        p=await preview(db, OWNER, request())
+        if duplicate_kind == 'archived_product':
+            await db.mezan_products_v2.insert_one({'user_id':'owner','mezan_product_id':'product',
+                'name':'Old duplicate','sku':'WRONG','archived':True,'options':[],'variants':[]})
+        else:
+            await db.warehouse_locations.insert_one({'user_id':'owner','id':'shelf',
+                'warehouse_id':'warehouse','state':'disabled','occupancy':None,'max_items':20})
+        with pytest.raises(HTTPException) as error:
+            await approve(db, OWNER, {**request(),'preview_hash':p['preview_hash']})
+        assert error.value.detail['code'] == 'opening_inventory_identity_ambiguous'
+        assert await db[BATCHES].count_documents({}) == 0
+        assert await db[RECEIPTS].count_documents({}) == 0
+    run(scenario)
+
+
+def test_disabled_duplicate_warehouse_blocks_opening():
+    async def scenario(db):
+        await seed(db)
+        p=await preview(db,OWNER,request())
+        await db.warehouse_locations_warehouses.insert_one({'user_id':'owner','id':'warehouse','name':'Old duplicate','status':'disabled'})
+        for action in ('preview','approve'):
+            with pytest.raises(HTTPException) as error:
+                if action == 'preview': await preview(db,OWNER,request())
+                else: await approve(db,OWNER,{**request(),'preview_hash':p['preview_hash']})
+            assert error.value.detail['code'] == 'opening_inventory_identity_ambiguous'
+        assert await db[BATCHES].count_documents({}) == 0
+        assert await db[RECEIPTS].count_documents({}) == 0
+    run(scenario)
+
+
+@pytest.mark.parametrize('change', [{'name':'Renamed'}, {'active':False}, {'archived':True}])
+def test_warehouse_snapshot_changes_reject_approval(change):
+    async def scenario(db):
+        await seed(db)
+        p=await preview(db,OWNER,request())
+        await db.warehouse_locations_warehouses.update_one({'id':'warehouse'}, {'$set':change})
+        with pytest.raises(HTTPException):
+            await approve(db,OWNER,{**request(),'preview_hash':p['preview_hash']})
+        assert await db[BATCHES].count_documents({}) == 0
+        assert await db[RECEIPTS].count_documents({}) == 0
+    run(scenario)
