@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 
 from ai_store_access_contract import ROLE_CATALOG, effective_permissions
 from fulfillment_experiment_routes import (
@@ -130,16 +130,16 @@ def test_router_exposes_state_reset_hold_and_release_operations():
         SimpleNamespace(),
         lambda: {"id": "owner-1", "role": "owner"},
     )
-    routes = {
-        (route.path, method)
-        for route in router.routes
-        for method in route.methods
-    }
+    app = FastAPI()
+    app.include_router(router)
+    routes = {(path, method.upper()) for path, methods in app.openapi()["paths"].items()
+              for method in methods}
 
     assert ("/fulfillment-experiments-v1/orders/{order_number}", "GET") in routes
     assert ("/fulfillment-experiments-v1/orders/{order_number}/reset", "POST") in routes
     assert ("/fulfillment-experiments-v1/orders/{order_number}/holds", "POST") in routes
     assert ("/fulfillment-experiments-v1/holds/{hold_id}/release", "POST") in routes
+    assert ("/fulfillment-experiments-v1/holds/history", "GET") in routes
 
 
 

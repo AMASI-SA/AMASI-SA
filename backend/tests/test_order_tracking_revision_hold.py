@@ -56,10 +56,15 @@ class RevisionHoldTests(unittest.IsolatedAsyncioTestCase):
         pieces = self.db.raw['mezan_preparation_pieces_v1']
         self.assertEqual(pieces.find_one({'piece_id': 'p'})['status'], 'blocked')
         self.assertEqual(pieces.find_one({'piece_id': 'other'})['status'], 'ready_for_employee_receipt')
+        hold = self.db.raw['mezan_fulfillment_holds_v1'].find_one({'id': hold_id})
+        self.assertEqual([row['piece_id'] for row in hold['product_snapshots']], ['p'])
         await _release_linked_hold(self.db, merchant_id='owner',
             instruction={**self.instruction, 'hold_id': hold_id}, actor=self.actor, note='Cancelled change request')
         self.assertEqual(pieces.find_one({'piece_id': 'p'})['status'], 'ready_for_employee_receipt')
         self.assertNotIn('active_hold_id', pieces.find_one({'piece_id': 'p'}))
+        released = self.db.raw['mezan_fulfillment_holds_v1'].find_one({'id': hold_id})
+        self.assertEqual(released['status'], 'released')
+        self.assertEqual(released['product_snapshots'], hold['product_snapshots'])
 
     async def test_changed_piece_cannot_be_paused_using_stale_snapshot(self):
         pieces = self.db.raw['mezan_preparation_pieces_v1']
