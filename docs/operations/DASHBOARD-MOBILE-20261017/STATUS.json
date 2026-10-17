@@ -20,14 +20,32 @@
     },
     "dashboard_bundle": "Actual AdvancedDashboard import graph and Tailwind compiled using esbuild with synthetic read-only service fixtures; exit0",
     "diff_check": "passed",
-    "mobile_visual": "unverified: Cloud Browser rejected the local-file preview protocol. No bypass attempted. No real phone or mobile Safari result claimed."
+    "mobile_visual": "unverified: Cloud Browser rejected the local-file preview protocol. No bypass attempted. No real phone or mobile Safari result claimed.",
+    "github_dashboard": {
+      "run": 39039343921,
+      "job": 117415465337,
+      "suites": 9,
+      "tests": 54,
+      "conclusion": "success",
+      "frontend_production_build": "success"
+    },
+    "github_release_readiness": {
+      "run": 39039343996,
+      "conclusion": "success",
+      "source_a_only": true,
+      "governed_ab_build": "success",
+      "reviewed_b_rehearsal": "not run; no intent-only B"
+    }
   },
   "production_changed": false,
   "release_guard": "No lease or production workspace change",
   "remaining": [
-    "Inspect PR CI on exact source SHA.",
+    "Other CI: Security Gate, CodeQL, G47, Operational Balance still running at last read.",
     "Mobile rendered QA at 320,360,393,430 CSS px: all cards inside viewport; ads/shipping/payment tables scroll to both ends; arrow-only independent collapse.",
     "Separately authorized integration and protocol-v5 release, then live readback."
   ],
-  "next_safe_action": "Review source diff and CI. Preserve any newer Production changes. Do not infer publication from this checkpoint."
+  "next_safe_action": "Finish rendered mobile QA and remaining CI; only then separately authorize integration/publication through protocol v5.",
+  "source_sha": "585db04b312509096b6802ae8a77bc36d46b5a32",
+  "source_tree": "c0dbb31f6ee54710e25bede95a32fc64d35925ac",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1423"
 }
