@@ -155,6 +155,11 @@ async def capture_unknown_event(
     event_hash = _fingerprint(sanitized)
     now = datetime.now(timezone.utc)
 
+    # A received label must survive a later order-processing failure. Failure
+    # to durably enqueue is propagated instead of acknowledging lost data.
+    from .shipping_label_inbox import enqueue_verified_label
+    await enqueue_verified_label(db, event_body)
+
     order_sync: dict[str, Any] = {
         "attempted": False,
         "reason": "not_order_snapshot_event",

@@ -4,6 +4,10 @@ on:
     branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable]
     paths:
       - backend/salla_shipping.py
+      - backend/salla_integration/shipping_label_inbox.py
+      - backend/salla_integration/webhook_event_capture.py
+      - backend/tests/test_shipping_saved_label_print.py
+      - backend/tests/test_shipping_label_inbox.py
       - backend/tests/test_shipping_snapshot_bootstrap.py
       - backend/order_engine/shipping_label_service.py
       - backend/tests/test_shipping_print_boundary.py
@@ -42,6 +46,8 @@ jobs:
           ], text=True).splitlines())
           owned = {
               "backend/salla_shipping.py",
+              "backend/salla_integration/shipping_label_inbox.py",
+              "backend/salla_integration/webhook_event_capture.py",
               "backend/order_engine/shipping_label_service.py",
               "backend/fulfillment_carrier_label.py",
               "backend/preparation_piece_operations.py",
@@ -105,6 +111,8 @@ jobs:
         run: >-
           python -m pytest --noconftest --asyncio-mode=auto -q -ra
           backend/tests/test_shipping_snapshot_bootstrap.py
+          backend/tests/test_shipping_saved_label_print.py
+          backend/tests/test_shipping_label_inbox.py
           backend/tests/test_shipping_print_boundary.py
           backend/tests/test_shipping_print_legacy_path.py
           backend/tests/test_store_courier_unified_print.py

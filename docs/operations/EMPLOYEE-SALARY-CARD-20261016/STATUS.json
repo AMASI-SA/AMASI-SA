@@ -1,0 +1,49 @@
+{
+  "task": "employee-salary-card-refresh-20261016",
+  "branch": "codex/employee-salary-final-release-20261017",
+  "base_sha": "6f4877922747350189d2f45c676083cc791ac670",
+  "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
+  "state": "User authorized merge and publication; source refreshed after shipping PR1413; fresh CI pending",
+  "completed": [
+    "Show current and scheduled salary on Employee OS cards immediately after save",
+    "Verify employee account creation/reset accepts six digits or more",
+    "Immediate access change; payroll stop/resume defaults to tomorrow preserving today",
+    "Atomic contract, employee, access and audit updates with operational revision fence",
+    "Reject malformed or overlapping unpaid leave; support repeated same-day undo",
+    "Keep employees without salary contracts in payroll directory",
+    "Align operational accrual dates/rounding; preserve and detect historical conflicts"
+  ],
+  "verification": {
+    "previous_source": {
+      "backend_passed": 370,
+      "frontend_passed": 42,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "fresh_current_base": "pending",
+    "source_delta": "Payroll code identical to d7ae8c93 (370 backend +42 frontend PASS); shipping source retained"
+  },
+  "production_changed": false,
+  "release_guard": "Not started; publication authorized; shipping owns current release window",
+  "boundaries": [
+    "Historical source discrepancies are detected and new affected movements blocked; no automatic settlement or retroactive rewriting",
+    "Operational balances and accounting ledger remain separate; no automatic financial bridge"
+  ],
+  "next_action": "Fresh source CI and reviewed intent-only B, final checks, exact-head merge then release protocol v5 after existing publisher verifies and closes lease. No repeated user approval required.",
+  "integration_verification": {
+    "previous_pr": 1387,
+    "overlap": [
+      "operational_atomic.py bundle_catalog capability",
+      "operational_balance_service.py POS kind",
+      "operational_balance_sources.py bank and POS identity"
+    ],
+    "resolution": "Clean source-only cherry-pick; latest production additions preserved; no old intent carried forward",
+    "fresh_verification": "48 operational engine/legacy upgrade tests PASS; 44 lifecycle capability tests including real Mongo PASS; comprehensive suite pending",
+    "legacy_compatibility": "Exact pre-upgrade calendar rounding accepted only for old rows without currency, matching revision salary/status and obligation currency. No tolerance or financial history rewrite."
+  },
+  "previous_source": "29ae5117b0ad68e57213bae6d909a29c9fd62939",
+  "previous_verified_source": "d7ae8c93fa940f6a995bf788770986f426e9ec2c",
+  "merge_authorized": true,
+  "publish_authorized": true
+}
