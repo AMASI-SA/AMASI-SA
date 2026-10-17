@@ -1297,6 +1297,7 @@ async def allow_legacy_component_execution(db: Any, *, user_id: str, order_numbe
 async def persist_component_source_snapshot(
     db: Any, *, user_id: str, order_number: str, payload: dict[str, Any],
     persist: Any, created_event: bool = False, authoritative_refresh: bool = False,
+    allow_delivery_observation: bool = True, before_persist: Any = None,
 ) -> dict[str, Any]:
     """Fence the canonical write, not merely its later fulfillment callback.
 
@@ -1311,6 +1312,8 @@ async def persist_component_source_snapshot(
     cancelled = _text(status).lower() in {"cancel", "cancelled", "canceled", "refunded", "ملغي", "ملغى"}
 
     async def write(scoped):
+        if before_persist is not None:
+            await before_persist(scoped)
         query = {"user_id": user_id, "order_number": order_number}
         current = await scoped.unified_orders.find_one(query) or {}
         watermark = current.get("g47_salla_snapshot") or {}
@@ -1343,7 +1346,7 @@ async def persist_component_source_snapshot(
         return {**result, "snapshot_revision": revision}
 
     result = await operational_owner(db, user_id, write)
-    if not result.get("blocked") and not result.get("stale"):
+    if allow_delivery_observation and not result.get("blocked") and not result.get("stale"):
         # Financial work must run AFTER the restricted operational transaction.
         # P02/pause remain authoritative; failures leave a durable retry marker.
         try:

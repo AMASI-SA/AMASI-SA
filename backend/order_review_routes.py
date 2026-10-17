@@ -291,6 +291,11 @@ class ReviewItemPatch(BaseModel):
     internal_note: Optional[str] = Field(default=None, max_length=2000)
 
 
+class ReviewSourceRefreshRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0, strict=True)
+
+
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
@@ -872,6 +877,88 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         except OrderNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "order_not_found"}) from exc
         return await _detail(db, merchant_id, order, local_only=local_only, session_context=session_context)
+
+    @router.post("/{order_number}/refresh-from-salla")
+    async def refresh_review_source(
+        order_number: str, payload: ReviewSourceRefreshRequest,
+        user: dict = Depends(current_user),
+    ):
+        """Refresh source facts without approving or routing the review.
+
+        Provider reads stay outside the owner transaction. Recheck the displayed
+        revision and any completion operation inside the canonical source fence,
+        then invalidate old approval consent in that same transaction.
+        """
+        from fastapi.responses import JSONResponse
+        from pymongo.errors import PyMongoError
+
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        number = _text(order_number)
+        selector = {"user_id": merchant_id, "order_number": number}
+
+        async def validate(scoped):
+            try:
+                current = await get_order(MongoOrderRepository(scoped), user_id=merchant_id, order_number=number)
+            except OrderNotFoundError:
+                raise HTTPException(404, detail={"code": "order_not_found", "message": "لم يتم العثور على الطلب."}) from None
+            workflow = await scoped[WORKFLOWS].find_one(selector) or {}
+            # status_native includes the authoritative canonical/custom state;
+            # a stale raw under_review parent must not revive a shipped order.
+            pending = _normalized(current.status_native or current.status) in PENDING_REVIEW_STATUS_KEYS
+            if not pending or _text(workflow.get("stage")) not in {"", "pending_review"}:
+                raise HTTPException(409, detail={"code": "review_refresh_not_pending", "message": "الطلب لم يعد في انتظار المراجعة. حدّث القائمة."})
+            if int(workflow.get("revision") or 0) != payload.expected_revision:
+                raise HTTPException(409, detail={"code": "review_revision_conflict", "message": "تغيّرت مراجعة الطلب. حدّث بياناته قبل المحاولة."})
+            operation = await scoped.order_review_completion_operations.find_one({
+                **selector, "superseded_by": {"$exists": False},
+            }, {"_id": 1})
+            if operation:
+                raise HTTPException(409, detail={"code": "review_refresh_completion_conflict", "message": "توجد محاولة اعتماد لهذا الطلب. تحقّق من نتيجتها قبل تحديث بياناته."})
+
+        async def invalidate_approval(scoped):
+            # Update only consent metadata: notes, choices, item identities,
+            # quantities and review stage remain untouched.
+            await scoped[WORKFLOWS].update_one(selector, {
+                "$inc": {"revision": 1},
+                "$set": {"updated_at": _now()},
+                "$setOnInsert": {**selector, "stage": "pending_review", "items": []},
+            }, upsert=True)
+
+        try:
+            await validate(db)
+            await _ensure_indexes(db)
+            result = await refresh_order_from_salla(
+                db, merchant_id, number, force=True, allow_auto_fulfillment=False,
+                allow_delivery_observation=False, allow_billing_eligibility=False, before_persist=validate,
+                after_persist=invalidate_approval,
+            )
+            if not (result.get("ok") is True and result.get("found") is True
+                    and result.get("updated") is True and not result.get("skipped")
+                    and not result.get("created") and result.get("order_number") == number
+                    and result.get("refreshed_at")):
+                if result.get("needs_reauth"):
+                    code, http_status, message = "salla_reauth_required", 409, "يحتاج ربط سلة إلى إعادة اعتماد من مدير المتجر."
+                elif result.get("code") == "order_not_found_in_salla":
+                    code, http_status, message = "order_not_found_in_salla", 404, "لم يتم العثور على الطلب في سلة."
+                elif result.get("skipped") or result.get("blocked"):
+                    code, http_status, message = "review_refresh_not_applied", 409, "لم تُطبّق بيانات جديدة من سلة. حدّث بيانات الطلب ثم أعد التحقق."
+                else:
+                    code, http_status, message = "review_refresh_failed", 502, "تعذّر تحديث بيانات الطلب من سلة. بيانات المراجعة محفوظة؛ أعد المحاولة لاحقًا."
+                raise HTTPException(http_status, detail={"code": code, "message": message})
+            return JSONResponse({
+                "ok": True, "found": True, "updated": True, "order_number": number,
+                "revision": payload.expected_revision + 1, "refreshed_at": result["refreshed_at"],
+                "items_count": result.get("items_count", 0), "source": "salla",
+                "approval_requires_reload": True,
+            }, headers={"Cache-Control": "no-store"})
+        except PyMongoError:
+            raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
+                "code": "review_refresh_outcome_unknown", "message": "تعذّر تأكيد نتيجة التحديث. حدّث بيانات الطلب قبل إعادة المحاولة.",
+            }) from None
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
+            raise
 
     @router.post("/{order_number}/operational-items")
     async def create_operational_item(
