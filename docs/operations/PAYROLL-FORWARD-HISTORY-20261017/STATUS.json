@@ -1,1 +1,31 @@
-{"task":"payroll-forward-history-fix-20261017","branch":"codex/payroll-forward-history-fix-20261017","base_sha":"2a7740359451a538be8df373266c4c92ca1a57c8","state":"Source fix verified locally; fresh CI and publication pending","cause":"Salary history guard treated normal legacy Ledger Core posted_at/created_at-only rows as undated, rejecting forward salary changes with employee_salary_adjustment_required.","fix":"Reuse accounting_report_dates.accounting_instant with authoritative top-level effective_at/accounting_at precedence. Malformed explicit dates still fail closed; accrued_through/period protections unchanged. No ledger write or salary fallback.","verification":{"red":"2 regression cases failed409 before fix","green":"75 history and contract tests passed against disposable Mongo27517"},"production_changed":false,"merge_authorized":true,"publish_authorized":true,"next_action":"Fresh source CI, reviewed intent-onlyB, final checks, coordinate lease then merge and v5 publish/verify. Never alter employee salary or historical financial rows during validation.","limitations":"Specific live employee ledger not inspected; reproduction uses the actual legacy writer schema. Native journal-only history coverage identified separately for accounting coordination."}
+{
+  "task": "payroll-forward-history-fix-20261017",
+  "branch": "codex/payroll-forward-history-fix-20261017",
+  "base_sha": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "state": "Published; actual production verify passed3; lease inactive. UI reports Deployment finished, not literal Deployment Succeeded.",
+  "cause": "Salary history guard treated normal legacy Ledger Core posted_at/created_at-only rows as undated, rejecting forward salary changes with employee_salary_adjustment_required.",
+  "fix": "Reuse accounting_report_dates.accounting_instant with authoritative top-level effective_at/accounting_at precedence. Malformed explicit dates still fail closed; accrued_through/period protections unchanged. No ledger write or salary fallback.",
+  "verification": {
+    "red": "2 regression cases failed409 before fix",
+    "green": "75 history and contract tests passed against disposable Mongo27517"
+  },
+  "production_changed": true,
+  "merge_authorized": true,
+  "publish_authorized": true,
+  "next_action": "No republish. User can refresh and retry the same future salary edit. No live employee or financial data changed by agent.",
+  "limitations": "Specific live employee ledger not inspected; reproduction uses the actual legacy writer schema. Native journal-only history coverage identified separately for accounting coordination.",
+  "release": {
+    "pr": 1418,
+    "source": "44dc95636239a30ac3879c8f5c7072627eea1953",
+    "intent": "d096a62a6691139c7e7f6f52a03a5ec3b36b105a",
+    "deployment": "196adb36d64f5bb595a52a4371efd38034941173",
+    "runtime": "rg5-45eb9184a9701b7ecc99330836ea33a6fe3efb4344816b14a28729849e611b3c",
+    "verified": true,
+    "checks": 3,
+    "active": false,
+    "backend_tests": 375,
+    "frontend_tests": 42,
+    "ui_event": "Deployment finished Oct17 04:33AM",
+    "boot_started_at": "2026-10-17T01:32:53.388045+00:00"
+  }
+}
