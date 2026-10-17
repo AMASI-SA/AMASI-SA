@@ -2,7 +2,7 @@
   "task": "SHIPPING-SAVED-LABEL-20261017",
   "branch": "codex/shipping-pilot-deployment-evidence-20261017",
   "base": "7da8b95c5bf79cd001d0714439dc5b7f89e18f31",
-  "state": "Backend publication dispatched; live verification pending",
+  "state": "Backend deployed and live identity verified three times; Android pilot build/device UAT pending",
   "behavior": "Legacy refresh and web remain unchanged. New POST /fulfillment-v2/completed/{order}/carrier-label/refresh-saved reads canonical saved label only. Durable verified shipping inbox retries local persistence, retains invalidations/cancellation fences, performs no provider lookup or full-order replay. Android candidate persists waiting intent and polls new endpoint only.",
   "verification": "312 passed, 165 skipped (isolated replica-set Mongo unavailable), pytest exit0 across 11 affected backend suites. Legacy test files restored exactly to production base and pass unchanged. New opt-in route/permission, delayed-label, retry/crash/cancellation and duplicate-worker tests pass.",
   "test_files": [
@@ -17,18 +17,24 @@
   ],
   "risks": [
     "Native Android pilot not built or device tested",
-    "Publication has not yet been verified; do not infer success from start",
+    "Emergent UI says Deployment finished and Published Health Check Successful; literal Deployment Succeeded wording was not displayed",
+    "Cloud Build full command transcript not exposed by runtime logs; local adapter and live identity proofs passed",
     "Known pre-existing dashboard frozen-reference find43 vs41 mismatch reproduced on baseline"
   ],
-  "next": "Wait for successful Emergent publication, run verify for three exact probes then status inactive. Notify salary task release window is free only after verification.",
-  "production_changed": false,
-  "release_guard": "Prepared and prepublish passed; owner shipping-saved-label-pilot-20261017",
-  "deployment": "Emergent republish confirmed once; awaiting completion",
+  "next": "Android release task builds isolated saved-carrier-print-pilot with new versionCode, confirms runtime/channel boundary and tests PDF viewer on device. Legacy route stays available. No further backend publish needed for this release.",
+  "production_changed": true,
+  "release_guard": "verify=true checks=3; follow-up status active=false",
+  "deployment": "Emergent Deployment finished Oct 17 03:14 AM, Live current publication 9d609b1; verify exit0",
   "web_candidate": "Not activated. Optional candidate preserved remotely on codex/web-pending-label-candidate-20261017; final frontend diff vs production base is empty.",
   "android_branch": "AMASI-SA/amasi-mobile codex/pending-carrier-print-20261017",
   "source_sha": "13c33d6bfd8b22fb373e56ed265a90dd242239cc",
   "intent_sha": "391ecbdb6cc88f833428b909f2f08cc624cb0397",
   "deployment_sha": "6f4877922747350189d2f45c676083cc791ac670",
   "release_id": "rg5-3484e5676778a2e2aae2750ae8032f8266ff379eab06758a104ba38e41252707",
-  "readiness_run": "38983439480 success incl clean-clone Emergent rehearsal; required checks pass; shipping real Mongo pass"
+  "readiness_run": "38983439480 success incl clean-clone Emergent rehearsal; required checks pass; shipping real Mongo pass",
+  "verify_boot_times": [
+    "2026-10-17T00:13:56.272140+00:00",
+    "2026-10-17T00:13:45.910382+00:00"
+  ],
+  "frontend_artifact_tree": "d2ee16a96700dc0e2e9ae53607fd5a2a62e96f8bd30f2c2991c436c19ec4b5a6"
 }
