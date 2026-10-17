@@ -1,3 +1,4 @@
+import DashboardPanel from "./DashboardPanel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowsClockwise,
@@ -85,6 +86,7 @@ export function DashboardAdsSpendCardContent({
     refreshing = false,
     error = "",
     onRefresh,
+    collapsible = false,
 }) {
     const singleDay = isSingleDay(fromDate, toDate);
     const points = useMemo(
@@ -108,7 +110,7 @@ export function DashboardAdsSpendCardContent({
         && data?.providers?.tiktok?.hourly_source === "make_daily_total_marker";
 
     return (
-        <section
+        <DashboardPanel title={collapsible ? "صرفيات منصات الإعلانات" : undefined}
             className="h-full overflow-hidden rounded-2xl border-2 border-yellow-300 bg-white shadow-sm"
             data-testid="dashboard-ads-spend-card"
             data-from-date={fromDate || ""}
@@ -291,11 +293,11 @@ export function DashboardAdsSpendCardContent({
                     </div>
                 )}
             </div>
-        </section>
+        </DashboardPanel>
     );
 }
 
-export default function DashboardAdsSpendCard({ fromDate, toDate }) {
+export default function DashboardAdsSpendCard({ fromDate, toDate, collapsible = false }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -357,6 +359,7 @@ export default function DashboardAdsSpendCard({ fromDate, toDate }) {
     return (
         <DashboardAdsSpendCardContent
             data={data}
+            collapsible={collapsible}
             fromDate={fromDate}
             toDate={toDate}
             loading={loading}

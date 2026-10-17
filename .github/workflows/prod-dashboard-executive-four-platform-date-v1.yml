@@ -18,6 +18,11 @@ on:
       - "frontend/src/services/dashboardAdsSpend.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.latestOrders.test.jsx"
+      - "frontend/src/pages/AdvancedDashboard.mobile.test.jsx"
+      - "frontend/src/components/DashboardPanel*"
+      - "frontend/src/components/DashboardTableScroll.jsx"
+      - "frontend/src/components/dashboardPanel.css"
+      - "frontend/src/index.css"
       - "frontend/src/components/DashboardAnalyticsPlacement.test.js"
       - ".github/workflows/prod-dashboard-executive-four-platform-date-v1.yml"
 
@@ -50,6 +55,8 @@ jobs:
           src/dashboardExecutivePlatformSpendInterceptor.test.js
           src/services/dashboardAdsSpend.test.js
           src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/pages/AdvancedDashboard.mobile.test.jsx
+          src/components/DashboardPanel.test.jsx
           src/components/DashboardAnalyticsPlacement.test.js
       - name: Build Production frontend
         env:

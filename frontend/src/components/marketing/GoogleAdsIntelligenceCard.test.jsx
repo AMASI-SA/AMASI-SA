@@ -34,6 +34,6 @@ test("a stale dashboard analysis response cannot cross account or period boundar
 
 test("the actual AdvancedDashboard mounts the Google intelligence card beside the existing advisor", () => {
     const source = require("fs").readFileSync(require("path").join(__dirname, "../../pages/AdvancedDashboard.jsx"), "utf8");
-    expect(source).toContain("<CampaignAdvisorCard />"); expect(source).toContain("<GoogleAdsIntelligenceCard dateFrom={filters.from} dateTo={filters.to} />");
+    expect(source).toContain("<CampaignAdvisorCard />"); expect(source).toContain("<GoogleAdsIntelligenceCard collapsible dateFrom={filters.from} dateTo={filters.to} />");
     expect(source).toContain('["snapchat", "meta"].includes(item.provider) && item.action_type');
 });
