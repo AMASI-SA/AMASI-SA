@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
+
+from fastapi import HTTPException
 
 from orders_db import upsert_order
 from salla_shipping import SHIPPING_FIELDS, extract_shipping, shipping_root_fields
@@ -399,8 +401,17 @@ async def refresh_order_from_salla(
     force: bool = False,
     minimum_fresh_seconds: int = 120,
     allow_auto_fulfillment: bool = True,
+    allow_delivery_observation: bool = True,
+    allow_billing_eligibility: bool = True,
+    before_persist: Optional[Callable[[Any], Awaitable[None]]] = None,
+    after_persist: Optional[Callable[[Any], Awaitable[None]]] = None,
 ) -> dict[str, Any]:
-    """Refresh one Order Engine V2 order from Salla Order Details and Items."""
+    """Refresh one Order Engine V2 order from Salla Order Details and Items.
+
+    Explicit review callers can suppress downstream observers. Their hooks join
+    the canonical owner transaction: validate before any source fence write and
+    invalidate displayed consent only after actual canonical persistence.
+    """
     normalized = str(order_number or "").strip()
     if not normalized:
         return {"ok": False, "found": False, "code": "order_number_required"}
@@ -534,14 +545,18 @@ async def refresh_order_from_salla(
         from fulfillment_v2_routes import persist_component_source_snapshot
         async def persist_snapshot(scoped):
             result = await upsert_order(scoped, str(user_id), normalized, doc, source="salla_direct", raw=merged_raw,
-                                        shipping_snapshot=extract_shipping(details) or {})
+                                        shipping_snapshot=extract_shipping(details) or {},
+                                        **({"allow_billing_eligibility": False} if not allow_billing_eligibility else {}))
             await scoped.unified_orders.update_one(
                 {"user_id": str(user_id), "order_number": normalized}, {"$set": canonical_updates},
             )
+            if after_persist is not None:
+                await after_persist(scoped)
             return result
         result = await persist_component_source_snapshot(
             db, user_id=str(user_id), order_number=normalized, payload=details, persist=persist_snapshot,
-            authoritative_refresh=True,
+            authoritative_refresh=True, allow_delivery_observation=allow_delivery_observation,
+            before_persist=before_persist,
         )
         if result.get("blocked"):
             return {"ok": False, "found": True, "updated": False, "order_number": normalized, **result}
@@ -620,6 +635,10 @@ async def refresh_order_from_salla(
             "no_qoyod_calls": True,
         }
     except Exception as exc:  # pragma: no cover - fail-safe boundary
+        if before_persist is not None and isinstance(exc, HTTPException):
+            # The explicit review caller owns its transaction-scoped conflicts.
+            # Existing callers retain the historical result/error contract.
+            raise
         return {
             "ok": False,
             "found": False,
