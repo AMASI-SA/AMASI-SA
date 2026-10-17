@@ -7,8 +7,16 @@ Remote retained reference: codex/ready-rollback-baseline-20261017.
 Isolated inverse source commit: d9945b7d961dfebca27fda5e08b3515ca922edbb,
 branch codex/ready-rollback-candidate-20261017. Its full tree exactly equals
 the baseline, preserving payroll, Google periodic and dashboard changes.
-The inherited intent is NOT valid for this new descendant source commit;
-it must be rebuilt and frozen as a fresh v5 A/B release before use.
+The exact old tree can validate as the old reviewed identity, but it is not a
+new rollback release relative to the proposed Ready deployment. Initial CI
+39060118127 refused its candidate-base input because it classified as reviewed
+B. This is a failed rehearsal, not evidence of deployability.
+
+The prospective deployable rollback is now codex/ready-rollback-release-20261017,
+source 3cb433e64a8a7d9563f20642e5f46749816aa4e0, based on frozen Ready B
+ff442eb34a91fa618d10d0b3e1484e0be1e3a313. It restores baseline source bytes
+while retaining the new predecessor intent, allowing a fresh rollback intent
+to be built under the unchanged release protocol. Its rehearsal is pending.
 Baseline whitespace is retained intentionally; git diff --check reports three
 pre-existing whitespace lines restored from baseline, not a semantic mismatch.
 
