@@ -3,8 +3,8 @@
   "branch": "codex/ready-prod177-integration-20261017",
   "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "FINAL_INTENT_CI_PENDING",
-  "production_changed": false,
+  "state": "MERGED_LOCAL_RELEASE_REHEARSAL",
+  "production_changed": true,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
     "Added v2 read-first status dispatch with bounded transient retries and persisted dispatch count",
@@ -16,7 +16,7 @@
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
     "mongo_and_performance": "PENDING",
-    "final_ci": "PENDING B20d8eeae1",
+    "final_ci": "26 applicable PASS +1 nonapplicable TikTok skip on20d8eeae1",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
@@ -30,15 +30,15 @@
     "dashboard_three_arm": "reference40PASS,production40PASS,candidate40PASS;164records exacthistoricalJSON and productionreadcomparison",
     "current_prod_integration": "182 passed,9subtests,0skips/failures;532.56s isolated Mongo on source16a44200f",
     "previous_head_ci": "255e1ecf:26/26 successful",
-    "release_rehearsal": "39060189255 Linux clean-clone/runtime PASS",
-    "rollback_rehearsal": "39060790175 Backend,Frontend,clean-clone/runtime PASS;not activated",
+    "release_rehearsal": "39063636676 Linux clean-clone/runtime PASS; /app local rehearsal running",
+    "rollback_rehearsal": "39064082060 PASS on prospective a7d23ca2a; actual-merge-parent candidate651b2821e863277e35795c37a7d83840c161b7db being rebuilt",
     "source_ci": "26/26 PASS source16a44200f"
   },
   "remaining": [
     "Android final tested HEAD and coordinated compatible client release",
     "Production merge and local governed rehearsal, prepare/prepublish/deploy/verify"
   ],
-  "next": "Complete fresh Mongo and CI for PR1430; freeze new intent; review APK candidate and coordinate authorized deployment",
+  "next": "Finish local rehearsal, prepare/prepublish under own lease, publish once and verify three probes; APK46 exact guard review pending",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
   "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
@@ -58,5 +58,7 @@
     "owner_decision": "new isolated reviewed APK then installation, no OTA",
     "candidate": "74badd59030b7dea0329249799dc91fc4f127014,16 config tests independently PASS",
     "devices": "emulator only, no physical employee device attached"
-  }
+  },
+  "production_change_scope": "GitHub Production branch merged; Emergent checkout fast-forwarded, live runtime NOT yet published",
+  "deployment_head": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1"
 }
