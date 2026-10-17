@@ -1,0 +1,4 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+{"boundary": "status_post", "canonical_status": "delivered", "mock_posts": ["/orders/internal/status"], "ready": true, "outbox_state": "confirmed", "error_code": null, "real_provider_calls": 0}
+{"boundary": "awb_post", "canonical_status": "delivered", "mock_posts": ["/shipments"], "ready": true, "outbox_state": "confirmed", "error_code": null, "real_provider_calls": 0}
+{"boundary": "publication", "canonical_status": "delivered", "mock_posts": [], "ready": true, "outbox_state": "confirmed", "error_code": null, "real_provider_calls": 0}
