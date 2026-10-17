@@ -34,18 +34,19 @@ def application(database, actor=None):
     return app
 
 
+@pytest.mark.parametrize("symbol", ["a", "7"])
 @pytest.mark.parametrize("length", [0, 5, 6, 7, 10, 11, 12])
-async def test_employee_create_password_boundaries(db, length):
+async def test_employee_create_password_boundaries(db, length, symbol):
     await db.mezan_employees_v2.insert_one({"id": "employee", "user_id": "owner"})
     async with AsyncClient(transport=ASGITransport(app=application(db)), base_url="http://test") as client:
         response = await client.post("/api/team/users/employee", json={
             "employee_id": "employee", "name": "Employee", "email": "employee@example.com",
-            "password": "a" * length, "role": "viewer", "denied_permissions": ["dashboard.view"],
+            "password": symbol * length, "role": "viewer", "denied_permissions": ["dashboard.view"],
         })
     assert response.status_code == (200 if length >= 6 else 422), response.text
     account = await db.users.find_one({})
     if length >= 6:
-        assert verify_password("a" * length, account["password_hash"])
+        assert verify_password(symbol * length, account["password_hash"])
         assert account["email"] == "employee@example.com"
         assert account["role"] == "viewer" and account["denied_permissions"] == ["dashboard.view"]
         assert "password" not in response.text
