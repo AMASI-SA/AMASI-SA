@@ -270,7 +270,7 @@ test("preview shows inherited decisions, unresolved costs, sourcing segments and
         known_cost: "20", estimated_cost: null, cost_complete: false,
         component_decisions: [{ name: "تغليف مستثنى", use: false, quantity: "1", cost_treatment: "independent", assembly_origin: "inhouse", binding_kind: "product_resource", binding_id: "wrap", path: ["bundle@3:rule1"] }],
         unresolved_components: [{ name: "سلسال غير محسوم", use: true }],
-        leaves: [{ name: "منتج تلقائي", quantity: "3", unit_cost: "5", sourcing_mode: "auto", state: "needs_source", unresolved_quantity: "2", preview_only: true, paths: [["bundle@3:rule2"]], sourcing_segments: [{ sourcing_mode: "stock", quantity: "1", reserved_quantity: "1" }] }]
+        leaves: [{ name: "منتج تلقائي", supplier_id: "technical-supplier-uuid", quantity: "3", unit_cost: "5", sourcing_mode: "auto", state: "needs_source", unresolved_quantity: "2", preview_only: true, paths: [["bundle@3:rule2"]], sourcing_segments: [{ sourcing_mode: "stock", quantity: "1", reserved_quantity: "1" }] }]
     } });
     await act(async () => root.render(<BundleEditor productId="bundle" />));
     expect(node.textContent).toContain("تغليف مستثنى · مستثنى");
@@ -279,7 +279,10 @@ test("preview shows inherited decisions, unresolved costs, sourcing segments and
     expect(node.textContent).toContain("التوريد: من المخزون · الكمية: 1");
     expect(node.textContent).toContain("يحتاج مصدر توريد: 2");
     expect(node.textContent).toContain("حساب الكمية: 3 لكل اختيار × 1 كمية سلة = 3");
-    expect(node.textContent).toContain("bundle@3:rule2");
+    expect(node.textContent).not.toContain("bundle@3:rule2");
+    expect(node.textContent).toContain("تركيب المنتج الداخلي");
+    expect(node.textContent).not.toContain("product_resource:wrap");
+    expect(node.textContent).not.toContain("technical-supplier-uuid");
 });
 
 test("failed product details block saving and do not claim a verified unit", async () => {
@@ -339,4 +342,35 @@ test("mapped child customization text is forwarded in preview without unrelated 
     await inputValue(node.querySelector('[aria-label="ملاحظة"]'), "سري");
     await act(async () => button("معاينة المكونات والتكلفة للاختيارات").click());
     expect(bundles.previewProductBundle.mock.calls[0][3].option_answers).toEqual({ gift: "أحبك" });
+});
+
+test("products use catalog units without a manual unit field", async () => {
+    getProductV2.mockResolvedValue({ name: "منتج كتالوج", unit: "unit", options: [] });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    expect([...node.querySelectorAll("label")].some((label) => label.firstChild?.textContent === "الوحدة" && label.querySelector("input"))).toBe(false);
+    expect(node.textContent).toContain("قطعة");
+});
+
+test("saved product identity, quantity and condition survive a fresh mount", async () => {
+    const savedRow = { ...items[0], rule_id: "persisted-rule", quantity: "3", condition: { option_id: "size", value_id: "4" } };
+    const persisted = { revision: 4, schema_version: 2, product_type: "composite", items: [savedRow] };
+    bundles.getProductBundle.mockResolvedValue({ definition: { revision: 3, product_type: "composite", items: [items[0]] }, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
+    bundles.saveProductBundle.mockResolvedValue({ definition: persisted, expansion: null });
+    getProductV2.mockResolvedValue({ name: "سلسال ثابت", main_image: "/saved-product.png", options: [{ id: "size", name: "حجم البكج", values: [{ id: "4", name: "أربعة" }] }] });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await inputValue(node.querySelector('[aria-label="كمية المكوّن 1"]'), "3");
+    await selectValue(labeledSelect("إضافة المكوّن"), "conditional");
+    await selectValue(labeledSelect("حقل خيار العميل"), "size");
+    await selectValue(labeledSelect("قيمة خيار العميل"), "4");
+    await act(async () => button("حفظ التركيب وحساب التكلفة").click());
+    expect(bundles.saveProductBundle.mock.calls[0][1].items[0]).toMatchObject({ quantity: "3", product_id: "p1", condition: { option_id: "size", value_id: "4" } });
+    bundles.getProductBundle.mockResolvedValue({ definition: persisted, expansion: null, limits: { max_items: 100, max_depth: 5, max_leaves: 500 } });
+    await act(async () => root.unmount()); root = createRoot(node);
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    expect(node.textContent).toContain("سلسال ثابت");
+    expect(node.querySelector('img[src="/saved-product.png"]')).not.toBeNull();
+    expect(node.querySelector('[aria-label="كمية المكوّن 1"]').value).toBe("3");
+    expect(labeledSelect("حقل خيار العميل").value).toBe("size");
+    expect(labeledSelect("قيمة خيار العميل").value).toBe("4");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(true);
 });

@@ -91,6 +91,29 @@ async def test_v2_intentional_rules_sum_and_duplicate_rule_rejected(db):
 
 
 @pytest.mark.asyncio
+async def test_v2_same_variant_different_options_keep_independent_supplier_resolution(db):
+    from product_fulfillment_rules import PRODUCT_OPERATION_PROFILES
+    from bundle_fulfillment_v2 import allocate_leaves
+    await db[PRODUCTS].update_one({'salla_product_id': 'p1'}, {'$set': {
+        'variants': [{'id': 'same'}], 'options': [{'id': 'work', 'values': [{'id': 'a'}, {'id': 'b'}]}]}})
+    await db[PRODUCT_OPERATION_PROFILES].insert_one({'user_id': 'owner', 'salla_product_id': 'p1',
+        'bundle_sourcing': {'revision': 1, 'rules': [
+            {'rule_id': value, 'conditions': [{'option_id': 'work', 'value_id': value}], 'supplier_id': supplier}
+            for value, supplier in [('a', 's1'), ('b', 's2')]]}})
+    def selected(value):
+        return item('p1', variant_id='same', selected_options=[{'option_id': 'work', 'value_id': value}])
+    result = await save_v2(db, [selected('a'), selected('b')])
+    leaves = result['expansion']['leaves']
+    assert len(leaves) == 2
+    assert [leaf['quantity'] for leaf in leaves] == ['1', '1']
+    resolved, _ = await allocate_leaves(db, 'owner', leaves, [], unit_id='synthetic-unit')
+    assert {leaf['supplier_id']: leaf['supplier_quantity'] for leaf in resolved} == {'s1': '1', 's2': '1'}
+    identical = await save_v2(db, [selected('a'), selected('a')], revision=1)
+    assert len(identical['expansion']['leaves']) == 1
+    assert identical['expansion']['leaves'][0]['quantity'] == '2'
+
+
+@pytest.mark.asyncio
 async def test_v2_supplier_omission_requires_evidence_and_foreign_override_rejected(db):
     await native_component(db, 'p1', 'bag', 2, {'cost_treatment': 'included_in_base', 'assembly_origin': 'supplier'})
     result = await save_v2(db, [item('p1', component_overrides=[excluded('bag')])])

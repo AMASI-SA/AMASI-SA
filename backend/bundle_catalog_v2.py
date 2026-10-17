@@ -658,7 +658,14 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
         raise HTTPException(409, detail={"code": "bundle_selection_required", "options": needs_selection})
     merged = {}
     for leaf in leaves:
-        identity = (leaf["kind"], leaf.get("product_id"), leaf.get("resource_id") or leaf.get("binding_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), leaf.get("unit"), leaf.get("slot_id"), json.dumps(leaf.get("customization", {}), sort_keys=True), tuple(leaf["dedup_scopes"][0]))
+        # Equal physical variants can still require different supplier work.
+        # Keep stable customer selections and the frozen sourcing evidence in
+        # both merge stages; otherwise the first rule silently wins for all units.
+        sourcing_context = (
+            tuple(sorted((str(s["option_id"]), str(s["value_id"])) for s in leaf.get("selected_options", []))),
+            json.dumps(leaf.get("sourcing_policy") or {}, sort_keys=True, default=str),
+        ) if composition_v2 else None
+        identity = (leaf["kind"], leaf.get("product_id"), leaf.get("resource_id") or leaf.get("binding_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), leaf.get("unit"), leaf.get("slot_id"), json.dumps(leaf.get("customization", {}), sort_keys=True), sourcing_context, tuple(leaf["dedup_scopes"][0]))
         previous = merged.get(identity)
         if previous is None:
             merged[identity] = leaf
