@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "GOOGLE_PERIODIC_PUBLISH_IN_PROGRESS",
-  "updated_at_utc": "2026-10-17T15:42:12.653Z",
+  "status": "GOOGLE_PERIODIC_PLATFORM_FINISHED_PUBLIC_VERIFY_IN_PROGRESS",
+  "updated_at_utc": "2026-10-17T15:52:04.754Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Follow current single deployment without another publish. Require explicit newer deployment success, then original /app own-lease verify --url https://mezansalla.com (3 exact public probes), guard inactive, native Google/shared dashboard UI acceptance. No provider/financial writes.",
+  "next_safe_action": "Read public verification result; require verified=true/3 exact probes and actual guard inactive before UI/provider-read acceptance. Publication finished, do not publish again or clear lease manually.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,7 +450,7 @@
     }
   },
   "completion_followup": {
-    "status": "PUBLISH_IN_PROGRESS",
+    "status": "PLATFORM_FINISHED_PUBLIC_VERIFY_IN_PROGRESS",
     "branch": "codex/google-periodic-current-prod-20261016",
     "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
     "scope": [
@@ -582,8 +582,17 @@
       "started_riyadh": "2026-10-17T18:41",
       "platform_state": "Publishing in progress; Deployment Started Oct17 18:41 Saudi",
       "previous_live_prefix": "b9c554a",
-      "finished": false,
-      "public_verified": false
+      "finished": true,
+      "public_verified": false,
+      "finished_riyadh": "2026-10-17T18:50",
+      "live_prefix": "4e3c67a",
+      "explicit_success": "Fresh platform reload shows Deployment finished Oct17 18:50 Saudi; new Live Publish100 prefix4e3c67a and previous b9c554a moved99."
+    },
+    "public_verification": {
+      "status": "IN_PROGRESS",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "result": "/root/google-1406-public-verify.json",
+      "stderr_log": "/root/google-1406-public-verify.log"
     }
   }
 }
