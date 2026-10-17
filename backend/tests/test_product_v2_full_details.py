@@ -46,3 +46,20 @@ def test_option_and_variant_normalizers_tolerate_sparse_shapes():
     assert [row["name"] for row in options[0]["values"]] == ["ذهبي", "فضي"]
     assert variants[0]["id"] == "7"
     assert variants[0]["selections"][0] == {"name": "اللون", "value": "ذهبي"}
+
+
+def test_missing_variant_identity_never_becomes_array_position():
+    raw = {"id": 17, "variants": [{"sku": "NO-ID", "attributes": {"Color": "Black"}},
+                                   {"id": "real-variant", "sku": "REAL"}]}
+    doc = _details_patch(raw, user_id="owner")
+    assert doc["variants"][0]["id"] is None
+    assert doc["variants"][1]["id"] == "real-variant"
+    # Retain the unresolved stock combination rather than treating the product
+    # as a base-only product or silently losing it during discovery.
+    assert doc["variants_count"] == 2
+    assert doc["variants"][0]["selections"] == [{"name": "Color", "value": "Black"}]
+
+
+def test_malformed_variant_id_cannot_become_a_display_label_identity():
+    values = _normalize_variants([{"id": {"name": "display-only"}}, {"id": True}, {"id": "  "}, {"id": 7}])
+    assert [row["id"] for row in values] == [None, None, None, "7"]

@@ -1,0 +1,14 @@
+{
+  "baseline": "3411a19448d5d34c9aa18e48497ef36028a819a0",
+  "success": true,
+  "suites": 18,
+  "passed": 190,
+  "failed": 0,
+  "scope": "Focused source tests only; fresh exact-head CI and browser results recorded in Issue1006/PR1247",
+  "runtime_sha256": {
+    "frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx": "11ac87759507f318691c2572623de941ce83e5e0af035cf1d03099aeb29b1e93",
+    "frontend/src/pages/accounting/onboarding/OpeningDomainContext.jsx": "c8e886a72ad834bd2a5d3c49aa1c86564da2c3a238c070619bed648f0634434c",
+    "frontend/src/pages/accounting/onboarding/OpeningEntityEditor.jsx": "6c26ea270a762685a4cf5a40a66227a53783eabfbbfc0149412b2842fb162e31",
+    "frontend/src/services/accountingOnboarding.js": "84ba8cfd6fe1a1926440ac725fbeec96d6df7298edc66380391f5c1e9c0c7049"
+  }
+}

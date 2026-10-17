@@ -98,16 +98,109 @@ def _catalog_options(value):
     return []
 
 
+def _catalog_variant_id(row):
+    value = row.get("id") if isinstance(row, dict) else None
+    return str(value).strip() if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
+
+
+def _catalog_count(value):
+    return int(value) if isinstance(value, (str, int)) and str(value).isdigit() else 0
+
+
+def _catalog_source_time(value):
+    # Mongo returns stored UTC datetimes without tzinfo by default. External
+    # strings, however, must identify their timezone before they can order sources.
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+        except ValueError:
+            pass
+    return None
+
+
+def _catalog_provenance(product):
+    """Resolve retained detail/light snapshots for this read, never repair history."""
+    details, light = product.get("raw_salla_details"), product.get("raw_salla")
+    if not isinstance(details, dict) or not isinstance(light, dict) or details == light:
+        return product, False
+    # Arrival/sync time does not prove a newer source revision: an old response
+    # can arrive last. Unordered contradictory source evidence stays fail closed.
+    times = [_catalog_source_time(raw.get("updated_at") or raw.get("date_updated"))
+             for raw in (details, light)]
+    selected = None
+    if all(times) and times[0] != times[1]:
+        selected = details if times[0] > times[1] else light
+    else:
+        fields = ("options", "product_options", "variants", "skus", "product_variants")
+        if {k: details[k] for k in fields if k in details} == {k: light[k] for k in fields if k in light}:
+            return product, False
+
+    if selected is None:
+        # Unordered contradictory evidence must not prove customization-only or
+        # make a retained variant selectable. Preserve option evidence for the UI.
+        options = [*_catalog_options(details.get("options") or details.get("product_options")),
+                   *_catalog_options(light.get("options") or light.get("product_options"))]
+        required = bool(options or product.get("options") or _catalog_count(product.get("options_count"))
+                        or product.get("variants") or _catalog_count(product.get("variants_count"))
+                        or any(raw.get(k) for raw in (details, light)
+                               for k in ("variants", "skus", "product_variants")))
+        return {**product, "options": options or product.get("options"), "variants": [],
+                "variants_count": 0}, required
+
+    # Do not combine the winning options with stale normalized variants. Missing
+    # combinations in the winning snapshot remain missing, not an empty proof.
+    other = light if selected is details else details
+    prior_options = _catalog_options(other.get("options") or other.get("product_options"))
+    options = _catalog_options(selected.get("options") or selected.get("product_options"))
+    option_sources = [selected[k] for k in ("options", "product_options") if k in selected]
+    valid_options = bool(option_sources) and all(isinstance(value, list) and all(isinstance(row, dict) for row in value)
+                                                for value in option_sources)
+    if not valid_options:
+        options = prior_options or _catalog_options(product.get("options"))
+    variant_sources = [selected[k] for k in ("variants", "skus", "product_variants") if k in selected]
+    rows = next((value for value in variant_sources if value), [])
+    prior_evidence = bool(prior_options or product.get("options") or _catalog_count(product.get("options_count"))
+                          or product.get("variants") or _catalog_count(product.get("variants_count"))
+                          or any(other.get(k) for k in ("variants", "skus", "product_variants")))
+    # Missing fields in a partial payload do not prove that older stock vanished.
+    valid_variants = bool(variant_sources) and all(isinstance(value, list) for value in variant_sources)
+    incomplete_removal = (not valid_variants or not valid_options) and prior_evidence
+    return {**product, "options": options,
+            "options_count": len(options) if valid_options else max(len(options), _catalog_count(product.get("options_count"))),
+            "variants": rows, "variants_count": len(rows) if isinstance(rows, (list, dict)) else 0,
+            "raw_salla": selected, "raw_salla_details": selected}, incomplete_removal
+
+
+def _empty_customization_variant_source(product, options):
+    # Both sync producers default absent variants to [] / 0. Only retained
+    # source data can distinguish that default from an explicitly empty source.
+    # _catalog_provenance resolves competing snapshots before this proof is used.
+    details = product.get("raw_salla_details")
+    raw = details if isinstance(details, dict) else product.get("raw_salla")
+    if not isinstance(raw, dict):
+        return False
+    sources = [raw[key] for key in ("variants", "skus", "product_variants") if key in raw]
+    source_options = _catalog_options(raw.get("options") or raw.get("product_options"))
+    return (bool(sources) and all(isinstance(value, list) and not value for value in sources)
+            and bool(options) and len(source_options) == len(options)
+            and _catalog_count(product.get("options_count")) <= len(options)
+            and all(option.get("type") == "text" for option in [*options, *source_options]))
+
+
 async def onboarding_inventory_catalog(db, owner):
     # Product V2 sync persists raw_salla.options; details refresh additionally
     # persists normalized options and variant.selections in this same V2 row.
     products = await _rows(db, "mezan_products_v2", owner,
         {key: 1 for key in ("mezan_product_id", "name", "sku", "barcode", "main_image",
-                           "variants", "variants_count", "options", "options_count", "raw_salla")}, {"archived": {"$ne": True}})
-    choices = []
+                           "variants", "variants_count", "options", "options_count", "raw_salla", "raw_salla_details")}, {"archived": {"$ne": True}})
+    choices, variant_warnings = [], []
     for product in products:
         if not product.get("mezan_product_id"):
             continue
+        product, source_uncertain = _catalog_provenance(product)
         image = _catalog_image(product.get("main_image"))
         raw = product.get("raw_salla") if isinstance(product.get("raw_salla"), dict) else {}
         options = _catalog_options(product.get("options") or raw.get("options") or raw.get("product_options"))
@@ -117,18 +210,37 @@ async def onboarding_inventory_catalog(db, owner):
             variant_rows = list(variant_rows.values())
         if not isinstance(variant_rows, list):
             variant_rows = []
+        variant_counts = {}
+        for row in variant_rows:
+            key = _catalog_variant_id(row)
+            variant_counts[key] = variant_counts.get(key, 0) + 1
         for variant in variant_rows:
-            if not isinstance(variant, dict) or variant.get("id") is None:
+            variant_id = _catalog_variant_id(variant)
+            if not variant_id or variant_counts[variant_id] != 1:
                 continue
             selections = variant.get("selections") or variant.get("options") or variant.get("values") or variant.get("attributes") or []
             selections = _catalog_options(selections)
-            variants.append({"id": str(variant["id"]), "name": variant.get("name") or variant.get("sku") or str(variant["id"]),
+            variants.append({"id": variant_id, "name": variant.get("name") or variant.get("sku") or variant_id,
                 "sku": variant.get("sku"), "barcode": variant.get("barcode") or variant.get("gtin"),
                 "options": selections, "image_url": _catalog_image(variant.get("image") or variant.get("image_url")) or image})
+        declared_count = _catalog_count(product.get("variants_count"))
+        unresolved = max(len(variant_rows), declared_count) - len(variants)
+        if unresolved:
+            variant_warnings.append({"code": "inventory_variant_identity_unresolved", "product_v2_id": product["mezan_product_id"], "count": unresolved})
+        options_present = bool(options or _catalog_count(product.get("options_count")))
+        empty_customization_source = not source_uncertain and _empty_customization_variant_source(product, options)
+        variants_required = bool(source_uncertain or variant_rows or declared_count or product.get("variants")
+                                 or (options_present and not empty_customization_source))
+        source_missing = variants_required and not variant_rows
+        if source_missing:
+            variant_warnings.append({"code": "inventory_variant_source_missing", "product_v2_id": product["mezan_product_id"]})
         choices.append({"id": product["mezan_product_id"], "product_v2_id": product["mezan_product_id"],
             "name": product.get("name"), "sku": product.get("sku"), "barcode": product.get("barcode"),
             "main_image": image, "image_url": image, "options": options,
-            "variants_required": bool(product.get("variants") or product.get("variants_count") or options or product.get("options_count")), "variants": variants})
+            "variants_required": variants_required,
+            "variants_source_available": bool(variant_rows or empty_customization_source),
+            "variants_source_missing": source_missing,
+            "unresolved_variants_count": unresolved, "variants": variants})
     resources = await _rows(db, "mezan_cost_resources_v2", owner,
         {key: 1 for key in ("id", "name", "code", "category_ids", "unit", "kind", "status", "track_inventory")},
         {**ACTIVE, "status": "active", "track_inventory": True, "kind": {"$ne": "service"}})
@@ -144,7 +256,7 @@ async def onboarding_inventory_catalog(db, owner):
     locations = [{**row, "provenance": "AMBIGUOUS", "physical_approval_verified": False}
                  for row in locations if row.get("id") and row.get("warehouse_id")
                  and (row.get("purpose") or cabinets.get(row.get("cabinet_id"), {}).get("purpose")) == "permanent_storage"]
-    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}]
+    warnings = [{"code": "inventory_account_mapping_requires_opening_contract"}, *variant_warnings]
     if locations:
         warnings.append({"code": "warehouse_location_provenance_ambiguous", "count": len(locations)})
     return {"products": choices, "components": components, "categories": categories, "locations": locations,

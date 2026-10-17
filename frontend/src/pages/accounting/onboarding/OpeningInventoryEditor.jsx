@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { inventoryTotal, scaledDecimal } from "./onboardingDecimal";
-import { inventoryImage, optionSummary, productIdentity, rowProductIdentity, searchProducts } from "./inventoryCatalogPresentation";
+import { inventoryImage, optionSummary, productIdentity, rowProductIdentity, searchProducts, requiresStockVariant, selectableStockVariants, stockVariantSourceIncomplete, incompleteStockVariantMessage } from "./inventoryCatalogPresentation";
 
 const inputClass = "w-full rounded-lg border border-slate-300 bg-white p-2 text-sm";
 const buttonClass = "rounded-lg border border-slate-300 px-3 py-2 text-sm";
@@ -22,8 +22,9 @@ export function validateOpeningInventoryRows(rows = [], context = {}) {
         let identity;
         if (row.item_type === "PRODUCT") {
             if (!product) error("product_id", "اختر منتجًا من كتالوج V2.");
-            if ((product?.variants_required || product?.variants_count || product?.variants?.length || product?.options?.length) && !row.variant_id) error("variant_id", "اختر الخيار الأصلي؛ إذا لم يتوفر يلزم استكمال الكتالوج.");
-            if (row.variant_id && !(product?.variants || []).some(v => same(v.id, row.variant_id))) error("variant_id", "الخيار غير مطابق للكتالوج.");
+            if (stockVariantSourceIncomplete(product)) error("variant_id", incompleteStockVariantMessage);
+            if (requiresStockVariant(product) && !row.variant_id) error("variant_id", "اختر تركيبة المخزون الأصلية؛ إذا لم تتوفر يلزم استكمال هوية المصدر.");
+            if (row.variant_id && !selectableStockVariants(product).some(v => same(v.id, row.variant_id))) error("variant_id", "الخيار غير مطابق للكتالوج.");
             identity = `product:${rowProductIdentity(row)}:${row.variant_id || ""}`;
         } else if (row.item_type === "STOCK_COMPONENT") {
             if (!component || !eligible(component) || !(component.category_ids || []).some(id => same(id, row.category_id))) error("resource_id", "اختر مكوّنًا مخزنيًا نشطًا تابعًا للتصنيف.");
@@ -62,38 +63,53 @@ function ProductPicker({ products, selected, index, onSelect }) {
     return <div className="space-y-2">
         <Field label="بحث المنتج بالاسم أو SKU أو الباركود أو المعرّف"><input aria-label={`بحث المنتج ${index + 1}`} className={inputClass} value={query} onFocus={() => setOpen(true)} onChange={e => { setQuery(e.target.value); setOpen(true); }} /></Field>
         {selected && <button type="button" className={buttonClass} onClick={() => setOpen(!open)}>تغيير المنتج: {selected.name}</button>}
-        {open && <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border p-2" aria-label={`نتائج المنتجات ${index + 1}`}><p className="text-xs">{results.length} نتيجة{results.length > 50 ? " · أضف تفاصيل للبحث لعرض بقية النتائج" : ""}</p>{results.slice(0, 50).map(product => <button key={productIdentity(product)} type="button" className="flex w-full items-center gap-3 rounded-lg p-2 text-right hover:bg-emerald-50 focus:bg-emerald-50" onClick={() => { onSelect(product); setOpen(false); setQuery(""); }}><ProductImage product={product} /><span><strong>{product.name}</strong><span className="block text-xs">SKU: {product.sku || "—"} · barcode: {product.barcode || "—"}</span><span className="block text-xs">{optionSummary(product) || "بلا خيارات"}</span></span></button>)}</div>}
+        {open && <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border p-2" aria-label={`نتائج المنتجات ${index + 1}`}><p className="text-xs">{results.length} نتيجة{results.length > 50 ? " · أضف تفاصيل للبحث لعرض بقية النتائج" : ""}</p>{!results.length && <p role="status" className="p-3 text-sm">{products.length ? "لا توجد منتجات مطابقة للبحث." : "لا تتوفر منتجات في الكتالوج الحالي. حدّث الكتالوج وتحقق من مصدر المنتج."}</p>}{results.slice(0, 50).map(product => <button key={productIdentity(product)} type="button" className="flex w-full items-center gap-3 rounded-lg p-2 text-right hover:bg-emerald-50 focus:bg-emerald-50" onClick={() => { onSelect(product); setOpen(false); setQuery(""); }}><ProductImage product={product} /><span><strong>{product.name}</strong><span className="block text-xs">SKU: {product.sku || "—"} · barcode: {product.barcode || "—"}</span><span className="block text-xs">{optionSummary(product) || "بلا خيارات"}</span><span className="block break-all text-xs" dir="ltr">{productIdentity(product)}</span></span></button>)}</div>}
     </div>;
 }
-const fixed = (value, scale) => `${value / 10n ** BigInt(scale)}.${String(value % 10n ** BigInt(scale)).padStart(scale, "0")}`;
+function ComponentPicker({ components, categoryId, selectedId, index, onSelect }) {
+    const [query, setQuery] = useState("");
+    const available = components.filter(c => eligible(c) && (c.category_ids || []).some(id => same(id, categoryId)));
+    const needle = query.trim().toLocaleLowerCase();
+    const results = available.filter(c => same(c.id, selectedId) || [c.name, c.id, c.code, c.unit].some(value => String(value || "").toLocaleLowerCase().includes(needle)));
+    return <div className="space-y-2">
+        <Field label="بحث المكوّن بالاسم أو معرّف ميزان"><input aria-label={`بحث المكوّن ${index + 1}`} className={inputClass} value={query} onChange={e => setQuery(e.target.value)} /></Field>
+        <Field label="المكوّن"><select aria-label={`المكوّن ${index + 1}`} className={inputClass} value={selectedId} onChange={e => onSelect(e.target.value)}><option value="">اختر المكوّن</option>{results.map(c => <option key={c.id} value={c.id}>{[c.name, c.code, c.unit].filter(Boolean).join(" · ")}</option>)}</select></Field>
+        {!categoryId ? <p className="text-sm text-slate-600">اختر تصنيف المكوّن المسجل أولًا.</p> : !results.length && <p role="status" className="text-sm text-amber-800">{available.length ? "لا توجد مكونات مطابقة للبحث." : "لا توجد مكونات مخزنية نشطة في هذا التصنيف."}</p>}
+    </div>;
+}
+const fixed = (value, scale) => { const sign = value < 0n ? "-" : "", absolute = value < 0n ? -value : value; return `${sign}${absolute / 10n ** BigInt(scale)}.${String(absolute % 10n ** BigInt(scale)).padStart(scale, "0")}`; };
+const quantityText = value => fixed(value, 6).replace(/\.?0+$/, "");
 export default function OpeningInventoryEditor({ value = [], onChange, context = {} }) {
     const { products = [], components = [], categories = [], locations = [] } = context;
     const edit = (index, patch) => onChange(value.map((row, i) => i === index ? { ...row, ...patch } : row));
     const editAllocation = (index, ai, patch) => edit(index, { allocations: value[index].allocations.map((a, i) => i === ai ? { ...a, ...patch } : a) });
     const cost = (index, field, nextValue) => { const next = { ...value[index], [field]: nextValue }; next.opening_total_cost = inventoryTotal(next.opening_quantity, next.opening_unit_cost); edit(index, next); };
     const errors = validateOpeningInventoryRows(value, context);
-    const quantity = value.reduce((sum, row) => sum + (scaledDecimal(row.opening_quantity) || 0n), 0n);
+    const completeValues = value.length > 0 && value.every(row => inventoryTotal(row.opening_quantity, row.opening_unit_cost) !== "");
     const total = value.reduce((sum, row) => sum + (scaledDecimal(inventoryTotal(row.opening_quantity, row.opening_unit_cost), 2) || 0n), 0n);
-    return <section dir="rtl" className="space-y-4" aria-label="المخزون الافتتاحي">
-        <p className="text-sm text-slate-600">مسودة تقييم مالي. التوزيع على المستودع والخانات اختياري، وحفظه لا يثبت اعتماد المخزون الفعلي.</p>
-        <div aria-label="ملخص المخزون" className="grid gap-3 rounded-xl bg-emerald-50 p-4 sm:grid-cols-4"><p>أسطر المنتجات: {value.filter(r => r.item_type === "PRODUCT").length}</p><p>أسطر المكوّنات: {value.filter(r => r.item_type === "STOCK_COMPONENT").length}</p><p>مجموع الكمية: {fixed(quantity, 6).replace(/\.?0+$/, "")} <small>(وحدات متنوعة)</small></p><p>قيمة المخزون: <strong>{fixed(total, 2)} SAR</strong></p></div>
-        {value.map((row, index) => {
+    const renderRow = (row, index) => {
             const product = products.find(p => same(productIdentity(p), rowProductIdentity(row)));
-            const variant = product?.variants?.find(v => same(v.id, row.variant_id));
+            const variants = selectableStockVariants(product);
+            const variant = variants.find(v => same(v.id, row.variant_id));
             const component = components.find(c => same(c.id, row.resource_id));
+            const allocated = (row.allocations || []).every(a => positive(a.quantity)) ? row.allocations.reduce((sum, a) => sum + scaledDecimal(a.quantity), 0n) : null;
             const numberField = (field, label, step) => <Field label={label}><input aria-label={`${label} ${index + 1}`} className={inputClass} type="number" min="0" step={step} value={row[field] ?? ""} onChange={e => cost(index, field, e.target.value)} /></Field>;
             return <fieldset key={index} className="space-y-3 rounded-xl border p-4"><legend className="px-2 font-bold">بند المخزون {index + 1}</legend>
                 <Field label="نوع البند"><select aria-label={`نوع البند ${index + 1}`} className={inputClass} value={row.item_type} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), item_type: e.target.value })}><option value="PRODUCT">منتج</option><option value="STOCK_COMPONENT">مكوّن مخزني</option></select></Field>
                 {row.item_type === "PRODUCT" ? <>
                     <ProductPicker products={products} selected={product} index={index} onSelect={p => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: productIdentity(p), product_id: productIdentity(p) })} />
-                    {(product?.variants_required || product?.options?.length || product?.variants?.length) ? <Field label="خيار المنتج — مطلوب"><select aria-label={`خيار المنتج ${index + 1}`} className={inputClass} value={row.variant_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: rowProductIdentity(row), product_id: rowProductIdentity(row), variant_id: e.target.value })}><option value="">اختر الخيار الأصلي</option>{(product.variants || []).map(v => <option key={v.id} value={v.id}>{optionSummary(product, v) || v.id} · {v.sku || ""} · {v.barcode || ""}</option>)}</select></Field> : null}
+                    {requiresStockVariant(product) ? <Field label="تركيبة الخيارات المخزنية — مطلوبة"><select aria-label={`خيار المنتج ${index + 1}`} className={inputClass} value={row.variant_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), product_v2_id: rowProductIdentity(row), product_id: rowProductIdentity(row), variant_id: e.target.value })}><option value="">اختر التركيبة الأصلية</option>{variants.map(v => <option key={v.id} value={v.id}>{optionSummary(product, v) || v.id} · {v.sku || v.id}</option>)}</select></Field> : null}
+                    {product && stockVariantSourceIncomplete(product) && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{incompleteStockVariantMessage}</p>}
                     {product && <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3"><ProductImage product={product} variant={variant} /><div><strong>{product.name}</strong><p>{variant ? optionSummary(product, variant) : optionSummary(product)}</p><p className="text-xs">SKU: {variant?.sku || product.sku || "—"} · barcode: {variant?.barcode || product.barcode || "—"}</p></div></div>}
+                    {product && <p className="break-all text-xs text-slate-600">هوية المنتج: <bdi>{productIdentity(product)}</bdi>{variant && <> · هوية التركيبة: <bdi>{variant.id}</bdi></>} · كمية المنتج عدد صحيح وفق عقد المخزون.</p>}
                 </> : <>
                     <Field label="التصنيف"><select aria-label={`التصنيف ${index + 1}`} className={inputClass} value={row.category_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", category_id: e.target.value })}><option value="">اختر التصنيف</option>{categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
-                    <Field label="المكوّن"><select aria-label={`المكوّن ${index + 1}`} className={inputClass} value={row.resource_id} onChange={e => edit(index, { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", category_id: row.category_id, resource_id: e.target.value })}><option value="">اختر المكوّن</option>{components.filter(c => eligible(c) && (c.category_ids || []).some(id => same(id, row.category_id))).map(c => <option key={c.id} value={c.id}>{c.name} · {c.code} · {c.unit}</option>)}</select></Field>
+                    <ComponentPicker components={components} categoryId={row.category_id} selectedId={row.resource_id} index={index} onSelect={id => edit(index, { ...emptyOpeningInventoryRow(), item_type: "STOCK_COMPONENT", category_id: row.category_id, resource_id: id })} />
                     <p>الوحدة المسجلة: <strong>{component?.unit || "غير محددة"}</strong></p>
+                    {component && <p className="break-all text-xs text-slate-600">معرّف المكوّن في ميزان: <bdi>{component.id}</bdi></p>}
                 </>}
                 <div className="grid gap-3 sm:grid-cols-3">{numberField("opening_quantity", "الكمية", row.item_type === "PRODUCT" ? "1" : "any")}{numberField("opening_unit_cost", "تكلفة الوحدة", "0.000001")}<Field label="الإجمالي"><input aria-label={`الإجمالي ${index + 1}`} className={inputClass} readOnly value={inventoryTotal(row.opening_quantity, row.opening_unit_cost)} /></Field></div>
+                <p className="text-xs text-slate-600">التكلفة والقيمة بالريال SAR. القيمة غير المدخلة تبقى معلقة؛ حفظ هذا السطر لا ينشئ رصيدًا ماليًا.</p>
                 {(row.allocations || []).map((a, ai) => <fieldset key={ai} className="space-y-2 rounded-lg border bg-slate-50 p-3"><legend>توزيع اختياري {ai + 1}</legend>
                     <Field label="المستودع / الخانة"><select aria-label={`الخانة ${index + 1}-${ai + 1}`} className={inputClass} value={a.location_id} onChange={e => editAllocation(index, ai, { location_id: e.target.value, scanned_location_barcode: "" })}><option value="">اختر الخانة</option>{locations.map(l => <option key={l.id} value={l.id}>{l.warehouse_name || l.warehouse_id} / {l.code || l.name || l.id} · {l.provenance || "AMBIGUOUS"}</option>)}</select></Field>
                     <p className="text-xs">AMBIGUOUS: مصدر إنشاء الخانة غير مثبت بعقد V2؛ لا تُعد دليل اعتماد فعلي.</p>
@@ -101,10 +117,21 @@ export default function OpeningInventoryEditor({ value = [], onChange, context =
                     <Field label="باركود الخانة — اختياري"><input aria-label={`باركود الخانة ${index + 1}-${ai + 1}`} className={inputClass} value={a.scanned_location_barcode} onChange={e => editAllocation(index, ai, { scanned_location_barcode: e.target.value })} /></Field>
                     <button type="button" className={buttonClass} onClick={() => edit(index, { allocations: row.allocations.filter((_, i) => i !== ai) })}>حذف التوزيع</button>
                 </fieldset>)}
+                {row.allocations?.length > 0 && <p aria-label={`مطابقة توزيع البند ${index + 1}`} className="text-sm">{allocated !== null && positive(row.opening_quantity) ? `الموزّع: ${quantityText(allocated)} · الفرق عن كمية السطر: ${quantityText(scaledDecimal(row.opening_quantity) - allocated)}` : "مطابقة التوزيع بانتظار إدخال الكميات."}</p>}
+                {!locations.length && <p className="text-sm text-slate-600">لا تتوفر خانات تخزين في الكتالوج الحالي. يمكن حفظ مسودة الكمية والتكلفة دون إثبات توزيع فعلي.</p>}
                 {errors.some(e => e.row === index) && <ul className="text-sm text-rose-700" aria-label={`نواقص البند ${index + 1}`}>{errors.filter(e => e.row === index).map(e => <li key={e.field}>{e.message}</li>)}</ul>}
                 <div className="flex gap-2"><button type="button" className={buttonClass} onClick={() => edit(index, { allocations: [...(row.allocations || []), allocation()] })}>إضافة توزيع اختياري</button><button type="button" className={buttonClass} onClick={() => onChange(value.filter((_, i) => i !== index))}>حذف البند</button></div>
             </fieldset>;
-        })}
-        <button type="button" className={buttonClass} onClick={() => onChange([...value, emptyOpeningInventoryRow()])}>إضافة منتج أو مكوّن</button>
+    };
+    return <section dir="rtl" className="space-y-5" aria-label="المخزون الافتتاحي">
+        <p className="text-sm text-slate-600">سجّل الكميات والتكلفة الفعلية لكل هوية موجودة. بيانات الجرد هنا مسودة مستقلة عن قيم الحسابات المالية واعتماد المخزون. التوزيع اختياري أثناء الإدخال.</p>
+        <div aria-label="ملخص المخزون" className="grid gap-3 rounded-xl bg-emerald-50 p-4 sm:grid-cols-3"><p>أسطر المنتجات: {value.filter(r => r.item_type === "PRODUCT").length}</p><p>أسطر المكوّنات: {value.filter(r => r.item_type === "STOCK_COMPONENT").length}</p><p>مجموع قيم الأسطر: <strong>{completeValues ? `${fixed(total, 2)} SAR` : "بانتظار استكمال الكميات والتكلفة"}</strong></p></div>
+        {[["PRODUCT", "المنتجات وتركيبات المخزون"], ["STOCK_COMPONENT", "المكونات والمواد المخزنية"]].map(([kind, title]) => <section key={kind} aria-label={title} className="space-y-3 rounded-xl border bg-white p-3 sm:p-5">
+            <h3 className="text-base font-bold">{title}</h3>
+            <p className="text-sm text-slate-600">{kind === "PRODUCT" ? "اختر المنتج ثم تركيبته الأصلية عند وجود مخزون مستقل للخيارات. لا تُضف كمية المنتج مرة أخرى فوق كميات تركيباته." : "كل مكوّن له هوية ميزان ووحدة مسجلة. لا تضاف قيمته مرة أخرى بسبب ارتباطه بمنتج نهائي."}</p>
+            {!value.some(row => row.item_type === kind) && <p className="rounded-lg bg-slate-50 p-3 text-sm">لم تُدخل بنودًا في هذا القسم بعد؛ هذا لا يثبت أن الرصيد صفر.</p>}
+            {value.map((row, index) => row.item_type === kind ? renderRow(row, index) : null)}
+            <button type="button" className={buttonClass} onClick={() => onChange([...value, { ...emptyOpeningInventoryRow(), item_type: kind }])}>{kind === "PRODUCT" ? "إضافة منتج أو مكوّن" : "إضافة مكوّن مخزني"}</button>
+        </section>)}
     </section>;
 }

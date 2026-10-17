@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from supplier_identity_service import SUPPLIERS_V2, require_supplier_v2
 from accounting_financial_identity import find_financial_account, list_financial_accounts
+from employee_payroll_status import require_employee_v2_identity
 
 KINDS = ("bank", "provider", "employee", "supplier", "external_person",
          "courier", "store_driver", "ad_account")
@@ -132,10 +133,16 @@ async def identities(db, owner, kind):
         key = str(row.get("id") or "")
         if not key or key in seen:
             fail()
+        if kind == "employee":
+            # Native writers use Employee OS's exact V2 id. The historical
+            # financial_entity_id is not an opening identity or balance source.
+            native = await require_employee_v2_identity(db, owner, row.get("id"))
+            if not usable(native) or native.get("status") != "active":
+                fail("onboarding_employee_financial_identity_dependency")
         seen.add(key)
         result.append({"id": key, "label": row.get("display_name") or row.get("name") or row.get("company_name") or key,
                        "kind": kind, "version": row.get("version"),
-                       **({"financial_identity_ready": row.get("financial_entity_id") == key} if kind == "employee" else {}),
+                       **({"financial_identity_ready": True} if kind == "employee" else {}),
                        "currency": row.get("currency"), "external_ref": row.get("external_ref")})
     return sorted(result, key=lambda row: row["id"])
 

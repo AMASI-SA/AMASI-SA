@@ -146,12 +146,18 @@ test("reviewed session is immutable but every screen stays navigable", async () 
 
 test("readiness distinguishes financial valuation from physical approval and exposes hard live gates", async () => {
     const b = backend();
-    b.transport.getOnboardingReadiness.mockResolvedValue({ source_ready: true, inventory_reconciled: true, inventory_physical_approval_verified: false, blockers: [], ready_for_live_post: false, live_gates: { smoke_b: "BLOCKED_BY_ENVIRONMENT" } });
+    b.transport.getOnboardingReadiness.mockResolvedValue({ source_ready: true, inventory_reconciled: true, inventory_physical_approval_verified: false,
+        blockers: ["accounting_v2_not_active", "opening_balance_not_verified", "smoke_b_production_proof_required", "live_owner_authorization_required"].map(code => ({ code })),
+        ready_for_live_post: false, live_gates: { smoke_b: "BLOCKED_BY_ENVIRONMENT" } });
     await render(b.transport); await resume(); await click("فحص جاهزية المصدر");
     expect(node.textContent).toContain("مطابقة التقييم المالي: مكتمل");
     expect(node.textContent).toContain("اعتماد الكميات الفعلية: غير مثبت");
-    expect(node.textContent).toContain("Smoke B: BLOCKED_BY_ENVIRONMENT");
-    expect(node.textContent).toContain("ready_for_live_post=false");
+    expect(node.textContent).toContain("Smoke B: إثبات بيئة التشغيل المطلوبة غير مكتمل");
+    expect(node.textContent).toContain("جاهزية الترحيل الفعلي: غير متاحة");
+    expect(node.textContent).not.toMatch(/BLOCKED_BY_ENVIRONMENT|ready_for_live_post/);
+    expect(node.textContent).not.toContain("تعذر إكمال الطلب");
+    for (const reason of ["التشغيل المالي V2 غير مفعّل", "لم يُثبت تنفيذ الافتتاح", "إثبات Smoke B لبيئة الإنتاج مطلوب", "تفويض المالك الصريح"]) expect(node.textContent).toContain(reason);
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
 });
 
 test("Stage 10 auto-loads, saves before navigation and refresh restores from server without localStorage", async () => {
@@ -172,6 +178,82 @@ test("catalog failure exposes retry and autosave conflict prevents navigation wi
     expect(node.textContent).toContain("تعذر تحميل الكتالوج"); await click("إعادة محاولة تحميل الكتالوج"); expect(loadInventory).toHaveBeenCalledTimes(2);
     await click("إضافة منتج أو مكوّن"); await value("الكمية 1", "8"); b.stale(); await click("التالي");
     expect(field("الكمية 1").value).toBe("8"); expect(node.textContent).toContain("لم تُحفظ آخر تعديلات المخزون");
+});
+
+const deferredCatalog = () => {
+    let resolve, reject;
+    const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+    return { promise, resolve, reject };
+};
+const catalogForProduct = product => ({ products: [product], components: [], locations: [], categories: [] });
+const customizationProduct = {
+    product_v2_id: "mpv2_123", name: "منتج بتخصيص سابق", options: [{ id: "engraving", name: "نص", type: "text" }],
+    variants: [], variants_required: false, variants_source_available: true,
+};
+const stockProductWithoutVariants = {
+    product_v2_id: "mpv2_123", name: "منتج بخيار مخزني حالي", options: [{ id: "size", name: "المقاس", type: "select" }],
+    variants: [], variants_required: true, variants_source_available: false, variants_source_missing: true,
+};
+const stockInventoryDraft = { rows: [{
+    item_type: "PRODUCT", product_v2_id: "mpv2_123", product_id: "mpv2_123", variant_id: "",
+    opening_quantity: "2", opening_unit_cost: "3", opening_total_cost: "6.00", allocations: [],
+}], financial_lines: [] };
+const variantSourceError = "تعذر تحميل تركيبات هذا المنتج — لا يمكن اعتماد جرد المنتج حتى تكتمل هوية التركيبات.";
+
+test.each(["stale empty success", "stale failure"])("Stage 10 ignores %s after a newer catalogue response", async olderResult => {
+    const b = backend({ inventory_draft: clone(stockInventoryDraft) }), older = deferredCatalog(), newer = deferredCatalog();
+    const loadInventory = jest.fn().mockResolvedValueOnce(catalogForProduct(customizationProduct))
+        .mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(field("خيار المنتج 1")).toBeNull();
+    // Two refresh events may already be queued before the loading state disables the button.
+    act(() => {
+        const refresh = [...node.querySelectorAll("button")].find(button => button.textContent === "تحديث الكتالوج");
+        refresh.click(); refresh.click();
+    });
+    expect(loadInventory).toHaveBeenCalledTimes(3);
+    await act(async () => newer.resolve(catalogForProduct(stockProductWithoutVariants)));
+    expect(node.textContent).toContain(variantSourceError);
+    expect(field("خيار المنتج 1")).not.toBeNull();
+    await act(async () => {
+        if (olderResult === "stale empty success") older.resolve(catalogForProduct(customizationProduct));
+        else older.reject(new Error("old catalogue request failed"));
+    });
+    expect(node.textContent).toContain(variantSourceError);
+    expect(node.textContent).toContain(stockProductWithoutVariants.name);
+    expect(field("خيار المنتج 1")).not.toBeNull();
+    expect(node.textContent).not.toContain("تعذر تحميل الكتالوج. بيانات المسودة محفوظة");
+    expect(node.textContent).not.toContain("جارٍ تحميل كتالوج V2");
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
+    expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
+    expect(b.peek().inventory_draft).toEqual(stockInventoryDraft);
+});
+
+test("Stage 10 repeated catalogue recovery preserves the draft and requires the latest canonical variant", async () => {
+    const b = backend({ inventory_draft: clone(stockInventoryDraft) });
+    const provenStock = { ...stockProductWithoutVariants, variants_source_available: true, variants_source_missing: false,
+        variants: [{ id: "canonical-size-S", name: "Small", options: [{ option_id: "size", value: "Small" }] }] };
+    const loadInventory = jest.fn().mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(catalogForProduct(stockProductWithoutVariants)).mockRejectedValueOnce(new Error("offline again"))
+        .mockResolvedValueOnce(catalogForProduct(provenStock)).mockResolvedValueOnce(catalogForProduct(provenStock));
+    await render(b.transport, { loadInventory }); await resume(); await stage(9);
+    expect(node.textContent).toContain("تعذر تحميل الكتالوج");
+    await click("إعادة محاولة تحميل الكتالوج");
+    expect(node.textContent).toContain(variantSourceError);
+    await click("تحديث الكتالوج");
+    expect(node.textContent).toContain("تعذر تحميل الكتالوج");
+    expect(node.textContent).toContain(variantSourceError);
+    await click("إعادة محاولة تحميل الكتالوج");
+    await click("تحديث الكتالوج");
+    expect(loadInventory).toHaveBeenCalledTimes(5);
+    expect(node.textContent).not.toContain(variantSourceError);
+    expect([...field("خيار المنتج 1").options].map(option => option.value)).toEqual(["", "canonical-size-S"]);
+    expect(field("خيار المنتج 1").value).toBe("");
+    expect(node.textContent).toContain("اختر تركيبة المخزون الأصلية");
+    expect(field("الكمية 1").value).toBe("2"); expect(field("تكلفة الوحدة 1").value).toBe("3");
+    expect(b.transport.saveOnboardingSection).not.toHaveBeenCalled();
+    expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
+    expect(b.peek().inventory_draft).toEqual(stockInventoryDraft);
 });
 
 test("Stage 10 autosave survives a lost response by retrying identical metadata request", async () => {
@@ -209,4 +291,77 @@ test("restoring during the autosave debounce cancels the old session draft", asy
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
     expect(b.transport.saveOnboardingInventoryDraft).not.toHaveBeenCalled();
     await act(async () => release(b.peek())); expect(field("الكمية 1")).toBeNull();
+});
+
+test("a failed employee source leaves banks usable and exposes the specific stage failure without losing the session", async () => {
+    const b = backend(), original = b.transport.getOnboardingIdentities.getMockImplementation();
+    b.transport.getOnboardingIdentities.mockImplementation(kind => kind === "employee" ? Promise.reject(fail("accounting_permission_required", 403)) : original(kind));
+    await render(b.transport);
+    expect(field("الجلسات المحفوظة").options.length).toBe(2);
+    await resume(); await stage(1); await click("اختيار جهة موجودة"); await value("الجهة 1", "bank-1"); await value("الرصيد الافتتاحي 1", "12"); await click("حفظ البيانات المالية");
+    expect(b.peek().sections.banks_cash.data.lines[0].original_amount).toBe("12");
+    await stage(3);
+    expect(node.textContent).toContain("مصدر الموظفين");
+    expect([...node.querySelectorAll("button")].find(b => b.textContent === "حفظ البيانات المالية").closest("fieldset").disabled).toBe(true);
+    expect(node.textContent).not.toContain("SECRET");
+});
+
+test.each([
+    ["prepaid", "financial_accounts"], ["postpaid", "financial_accounts"],
+    ["hybrid", "financial_accounts"], ["hybrid", "ad_account"],
+])("%s advertising recovery from %s preserves every saved fact and replays the complete replacement", async (mode, failedSource) => {
+    const wallet = mode !== "postpaid", payable = mode !== "prepaid";
+    const binding = { id: "ad-binding", funding_mode: mode,
+        ...(wallet ? { wallet_financial_account_id: "ad-wallet" } : {}),
+        ...(payable ? { payable_financial_account_id: "ad-debt" } : {}) };
+    const accounts = [
+        { id: "ad-wallet", account_type: "ad_prepaid_wallet", currency: "SAR", status: "active" },
+        { id: "ad-debt", account_type: "ad_payable", currency: "SAR", status: "active" },
+    ];
+    const fact = (financial_account_id, original_amount) => ({ category: "financial_account", financial_account_id,
+        original_amount, original_currency: "SAR", meaning: financial_account_id === "ad-debt" ? "owed_by_us" : "available_to_us",
+        evidence_file_id: "saved-ad-evidence" });
+    const provider = { category: "provider_receivable", entity_id: "tabby", original_amount: "7", original_currency: "SAR", meaning: "available_to_us", evidence_file_id: "provider-evidence" };
+    const initial = backend().peek();
+    initial.sections.providers = { status: "incomplete", evidence_file_id: null, reason: "", data: {
+        lines: [provider, ...(wallet ? [fact("ad-wallet", "20")] : []), ...(payable ? [fact("ad-debt", "30")] : [])],
+        provider_bindings: [{ provider: "tabby", bank_account_id: "bank-1", evidence_file_id: "provider-binding" }],
+    } };
+    const b = backend(initial), identities = b.transport.getOnboardingIdentities.getMockImplementation();
+    let failed = false;
+    b.transport.getOnboardingIdentities.mockImplementation(async kind => {
+        if (kind === "ad_account") {
+            if (failedSource === "ad_account" && !failed) { failed = true; throw fail("accounting_permission_required", 403); }
+            return { items: [binding] };
+        }
+        return identities(kind);
+    });
+    b.transport.getOnboardingFinancialAccounts.mockImplementation(async () => {
+        if (failedSource === "financial_accounts" && !failed) { failed = true; throw fail("accounting_permission_required", 403); }
+        return { items: accounts };
+    });
+    await render(b.transport); await resume(); await stage(11);
+    const saveButton = () => [...node.querySelectorAll("button")].find(button => button.textContent === "حفظ البيانات المالية");
+    expect(saveButton().closest("fieldset").disabled).toBe(true);
+    // Recovery must not discard unrelated unsaved input in another section.
+    await stage(5); await click("اختيار جهة موجودة"); await value("الجهة 1", "person-exact"); await value("مستحق لنا على الطرف 1", "90");
+    await click("إعادة تحميل مصادر التأسيس"); await stage(11);
+    expect(saveButton().closest("fieldset").disabled).toBe(false);
+    if (wallet) expect(field("محفظة مدفوعة مقدمًا 1").value).toBe("20");
+    if (payable) expect(field("مستحق للمنصة 1").value).toBe("30");
+    await value(payable ? "مستحق للمنصة 1" : "محفظة مدفوعة مقدمًا 1", payable ? "31" : "21");
+    const save = b.transport.saveOnboardingSection.getMockImplementation();
+    b.transport.saveOnboardingSection.mockImplementationOnce(async (...args) => { await save(...args); throw new Error("response lost"); }).mockImplementation(save);
+    await click("حفظ البيانات المالية"); await click("إعادة إرسال الطلب نفسه");
+    expect(b.transport.saveOnboardingSection.mock.calls[0]).toEqual(b.transport.saveOnboardingSection.mock.calls[1]);
+    const data = b.peek().sections.providers.data;
+    expect(data.lines.find(item => item.entity_id === "tabby")).toEqual(provider);
+    expect(data.provider_bindings).toEqual(initial.sections.providers.data.provider_bindings);
+    expect(data.lines.filter(item => item.category === "financial_account").map(item => [item.financial_account_id, item.original_amount]))
+        .toEqual([...(wallet ? [["ad-wallet", payable ? "20" : "21"]] : []), ...(payable ? [["ad-debt", "31"]] : [])]);
+    expect(b.peek().version).toBe(2);
+    await stage(5); expect(field("مستحق لنا على الطرف 1").value).toBe("90");
+    await resume(); await stage(11);
+    if (wallet) expect(field("محفظة مدفوعة مقدمًا 1").value).toBe(payable ? "20" : "21");
+    if (payable) expect(field("مستحق للمنصة 1").value).toBe("31");
 });

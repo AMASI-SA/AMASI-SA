@@ -22,6 +22,8 @@ if urlparse(uri).hostname not in {"127.0.0.1", "localhost", "::1"}:
     raise RuntimeError("Only an explicitly configured disposable loopback Mongo is allowed")
 
 from financial_provider_apps import make_financial_provider_apps_router
+from recurring_obligations_routes import make_recurring_obligations_router
+from store_delivery_driver_routes import make_store_delivery_driver_router
 from tests.test_financial_accounts_real_mongo import mongo_db, OWNER, ALL_NEW, _user
 from tests.test_accounting_onboarding import prepare, section_lines, line, fingerprint
 from accounting_onboarding_ssot import FeePolicyCreate, create_fee_policy
@@ -35,8 +37,10 @@ async def expanded_fixture(app, stack):
     child = FastAPI()
     await db.users.insert_one(_user(OWNER, [*ALL_NEW, "accounting.shipping.view", "accounting.rules.manage"], role="owner"))
     async def actor(request: Request):
-        return {"id": OWNER}
+        return await db.users.find_one({"id": OWNER}, {"_id": 0})
     child.include_router(make_financial_provider_apps_router(db, actor), prefix="/api")
+    child.include_router(make_store_delivery_driver_router(db, actor), prefix="/api")
+    child.include_router(make_recurring_obligations_router(db, actor), prefix="/api")
     async with AsyncClient(transport=ASGITransport(child), base_url="http://test") as client:
         context = SimpleNamespace(db=db, client=client)
         session, evidence, account = await prepare(context, amount="0.00")
@@ -71,9 +75,19 @@ async def lifespan(app):
         fixture = mongo_db.__wrapped__()
         stack.push_async_callback(fixture.aclose)
         db = await anext(fixture)
+        # The positive read surface uses the same persisted employee everywhere.
+        # Driver listing requires the existing operational management permission;
+        # recurring obligations remain owner-only and must still return 403 here.
+        # Seed capabilities before taking the non-session collection fingerprint.
+        await db.users.update_one({"id": "full"}, {"$addToSet": {
+            "accounting_permissions": "accounting.shipping.view",
+            "extra_permissions": "store_delivery.manage",
+        }})
         async def test_user(request: Request):
-            return {"id": "full"}
+            return await db.users.find_one({"id": "full"}, {"_id": 0})
         app.include_router(make_financial_provider_apps_router(db, test_user), prefix="/api")
+        app.include_router(make_store_delivery_driver_router(db, test_user), prefix="/api")
+        app.include_router(make_recurring_obligations_router(db, test_user), prefix="/api")
         async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
             context = SimpleNamespace(db=db, client=client)
             session, evidence, account = await prepare(context, amount="0.00")

@@ -50,6 +50,18 @@ test("errors never expose raw server exception text", () => {
     expect(service.onboardingErrorMessage({ response: { status: 409, data: { detail: { code: "onboarding_version_conflict" } } } })).toContain("أعد تحميل");
 });
 
+test("known transition gate failures explain the hold without changing transport or revealing arbitrary detail", () => {
+    for (const [code, explanation] of [
+        ["accounting_transition_contract_invalid", "تعذر إثبات حالة انتقال المحاسبة"],
+        ["later_phases_must_remain_locked", "يلزم بقاء مراحل الشحن والمخزون اللاحقة مقفلة"],
+    ]) {
+        const message = service.onboardingErrorMessage({ response: { data: { detail: { code, message: "private source value" } } } });
+        expect(message).toContain(explanation);
+        expect(message).not.toContain("private source value");
+    }
+    for (const method of Object.values(api)) expect(method).not.toHaveBeenCalled();
+});
+
 test("external person uses native V2 registry exact id", async () => {
     const person = { id: "persisted-id", kind: "external_person", name: "Person", phone: "123", notes: "Evidence" };
     api.post.mockResolvedValue({ data: person });
