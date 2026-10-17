@@ -12,13 +12,20 @@
   "source_build_ci": 39071725190,
   "artifact": 12115482519,
   "independent_tests": "64 passed +91 subtests;112.27s;isolated Mongo D loopback27476",
-  "source_ci": "14 passed; Review Completion Resumable39071725172 still running at checkpoint",
-  "next": "Wait source CI then push intent B to PR branch; verify final B CI; guarded merge/rehearsal/deploy/verify. Prepare rollback of correction only to baselinebb23.",
+  "source_ci": "15/15 PASS",
+  "next": "Linux /app governed rehearsal, then prepare/prepublish and authorized publish. Rollback source readiness underway.",
   "rollback_patch_sha256": "2ac1577406a231b4604c7c64c2faf002b808fad0a51db29b06daa7379110b91d",
   "limits": [
     "Live order cause not proven: configured /app DB exact-number diagnostic returned zero matches",
     "Physical printing untested",
     "APK46 courier pending wording and30s polling retained",
     "No live Salla or financial test writes"
-  ]
+  ],
+  "deployment_head": "f7b5a81cf92cfb43b1c7277ed95641f7f3c87d9f",
+  "intent_ci": "15 successful+1 nonapplicable skip; release39072170710 PASS",
+  "production_branch_changed": true,
+  "live_runtime_changed": false,
+  "rollback_source": "bcc1ec0d77a89668bce5684357c9cf847ca58a69",
+  "rollback_tree": "fc349020b854a2b09c269405a816c6898d9eea7f",
+  "rollback_branch": "codex/print-readback-rollback-20261018"
 }
