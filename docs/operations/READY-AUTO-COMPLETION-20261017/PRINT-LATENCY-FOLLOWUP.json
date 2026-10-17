@@ -1,0 +1,20 @@
+{
+  "scope": "shipping print only; preserve fast review approval",
+  "mobile": {
+    "pr": "https://github.com/AMASI-SA/amasi-mobile/pull/277",
+    "head": "958f83378e4bda58f3c356d9cee08a96d4d337fd",
+    "tree": "c229dbe9cec96d4c0a97541548959229bc9c1451",
+    "ci": "3/3 PASS;focused39075402901;mobile39075402926",
+    "apk": "not built;47 successor admission being prepared separately"
+  },
+  "backend": {
+    "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1432",
+    "head": "286e4bba20ef52dc026800da6ed8b49bdf7ee4ac",
+    "tree": "c72949f08fc0e3d6043499218495fee0bea2ca1d",
+    "ci": "Shipping Print Boundary39075609353 failed34 old mockseam cases; fixing; not release-ready"
+  },
+  "production": "unchanged since verified1431 f7b5a81",
+  "evidence": "logo held download fallback1501ms;reprint1downloadfor2renders;combined syntheticcourier8to5GET;reported minute not measured ondevice",
+  "device_acceptance": "not performed",
+  "review_changes": false
+}
