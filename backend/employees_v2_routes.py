@@ -31,6 +31,7 @@ from pymongo.errors import DuplicateKeyError
 from operational_atomic import employee_setup_atomic_owner, employee_lifecycle_atomic_owner
 from auth import hash_password
 from employee_password_policy import EMPLOYEE_PASSWORD_MIN_LENGTH
+from accounting_report_dates import accounting_instant, RIYADH
 from ai_store_access_contract import (
     PERMISSIONS,
     ROLE_ASSIGNMENTS,
@@ -363,6 +364,8 @@ async def _assert_salary_history_mutable(db, owner_id, employee, contract, effec
 
     Serializes with financial posting through employee_lifecycle_atomic_owner. No guessed date,
     legacy salary fallback, or rewrite of opening/settlement/ledger documents.
+    Legacy journal dates follow the same explicit-date/audit-date contract as
+    accounting reports; absent modern fields do not mean an unknown period.
     A forward change is allowed only beyond every evidenced affected period.
     """
     ids = list({str(value) for value in (
@@ -394,7 +397,6 @@ async def _assert_salary_history_mutable(db, owner_id, employee, contract, effec
     for row in rows + events:
         meta = row.get("metadata") or {}
         period = row.get("period") or meta.get("period")
-        raw_date = row.get("effective_at") or row.get("accounting_at") or meta.get("accounting_at")
         try:
             if row.get("accrued_through") or meta.get("accrued_through"):
                 last = date.fromisoformat(row.get("accrued_through") or meta["accrued_through"])
@@ -402,11 +404,14 @@ async def _assert_salary_history_mutable(db, owner_id, employee, contract, effec
                 year, month = map(int, str(period).split("-"))
                 last = date(year, month, calendar.monthrange(year, month)[1])
             else:
-                instant = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
-                if instant.tzinfo is None:
-                    raise ValueError("ambiguous accounting date")
-                from zoneinfo import ZoneInfo
-                last = instant.astimezone(ZoneInfo("Asia/Riyadh")).date()
+                dated_row = row
+                for key in ("effective_at", "accounting_at"):
+                    if key in row:
+                        dated_row = {**row, "metadata": {**meta, "accounting_at": row[key]}}
+                        break
+                # Ledger Core legacy rows carry posted_at/created_at, not
+                # effective_at. Never replace a malformed authoritative date.
+                last = accounting_instant(dated_row).astimezone(RIYADH).date()
         except (TypeError, ValueError):
             raise HTTPException(409, detail={"code": "employee_salary_adjustment_required"}) from None
         if row.get("entry_type") == "opening_balance" and meta.get("source") == "accounting_opening_balance_p01":

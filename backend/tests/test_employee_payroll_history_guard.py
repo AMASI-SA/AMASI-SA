@@ -20,6 +20,60 @@ async def setup_employee(db):
     return result["employee_id"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stamp_field", ["posted_at", "created_at"])
+async def test_forward_salary_edit_accepts_legacy_ledger_audit_date(db, stamp_field):
+    employee_id = await setup_employee(db)
+    legacy = {"user_id": "owner", "entity_type": "employee", "entity_id": employee_id,
+              "status": "posted", "entry_type": "payment", "amount": 1200,
+              stamp_field: "2026-10-16T12:00:00+03:00", "metadata": {}}
+    await db.general_ledger.insert_one(legacy)
+    result = await endpoint(db, "PUT")(employee_id, {
+        "expected_version": 1, **change("salary"), "salary_effective_date": "2026-10-17",
+    }, OWNER)
+    assert result["ok"] is True
+    assert await db.general_ledger.find_one({}) == legacy
+    contract = await db.mezan_employee_salary_contracts_v2.find_one({"employee_id": employee_id})
+    employee = await db.mezan_employees_v2.find_one({"id": employee_id})
+    from employee_payroll_status import salary_amount_on
+    assert salary_amount_on(contract_salary_row(contract, employee), date(2026, 10, 16)) == 3100
+    assert salary_amount_on(contract_salary_row(contract, employee), date(2026, 10, 17)) == 6200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("metadata", [{}, {"period": "2026-10"}])
+async def test_legacy_recorded_day_or_full_month_stays_frozen(db, metadata):
+    employee_id = await setup_employee(db)
+    await db.general_ledger.insert_one({
+        "user_id": "owner", "entity_type": "employee", "entity_id": employee_id,
+        "status": "posted", "posted_at": "2026-10-16T12:00:00+03:00", "metadata": metadata,
+    })
+    before = await state(db)
+    with pytest.raises(HTTPException) as exc:
+        await endpoint(db, "PUT")(employee_id, {
+            "expected_version": 1, **change("salary"),
+            "salary_effective_date": "2026-10-17" if metadata else "2026-10-16",
+        }, OWNER)
+    assert exc.value.detail["code"] == "employee_salary_adjustment_required"
+    assert await state(db) == before
+
+
+@pytest.mark.asyncio
+async def test_invalid_authoritative_ledger_date_never_falls_back_to_audit_date(db):
+    employee_id = await setup_employee(db)
+    await db.general_ledger.insert_one({
+        "user_id": "owner", "entity_type": "employee", "entity_id": employee_id,
+        "status": "posted", "effective_at": "invalid", "posted_at": "2026-10-01T00:00:00Z",
+    })
+    before = await state(db)
+    with pytest.raises(HTTPException) as exc:
+        await endpoint(db, "PUT")(employee_id, {
+            "expected_version": 1, **change("salary"), "salary_effective_date": "2026-10-17",
+        }, OWNER)
+    assert exc.value.detail["code"] == "employee_salary_adjustment_required"
+    assert await state(db) == before
+
+
 def change(kind):
     return {
         "hire": {"hire_date": "2026-10-15"},
