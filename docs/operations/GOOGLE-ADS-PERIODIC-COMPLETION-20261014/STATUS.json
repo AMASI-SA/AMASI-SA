@@ -1,0 +1,24 @@
+{
+  "task_id": "GOOGLE-ADS-PERIODIC-COMPLETION-20261014",
+  "status": "WIP_CURRENT_PRODUCTION_MOBILE_INTEGRATION_PENDING_FRESH_CI",
+  "pr": 1406,
+  "branch": "codex/google-periodic-current-prod-20261016",
+  "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
+  "previous_reviewed_B": "62c29d11e2a62531aadedcf88f459105994763a6",
+  "previous_source_A": "515af86450528e9a70c779a0d0869a3b26007c6d",
+  "previous_backup_branch": "codex/google-periodic-reviewed-62c29-backup",
+  "previous_verification": "341 Google backend tests and86 frontend tests passed;31 reviewed-B contexts success/skipped; clean Host20 adapter passed. Historical evidence only; old-base intent must not deploy.",
+  "scope": [
+    "Add native Google diagnostics to existing five-hour campaign cycle and shared list",
+    "Move standalone Google card to Google workspace only",
+    "Preserve mobile collapse/scroll and all current production features",
+    "Separate advisory notes from deterministic draft gaps; Search language compatibility; existing Smart common management"
+  ],
+  "merge_resolution": "Keep current mobile dashboard layout and remove only standalone Google mount. Update placement regression to native Google workspace while retaining mobile-card tests.",
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "paid_project_chat_requests": 0,
+  "production_changed": false,
+  "current_verification": "PENDING",
+  "next_safe_action": "Require new source CI/readiness candidate freeze, intent-only B and final reviewed-B adapter. Then fresh guard status and unchanged Production base before exact merge/publication/public and UI acceptance."
+}
