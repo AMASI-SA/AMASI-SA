@@ -1,0 +1,160 @@
+name: Dashboard B cooperative parser experiment
+on:
+  pull_request:
+    paths:
+      - 'backend/tests/dashboard_b_cooperative_client.py'
+      - 'backend/tests/dashboard_b_cooperative_experiment.py'
+      - 'backend/tests/test_dashboard_b_cooperative_correctness.py'
+      - 'backend/tests/test_dashboard_b_cooperative_mongo.py'
+      - '.github/workflows/dashboard-b-cooperative.yml'
+      - 'docs/DASHBOARD_B_COOPERATIVE_EXPERIMENT.md'
+permissions:
+  contents: read
+jobs:
+  correctness-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: '.:tests'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_DOTENV_DISABLED: '1'
+      JWT_SECRET: 'isolated-performance-pr1-ci-only'
+      MZ2_TEST_MONGO_URI: 'mongodb://127.0.0.1:27450/?replicaSet=performancepr1'
+      DASHBOARD_INTERACTIVE_EVIDENCE_PATH: '${{ github.workspace }}/cooperative.json'
+      DASHBOARD_COMPUTATION_CONCURRENCY_PATH: '${{ github.workspace }}/mutations.json'
+      DASHBOARD_COOPERATIVE_INTERLEAVING_PATH: '${{ github.workspace }}/cooperative-interleaving.json'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install fastapi==0.110.1 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.1 pytest pytest-asyncio httpx
+          mongomock-motor openpyxl cryptography reportlab python-multipart
+          pymupdf pillow qrcode arabic-reshaper python-bidi python-dotenv
+          PyJWT bcrypt email-validator psutil uvicorn==0.25.0
+      - name: Start isolated MongoDB 8.0.12 replica set
+        run: |
+          docker run -d --name performance-pr1 --network host mongo:8.0.12 --replSet performancepr1 --bind_ip 127.0.0.1 --port 27450
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'rs.initiate({_id:"performancepr1",members:[{_id:0,host:"127.0.0.1:27450"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' ; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Correctness and independent-process load smoke
+        working-directory: backend
+        env:
+          DASHBOARD_INTERACTIVE_SIZE: '100'
+          DASHBOARD_INTERACTIVE_SCENARIO: 'multi-different'
+          DASHBOARD_INTERACTIVE_REPEATS: '1'
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q -s -x
+          tests/test_dashboard_b_cooperative_mongo.py
+          tests/test_dashboard_b_cooperative_correctness.py
+          tests/test_dashboard_b_computation_mongo.py::test_full_json_equivalence
+          tests/test_dashboard_b_computation_mongo.py::test_new_request_observes_changed_database
+          tests/test_dashboard_v2_product_cost.py
+          tests/test_dashboard_v2_arabic_status_normalization.py
+          tests/test_dashboard_v2_salla_ads_executive.py
+          tests/test_dashboard_v2_ad_account_costs.py
+          --junitxml=../correctness.xml
+      - name: Require zero skipped tests
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          assert not ET.parse('correctness.xml').getroot().findall('.//skipped')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cooperative-correctness-${{ github.event.pull_request.head.sha }}
+          path: |
+            correctness.xml
+            mutations.json
+            cooperative-interleaving.json
+            cooperative.json
+  paired-load:
+    needs: correctness-and-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - size: 10000
+            scenario: multi-same
+          - size: 100000
+            scenario: single-same
+          - size: 100000
+            scenario: multi-different
+    env:
+      PYTHONPATH: '.:tests'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHON_DOTENV_DISABLED: '1'
+      JWT_SECRET: 'isolated-performance-pr1-ci-only'
+      MZ2_TEST_MONGO_URI: 'mongodb://127.0.0.1:27450/?replicaSet=performancepr1'
+      DASHBOARD_INTERACTIVE_EVIDENCE_PATH: '${{ github.workspace }}/cooperative.json'
+      DASHBOARD_COMPUTATION_CONCURRENCY_PATH: '${{ github.workspace }}/mutations.json'
+      DASHBOARD_COOPERATIVE_INTERLEAVING_PATH: '${{ github.workspace }}/cooperative-interleaving.json'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install targeted dependencies
+        run: >-
+          python -m pip install fastapi==0.110.1 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.1 pytest pytest-asyncio httpx
+          mongomock-motor openpyxl cryptography reportlab python-multipart
+          pymupdf pillow qrcode arabic-reshaper python-bidi python-dotenv
+          PyJWT bcrypt email-validator psutil uvicorn==0.25.0
+      - name: Start isolated MongoDB 8.0.12 replica set
+        run: |
+          docker run -d --name performance-pr1 --network host mongo:8.0.12 --replSet performancepr1 --bind_ip 127.0.0.1 --port 27450
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'rs.initiate({_id:"performancepr1",members:[{_id:0,host:"127.0.0.1:27450"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec performance-pr1 mongosh --port 27450 --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' ; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Current vs sharing control vs cooperative 1/5/10 ms
+        working-directory: backend
+        env:
+          DASHBOARD_INTERACTIVE_SIZE: '${{ matrix.size }}'
+          DASHBOARD_INTERACTIVE_SCENARIO: '${{ matrix.scenario }}'
+          DASHBOARD_INTERACTIVE_REPEATS: '6'
+        run: >-
+          python -m pytest --noconftest -p no:cacheprovider -q -s -x
+          tests/test_dashboard_b_cooperative_mongo.py
+          --junitxml=../cooperative-tests.xml
+      - name: Require zero skipped tests
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          assert not ET.parse('cooperative-tests.xml').getroot().findall('.//skipped')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cooperative-${{ matrix.size }}-${{ matrix.scenario }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            cooperative.json
+            cooperative-tests.xml
