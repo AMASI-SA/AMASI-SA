@@ -1,7 +1,7 @@
 {
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
-  "status": "DRAFT_REVIEW",
-  "branch": "codex/operational-opening-stock-20261017",
+  "status": "REVIEWED_INTENT_CI_PENDING",
+  "branch": "codex/operational-opening-stock-candidate-20261017",
   "base_sha": "196adb36d64f5bb595a52a4371efd38034941173",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
   "acceptance": [
@@ -14,8 +14,12 @@
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
   "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
-  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS. Review fix: full product/location/warehouse identities fail closed including archived/disabled duplicates; final new suite36 PASS.",
+  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending. After integration with Production2a774035:85 opening-inventory/employee-capability/salary-consistency tests PASS. Review fix: full product/location/warehouse identities fail closed including archived/disabled duplicates; final new suite36 PASS. Final36 tests rerun independently on Source A PASS. Source CI39029750215 PASS; Linux candidate intent artifact12100430152 archived at D:/codex-release-archives/mz2/opening-stock-ed89dd61. Windows file-mode validation not counted.",
   "production_changed": false,
   "release": "No prepare, prepublish, merge or publish performed for this task.",
-  "next": "Create fresh source candidate on latest Production without carrying intent-changing merge history, preserving this WIP branch; run candidate CI before v5 intent freeze."
+  "next": "Inspect CI for exact Intent B and Linux clean-clone rehearsal; no source changes after A. This status lives on checkpoint branch to preserve intent-only B.",
+  "source_sha": "ed89dd61894ba4b99eb5a79fbbb9e26ccf749845",
+  "intent_sha": "8074341157888dc805a909e4932e6e41eccc531c",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1420",
+  "release_id": "rg5-95d63b5d8c0971f54cf9962f39f623d6975274523b2e371f5e7a0c499d052669"
 }
