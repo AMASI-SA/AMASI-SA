@@ -3,7 +3,7 @@
   "branch": "codex/ready-prod177-integration-20261017",
   "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "BACKEND_VERIFIED_APK_BUILD_SUBMITTED",
+  "state": "APK46_VERIFIED_PRINT_REGRESSION_FIX_IN_PROGRESS",
   "production_changed": true,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -37,9 +37,11 @@
     "verify_output_sha256": "9eb930137d2b4c6cda729e49085e82dc2817e517d026568fd7ed9a5e565ce8fe"
   },
   "remaining": [
-    "Verify APK46 artifact and provide download link to owner for employee-device installation"
+    "Fix historical completed orders hidden by completion gate",
+    "Fix new completed order blocked completion including store courier",
+    "Final candidate review, CI, rollback, governed deployment and three-probe verification"
   ],
-  "next": "Follow single existing build; verify artifact; deliver APK link; no duplicate submit or OTA",
+  "next": "Android audit task owns isolated backend candidate; root reviews and deploys only after final validation. Owner explicitly authorized publishing correction.",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
   "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
@@ -63,7 +65,7 @@
     "candidate_ci": "39065342410 and39065371787 SUCCESS; Linux14negative testsPASS; fullquality52checksPASS andAndroidexport",
     "receipt_digest": "884909af45cd837650a960e46b3e41f7078f2b75918f42e300cc3ad7fa4e3902",
     "runner_digest": "0083d0713f31d1d668f5c088f64b76b35841251b60c9336b56a4e4362e0bc477",
-    "build": "b4e241ee-dd85-4a93-a302-fcf835c84f7e; single submission acknowledged exit0"
+    "build": "b4e241ee-dd85-4a93-a302-fcf835c84f7e FINISHED; artifact verified; owner download link delivered"
   },
   "production_change_scope": "PR1430 merged; live Backend/Frontend verified3 and matching lease inactive",
   "deployment_head": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1",
