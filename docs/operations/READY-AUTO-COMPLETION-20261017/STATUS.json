@@ -1,9 +1,9 @@
 {
   "task": "READY-AUTO-COMPLETION-20261017",
-  "branch": "codex/ready-auto-completion-20261017",
-  "base": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
+  "branch": "codex/ready-prod177-integration-20261017",
+  "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "WIP_NOT_FOR_RELEASE",
+  "state": "CURRENT_PRODUCTION_INTEGRATION_PENDING",
   "production_changed": false,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -37,14 +37,25 @@
     "Android final tested HEAD and coordinated compatible client release",
     "Production merge and local governed rehearsal, prepare/prepublish/deploy/verify"
   ],
-  "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
+  "next": "Complete fresh Mongo and CI for PR1430; freeze new intent; review APK candidate and coordinate authorized deployment",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
-  "source_head": "c77a614ac762d48f50885d60e8b6b005dd2789dc",
-  "source_tree": "ef9b704e53c3fd992ad9364cdddaa6daf8078941",
+  "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
+  "source_tree": "f581c3a6762fdd26de773454e67da04df9889e27",
   "evidence_branch": "codex/ready-auto-evidence-20261017 (documentation only, do not deploy)",
   "rollback_source": "d9945b7d961dfebca27fda5e08b3515ca922edbb exact baseline tree, not deployable until fresh intent/rehearsal",
-  "release_head": "ff442eb34a91fa618d10d0b3e1484e0be1e3a313",
-  "release_tree": "a2fffcfacba46c43f40b7901ed611891740fbf1a",
-  "rollback_release": "e6e161194d5ae5d27a623c91f652612e5e30a086"
+  "release_head": null,
+  "release_tree": null,
+  "rollback_release": "e6e161194d5ae5d27a623c91f652612e5e30a086",
+  "previous_verified_release": "ff442eb34a91fa618d10d0b3e1484e0be1e3a313 (historical, Production base advanced)",
+  "android": {
+    "source": "7e0db37c59f58785e7344a5f647089a221f6faf5",
+    "pr": 274,
+    "source_audit": "PASS_NOT_DEPLOYED",
+    "receipt_tests": "6 PASS",
+    "ci": "39062907673 pending",
+    "owner_decision": "new isolated reviewed APK then installation, no OTA",
+    "candidate": "46/1.0.31 being prepared separately",
+    "devices": "emulator only, no physical employee device attached"
+  }
 }
