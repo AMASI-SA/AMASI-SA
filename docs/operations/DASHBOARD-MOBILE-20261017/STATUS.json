@@ -3,7 +3,7 @@
   "scope": "Dashboard phone-width containment, icon-only independent card collapse, and horizontal access to all profit detail table columns.",
   "branch": "codex/dashboard-mobile-collapse-20261017",
   "base": "342bbefaba5d4a59e3a2988589d02a7efdb07aa4",
-  "state": "publication_in_progress",
+  "state": "published_verified",
   "completed": [
     "Explicit shrinkable one-column grid tracks and min-width:0 on dashboard columns.",
     "Independent accessible chevron controls preserve original headers and mounted body state.",
@@ -49,22 +49,53 @@
       "path": "/tmp/dashboard-mobile-26dc6f8-clean",
       "log": "/tmp/dashboard-mobile-26dc6f8-rehearsal.log",
       "result": "PASS exit0; matching runtime identity and isolated package boundary proof; completed72.31s"
+    },
+    "merge_ci": "Security Gate 39041706147, Mezan readiness 39041706186, CodeQL 39041706146: success",
+    "production_guard": {
+      "checks": 3,
+      "exit": 0,
+      "source_sha": "585db04b312509096b6802ae8a77bc36d46b5a32",
+      "deployment_sha": "fc51e2d581296270238d9b30d1612267287b08db",
+      "release_id": "rg5-0db5f5cde833dd72bac72abaef3467650bf1c1a77ced056303df7452930e363a",
+      "frontend_artifact_tree_sha256": "2feb8c2050130d7916b8c4acb2ef5cd4153f642d45cb421f3f61fc8fdd6c584a",
+      "build_meta_sha256": "c5ed85460b7f4b60b3b1a0d4dfce88a011aab801b6b89ac0f1e386c1c08f16cb",
+      "build_meta_bytes": 267419,
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "canonical_and_cache_busted_build_meta": "exact governed JSON bytes and MIME verified"
+    },
+    "live_dashboard": {
+      "url": "https://mezansalla.com/dashboard-advanced",
+      "panels": 11,
+      "icon_only": true,
+      "all_independently_collapsed": "PASS; 0 visible bodies; original headers retained",
+      "orders_independent_reopen": "PASS; 1 body visible and other10 remained collapsed",
+      "ads_scroll": "PASS; rightmost metric/Snapchat and leftmost Meta/Google Ads/total visually observed; region371px, table920px",
+      "shipping_scroll": "PASS; scrollLeft -234 then0; region386px, table620px",
+      "payment_scroll": "PASS; scrollLeft -389 then0; final fee/VAT columns visible; region371px, table760px",
+      "viewport_note": "Live desktop browser with bounded narrow card/table regions; not an actual mobile viewport or Safari validation"
     }
   },
-  "production_changed": "Source merged and /app updated; runtime switch not yet verified",
+  "production_changed": "yes: production merge fc51e2d581296270238d9b30d1612267287b08db published; matching source/runtime verified in three consecutive live Release Guard probes",
   "release_guard": {
-    "active": true,
+    "active": false,
     "actor": "codex-dashboard-mobile-20261017",
     "prepared_at": "2026-10-17T14:42:08.423742+00:00",
     "prepare_exit": 0,
     "prepublish_exit": 0,
-    "ready_to_publish": true
+    "ready_to_publish": true,
+    "verify_exit": 0,
+    "verified": true,
+    "checks": 3,
+    "verify_command": "python -B scripts/production_release_guard.py verify --url https://mezansalla.com",
+    "evidence": "/tmp/dashboard-mobile-verify.json",
+    "status_after_verify": "active:false"
   },
   "remaining": [
-    "Rendered phone/Safari acceptance and bidirectional detail-table scrolling.",
-    "Fresh production/guard/CI drift check, ready/review/merge, exact local rehearsal evidence, protocol-v5 prepare/prepublish, one UI publish and three live probes."
+    "Acceptance on an actual phone/mobile Safari remains unverified; no browser viewport-resize API was available. No further deployment work required."
   ],
-  "next_safe_action": "Wait for newer explicit deployment completion; no duplicate republish. Run actual /app guard verify against https://mezansalla.com; require3 matching probes and inactive lease. Then live dashboard UI validation.",
+  "next_safe_action": "Return published result to user. For a future phone-specific issue, first capture actual device/browser/viewport evidence; do not repeat this successful deployment or reuse its closed lease.",
   "source_sha": "585db04b312509096b6802ae8a77bc36d46b5a32",
   "source_tree": "c0dbb31f6ee54710e25bede95a32fc64d35925ac",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1423",
@@ -79,7 +110,19 @@
     "target": "https://mezansalla.com",
     "project": "Salla Analytics",
     "clicked_once": true,
-    "ui": "Deployment Started Oct17 05:43PM; Publishing in progress, packaging latest changes",
-    "verified": false
-  }
+    "ui": "New Deployment finished Oct17 05:52PM Asia/Aden; UI wording is Deployment finished, not literal Deployment Succeeded; Manage Publishing shows Live",
+    "verified": true,
+    "publish": 100,
+    "platform_marker": "b9c554a",
+    "started": "2026-10-17T17:43:00+03:00",
+    "finished_display": "2026-10-17 17:52 Asia/Aden",
+    "cloud_build_transcript": "not exposed by UI; runtime logs only; no Cloud Build argv/cwd or package snapshot-order claim"
+  },
+  "unrelated_work_preserved": [
+    "/app/INTENT-1367.json.gz",
+    "/app/deployer-agent-docs/",
+    "Existing unsaved editor content; no destructive reset"
+  ],
+  "evidence_branch": "codex/dashboard-mobile-evidence-20261017",
+  "evidence_branch_do_not_deploy": true
 }
