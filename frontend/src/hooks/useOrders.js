@@ -18,11 +18,15 @@ function uniqueOrders(rows) {
     return Array.from(unique.values());
 }
 
-export function useOrders({ statusGroup = null, statusExact = null } = {}) {
+export function useOrders({ statusGroup = null, statusExact = null, autoFilters = null } = {}) {
     const requestIdRef = useRef(0);
     const refreshInFlightRef = useRef(false);
     const ordersRef = useRef([]);
     const searchModeRef = useRef(false);
+    const combinedSearchRef = useRef(false);
+    const searchAbortRef = useRef(null);
+    const searchTimerRef = useRef(null);
+    const autoFilterKey = autoFilters === null ? null : JSON.stringify(autoFilters);
 
     const [orders, setOrders] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
@@ -39,6 +43,8 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     const loadFirstPage = useCallback(async ({ background = false } = {}) => {
         if (background && refreshInFlightRef.current) return;
         const requestId = ++requestIdRef.current;
+        searchAbortRef.current?.abort();
+        combinedSearchRef.current = false;
         refreshInFlightRef.current = true;
 
         if (!background) {
@@ -95,11 +101,10 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
         }
     }, [statusExact, statusGroup]);
 
-    useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
-
     const loadMore = useCallback(async () => {
         if (loading || initialLoading || searchMode || !hasMore || !nextCursor || refreshInFlightRef.current) return;
         refreshInFlightRef.current = true;
+        const requestId = ++requestIdRef.current;
         setLoading(true);
         setError("");
         try {
@@ -109,14 +114,18 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
                 statusGroup,
                 statusExact,
             });
+            if (requestId !== requestIdRef.current) return;
             setOrders((current) => uniqueOrders([...current, ...result.items]));
             setNextCursor(result.nextCursor);
             setHasMore(Boolean(result.nextCursor));
         } catch (loadError) {
+            if (requestId !== requestIdRef.current) return;
             setError(loadError.message);
         } finally {
-            setLoading(false);
-            refreshInFlightRef.current = false;
+            if (requestId === requestIdRef.current) {
+                setLoading(false);
+                refreshInFlightRef.current = false;
+            }
         }
     }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusExact, statusGroup]);
 
@@ -154,14 +163,20 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     }, [loadFirstPage]);
 
     const searchCombined = useCallback(async (filters) => {
+        window.clearTimeout(searchTimerRef.current);
+        searchAbortRef.current?.abort();
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
         const requestId = ++requestIdRef.current;
+        combinedSearchRef.current = true;
+        searchModeRef.current = true;
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
         setError("");
         setSearchMode(true);
         try {
-            const result = await listOrders({ limit: 50, filters });
+            const result = await listOrders({ limit: 50, statusExact, statusGroup, filters, signal: controller.signal });
             if (requestId !== requestIdRef.current) return;
             setOrders(uniqueOrders(result.items));
             setResultSummary(result.resultSummary);
@@ -179,10 +194,30 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
                 refreshInFlightRef.current = false;
             }
         }
-    }, []);
+    }, [statusExact, statusGroup]);
+
+    useEffect(() => {
+        const filters = autoFilterKey === null ? null : JSON.parse(autoFilterKey);
+        const hasFilters = filters && Object.values(filters).some((value) => String(value || "").trim());
+        if (!hasFilters) {
+            searchModeRef.current = false;
+            loadFirstPage();
+        } else {
+            combinedSearchRef.current = true;
+            searchModeRef.current = true;
+            searchTimerRef.current = window.setTimeout(() => searchCombined(filters), 500);
+        }
+        return () => {
+            window.clearTimeout(searchTimerRef.current);
+            searchAbortRef.current?.abort();
+            ++requestIdRef.current;
+            refreshInFlightRef.current = false;
+        };
+    }, [autoFilterKey, loadFirstPage, searchCombined]);
 
     const refreshVisibleOrders = useCallback(async () => {
         if (
+            combinedSearchRef.current ||
             refreshInFlightRef.current ||
             (typeof document !== "undefined" && document.hidden) ||
             (typeof navigator !== "undefined" && !navigator.onLine)
