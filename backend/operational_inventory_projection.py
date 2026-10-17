@@ -100,6 +100,8 @@ async def _projection(db,owner):
             unknown=False
             record={'id':digest(['mz2-stock-row',owner,location['id'],lot or index]),'kind':kind,'product_id':product_id,'resource_id':resource_id,'variant_id':variant,'name':source['name'],'sku':source.get('sku') if kind=='product' else None,'unit':source.get('unit') or 'piece','location_id':location['id'],'location_code':location.get('code') or location['id'],'warehouse_id':location.get('warehouse_id'),'preparation_state':item.get('preparation_state') or 'unspecified','condition':condition,'specifications':deepcopy(item.get('specifications') or {}),'configuration_key':item.get('configuration_key'),'physical':float(q),'reserved':0.0,'held':float(q) if blocked else None if unknown else 0.0,'available':0.0 if blocked or unknown else float(q),'unit_cost':None,'inventory_value':None,'cost_basis':None,'availability_issues':issues}
             record["financially_pending"] = float(q) if financially_pending else 0.0
+            from operational_opening_inventory import projected_evidence
+            record.update(projected_evidence(location, item, witnesses))
             matches=[]
             for cost in data['mz2_inventory_cost_states']:
                 ci=cost.get('inventory_identity') or {}
