@@ -1,7 +1,7 @@
 {
   "task": "PRINT-READBACK-20261018",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1431",
-  "production_changed": false,
+  "production_changed": true,
   "baseline": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1",
   "source": "8d731ec92536e872fef830c2fcd995dde3046c82",
   "source_tree": "21d84fcc889bd04f436e1157da269468b635fb65",
@@ -13,7 +13,7 @@
   "artifact": 12115482519,
   "independent_tests": "64 passed +91 subtests;112.27s;isolated Mongo D loopback27476",
   "source_ci": "15/15 PASS",
-  "next": "Linux /app governed rehearsal, then prepare/prepublish and authorized publish. Rollback source readiness underway.",
+  "next": "Owner reports very slow shipping printing after deployment; diagnose phase and timings. Physical acceptance remains pending.",
   "rollback_patch_sha256": "2ac1577406a231b4604c7c64c2faf002b808fad0a51db29b06daa7379110b91d",
   "limits": [
     "Live order cause not proven: configured /app DB exact-number diagnostic returned zero matches",
@@ -24,8 +24,25 @@
   "deployment_head": "f7b5a81cf92cfb43b1c7277ed95641f7f3c87d9f",
   "intent_ci": "15 successful+1 nonapplicable skip; release39072170710 PASS",
   "production_branch_changed": true,
-  "live_runtime_changed": false,
+  "live_runtime_changed": true,
   "rollback_source": "bcc1ec0d77a89668bce5684357c9cf847ca58a69",
   "rollback_tree": "fc349020b854a2b09c269405a816c6898d9eea7f",
-  "rollback_branch": "codex/print-readback-rollback-20261018"
+  "rollback_branch": "codex/print-readback-rollback-20261018",
+  "rehearsal": "Linux /app governed build PASS;59.01s",
+  "prepare_exit": 0,
+  "prepublish_exit": 0,
+  "prepared_at": "2026-10-17T21:55:06.938081+00:00",
+  "publish_ui_started": "Oct18 00:59 Asia/Riyadh",
+  "rollback_source_ci": "39072679183 PASS",
+  "rollback_intent_commit": "a5e946ceee861c7cde159bbc1106d1619538117b",
+  "rollback_intent_ci": 39073324794,
+  "verification": {
+    "verified": true,
+    "checks": 3,
+    "exit_code": 0,
+    "boot_started_at": "2026-10-17T22:07:55.206099+00:00",
+    "ui_completed": "Oct18 01:08 Riyadh",
+    "raw_evidence_remote": "/tmp/print1431-verify.json"
+  },
+  "rollback_intent_ci_result": "39073324794 PASS"
 }
