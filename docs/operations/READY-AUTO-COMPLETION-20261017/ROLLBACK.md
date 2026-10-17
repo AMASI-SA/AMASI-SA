@@ -1,64 +1,53 @@
-# Ready rollback preparation — not a deployed or release-ready rollback
+# Ready rollback contingency — not activated
 
-Current integration: c77a614ac762d48f50885d60e8b6b005dd2789dc.
-Known deployed baseline: 29ccdb81af9eb51ca2670b1bca95afa4666fb9c7.
-Baseline tree: ad21eff70fbcfd48c7b2f18ca5514bfcf6bf4106.
-Remote retained reference: codex/ready-rollback-baseline-20261017.
-Isolated inverse source commit: d9945b7d961dfebca27fda5e08b3515ca922edbb,
-branch codex/ready-rollback-candidate-20261017. Its full tree exactly equals
-the baseline, preserving payroll, Google periodic and dashboard changes.
-The exact old tree can validate as the old reviewed identity, but it is not a
-new rollback release relative to the proposed Ready deployment. Initial CI
-39060118127 refused its candidate-base input because it classified as reviewed
-B. This is a failed rehearsal, not evidence of deployability.
+Current Ready deployment commit: bb23e92a88b66bec29ad449e1e7635c44ff2b4f1.
+Source: 16a44200f6b8dc79484ebae0010614c6f05b75e3.
+Immediate preceding Production: 177f5f6de5523f01c428ed1722cc8e7781c4cb28.
+Its tree is 3a6ff57cbc5567aad5fc54ea700feb62f9023723.
+This baseline includes the current smart bundle composition release. Do NOT
+use the earlier 29cc rollback candidates: those would undo an unrelated release.
 
-The prospective deployable rollback is now codex/ready-rollback-release-20261017,
-source 3cb433e64a8a7d9563f20642e5f46749816aa4e0, based on frozen Ready B
-ff442eb34a91fa618d10d0b3e1484e0be1e3a313. It restores baseline source bytes
-while retaining the new predecessor intent, allowing a fresh rollback intent
-to be built under the unchanged release protocol. Its rehearsal is pending.
-Baseline whitespace is retained intentionally; git diff --check reports three
-pre-existing whitespace lines restored from baseline, not a semantic mismatch.
+Actual-merge-parent rollback branch: codex/ready-merged-rollback-20261017.
+Source A_R: 651b2821e863277e35795c37a7d83840c161b7db, parent bb23e92a8.
+Source tree: 0c0c8ca050e54612e9c86e0c6d85aa46fec0f7c1.
+It restores all preceding Production source bytes while retaining the Ready
+predecessor intent for the new rollback build. No data changes are included.
+Intent-only B_R: 4dcba49bb57d2b1d19b0b05652f7252908e2ce96.
+B_R tree: 335f3a396c5a83b4052becf0723676fb7f73253e.
+Runtime: rg5-3f4a8ba8052c436fb8ef52a61645dcba24b0cb5ee1bb8029a4dbd3d9a0c75800.
+Source rehearsal39064512416 PASS; final reviewed package rehearsal dispatched.
+
+The same source bytes were rehearsed successfully on the prospective B parent:
+source d2a1c75796b7dcb0bd56889beb6bb0e177277a53, intent a7d23ca2aa08484cbaeb6226f1fb9550e7a38cd5,
+workflow39064082060 PASS (Backend, reproducible Frontend, Linux clean clone and
+runtime JSON proof). That result does not replace the actual-parent final check.
 
 ## Data boundary
 No database migration, record deletion, compensation or inventory reset is part
-of the rollback. A successful Ready remains committed. Never replay Ready POSTs
-because deployment or rollback was interrupted. Persisted dispatch markers and
-leases must survive. New worker cancellation/restart acceptance exercises
-expired-lease recovery and completed GET without a duplicate POST.
+of rollback. A successful Ready remains committed. Never replay Ready POSTs
+because deployment or rollback was interrupted. Persisted dispatch markers,
+leases and pending records must survive.
 
-The old baseline does not run the new version-2 outbox worker, so pending
-completions can stop progressing after a full source rollback. It also lacks
-the new canonical writer fence. Therefore a full rollback must not be presented
-as safe uninterrupted Ready operation: suspend Ready use during the recovery
-window, retain all pending records and reconcile provider outcomes before
-restoring normal operation. Prefer a narrowly reviewed forward repair when
-possible, retaining canonical fencing and durable readback.
+The preceding baseline does not run the new v2 outbox worker and lacks the new
+canonical writer fence. Full rollback therefore requires suspending Ready use
+during recovery, preserving pending operations and reconciling provider outcomes
+before resuming. Prefer a narrow reviewed forward repair that retains fencing
+and durable readback. Package rollback does not guarantee uninterrupted pending
+completion or reverse provider side effects.
 
-## Execution gates (not executed)
-1. Inspect the fault and current release lease; never clear another owner lease.
-2. Fetch current Production and ensure the rollback only undoes this release.
-   If Production advanced, rebuild the inverse against that head; do not rewind
-   unrelated releases or force-push Production.
-3. Build and test the rollback source, freeze fresh intent-only B and preserve A/B.
-4. Review and merge the rollback through the normal source-of-truth branch.
-5. In /app check inactive lease, clean tracked files and exact fresh origin HEAD;
-   preserve env/untracked files and rehearse the governed adapter.
-6. Run prepare and prepublish, publish once, require explicit deployment success
-   and verify three consecutive probes, then inactive lease.
-7. Audit retained pending operation counts/statuses without exposing customer
-   data; resume only through readback/recovery, never inventory compensation or
-   blind replay of Ready.
+## Execution gates — not executed
+1. Inspect the fault and current lease; never clear another owner lease.
+2. Fetch Production and verify it still matches the reviewed predecessor. If it
+   advanced, rebuild the inverse on the new head; never undo unrelated releases.
+3. Require passing final rollback build/rehearsal and preserve source/intent A/B.
+4. Merge through the Production branch without squash or rebase of frozen A/B.
+5. Check /app inactive lease, clean tracked source, exact fresh origin HEAD;
+   preserve env and untracked files, then rehearse the governed adapter.
+6. Prepare, prepublish, publish once, verify visible success plus three matching
+   release probes, and confirm the matching lease is inactive.
+7. Reconcile retained pending outcomes through readback/recovery, without stock
+   compensation, record deletion, or blind Ready replay.
 
-No Production write, release lease, intent freeze or rollback deployment was
-performed to create these source references. Full rollback runtime rehearsal
-and Android compatibility remain release prerequisites.
-
-
-Reviewed rollback B: e6e161194d5ae5d27a623c91f652612e5e30a086, tree
-50e5bd2bc5a70fd4747e8dd537fd36b17cb34e8f. Workflow39060790175 passed
-Backend preflight, reproducible Frontend build and Linux clean-clone adapter
-and runtime JSON proof. This is a tested package contingency, not proof that
-old code continues processing new outboxes. No rollback was activated.
-Owner instruction relayed by Android task: keep the working update; do not
-restore it. Contingency branches are not scheduled for merge/deployment.
+No rollback has been activated. Keep the currently working update unless a
+specific recovery decision requires changing it. Android APK46 is a separate
+upgrade; do not uninstall, clear app data or silently downgrade employee devices.
