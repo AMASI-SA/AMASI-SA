@@ -2,7 +2,7 @@
   "task": "ORDERS-V2-SEARCH-20261017",
   "branch": "codex/orders-v2-search-20261017",
   "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
-  "state": "IMPLEMENTED_LOCAL_PASS_CI_PENDING",
+  "state": "MOBILE_COMPACT_LAYOUT_LOCAL_PASS_CI_PENDING",
   "scope": "Explicit-submit orders search by campaign/product ID and SKU; one dashboard date-range picker; bounded read-only search without preparation writes.",
   "root_causes": [
     "Product IDs absent from search text and API",
@@ -47,8 +47,20 @@
   "production_changed": false,
   "release_guard": "Not touched",
   "remaining": [
-    "Exact-source CI including disposable Mongo index/execution evidence",
-    "Final source review; production/UI acceptance remains unverified"
+    "Fresh candidate CI/build",
+    "Browser recovery: credential observation restricted; user takeover requested",
+    "Protocol-v5 release and production visual acceptance"
   ],
-  "next_safe_action": "Continue local isolated tests; do not publish or alter shared/app. Preserve existing dashboard/Google/opening-stock work."
+  "next_safe_action": "Inspect new candidate CI, restore browser access then inspect shared guard status and follow already-authorized protocol-v5 release. No further publication permission needed.",
+  "publication_authorized": true,
+  "mobile_followup": {
+    "scope": "Owner screenshot correction: four KPIs in one phone row, compact single-line executive title and cost label/amount/share rows; desktop labels retained, mobile aliases preserve provisional ads state. Latest Orders compact single-line header; phone disclosure arrows24px without frame/extra vertical padding across dashboard cards.",
+    "files": [
+      "frontend/src/index.css",
+      "frontend/src/pages/AdvancedDashboard.jsx",
+      "frontend/src/components/dashboardPanel.css"
+    ],
+    "verification": "28 existing dashboard/panel tests PASS; diff check PASS. CSS confined to max767px; actual mobile visual verification pending browser recovery.",
+    "publication": "Not merged/deployed; prior807 source CI all15 successful but new source must pass fresh CI."
+  }
 }
