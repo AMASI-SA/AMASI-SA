@@ -74,6 +74,10 @@ from .abandoned_carts import (
     ensure_abandoned_cart_indexes,
     split_scopes,
 )
+from .auto_sync import (
+    ensure_salla_auto_sync_indexes,
+    reconcile_salla_order_gaps,
+)
 
 
 HISTORICAL_ABANDONED_CART_IMPORT_ENABLED = False
@@ -955,6 +959,24 @@ def attach_salla_routes(api_router: APIRouter, db) -> None:
         data = await compute_sources_comparison(db, user["id"], from_date=from_date, to_date=to_date)
         return data
 
+    @router.get("/orders-gap-diagnostic")
+    async def orders_gap_diagnostic(
+        date_from: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        date_to: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+        user: dict = Depends(current_user),
+    ):
+        """Read-only, bounded comparison of Salla and Mezan order identities."""
+        try:
+            return await reconcile_salla_order_gaps(
+                db,
+                str(user["id"]),
+                date_from=date_from,
+                date_to=date_to,
+                recover_missing=False,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     api_router.include_router(router)
 
 
@@ -966,6 +988,7 @@ async def ensure_salla_indexes(db) -> None:
     # doesn't grow forever.
     await db.salla_oauth_states.create_index("expires_at", expireAfterSeconds=0)
     await ensure_abandoned_cart_indexes(db)
+    await ensure_salla_auto_sync_indexes(db)
     # Phase 2 — sync indexes
     await ensure_sync_indexes(db)
     # Warm up the credentials cache from DB so the very first OAuth
