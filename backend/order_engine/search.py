@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
+import hashlib
+import json
+from contextlib import aclosing
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -9,8 +13,12 @@ from zoneinfo import ZoneInfo
 from .models import OrderDTO
 from .repository import OrderRepository
 from .service import _map_row
+from .campaign_enrichment import _looks_like_campaign_id
+from pymongo.errors import ExecutionTimeout
 
 SCAN_LIMIT = 5000
+SEARCH_TIMEOUT_SECONDS = 3
+_SEARCH_SLOT = asyncio.Semaphore(1)
 ACCOUNT_TIMEZONE = ZoneInfo("America/New_York")
 _CANCELLED = ("cancel", "deleted", "ملغ", "محذوف")
 _REFUNDED = ("refund", "return", "مسترج", "استرجاع")
@@ -21,6 +29,13 @@ _PENDING_PAYMENT = ("payment pending", "pending payment", "بانتظار الد
 class SearchResult:
     items: list[OrderDTO]
     summary: dict[str, Any]
+    next_cursor: str | None = None
+
+
+class OrderSearchError(ValueError):
+    def __init__(self, code, message, status_code=422):
+        super().__init__(message)
+        self.code, self.status_code = code, status_code
 
 
 def _text(value: Any) -> str:
@@ -58,16 +73,27 @@ def _is_paid(order: OrderDTO) -> bool:
 
 def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | None, end: datetime | None) -> bool:
     source = order.source
+    campaign_id = source.campaign_id
+    if not campaign_id:
+        raw_campaign = source.campaign_name or source.utm_campaign
+        if _looks_like_campaign_id(raw_campaign):
+            campaign_id = raw_campaign
     if start and order.created_at < start:
         return False
     if end and order.created_at >= end:
         return False
     products = " ".join(item.name for item in order.items)
     skus = " ".join(item.sku or "" for item in order.items)
+    product_ids = {value for item in order.items for value in
+                   (item.product_id, item.parent_product_id, item.variant_id) if value}
+    if filters.get("product_id") and str(filters["product_id"]).strip() not in product_ids:
+        return False
+    if filters.get("campaign_id") and _text(filters["campaign_id"]) != _text(campaign_id):
+        return False
     raw_utm = " ".join(value or "" for value in source.utm_raw.values())
     general = " ".join(filter(None, (
-        order.order_number, products, skus, source.source, source.platform,
-        source.campaign_name, source.campaign_id, source.ad_squad_name,
+        order.order_number, products, skus, " ".join(product_ids), source.source, source.platform,
+        source.campaign_name, campaign_id, source.ad_squad_name,
         source.ad_squad_id, source.ad_name, source.ad_id, raw_utm,
     )))
     checks = (
@@ -75,7 +101,7 @@ def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | 
         (skus, filters.get("sku")), (_status(order), filters.get("status")),
         (order.payment.collection_status or order.payment.status, filters.get("payment_status")),
         (source.source or source.platform, filters.get("provider")),
-        (source.campaign_name, filters.get("campaign")), (source.campaign_id, filters.get("campaign_id")),
+        (source.campaign_name, filters.get("campaign")),
         (source.ad_squad_name, filters.get("ad_squad")), (source.ad_squad_id, filters.get("ad_squad_id")),
         (source.ad_name, filters.get("ad")), (source.ad_id, filters.get("ad_id")),
         (raw_utm, filters.get("utm")), (source.match_status, filters.get("attribution_status")),
@@ -125,14 +151,61 @@ def _summary(items: list[OrderDTO], cutoff: datetime | None) -> dict[str, Any]:
     }
 
 
-async def search_orders(repository: OrderRepository, *, user_id: str, filters: dict[str, str | None]) -> SearchResult:
-    rows = await repository.list_salla_orders(user_id=user_id, limit=SCAN_LIMIT)
-    start, end, cutoff = _parse(filters.get("created_from")), _parse(filters.get("created_to")), _parse(filters.get("baseline_cutoff_at"))
-    # Webhook retries, reconciliation and rerunnable backfills all converge on
-    # the Salla order reference. A legacy duplicate must not inflate results.
-    unique_rows = {}
-    for row in rows:
-        unique_rows.setdefault(str(row.order_number), row)
-    mapped = [_map_row(row.salla_raw, current_status=row.current_status) for row in unique_rows.values()]
-    items = [item for item in mapped if _matches(item, filters, start, end)]
-    return SearchResult(items=items, summary=_summary(items, cutoff))
+async def search_orders(repository: OrderRepository, *, user_id: str, filters: dict[str, str | None],
+                        limit: int = 50, cursor: str | None = None) -> SearchResult:
+    try:
+        start, end, cutoff = (_parse(filters.get(key)) for key in
+                              ("created_from", "created_to", "baseline_cutoff_at"))
+        if start and end and start >= end:
+            raise ValueError("reversed period")
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise OrderSearchError("invalid_search_period", "اختر فترة تاريخ صحيحة للبحث.") from exc
+    fingerprint = hashlib.sha256(json.dumps([str(user_id), filters], sort_keys=True).encode()).hexdigest()[:24]
+    offset = 0
+    if cursor:
+        try:
+            prefix, expected, offset_text = cursor.split(":")
+            offset = int(offset_text)
+            if prefix != "search" or expected != fingerprint or not 0 <= offset < SCAN_LIMIT:
+                raise ValueError("cursor mismatch")
+        except (ValueError, TypeError) as exc:
+            raise OrderSearchError("invalid_search_cursor", "تغيّرت شروط البحث؛ اضغط بحث من جديد.", 400) from exc
+    if _SEARCH_SLOT.locked():
+        raise OrderSearchError("search_busy", "يوجد بحث قيد التنفيذ؛ حاول بعد لحظات.", 429)
+    async with _SEARCH_SLOT:
+        try:
+            async with asyncio.timeout(SEARCH_TIMEOUT_SECONDS):
+                items, seen = [], set()
+                async def candidates():
+                    if hasattr(repository, "iter_salla_search_orders"):
+                        async with aclosing(repository.iter_salla_search_orders(
+                            user_id=user_id, start=start, end=end, product_id=filters.get("product_id"),
+                        )) as stream:
+                            async for row in stream:
+                                yield row
+                    else:
+                        # Repository protocol test doubles; production always uses the streaming reader.
+                        for row in await repository.list_salla_orders(user_id=user_id, limit=SCAN_LIMIT + 1):
+                            yield row
+                scanned = 0
+                async with aclosing(candidates()) as rows:
+                    async for row in rows:
+                        scanned += 1
+                        if scanned > SCAN_LIMIT:
+                            raise OrderSearchError("search_period_too_broad", "نطاق البحث واسع؛ اختر فترة أقصر أو رقم المنتج ثم أعد البحث.")
+                        if scanned % 10 == 0:
+                            # Let order preparation and other requests run between small mapping batches.
+                            await asyncio.sleep(0)
+                        if row is None or str(row.order_number) in seen:
+                            continue
+                        seen.add(str(row.order_number))
+                        item = _map_row(row.salla_raw, current_status=row.current_status)
+                        if _matches(item, filters, start, end):
+                            items.append(item)
+                items.sort(key=lambda item: (item.created_at, item.order_number), reverse=True)
+                limit = max(1, min(int(limit), 50))
+                next_offset = offset + limit
+                next_cursor = f"search:{fingerprint}:{next_offset}" if next_offset < len(items) else None
+                return SearchResult(items=items[offset:next_offset], summary=_summary(items, cutoff), next_cursor=next_cursor)
+        except (TimeoutError, ExecutionTimeout) as exc:
+            raise OrderSearchError("search_timeout", "استغرق البحث وقتًا طويلًا؛ اختر فترة أقصر ثم أعد البحث.", 503) from exc

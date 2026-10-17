@@ -92,6 +92,32 @@ test("list polling keeps its ten second cadence", async () => {
     expect(listOrders).toHaveBeenCalledTimes(2);
 });
 
+test("combined search keeps every result across timer and focus without automatic searches", async () => {
+    listOrders.mockResolvedValueOnce({ items: [], nextCursor: null })
+        .mockResolvedValue({ items: [{ order_number: "A" }, { order_number: "B" }], nextCursor: null });
+    getOrder.mockResolvedValue({ order_number: "A" });
+    await render(<List />);
+    await act(async () => { await latest.searchCombined({ campaign_id: "campaign-123" }); });
+    await advance(30000);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(latest.orders.map(order => order.order_number)).toEqual(["A", "B"]);
+    expect(listOrders).toHaveBeenCalledTimes(2);
+    expect(getOrder).not.toHaveBeenCalled();
+});
+
+test("next search page uses submitted filters even while the form draft changes", async () => {
+    listOrders.mockResolvedValueOnce({ items: [], nextCursor: null })
+        .mockResolvedValueOnce({ items: [{ order_number: "A" }], nextCursor: "search:next", resultSummary: { orders: 2 } })
+        .mockResolvedValueOnce({ items: [{ order_number: "B" }], nextCursor: null, resultSummary: { orders: 2 } });
+    await render(<List />);
+    const draft = { product_id: "123" };
+    await act(async () => { await latest.searchCombined(draft); });
+    draft.product_id = "456";
+    await act(async () => { await latest.loadMore(); });
+    expect(listOrders).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "search:next", filters: { product_id: "123" } }));
+    expect(latest.orders.map(order => order.order_number)).toEqual(["A", "B"]);
+});
+
 test("returning to an order cannot revive its earlier in-flight response", async () => {
     const oldA = deferred();
     getOrder.mockReturnValueOnce(oldA.promise)

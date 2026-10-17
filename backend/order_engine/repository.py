@@ -5,6 +5,7 @@ from copy import deepcopy
 import re
 from salla_shipping import CURRENT_SHIPPING, projected_shipping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Optional, Protocol
 
 
@@ -442,6 +443,41 @@ def _pending_review_search_match(search: str) -> dict[str, Any]:
 class MongoOrderRepository:
     def __init__(self, db: Any):
         self._collection = db.unified_orders
+
+    async def iter_salla_search_orders(self, *, user_id, start=None, end=None, product_id=None):
+        """Bounded, read-only search on the existing tenant/date index.
+
+        A coarse date envelope allows provider timezone offsets; the mapped
+        created_at remains the final authority. No provider calls or writes.
+        """
+        query = {"user_id": str(user_id), "raw_by_source.salla_direct": {"$type": "object"}}
+        date_bounds = {}
+        if start:
+            date_bounds["$gte"] = (start - timedelta(days=1)).date().isoformat()
+        if end:
+            date_bounds["$lt"] = (end + timedelta(days=2)).date().isoformat()
+        if date_bounds:
+            query["order_date"] = date_bounds
+        if product_id:
+            values = [str(product_id).strip()]
+            if values[0].isdigit() and str(int(values[0])) == values[0] and len(values[0]) <= 18:
+                values.append(int(values[0]))
+            query["$or"] = [{f"raw_by_source.salla_direct.items.{path}": {"$in": values}} for path in (
+                "product.id", "product_id", "product.parent_id", "parent_product_id",
+                "variant.id", "product.variant.id", "variant_id", "product_sku_id", "product.variant_id",
+            )]
+        projection = {"_id": 0, "order_number": 1, "order_date": 1, "order_status": 1,
+                      "raw_by_source.salla_direct": 1,
+                      **{field: 1 for field in _V2_CANONICAL_ROOT_FIELDS}}
+        cursor = (self._collection.find(query, projection)
+                  .hint([("user_id", 1), ("order_date", -1)])
+                  .sort([("order_date", -1)]).limit(5001).batch_size(100).max_time_ms(1500))
+        try:
+            async for row in cursor:
+                # Count malformed candidates as well, so they cannot evade the budget.
+                yield self._to_discovery_row(row)
+        finally:
+            await cursor.close()
 
     async def financial_delivery_snapshot(self, *, user_id: str, order_number: str):
         """Exact provider snapshot for a provenance adapter, no root fallbacks.

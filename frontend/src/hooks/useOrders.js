@@ -23,6 +23,7 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     const refreshInFlightRef = useRef(false);
     const ordersRef = useRef([]);
     const searchModeRef = useRef(false);
+    const submittedFiltersRef = useRef(null);
 
     const [orders, setOrders] = useState([]);
     const [nextCursor, setNextCursor] = useState(null);
@@ -42,6 +43,8 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
         refreshInFlightRef.current = true;
 
         if (!background) {
+            submittedFiltersRef.current = null;
+            searchModeRef.current = false;
             setOrders([]);
             setNextCursor(null);
             setHasMore(false);
@@ -98,25 +101,32 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
     useEffect(() => { loadFirstPage(); }, [loadFirstPage]);
 
     const loadMore = useCallback(async () => {
-        if (loading || initialLoading || searchMode || !hasMore || !nextCursor || refreshInFlightRef.current) return;
+        if (loading || initialLoading || !hasMore || !nextCursor || refreshInFlightRef.current) return;
+        const requestId = ++requestIdRef.current;
         refreshInFlightRef.current = true;
         setLoading(true);
         setError("");
         try {
             const result = await listOrders({
-                limit: ORDER_PAGE_SIZE,
+                limit: searchMode ? 50 : ORDER_PAGE_SIZE,
                 cursor: nextCursor,
                 statusGroup,
                 statusExact,
+                filters: searchMode ? submittedFiltersRef.current : null,
             });
+            if (requestId !== requestIdRef.current) return;
             setOrders((current) => uniqueOrders([...current, ...result.items]));
+            if (searchMode) setResultSummary(result.resultSummary);
             setNextCursor(result.nextCursor);
             setHasMore(Boolean(result.nextCursor));
         } catch (loadError) {
+            if (requestId !== requestIdRef.current) return;
             setError(loadError.message);
         } finally {
-            setLoading(false);
-            refreshInFlightRef.current = false;
+            if (requestId === requestIdRef.current) {
+                setLoading(false);
+                refreshInFlightRef.current = false;
+            }
         }
     }, [hasMore, initialLoading, loading, nextCursor, searchMode, statusExact, statusGroup]);
 
@@ -127,6 +137,8 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             return;
         }
         const requestId = ++requestIdRef.current;
+        submittedFiltersRef.current = null;
+        searchModeRef.current = true;
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
@@ -155,18 +167,24 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
 
     const searchCombined = useCallback(async (filters) => {
         const requestId = ++requestIdRef.current;
+        submittedFiltersRef.current = { ...filters };
+        searchModeRef.current = true;
         refreshInFlightRef.current = true;
         setInitialLoading(true);
         setLoading(true);
         setError("");
         setSearchMode(true);
+        setOrders([]);
+        setNextCursor(null);
+        setHasMore(false);
+        setResultSummary(null);
         try {
-            const result = await listOrders({ limit: 50, filters });
+            const result = await listOrders({ limit: 50, filters: submittedFiltersRef.current });
             if (requestId !== requestIdRef.current) return;
             setOrders(uniqueOrders(result.items));
             setResultSummary(result.resultSummary);
-            setNextCursor(null);
-            setHasMore(false);
+            setNextCursor(result.nextCursor);
+            setHasMore(Boolean(result.nextCursor));
         } catch (searchError) {
             if (requestId !== requestIdRef.current) return;
             setOrders([]);
@@ -188,17 +206,23 @@ export function useOrders({ statusGroup = null, statusExact = null } = {}) {
             (typeof navigator !== "undefined" && !navigator.onLine)
         ) return;
         if (searchModeRef.current) {
+            // Combined results are a user-submitted snapshot. Never replace
+            // the whole result set with the first order on timer/focus/online.
+            if (submittedFiltersRef.current) return;
+            const requestId = requestIdRef.current;
             const orderNumber = String(ordersRef.current[0]?.order_number || "").trim();
             if (!orderNumber) return;
             refreshInFlightRef.current = true;
             try {
                 const order = await getOrder(orderNumber);
+                if (requestId !== requestIdRef.current) return;
                 if (order) setOrders([order]);
                 setError("");
             } catch (refreshError) {
+                if (requestId !== requestIdRef.current) return;
                 setError(refreshError.message);
             } finally {
-                refreshInFlightRef.current = false;
+                if (requestId === requestIdRef.current) refreshInFlightRef.current = false;
             }
             return;
         }

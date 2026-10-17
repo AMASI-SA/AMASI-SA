@@ -1,6 +1,7 @@
 """Read-only HTTP routes for the Mezan Order Engine."""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -38,7 +39,7 @@ from .service import (
     get_order,
     list_orders,
 )
-from .search import search_orders
+from .search import search_orders, OrderSearchError
 from .preparation_tracking import install_preparation_tracking_read_route
 
 
@@ -115,6 +116,7 @@ def make_order_engine_router(
         status_exact: Optional[str] = Query(default=None),
         q: Optional[str] = Query(default=None, max_length=200),
         product: Optional[str] = Query(default=None, max_length=200),
+        product_id: Optional[str] = Query(default=None, max_length=160),
         sku: Optional[str] = Query(default=None, max_length=120),
         payment_status: Optional[str] = Query(default=None, max_length=80),
         provider: Optional[str] = Query(default=None, max_length=40),
@@ -135,7 +137,7 @@ def make_order_engine_router(
         owner_id = str(owner["id"])
 
         combined_filters = {
-            "q": q, "product": product, "sku": sku, "status": status_exact,
+            "q": q, "product": product, "product_id": product_id, "sku": sku, "status": status_exact,
             "payment_status": payment_status, "provider": provider, "campaign": campaign,
             "campaign_id": campaign_id, "ad_squad": ad_squad, "ad_squad_id": ad_squad_id,
             "ad": ad, "ad_id": ad_id, "utm": utm, "attribution_status": attribution_status,
@@ -144,9 +146,18 @@ def make_order_engine_router(
         }
         advanced = any(value for key, value in combined_filters.items() if key != "status")
         if advanced:
-            result = await search_orders(repository(), user_id=owner_id, filters=combined_filters)
-            enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items[:limit])
-            return OrderListResponse(items=enriched_items, next_cursor=None, limit=limit, result_summary=result.summary)
+            try:
+                result = await search_orders(repository(), user_id=owner_id, filters=combined_filters, limit=limit, cursor=cursor)
+            except OrderSearchError as exc:
+                raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": str(exc)}) from exc
+            # Names are optional decoration; a slow ad catalog must not hold
+            # the orders/preparation web worker after a successful search.
+            try:
+                async with asyncio.timeout(0.5):
+                    enriched_items = await enrich_order_campaigns(db, user_id=owner_id, orders=result.items)
+            except TimeoutError:
+                enriched_items = result.items
+            return OrderListResponse(items=enriched_items, next_cursor=result.next_cursor, limit=limit, result_summary=result.summary)
 
         try:
             page = await list_orders(
