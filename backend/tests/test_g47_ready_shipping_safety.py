@@ -167,10 +167,7 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
                         {"order_status": status, "order_status_slug": status}, "salla_direct", raw=raw)
             return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}
         rows = [{"id": "a", "status": "created", "tracking_number": "AWB-A", "label_url": "https://example.test/a.pdf"}]
-        async def read_resolved(*args):
-            return (await resolve(*args[:3]))[1]
         with patch.object(shipping, "_resolve_order", resolve), \
-             patch.object(shipping, "_read_resolved_order", read_resolved), \
              patch.object(shipping, "_print_shipment_rows", AsyncMock(return_value=rows)):
             with self.assertRaises(shipping.ShippingLabelError) as error:
                 await shipping.refresh_shipping_label(self.db, "owner", "local-assembly")
@@ -181,12 +178,6 @@ class SafetyTests(unittest.IsolatedAsyncioTestCase):
         await self.finish()
         from copy import deepcopy
         shipping = fixture.delivery.shipping
-        # The shared assembly fixture uses its reference as a synthetic Salla
-        # id; align that identity with this scenario's provider response.
-        await self.db.unified_orders.update_one(
-            {"user_id": "owner", "order_number": "local-assembly"},
-            {"$set": {"raw_by_source.salla_direct.id": "internal"}},
-        )
         # Both order observations omit carrier/shipments: only the shipment
         # endpoint proves that the initially selected merchant row is current.
         order = {"id": "internal", "reference_id": "local-assembly",
@@ -257,6 +248,6 @@ class ProviderReadbackTests(unittest.IsolatedAsyncioTestCase):
         initial = {"id": "internal", "reference_id": "order", "status": {"slug": "completed"},
                    "shipping": {"company_name": "SMSA"}}
         latest = {**initial, "shipping": {"company_name": "iMile"}}
-        with patch.object(shipping, "_read_resolved_order", AsyncMock(return_value=latest)):
+        with patch.object(shipping, "_resolve_order", AsyncMock(return_value=("internal", latest))):
             with self.assertRaises(shipping.ShippingLabelError):
                 await shipping._recheck_provider_completed(None, "owner", "order", "internal", initial)

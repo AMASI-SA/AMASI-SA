@@ -583,24 +583,6 @@ async def _resolve_order(
     user_id: str,
     order_number: str,
 ) -> tuple[str, dict[str, Any]]:
-    # The ingested id is only a routing hint, never a status/print proof.
-    # Scope it to the authenticated owner and validate the fresh response.
-    # Top-level order_id is also used for local assembly ids; do not route it.
-    collection = getattr(db, "unified_orders", None)
-    if collection is not None:
-        saved = await collection.find_one(
-            {"user_id": str(user_id), "order_number": order_number},
-            {"raw_by_source.salla_direct.id": 1},
-        )
-        raw = ((saved or {}).get("raw_by_source") or {}).get("salla_direct") or {}
-        known_id = _text(raw.get("id"))
-        if known_id:
-            details = await _read_resolved_order(db, user_id, order_number, known_id)
-            if (_text(details.get("id")) != known_id
-                    or _text(details.get("reference_id")) != order_number):
-                raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت العملية للحماية.")
-            return known_id, details
-
     response = await call_salla(
         db,
         user_id,
@@ -638,13 +620,6 @@ async def _resolve_order(
             "لم تُرجع سلة المعرّف الداخلي للطلب.",
         )
 
-    return internal_id, await _read_resolved_order(db, user_id, order_number, internal_id)
-
-
-async def _read_resolved_order(
-    db: Any, user_id: str, order_number: str, internal_id: str,
-) -> dict[str, Any]:
-    """Fresh details for an already resolved identity; never reuse its status."""
     details_response = await call_salla(
         db,
         user_id,
@@ -666,7 +641,7 @@ async def _read_resolved_order(
             "salla_order_reference_mismatch",
             "أعادت سلة طلبًا مختلفًا؛ أوقفت العملية للحماية.",
         )
-    return details
+    return internal_id, details
 
 
 async def _shipment_rows(
@@ -1562,10 +1537,8 @@ async def _assert_current_print_status(db, user_id, order_number, *, expected=No
 
 
 async def _recheck_provider_completed(db, user_id, number, internal_id, initial, fence=None):
-    # Identity is already resolved in this request. Repeating keyword search
-    # adds provider latency without making the final detail observation newer.
-    latest = await _read_resolved_order(db, user_id, number, internal_id)
-    if (_text(latest.get("id")) != internal_id
+    latest_id, latest = await _resolve_order(db, user_id, number)
+    if (latest_id != internal_id or _text(latest.get("id")) != internal_id
             or _text(latest.get("reference_id")) != number or not _order_is_completed(latest)):
         raise ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.")
     # A second completed observation cannot authorize a label for a carrier or
