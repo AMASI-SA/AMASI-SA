@@ -3,7 +3,7 @@
   "branch": "codex/employee-salary-final-release-20261017",
   "base_sha": "6f4877922747350189d2f45c676083cc791ac670",
   "peer_source_sha": "932e0d1e1e3bd6e610857a5af05a834318d24a25",
-  "state": "User authorized merge and publication; source refreshed after shipping PR1413; fresh CI pending",
+  "state": "Published; actual production verify passed three consecutive probes; lease inactive. UI reports Deployment finished (not literal Deployment Succeeded).",
   "completed": [
     "Show current and scheduled salary on Employee OS cards immediately after save",
     "Verify employee account creation/reset accepts six digits or more",
@@ -21,16 +21,16 @@
       "errors": 0,
       "skipped": 0
     },
-    "fresh_current_base": "pending",
+    "fresh_current_base": "370 backend +42 frontend PASS, zero failures/errors/skips; all final required checks passed; source readiness38984403048 and B cleanclone38985105543 PASS",
     "source_delta": "Payroll code identical to d7ae8c93 (370 backend +42 frontend PASS); shipping source retained"
   },
-  "production_changed": false,
-  "release_guard": "Not started; publication authorized; shipping owns current release window",
+  "production_changed": true,
+  "release_guard": "prepare exit0; prepublish ready_to_publish true exit0; verify verified=true checks=3 exit0; status active=false",
   "boundaries": [
     "Historical source discrepancies are detected and new affected movements blocked; no automatic settlement or retroactive rewriting",
     "Operational balances and accounting ledger remain separate; no automatic financial bridge"
   ],
-  "next_action": "Fresh source CI and reviewed intent-only B, final checks, exact-head merge then release protocol v5 after existing publisher verifies and closes lease. No repeated user approval required.",
+  "next_action": "No republish needed. Keep historical corrections explicit and separate; accountant-specific live record was not inspected or changed. Accounting task notified of release.",
   "integration_verification": {
     "previous_pr": 1387,
     "overlap": [
@@ -45,5 +45,20 @@
   "previous_source": "29ae5117b0ad68e57213bae6d909a29c9fd62939",
   "previous_verified_source": "d7ae8c93fa940f6a995bf788770986f426e9ec2c",
   "merge_authorized": true,
-  "publish_authorized": true
+  "publish_authorized": true,
+  "deployment": {
+    "pr": 1417,
+    "source_git_sha": "a36720d967f4c862afc0e6f7c08c15ef95d2672b",
+    "intent_git_sha": "2acec61ff5e68d200040548bebe3de52b6225aa0",
+    "deployment_git_sha": "2a7740359451a538be8df373266c4c92ca1a57c8",
+    "release_id": "rg5-98c2e1d6c0ca8e29b69a4dafbe274c4ba7e6a42f94f9320713f3a17e5005868e",
+    "verified": true,
+    "checks": 3,
+    "lease_active": false,
+    "boot_started_at": "2026-10-17T00:27:58.929537+00:00",
+    "ui_event": "Deployment finished Oct17 03:28AM",
+    "ui_version": "c2b5c8f",
+    "ui_literal_succeeded_observed": false,
+    "financial_writes": 0
+  }
 }
