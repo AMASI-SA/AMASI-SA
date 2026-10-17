@@ -2,7 +2,7 @@
   "task": "ORDERS-V2-SEARCH-20261017",
   "branch": "codex/orders-v2-search-20261017",
   "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
-  "state": "IMPLEMENTED_LOCAL_PASS_CI_PENDING",
+  "state": "FOCUSED_CI_PASS_NOT_DEPLOYED",
   "scope": "Explicit-submit orders search by campaign/product ID and SKU; one dashboard date-range picker; bounded read-only search without preparation writes.",
   "root_causes": [
     "Product IDs absent from search text and API",
@@ -20,12 +20,18 @@
     "Search pagination50 with tenant/filter-bound cursor and full bounded-cohort summary; optional catalog name enrichment capped500ms"
   ],
   "verification": {
-    "frontend": "15tests/3suites PASS",
-    "backend_focused": "26 PASS, realMongo integration skipped locally (dedicated CI Mongo service added)",
+    "frontend": "15 tests/3 suites PASS on exact source SHA, CI39051854014",
+    "backend_focused": "27 PASS on exact source SHA, disposable Mongo7 included; CI39051854014",
     "regressions_reproduced": "Combined result loss and unavailable next page failed before hook fix",
-    "broad_route_suite": "8 environment dependency failures (PyMuPDF missing at run time),1 pre-existing AST guard failure caused by existing mark-read update_one route; narrow real-route tests added",
+    "broad_route_suite": "Supplemental-router imports blocked by missing optional dependencies (PyMuPDF, then openai). Existing AST mark-read update_one failure reproduced on baseline; not changed. Two focused actual core route tests pass.",
     "production_load": "NOT_TESTED",
-    "mongo_execution_plan": "NOT_TESTED",
+    "mongo_execution_plan": {
+      "fixture_orders": 6021,
+      "matched_old_orders": 20,
+      "date_search_docs_examined": 20,
+      "index": "user_id_1_order_date_-1 IXSCAN",
+      "scope": "Synthetic disposable Mongo7, not production load"
+    },
     "real_route": "2 real core route tests PASS, including owner boundary, product API and continuation",
     "local_synthetic_benchmark": {
       "rows": 1500,
@@ -42,13 +48,110 @@
         "heartbeat_ticks": 52
       },
       "scope": "Synthetic mapper only; not production/Mongo/physical preparation workload"
-    }
+    },
+    "ci": [
+      {
+        "id": 39051853911,
+        "name": "CodeQL",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 39051853930,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854151,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854077,
+        "name": "Review Completion Resumable",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 39051854014,
+        "name": "Orders V2 Search Bounds",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051853954,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051853985,
+        "name": "Production Ads Manager Date Sort Readability V3",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051853956,
+        "name": "Production Dashboard V2 Salla Ads Executive",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854011,
+        "name": "Production Ads Performance Chart V1",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051853998,
+        "name": "Fulfillment V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854088,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854071,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854055,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854045,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 39051854051,
+        "name": "MZ2 Track F native shipping",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
   },
   "production_changed": false,
   "release_guard": "Not touched",
   "remaining": [
-    "Exact-source CI including disposable Mongo index/execution evidence",
-    "Final source review; production/UI acceptance remains unverified"
+    "CodeQL and Review Completion Resumable were still running at final evidence capture",
+    "Production UI acceptance and representative preparation-load measurement not performed",
+    "Release review and protocol-v5 governed deployment remain separate"
   ],
-  "next_safe_action": "Continue local isolated tests; do not publish or alter shared/app. Preserve existing dashboard/Google/opening-stock work."
+  "next_safe_action": "Review PR1427 at source8071970a80f66aeb5ae49c70094be77215a8ee8e and remaining CI; if publishing is authorized, re-read Issue1006/current production head, follow protocol-v5 rehearsal/intent/lease/probes. Do not deploy evidence-only branch. Preserve other tasks.",
+  "source_sha": "8071970a80f66aeb5ae49c70094be77215a8ee8e",
+  "evidence_branch": "codex/orders-v2-search-evidence-20261017",
+  "evidence_only_do_not_deploy": true,
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1427"
 }
