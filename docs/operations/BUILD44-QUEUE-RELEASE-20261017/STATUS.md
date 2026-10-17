@@ -1,23 +1,29 @@
-# Build44 queue backend release
+# Build44 queue and review refresh preparation
 
-Owner authorized publication and continuation on 2026-10-17. Functional source
-`88666446fcfa6056883ccce29be75f5f3fbd9774`, base Production
-`c03c9df22d07a9a99984b02ab134763b0ae600a8`, branch `codex/build44-queue-backend`.
+Publication is owner-authorized. Candidate branch codex/build44-queue-backend.
+Queue/refresh candidate fc452abe4d73c2a22db1ced37ab2edd1ad903cf4 passed
+GitHub CI38987547846, including real replica-set refresh contracts.
 
-Implements tenant-scoped pending search before count/pagination; reviewed queue
-pagination from Mezan workflow; authoritative terminal preparation evidence;
-consistent employee and monitoring active counters while retaining receipt history.
-Adds synthetic Mongo contracts for queue behavior and existing courier scan/manual
-identity and duplicate handling. No production financial mutation is involved.
+New WIP source adds export-control workflow revision advancement and explicit
+atomic closure of an uncommitted review attempt. Exact binding, durable closure
+event and workflow revision barrier prevent late old consent from committing.
+Absent operations alone remain unknown. Added 14 real-Mongo test methods; AST
+and diff checks passed, integrated execution pending. Never publish this WIP.
 
-Original local validation: 40 queue/stage checks and 162 affected checks plus 19
-subtests passed; one unrelated pre-existing courier average test was reproduced on
-the baseline and excluded from that affected run. Final integrated CI remains
-pending after updating to current Production. Prior evidence is stored locally at
-D:/amasi-build/build44-queue-backend-evidence/HANDOFF.json.
+Prior reviewed source8e34390/intent e7ac9e9 are superseded, not deployed. Current
+tracked intent is not applicable to this source and must be replaced by a newly
+built intent-only B after final source A is integrated with current Production.
+Fresh remote Production advanced to2a7740359451a538be8df373266c4c92ca1a57c8.
 
-Do not deliver the paired Android update before this backend contract is deployed
-and verified. Source checkpoints are not release intent. The v5 source A / intent B
-contract and current /app lease checks remain required. UI tools failed kernel
-asset initialization, and /app access is unavailable; no lease, merge or deployment
-has occurred for this task. Preserve concurrent unrelated Production work.
+Emergent browser recovered. Our /app lease was inactive during inspection; a
+separate task later deployed c03, and other tasks advanced Production. Recheck
+actual lease/origin before any /app action; preserve other tasks and untracked
+files. No Production merge/deployment or EAS publication by this task.
+
+Android newest owner request: merge saved-carrier-print pilot eae38b32 with all
+current fixes, new version and isolated pilot channel; do not update old channels.
+Device acceptance remains unverified. No customer/financial/shipment test writes.
+
+Next: finish combined test/review evidence, integrate current origin, freeze new
+source A then intent-only B and CI, protocol-v5 backend deployment and proof,
+then build isolated Android pilot with existing signing identity.

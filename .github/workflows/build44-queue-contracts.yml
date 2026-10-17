@@ -103,6 +103,9 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q
           backend/tests/test_mobile_review_refresh_contract.py
           backend/tests/test_order_engine_salla_refresh.py
+          backend/tests/test_review_attempt_closure.py
+          backend/tests/test_review_readback_v2.py
+          backend/tests/test_order_review_export_controls.py
           --junitxml=review-refresh.xml
       - name: Retain refresh contract evidence
         if: always()

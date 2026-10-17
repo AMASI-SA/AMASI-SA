@@ -296,6 +296,20 @@ class ReviewSourceRefreshRequest(BaseModel):
     expected_revision: int = Field(ge=0, strict=True)
 
 
+class ReviewAttemptClosureRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contract_version: int = Field(ge=2, le=2, strict=True)
+    client_request_id: str = Field(min_length=36, max_length=36)
+    merchant_id: str = Field(min_length=1, max_length=200)
+    actor_id: str = Field(min_length=1, max_length=200)
+    origin_session_ref: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$")
+    origin_session_epoch: int = Field(ge=1, le=1, strict=True)
+    order_number: str = Field(min_length=1, max_length=200)
+    approved_revision: int = Field(ge=0, strict=True)
+    approval_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    approval_token_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class CompleteReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
@@ -910,9 +924,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 raise HTTPException(409, detail={"code": "review_refresh_not_pending", "message": "الطلب لم يعد في انتظار المراجعة. حدّث القائمة."})
             if int(workflow.get("revision") or 0) != payload.expected_revision:
                 raise HTTPException(409, detail={"code": "review_revision_conflict", "message": "تغيّرت مراجعة الطلب. حدّث بياناته قبل المحاولة."})
-            operation = await scoped.order_review_completion_operations.find_one({
-                **selector, "superseded_by": {"$exists": False},
-            }, {"_id": 1})
+            from review_completion_readback import unresolved_operation
+            operation = await unresolved_operation(scoped, selector)
             if operation:
                 raise HTTPException(409, detail={"code": "review_refresh_completion_conflict", "message": "توجد محاولة اعتماد لهذا الطلب. تحقّق من نتيجتها قبل تحديث بياناته."})
 
@@ -1347,6 +1360,39 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         })
         return await _detail(db, user_id, order)
 
+    @router.post("/{order_number}/completion-operation/close")
+    async def close_completion_attempt(order_number: str, payload: ReviewAttemptClosureRequest,
+                                       user: dict = Depends(current_user)):
+        from fastapi.responses import JSONResponse
+        from pymongo.errors import PyMongoError
+        from review_completion_readback import close_attempt, unknown_attempt
+        from review_session_fence import review_session_context
+        reviewer = _require_reviewer(user)
+        merchant_id = _merchant_user_id(reviewer)
+        actor_id = str(reviewer["id"])
+
+        async def validate_order(scoped):
+            try:
+                order = await get_order(MongoOrderRepository(scoped), user_id=merchant_id, order_number=order_number)
+            except OrderNotFoundError:
+                raise HTTPException(404, detail={"code": "order_not_found", **unknown_attempt()}) from None
+            if _normalized(order.status_native or order.status) not in PENDING_REVIEW_STATUS_KEYS:
+                raise HTTPException(409, detail={"code": "review_not_pending", **unknown_attempt()})
+
+        try:
+            session = {**await review_session_context(db, user_id=merchant_id, actor=reviewer), "actor_id": actor_id}
+            await _ensure_indexes(db)
+            result = await close_attempt(db, binding=payload.model_dump(), user_id=merchant_id,
+                actor_id=actor_id, order_number=order_number, session_context=session, validate_order=validate_order)
+        except PyMongoError:
+            raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
+                "code": "review_completion_outcome_unknown", **unknown_attempt()}) from None
+        except HTTPException as exc:
+            exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
+            raise
+        return JSONResponse(status_code=200 if result["state"] in {"completed", "not_committed"} else 202,
+                            content=result, headers={"Cache-Control": "no-store"})
+
     @router.get("/{order_number}/completion-operation")
     async def completion_operation_status(order_number: str,
             readback_contract_version: int = Query(1, ge=1, le=2),
@@ -1368,7 +1414,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             except HTTPException as exc:
                 exc.headers = {**(exc.headers or {}), "Cache-Control": "no-store"}
                 raise
-            return JSONResponse(status_code=200 if result["state"] == "completed" else 202,
+            return JSONResponse(status_code=200 if result["state"] in {"completed", "not_committed"} else 202,
                                 content=result, headers={"Cache-Control": "no-store"})
         if client_request_id is not None:
             raise HTTPException(422, detail={"code": "review_readback_version_required"})
@@ -1428,7 +1474,7 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                     raise HTTPException(503, headers={"Cache-Control": "no-store"}, detail={
                         "code": "review_completion_outcome_unknown", "state": "unknown",
                         "retry_post": False, "reconcile": "get_only"}) from None
-                return JSONResponse(status_code=200 if status["state"] == "completed" else 202,
+                return JSONResponse(status_code=200 if status["state"] in {"completed", "not_committed"} else 202,
                                     content=status, headers={"Cache-Control": "no-store"})
         elif payload.client_request_id is not None:
             raise HTTPException(422, detail={"code": "review_readback_version_required"})
