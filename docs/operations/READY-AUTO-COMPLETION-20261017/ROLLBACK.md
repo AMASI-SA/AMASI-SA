@@ -53,3 +53,12 @@ possible, retaining canonical fencing and durable readback.
 No Production write, release lease, intent freeze or rollback deployment was
 performed to create these source references. Full rollback runtime rehearsal
 and Android compatibility remain release prerequisites.
+
+
+Reviewed rollback B: e6e161194d5ae5d27a623c91f652612e5e30a086, tree
+50e5bd2bc5a70fd4747e8dd537fd36b17cb34e8f. Workflow39060790175 passed
+Backend preflight, reproducible Frontend build and Linux clean-clone adapter
+and runtime JSON proof. This is a tested package contingency, not proof that
+old code continues processing new outboxes. No rollback was activated.
+Owner instruction relayed by Android task: keep the working update; do not
+restore it. Contingency branches are not scheduled for merge/deployment.
