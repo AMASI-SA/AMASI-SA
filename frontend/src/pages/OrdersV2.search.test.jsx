@@ -44,7 +44,11 @@ test('one shared dashboard picker changes only draft and includes whole final Sa
     expect(host.querySelectorAll('input[type="datetime-local"]')).toHaveLength(0);
     await click(host.querySelector('[data-testid="ads-arabic-date-range-picker"] > button'));
     await click(button('آخر 7 أيام'));
+    const appliedEvent = jest.fn();
+    window.addEventListener('mezan:ads-date-range-applied', appliedEvent);
     await click(button('حفظ وتطبيق'));
+    expect(appliedEvent).not.toHaveBeenCalled();
+    window.removeEventListener('mezan:ads-date-range-applied', appliedEvent);
     expect(searchCombined).not.toHaveBeenCalled();
     await click(button('بحث'));
     expect(searchCombined).toHaveBeenCalledWith(expect.objectContaining({

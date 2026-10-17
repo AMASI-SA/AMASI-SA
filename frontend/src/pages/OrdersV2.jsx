@@ -26,7 +26,17 @@ import { useOrders } from "../hooks/useOrders";
 import { getOrderFilterSummary } from "../services/orderEngine";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import ArabicDateRangePicker from "../components/ArabicDateRangePicker";
-import { addDaysISO } from "../lib/dates";
+import { addDaysISO, toRiyadhISO } from "../lib/dates";
+
+function searchBoundDate(value, exclusive = false) {
+    if (!value) return "";
+    // Explicit-offset links keep their precise API bounds; display their Saudi days.
+    if (/(Z|[+-]\d{2}:\d{2})$/.test(value)) {
+        const timestamp = Date.parse(value);
+        return Number.isFinite(timestamp) ? toRiyadhISO(new Date(timestamp - (exclusive ? 1 : 0))) : "";
+    }
+    return value.slice(0, 10);
+}
 
 const STATUS_PRIORITY = [
     ["بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review"],
@@ -207,13 +217,13 @@ export default function OrdersV2() {
         provider: urlParams.get("provider") || "", campaign: urlParams.get("campaign") || "",
         campaign_id: urlParams.get("campaign_id") || "", ad_squad: urlParams.get("ad_squad") || "",
         ad_squad_id: urlParams.get("ad_squad_id") || "", ad: urlParams.get("ad") || "",
-        ad_id: urlParams.get("ad_id") || "", product: "", product_id: urlParams.get("product_id") || "", sku: urlParams.get("sku") || "", payment_status: "", status_exact: "",
+        ad_id: urlParams.get("ad_id") || "", product: "", product_id: urlParams.get("product_id") || "", sku: urlParams.get("sku") || "", payment_status: "", status_exact: null,
         utm: "", attribution_status: "", created_from: urlParams.get("created_from") || "",
         created_to: urlParams.get("created_to") || "", baseline_cutoff_at: urlParams.get("baseline_cutoff_at") || "",
     }));
     const [dateRange, setDateRange] = useState(() => ({
-        dateFrom: (urlParams.get("created_from") || "").slice(0, 10),
-        dateTo: (urlParams.get("created_to") || "").slice(0, 10),
+        dateFrom: searchBoundDate(urlParams.get("created_from")),
+        dateTo: searchBoundDate(urlParams.get("created_to"), true),
     }));
     const [selected, setSelected] = useState(() => new Set());
     const [allMatchingSelected, setAllMatchingSelected] = useState(false);
@@ -299,7 +309,7 @@ export default function OrdersV2() {
     function submitSearch(event) {
         event.preventDefault();
         if (loading) return;
-        searchCombined({ ...filters, q: searchDraft, status_exact: filters.status_exact || activeStatus || "" });
+        searchCombined({ ...filters, q: searchDraft, status_exact: filters.status_exact ?? activeStatus ?? "" });
     }
     function applyDateRange(range) {
         setDateRange(range);
@@ -326,13 +336,13 @@ export default function OrdersV2() {
                 <div className="mt-5 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">{statusCards.map((card) => <CountCard key={card.key || "all"} label={card.label} count={card.count} isAll={card.isAll} active={activeStatus === card.key} onClick={() => setActiveStatus(card.key)} />)}</div>
                 {summaryError && <div className="mt-2 text-xs text-rose-600">{summaryError}</div>}
                 <form onSubmit={submitSearch} className="mt-5 space-y-3">
-                    <div className="flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="رقم الطلب أو المنتج أو SKU أو الحملة" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus(filters.status_exact || activeStatus); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> الحالة</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</div>
+                    <div className="flex flex-wrap gap-2 sm:flex-nowrap"><div className="relative min-w-0 flex-1 basis-full sm:basis-auto"><MagnifyingGlass size={20} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="رقم الطلب أو المنتج أو SKU أو الحملة" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-11 pl-4 outline-none focus:border-violet-400" /></div><button type="button" onClick={() => { setDraftStatus((filters.status_exact ?? activeStatus) || null); setDrawerOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><Funnel size={18} /> الحالة</button><button type="submit" disabled={loading} className="rounded-xl bg-violet-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-60">بحث</button>{searchMode && <button type="button" onClick={clearSearch} className="rounded-xl border px-4 py-3 text-sm font-bold"><X size={17} /> مسح</button>}</div>
                     <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
                         {[["product","اسم المنتج"],["product_id","رقم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
                         <select value={filters.payment_status} onChange={(event) => setFilters((current) => ({ ...current, payment_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="partial">مدفوع جزئيًا</option></select>
                         <select value={filters.attribution_status} onChange={(event) => setFilters((current) => ({ ...current, attribution_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الإسناد</option><option value="matched">مطابق</option><option value="unattributed">غير منسوب</option><option value="conflicted">متعارض</option></select>
                         <div className="min-w-0 md:col-span-2" data-testid="orders-search-date-range">
-                            <ArabicDateRangePicker valueFrom={dateRange.dateFrom} valueTo={dateRange.dateTo} onApply={applyDateRange} />
+                            <ArabicDateRangePicker valueFrom={dateRange.dateFrom} valueTo={dateRange.dateTo} onApply={applyDateRange} emitAppliedEvent={false} />
                             <p className="mt-1 text-xs text-slate-500">{filters.created_from || filters.created_to ? "الفترة حسب تاريخ إنشاء الطلب؛ تُطبّق عند الضغط على بحث." : "كل التواريخ؛ اختر فترة لتضييق البحث."}</p>
                         </div>
                     </div>

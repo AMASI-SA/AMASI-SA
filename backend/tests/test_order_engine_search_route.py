@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from order_engine import _original_make_order_engine_router
-from test_order_engine_search_bounds import Stream, row
+from tests.test_order_engine_search_bounds import Stream, row
 
 
 def client(role='owner'):
