@@ -16,7 +16,7 @@ import httpx
 from pymongo import ReturnDocument
 
 from operational_atomic import operational_owner
-from assembly_status_policy import canonical_status, source_status, status_values
+from assembly_status_policy import canonical_status, source_status, status_values, component_refresh_pending
 from order_engine import shipping_label_service as shipping
 
 WORKFLOWS = "order_review_workflows"
@@ -74,11 +74,13 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
         current = await shipping_workflow(scoped, owner, number)
         outbox = current.get(FIELD) or {}
         source = await scoped["unified_orders"].find_one({"user_id": owner, "order_number": number})
+        if component_refresh_pending(source):
+            raise shipping.ShippingLabelError("completion_source_refresh_pending", "جارٍ التحقق من بيانات التجهيز المحدثة.")
         if (outbox.get("claim") != operation[FIELD]["claim"]
                 or outbox.get("lease_until", "") <= now().isoformat()):
             raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
-        allowed = {"in_progress"} if effect == "status" else {"in_progress", "completed"}
-        if canonical_status(source) not in allowed:
+        current_status = canonical_status(source)
+        if current_status not in {"in_progress", "completed"}:
             raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالشحن.")
         shipping_fence = {
             "epoch": current.get("shipping_status_epoch", 0),
@@ -105,6 +107,10 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
                 await assert_component_execution(scoped, user_id=owner, order_number=number, plan=plan)
             elif not await allow_legacy_component_execution(scoped, user_id=owner, order_number=number):
                 raise shipping.ShippingLabelError("component_reservation_missing", "تعذر إثبات حجز المكونات.")
+        if effect == "status" and current_status == "completed":
+            # A webhook won the race after the provider GET. Never dispatch a
+            # second status POST; require a fresh read of this completion.
+            raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
         if effect or patch is not None:
             selector = {
                 "user_id": owner, "order_number": number, "revision": current.get("revision"),
@@ -152,8 +158,22 @@ def public_status(workflow, *, canonical=None):
             "ready": available, "order_status_completed": confirmed}
 
 
-async def read_status(db, user_id, order_number):
+async def read_status(db, user_id, order_number, *, authorize_repair=None):
     workflow = await shipping_workflow(db, user_id, order_number)
+    if FIELD not in workflow:
+        from assembly_completion_legacy_readback import read_legacy_completion
+        legacy = await read_legacy_completion(db, user_id, order_number)
+        if legacy is not None:
+            return legacy
+        # An outbox was enrolled concurrently. Use its current authority.
+        workflow = await shipping_workflow(db, user_id, order_number)
+    operation = workflow.get(FIELD) or {}
+    if operation.get("version") == 2 and operation.get("state") == "requires_attention":
+        from assembly_completion_v2_readback import read_blocked_completion
+        recovered = await read_blocked_completion(db, user_id, order_number, authorize_repair=authorize_repair)
+        if recovered is not None:
+            return recovered
+        workflow = await shipping_workflow(db, user_id, order_number)
     return {**label_fields(workflow), **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 
 def label_fields(workflow):
@@ -193,12 +213,25 @@ async def _deliver(db, operation):
         # provider in_progress read on EVERY attempt. The owner accepts the
         # remaining remote GET/POST race: Salla has no conditional-write API.
         # A later attempt reads first; completed never causes another POST.
-        await guard_effect(db, operation, effect="status")
-        await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
-                                  json={"slug": "completed"}, single_post_attempt=True)
-        # An acknowledgement alone is not completion proof. Release the lease
-        # for a durable readback attempt; never send another POST in this run.
-        raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
+        try:
+            await guard_effect(db, operation, effect="status")
+        except shipping.ShippingLabelError as exc:
+            if exc.code != "completion_readback_pending":
+                raise
+            # One immediate bounded readback for the expected local transition,
+            # retaining the original shipment/material fence across both reads.
+            read_id, order = await shipping._resolve_order(db, owner, number)
+            if (read_id != internal_id or str(order.get("reference_id")) != number
+                    or str(order.get("id")) != internal_id):
+                raise shipping.ShippingLabelError("salla_order_reference_mismatch", "تعذر تأكيد هوية الطلب في سلة.")
+            await guard_effect(db, operation)
+            if not shipping._order_is_completed(order):
+                raise exc
+        else:
+            await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
+                                      json={"slug": "completed"}, single_post_attempt=True)
+            # An acknowledgement alone is not completion proof.
+            raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
     await guard_effect(db, operation, patch={
         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
         "salla_order_status_verified_at": now().isoformat()})
@@ -250,7 +283,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
             status = getattr(exc, "status_code", 0) or 0
-            retryable = (code == "completion_readback_pending"
+            retryable = (code in {"completion_readback_pending", "completion_source_refresh_pending"}
                          or isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError))
                          or status in {408, 429} or status >= 500)
             retry = (retryable and operation[FIELD].get("version") == 2

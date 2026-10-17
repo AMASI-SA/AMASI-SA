@@ -1594,6 +1594,28 @@ async def refresh_saved_shipping_label(
         # Keep merchant-courier generation and its provider checks unchanged.
         return await _refresh_provider_shipping_label(db, user_id, normalized, store_courier_only=True)
 
+    return await _saved_external_shipping_snapshot(db, user_id, normalized, order)
+
+
+async def read_saved_external_shipping_label(db: Any, user_id: str, order_number: str) -> dict[str, Any]:
+    """Read saved external artifacts only; never fall through to courier generation."""
+    from .repository import MongoOrderRepository
+    from .service import OrderNotFoundError, get_order
+
+    normalized = _text(order_number)
+    if not normalized:
+        raise ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
+    try:
+        order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=normalized)
+    except OrderNotFoundError as exc:
+        raise ShippingLabelError("order_not_found", "الطلب غير موجود في ميزان.", status_code=404) from exc
+    if _is_store_courier({"company": order.shipping.company, "meta": {"app_id": order.shipping.company_code}}):
+        raise ShippingLabelError("store_courier_explicit_print_required", "طباعة مندوب المتجر تتم عند طلب الطباعة فقط.")
+    return await _saved_external_shipping_snapshot(db, user_id, normalized, order)
+
+
+async def _saved_external_shipping_snapshot(db, user_id, normalized, order):
+    saved = order.shipping
     snapshot = _snapshot({
         "id": saved.shipment_id, "status": saved.status,
         "label_url": saved.label_url, "tracking_number": saved.tracking_number,
