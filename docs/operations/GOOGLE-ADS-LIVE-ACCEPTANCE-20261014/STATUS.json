@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "GOOGLE_PERIODIC_CURRENT_MOBILE_SOURCE_REVIEWED_B_CI_IN_PROGRESS",
-  "updated_at_utc": "2026-10-17T15:30:48.514Z",
+  "status": "GOOGLE_PERIODIC_MERGED_ORIGINAL_WORKSPACE_REHEARSAL_NEXT",
+  "updated_at_utc": "2026-10-17T15:36:23.296Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Require current B all final gates and clean Host20 adapter. Recheck remote Production exact fc51e2 and actual guard inactive; merge preserving exact B tree and source A ancestry. Original /app guarded FF and actual adapter, own prepare/prepublish, one toolbar republish,3 exact public probes then native Google/shared UI and periodic acceptance. Old reviewed intents superseded.",
+  "next_safe_action": "Fresh actual guard inactive, clean /app, fetch exact merged29ccdb81af9eb51ca2670b1bca95afa4666fb9c7 and fast-forward only. Original package adapter rehearsal without lease must match reviewed intent; then own prepare/prepublish, toolbar republish and3 exact public probes. No provider/financial writes.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,7 +450,7 @@
     }
   },
   "completion_followup": {
-    "status": "CURRENT_MOBILE_SOURCE_REVIEWED_B_CI_IN_PROGRESS",
+    "status": "MERGED_ORIGINAL_WORKSPACE_REHEARSAL_NEXT",
     "branch": "codex/google-periodic-current-prod-20261016",
     "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
     "scope": [
@@ -505,7 +505,11 @@
     "reviewed_B": {
       "intent_only_diff_verified": true,
       "readiness_run": 39045277893,
-      "status": "PENDING"
+      "status": "PASS",
+      "latest_contexts": 31,
+      "non_success_or_skip": 0,
+      "canonical_CodeQL": "success",
+      "clean_host20_adapter": "PASS"
     },
     "superseded_pr": 1367,
     "superseded_pr_state": "closed unmerged; preserved source0723, obsolete old-base intent must not deploy",
@@ -521,9 +525,11 @@
       "editor_signed_in_verified": true,
       "emergent_platform_signed_in_verified": true
     },
-    "merged": false,
+    "merged": true,
     "other_release": null,
     "browser_blocker": null,
-    "superseded_reviewed_backup": "codex/google-periodic-reviewed-62c29-backup"
+    "superseded_reviewed_backup": "codex/google-periodic-reviewed-62c29-backup",
+    "deployment_git_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
+    "merge_tree": "ad21eff70fbcfd48c7b2f18ca5514bfcf6bf4106"
   }
 }
