@@ -1775,8 +1775,6 @@ async def _refresh_shipping_label(
             "print_data": print_data,
             "message": "تم تجهيز بوليصة مندوب المتجر من بيانات الطلب.",
         }
-    if store_courier_only:
-        raise _stale_label()
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
