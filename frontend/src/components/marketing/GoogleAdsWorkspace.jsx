@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GoogleAdsIntelligenceCard from "./GoogleAdsIntelligenceCard";
 import GoogleCampaignComposer, { googleDefaultDraft, googleDefaultGroup } from "./GoogleCampaignComposer";
 import {
     GOOGLE_CAMPAIGN_LABELS, GOOGLE_STATUS_LABELS, analyzeGoogleCampaign,
@@ -300,6 +301,7 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
             {items.filter((row) => row.editable === false || row.creative_supported === false).map((row) => <p key={`${rowAccountId(row)}:${rowId(row, kind)}`} className="text-xs leading-6 text-amber-900">{rowName(row)}: {googleCreativeGaps(row).join(" · ") || "لا يمكن استعادة جميع إعدادات المحتوى الحالية بأمان."} · يظل تعديل المحتوى مقفلًا حتى تتوفر قراءة كاملة للصيغة والمواد.</p>)}
         </section>}
         <div ref={editorRef}>{composer && <GoogleCampaignComposer key={composer.key} selection={composer} readiness={readiness} onClose={() => setComposer(null)} onCompleted={completed} onDraftSaved={() => setDrafts(null)} />}</div>
+        {accountId && <GoogleAdsIntelligenceCard accountId={accountId} dateFrom={dateFrom} dateTo={dateTo} />}
         {analysis && <GoogleAnalysisPanel selection={analysis} dateFrom={dateFrom} dateTo={dateTo} onClose={() => setAnalysis(null)} onDraft={(draft) => openComposer({ mode: "create", accountId: analysis.accountId, accountName: accountNameOf(account || {}), currency: accountCurrency, initialDraft: draft })} onRecommendation={(item) => openComposer({ mode: "edit", action: item.action, accountId: item.account_id || analysis.accountId, accountName: accountNameOf(account || {}), currency: item.currency || accountCurrency, campaignId: String(item.campaign_id), name: item.campaign_name || analysis.name, reason: item.rationale || item.title || "توصية من ذكاء ميزان", changes: { ...(item.changes || {}), ...(item.proposed_budget_native ? { budget_native: String(item.proposed_budget_native) } : {}) } })} />}
         <nav aria-label="مستويات إعلانات جوجل" className="flex flex-wrap gap-2">{LEVELS.map(([value, label]) => <button key={value} type="button" className={`rounded-xl px-4 py-2.5 text-sm font-bold ${kind === value ? "bg-slate-950 text-white" : "border bg-white text-slate-700"}`} aria-pressed={kind === value} disabled={["groups", "ads"].includes(value) && !parent.campaignId} onClick={() => changeContext({ kind: value, parent: value === "campaigns" ? {} : parent })}>{label}</button>)}</nav>
         {parent.campaignId && <nav aria-label="مسار حملة جوجل" className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-100 p-3 text-sm"><button type="button" onClick={() => changeContext({ kind: "campaigns", parent: {} })} className="font-bold text-blue-700">الحملات</button><span>›</span><button type="button" onClick={() => changeContext({ kind: "groups", parent: { campaignId: parent.campaignId, campaignName: parent.campaignName, campaignType: parent.campaignType, campaignContext: parent.campaignContext } })} className="font-bold">{parent.campaignName}</button>{parent.groupName && <><span>›</span><span>{parent.groupName}</span></>}</nav>}
@@ -309,3 +311,4 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         <p className="text-xs leading-6 text-slate-500">التقارير بحسب توقيت وعملة حساب جوجل. لا تُجمع أرقام الحملات والمجموعات والإعلانات معًا. ظهور الحملة أو نجاح إرسالها لا يثبت قبول الإعلان أو بدء التسليم.</p>
     </section>;
 }
+

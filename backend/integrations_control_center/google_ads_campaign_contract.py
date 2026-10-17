@@ -43,6 +43,7 @@ SUPPORTED_FORMATS: dict[str, tuple[str, ...]] = {
     "HOTEL": ("HOTEL",),
 }
 TOTAL_BUDGET_TYPES = frozenset({"SEARCH", "SHOPPING", "PERFORMANCE_MAX", "DEMAND_GEN"})
+SMART_MANAGEMENT_ACTIONS = ("rename", "pause", "enable", "set_budget", "remove")
 UNSUPPORTED_CREATE = {
     "VIDEO": "Google Ads API does not support creation of classic VIDEO campaigns; Demand Gen video is a different campaign type.",
     "SMART": "New Smart campaign creation was discontinued by Google on 2026-09-23.",
@@ -466,6 +467,8 @@ def campaign_capabilities() -> list[dict[str, Any]]:
         elif campaign_type == "PERFORMANCE_MAX_TRAVEL":
             limitation = "Specialized travel-goal hotel-property asset sets and generation workflow are not implemented; ordinary Performance Max must not be substituted."
         actions = ["rename", "pause", "enable", "set_budget", "set_bidding", "set_targeting", "remove", "duplicate", "add_group", "rename_group", "pause_group", "enable_group", "remove_group"] if supported else []
+        if campaign_type == "SMART":
+            actions = list(SMART_MANAGEMENT_ACTIONS)
         if supported and campaign_type != "PERFORMANCE_MAX":
             actions.extend(["update_ad", "add_ad", "remove_ad", "pause_ad", "enable_ad", "set_group_bidding"])
         elif campaign_type == "PERFORMANCE_MAX":
@@ -480,7 +483,7 @@ def campaign_capabilities() -> list[dict[str, Any]]:
             "type": campaign_type, "label": label, "create": supported, "read": True,
             "manage": bool(actions), "actions": actions, "provider_limitation": limitation,
             "prerequisites": prerequisites.get(campaign_type, []),
-            "implemented": "builder_ready" if supported else "creation_unavailable" if campaign_type in UNSUPPORTED_CREATE else "not_implemented",
+            "implemented": "builder_ready" if supported else "existing_campaign_management" if campaign_type == "SMART" else "creation_unavailable" if campaign_type in UNSUPPORTED_CREATE else "not_implemented",
             "provider_api_version": "v25", "formats": list(SUPPORTED_FORMATS.get(campaign_type, ())),
             "bidding_strategies": list(SUPPORTED_STRATEGIES.get(campaign_type, ())),
             "budget_modes": ["DAILY", "TOTAL"] if campaign_type in TOTAL_BUDGET_TYPES else ["DAILY"] if supported else [],
@@ -489,3 +492,4 @@ def campaign_capabilities() -> list[dict[str, Any]]:
             "duplicate_source_policy": "complete_lossless_snapshot_required" if supported else None,
         })
     return rows
+

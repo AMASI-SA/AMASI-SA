@@ -153,12 +153,12 @@ test("entity group status changes submit the trusted selection without editable 
     expect(container.querySelector('textarea[aria-label*="JSON"]')).toBeNull(); expect(container.querySelector('input[aria-label*="معرف"]')).toBeNull();
 });
 
-test("named geo and language choices persist digit IDs even when the lookup also supplies resource names", async () => {
+test("Display geo and language choices persist digit IDs even when lookups supply resource names", async () => {
     jest.useFakeTimers();
     try {
         api.get.mockImplementation((url) => Promise.resolve({ data: { items: url.endsWith("/lookup/languages") ? [{ id: "1000", resource_name: "languageConstants/1000", name: "العربية", code: "ar" }] : url.endsWith("/lookup/geo") ? [{ id: "2682", resource_name: "geoTargetConstants/2682", name: "السعودية" }] : [] } }));
         api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "scoped_draft", revision: 1, draft: body.draft } }));
-        await render();
+        await render({ selection: { ...selection, initialDraft: { ...draft, campaign_type: "DISPLAY" } } });
         await change("بحث مواقع جوجل", "السعودية");
         await act(async () => { jest.advanceTimersByTime(300); });
         await act(async () => container.querySelector('[aria-label="المواقع الجغرافية: السعودية"]').click());
@@ -167,6 +167,22 @@ test("named geo and language choices persist digit IDs even when the lookup also
         expect(api.post.mock.calls[0][1].draft.geo_target_ids).toEqual(["2682"]);
         expect(api.post.mock.calls[0][1].draft.language_ids).toEqual(["1000"]);
     } finally { jest.useRealTimers(); }
+});
+
+test("Search explains automatic language matching and saves no legacy language criterion", async () => {
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "search", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: { ...draft, language_ids: ["1000"] } } });
+    expect(container.textContent).toContain("تطابق جوجل لغة إعلانات البحث وصفحات الوصول تلقائيًا");
+    expect(container.querySelector('[aria-label="لغات العملاء: العربية"]')).toBeNull();
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft.language_ids).toEqual([]);
+});
+
+test("Search geographic updates do not silently submit deprecated language targeting", async () => {
+    api.post.mockResolvedValue({ data: preview });
+    await render({ selection: { mode: "edit", action: "set_targeting", accountId: "123", campaignId: "456", campaignType: "SEARCH", campaignContext: { geo_target_ids: ["2682"], language_ids: ["1000"] } } });
+    await submit();
+    expect(api.post.mock.calls[0][1].changes).not.toHaveProperty("language_ids");
 });
 
 test("AI receives the chosen type and at most eight trusted Mezan products, preserved on save", async () => {
@@ -263,3 +279,4 @@ test.each([
     expect(container.querySelectorAll("img,iframe,object,embed,script")).toHaveLength(0);
     expect(api.post).not.toHaveBeenCalled();
 });
+
