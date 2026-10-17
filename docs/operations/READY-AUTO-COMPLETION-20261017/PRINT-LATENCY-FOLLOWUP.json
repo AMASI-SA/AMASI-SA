@@ -5,16 +5,31 @@
     "head": "958f83378e4bda58f3c356d9cee08a96d4d337fd",
     "tree": "c229dbe9cec96d4c0a97541548959229bc9c1451",
     "ci": "3/3 PASS;focused39075402901;mobile39075402926",
-    "apk": "not built;47 successor admission being prepared separately"
+    "apk": "47 source admission complete, not built"
   },
   "backend": {
     "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1432",
-    "head": "286e4bba20ef52dc026800da6ed8b49bdf7ee4ac",
-    "tree": "c72949f08fc0e3d6043499218495fee0bea2ca1d",
-    "ci": "Shipping Print Boundary39075609353 failed34 old mockseam cases; fixing; not release-ready"
+    "head": "11428960a8e6740b5eaa0eac2ddd763a6b34d64f",
+    "tree": "df6c477f227724da0d0ba8f962ebbf2e74531d89",
+    "ci": "A14/14PASS; BCI running readiness39076736387; artifact12116879067 independently SHA256+2135Gitrecords verified",
+    "source": "225ad9f27e75ebc9794aba53f81be9191f9eff42",
+    "runtime": "rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4"
   },
   "production": "unchanged since verified1431 f7b5a81",
   "evidence": "logo held download fallback1501ms;reprint1downloadfor2renders;combined syntheticcourier8to5GET;reported minute not measured ondevice",
   "device_acceptance": "not performed",
-  "review_changes": false
+  "review_changes": false,
+  "apk47": {
+    "pr": "https://github.com/AMASI-SA/amasi-mobile/pull/278",
+    "head": "f0d5f11ca0d645f4aca9f49ea858ad4af5a957a0",
+    "tree": "8c7863ff43ad274b0b3d6ccd2e7e424b82f0a054",
+    "ci": "39076008861 and39076028930 SUCCESS; full quality and Android export",
+    "artifact_id": 12117316550,
+    "artifact_sha256": "14aed60b9813d683bfa3d929cf9706a8a6d8ae893065661ab06dcbd75f44255d",
+    "runner_branch": "codex/apk47-runner-review-20261018",
+    "runner_head": "e7f02dd1a7c377cd6c847a756d0f621de52a2816",
+    "runner_tests": "root independent20PASS; agent historical17PASS",
+    "build": "NOT_SUBMITTED; backend pin/receipt pending"
+  },
+  "next": "Wait final B CI, reviewed rollback, governed release; fresh47 receipt and single build, APK inspection/link. No production/physical-print completion claim."
 }
