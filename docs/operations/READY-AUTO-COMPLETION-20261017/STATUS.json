@@ -3,7 +3,7 @@
   "branch": "codex/ready-prod177-integration-20261017",
   "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "CURRENT_PRODUCTION_INTEGRATION_PENDING",
+  "state": "FINAL_INTENT_CI_PENDING",
   "production_changed": false,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -16,7 +16,7 @@
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
     "mongo_and_performance": "PENDING",
-    "final_ci": "26 applicable successful +1 nonapplicable TikTok skip on ff442eb34",
+    "final_ci": "PENDING B20d8eeae1",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
@@ -28,10 +28,11 @@
     "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required",
     "after_payroll_race_delivery": "50 passed,9subtests,zero failures/errors/skips",
     "dashboard_three_arm": "reference40PASS,production40PASS,candidate40PASS;164records exacthistoricalJSON and productionreadcomparison",
-    "current_prod_integration": "101 passed,14 subtests,zero skips/errors/failures;293.24s; isolated Mongo",
+    "current_prod_integration": "182 passed,9subtests,0skips/failures;532.56s isolated Mongo on source16a44200f",
     "previous_head_ci": "255e1ecf:26/26 successful",
     "release_rehearsal": "39060189255 Linux clean-clone/runtime PASS",
-    "rollback_rehearsal": "39060790175 Backend,Frontend,clean-clone/runtime PASS;not activated"
+    "rollback_rehearsal": "39060790175 Backend,Frontend,clean-clone/runtime PASS;not activated",
+    "source_ci": "26/26 PASS source16a44200f"
   },
   "remaining": [
     "Android final tested HEAD and coordinated compatible client release",
@@ -43,9 +44,9 @@
   "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
   "source_tree": "f581c3a6762fdd26de773454e67da04df9889e27",
   "evidence_branch": "codex/ready-auto-evidence-20261017 (documentation only, do not deploy)",
-  "rollback_source": "d9945b7d961dfebca27fda5e08b3515ca922edbb exact baseline tree, not deployable until fresh intent/rehearsal",
-  "release_head": null,
-  "release_tree": null,
+  "rollback_source": "d2a1c75796b7dcb0bd56889beb6bb0e177277a53; rehearsal39063723586 pending",
+  "release_head": "20d8eeae176a7b623f505f1e00570bbaf3ef5933",
+  "release_tree": "a69beed9b18eb3e7c3ea38ec1ecb04ce6ddfad81",
   "rollback_release": "e6e161194d5ae5d27a623c91f652612e5e30a086",
   "previous_verified_release": "ff442eb34a91fa618d10d0b3e1484e0be1e3a313 (historical, Production base advanced)",
   "android": {
@@ -53,9 +54,9 @@
     "pr": 274,
     "source_audit": "PASS_NOT_DEPLOYED",
     "receipt_tests": "6 PASS",
-    "ci": "39062907673 pending",
+    "ci": "39062907673 PASS",
     "owner_decision": "new isolated reviewed APK then installation, no OTA",
-    "candidate": "46/1.0.31 being prepared separately",
+    "candidate": "74badd59030b7dea0329249799dc91fc4f127014,16 config tests independently PASS",
     "devices": "emulator only, no physical employee device attached"
   }
 }
