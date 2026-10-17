@@ -15,7 +15,7 @@ predecessor intent for the new rollback build. No data changes are included.
 Intent-only B_R: 4dcba49bb57d2b1d19b0b05652f7252908e2ce96.
 B_R tree: 335f3a396c5a83b4052becf0723676fb7f73253e.
 Runtime: rg5-3f4a8ba8052c436fb8ef52a61645dcba24b0cb5ee1bb8029a4dbd3d9a0c75800.
-Source rehearsal39064512416 PASS; final reviewed package rehearsal dispatched.
+Source rehearsal39064512416 PASS; final reviewed package rehearsal39065049714 PASS (Backend, Frontend, clean-clone adapter and runtime JSON).
 
 The same source bytes were rehearsed successfully on the prospective B parent:
 source d2a1c75796b7dcb0bd56889beb6bb0e177277a53, intent a7d23ca2aa08484cbaeb6226f1fb9550e7a38cd5,
