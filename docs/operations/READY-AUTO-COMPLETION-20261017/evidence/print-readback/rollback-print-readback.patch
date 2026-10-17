@@ -1,0 +1,1926 @@
+diff --git a/.github/workflows/review-completion-resumable.yml b/.github/workflows/review-completion-resumable.yml
+index b5a520dd..fe1f06b9 100644
+--- a/.github/workflows/review-completion-resumable.yml
++++ b/.github/workflows/review-completion-resumable.yml
+@@ -8,17 +8,8 @@ on:
+       - "backend/review_local_policy.py"
+       - "backend/preparation_piece_operations.py"
+       - "backend/assembly_completion_delivery.py"
+-      - "backend/assembly_completion_legacy_readback.py"
+-      - "backend/assembly_completion_v2_readback.py"
+       - "backend/assembly_status_policy.py"
+-      - "backend/salla_integration/auto_sync.py"
+-      - "backend/order_engine/shipping_label_service.py"
+       - "backend/tests/test_assembly_completion_delivery.py"
+-      - "backend/tests/test_assembly_completion_legacy_readback.py"
+-      - "backend/tests/test_assembly_completion_v2_readback.py"
+-      - "backend/tests/test_assembly_completion_status_transition.py"
+-      - "backend/tests/test_assembly_completion_readback_routes.py"
+-      - "backend/tests/test_shipping_saved_label_print.py"
+       - "backend/tests/test_assembly_search_instruction_batch.py"
+       - "backend/order_tracking_notes.py"
+       - "backend/preparation_route_history.py"
+@@ -97,11 +88,6 @@ jobs:
+           tests/test_review_local_downstream.py
+           tests/test_review_local_assembly.py
+           tests/test_assembly_completion_delivery.py
+-          tests/test_assembly_completion_legacy_readback.py
+-          tests/test_assembly_completion_v2_readback.py
+-          tests/test_assembly_completion_status_transition.py
+-          tests/test_assembly_completion_readback_routes.py
+-          tests/test_shipping_saved_label_print.py
+           tests/test_g47_ready_shipping_safety.py
+           tests/test_g47_ready_canonical_status_race.py
+           tests/test_assembly_search_instruction_batch.py
+@@ -125,7 +111,7 @@ jobs:
+           tests/test_order_review_export_controls.py
+           tests/test_order_review_mobile_app_permissions.py
+           tests/test_reviewed_products_catalog.py
+-          --asyncio-mode=auto --junitxml="${{ runner.temp }}/review-completion.xml"
++          --junitxml="${{ runner.temp }}/review-completion.xml"
+       - name: Preserve the acceptance configuration conflict guard
+         if: ${{ !cancelled() }}
+         run: >-
+@@ -139,7 +125,7 @@ jobs:
+           import os
+           from pathlib import Path
+           import xml.etree.ElementTree as ET
+-          for name, minimum in (("review-completion.xml", 256), ("review-acceptance-guard.xml", 1)):
++          for name, minimum in (("review-completion.xml", 174), ("review-acceptance-guard.xml", 1)):
+               cases = list(ET.parse(Path(os.environ["RUNNER_TEMP"]) / name).iter("testcase"))
+               assert len(cases) >= minimum, (name, "Missing executed tests", len(cases))
+               rejected = [row.attrib.get("name") for row in cases
+@@ -151,11 +137,6 @@ jobs:
+                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
+                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
+                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
+-                                         ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 28),
+-                                         ("test_assembly_completion_v2_readback.BlockedCompletionTests", 24),
+-                                         ("test_assembly_completion_status_transition.StatusTransitionTests", 9),
+-                                         ("test_assembly_completion_readback_routes.CompletionReadbackRouteTests", 3),
+-                                         ("test_shipping_saved_label_print", 18),
+                                          ("test_g47_ready_shipping_safety.CounterexampleTests", 3),
+                                          ("test_g47_ready_shipping_safety.SafetyTests", 10),
+                                          ("test_g47_ready_shipping_safety.StatusPolicyTests", 1),
+diff --git a/backend/assembly_completion_delivery.py b/backend/assembly_completion_delivery.py
+index 94529c2a..9f866ecf 100644
+--- a/backend/assembly_completion_delivery.py
++++ b/backend/assembly_completion_delivery.py
+@@ -16,7 +16,7 @@ import httpx
+ from pymongo import ReturnDocument
+ 
+ from operational_atomic import operational_owner
+-from assembly_status_policy import canonical_status, source_status, status_values, component_refresh_pending
++from assembly_status_policy import canonical_status, source_status, status_values
+ from order_engine import shipping_label_service as shipping
+ 
+ WORKFLOWS = "order_review_workflows"
+@@ -74,13 +74,11 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
+         current = await shipping_workflow(scoped, owner, number)
+         outbox = current.get(FIELD) or {}
+         source = await scoped["unified_orders"].find_one({"user_id": owner, "order_number": number})
+-        if component_refresh_pending(source):
+-            raise shipping.ShippingLabelError("completion_source_refresh_pending", "جارٍ التحقق من بيانات التجهيز المحدثة.")
+         if (outbox.get("claim") != operation[FIELD]["claim"]
+                 or outbox.get("lease_until", "") <= now().isoformat()):
+             raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+-        current_status = canonical_status(source)
+-        if current_status not in {"in_progress", "completed"}:
++        allowed = {"in_progress"} if effect == "status" else {"in_progress", "completed"}
++        if canonical_status(source) not in allowed:
+             raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالشحن.")
+         shipping_fence = {
+             "epoch": current.get("shipping_status_epoch", 0),
+@@ -107,10 +105,6 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
+                 await assert_component_execution(scoped, user_id=owner, order_number=number, plan=plan)
+             elif not await allow_legacy_component_execution(scoped, user_id=owner, order_number=number):
+                 raise shipping.ShippingLabelError("component_reservation_missing", "تعذر إثبات حجز المكونات.")
+-        if effect == "status" and current_status == "completed":
+-            # A webhook won the race after the provider GET. Never dispatch a
+-            # second status POST; require a fresh read of this completion.
+-            raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
+         if effect or patch is not None:
+             selector = {
+                 "user_id": owner, "order_number": number, "revision": current.get("revision"),
+@@ -158,22 +152,8 @@ def public_status(workflow, *, canonical=None):
+             "ready": available, "order_status_completed": confirmed}
+ 
+ 
+-async def read_status(db, user_id, order_number, *, authorize_repair=None):
++async def read_status(db, user_id, order_number):
+     workflow = await shipping_workflow(db, user_id, order_number)
+-    if FIELD not in workflow:
+-        from assembly_completion_legacy_readback import read_legacy_completion
+-        legacy = await read_legacy_completion(db, user_id, order_number)
+-        if legacy is not None:
+-            return legacy
+-        # An outbox was enrolled concurrently. Use its current authority.
+-        workflow = await shipping_workflow(db, user_id, order_number)
+-    operation = workflow.get(FIELD) or {}
+-    if operation.get("version") == 2 and operation.get("state") == "requires_attention":
+-        from assembly_completion_v2_readback import read_blocked_completion
+-        recovered = await read_blocked_completion(db, user_id, order_number, authorize_repair=authorize_repair)
+-        if recovered is not None:
+-            return recovered
+-        workflow = await shipping_workflow(db, user_id, order_number)
+     return {**label_fields(workflow), **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
+ 
+ def label_fields(workflow):
+@@ -213,25 +193,12 @@ async def _deliver(db, operation):
+         # provider in_progress read on EVERY attempt. The owner accepts the
+         # remaining remote GET/POST race: Salla has no conditional-write API.
+         # A later attempt reads first; completed never causes another POST.
+-        try:
+-            await guard_effect(db, operation, effect="status")
+-        except shipping.ShippingLabelError as exc:
+-            if exc.code != "completion_readback_pending":
+-                raise
+-            # One immediate bounded readback for the expected local transition,
+-            # retaining the original shipment/material fence across both reads.
+-            read_id, order = await shipping._resolve_order(db, owner, number)
+-            if (read_id != internal_id or str(order.get("reference_id")) != number
+-                    or str(order.get("id")) != internal_id):
+-                raise shipping.ShippingLabelError("salla_order_reference_mismatch", "تعذر تأكيد هوية الطلب في سلة.")
+-            await guard_effect(db, operation)
+-            if not shipping._order_is_completed(order):
+-                raise exc
+-        else:
+-            await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
+-                                      json={"slug": "completed"}, single_post_attempt=True)
+-            # An acknowledgement alone is not completion proof.
+-            raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
++        await guard_effect(db, operation, effect="status")
++        await shipping.call_salla(db, owner, "POST", f"/orders/{internal_id}/status",
++                                  json={"slug": "completed"}, single_post_attempt=True)
++        # An acknowledgement alone is not completion proof. Release the lease
++        # for a durable readback attempt; never send another POST in this run.
++        raise shipping.ShippingLabelError("completion_readback_pending", "جارٍ التحقق من تنفيذ الطلب في سلة.")
+     await guard_effect(db, operation, patch={
+         f"{FIELD}.order_confirmed": True, "salla_order_status": "completed",
+         "salla_order_status_verified_at": now().isoformat()})
+@@ -283,7 +250,7 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
+             # No provider messages, identifiers or customer data in diagnostics.
+             code = getattr(exc, "code", type(exc).__name__)
+             status = getattr(exc, "status_code", 0) or 0
+-            retryable = (code in {"completion_readback_pending", "completion_source_refresh_pending"}
++            retryable = (code == "completion_readback_pending"
+                          or isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError))
+                          or status in {408, 429} or status >= 500)
+             retry = (retryable and operation[FIELD].get("version") == 2
+diff --git a/backend/assembly_completion_legacy_readback.py b/backend/assembly_completion_legacy_readback.py
+deleted file mode 100644
+index 363496b6..00000000
+--- a/backend/assembly_completion_legacy_readback.py
++++ /dev/null
+@@ -1,229 +0,0 @@
+-"""Ephemeral, read-only completion proof for pre-outbox assembly workflows.
+-
+-Saved label availability is a local projection policy, not Salla completion
+-evidence. Each completed read needs a fresh exact Salla order observation. Only
+-overlapping readers share work; completed results are never retained as authority.
+-"""
+-import asyncio
+-from copy import deepcopy
+-import hashlib
+-import json
+-from urllib.parse import quote
+-
+-import httpx
+-
+-from accounting_atomic import SessionDatabase
+-from accounting_write_control import AccountingDatabase
+-from assembly_status_policy import canonical_status
+-from order_engine import shipping_label_service as shipping
+-from salla_shipping import CURRENT_SHIPPING, extract_shipping, projected_shipping
+-
+-READBACK_TIMEOUT_SECONDS = 9.0
+-_flights = {}
+-_WORKFLOW_FIELDS = (
+-    "user_id", "order_number", "stage", "completion_mode", "review_completion_operation_id",
+-    "items", "operational_items", "fulfillment_decision", "assembly_status",
+-    "assembly_ready_piece_count", "assembly_total_piece_count", "preparation_receipt_status",
+-    "shipping_print_batch_id", "experiment_mode", "experiment_delivery_flow",
+-    "shipping_status_epoch", "store_courier_assignee_id", "store_courier_assignee_name",
+-    "store_delivery_assignment_id",
+-)
+-_SOURCE_FIELDS = (
+-    "user_id", "order_number", "order_status", "order_status_slug", "g47_salla_snapshot",
+-    CURRENT_SHIPPING, *shipping._LABEL_ROOT_FIELDS,
+-    "shipping_address", "shipping_address_raw", "shipping_city", "shipping_district",
+-    "shipping_street", "shipping_national_address", "shipping_short_address",
+-    "shipping_postal_code", "shipping_building_number", "shipping_additional_number",
+-    "shipping_country", "shipping_latitude", "shipping_longitude",
+-)
+-_RAW_FIELDS = (
+-    "id", "reference_id", "status", "status_slug", "items", "shipping_address", "payment_method",
+-    "payment_status", "shipping", "shipments", "shipping_company", "shipping_company_code",
+-)
+-
+-
+-def _select(value, keys):
+-    # Preserve absent vs explicitly null fields in the fence.
+-    return {key: deepcopy(value[key]) for key in keys if key in value}
+-
+-
+-def _courier(carrier):
+-    return shipping._is_store_courier({"company": carrier.get("company_name"),
+-                                      "meta": {"app_id": carrier.get("company_code")}})
+-
+-
+-async def _capture(db, owner, number):
+-    workflow = await db.order_review_workflows.find_one({"user_id": owner, "order_number": number})
+-    if not workflow or workflow.get("assembly_status") != "completed":
+-        raise shipping.ShippingLabelError("assembly_completion_required", "أكمل جميع منتجات الطلب في التجميع والعنونة أولًا.")
+-    if "assembly_delivery" in workflow:
+-        return None
+-    source = await db.unified_orders.find_one({"user_id": owner, "order_number": number})
+-    if not source:
+-        raise shipping.ShippingLabelError("order_not_found", "الطلب غير موجود في ميزان.", status_code=404)
+-    if canonical_status(source) not in {"in_progress", "completed"}:
+-        raise shipping.ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية غير مؤكدة أو لا تسمح بالطباعة.")
+-    raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+-    internal_id = shipping._text(raw.get("id"))
+-    if not internal_id:
+-        raise shipping.ShippingLabelError("salla_order_id_missing", "حدّث بيانات الطلب من سلة للتحقق من معرّفه.")
+-    current = projected_shipping(source) or extract_shipping(raw) or {}
+-    fence = {"workflow": _select(workflow, _WORKFLOW_FIELDS),
+-             "source": _select(source, _SOURCE_FIELDS), "raw": _select(raw, _RAW_FIELDS)}
+-    # Receipt invalidation precedes the asynchronous current-shipment projection.
+-    cancelled = await db.salla_shipping_label_inbox.find_one({"user_id": owner,
+-        "$or": [{"order_number": number}, {"order_id": internal_id}],
+-        "observation.shipment_id": shipping._text(current.get("shipment_id")),
+-        "observation.status": {"$in": list(shipping._CANCELLED)}}, {"_id": 1})
+-    fence["cancelled"] = bool(cancelled)
+-    return {"fence": fence, "internal_id": internal_id, "shipping": current}
+-
+-
+-def _root_database(db):
+-    root = db.current() if isinstance(db, AccountingDatabase) else db
+-    if isinstance(root, SessionDatabase):
+-        raise shipping.ShippingLabelError("completion_readback_scope_conflict", "أعد التحقق من الطلب خارج عملية الحفظ الحالية.")
+-    return root
+-
+-
+-async def _snapshot(db, owner, number, *, expected=None):
+-    # A fresh read-only Mongo snapshot keeps workflow/source/receipt observations
+-    # consistent without incrementing operational owner revisions. Never hold a
+-    # Mongo snapshot across provider IO or reuse an existing transaction snapshot.
+-    root = _root_database(db)
+-    async with await root.client.start_session(snapshot=True) as session:
+-        scoped = SessionDatabase(root, session)
+-        scoped._owner = owner
+-        current = await _capture(scoped, owner, number)
+-        if expected is None:
+-            return current
+-        if current != expected:
+-            raise shipping._stale_label()
+-        if _courier(current["shipping"]):
+-            return {"ready": False, "label_url": None, "label_type": "store_courier", "print_data": None}
+-        return await shipping.read_saved_external_shipping_label(scoped, owner, number)
+-
+-
+-def _assert_provider_identity(order, internal_id, number):
+-    if (not isinstance(order, dict) or shipping._text(order.get("id")) != internal_id
+-            or shipping._text(order.get("reference_id")) != number):
+-        raise shipping.ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
+-    if not shipping._order_is_completed(order):
+-        raise shipping.ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.")
+-
+-
+-def _assert_provider_shipping(order, current):
+-    # Missing shipping in a light response does not initiate a shipment lookup.
+-    # Positive contradictions, however, cannot authorize the cached old label.
+-    if _courier(current):
+-        # Old external shipments do not define the current store-courier route.
+-        # Keep the existing explicit courier document path and its assignment.
+-        observed = extract_shipping({key: order.get(key) for key in (
+-            "shipping", "shipping_company", "shipping_company_code")}) or {}
+-    else:
+-        rows = order.get("shipments")
+-        rows = rows if isinstance(rows, list) else [rows] if isinstance(rows, dict) else [order.get("shipment")]
+-        outbound = [row for row in rows if isinstance(row, dict)
+-                    and shipping._status(row.get("type") or row.get("shipment_type")) not in
+-                    {"return", "return_shipment", "reverse"}]
+-        current_id = shipping._text(current.get("shipment_id"))
+-        if any(current_id and shipping._text(row.get("id")) == current_id
+-               and shipping._status(row.get("status")) in shipping._CANCELLED for row in outbound):
+-            raise shipping._stale_label()
+-        active_ids = {shipping._text(row.get("id")) for row in outbound
+-                      if shipping._text(row.get("id")) and shipping._status(row.get("status")) not in shipping._CANCELLED}
+-        if len(active_ids) > 1:
+-            raise shipping._stale_label()
+-        observed = extract_shipping(order) or {}
+-    for key in ("shipment_id", "tracking_number"):
+-        if observed.get(key) and current.get(key) and str(observed[key]) != str(current[key]):
+-            raise shipping._stale_label()
+-    left = {"code": shipping._text(current.get("company_code")), "name": shipping._text(current.get("company_name"))}
+-    right = {"code": shipping._text(observed.get("company_code")), "name": shipping._text(observed.get("company_name"))}
+-    if shipping._label_carriers_match(left, right) is False:
+-        raise shipping._stale_label()
+-    if observed.get("status") in shipping._CANCELLED | shipping._PENDING:
+-        raise shipping._stale_label()
+-
+-
+-def _assert_provider_material(order, raw):
+-    # A light GET may omit material, but positive changed material cannot
+-    # authorize the old completion. Never enrich or resync from this read.
+-    for key in ("items", "shipping_address", "payment_method", "payment_status"):
+-        if key in order and order[key] != raw.get(key):
+-            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+-    observed = order.get("shipping") if isinstance(order.get("shipping"), dict) else {}
+-    saved = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
+-    for key in ("address", "recipient", "receiver"):
+-        if key in observed and observed[key] != saved.get(key):
+-            raise shipping.ShippingLabelError("assembly_completion_evidence_changed", "تغيرت أدلة التجهيز؛ يلزم التحقق.")
+-
+-
+-async def _read(db, owner, number, before):
+-    try:
+-        response = await shipping.call_salla(db, owner, "GET", "/orders/" + quote(before["internal_id"], safe=""))
+-    except (shipping.SallaError, httpx.HTTPError) as exc:
+-        raise shipping.ShippingLabelError("completion_readback_unavailable", "تعذّر التحقق من حالة الطلب في سلة؛ أعد تحديث الحالة.", status_code=503) from exc
+-    order = response.get("data") if isinstance(response, dict) else None
+-    _assert_provider_identity(order, before["internal_id"], number)
+-    _assert_provider_shipping(order, before["shipping"])
+-    _assert_provider_material(order, before["fence"]["raw"])
+-    # The final snapshot is the local read linearization point. Its label and
+-    # cancellation receipt belong to the same observation as the material fence.
+-    label = await _snapshot(db, owner, number, expected=before)
+-    ready = label.get("ready") is True
+-    return {**label, "order_number": number, "assembly_completion_confirmed": True,
+-            "order_completion_status": "confirmed", "order_status_completed": True,
+-            "label_status": "available" if ready else "pending", "requires_attention": False,
+-            "error_code": None, "error_message": None, "ready": ready}
+-
+-
+-async def _join(db, owner, number):
+-    before = await _snapshot(db, owner, number)
+-    if before is None:
+-        return None
+-    digest = hashlib.sha256(json.dumps(before, sort_keys=True, default=str).encode()).hexdigest()
+-    # Different request wrappers around the same root database share only the
+-    # same merchant/order/fence; their caller-owned final reads remain separate.
+-    key = (id(_root_database(db)), owner, number, digest)
+-    entry = _flights.get(key)
+-    if entry is None or entry["task"].done():
+-        task = asyncio.create_task(asyncio.wait_for(_read(db, owner, number, before), READBACK_TIMEOUT_SECONDS))
+-        entry = {"task": task, "waiters": 0}
+-        _flights[key] = entry
+-    entry["waiters"] += 1
+-    try:
+-        result = await asyncio.shield(entry["task"])
+-        # A joined result is not reusable authority: this caller checks the
+-        # current local fence and cancellation receipt just before returning.
+-        label = await _snapshot(db, owner, number, expected=before)
+-        if any(result.get(key) != value for key, value in label.items()):
+-            raise shipping._stale_label()
+-        return deepcopy(result)
+-    finally:
+-        entry["waiters"] -= 1
+-        if entry["waiters"] == 0:
+-            if _flights.get(key) is entry:
+-                del _flights[key]
+-            if not entry["task"].done():
+-                entry["task"].cancel()
+-            try:
+-                await entry["task"]
+-            except (asyncio.CancelledError, Exception):
+-                # Every waiter already receives its own original exception.
+-                pass
+-
+-
+-async def read_legacy_completion(db, user_id, order_number):
+-    """Return fresh ephemeral legacy proof, or None when an outbox exists.
+-
+-    No workflow, source, owner revision or outbox writes are performed. The
+-    authenticated Salla transport retains its existing token-refresh policy.
+-    """
+-    owner, number = shipping._text(user_id), shipping._text(order_number)
+-    if not owner or not number:
+-        raise shipping.ShippingLabelError("order_number_required", "رقم الطلب والمالك مطلوبان.", status_code=400)
+-    try:
+-        return await asyncio.wait_for(_join(db, owner, number), READBACK_TIMEOUT_SECONDS)
+-    except TimeoutError as exc:
+-        raise shipping.ShippingLabelError("completion_readback_timeout", "تعذّر التحقق من سلة خلال المهلة؛ أعد تحديث الحالة.", status_code=504) from exc
+diff --git a/backend/assembly_completion_v2_readback.py b/backend/assembly_completion_v2_readback.py
+deleted file mode 100644
+index 6956b545..00000000
+--- a/backend/assembly_completion_v2_readback.py
++++ /dev/null
+@@ -1,203 +0,0 @@
+-"""Fresh completion evidence for an inactive, blocked v2 delivery only.
+-
+-This does not resume delivery. Healthy canonical reads write nothing. The sole
+-authorized repair is a versioned in_progress/completed alias conflict, under
+-the operational owner fence; it changes source status aliases only. Outbox,
+-inventory, workflow, component and provider state are never written here.
+-"""
+-import asyncio
+-from copy import deepcopy
+-from datetime import datetime, timezone
+-from urllib.parse import quote
+-
+-from fastapi import HTTPException
+-import httpx
+-
+-from accounting_atomic import SessionDatabase
+-from assembly_completion_delivery import source_fingerprint, workflow_fingerprint
+-from assembly_completion_legacy_readback import (
+-    _assert_provider_identity, _assert_provider_material, _assert_provider_shipping, _courier, _root_database,
+-)
+-from assembly_status_policy import canonical_status, status_values
+-from fulfillment_v2_routes import (
+-    COMPONENT_LIFECYCLES, LEGACY_COMPONENT_COHORT, assert_component_execution,
+-    component_provider_version, component_source_time, legacy_component_cohort,
+-)
+-from operational_atomic import operational_owner
+-from order_engine import shipping_label_service as shipping
+-from salla_shipping import CURRENT_SHIPPING, extract_shipping, projected_shipping
+-from stock_component_consumption_service import PLANS
+-
+-READBACK_TIMEOUT_SECONDS = 9.0
+-_CODES = {"assembly_canonical_status_blocked", "completion_source_refresh_pending"}
+-
+-
+-def _inactive(outbox):
+-    if (not isinstance(outbox, dict) or outbox.get("version") != 2
+-            or outbox.get("state") != "requires_attention"
+-            or outbox.get("error_code") not in _CODES
+-            or outbox.get("legacy_readback_only") or outbox.get("claim")):
+-        return False
+-    value = outbox.get("lease_until")
+-    if value in (None, ""):
+-        return True
+-    try:
+-        expires = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+-    except (TypeError, ValueError):
+-        return False
+-    return expires.tzinfo is not None and expires <= datetime.now(timezone.utc)
+-
+-
+-def _alias_conflict(source):
+-    raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+-    provider = status_values(raw.get("status")) | status_values(raw.get("status_slug"))
+-    values = provider | status_values(source.get("order_status")) | status_values(source.get("order_status_slug"))
+-    return bool(provider) and values == {"in_progress", "completed"}
+-
+-
+-async def _capture(db, owner, number):
+-    workflow = await db.order_review_workflows.find_one({"user_id": owner, "order_number": number})
+-    if not workflow or workflow.get("assembly_status") != "completed":
+-        return None
+-    outbox = workflow.get("assembly_delivery")
+-    if not _inactive(outbox) or workflow_fingerprint(workflow) != outbox.get("workflow_fingerprint"):
+-        return None
+-    source = await db.unified_orders.find_one({"user_id": owner, "order_number": number})
+-    if not source or source_fingerprint(source) != outbox.get("source_fingerprint"):
+-        return None
+-    watermark = source.get("g47_salla_snapshot") or {}
+-    if watermark.get("component_pending") or watermark.get("requires_authoritative_refresh") or watermark.get("cancelled"):
+-        return None
+-    repair = canonical_status(source) not in {"in_progress", "completed"}
+-    if repair and not _alias_conflict(source):
+-        return None
+-    raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+-    internal_id = shipping._text(raw.get("id"))
+-    if not internal_id or shipping._text(raw.get("reference_id")) != number:
+-        return None
+-    plan = await db[PLANS].find_one({"user_id": owner, "order_id": number})
+-    lifecycle = await db[COMPONENT_LIFECYCLES].find_one({"user_id": owner, "order_number": number})
+-    settings = await db.settings.find_one({"user_id": owner}) or {}
+-    try:
+-        if plan:
+-            if plan.get("state") != "accepted" or plan.get("reconciliation_required"):
+-                return None
+-            await assert_component_execution(db, user_id=owner, order_number=number, plan=plan)
+-        elif (not lifecycle or lifecycle.get("state") != LEGACY_COMPONENT_COHORT
+-                or lifecycle.get("cancelled") or lifecycle.get("retry_required")
+-                or not await legacy_component_cohort(db, user_id=owner, order_number=number)):
+-            # Read existing legacy evidence; never call its audit-marker writer.
+-            return None
+-    except HTTPException:
+-        return None
+-    current = projected_shipping(source) or extract_shipping(raw) or {}
+-    cancelled = await db.salla_shipping_label_inbox.find_one({"user_id": owner,
+-        "$or": [{"order_number": number}, {"order_id": internal_id}],
+-        "observation.shipment_id": shipping._text(current.get("shipment_id")),
+-        "observation.status": {"$in": list(shipping._CANCELLED)}}, {"_id": 1})
+-    return {"workflow": workflow, "source": source, "plan": plan, "lifecycle": lifecycle,
+-            "settings": settings, "internal_id": internal_id, "shipping": current,
+-            "cancelled": bool(cancelled), "repair_needed": repair}
+-
+-
+-async def _snapshot(db, owner, number, *, expected=None):
+-    root = _root_database(db)
+-    async with await root.client.start_session(snapshot=True) as session:
+-        scoped = SessionDatabase(root, session)
+-        scoped._owner = owner
+-        current = await _capture(scoped, owner, number)
+-        if expected is None:
+-            return current
+-        if current != expected:
+-            raise shipping._stale_label()
+-        if current["repair_needed"]:
+-            raise shipping._stale_label()
+-        if _courier(current["shipping"]):
+-            return {"ready": False, "label_url": None, "label_type": "store_courier", "print_data": None}
+-        return await shipping.read_saved_external_shipping_label(scoped, owner, number)
+-
+-
+-def _repair_version(order, before):
+-    version = component_provider_version(order)
+-    source = before["source"]
+-    raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+-    values = [(source.get("g47_salla_snapshot") or {}).get("source_updated_at"),
+-              raw.get("updated_at"), (raw.get("date") or {}).get("updated") if isinstance(raw.get("date"), dict) else None,
+-              (before["lifecycle"] or {}).get("source_updated_at")]
+-    supplied = [value for value in values if value not in (None, "")]
+-    versions = [component_source_time(value) for value in supplied]
+-    if not version or not versions or any(value is None for value in versions) or version < max(versions):
+-        return None
+-    return version
+-
+-
+-async def _repair_aliases(db, owner, number, order, before, *, authorize_repair=None):
+-    version = _repair_version(order, before)
+-    if version is None:
+-        return None
+-    async def repair(scoped):
+-        current = await _capture(scoped, owner, number)
+-        if current != before:
+-            raise shipping._stale_label()
+-        if authorize_repair is not None:
+-            # Routes provide a fresh permission/tenant check inside this same
+-            # transaction; denial also rolls back the owner revision increment.
+-            await authorize_repair(scoped)
+-        patch = {"order_status": "completed", "order_status_slug": "completed",
+-                 "raw_by_source.salla_direct.status": deepcopy(order["status"]) if "status" in order else "completed",
+-                 "raw_by_source.salla_direct.status_slug": "completed",
+-                 "raw_by_source.salla_direct.updated_at": version}
+-        changed = await scoped.unified_orders.update_one(
+-            {"_id": current["source"]["_id"], "user_id": owner, "order_number": number}, {"$set": patch})
+-        if changed.matched_count != 1:
+-            raise shipping._stale_label()
+-        after = await _capture(scoped, owner, number)
+-        expected = deepcopy(before)
+-        expected["source"].update(order_status="completed", order_status_slug="completed")
+-        expected["source"]["raw_by_source"]["salla_direct"].update(
+-            status=patch["raw_by_source.salla_direct.status"], status_slug="completed", updated_at=version)
+-        expected["repair_needed"] = False
+-        if after != expected:
+-            raise shipping._stale_label()
+-        return after
+-    return await operational_owner(_root_database(db), owner, repair)
+-
+-
+-async def _read(db, owner, number, *, authorize_repair=None):
+-    before = await _snapshot(db, owner, number)
+-    if before is None:
+-        return None
+-    try:
+-        response = await shipping.call_salla(db, owner, "GET", "/orders/" + quote(before["internal_id"], safe=""))
+-    except (shipping.SallaError, httpx.HTTPError) as exc:
+-        raise shipping.ShippingLabelError("completion_readback_unavailable", "تعذّر التحقق من حالة الطلب في سلة؛ أعد تحديث الحالة.", status_code=503) from exc
+-    order = response.get("data") if isinstance(response, dict) else None
+-    _assert_provider_identity(order, before["internal_id"], number)
+-    _assert_provider_shipping(order, before["shipping"])
+-    _assert_provider_material(order, (before["source"].get("raw_by_source") or {}).get("salla_direct") or {})
+-    if before["repair_needed"]:
+-        before = await _repair_aliases(db, owner, number, order, before, authorize_repair=authorize_repair)
+-        if before is None:
+-            return None
+-    # This independent fresh local snapshot is the response linearization point.
+-    label = await _snapshot(db, owner, number, expected=before)
+-    ready = label.get("ready") is True
+-    return {**label, "order_number": number, "assembly_completion_confirmed": True,
+-            "order_completion_status": "confirmed", "order_status_completed": True,
+-            "label_status": "available" if ready else "pending", "requires_attention": False,
+-            "error_code": None, "error_message": None, "ready": ready}
+-
+-
+-async def read_blocked_completion(db, user_id, order_number, *, authorize_repair=None):
+-    """Return ephemeral proof or None if this narrow recovery is inapplicable.
+-
+-Never resumes an outbox or performs status/issuance POST, AWB/PDF work or resync.
+-Only the owner-approved versioned alias repair can write source status fields.
+-"""
+-    owner, number = shipping._text(user_id), shipping._text(order_number)
+-    if not owner or not number:
+-        raise shipping.ShippingLabelError("order_number_required", "رقم الطلب والمالك مطلوبان.", status_code=400)
+-    try:
+-        return await asyncio.wait_for(_read(db, owner, number, authorize_repair=authorize_repair), READBACK_TIMEOUT_SECONDS)
+-    except TimeoutError as exc:
+-        raise shipping.ShippingLabelError("completion_readback_timeout", "تعذّر التحقق من سلة خلال المهلة؛ أعد تحديث الحالة.", status_code=504) from exc
+diff --git a/backend/assembly_status_policy.py b/backend/assembly_status_policy.py
+index 7b5d5d31..091789fb 100644
+--- a/backend/assembly_status_policy.py
++++ b/backend/assembly_status_policy.py
+@@ -34,38 +34,8 @@ async def source_status(db, owner, number):
+     return canonical_status(source)
+ 
+ 
+-def component_refresh_pending(source):
+-    """A known eligible status awaiting local component reconciliation only.
+-
+-    An ambiguous/cancelled status or a required authoritative refresh is not
+-    a transient success and must retain the stricter blocked behavior.
+-    """
+-    source = source or {}
+-    snapshot = source.get("g47_salla_snapshot") or {}
+-    return bool(snapshot.get("component_pending") and not snapshot.get("requires_authoritative_refresh")
+-                and canonical_status({**source, "g47_salla_snapshot": {
+-                    **snapshot, "component_pending": False}}) in {"in_progress", "completed"})
+-
+-
+ async def invalidate_shipping_if_blocked(db, owner, number):
+-    source = await db["unified_orders"].find_one({"user_id": owner, "order_number": number})
+-    if canonical_status(source) in {"in_progress", "completed"}:
+-        return
+-    if component_refresh_pending(source):
+-        # A source transaction and its component reconciliation are separate
+-        # durable phases. Stop use of old proof, but keep delivery recoverable.
+-        await db["order_review_workflows"].update_one(
+-            {"user_id": owner, "order_number": number, "assembly_status": "completed"},
+-            {"$set": {"carrier_label_ready": False, "salla_order_status": "unknown",
+-                      "salla_order_status_verified_at": None,
+-                      "carrier_label_url": None, "carrier_label_print_data": None}},
+-        )
+-        await db["order_review_workflows"].update_one(
+-            {"user_id": owner, "order_number": number, "assembly_status": "completed",
+-             "assembly_delivery.version": 2, "assembly_delivery.state": {"$in": ["pending", "confirmed"]}},
+-            {"$set": {"assembly_delivery.order_confirmed": False, "assembly_delivery.state": "pending",
+-                      "assembly_delivery.error_code": "completion_source_refresh_pending"}},
+-        )
++    if await source_status(db, owner, number) in {"in_progress", "completed"}:
+         return
+     await db["order_review_workflows"].update_one(
+         {"user_id": owner, "order_number": number, "assembly_status": "completed"},
+diff --git a/backend/order_engine/shipping_label_service.py b/backend/order_engine/shipping_label_service.py
+index 78d093ca..fb9594ba 100644
+--- a/backend/order_engine/shipping_label_service.py
++++ b/backend/order_engine/shipping_label_service.py
+@@ -1594,28 +1594,6 @@ async def refresh_saved_shipping_label(
+         # Keep merchant-courier generation and its provider checks unchanged.
+         return await _refresh_provider_shipping_label(db, user_id, normalized, store_courier_only=True)
+ 
+-    return await _saved_external_shipping_snapshot(db, user_id, normalized, order)
+-
+-
+-async def read_saved_external_shipping_label(db: Any, user_id: str, order_number: str) -> dict[str, Any]:
+-    """Read saved external artifacts only; never fall through to courier generation."""
+-    from .repository import MongoOrderRepository
+-    from .service import OrderNotFoundError, get_order
+-
+-    normalized = _text(order_number)
+-    if not normalized:
+-        raise ShippingLabelError("order_number_required", "رقم الطلب مطلوب.", status_code=400)
+-    try:
+-        order = await get_order(MongoOrderRepository(db), user_id=user_id, order_number=normalized)
+-    except OrderNotFoundError as exc:
+-        raise ShippingLabelError("order_not_found", "الطلب غير موجود في ميزان.", status_code=404) from exc
+-    if _is_store_courier({"company": order.shipping.company, "meta": {"app_id": order.shipping.company_code}}):
+-        raise ShippingLabelError("store_courier_explicit_print_required", "طباعة مندوب المتجر تتم عند طلب الطباعة فقط.")
+-    return await _saved_external_shipping_snapshot(db, user_id, normalized, order)
+-
+-
+-async def _saved_external_shipping_snapshot(db, user_id, normalized, order):
+-    saved = order.shipping
+     snapshot = _snapshot({
+         "id": saved.shipment_id, "status": saved.status,
+         "label_url": saved.label_url, "tracking_number": saved.tracking_number,
+diff --git a/backend/preparation_piece_operations.py b/backend/preparation_piece_operations.py
+index c6e1d8f9..7afc57ea 100644
+--- a/backend/preparation_piece_operations.py
++++ b/backend/preparation_piece_operations.py
+@@ -3918,20 +3918,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
+         context = await _actor_context(db, user)
+         _require_permission(context, "fulfillment.ready.read", responsibility="instant_ready")
+         from assembly_completion_delivery import read_status
+-        async def authorize_repair(scoped):
+-            current_context = await _actor_context(scoped, user)
+-            _require_permission(current_context, "fulfillment.ready.read", responsibility="instant_ready")
+-            if current_context["merchant_id"] != context["merchant_id"]:
+-                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+         try:
+-            response = await read_status(db, context["merchant_id"], _text(order_number), authorize_repair=authorize_repair)
+-            # A provider read may take time or be shared by simultaneous readers.
+-            # The result never shares permission authority with another caller.
+-            current_context = await _actor_context(db, user)
+-            _require_permission(current_context, "fulfillment.ready.read", responsibility="instant_ready")
+-            if current_context["merchant_id"] != context["merchant_id"]:
+-                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+-            return response
++            return await read_status(db, context["merchant_id"], _text(order_number))
+         except ShippingLabelError as exc:
+             raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
+ 
+diff --git a/backend/salla_integration/auto_sync.py b/backend/salla_integration/auto_sync.py
+index b22629fe..c38d293b 100644
+--- a/backend/salla_integration/auto_sync.py
++++ b/backend/salla_integration/auto_sync.py
+@@ -239,10 +239,6 @@ async def _reconcile_status_page(
+             "order_number": 1,
+             "order_status": 1,
+             "order_status_slug": 1,
+-            "raw_by_source.salla_direct.status": 1,
+-            "raw_by_source.salla_direct.status_slug": 1,
+-            "raw_by_source.salla_direct.updated_at": 1,
+-            "g47_salla_snapshot.revision": 1,
+         },
+     )
+     local_by_number = {
+@@ -263,24 +259,12 @@ async def _reconcile_status_page(
+ 
+         old_name = str(local.get("order_status") or "").strip()
+         old_slug = str(local.get("order_status_slug") or "").strip().lower()
+-        old_raw = ((local.get("raw_by_source") or {}).get("salla_direct") or {})
+-        new_raw_slug = status_slug or status_name
+-        # Alias repair is not authority to regress a terminal observation from
+-        # a light page. A deliberate reversal requires the explicit full refresh.
+-        from assembly_status_policy import status_values
+-        previous_values = (status_values(old_name) | status_values(old_slug)
+-                           | status_values(old_raw.get("status")) | status_values(old_raw.get("status_slug")))
+-        if (new_raw_slug in {"in_progress", "completed"}
+-                and previous_values & {"delivered", "shipped", "cancelled", "canceled", "refunded"}):
+-            continue
+-        if (old_name == status_name and old_slug == status_slug
+-                and old_raw.get("status") == raw_status and old_raw.get("status_slug") == new_raw_slug):
++        if old_name == status_name and old_slug == status_slug:
+             continue
+ 
+         patch: dict[str, Any] = {
+             "last_salla_direct_status_reconciled_at": reconciled_at,
+             "raw_by_source.salla_direct.status": raw_status,
+-            "raw_by_source.salla_direct.status_slug": new_raw_slug,
+         }
+         if status_name:
+             patch["order_status"] = status_name
+@@ -301,11 +285,6 @@ async def _reconcile_status_page(
+             if not current or any(current.get(key) != local.get(key)
+                                   for key in ("order_status", "order_status_slug")):
+                 return False
+-            current_raw = ((current.get("raw_by_source") or {}).get("salla_direct") or {})
+-            if (any(current_raw.get(key) != old_raw.get(key) for key in ("status", "status_slug", "updated_at"))
+-                    or (current.get("g47_salla_snapshot") or {}).get("revision") !=
+-                       (local.get("g47_salla_snapshot") or {}).get("revision")):
+-                return False
+             await scoped.unified_orders.update_one(selector, {"$set": patch})
+             from assembly_status_policy import invalidate_shipping_if_blocked
+             await invalidate_shipping_if_blocked(scoped, str(user_id), order_number)
+diff --git a/backend/tests/test_assembly_completion_legacy_readback.py b/backend/tests/test_assembly_completion_legacy_readback.py
+deleted file mode 100644
+index 23026713..00000000
+--- a/backend/tests/test_assembly_completion_legacy_readback.py
++++ /dev/null
+@@ -1,408 +0,0 @@
+-"""Legacy completion reads: real local Mongo, synthetic provider only."""
+-import asyncio
+-from copy import deepcopy
+-import os
+-import unittest
+-from unittest.mock import AsyncMock, patch
+-from uuid import uuid4
+-
+-from motor.motor_asyncio import AsyncIOMotorClient
+-
+-import assembly_completion_legacy_readback as legacy
+-from accounting_write_control import AccountingDatabase
+-from order_engine import shipping_label_service as shipping
+-from salla_shipping import CURRENT_SHIPPING
+-
+-
+-class LegacyCompletionTests(unittest.IsolatedAsyncioTestCase):
+-    async def asyncSetUp(self):
+-        uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
+-        if not uri:
+-            self.skipTest("MZ2_TEST_MONGO_URI required; no production fallback")
+-        self.assertTrue(uri.startswith("mongodb://127.0.0.1:"))
+-        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+-        self.db = self.mongo["legacy_readback_" + uuid4().hex]
+-        self.assertTrue((await self.db.command("hello")).get("setName"))
+-        self.addCleanup(self.mongo.close)
+-        async def cleanup():
+-            self.assertTrue(self.db.name.startswith("legacy_readback_"))
+-            await self.mongo.drop_database(self.db.name)
+-        self.addAsyncCleanup(cleanup)
+-        self.order = {"id": "123", "reference_id": "3001", "status": {"slug": "completed"},
+-                      "date": "2026-10-01T10:00:00Z", "items": [],
+-                      "shipping": {"company": "iMile"}}
+-        await self.db.unified_orders.insert_one({"user_id": "owner", "order_number": "3001",
+-            "order_date": "2026-10-01T10:00:00Z",
+-            "order_status": "completed", "raw_by_source": {"salla_direct": deepcopy(self.order)},
+-            CURRENT_SHIPPING: {"company_name": "iMile", "shipment_id": "shipment-a", "status": "created",
+-                "tracking_number": "SYNTHETIC-AWB", "label_url": "https://labels.test/current.pdf"}})
+-        await self.db.order_review_workflows.insert_one({"user_id": "owner", "order_number": "3001",
+-            "stage": "completed", "assembly_status": "completed", "revision": 4,
+-            "assembly_ready_piece_count": 2, "assembly_total_piece_count": 2, "items": []})
+-        self.provider = AsyncMock(side_effect=self.provider_read)
+-        for replacement in (patch.object(shipping, "call_salla", self.provider),
+-                patch.object(shipping, "_resolve_order", AsyncMock(side_effect=AssertionError("no keyword lookup"))),
+-                patch.object(shipping, "_refresh_provider_shipping_label", AsyncMock(side_effect=AssertionError("no eager courier PDF"))),
+-                patch.object(shipping, "_best_effort_resync", AsyncMock(side_effect=AssertionError("no resync")))):
+-            replacement.start()
+-            self.addCleanup(replacement.stop)
+-
+-    async def provider_read(self, db, owner, method, path, **kwargs):
+-        self.assertIs(db.current() if isinstance(db, AccountingDatabase) else db, self.db)
+-        self.assertEqual((owner, method, path), ("owner", "GET", "/orders/123"))
+-        return {"data": deepcopy(self.order)}
+-
+-    async def snapshot(self):
+-        return {name: await self.db[name].find({}).to_list(None)
+-                for name in await self.db.list_collection_names()}
+-
+-    async def read(self):
+-        return await legacy.read_legacy_completion(self.db, "owner", "3001")
+-
+-    async def test_completed_saved_label_is_immediate_and_writes_nothing(self):
+-        before = await self.snapshot()
+-        result = await self.read()
+-        self.assertTrue(result["assembly_completion_confirmed"])
+-        self.assertEqual(result["order_completion_status"], "confirmed")
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertFalse(result["requires_attention"])
+-        self.assertTrue(result["ready"])
+-        self.assertEqual(result["label_status"], "available")
+-        self.assertEqual(result["label_url"], "https://labels.test/current.pdf")
+-        self.assertEqual(self.provider.await_count, 1)
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_every_settled_read_gets_new_provider_proof_not_cached_authority(self):
+-        self.assertTrue((await self.read())["ready"])
+-        self.order["status"] = {"slug": "delivered"}
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "order_status_not_completed")
+-        self.assertEqual(self.provider.await_count, 2)
+-
+-    async def test_outbox_presence_including_empty_or_null_never_takes_fast_path(self):
+-        for value in (None, {}, {"state": "pending"}, {"state": "requires_attention"}):
+-            await self.db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery": value}})
+-            self.assertIsNone(await self.read())
+-        self.provider.assert_not_awaited()
+-
+-    async def test_durable_assembly_completion_is_required_even_with_cached_label(self):
+-        await self.db.order_review_workflows.update_one({}, {"$set": {"assembly_status": "in_progress"}})
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "assembly_completion_required")
+-        self.provider.assert_not_awaited()
+-
+-    async def test_other_owner_cannot_lookup_or_read_this_order(self):
+-        with self.assertRaises(shipping.ShippingLabelError):
+-            await legacy.read_legacy_completion(self.db, "other-owner", "3001")
+-        self.provider.assert_not_awaited()
+-
+-    async def test_missing_cached_internal_id_never_uses_keyword_fallback(self):
+-        await self.db.unified_orders.update_one({}, {"$unset": {"raw_by_source.salla_direct.id": ""}})
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "salla_order_id_missing")
+-        self.provider.assert_not_awaited()
+-
+-    async def test_exact_provider_identity_and_completed_status_are_required(self):
+-        original = deepcopy(self.order)
+-        for changed in ({"id": "456"}, {"reference_id": "OTHER"}, {"reference_id": None},
+-                {"status": {"slug": "in_progress"}}, {"status": {"slug": "shipped"}},
+-                {"status": None}, {"status_slug": "cancelled"}):
+-            with self.subTest(changed=changed):
+-                self.order = {**original, **changed}
+-                with self.assertRaises(shipping.ShippingLabelError):
+-                    await self.read()
+-
+-    async def test_pending_saved_label_keeps_completion_but_never_fetches_provider_label(self):
+-        await self.db.unified_orders.update_one({}, {"$set": {f"{CURRENT_SHIPPING}.label_url": None}})
+-        result = await self.read()
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertEqual(result["label_status"], "pending")
+-        self.assertFalse(result["ready"])
+-        self.assertIsNone(result["label_url"])
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_positive_provider_material_changes_block_unchanged_legacy_snapshot(self):
+-        original = deepcopy(self.order)
+-        before = await self.snapshot()
+-        for change in ({"items": [{"quantity": 99, "sku": "synthetic-changed"}]},
+-                       {"shipping_address": {"city": "synthetic-changed"}},
+-                       {"payment_method": "synthetic-changed"},
+-                       {"payment_status": "synthetic-changed"},
+-                       {"shipping": {"company": "iMile", "address": {"city": "synthetic-changed"}}},
+-                       {"shipping": {"company": "iMile", "recipient": {"name": "synthetic-changed"}}},
+-                       {"shipping": {"company": "iMile", "receiver": {"name": "synthetic-changed"}}}):
+-            with self.subTest(change=change):
+-                self.order = {**original, **change}
+-                with self.assertRaises(shipping.ShippingLabelError) as error:
+-                    await self.read()
+-                self.assertEqual(error.exception.code, "assembly_completion_evidence_changed")
+-                self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_light_provider_response_does_not_require_absent_material_fields(self):
+-        before = await self.snapshot()
+-        self.order = {key: self.order[key] for key in ("id", "reference_id", "status")}
+-        result = await self.read()
+-        self.assertTrue(result["ready"])
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertEqual(await self.snapshot(), before)
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_courier_get_confirms_completion_without_building_pdf(self):
+-        await self.db.unified_orders.update_one({}, {"$set": {
+-            f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر", f"{CURRENT_SHIPPING}.company_code": "0"}})
+-        self.order["shipping"] = {"company": "مندوب المتجر", "company_code": "0"}
+-        before = await self.snapshot()
+-        result = await self.read()
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertFalse(result["ready"])
+-        self.assertEqual(result["label_type"], "store_courier")
+-        self.assertIsNone(result["print_data"])
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_external_reader_itself_refuses_courier_fallback(self):
+-        await self.db.unified_orders.update_one({}, {"$set": {
+-            f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر", f"{CURRENT_SHIPPING}.company_code": "0"}})
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await shipping.read_saved_external_shipping_label(self.db, "owner", "3001")
+-        self.assertEqual(error.exception.code, "store_courier_explicit_print_required")
+-        self.provider.assert_not_awaited()
+-
+-    async def test_fresh_provider_carrier_or_shipment_contradiction_rejects_cached_pdf(self):
+-        for changed in ({"shipping": {"company": "SMSA"}},
+-                {"shipments": [{"id": "replacement", "courier_name": "iMile", "status": "created"}]},
+-                {"shipping": {"company": "مندوب المتجر", "company_code": "0"}}):
+-            with self.subTest(changed=changed):
+-                self.order = {"id": "123", "reference_id": "3001", "status": {"slug": "completed"}, **changed}
+-                with self.assertRaises(shipping.ShippingLabelError) as error:
+-                    await self.read()
+-                self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+-
+-    async def test_light_provider_order_uses_saved_label_without_shipments_lookup(self):
+-        self.order.pop("shipping")
+-        self.assertTrue((await self.read())["ready"])
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_local_canonical_conflict_or_component_pending_prevents_provider_read(self):
+-        for change in ({"order_status": "delivered"}, {"g47_salla_snapshot.component_pending": True}):
+-            with self.subTest(change=change):
+-                await self.db.unified_orders.update_one({}, {"$set": change})
+-                with self.assertRaises(shipping.ShippingLabelError) as error:
+-                    await self.read()
+-                self.assertEqual(error.exception.code, "assembly_canonical_status_blocked")
+-                await self.db.unified_orders.update_one({}, {"$set": {"order_status": "completed"}, "$unset": {"g47_salla_snapshot": ""}})
+-        self.provider.assert_not_awaited()
+-
+-    async def test_changes_during_provider_read_fence_publication(self):
+-        source = await self.db.unified_orders.find_one({})
+-        workflow = await self.db.order_review_workflows.find_one({})
+-        for collection, change in (
+-            ("order_review_workflows", {"assembly_delivery": {"state": "pending"}}),
+-            ("order_review_workflows", {"assembly_status": "in_progress"}),
+-            ("order_review_workflows", {"shipping_status_epoch": 1}),
+-            ("order_review_workflows", {"store_delivery_assignment_id": "replacement"}),
+-            ("order_review_workflows", {"items": [{"new": "material"}]}),
+-            ("unified_orders", {f"{CURRENT_SHIPPING}.shipment_id": "replacement"}),
+-            ("unified_orders", {"raw_by_source.salla_direct.items": [{"new": "material"}]}),
+-            ("unified_orders", {"order_status": "delivered"}),
+-        ):
+-            with self.subTest(collection=collection, change=change):
+-                await self.db.unified_orders.replace_one({}, deepcopy(source))
+-                await self.db.order_review_workflows.replace_one({}, deepcopy(workflow))
+-                async def racing(*args, **kwargs):
+-                    await self.db[collection].update_one({}, {"$set": change})
+-                    return await self.provider_read(*args, **kwargs)
+-                self.provider.side_effect = racing
+-                with self.assertRaises(shipping.ShippingLabelError):
+-                    await self.read()
+-
+-    async def test_late_cancellation_receipt_blocks_before_projection_worker(self):
+-        async def racing(*args, **kwargs):
+-            await self.db.salla_shipping_label_inbox.insert_one({"user_id": "owner", "order_number": "3001",
+-                "state": "pending", "observation": {"shipment_id": "shipment-a", "status": "cancelled"}})
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = racing
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+-        row = await self.db.unified_orders.find_one({})
+-        self.assertEqual(row[CURRENT_SHIPPING]["status"], "created")
+-        result = await self.read()
+-        self.assertFalse(result["ready"])
+-        self.assertTrue(result["order_status_completed"])
+-
+-    async def test_concurrent_same_fence_shares_one_provider_get_and_returns_independent_data(self):
+-        entered, release = asyncio.Event(), asyncio.Event()
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            await release.wait()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = wait
+-        first = asyncio.create_task(self.read())
+-        await entered.wait()
+-        second = asyncio.create_task(self.read())
+-        # A separate actual read snapshot gets a chance to join the shared IO.
+-        await asyncio.sleep(0.05)
+-        self.assertEqual(self.provider.await_count, 1)
+-        release.set()
+-        a, b = await asyncio.gather(first, second)
+-        self.assertIsNot(a, b)
+-        a["ready"] = False
+-        self.assertTrue(b["ready"])
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_cancelled_reader_does_not_cancel_shared_provider_read(self):
+-        entered, release = asyncio.Event(), asyncio.Event()
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            await release.wait()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = wait
+-        first = asyncio.create_task(self.read())
+-        await entered.wait()
+-        second = asyncio.create_task(self.read())
+-        await asyncio.sleep(0.05)
+-        first.cancel()
+-        with self.assertRaises(asyncio.CancelledError):
+-            await first
+-        release.set()
+-        self.assertTrue((await second)["ready"])
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_changed_fence_never_joins_old_completion_authority(self):
+-        entered, release = asyncio.Event(), asyncio.Event()
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            await release.wait()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = wait
+-        first = asyncio.create_task(self.read())
+-        await entered.wait()
+-        await self.db.order_review_workflows.update_one({}, {"$set": {"store_delivery_assignment_id": "new"}})
+-        second = asyncio.create_task(self.read())
+-        await asyncio.sleep(0.05)
+-        self.assertEqual(self.provider.await_count, 2)
+-        release.set()
+-        a, b = await asyncio.gather(first, second, return_exceptions=True)
+-        self.assertIsInstance(a, shipping.ShippingLabelError)
+-        self.assertTrue(b["ready"])
+-
+-    async def test_last_cancelled_waiter_cancels_and_joins_provider_without_orphan(self):
+-        entered, exited = asyncio.Event(), asyncio.Event()
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            try:
+-                await asyncio.Event().wait()
+-            finally:
+-                exited.set()
+-        self.provider.side_effect = wait
+-        first = asyncio.create_task(self.read())
+-        await entered.wait()
+-        second = asyncio.create_task(self.read())
+-        await asyncio.sleep(0.05)
+-        first.cancel()
+-        with self.assertRaises(asyncio.CancelledError):
+-            await first
+-        self.assertFalse(exited.is_set())
+-        second.cancel()
+-        with self.assertRaises(asyncio.CancelledError):
+-            await second
+-        self.assertTrue(exited.is_set())
+-        self.assertFalse(legacy._flights)
+-        self.provider.side_effect = self.provider_read
+-        self.assertTrue((await self.read())["ready"])
+-        self.assertEqual(self.provider.await_count, 2)
+-
+-    async def test_different_request_wrappers_share_only_underlying_database_fence(self):
+-        entered, release = asyncio.Event(), asyncio.Event()
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            await release.wait()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = wait
+-        a, b = AccountingDatabase(self.db), AccountingDatabase(self.db)
+-        first = asyncio.create_task(legacy.read_legacy_completion(a, "owner", "3001"))
+-        await entered.wait()
+-        second = asyncio.create_task(legacy.read_legacy_completion(b, "owner", "3001"))
+-        await asyncio.sleep(0.05)
+-        self.assertEqual(self.provider.await_count, 1)
+-        release.set()
+-        results = await asyncio.gather(first, second)
+-        self.assertTrue(all(result["ready"] for result in results))
+-        self.assertFalse(legacy._flights)
+-
+-    async def test_each_shared_result_waiter_rechecks_current_state_before_its_own_return(self):
+-        entered, release = asyncio.Event(), asyncio.Event()
+-        a, b = AccountingDatabase(self.db), AccountingDatabase(self.db)
+-        async def wait(*args, **kwargs):
+-            entered.set()
+-            await release.wait()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = wait
+-        original = legacy._snapshot
+-        b_final_read = False
+-        async def changed_before_b_final(db, owner, number, *, expected=None):
+-            nonlocal b_final_read
+-            if db is b and expected is not None:
+-                b_final_read = True
+-                await self.db.order_review_workflows.update_one({}, {"$set": {"store_delivery_assignment_id": "new"}})
+-            return await original(db, owner, number, expected=expected)
+-        with patch.object(legacy, "_snapshot", changed_before_b_final):
+-            first = asyncio.create_task(legacy.read_legacy_completion(a, "owner", "3001"))
+-            await entered.wait()
+-            second = asyncio.create_task(legacy.read_legacy_completion(b, "owner", "3001"))
+-            await asyncio.sleep(0.05)
+-            release.set()
+-            results = await asyncio.gather(first, second, return_exceptions=True)
+-        self.assertTrue(b_final_read)
+-        self.assertIsInstance(results[1], shipping.ShippingLabelError)
+-        self.assertEqual(results[1].code, "shipping_snapshot_changed")
+-        self.assertEqual(self.provider.await_count, 1)
+-        self.assertFalse(legacy._flights)
+-
+-    async def test_timeout_has_clear_error_and_no_persisted_confirmation(self):
+-        async def wait(*args, **kwargs):
+-            await asyncio.Event().wait()
+-        self.provider.side_effect = wait
+-        before = await self.snapshot()
+-        with patch.object(legacy, "READBACK_TIMEOUT_SECONDS", 0.08):
+-            with self.assertRaises(shipping.ShippingLabelError) as error:
+-                await self.read()
+-            self.assertEqual(error.exception.code, "completion_readback_timeout")
+-            self.assertFalse(legacy._flights)
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_provider_failure_is_sanitized_and_does_not_create_outbox(self):
+-        self.provider.side_effect = shipping.SallaError("private provider details", status_code=503)
+-        before = await self.snapshot()
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "completion_readback_unavailable")
+-        self.assertNotIn("private", str(error.exception))
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_current_cancelled_embedded_shipment_cannot_disappear_during_extraction(self):
+-        self.order["shipments"] = [{"id": "shipment-a", "status": "cancelled", "type": "shipment"}]
+-        before = await self.snapshot()
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_conflicting_active_shipments_cannot_authorize_cached_file(self):
+-        self.order["shipments"] = [
+-            {"id": "shipment-a", "status": "created", "type": "shipment", "company": "iMile"},
+-            {"id": "shipment-b", "status": "created", "type": "shipment", "company": "iMile"},
+-        ]
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+-
+-    async def test_previous_cancelled_or_return_shipment_does_not_block_current_label(self):
+-        self.order["shipments"] = [
+-            {"id": "old", "status": "cancelled", "type": "shipment"},
+-            {"id": "return", "status": "created", "type": "return"},
+-        ]
+-        self.assertTrue((await self.read())["ready"])
+diff --git a/backend/tests/test_assembly_completion_readback_routes.py b/backend/tests/test_assembly_completion_readback_routes.py
+deleted file mode 100644
+index 7d1603c1..00000000
+--- a/backend/tests/test_assembly_completion_readback_routes.py
++++ /dev/null
+@@ -1,63 +0,0 @@
+-"""Actual completion GET dispatch, authorization and response contracts."""
+-from copy import deepcopy
+-import unittest
+-from unittest.mock import AsyncMock, patch
+-
+-from fastapi import FastAPI
+-from httpx import ASGITransport, AsyncClient
+-
+-import preparation_piece_operations as pieces
+-import test_assembly_completion_v2_readback as fixture
+-
+-
+-class CompletionReadbackRouteTests(unittest.IsolatedAsyncioTestCase):
+-    reseal = fixture.BlockedCompletionTests.reseal
+-    provider_read = fixture.BlockedCompletionTests.provider_read
+-    snapshot = fixture.BlockedCompletionTests.snapshot
+-
+-    async def asyncSetUp(self):
+-        await fixture.BlockedCompletionTests.asyncSetUp(self)
+-        self.context = {"merchant_id": "owner", "actor_id": "employee", "is_owner": False,
+-                        "permissions": {"fulfillment.ready.read"}, "responsibilities": {"instant_ready"}}
+-        replacement = patch.object(pieces, "_actor_context", AsyncMock(side_effect=lambda *args: deepcopy(self.context)))
+-        replacement.start()
+-        self.addCleanup(replacement.stop)
+-        async def actor():
+-            return {"id": "employee", "role": "employee", "created_by": "owner"}
+-        app = FastAPI()
+-        app.include_router(pieces.make_preparation_piece_operations_router(self.db, actor))
+-        self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+-        self.addAsyncCleanup(self.client.aclose)
+-
+-    async def get(self):
+-        return await self.client.get("/preparation-work-v1/assembly/orders/synthetic-1/completion")
+-
+-    async def test_blocked_v2_route_automatically_recovers_without_post_or_write(self):
+-        before = await self.snapshot()
+-        result = await self.get()
+-        self.assertEqual(result.status_code, 200, result.text)
+-        self.assertTrue(result.json()["ready"])
+-        self.assertFalse(result.json()["requires_attention"])
+-        self.assertEqual(self.provider.await_count, 1)
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_legacy_route_automatically_recovers_without_outbox_enrollment(self):
+-        await self.db.order_review_workflows.update_one({}, {"$unset": {"assembly_delivery": ""}})
+-        before = await self.snapshot()
+-        result = await self.get()
+-        self.assertEqual(result.status_code, 200, result.text)
+-        self.assertTrue(result.json()["ready"])
+-        self.assertEqual(self.provider.await_count, 1)
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_v2_alias_repair_denied_after_permission_revocation_keeps_source_unchanged(self):
+-        await self.db.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.status_slug": "in_progress"}})
+-        before = await self.snapshot()
+-        async def revoke(*args, **kwargs):
+-            self.context["permissions"].clear()
+-            self.context["responsibilities"].clear()
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = revoke
+-        result = await self.get()
+-        self.assertEqual(result.status_code, 403, result.text)
+-        self.assertEqual(await self.snapshot(), before)
+diff --git a/backend/tests/test_assembly_completion_status_transition.py b/backend/tests/test_assembly_completion_status_transition.py
+deleted file mode 100644
+index dc338ad5..00000000
+--- a/backend/tests/test_assembly_completion_status_transition.py
++++ /dev/null
+@@ -1,190 +0,0 @@
+-"""Completed status transitions, with real local transactions and synthetic IO."""
+-import unittest
+-from copy import deepcopy
+-from unittest.mock import AsyncMock, patch
+-
+-import assembly_completion_delivery as delivery
+-import fulfillment_v2_routes as fulfillment
+-import operational_atomic
+-import preparation_piece_operations as pieces
+-from assembly_status_policy import invalidate_shipping_if_blocked
+-from assembly_status_policy import canonical_status
+-from salla_integration import auto_sync
+-import test_assembly_completion_delivery as fixture
+-
+-
+-class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
+-    asyncSetUp = fixture.DeliveryTests.asyncSetUp
+-    asyncTearDown = fixture.DeliveryTests.asyncTearDown
+-    source_payload = fixture.DeliveryTests.source_payload
+-    webhook = fixture.DeliveryTests.webhook
+-    mark_piece = fixture.DeliveryTests.mark_piece
+-    on_hand = fixture.DeliveryTests.on_hand
+-    complete_review = fixture.DeliveryTests.complete_review
+-    workflow = fixture.DeliveryTests.workflow
+-    finish = fixture.DeliveryTests.finish
+-
+-    async def reconcile_completed(self):
+-        payload = self.source_payload(number="local-assembly", status="completed")
+-        with patch.object(auto_sync, "call_salla", AsyncMock(return_value={"data": [payload]})), \
+-             patch.object(auto_sync, "_refresh_plan_b_status_snapshot", AsyncMock()):
+-            return await auto_sync._reconcile_status_page(self.db, "owner", page=1)
+-
+-    def completed(self):
+-        return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "completed"}}
+-
+-    async def test_reconciler_updates_all_status_aliases_before_invalidating_completion(self):
+-        original = await self.finish()
+-        await self.reconcile_completed()
+-        source = await self.db.unified_orders.find_one({"user_id": "owner", "order_number": "local-assembly"})
+-        self.assertEqual(canonical_status(source), "completed")
+-        current = await self.workflow()
+-        self.assertEqual(current[delivery.FIELD]["state"], "pending")
+-        self.assertEqual(current.get("shipping_status_epoch"), original.get("shipping_status_epoch"))
+-
+-    async def test_reconciler_repairs_old_stale_raw_alias_even_when_top_level_completed(self):
+-        await self.finish()
+-        await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+-            "order_status": "completed", "order_status_slug": "completed",
+-            "raw_by_source.salla_direct.status": {"slug": "completed", "name": "completed"},
+-        }})
+-        await self.reconcile_completed()
+-        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+-        self.assertEqual(canonical_status(source), "completed")
+-
+-    async def test_completed_during_fresh_get_requires_immediate_readback_not_status_post(self):
+-        await self.finish()
+-        reads = []
+-        async def resolve(*args):
+-            reads.append("GET")
+-            if len(reads) == 1:
+-                await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+-                    "order_status": "completed", "order_status_slug": "completed",
+-                    "raw_by_source.salla_direct.status": {"slug": "completed", "name": "completed"},
+-                    "raw_by_source.salla_direct.status_slug": "completed",
+-                }})
+-                return "internal", {"id": "internal", "reference_id": "local-assembly", "status": {"slug": "in_progress"}}
+-            return self.completed()
+-        with patch.object(delivery.shipping, "_resolve_order", resolve), \
+-             patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No status POST after local completed"))) as post, \
+-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+-                 "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
+-            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+-        self.assertEqual(reads, ["GET", "GET"])
+-        self.assertTrue(result["order_status_completed"], result)
+-        self.assertTrue(result["ready"], result)
+-        self.assertFalse(result["requires_attention"], result)
+-        post.assert_not_awaited()
+-        self.assertEqual(await self.on_hand(), 16)
+-
+-    async def test_actual_completed_webhook_retains_material_evidence_for_courier_readback(self):
+-        original = await self.finish()
+-        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+-        payload = deepcopy(source["raw_by_source"]["salla_direct"])
+-        payload.update(status={"slug": "completed", "name": "completed"}, status_slug="completed",
+-                       updated_at="2026-10-18T00:00:00+00:00")
+-        await self.webhook(payload, event="order.updated")
+-        latest = await self.db.unified_orders.find_one({"user_id": "owner"})
+-        self.assertEqual(canonical_status(latest), "completed")
+-        self.assertEqual(delivery.source_fingerprint(latest), original[delivery.FIELD]["source_fingerprint"])
+-        with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())), \
+-             patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
+-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+-                 "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
+-            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+-        self.assertTrue(result["ready"], result)
+-        post.assert_not_awaited()
+-
+-    async def test_component_reconcile_window_defers_then_recovers_without_post(self):
+-        await self.finish()
+-        original = fulfillment.persist_component_source_snapshot
+-        observations = []
+-        async def persist_then_read(*args, **kwargs):
+-            persisted = await original(*args, **kwargs)
+-            intermediate = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+-            observations.append(intermediate)
+-            return persisted
+-        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+-        payload = deepcopy(source["raw_by_source"]["salla_direct"])
+-        payload.update(status={"slug": "completed", "name": "completed"}, status_slug="completed",
+-                       updated_at="2026-10-18T00:00:00+00:00")
+-        with patch.object(fulfillment, "persist_component_source_snapshot", persist_then_read), \
+-             patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())) as resolve, \
+-             patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
+-             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+-                 "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})) as label:
+-            await self.webhook(payload, event="order.updated")
+-            self.assertEqual(len(observations), 1)
+-            self.assertFalse(observations[0]["ready"])
+-            self.assertFalse(observations[0]["requires_attention"], observations[0])
+-            resolve.assert_not_awaited()
+-            label.assert_not_awaited()
+-            result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
+-        self.assertTrue(result["ready"], result)
+-        self.assertFalse(result["requires_attention"])
+-        post.assert_not_awaited()
+-        self.assertEqual(await self.on_hand(), 16)
+-
+-    async def test_alias_repair_cannot_overwrite_new_raw_webhook_with_unchanged_top_status(self):
+-        await self.finish()
+-        original = operational_atomic.operational_owner
+-        entered = False
+-        async def newer_before_owner(db, owner, callback, **kwargs):
+-            nonlocal entered
+-            if not entered:
+-                entered = True
+-                await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+-                    "raw_by_source.salla_direct.status": {"slug": "delivered"},
+-                    "raw_by_source.salla_direct.status_slug": "delivered",
+-                    "raw_by_source.salla_direct.updated_at": "2026-10-18T01:00:00+00:00",
+-                }})
+-            return await original(db, owner, callback, **kwargs)
+-        with patch.object(operational_atomic, "operational_owner", newer_before_owner):
+-            await self.reconcile_completed()
+-        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+-        self.assertEqual(source["raw_by_source"]["salla_direct"]["status_slug"], "delivered")
+-
+-    async def test_transient_source_invalidates_all_cached_labels_without_reviving_material_failure(self):
+-        await self.finish()
+-        await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {"g47_salla_snapshot.component_pending": True}})
+-        for outbox in (None, {"version": 2, "state": "requires_attention", "error_code": "assembly_completion_evidence_changed"}):
+-            await self.db.order_review_workflows.update_one({"user_id": "owner"}, {"$set": {
+-                "carrier_label_ready": True, "carrier_label_url": "https://labels.test/old.pdf",
+-                "carrier_label_print_data": {"old": True},
+-            }, "$unset": {delivery.FIELD: ""}})
+-            if outbox is not None:
+-                await self.db.order_review_workflows.update_one({"user_id": "owner"}, {"$set": {delivery.FIELD: outbox}})
+-            await invalidate_shipping_if_blocked(self.db, "owner", "local-assembly")
+-            current = await self.workflow()
+-            self.assertFalse(current["carrier_label_ready"])
+-            self.assertIsNone(current["carrier_label_url"])
+-            self.assertIsNone(current["carrier_label_print_data"])
+-            if outbox is None:
+-                self.assertNotIn(delivery.FIELD, current)
+-            else:
+-                self.assertEqual(current[delivery.FIELD], outbox)
+-
+-    async def test_completion_get_rechecks_permission_after_provider_wait(self):
+-        await self.finish()
+-        context = deepcopy(self.context)
+-        context.update(is_owner=False, permissions={"fulfillment.ready.read"}, responsibilities={"instant_ready"})
+-        async def revoke(*args, **kwargs):
+-            context["permissions"].clear()
+-            context["responsibilities"].clear()
+-            return {"ready": True}
+-        with patch.object(pieces, "_actor_context", AsyncMock(side_effect=lambda *args: deepcopy(context))), \
+-             patch.object(delivery, "read_status", revoke):
+-            response = await self.client.get("/preparation-work-v1/assembly/orders/local-assembly/completion")
+-        self.assertEqual(response.status_code, 403, response.text)
+-
+-    async def test_light_reconcile_never_reopens_terminal_order_for_alias_repair(self):
+-        await self.finish()
+-        for status in ("delivered", "cancelled"):
+-            await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+-                "order_status": status, "order_status_slug": status,
+-                "raw_by_source.salla_direct.status": {"slug": status},
+-                "raw_by_source.salla_direct.status_slug": status,
+-            }})
+-            before = await self.db.unified_orders.find_one({"user_id": "owner"})
+-            await self.reconcile_completed()
+-            self.assertEqual(await self.db.unified_orders.find_one({"user_id": "owner"}), before)
+diff --git a/backend/tests/test_assembly_completion_v2_readback.py b/backend/tests/test_assembly_completion_v2_readback.py
+deleted file mode 100644
+index e0f7dd53..00000000
+--- a/backend/tests/test_assembly_completion_v2_readback.py
++++ /dev/null
+@@ -1,431 +0,0 @@
+-"""Blocked v2 reads: real local Mongo replica set, synthetic provider IO only."""
+-import asyncio
+-from copy import deepcopy
+-from datetime import datetime, timedelta, timezone
+-import os
+-import unittest
+-from unittest.mock import AsyncMock, patch
+-from uuid import uuid4
+-
+-import httpx
+-from fastapi import HTTPException
+-from motor.motor_asyncio import AsyncIOMotorClient
+-
+-import assembly_completion_delivery as delivery
+-import assembly_completion_v2_readback as readback
+-import fulfillment_v2_routes as fulfillment
+-from accounting_atomic import SessionDatabase
+-from accounting_write_control import AccountingDatabase
+-from order_engine import shipping_label_service as shipping
+-from salla_shipping import CURRENT_SHIPPING
+-from stock_component_consumption_service import PLANS, UNITS
+-
+-
+-class BlockedCompletionTests(unittest.IsolatedAsyncioTestCase):
+-    async def asyncSetUp(self):
+-        uri = os.environ.get("MZ2_TEST_MONGO_URI", "")
+-        if not uri:
+-            self.skipTest("MZ2_TEST_MONGO_URI required; no production fallback")
+-        self.assertTrue(uri.startswith("mongodb://127.0.0.1:"))
+-        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000)
+-        self.db = self.mongo["v2_readback_" + uuid4().hex]
+-        self.assertTrue((await self.db.command("hello")).get("setName"))
+-        self.addCleanup(self.mongo.close)
+-        async def cleanup():
+-            self.assertTrue(self.db.name.startswith("v2_readback_"))
+-            await self.mongo.drop_database(self.db.name)
+-        self.addAsyncCleanup(cleanup)
+-        self.order = {"id": "internal-1", "reference_id": "synthetic-1",
+-            "status": {"slug": "completed"}, "date": "2026-10-01T10:00:00Z",
+-            "updated_at": "2026-10-17T12:00:00Z", "items": [], "shipping": {"company": "iMile"}}
+-        await self.db.unified_orders.insert_one({"user_id": "owner", "order_number": "synthetic-1",
+-            "order_date": "2026-10-01T10:00:00Z", "order_status": "completed", "order_status_slug": "completed",
+-            "raw_by_source": {"salla_direct": deepcopy(self.order)},
+-            "g47_salla_snapshot": {"source_updated_at": "2026-10-17T12:00:00Z", "revision": 5,
+-                                   "component_pending": False, "requires_authoritative_refresh": False},
+-            CURRENT_SHIPPING: {"company_name": "iMile", "shipment_id": "shipment-current", "status": "created",
+-                "tracking_number": "SYNTHETIC-AWB", "label_url": "https://labels.test/current.pdf"}})
+-        await self.db.order_review_workflows.insert_one({"user_id": "owner", "order_number": "synthetic-1",
+-            "stage": "completed", "assembly_status": "completed", "revision": 4,
+-            "assembly_ready_piece_count": 2, "assembly_total_piece_count": 2, "items": [],
+-            "shipping_status_epoch": 2, "store_delivery_assignment_id": "assignment-current",
+-            "assembly_delivery": {"version": 2, "state": "requires_attention", "claim": None,
+-                "lease_until": "", "error_code": "assembly_canonical_status_blocked", "attempts": 3,
+-                "status_attempted": True, "order_confirmed": False}})
+-        await self.db[PLANS].insert_one({"user_id": "owner", "order_id": "synthetic-1", "state": "accepted",
+-            "source_version": {"kind": "sequence", "value": 3}, "lines": [{"quantity": 2}]})
+-        await self.db[fulfillment.COMPONENT_LIFECYCLES].insert_one({"user_id": "owner", "order_number": "synthetic-1",
+-            "state": "reserved", "accepted": True, "generation": 3, "cancelled": False, "retry_required": False,
+-            "source_updated_at": "2026-10-17T12:00:00Z"})
+-        await self.db.settings.insert_one({"user_id": "owner", "g47_inventory": {
+-            "component_lifecycle_starts_at": "2026-09-01T00:00:00Z"}})
+-        await self.db.mz2_atomic_owners.insert_one({"_id": "owner", "revision": 7, "writes_paused": False, "control_revision": 0})
+-        # Protected effects remain visible in whole-database before/after checks.
+-        for collection in (UNITS, "warehouse_locations", "general_ledger", "order_review_events", "mezan_preparation_pieces_v1"):
+-            await self.db[collection].insert_one({"user_id": "owner", "sentinel": "unchanged", "quantity": 2})
+-        await self.reseal()
+-        self.provider = AsyncMock(side_effect=self.provider_read)
+-        for replacement in (
+-            patch.object(shipping, "call_salla", self.provider),
+-            patch.object(shipping, "_resolve_order", AsyncMock(side_effect=AssertionError("no keyword lookup"))),
+-            patch.object(shipping, "refresh_shipping_label", AsyncMock(side_effect=AssertionError("no refresh or issuance"))),
+-            patch.object(shipping, "_refresh_provider_shipping_label", AsyncMock(side_effect=AssertionError("no PDF"))),
+-            patch.object(shipping, "_best_effort_resync", AsyncMock(side_effect=AssertionError("no resync"))),
+-            patch.object(fulfillment, "allow_legacy_component_execution", AsyncMock(side_effect=AssertionError("no legacy writer"))),
+-        ):
+-            replacement.start()
+-            self.addCleanup(replacement.stop)
+-
+-    async def reseal(self):
+-        source = await self.db.unified_orders.find_one({})
+-        workflow = await self.db.order_review_workflows.find_one({})
+-        await self.db.order_review_workflows.update_one({}, {"$set": {
+-            "assembly_delivery.source_fingerprint": delivery.source_fingerprint(source),
+-            "assembly_delivery.workflow_fingerprint": delivery.workflow_fingerprint(workflow)}})
+-
+-    async def provider_read(self, db, owner, method, path, **kwargs):
+-        self.assertIs(db.current() if isinstance(db, AccountingDatabase) else db, self.db)
+-        self.assertEqual((owner, method, path), ("owner", "GET", "/orders/internal-1"))
+-        self.assertEqual(kwargs, {})
+-        return {"data": deepcopy(self.order)}
+-
+-    async def snapshot(self):
+-        return {name: await self.db[name].find({}).to_list(None)
+-                for name in await self.db.list_collection_names()}
+-
+-    async def read(self):
+-        return await readback.read_blocked_completion(self.db, "owner", "synthetic-1")
+-
+-    async def assert_no_write_read(self, *, expected_none=False):
+-        before = await self.snapshot()
+-        result = await self.read()
+-        self.assertEqual(await self.snapshot(), before)
+-        if expected_none:
+-            self.assertIsNone(result)
+-        return result
+-
+-    async def test_blocked_v2_completed_returns_saved_label_one_get_zero_writes(self):
+-        result = await self.assert_no_write_read()
+-        self.assertTrue(result["assembly_completion_confirmed"])
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertTrue(result["ready"])
+-        self.assertEqual(result["order_completion_status"], "confirmed")
+-        self.assertEqual(result["label_status"], "available")
+-        self.assertEqual(result["label_url"], "https://labels.test/current.pdf")
+-        self.assertFalse(result["requires_attention"])
+-        self.assertIsNone(result["error_code"])
+-        self.provider.assert_awaited_once()
+-
+-    async def test_source_refresh_code_can_recover_only_after_flags_resolved(self):
+-        await self.db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery.error_code": "completion_source_refresh_pending"}})
+-        self.assertTrue((await self.assert_no_write_read())["ready"])
+-        await self.db.unified_orders.update_one({}, {"$set": {"g47_salla_snapshot.component_pending": True}})
+-        await self.reseal()
+-        await self.assert_no_write_read(expected_none=True)
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_pending_courier_confirms_status_but_never_fabricates_document(self):
+-        self.order["shipping"] = {"company": "مندوب المتجر", "company_code": "0"}
+-        await self.db.unified_orders.update_one({}, {"$set": {
+-            "raw_by_source.salla_direct.shipping": deepcopy(self.order["shipping"]),
+-            f"{CURRENT_SHIPPING}.company_name": "مندوب المتجر", f"{CURRENT_SHIPPING}.company_code": "0"}})
+-        await self.reseal()
+-        result = await self.assert_no_write_read()
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertEqual(result["label_type"], "store_courier")
+-        self.assertFalse(result["ready"])
+-        self.assertEqual(result["label_status"], "pending")
+-        self.assertIsNone(result["label_url"])
+-        self.assertIsNone(result["print_data"])
+-        self.provider.assert_awaited_once()
+-
+-    async def test_missing_label_preserves_confirmed_order_without_fetching_label(self):
+-        await self.db.unified_orders.update_one({}, {"$unset": {f"{CURRENT_SHIPPING}.label_url": ""}})
+-        result = await self.assert_no_write_read()
+-        self.assertTrue(result["order_status_completed"])
+-        self.assertFalse(result["ready"])
+-        self.assertEqual(result["label_status"], "pending")
+-        self.provider.assert_awaited_once()
+-
+-    async def test_ineligible_outbox_assembly_owner_or_claim_never_reads_provider(self):
+-        original = await self.db.order_review_workflows.find_one({})
+-        changes = [
+-            {"assembly_delivery": None}, {"assembly_delivery": {}}, {"assembly_delivery.version": 1},
+-            {"assembly_delivery.state": "pending"}, {"assembly_delivery.state": "confirmed"},
+-            {"assembly_delivery.error_code": "TimeoutError"}, {"assembly_delivery.error_code": "assembly_completion_evidence_changed"},
+-            {"assembly_delivery.legacy_readback_only": True}, {"assembly_delivery.claim": "active-worker"},
+-            {"assembly_delivery.lease_until": (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()},
+-            {"assembly_delivery.lease_until": "invalid"}, {"assembly_delivery.lease_until": "2026-10-17T10:00:00"},
+-            {"assembly_status": "in_progress"}, {"user_id": "other-owner"},
+-        ]
+-        for change in changes:
+-            with self.subTest(change=change):
+-                await self.db.order_review_workflows.replace_one({}, deepcopy(original))
+-                await self.db.order_review_workflows.update_one({}, {"$set": change})
+-                await self.assert_no_write_read(expected_none=True)
+-        self.provider.assert_not_awaited()
+-
+-    async def test_expired_lease_without_claim_can_read(self):
+-        await self.db.order_review_workflows.update_one({}, {"$set": {
+-            "assembly_delivery.lease_until": (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()}})
+-        self.assertTrue((await self.assert_no_write_read())["ready"])
+-
+-    async def test_material_fingerprint_mismatch_or_missing_never_recovers(self):
+-        source = await self.db.unified_orders.find_one({})
+-        workflow = await self.db.order_review_workflows.find_one({})
+-        for collection, change in (
+-            ("unified_orders", {"raw_by_source.salla_direct.items": [{"quantity": 3}]}),
+-            ("order_review_workflows", {"items": [{"quantity": 3}]}),
+-            ("order_review_workflows", {"assembly_delivery.source_fingerprint": None}),
+-            ("order_review_workflows", {"assembly_delivery.workflow_fingerprint": None}),
+-        ):
+-            with self.subTest(change=change):
+-                await self.db.unified_orders.replace_one({}, deepcopy(source))
+-                await self.db.order_review_workflows.replace_one({}, deepcopy(workflow))
+-                await self.db[collection].update_one({}, {"$set": change})
+-                await self.assert_no_write_read(expected_none=True)
+-        self.provider.assert_not_awaited()
+-
+-    async def test_component_lifecycle_plan_generation_and_watermark_fail_closed(self):
+-        originals = {name: await self.db[name].find_one({}) for name in
+-                     (PLANS, fulfillment.COMPONENT_LIFECYCLES, "unified_orders")}
+-        for collection, change in (
+-            (PLANS, {"state": "cancelled"}), (PLANS, {"source_version.value": 4}),
+-            (PLANS, {"reconciliation_required": True}),
+-            (fulfillment.COMPONENT_LIFECYCLES, {"accepted": False}),
+-            (fulfillment.COMPONENT_LIFECYCLES, {"state": "blocked"}),
+-            (fulfillment.COMPONENT_LIFECYCLES, {"cancelled": True}),
+-            (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
+-            ("unified_orders", {"g47_salla_snapshot.component_pending": True}),
+-            ("unified_orders", {"g47_salla_snapshot.requires_authoritative_refresh": True}),
+-            ("unified_orders", {"g47_salla_snapshot.cancelled": True}),
+-        ):
+-            with self.subTest(change=change):
+-                for name, original in originals.items():
+-                    await self.db[name].replace_one({}, deepcopy(original))
+-                await self.db[collection].update_one({}, {"$set": change})
+-                await self.reseal()
+-                await self.assert_no_write_read(expected_none=True)
+-        self.provider.assert_not_awaited()
+-
+-    async def test_existing_legacy_component_evidence_is_read_without_audit_writer(self):
+-        await self.db[PLANS].delete_many({})
+-        await self.db.settings.update_one({}, {"$unset": {"g47_inventory.component_lifecycle_starts_at": ""}})
+-        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$set": {"state": fulfillment.LEGACY_COMPONENT_COHORT}})
+-        self.assertTrue((await self.assert_no_write_read())["ready"])
+-        await self.db[fulfillment.COMPONENT_LIFECYCLES].delete_many({})
+-        await self.assert_no_write_read(expected_none=True)
+-        self.assertEqual(self.provider.await_count, 1)
+-
+-    async def test_exact_provider_identity_and_completed_status_required(self):
+-        original = deepcopy(self.order)
+-        before = await self.snapshot()
+-        for change in ({"id": "other"}, {"reference_id": "other"}, {"reference_id": None},
+-                       {"status": {"slug": "in_progress"}}, {"status": {"slug": "delivered"}},
+-                       {"status": None}, {"status_slug": "cancelled"}):
+-            with self.subTest(change=change):
+-                self.order = {**original, **change}
+-                with self.assertRaises(shipping.ShippingLabelError):
+-                    await self.read()
+-                self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_provider_material_carrier_shipment_changes_reject_old_label(self):
+-        original = deepcopy(self.order)
+-        before = await self.snapshot()
+-        for change in ({"items": [{"quantity": 3}]}, {"shipping_address": {"city": "changed"}},
+-                       {"payment_method": "changed"}, {"shipping": {"company": "SMSA"}},
+-                       {"shipping": {"company": "iMile", "recipient": {"city": "changed"}}},
+-                       {"shipments": [{"id": "other", "courier_name": "iMile", "status": "created"}]}):
+-            with self.subTest(change=change):
+-                self.order = {**original, **change}
+-                with self.assertRaises(shipping.ShippingLabelError):
+-                    await self.read()
+-                self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_local_changes_during_provider_get_reject_without_own_writes(self):
+-        collections = ("unified_orders", "order_review_workflows", PLANS, fulfillment.COMPONENT_LIFECYCLES, "settings")
+-        originals = {name: await self.db[name].find_one({}) for name in collections}
+-        for collection, change in (
+-            ("order_review_workflows", {"shipping_status_epoch": 3}),
+-            ("order_review_workflows", {"store_delivery_assignment_id": "changed"}),
+-            ("order_review_workflows", {"assembly_delivery.claim": "worker"}),
+-            ("order_review_workflows", {"assembly_delivery.attempts": 4}),
+-            ("order_review_workflows", {"items": [{"quantity": 3}]}),
+-            ("unified_orders", {f"{CURRENT_SHIPPING}.shipment_id": "changed"}),
+-            ("unified_orders", {"order_status": "delivered"}),
+-            ("unified_orders", {"g47_salla_snapshot.component_pending": True}),
+-            (PLANS, {"lines": [{"quantity": 3}]}),
+-            (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
+-            ("settings", {"g47_inventory.component_lifecycle_starts_at": "2027-01-01T00:00:00Z"}),
+-        ):
+-            with self.subTest(change=change):
+-                for name, value in originals.items():
+-                    await self.db[name].replace_one({}, deepcopy(value))
+-                expected = None
+-                async def racing(*args, **kwargs):
+-                    nonlocal expected
+-                    await self.db[collection].update_one({}, {"$set": change})
+-                    expected = await self.snapshot()
+-                    return await self.provider_read(*args, **kwargs)
+-                self.provider.side_effect = racing
+-                with self.assertRaises(shipping.ShippingLabelError):
+-                    await self.read()
+-                self.assertEqual(await self.snapshot(), expected)
+-
+-    async def test_cancellation_receipt_race_blocks_old_label(self):
+-        async def racing(*args, **kwargs):
+-            await self.db.salla_shipping_label_inbox.insert_one({"user_id": "owner", "order_number": "synthetic-1",
+-                "state": "pending", "observation": {"shipment_id": "shipment-current", "status": "cancelled"}})
+-            return await self.provider_read(*args, **kwargs)
+-        self.provider.side_effect = racing
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "shipping_snapshot_changed")
+-        self.provider.side_effect = self.provider_read
+-        result = await self.assert_no_write_read()
+-        self.assertFalse(result["ready"])
+-
+-    async def alias_conflict(self):
+-        await self.db.unified_orders.update_one({}, {"$set": {"order_status": "in_progress", "order_status_slug": "in_progress"}})
+-
+-    async def test_versioned_alias_repair_changes_only_status_fields_and_owner_revision(self):
+-        await self.alias_conflict()
+-        before = await self.snapshot()
+-        result = await self.read()
+-        self.assertTrue(result["ready"])
+-        self.provider.assert_awaited_once()
+-        expected = deepcopy(before)
+-        expected["unified_orders"][0].update(order_status="completed", order_status_slug="completed")
+-        expected["unified_orders"][0]["raw_by_source"]["salla_direct"].update(
+-            status=deepcopy(self.order["status"]), status_slug="completed", updated_at="2026-10-17T12:00:00.000000+00:00")
+-        expected["mz2_atomic_owners"][0]["revision"] += 1
+-        self.assertEqual(await self.snapshot(), expected)
+-        self.assertEqual(expected["order_review_workflows"][0]["assembly_delivery"]["state"], "requires_attention")
+-        # It remains GET recovery, not delivery enrollment or a second POST.
+-        self.assertTrue((await self.assert_no_write_read())["ready"])
+-        self.assertEqual(self.provider.await_count, 2)
+-
+-    async def test_repair_requires_known_fresh_at_least_latest_source_version(self):
+-        await self.alias_conflict()
+-        before = await self.snapshot()
+-        for value in (None, "invalid", "2026-10-17T11:59:59Z", "2026-10-17T12:00:00"):
+-            with self.subTest(value=value):
+-                self.order["updated_at"] = value
+-                await self.assert_no_write_read(expected_none=True)
+-                self.assertEqual(await self.snapshot(), before)
+-        self.order["updated_at"] = "2026-10-17T12:00:00Z"
+-        await self.db.unified_orders.update_one({}, {"$set": {"g47_salla_snapshot.source_updated_at": "2026-10-17T12:01:00Z"}})
+-        await self.assert_no_write_read(expected_none=True)
+-
+-    async def test_repair_refuses_missing_or_invalid_stored_versions(self):
+-        await self.alias_conflict()
+-        await self.db.unified_orders.update_one({}, {"$unset": {
+-            "g47_salla_snapshot.source_updated_at": "", "raw_by_source.salla_direct.updated_at": ""}})
+-        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one({}, {"$unset": {"source_updated_at": ""}})
+-        await self.assert_no_write_read(expected_none=True)
+-        await self.db.unified_orders.update_one({}, {"$set": {"g47_salla_snapshot.source_updated_at": "invalid"}})
+-        await self.assert_no_write_read(expected_none=True)
+-
+-    async def test_terminal_ambiguous_missing_status_and_pending_never_repaired(self):
+-        original = await self.db.unified_orders.find_one({})
+-        for change in ({"order_status": "cancelled"}, {"order_status": "delivered"},
+-                       {"order_status": "unknown"}, {"raw_by_source.salla_direct.status": None},
+-                       {"order_status": "in_progress", "g47_salla_snapshot.component_pending": True},
+-                       {"order_status": "in_progress", "g47_salla_snapshot.requires_authoritative_refresh": True}):
+-            with self.subTest(change=change):
+-                await self.db.unified_orders.replace_one({}, deepcopy(original))
+-                await self.db.unified_orders.update_one({}, {"$set": change})
+-                await self.reseal()
+-                await self.assert_no_write_read(expected_none=True)
+-        self.provider.assert_not_awaited()
+-
+-    async def test_repair_rechecks_outbox_and_source_under_owner_fence(self):
+-        await self.alias_conflict()
+-        owner_boundary = readback.operational_owner
+-        expected = None
+-        async def race(db, owner, callback):
+-            nonlocal expected
+-            await self.db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery.claim": "worker"}})
+-            expected = await self.snapshot()
+-            return await owner_boundary(db, owner, callback)
+-        with patch.object(readback, "operational_owner", race):
+-            with self.assertRaises(shipping.ShippingLabelError):
+-                await self.read()
+-        # The rejected owner transaction rolls back its own revision increment.
+-        self.assertEqual(await self.snapshot(), expected)
+-
+-    async def test_repair_rollback_if_repaired_snapshot_cannot_be_proven(self):
+-        await self.alias_conflict()
+-        before = await self.snapshot()
+-        capture = readback._capture
+-        async def reject_after_write(db, owner, number):
+-            result = await capture(db, owner, number)
+-            if result and not result["repair_needed"]:
+-                return None
+-            return result
+-        with patch.object(readback, "_capture", reject_after_write):
+-            with self.assertRaises(shipping.ShippingLabelError):
+-                await self.read()
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_late_revocation_or_tenant_change_denies_repair_and_rolls_back(self):
+-        await self.alias_conflict()
+-        before = await self.snapshot()
+-        for reason in ("permission_revoked", "tenant_changed"):
+-            with self.subTest(reason=reason):
+-                async def denied(scoped):
+-                    current = await scoped.unified_orders.find_one({"user_id": "owner", "order_number": "synthetic-1"})
+-                    self.assertEqual(current["order_status"], "in_progress")
+-                    raise HTTPException(403, detail={"code": reason})
+-                with self.assertRaises(HTTPException) as error:
+-                    await readback.read_blocked_completion(self.db, "owner", "synthetic-1", authorize_repair=denied)
+-                self.assertEqual(error.exception.detail["code"], reason)
+-                self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_healthy_read_does_not_invoke_write_authorizer(self):
+-        callback = AsyncMock(side_effect=AssertionError("healthy read must not enter repair"))
+-        before = await self.snapshot()
+-        self.assertTrue((await readback.read_blocked_completion(
+-            self.db, "owner", "synthetic-1", authorize_repair=callback))["ready"])
+-        callback.assert_not_awaited()
+-        self.assertEqual(await self.snapshot(), before)
+-
+-    async def test_provider_errors_timeout_and_repeated_get_never_dispatch_post(self):
+-        before = await self.snapshot()
+-        self.provider.side_effect = httpx.ConnectError("synthetic offline")
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "completion_readback_unavailable")
+-        async def slow(*args, **kwargs):
+-            await asyncio.sleep(0.2)
+-        self.provider.side_effect = slow
+-        with patch.object(readback, "READBACK_TIMEOUT_SECONDS", 0.05):
+-            with self.assertRaises(shipping.ShippingLabelError) as error:
+-                await self.read()
+-        self.assertEqual(error.exception.code, "completion_readback_timeout")
+-        self.provider.side_effect = self.provider_read
+-        self.assertTrue((await self.read())["ready"])
+-        self.assertEqual(await self.snapshot(), before)
+-        self.assertEqual(self.provider.await_count, 3)
+-
+-    async def test_no_cached_completion_authority_between_reads(self):
+-        self.assertTrue((await self.read())["ready"])
+-        self.order["status"] = {"slug": "delivered"}
+-        with self.assertRaises(shipping.ShippingLabelError) as error:
+-            await self.read()
+-        self.assertEqual(error.exception.code, "order_status_not_completed")
+-        self.assertEqual(self.provider.await_count, 2)
+-
+-    async def test_accounting_wrapper_and_existing_transaction_scope(self):
+-        wrapped = AccountingDatabase(self.db)
+-        self.assertTrue((await readback.read_blocked_completion(wrapped, "owner", "synthetic-1"))["ready"])
+-        async with await self.mongo.start_session() as session:
+-            scoped = SessionDatabase(self.db, session)
+-            scoped._owner = "owner"
+-            with self.assertRaises(shipping.ShippingLabelError) as error:
+-                await readback.read_blocked_completion(scoped, "owner", "synthetic-1")
+-        self.assertEqual(error.exception.code, "completion_readback_scope_conflict")
+-
+-
+-if __name__ == "__main__":
+-    unittest.main()
+diff --git a/docs/operations/PRINT-READBACK-20261018/STATUS.md b/docs/operations/PRINT-READBACK-20261018/STATUS.md
+deleted file mode 100644
+index 0de7f833..00000000
+--- a/docs/operations/PRINT-READBACK-20261018/STATUS.md
++++ /dev/null
+@@ -1,35 +0,0 @@
+-# Completed-order print readback — integrated candidate
+-
+-Scope: restore current saved-label access for legacy completed orders and safe recovery of v2 completion status transitions. APK46 source remains frozen. No Production, live Salla, APK, OTA or financial writes.
+-
+-Base: bb23e92a88b66bec29ad449e1e7635c44ff2b4f1.
+-Branch: codex/legacy-completed-label-readback-20261017.
+-Regression checkpoint: 41f15655f19f774d87092a28774bd8a25e9c4c16 (4 expected failures, 1 control pass on synthetic provider + local real Mongo). Independent coordinator reproduced the same results.
+-
+-Proven mechanisms:
+-- The light status reconciler replaces raw status and top-level status but leaves raw status_slug stale; its early skip also prevents repairing this conflict.
+-- A completed webhook arriving between provider GET and status dispatch is treated as permanently blocked rather than requiring fresh completion readback.
+-- The component source snapshot/reconciliation window is temporary, but the worker used to stop permanently during that window.
+-- Pre-outbox completed workflows always appear pending to APK46 even when a current saved label exists.
+-
+-The legacy and inactive v2 readback paths are integrated. Both require a fresh exact provider order observation and recheck local material, shipment, cancellation, epoch and ownership evidence before returning. An active outbox claim is never bypassed. Healthy reads write no business state. The only recovery write is an explicitly authorized versioned in-progress/completed source-alias repair under the owner transaction, with permissions rechecked inside that transaction. It does not change the workflow, outbox, items, address, stock or financial data.
+-
+-Candidate 9d74aec417238050201f6b1db995128f8f6a533c is superseded: final review demonstrated that a positive material/address contradiction in the fresh provider response could pass the legacy reader while the unchanged local fence still matched. Seven counterexamples failed for that reason. Legacy and v2 now share the same bounded material comparison. It rejects supplied contradictory items/address/payment/recipient evidence, does not require fields omitted by a light response, and performs no enrichment or writes. The focused regression and omitted-field control passed (2 tests, 7 subtests). The previous CI/artifact is not authority for this new source.
+-
+-Replacement integrated readback verification: 55 passed, 91 subtests passed, zero skips/failures/errors, exit 0 in 72.18 seconds. Command: `python -m pytest --noconftest backend/tests/test_assembly_completion_legacy_readback.py backend/tests/test_assembly_completion_v2_readback.py backend/tests/test_assembly_completion_readback_routes.py -q --asyncio-mode=auto --tb=line --log-level=ERROR` against the isolated loopback replica set. CI now requires 28 legacy cases and at least 256 total cases; all previous gates remain.
+-
+-Fresh verification (synthetic provider, isolated real Mongo replica set):
+-- Baseline regression checkpoint: 4 intended failures, 1 control pass; independently reproduced.
+-- Integrated affected suites: 421 passed, 1 intentionally unsupported memory-transaction case skipped, 93 subtests passed; exit 0, 388.42 seconds. The corresponding real Mongo case ran. This broad run started before the final embedded-shipment and route tests below.
+-- Latest legacy/v2/actual route tests after those additions: 53 passed, 84 subtests passed; exit 0, 63.64 seconds. This includes current cancelled or conflicting shipments, returns/old cancelled shipments, claim/lease races, material changes, exact identity, terminal status, transaction rollback, late permissions, timeouts and cancellation.
+-- Existing saved-label tests: 18 passed within the integrated run.
+-- Android actual screen/hook/controller compatibility tests passed on frozen APK46 source plus test-only changes, mobile PR 276, commit 7ab293d. Exact old response stays blocked; corrected first GET exposes existing print actions; no resume/Ready/old-issuance call. Synthetic 80/120/60 ms stage delays produced 200 ms to the label action and 260 ms to the enqueue boundary. These are not live/device printing timings; native PDF open was not exercised.
+-- CI adds the new suites and exact minimum counts, retaining all existing gates. Remote CI and independent candidate review remain required.
+-
+-One earlier run against the old C: fixture failed setup due to disk exhaustion. It is not accepted product evidence. Subsequent verification used a separate loopback D: fixture without changing or cleaning the old shared database.
+-
+-Known limits: exact live customer-order cause is unverified. Store courier remains on its existing explicit print path; confirmed completion honestly reports a pending label until that path generates the document. APK46's pending wording and 30-second completion polling remain unchanged. No authentication source, APK, OTA, Production, live provider or financial write was performed in this change.
+-
+-Backend PR: https://github.com/AMASI-SA/AMASI-SA/pull/1431 (Draft). Mobile test-only PR: https://github.com/AMASI-SA/amasi-mobile/pull/276 (Draft).
+-
+-Next: push this verified replacement source, inspect fresh CI, and send exact HEAD/TREE to the release coordinator for independent review. The separate one-read-after-status-ACK latency improvement is deferred from this correction. The release coordinator alone owns merge, governed A/B build, lease and deployment. Rollback baseline is bb23 above, preserving already-published fixes; no return to an older update.
