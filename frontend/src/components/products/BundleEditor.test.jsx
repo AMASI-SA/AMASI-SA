@@ -116,3 +116,72 @@ test("only explicitly linked supplier customization text is sent in preview", as
     await act(async () => button("معاينة المكونات والتكلفة للاختيارات").click());
     expect(bundles.previewProductBundle.mock.calls[0][3]).toEqual({ present_option_ids: ["size1", "message"], filled_option_ids: ["size1", "message"], option_answers: { size1: "XL" } });
 });
+
+test("preview selection can be cleared without saving bundle changes", async () => {
+    bundles.previewProductBundle.mockResolvedValue({ expansion: { leaves: [] } });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await act(async () => node.querySelector('input[type="radio"]').click());
+    await act(async () => node.querySelector('[aria-label="مسح اختيار عدد المنتجات"]').click());
+    expect([...node.querySelectorAll('input[type="radio"]')].every((input) => !input.checked)).toBe(true);
+    await act(async () => button("معاينة المكونات والتكلفة للاختيارات").click());
+    expect(bundles.previewProductBundle).toHaveBeenCalledWith("bundle", []);
+    expect(bundles.saveProductBundle).not.toHaveBeenCalled();
+});
+
+test("one searchable picker shows image and name and adds selected product", async () => {
+    jest.useFakeTimers();
+    listProductsV2.mockResolvedValue({ items: [{ id: "necklace", name: "قلادة ذهبية", sku: "AMS1", main_image: "https://example.com/necklace.png" }] });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    const search = node.querySelector('[role="combobox"]');
+    await inputValue(search, "قلادة");
+    await act(async () => jest.advanceTimersByTime(300));
+    expect(listProductsV2).toHaveBeenLastCalledWith({ query: "قلادة", perPage: 50 });
+    const result = node.querySelector('[role="option"]');
+    expect(result.textContent).toContain("قلادة ذهبية");
+    expect(result.querySelector("img").getAttribute("src")).toBe("https://example.com/necklace.png");
+    await act(async () => result.click());
+    expect(search.value).toBe("قلادة ذهبية");
+    expect(node.querySelector('[role="listbox"]')).toBeNull();
+    await act(async () => button("إضافة مكوّن (4/100)").click());
+    expect([...node.querySelectorAll("legend")].some((legend) => legend.textContent.includes("قلادة ذهبية"))).toBe(true);
+    jest.useRealTimers();
+});
+
+test("clear all resets text preview without modifying saved definition", async () => {
+    getProductV2.mockResolvedValue({ options: [{ id: "note", name: "ملاحظات", type: "text" }] });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await inputValue(node.querySelector('[aria-label="ملاحظات"]'), "هدية");
+    await act(async () => button("مسح جميع اختيارات المعاينة").click());
+    expect(node.querySelector('[aria-label="ملاحظات"]').value).toBe("");
+    expect(button("حفظ التركيب وحساب التكلفة").disabled).toBe(true);
+});
+
+test("clearing a parent preview choice also removes hidden dependent selections", async () => {
+    getProductV2.mockResolvedValue({ options: [
+        { id: "size", name: "المقاس", values: [{ id: "M", name: "M" }] },
+        { id: "color", name: "اللون", show_if: [{ option_id: "size", value_id: "M" }], values: [{ id: "red", name: "أحمر" }] }
+    ] });
+    bundles.previewProductBundle.mockResolvedValue({ expansion: { leaves: [] } });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    await act(async () => node.querySelector('input[type="radio"]').click());
+    await act(async () => node.querySelectorAll('input[type="radio"]')[1].click());
+    await act(async () => node.querySelector('[aria-label="مسح اختيار المقاس"]').click());
+    expect(node.querySelectorAll('input[type="radio"]')).toHaveLength(1);
+    await act(async () => button("معاينة المكونات والتكلفة للاختيارات").click());
+    expect(bundles.previewProductBundle).toHaveBeenCalledWith("bundle", []);
+});
+
+test("picker supports keyboard selection without a second select", async () => {
+    jest.useFakeTimers();
+    listProductsV2.mockResolvedValue({ items: [{ id: "p-new", name: "منتج بدون صورة" }] });
+    await act(async () => root.render(<BundleEditor productId="bundle" />));
+    const search = node.querySelector('[role="combobox"]');
+    await inputValue(search, "منتج");
+    await act(async () => jest.advanceTimersByTime(300));
+    expect(node.querySelector('[role="option"]').textContent).toContain("بدون صورة");
+    await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    await act(async () => search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(search.value).toBe("منتج بدون صورة");
+    expect(node.querySelector('[role="listbox"]')).toBeNull();
+    jest.useRealTimers();
+});

@@ -1,0 +1,29 @@
+{
+  "task": "SHIPPING-SAVED-LABEL-20261017",
+  "branch": "codex/shipping-pilot-release-20261017",
+  "base": "7da8b95c5bf79cd001d0714439dc5b7f89e18f31",
+  "state": "Parallel Android-only candidate implemented; release/device validation pending",
+  "behavior": "Legacy refresh and web remain unchanged. New POST /fulfillment-v2/completed/{order}/carrier-label/refresh-saved reads canonical saved label only. Durable verified shipping inbox retries local persistence, retains invalidations/cancellation fences, performs no provider lookup or full-order replay. Android candidate persists waiting intent and polls new endpoint only.",
+  "verification": "312 passed, 165 skipped (isolated replica-set Mongo unavailable), pytest exit0 across 11 affected backend suites. Legacy test files restored exactly to production base and pass unchanged. New opt-in route/permission, delayed-label, retry/crash/cancellation and duplicate-worker tests pass.",
+  "test_files": [
+    "test_shipping_saved_label_print.py",
+    "test_shipping_print_legacy_path.py",
+    "test_shipping_print_boundary.py",
+    "test_shipping_label_current_guard.py",
+    "test_shipping_snapshot_bootstrap.py",
+    "test_store_courier_unified_print.py",
+    "test_salla_current_shipping.py",
+    "test_shipping_label_inbox.py"
+  ],
+  "risks": [
+    "Live webhook timing/device viewer behavior unverified",
+    "Backend must be deployed before new Android candidate; new endpoint intentionally has no legacy fallback",
+    "No lease, production merge, deployment or APK build performed"
+  ],
+  "next": "Finish independent review, remote CI incl real Mongo and Android candidate tests. Deploy backend through AGENTS v5, then Android release task builds isolated pilot version/channel. Retain old endpoint until pilot proven.",
+  "production_changed": false,
+  "release_guard": "not prepared",
+  "deployment": "not attempted",
+  "web_candidate": "Not activated. Optional candidate preserved remotely on codex/web-pending-label-candidate-20261017; final frontend diff vs production base is empty.",
+  "android_branch": "AMASI-SA/amasi-mobile codex/pending-carrier-print-20261017"
+}
