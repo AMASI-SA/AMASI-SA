@@ -21,11 +21,13 @@ export default function BundleProductPolicy({ productId, suppliers = [], onSaved
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const request = useRef(0);
+    const attemptedProduct = useRef(null);
     const activeProduct = useRef(productId);
     activeProduct.current = productId;
     const [loadedProduct, setLoadedProduct] = useState(null);
-    useEffect(() => { request.current += 1; setData(null); setComponents([]); setProduct({}); setLoadedProduct(null); setError(""); setNotice(""); setBusy(false); return () => { request.current += 1; }; }, [productId]);
+    useEffect(() => { attemptedProduct.current = null; request.current += 1; setData(null); setComponents([]); setProduct({}); setLoadedProduct(null); setError(""); setNotice(""); setBusy(false); return () => { request.current += 1; }; }, [productId]);
     async function load() {
+        attemptedProduct.current = productId;
         const token = ++request.current;
         const id = productId;
         setBusy(true); setError("");
@@ -54,7 +56,7 @@ export default function BundleProductPolicy({ productId, suppliers = [], onSaved
         } catch (err) { if (token === request.current && activeProduct.current === id) setError(bundleError(err)); } finally { if (token === request.current && activeProduct.current === id) setBusy(false); }
     }
     const invalidPolicy = data && (Object.keys(data.composition_components).some((key) => !components.some((component) => `${component.binding_kind}:${component.binding_id}` === key)) || data.sourcing.rules.some((rule) => (!rule.variant_id && !rule.conditions.length && !Object.keys(rule.customization).length) || (rule.variant_id && !(product.variants || []).some((variant) => String(variant.id) === String(rule.variant_id))) || rule.conditions.some((condition) => !(product.options || []).some((option) => String(option.id) === condition.option_id && (option.values || []).some((value) => String(value.id) === condition.value_id))) || Object.keys(rule.customization).some((id) => !(product.options || []).some((option) => String(option.id) === id && textOption(option)))));
-    return <details className="rounded-xl border p-3" onToggle={(event) => { if (event.currentTarget.open && !data && !busy) load(); }}>
+    return <details className="rounded-xl border p-3" onToggle={(event) => { if (event.target === event.currentTarget && event.currentTarget.open && attemptedProduct.current !== productId) load(); }}>
         <summary className="cursor-pointer font-bold">سياسة المنتج الأصلية للتكلفة والتوريد</summary>
         <p className="my-2 text-sm text-amber-800">هذا إعداد مستقل للمنتج الأصلي، ويُستخدم في البكجات الجديدة. إضافة المنتج أو استبعاده من بكج لا تحفظ هذه الإعدادات. أدخل أساسًا موثوقًا قبل اعتماد التكلفة؛ لا تتغير مكونات المنتج الأصلية هنا.</p>
         {error && <p role="alert">{error}<button type="button" disabled={busy} onClick={load}>إعادة تحميل السياسة</button></p>}{notice && <p role="status">{notice}</p>}

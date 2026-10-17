@@ -67,7 +67,12 @@ test("incomplete or stale rules block save and can be removed", async () => {
 
 test("load errors can be retried without a policy write", async () => {
     api.get.mockRejectedValueOnce(new Error("offline"));
-    await render(); await open(); expect(node.querySelector('[role="alert"]')).not.toBeNull();
+    await render(); await open();
+    // A native toggle queued behind the initial event must not silently retry a failed read.
+    await act(async () => node.querySelector("details").dispatchEvent(new Event("toggle", { bubbles: true })));
+    expect(api.get).toHaveBeenCalledTimes(1);
+    expect(node.querySelector('[role="alert"]')).not.toBeNull();
     await act(async () => button("إعادة تحميل السياسة").click());
+    expect(api.get).toHaveBeenCalledTimes(2);
     expect(button("حفظ سياسة المنتج الأصلية")).toBeDefined(); expect(api.put).not.toHaveBeenCalled();
 });
