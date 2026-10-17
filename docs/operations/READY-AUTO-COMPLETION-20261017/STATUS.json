@@ -1,7 +1,7 @@
 {
   "task": "READY-AUTO-COMPLETION-20261017",
   "branch": "codex/ready-auto-completion-20261017",
-  "base": "2a7740359451a538be8df373266c4c92ca1a57c8",
+  "base": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
   "state": "WIP_NOT_FOR_RELEASE",
   "production_changed": false,
@@ -16,7 +16,7 @@
     "print_memory": "148 passed, 150 Mongo cases skipped; asyncio-mode=auto",
     "syntax": "PASS",
     "mongo_and_performance": "PENDING",
-    "final_ci": "Previous d058f09d1:24success/2failure; courier tests corrected (22passed); dashboard baseline failure independently reproduced on Production and candidate with identical response and43find vs historical41find",
+    "final_ci": "current c77 in progress",
     "print_mongo": "297 passed, 1 skipped; BUILD37_TEST_MONGO_URI isolated loopback",
     "delivery": "28 passed +9 subtests; corrected shipment injection boundary: all3 counterexample tests passed",
     "ready_performance": "Historical d55b1b86 baseline: last 20.204936s -> 0.165525s; ordinary 0.171850s -> 0.142284s; synthetic 20s provider",
@@ -27,7 +27,9 @@
     "full_shipping_after_payroll": "527 passed, 1 intentional mock transaction skip",
     "dashboard_fix": "CI three arms passed on0b80b6fb; follow-up immutable source guard pinned already-deployed bundle report2a774035;80regressions+5subtestsPASS locally; final CI rerun required",
     "after_payroll_race_delivery": "50 passed,9subtests,zero failures/errors/skips",
-    "dashboard_three_arm": "reference40PASS,production40PASS,candidate40PASS;164records exacthistoricalJSON and productionreadcomparison"
+    "dashboard_three_arm": "reference40PASS,production40PASS,candidate40PASS;164records exacthistoricalJSON and productionreadcomparison",
+    "current_prod_integration": "101 passed,14 subtests,zero skips/errors/failures;293.24s; isolated Mongo",
+    "previous_head_ci": "255e1ecf:26/26 successful"
   },
   "remaining": [
     "Finish three-arm dashboard validation",
@@ -38,7 +40,8 @@
   "next": "Run isolated local replica-set suites and benchmarks; no live Salla requests",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
-  "source_head": "255e1ecfe847a194b6e024bdf4609f8b268317a4",
+  "source_head": "c77a614ac762d48f50885d60e8b6b005dd2789dc",
   "source_tree": "ef9b704e53c3fd992ad9364cdddaa6daf8078941",
-  "evidence_branch": "codex/ready-auto-evidence-20261017 (documentation only, do not deploy)"
+  "evidence_branch": "codex/ready-auto-evidence-20261017 (documentation only, do not deploy)",
+  "rollback_source": "d9945b7d961dfebca27fda5e08b3515ca922edbb exact baseline tree, not deployable until fresh intent/rehearsal"
 }
