@@ -3,7 +3,7 @@
   "branch": "codex/ready-prod177-integration-20261017",
   "base": "177f5f6de5523f01c428ed1722cc8e7781c4cb28",
   "integration_checkpoint": "1117c56ee619a01b36d4ce88692537383816fe7e",
-  "state": "PUBLICATION_IN_PROGRESS",
+  "state": "BACKEND_VERIFIED_APK_PREFLIGHT_PENDING",
   "production_changed": true,
   "completed": [
     "Merged prior ready integration preserving latest production courier classification",
@@ -32,13 +32,15 @@
     "previous_head_ci": "255e1ecf:26/26 successful",
     "release_rehearsal": "CI39063636676PASS; local/app governed adapterPASS60.52s; prepare/prepublishPASS; publication requestedonce",
     "rollback_rehearsal": "39065049714 PASS final actual-merge-parent rollback4dcba49bb",
-    "source_ci": "26/26 PASS source16a44200f"
+    "source_ci": "26/26 PASS source16a44200f",
+    "live": "UI Deployment finished2026-10-17 23:08Asia/Riyadh +Live; actual guard verify exit0/checks3; statusactivefalse",
+    "verify_output_sha256": "9eb930137d2b4c6cda729e49085e82dc2817e517d026568fd7ed9a5e565ce8fe"
   },
   "remaining": [
     "Android final tested HEAD and coordinated compatible client release",
     "Production merge and local governed rehearsal, prepare/prepublish/deploy/verify"
   ],
-  "next": "Finish local rehearsal, prepare/prepublish under own lease, publish once and verify three probes; APK46 exact guard review pending",
+  "next": "Require preflightPASS, fresh provider inventory, submitoneAPK46, verifyartifact, installavailabledevices; noOTA",
   "history_checkpoint_branch": "codex/ready-auto-history-checkpoint-20261017",
   "history_note": "Original merge ancestry fails the release source-only transition; source tree rebuilt with latest Production as sole parent. No reviewed source/intent pair frozen or rewritten.",
   "source_head": "16a44200f6b8dc79484ebae0010614c6f05b75e3",
@@ -59,9 +61,12 @@
     "candidate": "5e4a4907dd71deeedad46fda0f282b3ca12898cf",
     "devices": "emulator only, no physical employee device attached",
     "source_guard": "Independent604filesPASS;13negative/reference testsPASS,1Windows symlink skip (Linux CI required)",
-    "candidate_ci": "39065342410 and39065371787 pending"
+    "candidate_ci": "39065342410 and39065371787 SUCCESS; Linux14negative testsPASS; fullquality52checksPASS andAndroidexport",
+    "receipt_digest": "884909af45cd837650a960e46b3e41f7078f2b75918f42e300cc3ad7fa4e3902",
+    "runner_digest": "0083d0713f31d1d668f5c088f64b76b35841251b60c9336b56a4e4362e0bc477",
+    "build": "NOT_SUBMITTED;preflight-onlyrunning"
   },
-  "production_change_scope": "GitHub Production branch merged; Emergent checkout fast-forwarded, live runtime NOT yet published",
+  "production_change_scope": "PR1430 merged; live Backend/Frontend verified3 and matching lease inactive",
   "deployment_head": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1",
   "release_id": "rg5-10f2364c7514588f61b5d39fa1f736e78402a9954cb7660cdf8c7140a53f3c6c",
   "lease_actor": "codex-ready-auto-apk46-20261017",
