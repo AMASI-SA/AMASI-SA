@@ -2,7 +2,7 @@
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
   "status": "CURRENT_PRODUCTION_INTEGRATION_CI_PENDING",
   "branch": "codex/opening-stock-fc51-source-20261017",
-  "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
+  "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
   "acceptance": [
     "Owner can search the real MZ2 catalogue before any physical inventory exists.",
@@ -14,11 +14,11 @@
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
   "compatibility": "Supports product image/SKU/option+name rows and MZ2 tracked components with meter/kg6decimal quantities and exacthalfup costtotals. No financialjournals/nativeactivation; hold remains. Existing stock needs reconciliation. Legacywarehouseplacement integeraggregate truncation predates patch and remains separate knownrisk.",
-  "verification": "Expanded scope:131 independent backendtests,87 frontendtests PASS; latestbase102 affectedtests PASS; all SourceA CI includingCodeQL/security/governedbuild PASS. Candidateartifact12102096034 Linuxrun39034881548; intentSHA256 e49e05ecb2b687ded56839935a72641c4c2f92eb61ec57d82bfbc9dbe93f43af. ExactB rehearsal pending. ExactB CI all applicable checks PASS includingCodeQL,security,operationaltests and run39035273408 clean-clone adapter/package rehearsal.",
+  "verification": "Expanded scope:131 independent backendtests,87 frontendtests PASS; latestbase102 affectedtests PASS; all SourceA CI includingCodeQL/security/governedbuild PASS. Candidateartifact12102096034 Linuxrun39034881548; intentSHA256 e49e05ecb2b687ded56839935a72641c4c2f92eb61ec57d82bfbc9dbe93f43af. ExactB rehearsal pending. ExactB CI all applicable checks PASS includingCodeQL,security,operationaltests and run39035273408 clean-clone adapter/package rehearsal. Integration on fc51:94 UI tests across5 suites PASS. Readiness39045806771 stopped before build because remote base advanced to29ccdb81. Integrated Google PR1406 without conflicts; new CI pending. No frozen intent for this candidate yet.",
   "production_changed": false,
   "release": "Owner authorized deployment. No merge, prepare or publish performed. Operator reports active=false, local/remote fc51e2d, tracked clean, 1.5GB free at 2026-10-17T15:31Z; Manage Publishing Idle. Fresh writer census outstanding.",
-  "next": "Wait for Source A readiness run39045806771; freeze its reviewed intent as intent-only B, verify B CI before merge. Preserve dashboard PR1423. Never build in /app or clear another lease.",
-  "source_sha": "b5a718e349716477aad540e58dbb875a9ae33bf1",
+  "next": "Wait for latest SourceA CI on ba2f4fa54; freeze reviewed intent-only B and verify exactB. Need current Production writer-disabled evidence before deployment. User confirmed Manage Publishing Idle. No /app updates requested yet.",
+  "source_sha": "ba2f4fa54a9c7535c3ea938429f7c6f7ec5f72d6",
   "intent_sha": null,
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1425",
   "release_id": null
