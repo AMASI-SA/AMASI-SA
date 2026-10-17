@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "GOOGLE_PERIODIC_PUBLISHED_PUBLIC_VERIFIED_UI_ACCEPTANCE_IN_PROGRESS",
-  "updated_at_utc": "2026-10-17T15:53:39.259Z",
+  "status": "GOOGLE_PERIODIC_PUBLISHED_VERIFIED_PLACEMENT_AND_NATIVE_AI_PREVIEW_PASS",
+  "updated_at_utc": "2026-10-17T16:01:17.286Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Public release verified and own guard closed. Verify live standalone card absent dashboard/present native Google account/period, shared list Google, mobile controls retained. Fresh native AI Search save/provider validate-only without approval/execution. Do not bypass existing five-hour cadence or claim an unobserved periodic cycle.",
+  "next_safe_action": "Requested eligibility/UI relocation is published and public/UI/native Search validation verified. A later normal periodic cycle must provide the first live Google recommendation evidence; do not force or bypass cadence. If native AI502 recurs, diagnose a fresh sanitized request rather than claiming its cause or retrying repeatedly. No further merge, rebuild or republish is needed for this completed source.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,7 +450,7 @@
     }
   },
   "completion_followup": {
-    "status": "PUBLISHED_PUBLIC_VERIFIED_UI_ACCEPTANCE_IN_PROGRESS",
+    "status": "PUBLISHED_VERIFIED_PLACEMENT_AND_NATIVE_AI_PREVIEW_PASS",
     "branch": "codex/google-periodic-current-prod-20261016",
     "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
     "scope": [
@@ -602,6 +602,44 @@
       "matching_own_lease_closed": true,
       "result": "/root/google-1406-public-verify.json",
       "stderr_log": "/root/google-1406-public-verify.log"
+    },
+    "native_acceptance": {
+      "selected_account_currency": "SAR",
+      "standalone_card_present_in_google_workspace": true,
+      "standalone_card_absent_from_dashboard": true,
+      "shared_dashboard_caption_includes_google": true,
+      "shared_google_filter_selectable": true,
+      "mobile_collapse_controls_retained": true,
+      "existing_Smart_common_management_controls_enabled": true,
+      "new_AI_draft_name": "اختبار ذكاء جوجل 1406",
+      "first_AI_attempt": {
+        "http_status": 502,
+        "route": "/api/integrations-v2/google_ads/ai/draft",
+        "exact_cause": "UNPROVEN; safe provider/model error code was not exposed by UI or retained logs",
+        "no_provider_writes": true
+      },
+      "single_retry_started_at_utc": "2026-10-17T15:57:37.533Z",
+      "AI_draft_generation": "PASS on one retry",
+      "local_save": "PASS",
+      "native_Google_validate_only": "PASS; previewed proposal displayed",
+      "budget_native": 100,
+      "max_cpc_native": 2,
+      "geographic_targets": 1,
+      "manual_language_targets": 0,
+      "model_notes_separate_from_authoritative_gaps": true,
+      "approval_checked": false,
+      "execute_button_disabled": true,
+      "provider_writes": 0,
+      "financial_writes": 0,
+      "screenshot": "mezan-google-1406-live-preview-1792252810476.jpg"
+    },
+    "periodic_acceptance": {
+      "existing_5hour_worker_integration_contract": "PASS in CI; no new scheduler or cadence override",
+      "shared_UI_integration": "PASS",
+      "latest_displayed_recommendations": 1,
+      "google_filter_displayed_recommendations": 0,
+      "first_live_new_Google_periodic_recommendation": "UNOBSERVED; not claimed",
+      "cadence_bypassed": false
     }
   }
 }
