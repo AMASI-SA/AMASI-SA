@@ -55,6 +55,10 @@ async def providers(monkeypatch, *, rows=None, order=None, resync=None, number=O
     async def forbidden(*args, **kwargs):
         pytest.fail("no provider mutation expected")
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
+    async def read_resolved(db, owner, number, _internal_id):
+        return (await shipping._resolve_order(db, owner, number))[1]
+
+    monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(shipping, "_shipment_rows", shipments)
     monkeypatch.setattr(shipping, "_print_shipment_rows", shipments)
     monkeypatch.setattr(shipping, "_best_effort_resync", resync or noop)

@@ -60,7 +60,7 @@ async def test_final_direct_read_keeps_provider_status_and_identity_guards(setup
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("identity_field", ["order_id", "raw_by_source.salla_direct.id"])
+@pytest.mark.parametrize("identity_field", ["raw_by_source.salla_direct.id"])
 async def test_saved_and_regular_courier_share_print_data_without_keyword_search(setup, monkeypatch, identity_field):
     from salla_shipping import CURRENT_SHIPPING
     db, state = setup
@@ -91,7 +91,7 @@ async def test_saved_and_regular_courier_share_print_data_without_keyword_search
 async def test_ingested_id_is_only_hint_and_mismatch_never_falls_back(setup, changed):
     db, state = setup
     state["order"].update(changed)
-    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {"order_id": "salla-order"}})
+    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {"raw_by_source.salla_direct.id": "salla-order"}})
     with pytest.raises(shipping.ShippingLabelError) as caught:
         await shipping._resolve_order(db, OWNER, ORDER)
     assert caught.value.code == "salla_order_reference_mismatch"
@@ -102,6 +102,15 @@ async def test_ingested_id_is_only_hint_and_mismatch_never_falls_back(setup, cha
 async def test_other_owners_ingested_identity_never_used(setup):
     db, state = setup
     await db.unified_orders.insert_one({"user_id": "other-owner", "order_number": ORDER, "order_id": "private-id"})
+    internal_id, _ = await shipping._resolve_order(db, OWNER, ORDER)
+    assert internal_id == "salla-order"
+    assert state["calls"] == ["/orders", "/orders/salla-order"]
+
+
+@pytest.mark.asyncio
+async def test_local_assembly_order_id_is_not_a_provider_routing_hint(setup):
+    db, state = setup
+    await db.unified_orders.update_one({"user_id": OWNER}, {"$set": {"order_id": "local-assembly"}})
     internal_id, _ = await shipping._resolve_order(db, OWNER, ORDER)
     assert internal_id == "salla-order"
     assert state["calls"] == ["/orders", "/orders/salla-order"]

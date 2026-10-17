@@ -585,14 +585,15 @@ async def _resolve_order(
 ) -> tuple[str, dict[str, Any]]:
     # The ingested id is only a routing hint, never a status/print proof.
     # Scope it to the authenticated owner and validate the fresh response.
+    # Top-level order_id is also used for local assembly ids; do not route it.
     collection = getattr(db, "unified_orders", None)
     if collection is not None:
         saved = await collection.find_one(
             {"user_id": str(user_id), "order_number": order_number},
-            {"order_id": 1, "raw_by_source.salla_direct.id": 1},
+            {"raw_by_source.salla_direct.id": 1},
         )
         raw = ((saved or {}).get("raw_by_source") or {}).get("salla_direct") or {}
-        known_id = _text(raw.get("id") or (saved or {}).get("order_id"))
+        known_id = _text(raw.get("id"))
         if known_id:
             details = await _read_resolved_order(db, user_id, order_number, known_id)
             if (_text(details.get("id")) != known_id
