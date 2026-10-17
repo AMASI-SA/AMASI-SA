@@ -12,15 +12,17 @@ from typing import Any, Iterable
 from fastapi import HTTPException
 
 from mobile_app_permissions import MOBILE_APP_CLIENT, mobile_app_access_for_user
+from mobile_preparation_assignable_employees import install_native_preparation_assignable_employees
 from preparation_route_history import install_supplier_dispatch_route_guard
 from supplier_receipt_employee_custody import install_supplier_receipt_employee_custody
 
 
-# Install the two native-operation guards once per process. They preserve
-# physical-piece history while enforcing current route visibility and transfer
-# employee custody only when supplier receipt is finally approved.
+# Install native-operation guards once per process. They preserve physical-piece
+# history, employee custody, and keep reviewed-preparation assignment aligned
+# with the independent AMASI app permission model rather than Mezan web RBAC.
 install_supplier_dispatch_route_guard()
 install_supplier_receipt_employee_custody()
+install_native_preparation_assignable_employees()
 
 
 def _permissions(*values: str) -> frozenset[str]:
