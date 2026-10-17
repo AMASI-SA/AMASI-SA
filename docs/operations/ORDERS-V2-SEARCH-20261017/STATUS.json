@@ -54,13 +54,14 @@
   "next_safe_action": "Inspect new candidate CI, restore browser access then inspect shared guard status and follow already-authorized protocol-v5 release. No further publication permission needed.",
   "publication_authorized": true,
   "mobile_followup": {
-    "scope": "Owner screenshot correction: four KPIs in one phone row, compact single-line executive title and cost label/amount/share rows; desktop labels retained, mobile aliases preserve provisional ads state. Latest Orders compact single-line header; phone disclosure arrows24px without frame/extra vertical padding across dashboard cards.",
+    "scope": "Owner screenshot correction: four KPIs in one phone row, compact single-line executive title and cost label/amount/share rows; desktop labels retained, mobile aliases preserve provisional ads state. Latest Orders compact single-line header; phone disclosure arrows24px without frame/extra vertical padding across dashboard cards. All dashboard card headers now share mobile nowrap titles, compact controls, metadata sizing; long supporting descriptions move into expanded body on phones and remain in desktop headers.",
     "files": [
       "frontend/src/index.css",
       "frontend/src/pages/AdvancedDashboard.jsx",
-      "frontend/src/components/dashboardPanel.css"
+      "frontend/src/components/dashboardPanel.css",
+      "frontend/src/components/DashboardAdsSpendCard.jsx"
     ],
-    "verification": "28 existing dashboard/panel tests PASS; diff check PASS. CSS confined to max767px; actual mobile visual verification pending browser recovery.",
+    "verification": "Dashboard/panel/ads card existing focused tests rerun; CSS visual acceptance pending browser recovery. Desktop header unchanged; no data requests or calculation changes.",
     "publication": "Not merged/deployed; prior807 source CI all15 successful but new source must pass fresh CI."
   }
 }

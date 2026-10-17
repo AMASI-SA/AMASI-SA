@@ -212,13 +212,14 @@ export function CampaignAdvisorCard() {
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-violet-800 bg-violet-700 px-4 py-3 text-white">
             <div>
                 <h2 className="flex items-center gap-2 font-extrabold"><Sparkles className="h-5 w-5" />ملاحظات الذكاء على الحملات</h2>
-                <p className="mt-1 text-[10px] text-violet-100">سناب وMeta وجوجل · تحليل وتوصيات في مكان واحد · التنفيذ بعد الاعتماد</p>
+                <p className="dashboard-header-details mt-1 text-[10px] text-violet-100">سناب وMeta وجوجل · تحليل وتوصيات في مكان واحد · التنفيذ بعد الاعتماد</p>
             </div>
             <div className="flex items-center gap-2 text-[10px] font-bold">
                 <span className="rounded-full bg-white/15 px-2 py-1">هدر محتمل {integer(urgent)}</span>
                 <span className="rounded-full bg-white/15 px-2 py-1">فرص توسعة {integer(scale)}</span>
             </div>
         </div>
+        <p className="px-3 pt-2 text-[10px] text-slate-500 md:hidden">سناب وMeta وجوجل · تحليل وتوصيات في مكان واحد · التنفيذ بعد الاعتماد</p>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-violet-50/60 px-4 py-2 text-[10px] text-violet-900">
             <span className="font-bold">{loading ? "جارٍ قراءة آخر تحليل…" : (snapshot?.summary || "سيظهر أول تحليل بعد اكتمال التشغيل الدوري.")}</span>
             <div className="flex items-center gap-3 whitespace-nowrap text-violet-600">
@@ -344,7 +345,8 @@ export function TopProductsCard({ rows, summary = {}, filters = {}, loading = fa
     useEffect(() => { setVisibleCount(5); }, [rows]);
     return (
         <Panel className="border-indigo-200" testid="advanced-top-products" title="المنتجات الأكثر مبيعًا">
-            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
+            <div className="flex h-14 items-center justify-between border-b border-indigo-800 bg-indigo-700 px-4 text-white"><h2 className="font-extrabold"><Link to={`/products-v2/sold?from=${encodeURIComponent(filters.from || "")}&to=${encodeURIComponent(filters.to || "")}`} className="flex items-center gap-2 rounded hover:underline focus-visible:outline-2" data-testid="advanced-top-products-report-link"><Trophy className="h-5 w-5" />المنتجات الأكثر مبيعًا ↗</Link></h2><div className="dashboard-header-details text-left text-[9px] font-bold leading-4"><p>{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة</p><p className="text-indigo-100">بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</p></div></div>
+            <div className="px-3 pt-2 text-[9px] text-slate-500 md:hidden">{loading && !rows ? "—" : integer(productCount)} منتجًا خلال الفترة · بتكلفة سلة {loading && !rows ? "—" : integer(summary.salla_fallback_products_count)} · تكلفة ناقصة {loading && !rows ? "—" : integer(summary.missing_all_cost_products_count)}</div>
             <div className="dashboard-products-table" tabIndex={0} role="region" aria-label="جدول المنتجات الأكثر مبيعًا"><div className="grid grid-cols-[48px_48px_minmax(80px,1fr)_minmax(86px,1fr)_minmax(86px,1fr)] gap-1.5 border-b px-3 py-2 text-center text-[8px] font-bold leading-4 text-slate-400">
                 <span>المنتج</span>
                 <span>القطع</span>
