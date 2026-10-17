@@ -964,7 +964,8 @@ def _merge_into(existing: dict, incoming: dict, source: str) -> dict:
 
 async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
                        source: str, raw: Optional[dict] = None,
-                       shipping_snapshot: Optional[dict] = None) -> dict:
+                       shipping_snapshot: Optional[dict] = None,
+                       allow_billing_eligibility: bool = True) -> dict:
     observation = shipping_snapshot if shipping_snapshot is not None else (
         extract_shipping(raw if raw is not None else incoming) if source == "salla_direct" else None
     )
@@ -973,14 +974,17 @@ async def upsert_order(db, user_id: str, order_number: str, incoming: dict,
         # Nested verified order intake joins its existing operational session.
         from operational_atomic import operational_owner
         async def persist(scoped):
-            return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation)
+            return await _upsert_order(scoped, user_id, order_number, incoming, source, raw, observation,
+                                       allow_billing_eligibility=allow_billing_eligibility)
         return await operational_owner(db, user_id, persist)
-    return await _upsert_order(db, user_id, order_number, incoming, source, raw, observation)
+    return await _upsert_order(db, user_id, order_number, incoming, source, raw, observation,
+                               allow_billing_eligibility=allow_billing_eligibility)
 
 
 async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
                         source: str, raw: Optional[dict],
-                        shipping_snapshot: Optional[dict]) -> dict:
+                        shipping_snapshot: Optional[dict], *,
+                        allow_billing_eligibility: bool = True) -> dict:
     """Upsert a single order into `unified_orders`. Returns {"created": bool, "doc": dict}."""
     order_number = str(order_number).strip()
     if not order_number:
@@ -1057,7 +1061,7 @@ async def _upsert_order(db, user_id: str, order_number: str, incoming: dict,
     try:
         from bnpl.billing_eligible import propagate_status_to_billing_eligible
         new_status = merged.get("order_status")
-        if new_status and new_status != (existing or {}).get("order_status"):
+        if allow_billing_eligibility and new_status and new_status != (existing or {}).get("order_status"):
             await propagate_status_to_billing_eligible(
                 db, user_id,
                 order_reference_id=merged.get("order_reference_id"),

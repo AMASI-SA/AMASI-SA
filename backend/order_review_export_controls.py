@@ -547,7 +547,7 @@ def make_order_review_export_controls_router(
                     "order_number": order_number,
                     "revision": int(workflow.get("revision") or 0),
                 },
-                {"$set": {
+                {"$inc": {"revision": 1}, "$set": {
                     "items": list(states.values()),
                     "updated_at": now,
                     "updated_by": actor_id,
@@ -565,7 +565,7 @@ def make_order_review_export_controls_router(
                     "order_number": order_number,
                     "order_id": order.order_id,
                     "stage": "pending_review",
-                    "revision": 0,
+                    "revision": 1,
                     "items": list(states.values()),
                     "operational_items": [],
                     "created_at": now,

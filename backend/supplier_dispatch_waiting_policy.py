@@ -5,12 +5,13 @@ not deleted or reassigned when external order status changes.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import HTTPException
 
 from order_engine import service as order_service
-from order_engine.repository import MongoOrderRepository
+from order_engine.repository import MongoOrderRepository, _STATUS_PATTERNS
 from review_local_policy import load_review_operational_context, local_review_stage_eligible
 
 _WAITING_REVIEW_ELIGIBLE = frozenset({
@@ -41,6 +42,13 @@ def order_waiting_fields(order: Any, local_workflow: dict[str, Any] | None = Non
     return {
         "order_status": status or None,
         "order_status_native": native or None,
+        # Current native status already resolves Order Engine source/custom
+        # precedence. Reuse its canonical completed/shipping status groups;
+        # neither stale piece facts nor supplier progress can make it terminal.
+        "preparation_terminal": bool(order is not None and any(
+            re.fullmatch(_STATUS_PATTERNS[group], effective, re.IGNORECASE)
+            for group in ("completed", "shipping")
+        )),
         "waiting_review_eligible": bool(
             order is not None and eligible
         ),

@@ -303,6 +303,16 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         if session_context is not None:
             from review_session_fence import fence_review_session
             await fence_review_session(scoped, user_id=user_id, **session_context)
+        if readback_binding is not None:
+            # A request may have passed its route-level lookup before another
+            # request closed the consent. Recheck under the commit owner fence.
+            closed = await scoped[OPERATIONS].find_one({"user_id": user_id,
+                "readback_binding.client_request_id": readback_binding["client_request_id"],
+                "state": "not_committed"})
+            if closed:
+                from review_completion_readback import require_binding
+                require_binding(closed, readback_binding)
+                _conflict("review_attempt_closed")
         existing = await scoped[OPERATIONS].find_one({"_id": identity})
         if existing and (readback_binding is not None or existing.get("readback_binding") is not None):
             from review_completion_readback import require_binding
