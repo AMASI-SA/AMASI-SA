@@ -3,7 +3,7 @@
   "scope": "Dashboard phone-width containment, icon-only independent card collapse, and horizontal access to all profit detail table columns.",
   "branch": "codex/dashboard-mobile-collapse-20261017",
   "base": "342bbefaba5d4a59e3a2988589d02a7efdb07aa4",
-  "state": "source_verified_not_deployed",
+  "state": "reviewed_candidate_verified_release_in_progress",
   "completed": [
     "Explicit shrinkable one-column grid tracks and min-width:0 on dashboard columns.",
     "Independent accessible chevron controls preserve original headers and mounted body state.",
@@ -34,18 +34,36 @@
       "conclusion": "success",
       "source_a_only": true,
       "governed_ab_build": "success",
-      "reviewed_b_rehearsal": "not run; no intent-only B"
+      "reviewed_b_rehearsal": {
+        "run": 39040720257,
+        "job": 117419754568,
+        "conclusion": "success",
+        "reviewed_b": true,
+        "package_boundaries": "success",
+        "build_meta_json_route": "success"
+      }
+    },
+    "source_a_all_ci": "success",
+    "reviewed_b_all_applicable_ci": "success; TikTok Creator Release Candidate not applicable/skipped",
+    "host_rehearsal": {
+      "path": "/tmp/dashboard-mobile-26dc6f8-clean",
+      "log": "/tmp/dashboard-mobile-26dc6f8-rehearsal.log",
+      "result": "governed adapter completion and matching identity observed; explicit shell exit marker readback pending"
     }
   },
   "production_changed": false,
-  "release_guard": "No lease or production workspace change",
+  "release_guard": "Actual /app status active:false; HEAD342bbefaba5d4a59e3a2988589d02a7efdb07aa4, tracked clean; unrelated INTENT-1367.json.gz, deployer-agent-docs and untitled editor preserved. No lease/prepare/publish.",
   "remaining": [
-    "Other CI: Security Gate, CodeQL, G47, Operational Balance still running at last read.",
-    "Mobile rendered QA at 320,360,393,430 CSS px: all cards inside viewport; ads/shipping/payment tables scroll to both ends; arrow-only independent collapse.",
-    "Separately authorized integration and protocol-v5 release, then live readback."
+    "Rendered phone/Safari acceptance and bidirectional detail-table scrolling.",
+    "Fresh production/guard/CI drift check, ready/review/merge, exact local rehearsal evidence, protocol-v5 prepare/prepublish, one UI publish and three live probes."
   ],
-  "next_safe_action": "Finish rendered mobile QA and remaining CI; only then separately authorize integration/publication through protocol v5.",
+  "next_safe_action": "Continue authenticated Salla Analytics project UI; read exact local rehearsal exit; complete acceptance and fresh release gates. No duplicate publish.",
   "source_sha": "585db04b312509096b6802ae8a77bc36d46b5a32",
   "source_tree": "c0dbb31f6ee54710e25bede95a32fc64d35925ac",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1423"
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1423",
+  "intent_sha": "26dc6f8d81bca5eea57a238f46504a1781d1f596",
+  "intent_tree": "e9f868da1b08c365f640cd2f365a886d1d5dfc14",
+  "release_id": "rg5-0db5f5cde833dd72bac72abaef3467650bf1c1a77ced056303df7452930e363a",
+  "publication_authorized": true,
+  "auth": "Code-server and Emergent signed in using secure credential handoff; no credentials recorded."
 }
