@@ -1,0 +1,29 @@
+name: EXIT-2A isolated Linux runtime
+on:
+  push:
+    branches: [codex/exit-2a-portable-linux-package]
+permissions:
+  contents: read
+concurrency:
+  group: exit2a-runtime
+  cancel-in-progress: false
+jobs:
+  runtime:
+    if: contains(github.event.head_commit.message, '[exit2a-runtime]')
+    runs-on: ubuntu-24.04
+    # Manual single attempt. Baseline consumed <2 minutes of the shared 45.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/AUDIT/
+            !/reports/
+            !/test_reports/
+            !/memory/
+      - name: Clean install and actual isolated application acceptance
+        shell: bash
+        run: bash packaging/exit2a/run_linux.sh

@@ -1,0 +1,15 @@
+**
+!backend/
+!backend/**
+!packaging/
+!packaging/exit2a/
+!packaging/exit2a/**
+**/.env*
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+backend/uploads/
+backend/release_identity.json
+backend/*.log
+backend/test_reports/
+backend/reports/
