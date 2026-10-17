@@ -22,6 +22,46 @@ LOGO = f"customers/{CUSTOMER}/assets/103"
 VIDEO = f"customers/{CUSTOMER}/assets/104"
 
 
+def test_search_is_ready_without_deprecated_manual_language_and_never_emits_it():
+    value = draft_for()
+    value["language_ids"] = []
+    assert validate_draft_readiness(value) == []
+    for language_ids in ([], ["1001"]):
+        value["language_ids"] = language_ids
+        operations = build_campaign_operations(value, CUSTOMER)
+        criteria = creates(operations, "campaignCriterionOperation")
+        assert any("location" in item for item in criteria)
+        assert not any("language" in item for item in criteria)
+
+
+def test_search_manual_language_update_is_explicitly_unavailable():
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        build_update_operations("set_targeting", CUSTOMER, snapshot(), {"language_ids": ["1000"]})
+    assert error.value.code == "google_search_language_targeting_unavailable"
+
+
+@pytest.mark.parametrize("action,changes", [("rename", {"name": "Updated Smart"}), ("pause", {}), ("enable", {}), ("set_budget", {"budget_native": "25"}), ("remove", {})])
+def test_existing_smart_has_bounded_common_updates_and_no_creation(action, changes):
+    before = snapshot()
+    before["campaign"]["advertisingChannelType"] = "SMART"
+    before["campaign"]["advertisingChannelSubType"] = "SMART_CAMPAIGN"
+    operations = build_update_operations(action, CUSTOMER, before, changes)
+    assert len(operations) == 1
+    capability = next(item for item in campaign_capabilities() if item["type"] == "SMART")
+    assert capability["create"] is False
+    assert capability["manage"] is True
+    assert set(capability["actions"]) == {"rename", "pause", "enable", "set_budget", "remove"}
+
+
+@pytest.mark.parametrize("action,changes", [("set_bidding", {"bidding": {"strategy": "MAXIMIZE_CLICKS"}}), ("duplicate", {}), ("add_ad", {}), ("remove", {"ad_group_ad_resource": f"customers/{CUSTOMER}/adGroupAds/901~1"})])
+def test_smart_specialized_or_new_entity_actions_stay_unavailable(action, changes):
+    before = snapshot()
+    before["campaign"]["advertisingChannelType"] = "SMART"
+    with pytest.raises(GoogleCampaignBuildError) as error:
+        build_update_operations(action, CUSTOMER, before, changes)
+    assert error.value.code == "google_smart_management_action_unsupported"
+
+
 def draft_for(kind="SEARCH"):
     draft = {
         "account_id": CUSTOMER, "campaign_type": kind, "name": "AMASI Google launch",
@@ -322,7 +362,7 @@ def test_unsupported_new_campaigns_are_explicit_capability_states(kind):
     draft["campaign_type"] = kind
     row = next(row for row in campaign_capabilities() if row["type"] == kind)
     assert row["create"] is False and row["provider_limitation"]
-    assert row["actions"] == []
+    assert row["actions"] == list(("rename", "pause", "enable", "set_budget", "remove")) if kind == "SMART" else row["actions"] == []
     assert validate_draft_readiness(draft)[0]["code"] == "provider_creation_unsupported"
     with pytest.raises(GoogleCampaignBuildError):
         build_campaign_operations(draft, CUSTOMER)
@@ -425,7 +465,7 @@ def test_target_replacement_preserves_exclusions_and_untouched_language():
     assert f"customers/{CUSTOMER}/campaignCriteria/900~912" not in removals
 
 
-@pytest.mark.parametrize("kind", ["VIDEO", "SMART", "LOCAL_SERVICES"])
+@pytest.mark.parametrize("kind", ["VIDEO", "LOCAL_SERVICES"])
 def test_management_does_not_apply_ordinary_campaign_mutations_to_restricted_types(kind):
     before = snapshot()
     before["campaign"]["advertisingChannelType"] = kind
@@ -861,3 +901,4 @@ def test_duplicate_does_not_invent_eu_political_declaration_from_unspecified_sou
     with pytest.raises(GoogleCampaignBuildError) as error:
         duplicate_campaign_draft(before, CUSTOMER, "Unknown declaration")
     assert any(gap["field"] == "campaign.containsEuPoliticalAdvertising" for gap in error.value.details)
+

@@ -29,6 +29,16 @@ const LEGACY_ACTIONS = {
 };
 
 const V3_ACTION_LABELS = {
+    REVIEW_TRACKING: "مراجعة التتبع",
+    REVIEW_ATTRIBUTION: "مراجعة إسناد التحويلات",
+    REVIEW_TARGETING: "مراجعة الاستهداف",
+    REVIEW_PRODUCT_PRICE: "مراجعة سعر المنتج",
+    REVIEW_PRODUCT_PAGE: "مراجعة صفحة المنتج",
+    CREATE_TEST_DRAFT: "تجهيز مسودة اختبار",
+    RESUME_CAMPAIGN: "تفعيل مقترح للحملة",
+    CHANGE_BUDGET: "مراجعة الميزانية",
+    CHANGE_BIDDING: "مراجعة المزايدة",
+
     CONTINUE: "استمرار",
     MONITOR: "مراقبة",
     PAUSE_AD: "إيقاف الإعلان",
@@ -371,7 +381,7 @@ export default function CampaignRecommendations() {
         .map(({ item }) => item), [recommendations, provider, rootCause, actionType]);
 
     const approve = async (item) => {
-        if (!(item.executable && item.approval_available && item.action_type === "ads_write")) return;
+        if (!(["snapchat", "meta"].includes(item.provider) && item.executable && item.approval_available && item.action_type === "ads_write")) return;
         const action = actualAction(item);
         const change = action.startsWith("PAUSE_") ? "الإيقاف" : action === "DECREASE_BUDGET" ? `خفض الميزانية ${item.change_percent || 15}%` : `رفع الميزانية ${item.change_percent || 15}%`;
         if (!window.confirm(`موافقتك ستنفّذ ${change} على ${item.entity_name} في ${item.provider === "meta" ? "Meta" : "Snapchat"}. هل تريد المتابعة؟`)) return;
@@ -432,7 +442,7 @@ export default function CampaignRecommendations() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2"><span className="flex items-center gap-1 px-2 text-[10px] font-black text-slate-500"><Filter className="h-4 w-4" />تصفية</span>
-                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">ميتا</option></select>
+                    <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل المنصات</option><option value="snapchat">سناب</option><option value="meta">ميتا</option><option value="google">جوجل</option></select>
                     <select value={rootCause} onChange={(e) => setRootCause(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل الأسباب</option>{Object.entries(ROOT_CAUSES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
                     <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"><option value="all">كل أنواع الإجراء</option>{Object.entries(ACTION_TYPES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
                     <span className="mr-auto px-2 text-[10px] font-extrabold text-slate-400">الأهم والأكثر تأثيرًا أولًا · المعروض {visible.length} من {recommendations.length}</span>
@@ -446,13 +456,14 @@ export default function CampaignRecommendations() {
                     const recommendedAction = actualAction(item);
                     const displayAction = V3_ACTION_LABELS[recommendedAction] || LEGACY_ACTIONS[item.action]?.label || recommendedAction;
                     const status = executionLabel(item.execution_status);
-                    const canExecute = Boolean(item.executable && item.approval_available && item.action_type === "ads_write");
+                    const canExecute = Boolean(["snapchat", "meta"].includes(item.provider) && item.executable && item.approval_available && item.action_type === "ads_write");
                     const isExpanded = expanded === item.recommendation_id;
                     const quickFacts = (item.decision_facts || item.evidence || []).slice(0, 4);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
-                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "meta" ? "ميتا" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأولوية الأولى</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}<Link to={`/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link></div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
+                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "google" ? "جوجل" : item.provider === "meta" ? "ميتا" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأولوية الأولى</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}<Link to={item.provider === "google" ? `/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}` : `/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link></div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
                         <CampaignResearchStatus research={item.external_research} />
                         <div className="mt-2 flex flex-wrap gap-1.5 text-[9px] font-black"><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">المشكلة/الفرصة: {ROOT_CAUSES[item.root_cause_category] || item.root_cause_category || "غير محسوم"}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">الثقة: {CONFIDENCE[item.confidence] || item.confidence}</span>{item.executable === false && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">اقتراح فقط — لا تنفيذ</span>}</div>
+                        {item.provider === "google" && <p className="mt-1 text-[10px] text-slate-500">{item.campaign_name} · {item.period_native?.date_from} ← {item.period_native?.date_to} · {item.period_native?.currency_code}</p>}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
                         <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[10px] font-black text-slate-500">ماذا نفعل الآن؟</p><p className="mt-1 text-sm font-black text-slate-900">{displayAction}</p><p className="mt-2 text-xs font-bold leading-6 text-slate-700">{item.why || item.diagnosis || item.rationale}</p></div>
                         {quickFacts.length > 0 && <div className="mt-2 grid grid-cols-2 gap-1.5">{quickFacts.map((fact) => <div key={fact} className="rounded-lg border border-slate-100 bg-white px-2 py-1.5 text-[9px] font-extrabold leading-4 text-slate-600">{fact}</div>)}</div>}
@@ -475,7 +486,7 @@ export default function CampaignRecommendations() {
                             {item.financial_impact && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-950">أثر الحملة على الربح</h3><p className="mt-1 text-[10px] font-bold text-emerald-800">مساهمة الفترة {money(item.financial_impact.period_estimated_contribution_sar)} ر.س · فترة القياس القادمة {item.financial_impact.forecast_hours || "—"} ساعة · التغير المتوقع {money(item.financial_impact.forecast_delta_sar)} ر.س</p></div>}
                         </div>}
 
-                        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[9px] font-bold text-slate-400">إعادة التقييم بعد: {item.recommended_wait_hours || 5} ساعات</span>{canExecute ? <button type="button" onClick={() => approve(item)} disabled={approving[item.recommendation_id] || Boolean(status)} className="rounded-xl bg-violet-700 px-4 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[9px] font-black text-slate-500">توصية فقط — لا تنفيذ تلقائي</span>}</div>
+                        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[9px] font-bold text-slate-400">إعادة التقييم بعد: {item.recommended_wait_hours || 5} ساعات</span>{item.provider === "google" ? <Link to={`/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}`} className="rounded-xl bg-violet-50 px-4 py-2 text-[10px] font-black text-violet-700">مراجعة التوصية في جوجل</Link> : canExecute ? <button type="button" onClick={() => approve(item)} disabled={approving[item.recommendation_id] || Boolean(status)} className="rounded-xl bg-violet-700 px-4 py-2 text-[10px] font-black text-white disabled:bg-slate-300">{status || (approving[item.recommendation_id] ? "جارٍ التنفيذ…" : "موافقة وتنفيذ")}</button> : <span className="rounded-xl bg-slate-100 px-3 py-2 text-[9px] font-black text-slate-500">توصية فقط — لا تنفيذ تلقائي</span>}</div>
                     </article>;
                 })}
             </section>
@@ -485,3 +496,4 @@ export default function CampaignRecommendations() {
         </div>
     </main>;
 }
+

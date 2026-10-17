@@ -32,8 +32,12 @@ test("a stale dashboard analysis response cannot cross account or period boundar
     await act(async () => finish({ data: { items: [record] } })); expect(container.textContent).toContain("الحساب الجديد"); expect(container.textContent).not.toContain("تحليل جوجل");
 });
 
-test("the actual AdvancedDashboard mounts the Google intelligence card beside the existing advisor", () => {
+test("the standalone Google card belongs to Google workspace and the dashboard uses shared periodic advice", () => {
     const source = require("fs").readFileSync(require("path").join(__dirname, "../../pages/AdvancedDashboard.jsx"), "utf8");
-    expect(source).toContain("<CampaignAdvisorCard />"); expect(source).toContain("<GoogleAdsIntelligenceCard collapsible dateFrom={filters.from} dateTo={filters.to} />");
+    const workspace = require("fs").readFileSync(require("path").join(__dirname, "GoogleAdsWorkspace.jsx"), "utf8");
+    expect(source).toContain("<CampaignAdvisorCard />"); expect(source).not.toContain("<GoogleAdsIntelligenceCard");
+    expect(workspace).toContain("<GoogleAdsIntelligenceCard accountId={accountId} dateFrom={dateFrom} dateTo={dateTo} />");
     expect(source).toContain('["snapchat", "meta"].includes(item.provider) && item.action_type');
 });
+
+

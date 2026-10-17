@@ -28,7 +28,7 @@ from pydantic import TypeAdapter
 from .google_ads_campaign_contract import (
     Digits, NativeAmount, ShortName, GoogleBiddingInput, GoogleCampaignDraft,
     GoogleCampaignGroupInput, GoogleConversionGoalInput, GoogleKeywordInput, SUPPORTED_FORMATS, SUPPORTED_STRATEGIES,
-    TOTAL_BUDGET_TYPES, UNSUPPORTED_CREATE, campaign_capabilities,
+    TOTAL_BUDGET_TYPES, UNSUPPORTED_CREATE, SMART_MANAGEMENT_ACTIONS, campaign_capabilities,
     owned_resource, positive_amount, validate_group_references, ad_as_group,
 )
 
@@ -111,7 +111,7 @@ def validate_draft_readiness(value: GoogleCampaignDraft | dict[str, Any], custom
         gap("groups", "At least one complete ad group or asset group is required.")
     if not draft.geo_target_ids:
         gap("geo_target_ids", "Choose at least one provider geographic target; empty targeting must not silently become worldwide.")
-    if not draft.language_ids and kind != "HOTEL":
+    if not draft.language_ids and kind not in {"SEARCH", "HOTEL"}:
         gap("language_ids", "Choose at least one provider language target.")
     for field, allowed in (("shopping", {"SHOPPING", "PERFORMANCE_MAX", "DEMAND_GEN"}), ("app", {"APP"}), ("hotel", {"HOTEL"}), ("search", {"SEARCH"}), ("ai_max", {"SEARCH"})):
         if getattr(draft, field) is not None and kind not in allowed:
@@ -666,7 +666,9 @@ def build_campaign_operations(value: GoogleCampaignDraft | dict[str, Any], custo
         resource = f"customers/{customer_id}/campaignConversionGoals/{campaign.rsplit('/', 1)[-1]}~{goal.category}~{goal.origin}"
         operations.items.append({"campaignConversionGoalOperation": {"update": {"resourceName": resource, "biddable": goal.biddable}, "updateMask": "biddable"}})
     if kind != "DEMAND_GEN":
-        _targeting(operations, campaign, draft.geo_target_ids, draft.language_ids)
+        # Since September2026 Google matches Search languages from the creative
+        # and landing page. Retained legacy draft language IDs are not sent.
+        _targeting(operations, campaign, draft.geo_target_ids, [] if kind == "SEARCH" else draft.language_ids)
     if kind == "PERFORMANCE_MAX" and draft.brand_guidelines_enabled:
         brand = draft.groups[0]
         asset = operations.text_asset(brand.business_name)
@@ -694,7 +696,7 @@ def _snapshot_campaign(before: dict[str, Any], customer_id: str) -> tuple[dict[s
     kind = str(campaign.get("advertisingChannelType") or "")
     if kind == "MULTI_CHANNEL" and campaign.get("advertisingChannelSubType") in {"APP_CAMPAIGN", "APP_CAMPAIGN_FOR_ENGAGEMENT", "APP_CAMPAIGN_FOR_PRE_REGISTRATION"}:
         kind = "APP"
-    if kind not in SUPPORTED_FORMATS or campaign.get("localServicesCampaignSettings") or campaign.get("pmaxCampaignSettings", {}).get("localServicesEnabled") or before.get("campaign_type") == "LOCAL_SERVICES":
+    if kind not in {*SUPPORTED_FORMATS, "SMART"} or campaign.get("localServicesCampaignSettings") or campaign.get("pmaxCampaignSettings", {}).get("localServicesEnabled") or before.get("campaign_type") == "LOCAL_SERVICES":
         raise GoogleCampaignBuildError("google_campaign_management_unsupported", "This campaign type or Local Services subtype has no implemented write contract.")
     if campaign.get("hotelPropertyAssetSet") or campaign.get("travelCampaignSettings"):
         raise GoogleCampaignBuildError("google_campaign_management_unsupported", "Performance Max for travel goals requires a specialized contract; ordinary Performance Max operations cannot be used.")
@@ -989,6 +991,8 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
     customer_id = _customer_id(customer_id)
     campaign, kind = _snapshot_campaign(before, customer_id)
     resource = campaign["resourceName"]
+    if kind == "SMART" and (action not in SMART_MANAGEMENT_ACTIONS or action == "remove" and changes.get("ad_group_ad_resource")):
+        raise GoogleCampaignBuildError("google_smart_management_action_unsupported", "Existing Smart campaigns support campaign name, status, budget and removal here; new entities and specialized settings are unavailable.")
     if action == "rename":
         _change_keys(changes, {"name"}, {"name"})
         return [_update("campaignOperation", resource, {"name": _name(changes["name"])}, ["name"])]
@@ -1059,6 +1063,8 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
         return result
     if action == "set_targeting":
         _change_keys(changes, {"geo_target_ids", "language_ids", "group_id"})
+        if kind == "SEARCH" and "language_ids" in changes:
+            raise GoogleCampaignBuildError("google_search_language_targeting_unavailable", "Search languages are matched from creative and landing pages; only geographic targeting is editable here.")
         dimensions = {key for key in changes if key != "group_id"}
         if not dimensions:
             raise GoogleCampaignBuildError("google_targeting_inputs_required", "Choose geographic targets or languages to change.")
@@ -1235,3 +1241,4 @@ def build_update_operations(action: str, customer_id: str, before: dict[str, Any
     if action == "duplicate":
         raise GoogleCampaignBuildError("google_duplicate_draft_required", "Duplicate a verified saved Mezan draft through full campaign creation; arbitrary provider campaign reconstruction is not implemented.")
     raise GoogleCampaignBuildError("google_action_unsupported", "This action is not implemented by the deterministic Google Ads builder.")
+

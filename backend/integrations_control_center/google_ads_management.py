@@ -232,6 +232,8 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
                     verified_offers = [{"offer_id": offer["offer_id"], "merchant_id": draft.shopping.merchant_id, "name": offer.get("title") or offer.get("name") or "منتج جوجل"} for offer in inventory["items"] if offer["offer_id"] in expected]
             operations = build_campaign_operations(draft, account_id)
             planned = draft.model_dump(mode="json")
+            if draft.campaign_type == "SEARCH":
+                planned["language_ids"] = []
             planned["products"] = [{"product_id": product["product_id"], "name": product["name"]} for product in trusted_products]
             planned["product_offers"] = verified_offers
             planned["initial_status"] = "PAUSED"
@@ -464,3 +466,4 @@ async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=Go
         return public_proposal(row)
     finally:
         await client.close()
+
