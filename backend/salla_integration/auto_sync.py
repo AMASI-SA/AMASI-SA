@@ -239,10 +239,6 @@ async def _reconcile_status_page(
             "order_number": 1,
             "order_status": 1,
             "order_status_slug": 1,
-            "raw_by_source.salla_direct.status": 1,
-            "raw_by_source.salla_direct.status_slug": 1,
-            "raw_by_source.salla_direct.updated_at": 1,
-            "g47_salla_snapshot.revision": 1,
         },
     )
     local_by_number = {
@@ -263,24 +259,12 @@ async def _reconcile_status_page(
 
         old_name = str(local.get("order_status") or "").strip()
         old_slug = str(local.get("order_status_slug") or "").strip().lower()
-        old_raw = ((local.get("raw_by_source") or {}).get("salla_direct") or {})
-        new_raw_slug = status_slug or status_name
-        # Alias repair is not authority to regress a terminal observation from
-        # a light page. A deliberate reversal requires the explicit full refresh.
-        from assembly_status_policy import status_values
-        previous_values = (status_values(old_name) | status_values(old_slug)
-                           | status_values(old_raw.get("status")) | status_values(old_raw.get("status_slug")))
-        if (new_raw_slug in {"in_progress", "completed"}
-                and previous_values & {"delivered", "shipped", "cancelled", "canceled", "refunded"}):
-            continue
-        if (old_name == status_name and old_slug == status_slug
-                and old_raw.get("status") == raw_status and old_raw.get("status_slug") == new_raw_slug):
+        if old_name == status_name and old_slug == status_slug:
             continue
 
         patch: dict[str, Any] = {
             "last_salla_direct_status_reconciled_at": reconciled_at,
             "raw_by_source.salla_direct.status": raw_status,
-            "raw_by_source.salla_direct.status_slug": new_raw_slug,
         }
         if status_name:
             patch["order_status"] = status_name
@@ -300,11 +284,6 @@ async def _reconcile_status_page(
             current = await scoped.unified_orders.find_one(selector)
             if not current or any(current.get(key) != local.get(key)
                                   for key in ("order_status", "order_status_slug")):
-                return False
-            current_raw = ((current.get("raw_by_source") or {}).get("salla_direct") or {})
-            if (any(current_raw.get(key) != old_raw.get(key) for key in ("status", "status_slug", "updated_at"))
-                    or (current.get("g47_salla_snapshot") or {}).get("revision") !=
-                       (local.get("g47_salla_snapshot") or {}).get("revision")):
                 return False
             await scoped.unified_orders.update_one(selector, {"$set": patch})
             from assembly_status_policy import invalidate_shipping_if_blocked

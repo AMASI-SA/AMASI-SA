@@ -3918,20 +3918,8 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         context = await _actor_context(db, user)
         _require_permission(context, "fulfillment.ready.read", responsibility="instant_ready")
         from assembly_completion_delivery import read_status
-        async def authorize_repair(scoped):
-            current_context = await _actor_context(scoped, user)
-            _require_permission(current_context, "fulfillment.ready.read", responsibility="instant_ready")
-            if current_context["merchant_id"] != context["merchant_id"]:
-                raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
-            response = await read_status(db, context["merchant_id"], _text(order_number), authorize_repair=authorize_repair)
-            # A provider read may take time or be shared by simultaneous readers.
-            # The result never shares permission authority with another caller.
-            current_context = await _actor_context(db, user)
-            _require_permission(current_context, "fulfillment.ready.read", responsibility="instant_ready")
-            if current_context["merchant_id"] != context["merchant_id"]:
-                raise HTTPException(403, detail={"code": "completion_owner_changed"})
-            return response
+            return await read_status(db, context["merchant_id"], _text(order_number))
         except ShippingLabelError as exc:
             raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
 

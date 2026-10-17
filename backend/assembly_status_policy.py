@@ -34,38 +34,8 @@ async def source_status(db, owner, number):
     return canonical_status(source)
 
 
-def component_refresh_pending(source):
-    """A known eligible status awaiting local component reconciliation only.
-
-    An ambiguous/cancelled status or a required authoritative refresh is not
-    a transient success and must retain the stricter blocked behavior.
-    """
-    source = source or {}
-    snapshot = source.get("g47_salla_snapshot") or {}
-    return bool(snapshot.get("component_pending") and not snapshot.get("requires_authoritative_refresh")
-                and canonical_status({**source, "g47_salla_snapshot": {
-                    **snapshot, "component_pending": False}}) in {"in_progress", "completed"})
-
-
 async def invalidate_shipping_if_blocked(db, owner, number):
-    source = await db["unified_orders"].find_one({"user_id": owner, "order_number": number})
-    if canonical_status(source) in {"in_progress", "completed"}:
-        return
-    if component_refresh_pending(source):
-        # A source transaction and its component reconciliation are separate
-        # durable phases. Stop use of old proof, but keep delivery recoverable.
-        await db["order_review_workflows"].update_one(
-            {"user_id": owner, "order_number": number, "assembly_status": "completed"},
-            {"$set": {"carrier_label_ready": False, "salla_order_status": "unknown",
-                      "salla_order_status_verified_at": None,
-                      "carrier_label_url": None, "carrier_label_print_data": None}},
-        )
-        await db["order_review_workflows"].update_one(
-            {"user_id": owner, "order_number": number, "assembly_status": "completed",
-             "assembly_delivery.version": 2, "assembly_delivery.state": {"$in": ["pending", "confirmed"]}},
-            {"$set": {"assembly_delivery.order_confirmed": False, "assembly_delivery.state": "pending",
-                      "assembly_delivery.error_code": "completion_source_refresh_pending"}},
-        )
+    if await source_status(db, owner, number) in {"in_progress", "completed"}:
         return
     await db["order_review_workflows"].update_one(
         {"user_id": owner, "order_number": number, "assembly_status": "completed"},
