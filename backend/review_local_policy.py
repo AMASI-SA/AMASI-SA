@@ -189,7 +189,6 @@ class HistoricalAssemblyEvidence:
     user_id: str
     order_number: str
     in_progress: bool
-    ready_in_progress: bool = False
 
 
 def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dict,
@@ -216,10 +215,7 @@ def historical_assembly_evidence(*, user_id: str, workflow: dict, canonical: dic
     execution = {"processing", "in progress", "قيد التنفيذ", "جاري التنفيذ"}
     if normalized & execution and normalized - execution:
         return None  # Conflicting current provider facts never grant authority.
-    return HistoricalAssemblyEvidence(
-        user_id, number, bool(normalized & execution),
-        bool(normalized) and normalized.issubset({"in progress", "قيد التنفيذ"}),
-    )
+    return HistoricalAssemblyEvidence(user_id, number, bool(normalized & execution))
 
 
 def historical_assembly_allowed(evidence: HistoricalAssemblyEvidence | None,
