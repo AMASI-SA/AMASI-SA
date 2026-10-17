@@ -2,7 +2,7 @@
   "task": "ORDERS-V2-SEARCH-20261017",
   "branch": "codex/orders-v2-search-20261017",
   "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
-  "state": "FOCUSED_CI_PASS_NOT_DEPLOYED",
+  "state": "PUBLISH_AUTHORIZED_BROWSER_RECOVERY_BLOCKED",
   "scope": "Explicit-submit orders search by campaign/product ID and SKU; one dashboard date-range picker; bounded read-only search without preparation writes.",
   "root_causes": [
     "Product IDs absent from search text and API",
@@ -53,8 +53,8 @@
       {
         "id": 39051853911,
         "name": "CodeQL",
-        "status": "in_progress",
-        "conclusion": null
+        "status": "completed",
+        "conclusion": "success"
       },
       {
         "id": 39051853930,
@@ -71,8 +71,8 @@
       {
         "id": 39051854077,
         "name": "Review Completion Resumable",
-        "status": "in_progress",
-        "conclusion": null
+        "status": "completed",
+        "conclusion": "success"
       },
       {
         "id": 39051854014,
@@ -145,13 +145,13 @@
   "production_changed": false,
   "release_guard": "Not touched",
   "remaining": [
-    "CodeQL and Review Completion Resumable were still running at final evidence capture",
-    "Production UI acceptance and representative preparation-load measurement not performed",
-    "Release review and protocol-v5 governed deployment remain separate"
+    "Cloud browser credential_observation_restricted persists after prescribed new-tab/navigation recovery; user takeover needed",
+    "No fresh shared /app guard status available; governed rehearsal/intent/merge/publish/probes not started"
   ],
-  "next_safe_action": "Review PR1427 at source8071970a80f66aeb5ae49c70094be77215a8ee8e and remaining CI; if publishing is authorized, re-read Issue1006/current production head, follow protocol-v5 rehearsal/intent/lease/probes. Do not deploy evidence-only branch. Preserve other tasks.",
+  "next_safe_action": "Recover browser through supported user takeover; inspect shared /app guard status and current ledger before protocol-v5 release. Publication explicitly authorized; do not ask again.",
   "source_sha": "8071970a80f66aeb5ae49c70094be77215a8ee8e",
   "evidence_branch": "codex/orders-v2-search-evidence-20261017",
   "evidence_only_do_not_deploy": true,
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1427"
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1427",
+  "publication_authorized": "Owner explicitly requested كمل انشر on 2026-10-17"
 }
