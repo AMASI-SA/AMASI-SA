@@ -7,6 +7,7 @@ on:
       - 'backend/tests/test_order_engine_search*'
       - 'frontend/src/hooks/useOrders*'
       - 'frontend/src/pages/OrdersV2*'
+      - 'frontend/src/components/marketing/ArabicDateRangePicker*'
       - '.github/workflows/orders-v2-search-bounds.yml'
   workflow_dispatch:
 permissions:
@@ -23,6 +24,8 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -50,6 +53,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

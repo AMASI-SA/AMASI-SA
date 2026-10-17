@@ -1,9 +1,9 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
 import OrdersV2 from './OrdersV2';
 import { useOrders } from '../hooks/useOrders';
 import { getOrderFilterSummary } from '../services/orderEngine';
+jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn(), useSearchParams: () => [new URLSearchParams('campaign_id=123')] }));
 jest.mock('../hooks/useOrders', () => ({ useOrders: jest.fn() }));
 jest.mock('../services/orderEngine', () => ({ getOrderFilterSummary: jest.fn() }));
 let host, root, searchCombined, reload;
@@ -24,7 +24,7 @@ beforeEach(async () => {
         error: '', searchMode: true, resultSummary: null, loadMore: jest.fn(), reload, searchCombined });
     getOrderFilterSummary.mockResolvedValue({ total: 0, statusCards: [] });
     host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
-    await act(async () => root.render(<MemoryRouter initialEntries={['/orders-v2?campaign_id=123']}><OrdersV2 /></MemoryRouter>));
+    await act(async () => root.render(<OrdersV2 />));
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); jest.useRealTimers(); });
 
