@@ -22,6 +22,7 @@ jobs:
     env:
       PYTHONPATH: backend:backend/tests
       OPERATIONAL_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
+      MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27305/?replicaSet=operationalprojection
     steps:
       - uses: actions/checkout@v4
         with:

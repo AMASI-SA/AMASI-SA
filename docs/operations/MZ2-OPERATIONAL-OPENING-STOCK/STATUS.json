@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
-  "status": "WIP_IMPLEMENTATION",
+  "status": "WIP_VERIFIED_IMPLEMENTATION",
   "branch": "codex/operational-opening-stock-20261017",
   "base_sha": "c03c9df22d07a9a99984b02ab134763b0ae600a8",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
@@ -14,8 +14,8 @@
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
   "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
-  "verification": "Pending implementation and isolated Mongo/HTTP/UI tests.",
+  "verification": "Local: 463 operational backend tests PASS; 90 focused inventory/gate/projection tests PASS before six additional cases; final new opening inventory suite 26 PASS; frontend three suites 83 PASS. Isolated Mongo replica sets only. Review and CI pending.",
   "production_changed": false,
   "release": "No prepare, prepublish, merge or publish performed for this task.",
-  "next": "Integrate backend and frontend, run isolated contracts and review privilege boundaries before candidate readiness."
+  "next": "Complete independent review, integrate current Production source preserving payroll and shipping changes, then publish a Draft PR. No release intent freeze or Production writes yet."
 }
