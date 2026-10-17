@@ -1,0 +1,25 @@
+{
+  "task": "MZ2-OPERATIONAL-OPENING-STOCK",
+  "status": "EXPANDED_SOURCE_CANDIDATE",
+  "branch": "codex/opening-stock-expanded-source-20261017",
+  "base_sha": "342bbefaba5d4a59e3a2988589d02a7efdb07aa4",
+  "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
+  "acceptance": [
+    "Owner can search the real MZ2 catalogue before any physical inventory exists.",
+    "Explicit product configuration, positive quantity, unit cost and storage location are reviewed before approval.",
+    "Preview has no writes; approval revalidates the preview and current owner permission.",
+    "The physical inventory writer remains default disabled; no automatic enablement.",
+    "One initial owner batch is atomic and idempotent; conflicting replay and existing stock fail closed.",
+    "No supplier debt, purchase invoice, native ledger, control changes or Salla writes.",
+    "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability.",
+    "Search and selected rows show canonical product/component image, name and SKU/code.",
+    "The same product may be entered as separate configurations including text customization, each with its own quantity, unit cost and line total.",
+    "Components come from MZ2 stock resources with canonical type and unit; meter/kilogram quantities support bounded fractions.",
+    "Do not sum unlike units as a meaningful stock total; show per-unit totals and currency total."
+  ],
+  "compatibility": "No journals/nativeaccounting activation; default-disabled writer and pendingvaluation preserved. Existing stock requires reconciliation. Null locationcapacity unlimited as native behavior. Legacy placement endpoint integer-truncation issue predates this change and is outside this patch.",
+  "verification": "Independent131 backend inventory/gate/projection tests PASS,87 frontend tests PASS;61 newopeningcases. Independentreview:no newfindings. CI on latestProductionbase pending.",
+  "production_changed": false,
+  "release": "No prepare, prepublish, merge or publish performed for this task.",
+  "next": "Run expanded sourceCI, freeze intent-onlyB from governed Linux artifact, review exactB. No merge/publish/writer activation performed."
+}
