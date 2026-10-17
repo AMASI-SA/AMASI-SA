@@ -1,8 +1,8 @@
 {
   "task_id": "GOOGLE-ADS-LIVE-ACCEPTANCE-20261014",
   "parent_task": "GOOGLE-ADS-FULL-CONTROL-20261013",
-  "status": "GOOGLE_PERIODIC_ORIGINAL_ADAPTER_PASS_OWN_LEASE_PREPARED",
-  "updated_at_utc": "2026-10-17T15:40:48.004Z",
+  "status": "GOOGLE_PERIODIC_PUBLISH_IN_PROGRESS",
+  "updated_at_utc": "2026-10-17T15:42:12.653Z",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ads-release-status-20261014",
   "base_branch": "hotfix/prod-snap-meta-final",
@@ -128,7 +128,7 @@
     "latest_support_diagnostic_received_utc": "2026-10-14T14:07:53Z",
     "latest_support_diagnostic": "Read-only: exact13:47 AI request logs unrecoverable, retained window begins13:58:50. Adjacent14:00 ad-sync/health/DB stalls do not establish target causation. No source/settings/restart/deploy or additional cost requested."
   },
-  "next_safe_action": "Own prepared lease active; run exact prepublish immediately before toolbar Republish. Require ready_to_publish=true then one authorized Republish, explicit new success and3 exact public probes. Do not clear another owner's lease.",
+  "next_safe_action": "Follow current single deployment without another publish. Require explicit newer deployment success, then original /app own-lease verify --url https://mezansalla.com (3 exact public probes), guard inactive, native Google/shared dashboard UI acceptance. No provider/financial writes.",
   "checkpoint_parent": "5169b5ca85b1595de46112e7c224dabb0329de11",
   "source_diagnosis": "Published account-scope correction passed live acceptance. AI draft still fails generically; exact failure status and stage unknown. Whole-request deadline and durable sanitized request timing remain absent. Bounded live diagnostic replay underway; any runtime fix requires new immutable A/B based on verified M2.",
   "superseded_source_A": "0b1aea049886a4ced784a2b575451b798a9d8169",
@@ -450,7 +450,7 @@
     }
   },
   "completion_followup": {
-    "status": "ORIGINAL_ADAPTER_PASS_OWN_LEASE_PREPARED",
+    "status": "PUBLISH_IN_PROGRESS",
     "branch": "codex/google-periodic-current-prod-20261016",
     "base_sha": "fc51e2d581296270238d9b30d1612267287b08db",
     "scope": [
@@ -568,6 +568,22 @@
       "source_sha": "571060bf9d25d11e1d6ca4721be40f249f3c96bb",
       "deployment_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
       "release_id": "rg5-076fb8e3e725cc81b9c0436e16888c2e875c24414d6e59db26ab7bb7e094ad8e"
+    },
+    "prepublish": {
+      "exit_code": 0,
+      "ready_to_publish": true,
+      "source_sha": "571060bf9d25d11e1d6ca4721be40f249f3c96bb",
+      "deployment_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
+      "release_id": "rg5-076fb8e3e725cc81b9c0436e16888c2e875c24414d6e59db26ab7bb7e094ad8e"
+    },
+    "publication": {
+      "toolbar_only": true,
+      "confirmed_once": true,
+      "started_riyadh": "2026-10-17T18:41",
+      "platform_state": "Publishing in progress; Deployment Started Oct17 18:41 Saudi",
+      "previous_live_prefix": "b9c554a",
+      "finished": false,
+      "public_verified": false
     }
   }
 }
