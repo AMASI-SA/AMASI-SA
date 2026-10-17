@@ -1,0 +1,24 @@
+{
+  "task": "PRINT-READBACK-20261018",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1431",
+  "production_changed": false,
+  "baseline": "bb23e92a88b66bec29ad449e1e7635c44ff2b4f1",
+  "source": "8d731ec92536e872fef830c2fcd995dde3046c82",
+  "source_tree": "21d84fcc889bd04f436e1157da269468b635fb65",
+  "intent_commit": "808568d758be2dcf130a32a08e0b012eb3bce073",
+  "intent_tree": "f6d540be5e4f350f3b8a3ab7962ea1abf43f8e5c",
+  "intent_checkpoint_branch": "codex/print-readback-reviewed-intent-20261018",
+  "runtime": "rg5-a96ad5153a0d272d79ef8ca805e4a4a15929e7c6b29d682cb12704dadcb3fad1",
+  "source_build_ci": 39071725190,
+  "artifact": 12115482519,
+  "independent_tests": "64 passed +91 subtests;112.27s;isolated Mongo D loopback27476",
+  "source_ci": "14 passed; Review Completion Resumable39071725172 still running at checkpoint",
+  "next": "Wait source CI then push intent B to PR branch; verify final B CI; guarded merge/rehearsal/deploy/verify. Prepare rollback of correction only to baselinebb23.",
+  "rollback_patch_sha256": "2ac1577406a231b4604c7c64c2faf002b808fad0a51db29b06daa7379110b91d",
+  "limits": [
+    "Live order cause not proven: configured /app DB exact-number diagnostic returned zero matches",
+    "Physical printing untested",
+    "APK46 courier pending wording and30s polling retained",
+    "No live Salla or financial test writes"
+  ]
+}
