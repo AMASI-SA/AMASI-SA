@@ -235,3 +235,7 @@ Before declaring a task complete, leave the task branch remotely recoverable
 and write a final handoff entry even when the same conversation expects to
 continue.
 
+
+## Mandatory performance and scalability law
+
+For every new task, read and apply docs/engineering/PERFORMANCE_AND_SCALABILITY_LAW.md before implementation. Performance and scalability are mandatory product requirements: protect interactive operations from background work, use database-side pagination/projection and bounded batch reads, prevent N+1, isolate heavy work, preserve business correctness, measure before/after, and track work through explicit phases until verified. Do not treat a passing build as performance evidence. Do not begin dependent work while an earlier performance phase is left undocumented or half-finished. Every performance-related PR must state its phase, scope, baseline, acceptance criteria, rollback plan, and next safe action.
