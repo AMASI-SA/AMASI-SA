@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
-  "status": "WIP_COMPONENTS_AND_CONFIGURATION",
+  "status": "VERIFIED_EXTENSION_WIP",
   "branch": "codex/opening-stock-components-20261017",
   "base_sha": "196adb36d64f5bb595a52a4371efd38034941173",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
@@ -17,9 +17,9 @@
     "Components come from MZ2 stock resources with canonical type and unit; meter/kilogram quantities support bounded fractions.",
     "Do not sum unlike units as a meaningful stock total; show per-unit totals and currency total."
   ],
-  "compatibility": "Keep the existing native opening import and native financial/fulfillment guards unchanged. Existing stock needs reconciliation rather than automatic overwrite or adoption.",
-  "verification": "Previous product-only candidate passed; expanded scope needs fresh backend/frontend tests. Examples: gold10x7=70; silver12x10=120; embroidered name Abeerah20x60=1200 and Fatimah12x60=720; meter component2.5x8=20.",
+  "compatibility": "No journals/nativeaccounting activation; default-disabled writer and pendingvaluation preserved. Existing stock requires reconciliation. Null locationcapacity unlimited as native behavior. Legacy placement endpoint integer-truncation issue predates this change and is outside this patch.",
+  "verification": "Expanded frontend87 tests PASS independently. Backend61 focused tests PASS(agent), independent integrated inventory/gate/projection suite running. Independent review:no new findings; compatibility with legacy missing componentkind when explicit track_inventory=true. Products/configurations, fractionalcomponents, exactcosts, unitproofs covered.",
   "production_changed": false,
   "release": "No prepare, prepublish, merge or publish performed for this task.",
-  "next": "Implement component contract and product/configuration UI, then isolated tests and fresh SourceA/IntentB; previous PR1420 is Draft and must not be deployed as expanded scope."
+  "next": "Complete integrated tests; create clean SourceA above latestProduction342bbefaba5d4a59e3a2988589d02a7efdb07aa4 retaining latestintent unchanged; CI then newIntentB. Previousproduct-onlycandidate not deployable for expanded scope."
 }

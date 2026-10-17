@@ -159,7 +159,7 @@ def test_approval_rolls_back_entire_batch_on_event_failure(monkeypatch):
     run(scenario)
 
 
-@pytest.mark.parametrize('bad', [float('nan'), True, None, -1])
+@pytest.mark.parametrize('bad', [float('nan'), True, -1])
 def test_malformed_capacity_is_rejected(bad):
     async def scenario(db):
         await seed(db)
@@ -348,4 +348,219 @@ def test_warehouse_snapshot_changes_reject_approval(change):
             await approve(db,OWNER,{**request(),'preview_hash':p['preview_hash']})
         assert await db[BATCHES].count_documents({}) == 0
         assert await db[RECEIPTS].count_documents({}) == 0
+    run(scenario)
+
+
+async def seed_component(db, identity='fabric', unit='m', **overrides):
+    await db.mezan_cost_resources_v2.insert_one({'user_id':'owner','id':identity,'name':'Fabric',
+        'kind':'stock_component','track_inventory':True,'status':'active','unit':unit,'code':identity.upper(),
+        'image_url':'https://example.com/fabric.png',**overrides})
+
+
+def component_line(identity='fabric', quantity=2.5, cost='8.00'):
+    return {'kind':'component','item_id':identity,'location_id':'shelf','quantity':quantity,'unit_cost':cost,
+            'purchase_configuration':{'state':'raw','selections':[],'inputs':[]}}
+
+
+def test_component_fractional_opening_metadata_cost_projection_and_replay():
+    async def scenario(db):
+        await seed(db);await seed_component(db)
+        ctx=await context(db,OWNER)
+        assert ctx['components'][0]['quantity_precision'] == 6
+        assert ctx['components'][0]['component_type'] == 'stock_component'
+        assert ctx['components'][0]['sku'] == 'FABRIC'
+        body={'request_id':'components-opening','lines':[component_line()]}
+        p=await preview(db,OWNER,body)
+        assert p['total_cost']=='20.00'
+        assert p['quantity_totals']==[{'unit':'m','quantity':2.5}]
+        a=await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        assert await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']}) == a
+        stock=await projection(db,'owner');row=stock['items'][0]
+        assert row['kind']=='component' and row['resource_id']=='fabric' and row['physical']==2.5
+        assert row['available']==0 and row['unit_cost'] is None
+        assert row['operational_unit_cost']=='8.00' and row['operational_inventory_value']=='20.00'
+        assert await db.mz2_inventory_cost_states.count_documents({})==0
+        assert await db.accounting_general_ledger_v2.count_documents({})==0
+    run(scenario)
+
+
+def test_mixed_units_have_separate_quantity_totals_and_half_up_line_rounding():
+    async def scenario(db):
+        await seed(db);await seed_component(db)
+        body=request();body['lines'].append(component_line(quantity=.125,cost='1.00'))
+        p=await preview(db,OWNER,body)
+        assert p['total_quantity'] is None
+        assert p['quantity_totals']==[{'unit':'m','quantity':.125},{'unit':'piece','quantity':5}]
+        assert p['lines'][1]['total_cost']=='0.13' and p['total_cost']=='62.63'
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        stock=await projection(db,'owner')
+        component=next(r for r in stock['items'] if r['kind']=='component')
+        assert component['operational_inventory_value']=='0.13'
+    run(scenario)
+
+
+@pytest.mark.parametrize('unit,quantity', [('piece',2.5),('m',.0000001),('kg',-1),('m',100001)])
+def test_fractional_component_quantity_boundaries(unit,quantity):
+    async def scenario(db):
+        await seed(db);await seed_component(db,unit=unit)
+        body={'request_id':'components-invalid','lines':[component_line(quantity=quantity)]}
+        from pydantic import ValidationError
+        with pytest.raises((HTTPException,ValidationError)):await preview(db,OWNER,body)
+        assert await db[RECEIPTS].count_documents({})==0
+    run(scenario)
+
+
+@pytest.mark.parametrize('quantity',[True,'2.5',float('nan'),float('inf')])
+def test_nonnumeric_component_quantity_rejected_at_boundary(quantity):
+    from operational_opening_inventory import OpeningRequest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        OpeningRequest.model_validate({'request_id':'components-invalid','lines':[component_line(quantity=quantity)]})
+
+
+def test_fractional_product_quantity_stays_rejected():
+    async def scenario(db):
+        await seed(db);body=request();body['lines'][0]['quantity']=1.5
+        with pytest.raises(HTTPException):await preview(db,OWNER,body)
+        assert await db[RECEIPTS].count_documents({})==0
+    run(scenario)
+
+
+@pytest.mark.parametrize('override',[{'track_inventory':False},{'kind':'service'},{'status':'inactive'},{'archived':True},{'user_id':'other'}])
+def test_nonstock_inactive_or_foreign_components_not_eligible(override):
+    async def scenario(db):
+        await seed(db);await seed_component(db,**override)
+        assert (await context(db,OWNER))['components']==[]
+        with pytest.raises(HTTPException):
+            await preview(db,OWNER,{'request_id':'components-invalid','lines':[component_line()]})
+    run(scenario)
+
+
+def test_archived_duplicate_component_and_stale_catalog_fail_closed():
+    async def scenario(db):
+        await seed(db);await seed_component(db)
+        body={'request_id':'components-invalid','lines':[component_line()]}
+        p=await preview(db,OWNER,body)
+        await seed_component(db,archived=True)
+        with pytest.raises(HTTPException):await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        assert await db[RECEIPTS].count_documents({})==0
+    run(scenario)
+
+
+def test_fractional_capacity_exact_sum_and_distinct_component_costs():
+    async def scenario(db):
+        await seed(db)
+        await db.warehouse_locations.update_one({'id':'shelf'},{'$set':{'max_items':.6}})
+        for identity in ('a','b','c'):await seed_component(db,identity)
+        body={'request_id':'components-capacity','lines':[component_line('a',.1),component_line('b',.2),component_line('c',.3)]}
+        p=await preview(db,OWNER,body)
+        assert p['total_quantity']==.6
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        assert await db[RECEIPTS].count_documents({})==3
+    run(scenario)
+
+
+def test_gold_silver_and_named_embroidery_remain_separate_costed_stock_rows():
+    async def scenario(db):
+        await seed(db)
+        await db.warehouse_locations.update_one({'id':'shelf'},{'$set':{'max_items':100}})
+        color={'id':'color','name':'اللون','type':'select','required':True,'values':[{'id':'gold','name':'ذهبي'},{'id':'silver','name':'فضي'}]}
+        service={'id':'service','name':'التخصيص','type':'select','required':True,'values':[{'id':'embroidery','name':'تطريز'},{'id':'none','name':'بدون'}]}
+        name={'id':'name','name':'الاسم','type':'text','required':False,'values':[]}
+        variants=[{'id':v,'name':v,'selections':[{'option_id':'color','value_id':v}]} for v in ('gold','silver')]
+        await db.mezan_products_v2.update_one({'mezan_product_id':'product'},{'$set':{'options':[color,service,name],'variants':variants,'variants_count':2}})
+        body={'request_id':'named-opening','lines':[]}
+        for color_id,service_id,personalization,quantity,cost in [('gold','none','',10,'7.00'),('silver','none','',12,'10.00'),('gold','embroidery','عبير',20,'60.00'),('gold','embroidery','فاطمة',12,'60.00')]:
+            line=deepcopy(request()['lines'][0]);line.update(quantity=quantity,unit_cost=cost)
+            line['purchase_configuration']={'state':'ready','selections':[{'option_id':'color','value_id':color_id},{'option_id':'service','value_id':service_id}],
+                'inputs':[{'option_id':'name','value':personalization}] if personalization else []}
+            body['lines'].append(line)
+        p=await preview(db,OWNER,body)
+        assert [r['total_cost'] for r in p['lines']]==['70.00','120.00','1200.00','720.00']
+        assert p['total_cost']=='2110.00'
+        assert len({r['inventory_identity']['configuration_key'] for r in p['lines']})==4
+        assert [r['inventory_identity']['salla_variant_id'] for r in p['lines']]==['gold','silver','gold','gold']
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        assert await db[RECEIPTS].count_documents({})==4
+    run(scenario)
+
+
+def test_null_capacity_is_native_unlimited_and_fractional_small_cost_rounds_zero():
+    async def scenario(db):
+        await seed(db);await seed_component(db,unit='kg')
+        await db.warehouse_locations.update_one({'id':'shelf'},{'$set':{'max_items':None}})
+        body={'request_id':'component-subcent','lines':[component_line(quantity=.001,cost='0.01')]}
+        p=await preview(db,OWNER,body)
+        assert p['lines'][0]['total_cost']=='0.00' and p['total_cost']=='0.00'
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        row=(await projection(db,'owner'))['items'][0]
+        assert row['physical']==.001 and row['operational_inventory_value']=='0.00'
+        assert row['available']==0 and row['unit_cost'] is None
+    run(scenario)
+
+
+def test_recorded_component_unit_cannot_be_reinterpreted_after_catalog_edit():
+    async def scenario(db):
+        await seed(db);await seed_component(db,unit='m')
+        body={'request_id':'component-original-unit','lines':[component_line()]}
+        p=await preview(db,OWNER,body)
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        await db.mezan_cost_resources_v2.update_one({'id':'fabric'},{'$set':{'unit':'kg'}})
+        row=(await projection(db,'owner'))['items'][0]
+        assert row['unit']=='m' and row['physical']==2.5
+        assert row['operational_inventory_value']=='20.00'
+        assert row['unit_cost'] is None and row['available']==0
+    run(scenario)
+
+
+def test_age_ten_dresses_with_embroidery_names_are_distinct_physical_rows():
+    async def scenario(db):
+        await seed(db)
+        await db.warehouse_locations.update_one({'id':'shelf'},{'$set':{'max_items':100}})
+        size={'id':'size','name':'المقاس','type':'select','required':True,'values':[{'id':'age10','name':'عمر 10'}]}
+        service={'id':'service','name':'الخدمة','type':'select','required':True,'values':[{'id':'embroidery','name':'تطريز الاسم'}]}
+        name={'id':'name','name':'الاسم','type':'text','required':True,'values':[]}
+        await db.mezan_products_v2.insert_one({'user_id':'owner','mezan_product_id':'dress','name':'فستان',
+            'sku':'DRESS','options':[size,service,name], 'variants_count':1,
+            'variants':[{'id':'dress-age10','name':'عمر 10','sku':'DRESS-10','selections':[{'option_id':'size','value_id':'age10'}]}]})
+        body={'request_id':'dresses-age-ten','lines':[]}
+        for personal,qty in [('عبير',20),('فاطمة',12)]:
+            line=deepcopy(request()['lines'][0]);line.update(item_id='dress',quantity=qty,unit_cost='60.00')
+            line['purchase_configuration']={'state':'ready','selections':[{'option_id':'size','value_id':'age10'},{'option_id':'service','value_id':'embroidery'}],
+                'inputs':[{'option_id':'name','value':personal}]}
+            body['lines'].append(line)
+        p=await preview(db,OWNER,body)
+        assert [r['total_cost'] for r in p['lines']]==['1200.00','720.00']
+        assert {r['sku'] for r in p['lines']}=={'DRESS-10'}
+        assert {r['inventory_identity']['salla_variant_id'] for r in p['lines']}=={'dress-age10'}
+        assert len({r['inventory_identity']['configuration_key'] for r in p['lines']})==2
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        projected=(await projection(db,'owner'))['items']
+        assert {(r['specifications']['الاسم'],r['physical']) for r in projected}=={('عبير',20),('فاطمة',12)}
+        assert all(r['specifications']['المقاس']=='عمر 10' and r['operational_unit_cost']=='60.00' for r in projected)
+    run(scenario)
+
+
+@pytest.mark.parametrize('legacy_kind',['missing',None,''])
+def test_legacy_component_kind_uses_explicit_inventory_flag(legacy_kind):
+    async def scenario(db):
+        await seed(db);await seed_component(db,kind=legacy_kind)
+        if legacy_kind == 'missing':
+            await db.mezan_cost_resources_v2.update_one({'id':'fabric'},{'$unset':{'kind':''}})
+        row=(await context(db,OWNER))['components'][0]
+        assert row['component_type']=='stock_component'
+        body={'request_id':'legacy-stock-component','lines':[component_line()]}
+        p=await preview(db,OWNER,body)
+        await approve(db,OWNER,{**body,'preview_hash':p['preview_hash']})
+        assert (await projection(db,'owner'))['items'][0]['physical']==2.5
+    run(scenario)
+
+
+def test_unknown_component_kind_is_not_assumed_stock():
+    async def scenario(db):
+        await seed(db);await seed_component(db,kind='unknown_kind')
+        assert (await context(db,OWNER))['components']==[]
+        with pytest.raises(HTTPException):
+            await preview(db,OWNER,{'request_id':'unknown-component','lines':[component_line()]})
+        assert await db[RECEIPTS].count_documents({})==0
     run(scenario)
