@@ -5,6 +5,9 @@ from unittest.mock import AsyncMock, patch
 
 import assembly_completion_delivery as delivery
 import fulfillment_v2_routes as fulfillment
+import operational_atomic
+import preparation_piece_operations as pieces
+from assembly_status_policy import invalidate_shipping_if_blocked
 from assembly_status_policy import canonical_status
 from salla_integration import auto_sync
 import test_assembly_completion_delivery as fixture
@@ -121,3 +124,55 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["requires_attention"])
         post.assert_not_awaited()
         self.assertEqual(await self.on_hand(), 16)
+
+    async def test_alias_repair_cannot_overwrite_new_raw_webhook_with_unchanged_top_status(self):
+        await self.finish()
+        original = operational_atomic.operational_owner
+        entered = False
+        async def newer_before_owner(db, owner, callback, **kwargs):
+            nonlocal entered
+            if not entered:
+                entered = True
+                await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {
+                    "raw_by_source.salla_direct.status": {"slug": "delivered"},
+                    "raw_by_source.salla_direct.status_slug": "delivered",
+                    "raw_by_source.salla_direct.updated_at": "2026-10-18T01:00:00+00:00",
+                }})
+            return await original(db, owner, callback, **kwargs)
+        with patch.object(operational_atomic, "operational_owner", newer_before_owner):
+            await self.reconcile_completed()
+        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+        self.assertEqual(source["raw_by_source"]["salla_direct"]["status_slug"], "delivered")
+
+    async def test_transient_source_invalidates_all_cached_labels_without_reviving_material_failure(self):
+        await self.finish()
+        await self.db.unified_orders.update_one({"user_id": "owner"}, {"$set": {"g47_salla_snapshot.component_pending": True}})
+        for outbox in (None, {"version": 2, "state": "requires_attention", "error_code": "assembly_completion_evidence_changed"}):
+            await self.db.order_review_workflows.update_one({"user_id": "owner"}, {"$set": {
+                "carrier_label_ready": True, "carrier_label_url": "https://labels.test/old.pdf",
+                "carrier_label_print_data": {"old": True},
+            }, "$unset": {delivery.FIELD: ""}})
+            if outbox is not None:
+                await self.db.order_review_workflows.update_one({"user_id": "owner"}, {"$set": {delivery.FIELD: outbox}})
+            await invalidate_shipping_if_blocked(self.db, "owner", "local-assembly")
+            current = await self.workflow()
+            self.assertFalse(current["carrier_label_ready"])
+            self.assertIsNone(current["carrier_label_url"])
+            self.assertIsNone(current["carrier_label_print_data"])
+            if outbox is None:
+                self.assertNotIn(delivery.FIELD, current)
+            else:
+                self.assertEqual(current[delivery.FIELD], outbox)
+
+    async def test_completion_get_rechecks_permission_after_provider_wait(self):
+        await self.finish()
+        context = deepcopy(self.context)
+        context.update(is_owner=False, permissions={"fulfillment.ready.read"}, responsibilities={"instant_ready"})
+        async def revoke(*args):
+            context["permissions"].clear()
+            context["responsibilities"].clear()
+            return {"ready": True}
+        with patch.object(pieces, "_actor_context", AsyncMock(side_effect=lambda *args: deepcopy(context))), \
+             patch.object(delivery, "read_status", revoke):
+            response = await self.client.get("/preparation-work-v1/assembly/orders/local-assembly/completion")
+        self.assertEqual(response.status_code, 403, response.text)
