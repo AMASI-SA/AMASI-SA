@@ -45,6 +45,10 @@ $env:PYTHONPATH='backend;backend/tests'
   helper was stopped and transient connection material cleared.
 - Need the original request's sanitized rejection code/stage and exact server
   workflow/attempt metadata. Do not infer non-commit from pending status alone.
+- The installed emulator's fresh read of the selected order showed approval
+  enabled and no additional specifications, unlike the supplied screenshot.
+  No business action was executed; this does not establish that the original
+  attempt recovered or that the defect is fixed.
 
 Next: restore a trusted read-only path to those records, reproduce the observed
 mechanism in an isolated fixture, then implement a focused fix. Preserve signed
