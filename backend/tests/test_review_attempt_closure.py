@@ -334,6 +334,41 @@ class ReviewAttemptClosureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.display())["revision"], 1)
         self.assertEqual((await self.submit(self.request(detail))).status_code, 409)
 
+    async def test_first_hide_then_fresh_display_can_complete_without_recovery(self):
+        item_id = await self.install_controls()
+        self.assertIsNone(await self.db[completion.WORKFLOWS].find_one({"order_number": "local-review"}))
+        response = await self.client.patch(f"/order-review-export-controls-v1/local-review/items/{item_id}",
+            json={"manual_hidden_spec_keys": ["size"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        detail = await self.display()
+        payload = self.request(detail)
+        await self.assert_commit(await self.submit(payload), detail, payload)
+        workflow = await self.db[completion.WORKFLOWS].find_one({"order_number": "local-review"})
+        self.assertEqual(workflow["items"][0]["manual_supplier_export_excluded_spec_keys"], ["size"])
+
+    async def test_hide_real_customer_option_after_intake_can_complete_once(self):
+        number = "options-review"
+        payload = self.source_payload(number=number)
+        payload["items"][0]["options"] = [
+            {"id": "synthetic-size", "name": "المقاس", "value": "M"},
+            {"id": "synthetic-name", "name": "الاسم", "value": "Synthetic"},
+        ]
+        self.assertTrue((await self.webhook(payload))["synced"])
+        await self.install_controls()
+        before = await self.display(number)
+        item_id = before["items"][0]["order_item_id"]
+        self.assertTrue(before["items"][0]["options"])
+        response = await self.client.patch(f"/order-review-export-controls-v1/{number}/items/{item_id}",
+            json={"manual_hidden_spec_keys": ["size"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        detail = await self.display(number)
+        request = self.request(detail)
+        await self.assert_commit(await self.submit(request, number), detail, request)
+        await self.assert_commit(await self.submit(request, number), detail, request)
+        workflow = await self.db[completion.WORKFLOWS].find_one({"order_number": number})
+        self.assertEqual(workflow["items"][0]["manual_supplier_export_excluded_spec_keys"], ["size"])
+        self.assertEqual(await self.db[completion.EVENTS].count_documents({"event_type": "order_review_completed"}), 1)
+
     async def test_export_hide_during_pre_read_completion_preserves_new_choice_and_prevents_commit(self):
         item_id = await self.install_controls()
         detail = await self.display()
