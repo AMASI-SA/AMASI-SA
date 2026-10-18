@@ -1,4 +1,4 @@
-# Preparation receiving custody actor
+# Preparation receiving custody actor and current Salla status
 
 ## Scope and status
 
@@ -27,10 +27,36 @@ server-owned `_mobile_actor_*` fields. The receipt POST already persists
 employee therefore saw the owner's receipts and could not see their own.
 
 The custody GET now resolves the same effective receiver as the receipt POST.
-Source-preparer grouping is unchanged and includes both owner and non-owner
-preparers. Tenant scope, own-receiver scope, permission checks, active custody
-filters, source-employee snapshots and receipt idempotency remain unchanged.
+Source-preparer grouping includes both owner and non-owner preparers. Tenant
+scope, own-receiver scope, permission checks, source-employee snapshots and
+receipt idempotency remain unchanged.
 There is no history rewrite, data migration, Android change or provider call.
+
+## Owner-approved visibility rule
+
+The owner subsequently requested that receiving custody show pieces only while
+their current Salla order is `in_progress`, including status changes made
+outside Android. A stale local `ready_for_assembly` piece must not keep a
+completed/shipped order in the queue.
+
+The custody read now fetches the relevant tenant-scoped `unified_orders` status
+fields once and filters pieces before source-employee grouping and totals.
+Empty employee cards therefore disappear. Order-number and barcode search in
+the receiving page use the same filter and return an Arabic explanation when
+the order is not eligible. The installed Android error helper already renders
+this server message; no APK change is required for these reads.
+
+Only unambiguous provider/root `in_progress` status qualifies. Missing,
+contradictory or explicitly stale status evidence is excluded. A component-only
+reconciliation phase does not hide an otherwise eligible order; local workflow
+stage does not override Salla status. Receipt records and events are untouched,
+so reopening an order in Salla can reveal its original receipt again.
+
+Freshness boundary: this uses the latest **synced** Salla status in Mezan, not a
+new provider call per piece. External changes take effect after synchronization
+and the next custody/search read (page refresh/reopen). It does not introduce
+live push/polling, change the separate local session history, or alter receipt
+write, assembly, shipping, stock or financial state transitions.
 
 ## Evidence
 
@@ -72,6 +98,27 @@ Review Completion Resumable run `39137444716` passed **442 tests and 259
 subtests in 270.66s**, plus the separate acceptance guard **1 test in 2.04s**.
 Both executed-suite gates reported zero skipped/failure/error cases.
 
+### Status-filter extension validation
+
+Five additional real-Mongo route tests reproduced the missing status filter
+before the patch: the RED run exited 1 with **17 failures (including subtests),
+8 passed tests and 4 passed subtests** in 15.84s. Completed/shipped pieces still
+appeared, totals stayed unchanged and inactive order/barcode searches returned
+200. The component-only reconciliation case already passed and stays covered.
+
+After the filter, the focused suite passed **11 tests and 18 subtests** in
+14.51s. The same affected-suite command above passed **70 tests and 18 subtests**
+in 15.69s (exit 0). Local JUnit has zero skipped/failure/error cases. The CI
+executed-case floor is increased from six to eleven for this suite.
+
+New coverage includes external completion/shipping/cancellation/delivery for
+both owner and employee receivers, mixed source-preparer cards, empty-card
+removal, reopening without receipt rewrites, Arabic status aliases, missing and
+contradictory status, explicit freshness invalidation, tenant isolation,
+order/barcode search, and 120 pieces across six orders using one source read.
+Database snapshots verify read requests do not modify stored business data.
+Remote CI for this extension is pending the new source checkpoint.
+
 ## Release and remaining work
 
 Production source/deployment changed: **no**. Production business writes: **no**.
@@ -83,9 +130,11 @@ production base.
 
 Next: review/integrate the source PR with the current release owner and follow
 the complete v5 source/intent/guard protocol before any merge/deployment.
-The release owner's PR1433 is separate; do not mix it or claim it includes this
-fix without an exact combined source and fresh verification. The hidden-option
-diagnostic task also remains separate. This is a backend read fix; it does not
-require replacing the Android APK. Post-deployment readback with a real
-receiving employee remains outstanding. The disposable test Mongo was stopped
-gracefully after checking its executable, start time and replica identity.
+PR1433 was cancelled by the owner and closed unmerged; do not integrate it.
+The current release owner coordinates mobile PR279 and the single next APK;
+this task must not start a competing APK build. The hidden-option diagnostic
+task remains separate. This is a backend read fix; it does not require
+replacing the Android APK. Post-deployment readback with a real receiving
+employee remains outstanding. The earlier disposable Mongo was stopped safely;
+the isolated loopback replica was restarted for the status-filter tests and
+must be stopped again after verification.
