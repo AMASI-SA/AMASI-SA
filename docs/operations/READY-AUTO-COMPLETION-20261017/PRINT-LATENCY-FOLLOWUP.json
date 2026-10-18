@@ -11,11 +11,15 @@
     "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1432",
     "head": "11428960a8e6740b5eaa0eac2ddd763a6b34d64f",
     "tree": "df6c477f227724da0d0ba8f962ebbf2e74531d89",
-    "ci": "A14/14PASS; BCI running readiness39076736387; artifact12116879067 independently SHA256+2135Gitrecords verified",
+    "ci": "A and B each14applicable PASS; final1TikToknonapplicable skip",
     "source": "225ad9f27e75ebc9794aba53f81be9191f9eff42",
-    "runtime": "rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4"
+    "runtime": "rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4",
+    "merged": true,
+    "merge": "e015b913ce950d6e5cf52cc0f1893da94b7b30b4",
+    "merge_tree": "df6c477f227724da0d0ba8f962ebbf2e74531d89",
+    "independent_final": "26passed7.32s with --asyncio-mode=auto; initial invocation lacked required asyncio mode and errored before test execution"
   },
-  "production": "unchanged since verified1431 f7b5a81",
+  "production": "GitHub branch advanced to e015b913; live health still verified source8d731/runtimea96. No1432prepare,lease,publish.",
   "evidence": "logo held download fallback1501ms;reprint1downloadfor2renders;combined syntheticcourier8to5GET;reported minute not measured ondevice",
   "device_acceptance": "not performed",
   "review_changes": false,
@@ -31,5 +35,15 @@
     "runner_tests": "root independent20PASS; agent historical17PASS",
     "build": "NOT_SUBMITTED; backend pin/receipt pending"
   },
-  "next": "Wait final B CI, reviewed rollback, governed release; fresh47 receipt and single build, APK inspection/link. No production/physical-print completion claim."
+  "next": "Restore Emergent IDE connection; freshguardstatus and actual/appHEAD; verify actualrollback readiness; fast-forward only if needed; governed build; prepare/prepublish/publish/verify3. Then freshAPK47backendproof/receipt, one build and download.",
+  "rollback": {
+    "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
+    "prospective_ci": "39120327277 PASS",
+    "actual_branch": "codex/courier-print-latency-rollback-actual-20261019",
+    "actual_source": "f19c173806449c6ff06f3d22aeb2a73d0d717214",
+    "actual_tree": "61f6f5eddf8ddb82569c2dd2f6643915d5ede567",
+    "candidate_ci": 39122919091,
+    "state": "candidate running; no rollback activated"
+  },
+  "blocker": "Emergent Preview slept. Resume Preview restored IDE briefly; fresh guardinactive and HEADf7 observed. Then terminal stopped responding, new terminal3 neverstarted; ReconnectNow remainsDisconnected. ff-only command sent but no result; must reread actual/appHEAD before any action."
 }
