@@ -2936,6 +2936,10 @@ async def _assembly_search(
         "stage": _text(workflow.get("stage")),
         "history_only": history_only,
         "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
+        "completion_state": delivery_status["completion_state"],
+        "requires_attention": delivery_status["requires_attention"],
+        "error_code": delivery_status["error_code"],
+        "error_message": delivery_status["error_message"],
         "order_completion_status": delivery_status["order_completion_status"],
         "label_status": delivery_status["label_status"],
         "matched_piece_id": matched_piece_id or None,
@@ -3940,9 +3944,15 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         context = await _actor_context(db, user)
         _require_permission(context, "fulfillment.labels.print", responsibility="shipping_labeling")
         from assembly_completion_delivery import resume
+        async def authorize_recovery(scoped):
+            fresh = await _actor_context(scoped, user)
+            _require_permission(fresh, "fulfillment.labels.print", responsibility="shipping_labeling")
+            if fresh["merchant_id"] != context["merchant_id"]:
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
             return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
-                                actor_id=context["actor_id"], actor_name=_text(user.get("name")), manual=True)
+                                actor_id=context["actor_id"], actor_name=_text(user.get("name")), manual=True,
+                                authorize=authorize_recovery)
         except ShippingLabelError as exc:
             raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
 

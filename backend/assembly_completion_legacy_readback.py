@@ -14,7 +14,7 @@ import httpx
 
 from accounting_atomic import SessionDatabase
 from accounting_write_control import AccountingDatabase
-from assembly_status_policy import canonical_status
+from assembly_status_policy import canonical_status, status_values
 from order_engine import shipping_label_service as shipping
 from salla_shipping import CURRENT_SHIPPING, extract_shipping, projected_shipping
 
@@ -109,6 +109,8 @@ def _assert_provider_identity(order, internal_id, number):
             or shipping._text(order.get("reference_id")) != number):
         raise shipping.ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
     if not shipping._order_is_completed(order):
+        if (status_values(order.get("status")) | status_values(order.get("status_slug"))) == {"in_progress"}:
+            raise shipping.ShippingLabelError("completion_legacy_recovery_required", "جاهزية القطع محفوظة؛ يلزم استكمال حالة الطلب.")
         raise shipping.ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.")
 
 

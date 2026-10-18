@@ -138,15 +138,21 @@ async def guard_effect(db, operation, *, effect=None, patch=None):
 
 def public_status(workflow, *, canonical=None):
     operation = workflow.get(FIELD) or {}
+    recovery_required = (workflow.get("assembly_status") == "completed"
+                         and operation.get("state") != "confirmed"
+                         and (not operation or operation.get("legacy_readback_only") is True
+                              or operation.get("version") == 1))
     confirmed = operation.get("order_confirmed") is True and canonical in {"in_progress", "completed"}
     available = confirmed and operation.get("state") == "confirmed" and workflow.get("carrier_label_ready") is True
     return {"order_number": workflow.get("order_number"),
             "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
             "order_completion_status": "confirmed" if confirmed else "pending",
             "label_status": "available" if available else "pending",
-            "requires_attention": operation.get("state") == "requires_attention",
-            "error_code": operation.get("error_code"),
-            "error_message": ({
+            "completion_state": "recovery_required" if recovery_required else operation.get("state", "not_started"),
+            "requires_attention": recovery_required or operation.get("state") == "requires_attention",
+            "error_code": "completion_legacy_recovery_required" if recovery_required else operation.get("error_code"),
+            "error_message": ("جاهزية القطع محفوظة من المسار السابق؛ يلزم استكمال حالة الطلب دون إعادة جاهز."
+                              if recovery_required else {
                 "assembly_order_not_ready": "حالة الطلب في سلة لا تسمح بالاستكمال.",
                 "assembly_canonical_status_blocked": "تغيرت حالة الطلب؛ الاستكمال متوقف.",
                 "assembly_completion_evidence_changed": "تغيرت بيانات التجهيز؛ يلزم التحقق.",
@@ -162,7 +168,17 @@ async def read_status(db, user_id, order_number, *, authorize_repair=None):
     workflow = await shipping_workflow(db, user_id, order_number)
     if FIELD not in workflow:
         from assembly_completion_legacy_readback import read_legacy_completion
-        legacy = await read_legacy_completion(db, user_id, order_number)
+        try:
+            legacy = await read_legacy_completion(db, user_id, order_number)
+        except shipping.ShippingLabelError as exc:
+            if exc.code != "completion_legacy_recovery_required":
+                raise
+            # A useful recovery state, not a fake background operation. GET
+            # remains read-only and never changes the provider order status.
+            current = await shipping_workflow(db, user_id, order_number)
+            if FIELD in current:
+                return await read_status(db, user_id, order_number, authorize_repair=authorize_repair)
+            return {**label_fields(current), **public_status(current, canonical=await source_status(db, user_id, order_number))}
         if legacy is not None:
             return legacy
         # An outbox was enrolled concurrently. Use its current authority.
@@ -190,7 +206,39 @@ async def shipping_workflow(db, user_id, order_number):
     return await _require_print_completed_workflow(db, user_id=user_id, order_number=order_number)
 
 
-async def _deliver(db, operation):
+async def _promote_legacy(db, operation, provider_order, *, authorize=None):
+    """Explicit per-order recovery, with fresh evidence and the existing lease."""
+    owner, number = operation["user_id"], operation["order_number"]
+    async def promote(scoped):
+        if authorize is not None:
+            await authorize(scoped)
+        workflow = await shipping_workflow(scoped, owner, number)
+        previous = workflow.get(FIELD) or {}
+        if (previous.get("claim") != operation[FIELD].get("claim")
+                or previous.get("lease_until", "") <= now().isoformat()):
+            raise shipping.ShippingLabelError("completion_lease_lost", "انتهت صلاحية محاولة الاستكمال.")
+        from assembly_legacy_recovery import validate_recovery
+        source = await validate_recovery(scoped, owner, number, workflow)
+        from assembly_completion_legacy_readback import _assert_provider_material
+        _assert_provider_material(provider_order, (source.get("raw_by_source") or {}).get("salla_direct") or {})
+        upgraded = {**previous, "version": 2, "legacy_readback_only": False,
+                    "state": "pending", "attempts": 1,
+                    "legacy_recovery": {"previous_version": previous.get("version"),
+                                        "previous_attempts": previous.get("attempts", 0),
+                                        "recovered_at": now().isoformat()},
+                    "source_fingerprint": source_fingerprint(source),
+                    "workflow_fingerprint": workflow_fingerprint(workflow),
+                    "workflow_revision": workflow.get("revision")}
+        changed = await scoped[WORKFLOWS].update_one(
+            {"user_id": owner, "order_number": number, f"{FIELD}.claim": previous["claim"],
+             "revision": workflow.get("revision")}, {"$set": {FIELD: upgraded}})
+        if changed.matched_count != 1:
+            raise shipping.ShippingLabelError("completion_lease_lost", "تغيرت محاولة الاستكمال.")
+        return upgraded
+    operation[FIELD] = await operational_owner(db, owner, promote)
+
+
+async def _deliver(db, operation, *, allow_legacy_recovery=False, authorize=None):
     owner, number = operation["user_id"], operation["order_number"]
     # Capture before the FIRST provider await, including legacy readback. Every
     # subsequent guard compares this identity under the owner lock through CAS.
@@ -208,7 +256,9 @@ async def _deliver(db, operation):
         if observed != {"in_progress"}:
             raise shipping.ShippingLabelError("assembly_order_not_ready", "الطلب ليس قيد التنفيذ في سلة.")
         if operation[FIELD].get("version") != 2 or operation[FIELD].get("legacy_readback_only"):
-            raise shipping.ShippingLabelError("completion_status_unconfirmed", "المحاولة السابقة غير مؤكدة؛ يلزم الاستكمال في سلة.")
+            if not allow_legacy_recovery:
+                raise shipping.ShippingLabelError("completion_status_unconfirmed", "المحاولة السابقة غير مؤكدة؛ يلزم استكمال الطلب.")
+            await _promote_legacy(db, operation, order, authorize=authorize)
         # Journal before dispatch, with current local evidence and a fresh
         # provider in_progress read on EVERY attempt. The owner accepts the
         # remaining remote GET/POST race: Salla has no conditional-write API.
@@ -250,9 +300,11 @@ async def _deliver(db, operation):
     return result
 
 
-async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False):
+async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manual=False, authorize=None):
     if manual:
         async def enroll(scoped):
+            if authorize is not None:
+                await authorize(scoped)
             workflow = await shipping_workflow(scoped, user_id, order_number)
             pending = pending_operation(actor_id, actor_name)
             # Historic issue paths did not all journal before provider POST.
@@ -278,7 +330,8 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
     result = {}
     if operation:
         try:
-            result = await asyncio.wait_for(_deliver(db, operation), TIMEOUT_SECONDS)
+            result = await asyncio.wait_for(_deliver(db, operation, allow_legacy_recovery=manual,
+                                                     authorize=authorize), TIMEOUT_SECONDS)
         except Exception as exc:
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
