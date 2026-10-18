@@ -143,6 +143,7 @@ async def sync_completed_carrier_label(
         _text(workflow.get("experiment_delivery_flow")) == "store_courier"
     )
     now = _now()
+    recovery_args = {"authorize_recovery": authorize_recovery} if action == "issue" and authorize_recovery is not None else {}
     try:
         if force_store_courier:
             result = await issue_shipping_label(
@@ -150,12 +151,12 @@ async def sync_completed_carrier_label(
                 user_id,
                 normalized,
                 force_store_courier=True,
-                authorize_recovery=authorize_recovery if action == "issue" else None,
+                **recovery_args,
             )
         elif action == "refresh":
             result = await refresh_shipping_label(db, user_id, normalized)
         else:
-            result = await issue_shipping_label(db, user_id, normalized, authorize_recovery=authorize_recovery)
+            result = await issue_shipping_label(db, user_id, normalized, **recovery_args)
     except ShippingLabelError as exc:
         await db[WORKFLOWS].update_one(
             {"user_id": user_id, "order_number": normalized},

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 import assembly_completion_delivery as delivery
 import test_assembly_completion_delivery as fixture
+import test_g47_component_lifecycle_integration as physical_fixture
 
 
 class LegacyRecoveryContractTests(unittest.IsolatedAsyncioTestCase):
@@ -160,3 +161,42 @@ class LegacyRecoveryContractTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(caught.exception.status_code, 403)
             post.assert_not_awaited()
         self.assertTrue((await self.workflow())[delivery.FIELD]["legacy_readback_only"])
+
+
+
+class PhysicalLegacyRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    asyncSetUp = physical_fixture.ComponentRouteTests.asyncSetUp
+    asyncTearDown = physical_fixture.ComponentRouteTests.asyncTearDown
+    order = physical_fixture.ComponentRouteTests.order
+    accept = physical_fixture.ComponentRouteTests.accept
+    seed_physical = physical_fixture.ComponentRouteTests.seed_physical
+    mark_piece = physical_fixture.ComponentRouteTests.mark_piece
+    on_hand = physical_fixture.ComponentRouteTests.on_hand
+    source_payload = physical_fixture.ComponentRouteTests.source_payload
+    webhook = physical_fixture.ComponentRouteTests.webhook
+
+    async def test_physical_legacy_recovery_keeps_inventory_and_ready_events(self):
+        await self.webhook(self.source_payload(number="order-1"))
+        current = await fixture.pieces._current_assembly_order(self.db, user_id="owner", order_number="order-1")
+        response, _ = await self.accept(current)
+        self.assertEqual(response.status_code, 200, response.text)
+        await self.db.unified_orders.update_one({"order_number": "order-1"}, {"$set": {
+            "status": "in_progress", "status_native": "in_progress"}})
+        await self.seed_physical()
+        from stock_component_consumption_service import PLANS
+        plan = await self.db[PLANS].find_one({"order_id": "order-1"})
+        await self.db[fixture.pieces.PIECES].update_many({}, {"$set": {
+            "order_item_id": plan["lines"][0]["order_line_id"]}})
+        for identifier in ("piece-1", "piece-2"):
+            response = await self.mark_piece(identifier)
+            self.assertEqual(response.status_code, 200, response.text)
+        await self.db.order_review_workflows.update_one({}, {"$unset": {delivery.FIELD: ""}})
+        stock = await self.on_hand()
+        with patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=("order-1", {
+                "id": "order-1", "reference_id": "order-1", "status": {"slug": "in_progress"}}))), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock()) as post:
+            result = await delivery.resume(self.db, user_id="owner", order_number="order-1", manual=True,
+                                           authorize=AsyncMock())
+            self.assertFalse(result["requires_attention"], result)
+            post.assert_awaited_once()
+        self.assertEqual(await self.on_hand(), stock)

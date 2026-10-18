@@ -1,7 +1,7 @@
 """Read-only evidence checks for explicit recovery of legacy completion.
 
 The accepted component plan proves original product/unit/option inputs, not the
-entire historical order. Payment and shipping must be eligible now. The caller
+entire historical order. Existing shipment admission remains downstream. The caller
 must freeze source and shipping evidence across subsequent provider I/O; this
 helper cannot prove an address was unchanged before recovery was requested.
 Run inside the caller's operational_owner transaction. Never reserve or consume.
@@ -23,7 +23,6 @@ async def validate_recovery(scoped, owner, number, workflow):
         _current_assembly_order, _workflow_assembly_pieces,
         _piece_has_completed_preparation_receipt,
     )
-    from product_fulfillment_rules import payment_is_eligible, shipping_address_is_complete
     from stock_component_consumption_service import PLANS, UNITS, _digest, _lines, _whole
 
     if (workflow.get("user_id") != owner or workflow.get("order_number") != number
@@ -39,9 +38,9 @@ async def validate_recovery(scoped, owner, number, workflow):
     if not str(raw.get("id") or "").strip() or str(raw.get("reference_id") or "") != number:
         _reject("salla_order_reference_mismatch")
     order = await _current_assembly_order(scoped, user_id=owner, order_number=number)
-    if (order is None or str(order.order_number) != number
-            or not payment_is_eligible(order.payment)
-            or not shipping_address_is_complete(order.shipping)):
+    # Do not introduce new payment/address admission rules for pieces approved
+    # by historical Ready paths. Current shipping/printing keeps its own guards.
+    if order is None or str(order.order_number) != number:
         _reject("assembly_order_not_ready")
     plan = await scoped[PLANS].find_one({"user_id": owner, "order_id": number})
     if not plan or not plan.get("input_hash") or not plan.get("lines") or not plan.get("_id"):
