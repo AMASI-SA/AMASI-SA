@@ -31,11 +31,13 @@
     "artifact_id": 12117316550,
     "artifact_sha256": "14aed60b9813d683bfa3d929cf9706a8a6d8ae893065661ab06dcbd75f44255d",
     "runner_branch": "codex/apk47-runner-review-20261018",
-    "runner_head": "e7f02dd1a7c377cd6c847a756d0f621de52a2816",
+    "runner_head": "5d4fef110a71998d912212aef12e747f3b905817",
     "runner_tests": "root independent20PASS; agent historical17PASS",
-    "build": "NOT_SUBMITTED; backend pin/receipt pending"
+    "build": "NOT_SUBMITTED; preflight running; inventory showslatest46 only",
+    "receipt_id": "d6ed4e4b-cd9a-4260-9ecf-b3a451d0dc33",
+    "receipt_sha256": "d39c0c879d9fe98e0559a6ba6d0c0610cabafbf2a75da1c4fe642b62a3b8670e"
   },
-  "next": "Observe newer explicit completion; guardverify threeprobes andinactive; preserveactualrawproof; fresh47receiptandonebuild. Do not modify/app orclearlease.",
+  "next": "Finish47 preflight; submit once with exclusivejournal; reconcileonly ifambiguous; officialAPKdownload/signatureinspection thenuserlink. NoOTA/deviceinstall requested.",
   "rollback": {
     "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
     "prospective_ci": "39120327277 PASS",
@@ -51,7 +53,7 @@
   },
   "blocker": null,
   "deployment": {
-    "state": "PUBLISHING_NOT_VERIFIED",
+    "state": "VERIFIED_LIVE",
     "build_exit": 0,
     "build_seconds": 97.1,
     "prepare_exit": 0,
@@ -62,6 +64,11 @@
     "deployment": "e015b913ce950d6e5cf52cc0f1893da94b7b30b4",
     "release_id": "rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4",
     "ui": "Re-publish changes + Yes clicked once; buttons disabled; do not repeat",
-    "raw_logs": "/tmp/courier1432-{build.log,prepare.json,prepublish.json}"
+    "raw_logs": "/tmp/courier1432-{build.log,prepare.json,prepublish.json}",
+    "verify_exit": 0,
+    "checks": 3,
+    "lease_active": false,
+    "ui_finished": "2026-10-18 15:13 Asia/Riyadh",
+    "verify_raw_sha256": "c026255a265115608973537d36ca5d55084ca26fa2a67c40efbccc59565cac80"
   }
 }
