@@ -5,14 +5,44 @@ Status: investigation incomplete; no production-code fix and no deployment.
 Base: `8d731ec92536e872fef830c2fcd995dde3046c82`.
 Branch: `codex/review-hidden-option-server-20261018`.
 
-The latest owner clarification is that hiding an option immediately disables
-review approval and displays a message, BEFORE an approval is submitted.
-Showing the option again re-enables approval in the SAME Android app. The owner
-subsequently approved and assigned that order; it is now in progress. Do not
-change that order or its assignments. Earlier investigation treated the symptom
-as a rejected completion; that timing assumption is superseded. The exact new
-message still needs confirmation. The afternoon source fix remains present.
-This checkpoint does not establish the production cause.
+## Current evidence: authorized emulator reproduction
+
+On 2026-10-18 the owner authorized hiding one named customer option and
+approving one specific pending order in Android. No customer identifiers or
+option values are retained in this repository. The emulator remained on
+versionCode 46/versionName 1.0.31; the separate APK47 was not installed.
+
+The owner corrected the earlier timing report: a disabled button while the
+product editor is open is expected. The owner hid the target option and closed
+the editor before the agent's approval action. A screenshot confirmed the
+option was crossed out and the approval button was enabled. Therefore the
+previous pre-approval failure theory below is superseded by this direct test.
+
+1. First explicit confirmation at 2026-10-18T12:30:24.586Z returned
+   `component_source_event_stale`, followed by the application's unresolved
+   outcome notice. The agent sent no blind retry.
+2. The explicit `update and verify review` action performed the existing exact
+   attempt recovery. Fresh UI showed approval enabled with the option still
+   hidden. This is consistent with the closure/readback contract; the raw
+   server proof was not separately extracted from the non-debuggable device.
+3. A new explicit confirmation after that recovery returned the same code.
+   This demonstrates the initial error was not solved merely by fresh UI
+   consent/recovery. It does not identify the server rejection stage.
+4. Final explicit verification at 2026-10-18T12:44:42.784Z again recovered the
+   button. No third approval was sent. The option remains hidden and the order
+   was not reported as approved. No assignment or financial action followed.
+
+The production View Logs modal exposed a cached 100-line window ending at
+12:32:10, with no matching conflict. Closing/reopening did not refresh it.
+Absence there is NOT evidence of absence in production. A Mongo viewer session
+ended before a connection; subsequent attempts did not open a new viewer.
+No database read succeeded through that viewer, and connection material was
+cleared. Local screenshots are evidence only and are not committed because
+they contain customer data.
+
+Root cause remains unproven: the same error code can arise from token/context
+validation, approval fingerprint comparison, or component source lifecycle
+validation. Do not call the current source fixed or weaken any of these guards.
 
 ## Verified locally
 
@@ -50,7 +80,7 @@ was then changed to a module alias, and discovery was asserted to contain only
 the two intended new tests. This remains synthetic coverage, not a reproduction
 or proof that the reported defect is repaired.
 
-## Remaining evidence
+## Earlier read-only evidence (before the authorized experiment)
 
 - Production UI showed the reported order pending review, but the retained
   runtime log window did not contain the original rejection.
@@ -64,21 +94,25 @@ or proof that the reported defect is repaired.
   environment to the Live database also timed out before metadata queries.
   The client was closed, interpreter exited, and transient credential/clipboard
   contents cleared. No connection material was written into source or reports.
-- Need the pre-approval save/refresh response and message, and any existing
-  receipt that could explain the displayed state. If completion was actually
-  sent, require its sanitized rejection/receipt evidence. Never infer non-commit
-  from pending status alone.
+- The earlier pre-approval timing theory was unproven. The authorized test
+  above now establishes a completion rejection. Pending status alone still
+  cannot prove non-commit.
 - The installed emulator's fresh read of the selected order showed approval
   enabled and no additional specifications, unlike the supplied screenshot.
   No business action was executed; this does not establish that the original
   attempt recovered or that the defect is fixed.
 
-Next: identify the exact message immediately after the export-controls PATCH
-and its follow-up detail GET, then reproduce that pre-approval mechanism in an
-isolated fixture. Do not assume that `/complete` was called. Restore a trusted
-read-only path to server evidence when needed. Preserve signed
-approval, exact receipt binding, unknown-outcome protection and current shipping
-behavior. Do not include this WIP in the separate shipping APK47 release.
+Next: obtain the sanitized production rejection stage and approved/current
+input evidence for the reproduced attempt, or reproduce the responsible
+mechanism with synthetic data. The generic code alone cannot distinguish the
+approval and component-lifecycle branches. Preserve signed approval, exact
+receipt binding, unknown-outcome protection and current shipping behavior.
+Do not include this WIP in the separate shipping APK47 release.
 
-Production changed: **no**. No hide/review/closure/stock/financial writes, merge,
-release lease, deployment or APK build performed by this investigation.
+Production source/deployment changed by this task: **no**. Production business
+interaction: **yes**, only the specifically authorized order's two explicit
+approval attempts and exact-attempt verification/recovery actions described
+above. The owner performed the hide. No successful approval was observed;
+no assignments, financial writes, release lease, merge, deployment, or APK
+build were performed by this investigation. Earlier read-only checkpoints
+remain historical and do not describe this newly authorized experiment.
