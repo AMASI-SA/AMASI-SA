@@ -3790,7 +3790,9 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             **await _preparation_receiving_custody_view(
                 db,
                 user_id=context["merchant_id"],
-                receiver_id=context["actor_id"],
+                # Native employees use a merchant-shaped principal. Match the
+                # receiver persisted by the receipt route, not that principal.
+                receiver_id=effective_operation_actor(user, context)["id"],
             ),
             "mezan_only": True,
             "salla_updated": False,
