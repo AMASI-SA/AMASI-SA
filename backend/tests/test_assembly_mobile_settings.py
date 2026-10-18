@@ -2,7 +2,7 @@ import os
 import uuid
 import unittest
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from httpx import ASGITransport, AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -30,10 +30,21 @@ class AssemblyMobileSettingsTests(unittest.IsolatedAsyncioTestCase):
              "permissions": ["app.page.assembly_shipping"]},
         ])
         self.user = {"id": "owner", "role": "owner"}
-        async def current_user():
+        self.native_actor = None
+        async def current_user(request: Request):
+            if self.native_actor is not None:
+                from auth import account_is_disabled
+                from mobile_app_request_context import mobile_app_request_user
+                actor = await self.db.users.find_one({"id": self.native_actor})
+                if not actor or account_is_disabled(actor):
+                    raise HTTPException(403)
+                return await mobile_app_request_user(
+                    self.db, {**actor, "_session_client": "amasi_mobile"},
+                    path=request.url.path, method=request.method)
             return self.user
         app = FastAPI()
         app.include_router(make_assembly_mobile_settings_router(self.db, current_user))
+        app.include_router(make_assembly_mobile_settings_router(self.db, current_user), prefix="/api/preparation-work-v1")
         self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://isolated")
 
     async def asyncTearDown(self):
@@ -85,6 +96,39 @@ class AssemblyMobileSettingsTests(unittest.IsolatedAsyncioTestCase):
         for payload in ({"show_salla_order_link": "true"}, {"show_salla_order_link": 1},
                         {"show_salla_order_link": True, "user_id": "other"}):
             self.assertEqual((await self.client.patch("/assembly/settings", json=payload)).status_code, 422)
+
+    async def test_actual_native_adapter_all_routes_and_live_revocation(self):
+        prefix = "/api/preparation-work-v1/assembly"
+        self.native_actor = "manager"
+        changed = await self.client.patch(prefix + "/settings", json={"show_salla_order_link": True})
+        self.assertEqual(changed.status_code, 200, changed.text)
+        self.assertTrue(changed.json()["can_manage"])
+        self.native_actor = "staff"
+        read = await self.client.get(prefix + "/settings")
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertEqual(read.json(), {"show_salla_order_link": True, "can_manage": False})
+        self.assertEqual((await self.client.get(prefix + "/orders/123/salla-link")).status_code, 200)
+        self.assertEqual((await self.client.patch(prefix + "/settings", json={"show_salla_order_link": False})).status_code, 403)
+        await self.db[MOBILE_APP_ACCESS].update_one({"user_id": "staff"}, {"$set": {"enabled": False}})
+        for suffix in ("/settings", "/orders/123/salla-link"):
+            self.assertEqual((await self.client.get(prefix + suffix)).status_code, 403)
+        self.native_actor = "manager"
+        await self.db[MOBILE_APP_ACCESS].update_one({"user_id": "manager"}, {"$set": {"permissions": ["app.page.assembly_shipping"]}})
+        self.assertEqual((await self.client.patch(prefix + "/settings", json={"show_salla_order_link": False})).status_code, 403)
+
+    async def test_native_foreign_scope_and_disabled_owner(self):
+        prefix = "/api/preparation-work-v1/assembly"
+        await self.db.settings.insert_one({"user_id": "owner", "assembly_shipping": {"show_salla_order_link": True}})
+        await self.db.users.insert_one({"id": "foreign", "role": "employee", "created_by": "other"})
+        await self.db[MOBILE_APP_ACCESS].insert_one({"owner_user_id": "other", "user_id": "foreign",
+            "enabled": True, "permissions": ["app.page.assembly_shipping"]})
+        self.native_actor = "foreign"
+        self.assertEqual((await self.client.get(prefix + "/settings")).json(), {"show_salla_order_link": False, "can_manage": False})
+        self.assertEqual((await self.client.patch(prefix + "/settings", json={"show_salla_order_link": True})).status_code, 403)
+        self.assertIsNone((await self.client.get(prefix + "/orders/123/salla-link")).json()["salla_admin_url"])
+        self.native_actor = "owner"
+        await self.db.users.update_one({"id": "owner"}, {"$set": {"is_active": False}})
+        self.assertEqual((await self.client.get(prefix + "/settings")).status_code, 403)
 
 
 def test_untrusted_admin_urls_are_rejected():

@@ -31,10 +31,18 @@ No extra work is added to assembly search, ready or shipping paths.
 Isolated MongoDB plus synthetic users/orders, no live provider calls:
 `python -m pytest backend/tests/test_assembly_mobile_settings.py backend/tests/test_mobile_app_manager_role.py backend/tests/test_preparation_piece_operations.py -q --asyncio-mode=auto`
 
-62 passed in 3.84 seconds. Covers manager/staff distinction despite native owner
+64 passed in 4.68 seconds. Covers manager/staff distinction despite native owner
 bridge, shared merchant state, other-merchant isolation, current revocation,
 disabled account, immediate link suppression, strict input, URL identity/host,
 unrelated settings preservation, and existing route contracts.
+
+Native adapter tests call the real `mobile_app_request_user` with actual `/api`
+paths and methods for all three endpoints, using current persisted employee grants.
+They cover manager PATCH, staff reads, staff/revoked PATCH denial, foreign tenant
+isolation and disabled owner authentication. They do not claim JWT transport E2E.
+The existing server startup creates `db.settings` unique index on `user_id`
+(`server.py:4696`); this feature uses its standard tenant update/upsert pattern,
+adding no migration or alternate settings collection.
 
 New Assembly Mobile Settings workflow runs focused auth/settings tests against
 an isolated MongoDB service. Remote CI is pending Draft PR creation.
