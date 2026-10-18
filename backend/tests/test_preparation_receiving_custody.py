@@ -15,10 +15,26 @@ from unittest.mock import patch
 from fastapi import FastAPI, Request
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.monitoring import CommandListener
 
 from mobile_app_permissions import MOBILE_APP_ACCESS, MOBILE_APP_ACCESS_OWNER_FIELD
 from mobile_app_request_context import mobile_app_request_user
 import preparation_piece_operations as operations
+
+
+class SourceReadCounter(CommandListener):
+    def __init__(self):
+        self.finds = 0
+
+    def started(self, event):
+        if event.command_name == "find" and event.command.get("find") == "unified_orders":
+            self.finds += 1
+
+    def succeeded(self, event):
+        pass
+
+    def failed(self, event):
+        pass
 
 
 class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
@@ -31,7 +47,9 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(parsed.port)
         self.assertFalse(parsed.username or parsed.password)
         self.assertIn(parsed.path, ("", "/"))
-        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000, tz_aware=True)
+        self.source_reads = SourceReadCounter()
+        self.mongo = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=5000, tz_aware=True,
+                                       event_listeners=[self.source_reads])
         self.addCleanup(self.mongo.close)
         self.db = self.mongo["preparation_custody_test_" + uuid4().hex]
         await self.db.command("ping")
@@ -76,6 +94,12 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
                "status": operations.PIECE_STATUS_IN_PROGRESS, "assembly_status": "pending",
                "assignment_status": "assigned", "services": [], **values}
         await self.db[operations.PIECES].insert_one(row)
+        await self.db.unified_orders.update_one(
+            {"user_id": row["user_id"], "order_number": row["order_number"]},
+            {"$setOnInsert": {
+                "order_status": "in_progress", "order_status_slug": "in_progress",
+                "raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}},
+            }}, upsert=True)
 
     async def seed_received(self, piece_id, source="prep-a", receiver="receiver-a", **values):
         await self.seed_piece(piece_id, source, **{
@@ -96,6 +120,15 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/api/preparation-work-v1/receiving/custody")
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    async def source_status(self, number, status, owner="merchant-a"):
+        await self.db.unified_orders.update_one({"user_id": owner, "order_number": number}, {
+            "$set": {"order_status": status, "order_status_slug": status,
+                     "raw_by_source.salla_direct.status": {"slug": status}}})
+
+    async def snapshot(self):
+        return {name: await self.db[name].find({}).sort("_id", 1).to_list(None)
+                for name in await self.db.list_collection_names()}
 
     async def test_native_receiver_sees_receipts_from_owner_and_multiple_preparers(self):
         # Owner receipts are deliberately present: the broken route shows this
@@ -178,3 +211,102 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["receiver_employee_id"], "merchant-a")
         self.assertEqual(result["total_pieces"], 1)
         self.assertEqual(result["groups"][0]["pieces"][0]["piece_id"], "owner")
+
+    async def test_external_order_status_changes_recount_and_remove_empty_cards(self):
+        for actor in (self.owner, self.employee):
+            with self.subTest(actor=actor["id"]):
+                self.user = deepcopy(actor)
+                prefix = actor["id"]
+                for suffix, source in (("owner", "merchant-a"), ("a1", "prep-a"),
+                                       ("a2", "prep-a"), ("b", "prep-b")):
+                    await self.seed_received(prefix + suffix, source, receiver=actor["id"])
+                self.assertEqual((await self.custody())["total_pieces"], 4)
+                # External sync changes only canonical order status. The piece
+                # and local workflow intentionally retain their older states.
+                await self.db[operations.WORKFLOWS].insert_one({
+                    "user_id": "merchant-a", "order_number": "synthetic-" + prefix + "a1",
+                    "stage": "in_progress"})
+                await self.source_status("synthetic-" + prefix + "a1", "completed")
+                before = await self.snapshot()
+                result = await self.custody()
+                self.assertEqual(result["total_pieces"], 3)
+                self.assertEqual({g["source_employee_id"]: g["piece_count"] for g in result["groups"]},
+                                 {"merchant-a": 1, "prep-a": 1, "prep-b": 1})
+                self.assertEqual(await self.snapshot(), before)
+                await self.source_status("synthetic-" + prefix + "a2", "shipped")
+                result = await self.custody()
+                self.assertEqual({g["source_employee_id"] for g in result["groups"]},
+                                 {"merchant-a", "prep-b"})
+                await self.source_status("synthetic-" + prefix + "owner", "cancelled")
+                await self.source_status("synthetic-" + prefix + "b", "delivered")
+                result = await self.custody()
+                self.assertEqual((result["total_pieces"], result["groups"]), (0, []))
+                # Reopening in Salla reveals the original receipt, no rewrite.
+                await self.source_status("synthetic-" + prefix + "b", "in_progress")
+                before = await self.snapshot()
+                self.assertEqual((await self.custody())["total_pieces"], 1)
+                self.assertEqual(await self.snapshot(), before)
+
+    async def test_only_unambiguous_current_salla_in_progress_is_visible(self):
+        for status in ("in_progress", "قيد التنفيذ", "completed", "تم التنفيذ", "shipped",
+                       "delivering", "delivered", "cancelled", "refunded", "under_review", ""):
+            with self.subTest(status=status):
+                await self.db[operations.PIECES].delete_many({})
+                await self.seed_received("status-case")
+                await self.source_status("synthetic-status-case", status)
+                result = await self.custody()
+                self.assertEqual(result["total_pieces"], int(status in {"in_progress", "قيد التنفيذ"}))
+        for fields in (
+            {"order_status": "completed", "raw_by_source.salla_direct.status": {"slug": "in_progress"}},
+            {"order_status": "in_progress", "raw_by_source.salla_direct.status": {"slug": "completed"}},
+            {"raw_by_source": {}},
+        ):
+            with self.subTest(fields=fields):
+                await self.source_status("synthetic-status-case", "in_progress")
+                await self.db.unified_orders.update_one({"user_id": "merchant-a",
+                    "order_number": "synthetic-status-case"}, {"$set": fields})
+                self.assertEqual((await self.custody())["total_pieces"], 0)
+        await self.db.unified_orders.delete_many({"user_id": "merchant-a"})
+        await self.db.unified_orders.insert_one({"user_id": "merchant-b",
+            "order_number": "synthetic-status-case", "order_status": "in_progress",
+            "raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}}})
+        self.assertEqual((await self.custody())["total_pieces"], 0)
+
+    async def test_status_visibility_does_not_depend_on_local_workflow_or_component_progress(self):
+        await self.seed_received("keep")
+        await self.db[operations.WORKFLOWS].insert_one({"user_id": "merchant-a",
+            "order_number": "synthetic-keep", "stage": "completed"})
+        await self.db.unified_orders.update_one({"user_id": "merchant-a", "order_number": "synthetic-keep"},
+            {"$set": {"g47_salla_snapshot.component_pending": True}})
+        self.assertEqual((await self.custody())["total_pieces"], 1)
+        await self.db.unified_orders.update_one({"user_id": "merchant-a", "order_number": "synthetic-keep"},
+            {"$set": {"g47_salla_snapshot.requires_authoritative_refresh": True}})
+        self.assertEqual((await self.custody())["total_pieces"], 0)
+
+    async def test_receiving_search_excludes_inactive_orders_by_number_and_barcode(self):
+        piece_id = "a" * 32
+        await self.seed_received(piece_id, order_number="synthetic-search")
+        for query in ("synthetic-search", "MEZAN-PIECE:" + piece_id):
+            response = await self.client.get("/api/preparation-work-v1/receiving/search", params={"q": query})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(len(response.json()["pieces"]), 1)
+        await self.source_status("synthetic-search", "completed")
+        before = await self.snapshot()
+        for query in ("synthetic-search", "MEZAN-PIECE:" + piece_id):
+            response = await self.client.get("/api/preparation-work-v1/receiving/search", params={"q": query})
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(response.json()["detail"]["code"], "preparation_receipt_order_not_in_progress")
+            self.assertIn("قيد التنفيذ", response.json()["detail"]["message"])
+        self.assertEqual(await self.snapshot(), before)
+
+    async def test_statuses_are_read_once_for_many_pieces_and_orders(self):
+        for index in range(120):
+            await self.seed_received(f"bulk-{index}", "prep-" + str(index % 3),
+                                     order_number="synthetic-bulk-" + str(index % 6))
+        await self.source_status("synthetic-bulk-1", "completed")
+        await self.source_status("synthetic-bulk-4", "shipped")
+        self.source_reads.finds = 0
+        result = await self.custody()
+        self.assertEqual(result["total_pieces"], 80)
+        self.assertEqual(sum(g["piece_count"] for g in result["groups"]), 80)
+        self.assertEqual(self.source_reads.finds, 1)

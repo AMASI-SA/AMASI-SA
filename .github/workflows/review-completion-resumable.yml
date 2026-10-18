@@ -168,7 +168,7 @@ jobs:
                                          ("test_g47_ready_shipping_safety.ProviderReadbackTests", 1),
                                          ("test_g47_ready_canonical_status_race.CanonicalStatusRaceTests", 3),
                                          ("test_assembly_search_instruction_batch.AssemblySearchInstructionTests", 4),
-                                         ("test_preparation_receiving_custody.PreparationCustodyTests", 6),
+                                         ("test_preparation_receiving_custody.PreparationCustodyTests", 11),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
                                          ("test_review_local_assembly.LocalAssemblyTests", 26),
                                          ("test_assignment_salla_in_progress.AssignmentSyncTests", 15),
