@@ -1,0 +1,33 @@
+name: Assembly Mobile Settings
+on:
+  pull_request:
+    paths:
+      - backend/assembly_mobile_settings.py
+      - backend/mobile_app_permissions.py
+      - backend/mobile_app_request_context.py
+      - backend/preparation_piece_operations.py
+      - backend/tests/test_assembly_mobile_settings.py
+      - .github/workflows/assembly-mobile-settings.yml
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest pytest-asyncio fastapi httpx motor PyJWT bcrypt cryptography python-dotenv
+      - name: Verify tenant and current manager authority
+        env:
+          MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+          PYTHONPATH: backend
+          JWT_SECRET: ci-only-assembly-settings
+        run: python -m pytest backend/tests/test_assembly_mobile_settings.py backend/tests/test_mobile_app_manager_role.py -q --asyncio-mode=auto

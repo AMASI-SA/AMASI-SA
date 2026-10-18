@@ -3751,6 +3751,8 @@ async def _manager_summary(db: Any, *, user_id: str, date: str) -> dict[str, Any
 
 def make_preparation_piece_operations_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/preparation-work-v1", tags=["Preparation Piece Operations"])
+    from assembly_mobile_settings import make_assembly_mobile_settings_router
+    make_assembly_mobile_settings_router(db, current_user, router=router)
 
     @router.get("/my-work")
     async def my_work(
