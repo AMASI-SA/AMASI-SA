@@ -9,8 +9,13 @@ Isolated worktree: `D:/amasi-build/backend-preparation-custody-20261018`.
 
 The owner reports only the owner's preparation card appearing in Android's
 preparation receiving custody, while pieces received from other preparers are
-missing before assembly. No live example order is currently available. Do not
-claim a specific production piece was inspected or repaired.
+missing before assembly. The owner subsequently supplied one example. ADB
+read-only UI inspection of installed APK47/1.0.32 confirmed a non-owner preparer
+and "already received" for that piece, while the custody list showed only the
+owner's card. The sidebar confirmed a signed-in receiving employee. Raw UI
+evidence remains local; no customer/order data is committed here. The UI does
+not expose the persisted receiving-actor ID or assembly state, so those fields
+were not read directly and no historical repair is claimed.
 
 ## Confirmed mechanism and change
 
@@ -58,16 +63,29 @@ The permission-denial subtests independently restore the valid grant before
 revocation. The final rerun also passed **65 tests and 2 subtests in 9.58s**
 (exit 0). `git diff --check` passed. No skipped tests were accepted.
 
+Code checkpoint `59d7d4466047a7be4e7575ff7a878c36ed771755` was pushed and
+read-back verified. PR: https://github.com/AMASI-SA/AMASI-SA/pull/1434.
+All 22 applicable PR checks passed; four explicitly nonapplicable checks were
+skipped (manual redeploy, release-intent adapter rehearsal, two Snapchat-only
+jobs). Release readiness is not inferred from those skipped release gates.
+Review Completion Resumable run `39137444716` passed **442 tests and 259
+subtests in 270.66s**, plus the separate acceptance guard **1 test in 2.04s**.
+Both executed-suite gates reported zero skipped/failure/error cases.
+
 ## Release and remaining work
 
 Production source/deployment changed: **no**. Production business writes: **no**.
-No release lease, merge, APK build, OTA or live receipt was performed.
+No release lease, merge, APK build, OTA or live receipt was performed. The only
+live interaction was read-only UI search and sidebar navigation on the emulator.
 Hidden-customer-option diagnostics remain a separate unresolved task and are
 not included. Existing shipping fixes are preserved by using the current
 production base.
 
-Next: final focused rerun/diff review, push this task checkpoint, open a review
-PR and inspect CI. Coordinate any authorized release with the current release
-owner, then follow the complete v5 source/intent/guard protocol. This is a
-backend read fix; it does not require replacing the Android APK. A production
-readback with a real receiving employee remains unverified.
+Next: review/integrate the source PR with the current release owner and follow
+the complete v5 source/intent/guard protocol before any merge/deployment.
+The release owner's PR1433 is separate; do not mix it or claim it includes this
+fix without an exact combined source and fresh verification. The hidden-option
+diagnostic task also remains separate. This is a backend read fix; it does not
+require replacing the Android APK. Post-deployment readback with a real
+receiving employee remains outstanding. The disposable test Mongo was stopped
+gracefully after checking its executable, start time and replica identity.
