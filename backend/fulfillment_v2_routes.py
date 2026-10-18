@@ -2285,6 +2285,22 @@ def make_fulfillment_v2_router(
                 reader = refresh_saved_shipping_label if action == "refresh_saved" else refresh_shipping_label
                 result = await reader(db, context["merchant_id"], _text(order_number))
                 return {**result, "assembly_completion_confirmed": True}
+            # Legacy issue buttons must read an already-completed shipment before
+            # attempting delivery recovery. This path never creates an AWB.
+            from assembly_print_completion import read_print_completion
+            try:
+                proof = await read_print_completion(db, context["merchant_id"], _text(order_number))
+            except ShippingLabelError as exc:
+                if exc.code != "order_status_not_completed":
+                    raise
+                proof = None
+            current_context = await _actor_context(db, user)
+            _require_permission(current_context, "fulfillment.labels.print")
+            if (current_context["merchant_id"] != context["merchant_id"]
+                    or not _can_operate_completed_carrier_label(current_context)):
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+            if proof is not None:
+                return {"ok": True, **proof}
             from assembly_completion_delivery import resume
             return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
                                 actor_id=context["actor_id"], actor_name=actor_name, manual=True)

@@ -168,6 +168,20 @@ async def read_status(db, user_id, order_number, *, authorize_repair=None):
         # An outbox was enrolled concurrently. Use its current authority.
         workflow = await shipping_workflow(db, user_id, order_number)
     operation = workflow.get(FIELD) or {}
+    if workflow.get("assembly_status") == "completed" and operation:
+        from assembly_print_completion import read_print_completion
+        try:
+            proof = await read_print_completion(db, user_id, order_number)
+            if proof is not None:
+                return proof
+        except shipping.ShippingLabelError as exc:
+            if exc.code != "order_status_not_completed":
+                raise
+        # A fresh negative read must never revive an old outbox success.
+        return {**label_fields(workflow), **public_status(workflow, canonical=None),
+                "ready": False, "order_status_completed": False,
+                "order_completion_status": "pending", "label_status": "pending",
+                "label_url": None, "print_data": None}
     if operation.get("version") == 2 and operation.get("state") == "requires_attention":
         from assembly_completion_v2_readback import read_blocked_completion
         recovered = await read_blocked_completion(db, user_id, order_number, authorize_repair=authorize_repair)

@@ -1,17 +1,15 @@
-# Completed shipment print incident — BLOCKED, no deployment
+# Completed shipment print recovery — verified source candidate
 
-Base Production: e015b913ce950d6e5cf52cc0f1893da94b7b30b4 (fresh fetch).
-Owner authorized urgent Backend fix and deployment with rollback.
+Production base: e015b913ce950d6e5cf52cc0f1893da94b7b30b4.
+Owner authorizes urgent Backend deployment with rollback. Revised acceptance: current local products ready and fresh Salla completed; delivery-outbox history is not a print prerequisite.
 
-Live browser evidence: selected affected order has two of two pieces ready, order details completed, but assembly completion response displays evidence_changed and pending completion/label. No order/customer identifiers retained here.
+Implementation: assembly_print_completion reads current physical/virtual units and exact source-item coverage in a Mongo snapshot, checks fresh Salla identity/status/shipment with GET only, then independently rereads the local evidence before returning the existing saved label. Missing, held, cancelled, archived or duplicate units fail closed. Harmless workflow revision/outbox progress changes do not block. Completion GET, legacy issue and legacy assembly-search inline labels use the read-only recovery. Permissions are rechecked after provider IO. No Ready, stock, financial, provider POST or new-shipment writes are introduced. Queue custody/reprint restrictions remain unchanged.
 
-Code findings:
-- Blocked v2 readback excludes assembly_completion_evidence_changed and requires original workflow/source hashes.
-- Legacy completed queue has independent ownership, confirmation and handoff filters; does not depend on completion outbox.
-- Legacy issue endpoint resumes delivery; changing GET readback alone cannot fix all old clients.
+Fresh local validation on an isolated MongoDB 8 replica set:
+- New print and actual route suites: 18 passed, 8 subtests passed, 20.75 seconds.
+- Delivery, status transition, v2/legacy readback, legacy print, G47 and saved-label suites: 364 passed, 100 subtests passed, 250.09 seconds.
+- Independent final code review: no remaining blocker under revised owner policy. Reviewer did not rerun tests.
 
-Rejected experiment: bypass historical workflow hash for this error, retain source hash, count current physical/virtual ready pieces, optional decision coverage. Real local replica set tests passed 29 tests / 64 subtests in 33.70 seconds, but independent review found incomplete approval/coverage proof. Removed entire experiment from source. Local patch retained outside repo marked UNSAFE-EXPERIMENT-NOT-FOR-RELEASE. Passing tests are not acceptance.
+The earlier fingerprint-bypass experiment was rejected and removed; it is not this candidate. Preview database had no target order, so it is not Production diagnosis. Live UI established local-ready/completed versus pending-label mismatch, not database repair proof. No emulator print or latency improvement has yet been demonstrated.
 
-Remote diagnostic: read-only Release Guard status returned active:false. Targeted read in preview backend database returned zero matches, so this is not evidence about Production order fields. No production data writes, provider POST, release intent, merge or deployment performed.
-
-Next safe action: obtain scoped read-only Production diagnostic of which stored source/workflow fingerprint changed, current source-to-piece coverage and queue exclusion facts. Build a minimal proven repair, test new and old API entry points plus replica-set races, then complete CI/release guard and live print verification. Do not deploy the rejected experiment or remove material/stock/custody protections.
+Production changed: no. No merge, intent or deployment yet. Next: commit/push this source, open Draft PR, pass final CI, freeze intent-only B, rehearse and prepare rollback, then follow Release Guard prepare/prepublish and exact live verification. Existing unrelated Android/settings/custody work is excluded.
