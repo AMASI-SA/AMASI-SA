@@ -8,6 +8,9 @@ on:
       - "backend/review_local_policy.py"
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_completion_delivery.py"
+      - "backend/assembly_legacy_recovery.py"
+      - "backend/tests/test_assembly_legacy_recovery_contract.py"
+      - "backend/tests/test_legacy_recovery_authorization.py"
       - "backend/assembly_completion_legacy_readback.py"
       - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
@@ -97,6 +100,8 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
+          tests/test_assembly_legacy_recovery_contract.py
+          tests/test_legacy_recovery_authorization.py
           tests/test_assembly_completion_legacy_readback.py
           tests/test_assembly_completion_v2_readback.py
           tests/test_assembly_completion_status_transition.py

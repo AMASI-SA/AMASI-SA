@@ -1854,6 +1854,7 @@ async def issue_shipping_label(
     order_number: str,
     *,
     force_store_courier: bool = False,
+    authorize_recovery=None,
 ) -> dict[str, Any]:
     normalized = _text(order_number)
     if not normalized:
@@ -1872,4 +1873,5 @@ async def issue_shipping_label(
         # a legacy print attempt. No provider POST is part of this operation.
         await _best_effort_resync(db, user_id, normalized)
     from assembly_completion_delivery import resume
-    return await resume(db, user_id=user_id, order_number=normalized, manual=True)
+    return await resume(db, user_id=user_id, order_number=normalized, manual=True,
+                        authorize=authorize_recovery)

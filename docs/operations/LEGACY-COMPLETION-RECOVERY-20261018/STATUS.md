@@ -15,6 +15,12 @@ Baseline: 17 delivery/readback-route tests passed in 90.84 seconds. Two new
 regressions failed on the base in 18.06 seconds. Missing-operation display
 regression passed after the first slice (13.46 seconds); explicit recovery
 regression passed after the second slice. Broader current-source tests pending.
+First candidate suite: 50 tests and 27 subtests passed in 135.06 seconds.
+After review, 13 focused tests passed in 63.39 seconds. Review caught and fixed
+provider-ID drift during GET, hidden failure reasons, and stale native actor
+authority. Fresh permission callbacks now propagate through old issue adapters.
+The latest broader run includes old printing/fulfillment contracts and remains
+pending at this checkpoint; do not reuse earlier passing results for new code.
 Initial baseline attempt could not connect because local Mongo was stopped;
 it was interrupted, then the isolated localhost replica set restarted.
 

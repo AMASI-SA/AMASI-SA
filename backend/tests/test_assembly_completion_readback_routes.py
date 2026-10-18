@@ -50,6 +50,18 @@ class CompletionReadbackRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.provider.await_count, 1)
         self.assertEqual(await self.snapshot(), before)
 
+    async def test_legacy_in_progress_returns_actionable_recovery_without_get_writes(self):
+        await self.db.order_review_workflows.update_one({}, {"$unset": {"assembly_delivery": ""}})
+        self.order["status"] = {"slug": "in_progress"}
+        before = await self.snapshot()
+        result = await self.get()
+        self.assertEqual(result.status_code, 200, result.text)
+        self.assertFalse(result.json()["ready"])
+        self.assertTrue(result.json()["requires_attention"])
+        self.assertEqual(result.json()["completion_state"], "recovery_required")
+        self.assertEqual(self.provider.await_count, 1)
+        self.assertEqual(await self.snapshot(), before)
+
     async def test_v2_alias_repair_denied_after_permission_revocation_keeps_source_unchanged(self):
         await self.db.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.status_slug": "in_progress"}})
         before = await self.snapshot()

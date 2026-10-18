@@ -508,6 +508,13 @@ def make_order_engine_router(
         user: dict = Depends(current_user),
     ) -> dict[str, Any]:
         owner = _require_owner(user)
+        async def authorize_recovery(scoped):
+            from fulfillment_carrier_label import fresh_recovery_principal
+            fresh = await fresh_recovery_principal(
+                scoped, user, path=f"/api/orders-v2/{order_number}/shipping-label")
+            current_owner = _require_owner(fresh)
+            if str(current_owner.get("id")) != str(owner["id"]):
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
             workflow = await db.order_review_workflows.find_one({
                 "user_id": str(owner["id"]), "order_number": str(order_number),
@@ -516,11 +523,13 @@ def make_order_engine_router(
             if workflow:
                 from assembly_completion_delivery import resume
                 return await resume(db, user_id=str(owner["id"]), order_number=str(order_number),
-                                    actor_id=str(owner["id"]), actor_name=str(owner.get("name") or ""), manual=True)
+                                    actor_id=str(owner["id"]), actor_name=str(owner.get("name") or ""), manual=True,
+                                    authorize=authorize_recovery)
             return await issue_shipping_label(
                 db,
                 str(owner["id"]),
                 str(order_number),
+                authorize_recovery=authorize_recovery,
             )
         except ShippingLabelError as exc:
             raise HTTPException(

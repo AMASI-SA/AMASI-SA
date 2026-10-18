@@ -3945,7 +3945,10 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
         _require_permission(context, "fulfillment.labels.print", responsibility="shipping_labeling")
         from assembly_completion_delivery import resume
         async def authorize_recovery(scoped):
-            fresh = await _actor_context(scoped, user)
+            from fulfillment_carrier_label import fresh_recovery_principal
+            principal = await fresh_recovery_principal(
+                scoped, user, path=f"/api/preparation-work-v1/assembly/orders/{order_number}/completion/resume")
+            fresh = await _actor_context(scoped, principal)
             _require_permission(fresh, "fulfillment.labels.print", responsibility="shipping_labeling")
             if fresh["merchant_id"] != context["merchant_id"]:
                 raise HTTPException(403, detail={"code": "completion_owner_changed"})

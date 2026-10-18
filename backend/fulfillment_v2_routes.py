@@ -2286,8 +2286,20 @@ def make_fulfillment_v2_router(
                 result = await reader(db, context["merchant_id"], _text(order_number))
                 return {**result, "assembly_completion_confirmed": True}
             from assembly_completion_delivery import resume
+            async def authorize_recovery(scoped):
+                from fulfillment_carrier_label import fresh_recovery_principal
+                fresh = await fresh_recovery_principal(
+                    scoped, user, path=f"/api/fulfillment-v2/completed/{order_number}/carrier-label")
+                current = await _actor_context(scoped, fresh)
+                _require_permission(current, "fulfillment.labels.print")
+                if not _can_operate_completed_carrier_label(current):
+                    raise HTTPException(403, detail={"code": "fulfillment_responsibility_required",
+                                                     "responsibility": "shipping_labeling"})
+                if current["merchant_id"] != context["merchant_id"]:
+                    raise HTTPException(403, detail={"code": "completion_owner_changed"})
             return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
-                                actor_id=context["actor_id"], actor_name=actor_name, manual=True)
+                                actor_id=context["actor_id"], actor_name=actor_name, manual=True,
+                                authorize=authorize_recovery)
         except ShippingLabelError as exc:
             raise HTTPException(
                 status_code=exc.status_code,

@@ -144,23 +144,29 @@ def public_status(workflow, *, canonical=None):
                               or operation.get("version") == 1))
     confirmed = operation.get("order_confirmed") is True and canonical in {"in_progress", "completed"}
     available = confirmed and operation.get("state") == "confirmed" and workflow.get("carrier_label_ready") is True
+    error_code = operation.get("error_code") or ("completion_legacy_recovery_required" if recovery_required else None)
+    attention = recovery_required or operation.get("state") == "requires_attention"
     return {"order_number": workflow.get("order_number"),
             "assembly_completion_confirmed": workflow.get("assembly_status") == "completed",
             "order_completion_status": "confirmed" if confirmed else "pending",
             "label_status": "available" if available else "pending",
             "completion_state": "recovery_required" if recovery_required else operation.get("state", "not_started"),
-            "requires_attention": recovery_required or operation.get("state") == "requires_attention",
-            "error_code": "completion_legacy_recovery_required" if recovery_required else operation.get("error_code"),
-            "error_message": ("جاهزية القطع محفوظة من المسار السابق؛ يلزم استكمال حالة الطلب دون إعادة جاهز."
-                              if recovery_required else {
+            "requires_attention": attention,
+            "error_code": error_code,
+            "error_message": ({
+                "completion_legacy_recovery_required": "جاهزية القطع محفوظة من المسار السابق؛ يلزم استكمال حالة الطلب دون إعادة جاهز.",
+                "completion_recovery_evidence_missing": "أدلة التجهيز القديمة غير مكتملة؛ يلزم التحقق قبل الاستكمال.",
+                "component_execution_blocked": "بيانات المكونات الحالية لا تسمح بالاستكمال؛ يلزم التحقق.",
+                "component_ready_state_requires_reconciliation": "تعذر مطابقة المكونات المستهلكة مع القطع الجاهزة.",
+                "salla_order_reference_mismatch": "تغير معرّف الطلب في سلة؛ أوقف الاستكمال للتحقق.",
                 "assembly_order_not_ready": "حالة الطلب في سلة لا تسمح بالاستكمال.",
                 "assembly_canonical_status_blocked": "تغيرت حالة الطلب؛ الاستكمال متوقف.",
                 "assembly_completion_evidence_changed": "تغيرت بيانات التجهيز؛ يلزم التحقق.",
                 "completion_label_pending": "لم تصبح البوليصة الحالية متاحة بعد.",
                 "completion_status_unconfirmed": "العملية السابقة غير مؤكدة؛ تحقق من سلة.",
                 "TimeoutError": "تعذر تأكيد استجابة سلة خلال المهلة.",
-            }.get(operation.get("error_code"), "تعذر تأكيد الاستكمال؛ أعد التحقق من الطلب والشحنة.")
-                if operation.get("state") == "requires_attention" else None),
+            }.get(error_code, "تعذر تأكيد الاستكمال؛ أعد التحقق من الطلب والشحنة.")
+                if attention else None),
             "ready": available, "order_status_completed": confirmed}
 
 
@@ -220,7 +226,11 @@ async def _promote_legacy(db, operation, provider_order, *, authorize=None):
         from assembly_legacy_recovery import validate_recovery
         source = await validate_recovery(scoped, owner, number, workflow)
         from assembly_completion_legacy_readback import _assert_provider_material
-        _assert_provider_material(provider_order, (source.get("raw_by_source") or {}).get("salla_direct") or {})
+        raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+        if (str(provider_order.get("id")) != str(raw.get("id"))
+                or str(provider_order.get("reference_id")) != number):
+            raise shipping.ShippingLabelError("salla_order_reference_mismatch", "تغير معرّف الطلب في سلة؛ أوقف الاستكمال للتحقق.")
+        _assert_provider_material(provider_order, raw)
         upgraded = {**previous, "version": 2, "legacy_readback_only": False,
                     "state": "pending", "attempts": 1,
                     "legacy_recovery": {"previous_version": previous.get("version"),
@@ -330,12 +340,14 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
     result = {}
     if operation:
         try:
-            result = await asyncio.wait_for(_deliver(db, operation, allow_legacy_recovery=manual,
+            result = await asyncio.wait_for(_deliver(db, operation, allow_legacy_recovery=manual and authorize is not None,
                                                      authorize=authorize), TIMEOUT_SECONDS)
         except Exception as exc:
             # No provider messages, identifiers or customer data in diagnostics.
             code = getattr(exc, "code", type(exc).__name__)
             status = getattr(exc, "status_code", 0) or 0
+            if status in {401, 403}:
+                code = "completion_authorization_revoked"
             retryable = (code in {"completion_readback_pending", "completion_source_refresh_pending"}
                          or isinstance(exc, (TimeoutError, ConnectionError, httpx.TransportError))
                          or status in {408, 429} or status >= 500)
@@ -350,6 +362,8 @@ async def resume(db, *, user_id, order_number, actor_id="", actor_name="", manua
                           f"{FIELD}.order_confirmed": False,
                           "salla_order_status": "unknown", "salla_order_status_verified_at": None,
                           "carrier_label_ready": False}})
+            if status in {401, 403}:
+                raise
     workflow = await shipping_workflow(db, user_id, order_number)
     return {"ok": True, **label_fields(workflow), **result, **public_status(workflow, canonical=await source_status(db, user_id, order_number))}
 

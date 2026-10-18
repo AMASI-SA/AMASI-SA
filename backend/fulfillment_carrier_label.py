@@ -100,6 +100,22 @@ def _workflow_patch(result: dict[str, Any], *, now: str) -> dict[str, Any]:
     }
 
 
+async def fresh_recovery_principal(db, user, *, path):
+    """Replay existing authentication/route grants using the real native actor."""
+    from auth import account_is_disabled
+    from fastapi import HTTPException
+    from mobile_app_request_context import mobile_app_request_user
+    actor_id = str(user.get("_mobile_actor_id") or user.get("id") or "")
+    actor = await db.users.find_one({"id": actor_id}, {"_id": 0})
+    if not actor or account_is_disabled(actor):
+        raise HTTPException(403, detail={"code": "completion_actor_unavailable"})
+    actor = {**actor, "_session_client": user.get("_session_client")}
+    principal = await mobile_app_request_user(db, actor, path=path, method="POST")
+    if account_is_disabled(principal):
+        raise HTTPException(403, detail={"code": "completion_actor_unavailable"})
+    return principal
+
+
 async def sync_completed_carrier_label(
     db: Any,
     *,
@@ -108,6 +124,7 @@ async def sync_completed_carrier_label(
     actor_id: str,
     actor_name: str,
     action: Literal["issue", "refresh"] = "issue",
+    authorize_recovery=None,
 ) -> dict[str, Any]:
     """Update Salla to completed, then obtain the official carrier label.
 
@@ -133,11 +150,12 @@ async def sync_completed_carrier_label(
                 user_id,
                 normalized,
                 force_store_courier=True,
+                authorize_recovery=authorize_recovery if action == "issue" else None,
             )
         elif action == "refresh":
             result = await refresh_shipping_label(db, user_id, normalized)
         else:
-            result = await issue_shipping_label(db, user_id, normalized)
+            result = await issue_shipping_label(db, user_id, normalized, authorize_recovery=authorize_recovery)
     except ShippingLabelError as exc:
         await db[WORKFLOWS].update_one(
             {"user_id": user_id, "order_number": normalized},
