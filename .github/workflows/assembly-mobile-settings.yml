@@ -24,7 +24,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install pytest pytest-asyncio fastapi httpx motor PyJWT bcrypt cryptography python-dotenv
+      - run: >-
+          python -m pip install pytest pytest-asyncio fastapi httpx motor PyJWT bcrypt cryptography python-dotenv
+          openpyxl requests reportlab pillow PyMuPDF qrcode arabic-reshaper python-bidi python-multipart tzdata
       - name: Verify tenant and current manager authority
         env:
           MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27017

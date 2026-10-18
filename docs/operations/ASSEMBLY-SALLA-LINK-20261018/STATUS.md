@@ -47,3 +47,13 @@ adding no migration or alternate settings collection.
 New Assembly Mobile Settings workflow runs focused auth/settings tests against
 an isolated MongoDB service. Remote CI is pending Draft PR creation.
 Next: independent review, exact-HEAD CI, coordinate Android callers. No release authorized here.
+
+## CI setup correction
+
+PR #1435 run 39140541760 failed before collection because shared test conftest
+imports openpyxl. Added the native adapter's actual transitive import dependencies
+to the focused workflow. A newly created local venv using exactly that install
+list passed all 15 workflow tests in 7.42 seconds against isolated MongoDB.
+Explicit tzdata also makes the clean Windows environment match Linux's system
+timezone availability. No tests, permission guards, or assertions were weakened.
+New exact-HEAD GitHub verification remains required.
