@@ -43,7 +43,11 @@
     "actual_source": "f19c173806449c6ff06f3d22aeb2a73d0d717214",
     "actual_tree": "61f6f5eddf8ddb82569c2dd2f6643915d5ede567",
     "candidate_ci": 39122919091,
-    "state": "candidate running; no rollback activated"
+    "state": "reviewed B CI in progress; no rollback activated",
+    "actual_reviewed_head": "fb3bc29ae90d0674fd070e01bed014da38dbe902",
+    "actual_reviewed_tree": "a592e2de12d7adf155af3752a4af36791f6e2bdf",
+    "candidate_ci_result": "SUCCESS",
+    "reviewed_ci": 39123125925
   },
   "blocker": "Emergent Preview slept. Resume Preview restored IDE briefly; fresh guardinactive and HEADf7 observed. Then terminal stopped responding, new terminal3 neverstarted; ReconnectNow remainsDisconnected. ff-only command sent but no result; must reread actual/appHEAD before any action."
 }
