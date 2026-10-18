@@ -106,6 +106,8 @@ jobs:
             if docker exec c2-mongo mongosh --port 27018 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'; then break; fi
             sleep 1
           done
+      - name: Courier print latency and exact identity regressions
+        run: python -m pytest --noconftest --asyncio-mode=auto -q -ra backend/tests/test_shipping_refresh_latency.py
       - name: Shipping, replacement, concurrency and transaction regression
         if: needs.scope.outputs.bootstrap_present == 'true'
         run: >-
