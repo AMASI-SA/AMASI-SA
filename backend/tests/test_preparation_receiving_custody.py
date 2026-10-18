@@ -310,3 +310,46 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["total_pieces"], 80)
         self.assertEqual(sum(g["piece_count"] for g in result["groups"]), 80)
         self.assertEqual(self.source_reads.finds, 1)
+
+    async def test_rejection_names_salla_status_for_search_and_local_receipt_without_writes(self):
+        piece_id = "b" * 32
+        number = "synthetic-status-explanation"
+        await self.seed_piece(piece_id, order_number=number)
+        await self.db[operations.WORKFLOWS].insert_one({"user_id": "merchant-a", "order_number": number,
+            "stage": "in_progress", "completion_mode": operations.LOCAL_COMPLETION_MODE})
+        # The existing route initializes the event collection/index on first
+        # use. Compare business records against an already initialized ledger.
+        await self.db.create_collection(operations.PIECE_EVENTS)
+        for status, label in (("delivering", "جاري التوصيل"), ("shipped", "تم الشحن"),
+                              ("completed", "تم التنفيذ"), ("cancelled", "ملغى")):
+            with self.subTest(status=status):
+                await self.source_status(number, status)
+                before = await self.snapshot()
+                for query in (number, "MEZAN-PIECE:" + piece_id):
+                    response = await self.client.get("/api/preparation-work-v1/receiving/search", params={"q": query})
+                    self.assertEqual(response.status_code, 409, response.text)
+                    detail = response.json()["detail"]
+                    self.assertEqual(detail["order_status"], status)
+                    self.assertEqual(detail["order_status_label"], label)
+                    self.assertIn(label, detail["message"])
+                    self.assertIn("غير مؤهل للاستلام أو التجهيز", detail["message"])
+                response = await self.client.post(f"/api/preparation-work-v1/receiving/pieces/{piece_id}/receive",
+                                                 json={"client_request_id": "synthetic-blocked-receipt"})
+                self.assertEqual(response.status_code, 409, response.text)
+                detail = response.json()["detail"]
+                self.assertEqual(detail["code"], "local_review_receipt_not_eligible")
+                self.assertEqual(detail["order_status_label"], label)
+                self.assertEqual(await self.snapshot(), before)
+
+    async def test_unknown_status_explanation_does_not_invent_a_delivery_state(self):
+        from preparation_receipt_status_message import receipt_status_rejection
+        await self.seed_piece("explanation", order_number="synthetic-uncertain")
+        await self.db.unified_orders.update_one({"user_id": "merchant-a", "order_number": "synthetic-uncertain"},
+            {"$set": {"order_status": "delivered"}})
+        before = await self.snapshot()
+        detail = await receipt_status_rejection(self.db, user_id="merchant-a", order_number="synthetic-uncertain",
+                                                code="local_review_receipt_not_eligible")
+        self.assertIsNone(detail["order_status"])
+        self.assertIsNone(detail["order_status_label"])
+        self.assertIn("تعذّر التأكد", detail["message"])
+        self.assertEqual(await self.snapshot(), before)

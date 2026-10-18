@@ -27,6 +27,7 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 from assembly_status_policy import canonical_status
+from preparation_receipt_status_message import receipt_status_rejection
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -1512,10 +1513,8 @@ async def _preparation_receipt_search(
     if not pieces:
         raise HTTPException(
             status_code=409,
-            detail={
-                "code": "preparation_receipt_order_not_in_progress",
-                "message": "يظهر الطلب في الاستلام من موظف التجهيز فقط عندما تكون حالته في سلة «قيد التنفيذ». حدّث بيانات الطلب ثم أعد المحاولة.",
-            },
+            detail=await receipt_status_rejection(db, user_id=user_id, order_number=order_number,
+                code="preparation_receipt_order_not_in_progress"),
         )
 
     rows = [
@@ -1783,7 +1782,8 @@ async def _receive_preparation_piece(
         current = await _current_assembly_order(scoped, user_id=user_id, order_number=number)
         if not local_review_stage_eligible(current, approved.get(number),
                                           {"reviewed", "in_progress", "ready_to_ship", "completed"}):
-            raise HTTPException(409, detail={"code": "local_review_receipt_not_eligible"})
+            raise HTTPException(409, detail=await receipt_status_rejection(scoped, user_id=user_id,
+                order_number=number, code="local_review_receipt_not_eligible"))
         return await _receive_preparation_piece_impl(scoped, **args, update_file=False)
 
     result = await operational_owner(db, user_id, receive)

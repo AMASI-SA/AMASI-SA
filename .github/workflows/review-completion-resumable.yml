@@ -7,6 +7,7 @@ on:
       - "backend/order_review*.py"
       - "backend/review_local_policy.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
       - "backend/assembly_print_completion.py"
       - "backend/tests/test_assembly_print_completion.py"
