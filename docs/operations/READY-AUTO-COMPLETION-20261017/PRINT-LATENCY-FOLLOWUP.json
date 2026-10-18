@@ -35,7 +35,7 @@
     "runner_tests": "root independent20PASS; agent historical17PASS",
     "build": "NOT_SUBMITTED; backend pin/receipt pending"
   },
-  "next": "Check governed build exit and exact identity, prepare/prepublish/publish/verify3; thenAPK47 freshreceipt/singlebuild/link.",
+  "next": "Observe newer explicit completion; guardverify threeprobes andinactive; preserveactualrawproof; fresh47receiptandonebuild. Do not modify/app orclearlease.",
   "rollback": {
     "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
     "prospective_ci": "39120327277 PASS",
@@ -50,5 +50,18 @@
     "reviewed_ci": 39123125925
   },
   "blocker": null,
-  "deployment": "FreshIDEconnection restored. guardinactive, trackedclean, onlydeployer-agent-docs untracked. /app fastforward verified to e015b913. Governed build running /tmp/courier1432-build.log. No ownlease/publishyet."
+  "deployment": {
+    "state": "PUBLISHING_NOT_VERIFIED",
+    "build_exit": 0,
+    "build_seconds": 97.1,
+    "prepare_exit": 0,
+    "prepublish_exit": 0,
+    "actor": "codex-courier-print-latency-20261018",
+    "prepared_at": "2026-10-18T12:03:42.806106+00:00",
+    "source": "225ad9f27e75ebc9794aba53f81be9191f9eff42",
+    "deployment": "e015b913ce950d6e5cf52cc0f1893da94b7b30b4",
+    "release_id": "rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4",
+    "ui": "Re-publish changes + Yes clicked once; buttons disabled; do not repeat",
+    "raw_logs": "/tmp/courier1432-{build.log,prepare.json,prepublish.json}"
+  }
 }
