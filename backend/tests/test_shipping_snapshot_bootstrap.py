@@ -92,10 +92,6 @@ async def test_refresh_current_passes_and_archived_print_stays_409(monkeypatch, 
         after = sync(before, observation(shipment, carrier, 3))
         await db.unified_orders.replace_one({"_id": before["_id"]}, after)
     monkeypatch.setattr(labels, "_resolve_order", resolve)
-    async def read_resolved(db, owner, number, _internal_id):
-        return (await labels._resolve_order(db, owner, number))[1]
-
-    monkeypatch.setattr(labels, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(labels, "_print_shipment_rows", rows)
     monkeypatch.setattr(labels, "_best_effort_resync", resync)
     results = await asyncio.gather(*(labels.refresh_shipping_label(db, "preview", "synthetic-order") for _ in range(2)))

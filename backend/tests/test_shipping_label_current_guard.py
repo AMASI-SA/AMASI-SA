@@ -139,10 +139,6 @@ async def test_legacy_print_rejects_provider_label_after_local_identity_changes(
     async def no_resync(*_args):
         return None
 
-    async def read_resolved(*_args):
-        return (await resolve())[1]
-
-    monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_print_shipment_rows", rows)
@@ -208,10 +204,6 @@ async def test_legacy_issue_reads_existing_label_without_unconditional_post(db, 
     async def no_resync(*_args):
         return None
 
-    async def read_resolved(*_args):
-        return (await resolve())[1]
-
-    monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "call_salla", post)
@@ -384,10 +376,6 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
     async def no_resync(*_args):
         return None
 
-    async def read_resolved(*_args):
-        return (await resolve())[1]
-
-    monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(shipping, "_resolve_order", resolve)
     monkeypatch.setattr(shipping, "_shipment_rows", rows)
     monkeypatch.setattr(shipping, "_print_shipment_rows", rows)

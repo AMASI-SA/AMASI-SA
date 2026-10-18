@@ -368,10 +368,6 @@ async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy
         return None
 
     monkeypatch.setattr(shipping, "_resolve_order", resolve_order)
-    async def read_resolved(db, owner, number, _internal_id):
-        return (await shipping._resolve_order(db, owner, number))[1]
-
-    monkeypatch.setattr(shipping, "_read_resolved_order", read_resolved)
     monkeypatch.setattr(shipping, "_ensure_order_completed", ensure_completed)
     monkeypatch.setattr(shipping, "_shipment_rows", shipment_rows)
     monkeypatch.setattr(shipping, "_store_identity", store_identity)
