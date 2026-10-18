@@ -117,7 +117,15 @@ removal, reopening without receipt rewrites, Arabic status aliases, missing and
 contradictory status, explicit freshness invalidation, tenant isolation,
 order/barcode search, and 120 pieces across six orders using one source read.
 Database snapshots verify read requests do not modify stored business data.
-Remote CI for this extension is pending the new source checkpoint.
+Source checkpoint `52861427ab234c721f786dd51f8cb607e30c8c58` is pushed and
+remote-readback verified. All **22 applicable PR checks passed**, including
+CodeQL. Four nonapplicable checks are skipped (manual redeploy, release-intent
+adapter rehearsal and two Snapchat-only jobs); they are not deployment proof.
+Review Completion Resumable run `39140142788` passed **447 tests and 275
+subtests in 192.68s**, plus **1 acceptance guard test in 1.34s**, with zero
+skipped/failure/error cases in both JUnit gates. Artifact `12141392275` retains
+the executed evidence for that exact source. The following documentation-only
+checkpoint does not change runtime code or tests.
 
 ## Release and remaining work
 
@@ -135,6 +143,6 @@ The current release owner coordinates mobile PR279 and the single next APK;
 this task must not start a competing APK build. The hidden-option diagnostic
 task remains separate. This is a backend read fix; it does not require
 replacing the Android APK. Post-deployment readback with a real receiving
-employee remains outstanding. The earlier disposable Mongo was stopped safely;
-the isolated loopback replica was restarted for the status-filter tests and
-must be stopped again after verification.
+employee remains outstanding. The disposable loopback Mongo was stopped
+gracefully after the status-filter tests, verifying its executable, start time
+and replica identity before shutdown and confirming its process exited.
