@@ -1,5 +1,28 @@
 # Preparation receiving custody actor and current Salla status
 
+## 2026-10-19 owner follow-up: explain ineligible receipt status
+
+Added a read-only, tenant-scoped status explanation for both receiving search
+and the existing `local_review_receipt_not_eligible` rejection. Known Salla
+states now name the reason, e.g. `جاري التوصيل` and `غير مؤهل للاستلام أو
+التجهيز`. Missing/contradictory/stale source status does not invent a state.
+The structured `order_status` and `order_status_label` support the Android
+companion change; existing clients already render the server Arabic message.
+The eligibility policy, receipt mutation, idempotency and financial flow are
+unchanged. No live order was received during verification.
+
+Fresh root verification: **72 passed and 22 subtests passed in 16.64s**, exit 0,
+using the same focused-suite command below. Search/order barcode and local
+receipt POST reject completed, shipped, delivering and cancelled synthetic
+orders with their actual status, retaining all business records. The fixture
+initializes the existing event ledger before snapshot comparison because the
+unchanged router creates its empty collection/index on first use.
+
+This follow-up supersedes the earlier 70-test source checkpoint only for the
+new message helper and callers/tests. It still has no Production change and
+requires review/CI before integration. The companion Android message mapping
+is on `codex/global-order-tracking-20261018`; no APK has been built here.
+
 ## Scope and status
 
 Task branch: `codex/preparation-custody-actor-20261018`.
