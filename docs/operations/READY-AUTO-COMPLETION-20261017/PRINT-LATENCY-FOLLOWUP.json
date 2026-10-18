@@ -33,11 +33,16 @@
     "runner_branch": "codex/apk47-runner-review-20261018",
     "runner_head": "5d4fef110a71998d912212aef12e747f3b905817",
     "runner_tests": "root independent20PASS; agent historical17PASS",
-    "build": "NOT_SUBMITTED; preflight running; inventory showslatest46 only",
+    "build": {
+      "state": "ACKNOWLEDGED",
+      "id": "8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
+      "url": "https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
+      "submission_count": 1
+    },
     "receipt_id": "d6ed4e4b-cd9a-4260-9ecf-b3a451d0dc33",
     "receipt_sha256": "d39c0c879d9fe98e0559a6ba6d0c0610cabafbf2a75da1c4fe642b62a3b8670e"
   },
-  "next": "Finish47 preflight; submit once with exclusivejournal; reconcileonly ifambiguous; officialAPKdownload/signatureinspection thenuserlink. NoOTA/deviceinstall requested.",
+  "next": "Read existing acknowledged build only; no repeatedsubmission. OnceFINISHED validateofficialAPK, downloadandinspectsignature, thenuserlink. Physicalprintacceptanceremainsunverified.",
   "rollback": {
     "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
     "prospective_ci": "39120327277 PASS",
