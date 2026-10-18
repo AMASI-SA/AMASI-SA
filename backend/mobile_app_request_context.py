@@ -40,6 +40,7 @@ def _path_matches_prefix(path: str, prefix: str) -> bool:
 
 # Longest/specific prefixes must appear before their broader parent prefixes.
 MOBILE_ROUTE_PERMISSIONS: tuple[tuple[str, frozenset[str]], ...] = (
+    ("/api/mobile/order-tracking", _permissions("app.action.orders.track")),
     ("/api/mobile/operations-monitoring", _permissions("app.page.operations_monitoring")),
     ("/api/order-reviews-v1/reviewed", _permissions("app.page.reviewed_preparation")),
     ("/api/order-reviews-v1", _permissions("app.page.pending_review", "app.page.reviewed_preparation")),
