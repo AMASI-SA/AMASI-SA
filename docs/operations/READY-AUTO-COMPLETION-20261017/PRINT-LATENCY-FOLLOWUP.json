@@ -34,15 +34,20 @@
     "runner_head": "5d4fef110a71998d912212aef12e747f3b905817",
     "runner_tests": "root independent20PASS; agent historical17PASS",
     "build": {
-      "state": "IN_PROGRESS",
+      "state": "FINISHED",
       "id": "8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
       "url": "https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
-      "submission_count": 1
+      "submission_count": 1,
+      "completed_at": "2026-10-18T12:35:42.231Z",
+      "official_apk_url": "https://expo.dev/artifacts/eas/9NCBUZnxArapB6wuBgaKZRqQebQ8-QoZ9mg3XbbX25E.apk",
+      "expected_bytes": 114886451,
+      "readback_sha256": "b30c16be0ca857569dc88122d453ec36971b52d50a2cf0787b31018d1c346502",
+      "artifact_verification": "PENDING_DOWNLOAD_AND_OFFLINE_INSPECTION"
     },
     "receipt_id": "d6ed4e4b-cd9a-4260-9ecf-b3a451d0dc33",
     "receipt_sha256": "d39c0c879d9fe98e0559a6ba6d0c0610cabafbf2a75da1c4fe642b62a3b8670e"
   },
-  "next": "Read existing acknowledged build only; no repeatedsubmission. OnceFINISHED validateofficialAPK, downloadandinspectsignature, thenuserlink. Physicalprintacceptanceremainsunverified.",
+  "next": "Download exactly acknowledged47artifact via reviewedhelper expectedbytes114886451, inspect exactsigner/runtime/nativeABI/source; afterPASS sendofficialAPKlink. Do notinstallonemulator(ownedbyseparatereviewtest), noOTA.",
   "rollback": {
     "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
     "prospective_ci": "39120327277 PASS",
