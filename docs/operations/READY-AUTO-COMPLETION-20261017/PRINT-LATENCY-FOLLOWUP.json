@@ -19,7 +19,7 @@
     "merge_tree": "df6c477f227724da0d0ba8f962ebbf2e74531d89",
     "independent_final": "26passed7.32s with --asyncio-mode=auto; initial invocation lacked required asyncio mode and errored before test execution"
   },
-  "production": "GitHub branch advanced to e015b913; live health still verified source8d731/runtimea96. No1432prepare,lease,publish.",
+  "production": "LIVE VERIFIED source225ad9f27e75ebc9794aba53f81be9191f9eff42 / deployment e015b913ce950d6e5cf52cc0f1893da94b7b30b4 / runtime rg5-88dc2717c81233cb4d8721949490bd233d2c098c31eefa42bf1b534b0603d5f4; checks3 andleaseinactive",
   "evidence": "logo held download fallback1501ms;reprint1downloadfor2renders;combined syntheticcourier8to5GET;reported minute not measured ondevice",
   "device_acceptance": "not performed",
   "review_changes": false,
@@ -34,7 +34,7 @@
     "runner_head": "5d4fef110a71998d912212aef12e747f3b905817",
     "runner_tests": "root independent20PASS; agent historical17PASS",
     "build": {
-      "state": "ACKNOWLEDGED",
+      "state": "IN_PROGRESS",
       "id": "8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
       "url": "https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/8bfd5d9e-6354-4ac9-8235-41b1b6e60433",
       "submission_count": 1
@@ -75,5 +75,12 @@
     "lease_active": false,
     "ui_finished": "2026-10-18 15:13 Asia/Riyadh",
     "verify_raw_sha256": "c026255a265115608973537d36ca5d55084ca26fa2a67c40efbccc59565cac80"
-  }
+  },
+  "limits": [
+    "Synthetic latency measurements do not prove the reported device minute eliminated.",
+    "Physical printer not tested.",
+    "Final Salla GET cannot atomically prevent later provider changes.",
+    "APK47 source verified, actual artifact signature/download pending.",
+    "Reviewed hidden-option investigation is separate and excluded."
+  ]
 }
