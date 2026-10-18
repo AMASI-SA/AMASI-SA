@@ -3849,12 +3849,31 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             responsibility="instant_ready",
         )
         await ensure_piece_operation_indexes(db)
-        return await _assembly_search(
+        result = await _assembly_search(
             db,
             user_id=context["merchant_id"],
             query=q,
             actor_id=effective_operation_actor(user, context)["id"],
         )
+        # Older clients use this inline label instead of the completion endpoint.
+        # Recover only a blocked projection; no provider IO for ordinary search.
+        if (result.get("summary", {}).get("all_ready")
+                and not result.get("carrier_label", {}).get("ready")
+                and result.get("order_status") == "completed"):
+            from assembly_print_completion import read_print_completion
+            try:
+                proof = await read_print_completion(db, context["merchant_id"], result["order_number"])
+            except ShippingLabelError:
+                proof = None  # Keep search usable; explicit refresh reports the failure.
+            if proof:
+                result["carrier_label"].update(proof)
+                result.update({key: proof[key] for key in (
+                    "assembly_completion_confirmed", "order_completion_status", "label_status")})
+            current_context = await _actor_context(db, user)
+            _require_permission(current_context, "fulfillment.ready.read", responsibility="instant_ready")
+            if current_context["merchant_id"] != context["merchant_id"]:
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
+        return result
 
     @router.get("/assembly/orders")
     async def list_assembly_orders(

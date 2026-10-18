@@ -8,6 +8,8 @@ on:
       - "backend/review_local_policy.py"
       - "backend/preparation_piece_operations.py"
       - "backend/assembly_completion_delivery.py"
+      - "backend/assembly_print_completion.py"
+      - "backend/tests/test_assembly_print_completion.py"
       - "backend/assembly_completion_legacy_readback.py"
       - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
@@ -97,6 +99,7 @@ jobs:
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
+          tests/test_assembly_print_completion.py
           tests/test_assembly_completion_legacy_readback.py
           tests/test_assembly_completion_v2_readback.py
           tests/test_assembly_completion_status_transition.py
@@ -151,6 +154,7 @@ jobs:
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
                   for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
+                                         ("test_assembly_print_completion.PrintCompletionTests", 15),
                                          ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 28),
                                          ("test_assembly_completion_v2_readback.BlockedCompletionTests", 24),
                                          ("test_assembly_completion_status_transition.StatusTransitionTests", 9),

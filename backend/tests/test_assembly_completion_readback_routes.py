@@ -17,6 +17,13 @@ class CompletionReadbackRouteTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixture.BlockedCompletionTests.asyncSetUp(self)
+        # The print policy proves actual product units, not stored counters.
+        self.order["items"] = [{"id": "line", "quantity": 2}]
+        await self.db.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.items": self.order["items"]}})
+        await self.db.mezan_preparation_pieces_v1.insert_many([
+            {"user_id": "owner", "order_number": "synthetic-1", "piece_id": str(i),
+             "order_item_id": "line", "unit_index": i + 1, "assembly_status": "ready"} for i in range(2)])
+        await self.reseal()
         self.context = {"merchant_id": "owner", "actor_id": "employee", "is_owner": False,
                         "permissions": {"fulfillment.ready.read"}, "responsibilities": {"instant_ready"}}
         replacement = patch.object(pieces, "_actor_context", AsyncMock(side_effect=lambda *args: deepcopy(self.context)))
