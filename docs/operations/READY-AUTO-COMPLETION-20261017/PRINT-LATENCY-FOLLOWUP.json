@@ -35,7 +35,7 @@
     "runner_tests": "root independent20PASS; agent historical17PASS",
     "build": "NOT_SUBMITTED; backend pin/receipt pending"
   },
-  "next": "Restore Emergent IDE connection; freshguardstatus and actual/appHEAD; verify actualrollback readiness; fast-forward only if needed; governed build; prepare/prepublish/publish/verify3. Then freshAPK47backendproof/receipt, one build and download.",
+  "next": "Check governed build exit and exact identity, prepare/prepublish/publish/verify3; thenAPK47 freshreceipt/singlebuild/link.",
   "rollback": {
     "prospective_reviewed_head": "b51d63e30f9a0c8612a906713cf79ce6180fedbf",
     "prospective_ci": "39120327277 PASS",
@@ -43,11 +43,12 @@
     "actual_source": "f19c173806449c6ff06f3d22aeb2a73d0d717214",
     "actual_tree": "61f6f5eddf8ddb82569c2dd2f6643915d5ede567",
     "candidate_ci": 39122919091,
-    "state": "reviewed B CI in progress; no rollback activated",
+    "state": "reviewed actual B readiness39123125925 SUCCESS; not activated",
     "actual_reviewed_head": "fb3bc29ae90d0674fd070e01bed014da38dbe902",
     "actual_reviewed_tree": "a592e2de12d7adf155af3752a4af36791f6e2bdf",
     "candidate_ci_result": "SUCCESS",
     "reviewed_ci": 39123125925
   },
-  "blocker": "Emergent Preview slept. Resume Preview restored IDE briefly; fresh guardinactive and HEADf7 observed. Then terminal stopped responding, new terminal3 neverstarted; ReconnectNow remainsDisconnected. ff-only command sent but no result; must reread actual/appHEAD before any action."
+  "blocker": null,
+  "deployment": "FreshIDEconnection restored. guardinactive, trackedclean, onlydeployer-agent-docs untracked. /app fastforward verified to e015b913. Governed build running /tmp/courier1432-build.log. No ownlease/publishyet."
 }
