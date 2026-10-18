@@ -448,7 +448,11 @@ class ReviewReadbackV2Tests(unittest.IsolatedAsyncioTestCase):
                 changed = {**payload, "approval_token": candidate}
                 if candidate is None:
                     changed.pop("approval_token")
-                await self.assert_rejected(changed)
+                response = await self.assert_rejected(changed)
+                if candidate == forged:
+                    self.assertEqual(response.json()["detail"]["diagnostic_reason"], "approval_token_invalid")
+                self.assertNotIn(payload["approval_token"], response.text)
+                self.assertNotIn(forged, response.text)
         await self.assert_no_completion()
 
     async def test_expired_display_rejects_post_but_does_not_erase_historical_get(self):

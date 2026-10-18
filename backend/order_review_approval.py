@@ -15,8 +15,9 @@ DOMAIN = b"mezan.order-review.display-approval.v1\x00"
 DOMAIN_V2 = b"mezan.order-review.display-approval.v2\x00"
 
 
-def reject(code="component_source_event_stale"):
+def reject(code="component_source_event_stale", *, diagnostic_reason=None):
     raise HTTPException(409, detail={"code": code, "refresh_required": True,
+        **({"diagnostic_reason": diagnostic_reason} if diagnostic_reason else {}),
         "message": "تغيرت بيانات الاعتماد أو انتهت صلاحية عرضها. حدّث الشاشة وراجع البيانات ثم وافق مجددًا."})
 
 
@@ -80,7 +81,7 @@ def verify_token(token, *, user_id, order_number, revision, context=None):
             raise ValueError()
         return payload["fingerprint"]
     except (ValueError, KeyError, TypeError, UnicodeError):
-        reject()
+        reject(diagnostic_reason="approval_token_invalid")
 
 
 class ReadSnapshot:

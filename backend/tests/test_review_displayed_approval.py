@@ -90,7 +90,8 @@ class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):
         detail = await self.display()
         await self.db[local.fixture.PRODUCT_BINDINGS].update_one(
             {"id": "recipe-material"}, {"$set": {"quantity": 3}})
-        await self.assert_rejected_without_effects(detail)
+        response = await self.assert_rejected_without_effects(detail)
+        self.assertEqual(response.json()["detail"]["diagnostic_reason"], "approval_route_inputs_changed")
 
     async def test_missing_forged_expired_and_other_context_tokens_fail_closed(self):
         detail = await self.display()
@@ -106,7 +107,8 @@ class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):
         for name, candidate in (("forged", forged), ("expired", expired),
                                 ("merchant", other_merchant), ("order", other_order)):
             with self.subTest(case=name):
-                await self.assert_rejected_without_effects({**detail, "approval_token": candidate})
+                response = await self.assert_rejected_without_effects({**detail, "approval_token": candidate})
+                self.assertEqual(response.json()["detail"]["diagnostic_reason"], "approval_token_invalid")
         missing = {key: value for key, value in detail.items() if key != "approval_token"}
         response = await self.assert_rejected_without_effects(missing, "review_approval_required")
         transition = response.json()["detail"]
@@ -130,7 +132,8 @@ class DisplayedApprovalTests(unittest.IsolatedAsyncioTestCase):
             return await real_owner(db, user_id, callback, **kwargs)
 
         with patch.object(completion, "operational_owner", before_claim):
-            await self.assert_rejected_without_effects(detail)
+            response = await self.assert_rejected_without_effects(detail)
+        self.assertEqual(response.json()["detail"]["diagnostic_reason"], "approval_current_inputs_changed")
         self.assertTrue(injected)
 
     async def test_lost_response_retry_same_displayed_token_returns_same_operation(self):

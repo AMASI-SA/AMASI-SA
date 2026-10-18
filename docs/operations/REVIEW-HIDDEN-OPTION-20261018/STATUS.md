@@ -2,6 +2,67 @@
 
 Status: investigation incomplete; no production-code fix and no deployment.
 
+## 2026-10-18 diagnostic preparation (not a defect fix)
+
+After the emulator reproduction, source inspection and a fresh production
+fetch confirmed that the relevant approval/export-control/completion files
+are identical to the current production branch. The coordinator has no newer
+matching production conflict log. Root cause remains unproven.
+
+The candidate now adds a constant `diagnostic_reason` to the existing 409
+response at three approval rejection sites: `approval_token_invalid`,
+`approval_route_inputs_changed`, and `approval_current_inputs_changed`.
+The existing completion log preserves that field. No token, customer option,
+payload, or new customer data is returned/logged. The original error code,
+status, comparison conditions, transaction boundaries, receipt binding and
+unknown-outcome behavior are unchanged. Component-lifecycle errors retain
+their existing code and logging stage. This is diagnostic preparation only;
+it neither identifies nor fixes the live rejection.
+
+Changed source: `backend/order_review_approval.py` and
+`backend/order_review_completion.py`. Three existing test modules now assert
+the diagnostic distinction, absence of token disclosure and unchanged
+rejection effects. Android source is unchanged. The current Android UI shows
+only the main error code, so diagnostic capture requires the response body or
+server log; deploying this alone does not improve the user's approval flow.
+
+Fresh validation used synthetic UUID databases on a task-owned loopback Mongo
+replica set. The previous test port was no longer listening; that first
+attempt failed in setup and is not a product failure. With the new fixture,
+the new assertions failed specifically on missing `diagnostic_reason` before
+the source change (6 tests, 13.375s, exit 1). Afterward:
+
+- Targeted displayed-approval and log tests: 6 tests, 9.703s, exit 0.
+- Hidden-option runtime, V2 forged/expired approval, and lost-response replay:
+  5 tests, 24.305s, exit 0. Hidden values survived, duplicate replay reused the
+  same operation, and an expired attempt remained unknown rather than being
+  incorrectly classified as safe to retry.
+- `git diff --check`: exit 0.
+
+Reproduce from this checkout with `PYTHONPATH=backend;backend/tests` and an
+isolated `MZ2_TEST_MONGO_URI`. Use the existing Python runner with a synthetic
+`tests` module path (as documented below), loading these unittest targets:
+
+```
+test_review_displayed_approval.DisplayedApprovalTests.test_component_recipe_changed_since_display_rejected
+test_review_displayed_approval.DisplayedApprovalTests.test_missing_forged_expired_and_other_context_tokens_fail_closed
+test_review_displayed_approval.DisplayedApprovalTests.test_source_changes_between_route_read_and_claim_rejected
+test_review_completion_409_observability
+test_review_hidden_option_runtime
+test_review_readback_v2.ReviewReadbackV2Tests.test_missing_or_forged_approval_rejects_without_effects
+test_review_readback_v2.ReviewReadbackV2Tests.test_expired_display_never_committed_remains_unknown
+test_review_displayed_approval.DisplayedApprovalTests.test_lost_response_retry_same_displayed_token_returns_same_operation
+```
+
+No PR/merge, CI release run, lease, deployment or APK build for this candidate.
+No additional live approval attempt was made. The production project landing
+page was reachable, but browser click dispatch failed; do not infer a fresh
+log read or any server action from that navigation. The actual next step is
+to obtain the live rejection stage/response through a restored read surface
+or a separately reviewed diagnostic delivery, then add a regression test for
+the proven mechanism and implement the fix. Do not label this diagnostic
+checkpoint fixed, deploy-ready, or part of APK47.
+
 Base: `8d731ec92536e872fef830c2fcd995dde3046c82`.
 Branch: `codex/review-hidden-option-server-20261018`.
 

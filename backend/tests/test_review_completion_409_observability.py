@@ -8,6 +8,7 @@ class ReviewCompletion409ObservabilityTests(unittest.TestCase):
     def test_allowlisted_fields_only(self):
         exc = HTTPException(409, detail={
             "code": "review_completion_source_changed",
+            "diagnostic_reason": "approval_route_inputs_changed",
             "operation_id": "review_example",
             "differing_fields": ["/source/shipping/company"],
             "customer": {"mobile": "redacted"},
@@ -18,6 +19,7 @@ class ReviewCompletion409ObservabilityTests(unittest.TestCase):
         )
         self.assertEqual(detail["code"], "review_completion_source_changed")
         self.assertEqual(detail["stage"], "claim")
+        self.assertEqual(detail["diagnostic_reason"], "approval_route_inputs_changed")
         self.assertNotIn("customer", detail)
         self.assertNotIn("extra", detail)
 

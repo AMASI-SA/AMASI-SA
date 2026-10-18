@@ -124,6 +124,7 @@ def _review_409_log_detail(exc, *, stage, user_id, order_number, revision):
         "current_source_hash", "approved_source_hash", "current_canonical_hash",
         "approved_canonical_hash", "differing_fields", "classification", "category",
         "schema_version", "normalization_version", "observed_at",
+        "diagnostic_reason",
     }
     safe = {key: detail[key] for key in allowed if key in detail}
     safe["stage"] = stage
@@ -362,7 +363,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
                 source_snapshot, order, approved_acceptance, workflow,
                 approved_identities, user_id=user_id,
             ) != approved_digest:
-                reject()
+                reject(diagnostic_reason="approval_route_inputs_changed")
             current_order = await load_order(scoped)
             current_acceptance = await acceptance_snapshot(scoped, user_id=user_id, order=current_order)
             current_workflow = await scoped[WORKFLOWS].find_one(selector)
@@ -370,7 +371,7 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
             current_digest = approval_fingerprint(source, current_order, current_acceptance,
                                                  current_workflow, current_items, user_id=user_id)
             if current_digest != approved_digest:
-                reject()
+                reject(diagnostic_reason="approval_current_inputs_changed")
         elif not existing and (source.get("g47_salla_snapshot") or {}).get("revision") != (source_snapshot.get("g47_salla_snapshot") or {}).get("revision"):
             _conflict("component_source_event_stale")
         if existing and existing.get("lease_until", "") > now.isoformat():
