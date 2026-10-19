@@ -25,8 +25,11 @@ import preparation_piece_operations as operations
 class SourceReadCounter(CommandListener):
     def __init__(self):
         self.finds = 0
+        self.collections_read = set()
 
     def started(self, event):
+        if event.command_name in {"find", "aggregate", "count"}:
+            self.collections_read.add(event.command.get(event.command_name))
         if event.command_name == "find" and event.command.get("find") == "unified_orders":
             self.finds += 1
 
@@ -401,9 +404,9 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
                 await self.db[name].update_one({"user_id": "merchant-a", "order_number": number},
                     {"$set": {"state": "unavailable", "revision": 77}}, upsert=True)
             before = {name: await self.db[name].find({}).to_list(None) for name in component_names}
-            with patch.object(operations, "load_local_assignment_workflows", side_effect=AssertionError("receipt must not load review")), \
-                 patch.object(operations, "_current_assembly_order", side_effect=AssertionError("receipt must not load components")):
-                result = await self.receive(piece_id)
+            self.source_reads.collections_read.clear()
+            result = await self.receive(piece_id)
+            self.assertFalse(set(component_names) & self.source_reads.collections_read)
             self.assertFalse(result["progress"]["order_ready_for_assembly"])
             workflow = await self.db[operations.WORKFLOWS].find_one({"order_number": number})
             self.assertEqual(workflow["stage"], "in_progress")
@@ -427,6 +430,30 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
             json={"client_request_id": "receipt-race"})
         self.assertEqual(response.status_code, 409, response.text)
         row = await self.db[operations.PIECES].find_one({"piece_id": "status-race"})
+        self.assertNotEqual(row.get("preparation_receipt_status"), "received")
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+
+    async def test_provider_timeout_before_commit_rolls_back_and_is_bounded(self):
+        import asyncio
+        from time import monotonic
+        await self.seed_piece("timeout")
+        original = self.provider.side_effect
+        calls = 0
+        async def slow(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                await asyncio.sleep(20)
+            return await original(*args, **kwargs)
+        self.provider.side_effect = slow
+        started = monotonic()
+        with patch.object(operations, "PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS", 0.15):
+            response = await self.client.post("/api/preparation-work-v1/receiving/pieces/timeout/receive",
+                json={"client_request_id": "timeout-receipt"})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "preparation_receipt_status_unverified")
+        self.assertLess(monotonic() - started, 3)
+        row = await self.db[operations.PIECES].find_one({"piece_id": "timeout"})
         self.assertNotEqual(row.get("preparation_receipt_status"), "received")
         self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
 

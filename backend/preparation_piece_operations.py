@@ -27,7 +27,6 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 from assembly_status_policy import canonical_status
-from preparation_receipt_status_message import receipt_status_rejection
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -1730,13 +1729,20 @@ async def _preparation_receiving_custody_view(
     }
 
 
+# Bound the whole provider resolution, including token refresh, below Mongo's
+# transaction lifetime. No receipt retry loop waits on a slow provider.
+PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS = 10.0
+
+
 async def _assert_preparation_receipt_salla_status(db: Any, *, user_id: str, order_number: str) -> None:
     """Read Salla directly; never synchronize an order or issue a shipment."""
     from order_engine.shipping_label_service import _resolve_order
     from preparation_receipt_status_message import _values, LABELS
+    import httpx
     try:
-        internal_id, current = await _resolve_order(db, user_id, order_number)
-    except (ShippingLabelError, SallaError) as exc:
+        internal_id, current = await asyncio.wait_for(
+            _resolve_order(db, user_id, order_number), PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS)
+    except (ShippingLabelError, SallaError, TimeoutError, httpx.RequestError) as exc:
         raise HTTPException(409, detail={"code": "preparation_receipt_status_unverified",
             "message": "تعذّر التحقق من حالة الطلب الحالية في سلة؛ أعد المحاولة."}) from exc
     if _text(current.get("id")) != internal_id or _text(current.get("reference_id")) != order_number:

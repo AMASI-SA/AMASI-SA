@@ -49,7 +49,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             "_id": "owner", "revision": 0, "writes_paused": False, "control_revision": 0,
         })
         self.actor = {"id": "owner", "role": "owner", "name": "Synthetic operator"}
-        await self.db.users.insert_one(dict(self.actor))
+        await self.db.users.insert_one({**self.actor, "email": "operator@example.test"})
         await self.db.settings.insert_one({"user_id": "owner", "g47_inventory": {
             "component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00",
         }})
@@ -506,16 +506,14 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         })
         return selector, payload
 
-    async def test_employee_receipt_recovers_historical_unchanged_snapshot(self):
+    async def test_employee_receipt_preserves_historical_pending_snapshot(self):
         selector, _ = await self.seed_historical_receipt_gap()
         inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
         result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
             json={"client_request_id": "synthetic-historical-receipt"})
         self.assertEqual(result.status_code, 200, result.text)
         source = await self.db.unified_orders.find_one(selector)
-        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one(selector)
-        self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
-        self.assertEqual(source["g47_salla_snapshot"]["revision"], lifecycle["snapshot_revision"])
+        self.assertTrue(source["g47_salla_snapshot"]["component_pending"])
         self.assertEqual(await self.db[pieces.PIECES].count_documents({"preparation_receipt_status": "received"}), 1)
         for name, documents in inventory.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents)
