@@ -1,8 +1,8 @@
 {
   "task": "MZ2-OPERATIONAL-OPENING-STOCK",
-  "status": "INTENT_B_CI_PENDING",
-  "branch": "codex/opening-stock-29cc-source-20261017",
-  "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
+  "status": "CURRENT_INTENT_B_CI_PENDING",
+  "branch": "codex/opening-stock-0d55-source-20261019",
+  "base_sha": "0d55bb0ce74df2759e6f9c4786f1b759b29ac0b0",
   "owner_decision": "Independent operational opening quantities, cost and locations without native accounting activation or financial journals.",
   "acceptance": [
     "Owner can search the real MZ2 catalogue before any physical inventory exists.",
@@ -14,12 +14,12 @@
     "Stock projection distinguishes recorded physical stock and operational cost from native financial valuation and fulfillment availability."
   ],
   "compatibility": "Supports product image/SKU/option+name rows and MZ2 tracked components with meter/kg6decimal quantities and exacthalfup costtotals. No financialjournals/nativeactivation; hold remains. Existing stock needs reconciliation. Legacywarehouseplacement integeraggregate truncation predates patch and remains separate knownrisk.",
-  "verification": "Expanded scope:131 independent backendtests,87 frontendtests PASS; latestbase102 affectedtests PASS; all SourceA CI includingCodeQL/security/governedbuild PASS. Candidateartifact12102096034 Linuxrun39034881548; intentSHA256 e49e05ecb2b687ded56839935a72641c4c2f92eb61ec57d82bfbc9dbe93f43af. ExactB rehearsal pending. ExactB CI all applicable checks PASS includingCodeQL,security,operationaltests and run39035273408 clean-clone adapter/package rehearsal. Integration on fc51:94 UI tests across5 suites PASS. Readiness39045806771 stopped before build because remote base advanced to29ccdb81. Integrated Google PR1406 without conflicts; new CI pending. No frozen intent for this candidate yet. Previous merge-history candidate failed source-transition guard; replaced without rewriting history. Fresh0cb95069 direct29ccbase passes transition. Linuxreadiness39061338118 SUCCESS artifact12110474784 archived D:/codex-release-archives/mz2/opening-0cb95069. Intent-only286c78b75 pushed; exactB CI pending.",
+  "verification": "Prior1429 all CI passed, superseded after Production advances. Current source transition passes; all SourceA checks including Linux readiness39257284681 PASS. Reviewed intent archived D:/codex-release-archives/mz2/opening-fdf719e6. ExactB CI pending. Preserved bundle_policy in operational_atomic alongside opening_inventory.",
   "production_changed": false,
-  "release": "Owner authorized deployment. No merge, prepare or publish performed. Operator reports active=false, local/remote fc51e2d, tracked clean, 1.5GB free at 2026-10-17T15:31Z; Manage Publishing Idle. Fresh writer census outstanding.",
-  "next": "Complete exactB CI, archive generated package, fresh writer census and release gates, then authorized merge/deploy. No Production mutation performed.",
-  "source_sha": "0cb950699bd282a373b573c2ab27927514d779e8",
-  "intent_sha": "286c78b75ce75f04c00ccde084edaf17cfdb4af7",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1429",
-  "release_id": "rg5-12516e660945c3987c1fefc820d5c3740e112363bd2f8664b754bbdbee454ef4"
+  "release": "No merge/prepare/publish for this task. Support ticket279912 fresh Production census2026-10-19T10:30:17Z enabled0 all2owners, noorphans, no writes; non-snapshot single aggregation. Publishing Idle10:29Z guard inactive. Later UI shows deployment finished Oct19 14:35; fresh gates required. Terminal requires login, ViewCode did not open terminal.",
+  "next": "Wait exactB CI; regain approved Emergent terminal; identify untracked file and current lease/source, archive matching package then authorized release. Issue1006 comment limit reached; checkpoints mirrored to PR comments.",
+  "source_sha": "fdf719e67c0385fd73bea3d1931f32e4595822fc",
+  "intent_sha": "7d8267e698cd8931a2021c291d0bb77b285d12f6",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1441",
+  "release_id": "rg5-4161b4475169f735ef9df7e52b2a8afbd6ca1799acc2f8bd22b14f3e3be32e99"
 }
