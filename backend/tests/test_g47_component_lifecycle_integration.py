@@ -405,11 +405,90 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_lookup_refresh_preserves_reserved_components(self):
         await self.assert_lookup_refresh_preserves_components("reserved")
 
-    async def assert_lookup_refresh_preserves_components(self, expected_state):
+    async def test_lookup_refresh_preserves_consumed_components(self):
+        await self.assert_lookup_refresh_preserves_components("reserved", consume=True)
+
+    async def test_repeated_snapshot_does_not_wait_for_fulfillment_callback(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        async def persist(scoped):
+            return {}
+        result = await fulfillment.persist_component_source_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], payload=payload, persist=persist)
+        source = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
+        self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
+        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        self.assertEqual(lifecycle["snapshot_revision"], result["snapshot_revision"])
+
+    async def test_employee_receipt_survives_identical_snapshot_between_two_pieces(self):
+        await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        selector = {"user_id": "owner", "order_number": payload["reference_id"]}
+        await self.db[fulfillment.WORKFLOWS].update_one(selector, {"$set": {
+            "stage": "in_progress", "completion_mode": "mezan_local_v1",
+            "review_completion_operation_id": "synthetic-proof", "items": [],
+        }}, upsert=True)
+        await self.db.order_review_completion_operations.insert_one({**selector,
+            "_id": "synthetic-proof", "state": "completed", "completion_mode": "mezan_local_v1"})
+        await self.db[pieces.PIECES].insert_many([{**selector,
+            "id": f"receipt-{n}", "piece_id": f"receipt-{n}", "order_item_id": "line-1",
+            "unit_index": n, "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
+            "responsible_employee_id": "synthetic-preparer", "assignment_status": "assigned",
+            "supplier_dispatch_status": "received", "services": [],
+        } for n in (1, 2)])
+        first = await self.client.post("/preparation-work-v1/receiving/pieces/receipt-1/receive",
+            json={"client_request_id": "synthetic-first"})
+        self.assertEqual(first.status_code, 200, first.text)
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        workflow = await self.db[fulfillment.WORKFLOWS].find_one(selector)
+        async def persist(scoped):
+            return {}
+        await fulfillment.persist_component_source_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], payload=payload, persist=persist)
+        self.assertEqual(await self.db[fulfillment.WORKFLOWS].find_one(selector), workflow)
+        second = await self.client.post("/preparation-work-v1/receiving/pieces/receipt-2/receive",
+            json={"client_request_id": "synthetic-second"})
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({"preparation_receipt_status": "received"}), 2)
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
+    async def test_revalidation_keeps_newer_timestamp_and_safety_flags_blocked(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        selector = {"user_id": "owner", "order_number": payload["reference_id"]}
+        snapshot = await self.db.unified_orders.find_one(selector)
+        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one(selector)
+        cases = [
+            ("unified_orders", {"g47_salla_snapshot.requires_authoritative_refresh": True}),
+            ("unified_orders", {"g47_salla_snapshot.source_updated_at": LATER}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"cancelled": True}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"accepted": False}),
+            (fulfillment.COMPONENT_LIFECYCLES, {"generation": lifecycle["generation"] + 1}),
+        ]
+        for collection, changes in cases:
+            with self.subTest(collection=collection, field=next(iter(changes))):
+                await self.db.unified_orders.replace_one(selector, snapshot)
+                await self.db[fulfillment.COMPONENT_LIFECYCLES].replace_one(selector, lifecycle)
+                await self.db.unified_orders.update_one(selector,
+                    {"$set": {"g47_salla_snapshot.component_pending": True}})
+                await self.db[collection].update_one(selector, {"$set": changes})
+                result = await fulfillment.revalidate_unchanged_component_snapshot(self.db, **selector,
+                    source_revision=snapshot["g47_salla_snapshot"]["revision"])
+                self.assertFalse(result["accepted"])
+                self.assertTrue((await self.db.unified_orders.find_one(selector))["g47_salla_snapshot"]["component_pending"])
+
+    async def assert_lookup_refresh_preserves_components(self, expected_state, consume=False):
         payload = self.source_payload(status="in_progress")
         self.assertTrue((await self.webhook(payload))["synced"])
         before = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
         self.assertEqual(before["state"], expected_state)
+        if consume:
+            from stock_component_consumption_service import consume_component_stock
+            await consume_component_stock(self.db, merchant_id="owner", order_id=payload["reference_id"])
+            self.assertEqual(await self.db[UNITS].count_documents({"state": "consumed"}), 2)
         inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
         result = await self.refresh(payload, allow_auto_fulfillment=False)
         self.assertTrue(result["ok"], result)
@@ -444,6 +523,11 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             order_number=payload["reference_id"], payload=payload, persist=persist)
         kwargs = {"user_id": "owner", "order_number": payload["reference_id"],
                   "source_revision": saved["snapshot_revision"]}
+        # Recreate the historical pre-fix gap, which new persistence avoids.
+        await self.db.unified_orders.update_one({"order_number": payload["reference_id"]},
+            {"$set": {"g47_salla_snapshot.component_pending": True}})
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one({},
+            {"$set": {"snapshot_revision": saved["snapshot_revision"] - 1}})
         names = await self.db.list_collection_names()
         before = {name: await self.db[name].find({}).to_list(1000) for name in names}
         preview = await fulfillment.revalidate_unchanged_component_snapshot(self.db, **kwargs, dry_run=True)
@@ -458,24 +542,48 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_lookup_revalidation_cannot_clear_newer_snapshot(self):
         payload = self.source_payload(status="in_progress")
         self.assertTrue((await self.webhook(payload))["synced"])
-        original = fulfillment.revalidate_unchanged_component_snapshot
-        async def interleave(db, **kwargs):
-            async def persist(scoped):
-                await scoped.unified_orders.update_one(
-                    {"user_id": "owner", "order_number": payload["reference_id"]},
-                    {"$set": {"raw_by_source.salla_direct.items.0.quantity": 3}})
-                return {}
-            await fulfillment.persist_component_source_snapshot(db, user_id="owner",
-                order_number=payload["reference_id"], payload=self.source_payload(version=LATER), persist=persist)
-            return await original(db, **kwargs)
+        previous = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
+        async def persist(scoped):
+            await scoped.unified_orders.update_one(
+                {"user_id": "owner", "order_number": payload["reference_id"]},
+                {"$set": {"raw_by_source.salla_direct.items.0.quantity": 3}})
+            return {}
         inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
-        with patch.object(fulfillment, "revalidate_unchanged_component_snapshot", interleave):
-            result = await self.refresh(payload, allow_auto_fulfillment=False)
-        self.assertTrue(result["ok"], result)
-        self.assertFalse(result["auto_fulfillment"]["component_revalidation"]["accepted"])
+        await fulfillment.persist_component_source_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], payload=self.source_payload(version=LATER), persist=persist)
+        result = await fulfillment.revalidate_unchanged_component_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], source_revision=previous["g47_salla_snapshot"]["revision"])
+        self.assertFalse(result["accepted"])
         source = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
         self.assertTrue(source["g47_salla_snapshot"]["component_pending"])
         for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
+    async def test_component_revalidation_failure_rolls_back_acceptance_metadata(self):
+        from motor.motor_asyncio import AsyncIOMotorCollection
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        async def persist(scoped):
+            return {}
+        saved = await fulfillment.persist_component_source_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], payload=payload, persist=persist)
+        await self.db.unified_orders.update_one({"order_number": payload["reference_id"]},
+            {"$set": {"g47_salla_snapshot.component_pending": True}})
+        await self.db[fulfillment.COMPONENT_LIFECYCLES].update_one({},
+            {"$set": {"snapshot_revision": saved["snapshot_revision"] - 1}})
+        names = ("unified_orders", fulfillment.COMPONENT_LIFECYCLES, PLANS, UNITS, LOCATIONS)
+        before = {name: await self.db[name].find({}).to_list(100) for name in names}
+        original = AsyncIOMotorCollection.update_one
+        async def fail_after_lifecycle(collection, query, update, *args, **kwargs):
+            if (collection.name == "unified_orders"
+                    and update.get("$set", {}).get("g47_salla_snapshot.component_pending") is False):
+                raise RuntimeError("synthetic failure before snapshot acknowledgement")
+            return await original(collection, query, update, *args, **kwargs)
+        with patch.object(AsyncIOMotorCollection, "update_one", fail_after_lifecycle):
+            with self.assertRaises(RuntimeError):
+                await fulfillment.revalidate_unchanged_component_snapshot(self.db, user_id="owner",
+                    order_number=payload["reference_id"], source_revision=saved["snapshot_revision"])
+        for name, documents in before.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents)
 
     async def test_real_webhook_refresh_replay_and_stale_canonical_snapshot(self):

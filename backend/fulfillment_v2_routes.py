@@ -1343,7 +1343,13 @@ async def persist_component_source_snapshot(
             "source_updated_at": version, "cancelled": cancelled,
             "revision": revision, "component_pending": True,
         }}})
-        return {**result, "snapshot_revision": revision}
+        # A replay of an accepted contract must not become unavailable while
+        # waiting for an optional/later fulfillment callback. Revalidate under
+        # this same owner transaction; material changes remain pending.
+        revalidation = await revalidate_unchanged_component_snapshot(
+            scoped, user_id=user_id, order_number=order_number, source_revision=revision,
+        )
+        return {**result, "snapshot_revision": revision, "component_revalidation": revalidation}
 
     result = await operational_owner(db, user_id, write)
     if allow_delivery_observation and not result.get("blocked") and not result.get("stale"):
@@ -1436,7 +1442,7 @@ async def revalidate_unchanged_component_snapshot(
     evidence stays pending for the normal lifecycle reconciliation.
     """
     from order_engine.repository import MongoOrderRepository
-    from order_engine.service import get_order
+    from order_engine.service import get_order, OrderNotFoundError
     from stock_component_consumption_service import PLANS
 
     async def revalidate(scoped):
@@ -1453,7 +1459,10 @@ async def revalidate_unchanged_component_snapshot(
                 or previous.get("cancelled") or not previous.get("source_fingerprint")
                 or previous.get("source_updated_at") != watermark.get("source_updated_at")):
             return deferred
-        order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
+        try:
+            order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
+        except OrderNotFoundError:
+            return deferred
         if component_order_fingerprint(order) != previous["source_fingerprint"]:
             return deferred
         legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)

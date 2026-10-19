@@ -570,11 +570,7 @@ async def refresh_order_from_salla(
             "reason": "disabled_for_read_only_lookup",
         }
         if not allow_auto_fulfillment:
-            from fulfillment_v2_routes import revalidate_unchanged_component_snapshot
-            auto_fulfillment["component_revalidation"] = await revalidate_unchanged_component_snapshot(
-                db, user_id=str(user_id), order_number=normalized,
-                source_revision=result.get("snapshot_revision"),
-            )
+            auto_fulfillment["component_revalidation"] = result.get("component_revalidation")
         if allow_auto_fulfillment:
             auto_fulfillment = {
                 "attempted": True,
