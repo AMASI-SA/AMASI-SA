@@ -16,3 +16,23 @@
 .op-returns fieldset{border:0;border-top:1px solid #e5dcd2;padding:18px 0;margin:18px 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
 .op-returns fieldset>p,.op-returns fieldset>button,.op-returns fieldset>label:not(.op-field){grid-column:1/-1}
 @media(max-width:600px){.op-returns fieldset{grid-template-columns:1fr}.op-returns .op-field input,.op-returns .op-field select{font-size:16px}}
+
+/* Opening stock: compact catalog rows and independent configuration cards. */
+.op-opening-stock .op-stock-picker{max-width:760px;margin-block:16px 24px}
+.op-opening-stock .op-stock-picker .op-field{margin-bottom:8px}
+.op-opening-stock .op-stock-results{list-style:none;padding:0;margin:8px 0;max-height:360px;overflow-y:auto;border:1px solid #c4d6cf;border-radius:16px;background:#fff;box-shadow:0 8px 24px #173a3a12}
+.op-opening-stock .op-stock-results li{display:flex;align-items:center;gap:14px;padding:14px;border-bottom:1px solid #e5eee8}
+.op-opening-stock .op-stock-results li:last-child{border-bottom:0}
+.op-opening-stock .op-stock-results img,.op-opening-stock .op-stock-line-heading img{flex:none;width:64px;height:64px;object-fit:contain;border-radius:12px}
+.op-opening-stock .op-stock-result-name{flex:1;min-width:0;overflow-wrap:anywhere}
+.op-opening-stock .op-stock-result-name strong,.op-opening-stock .op-stock-result-name small{display:block}
+.op-opening-stock .op-stock-result-name small{color:#617872;margin-top:5px}
+.op-opening-stock .op-stock-results button{flex:none;color:#195f4b;border-color:#195f4b;white-space:nowrap}
+.op-opening-stock .op-stock-line{max-width:920px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
+.op-opening-stock .op-stock-line>div,.op-opening-stock .op-stock-line>p{grid-column:1/-1}
+.op-opening-stock .op-stock-line-heading{display:flex;align-items:center;gap:16px}
+.op-opening-stock .op-stock-line .op-field input,.op-opening-stock .op-stock-line .op-field select,.op-opening-stock .op-stock-line .op-field textarea{box-sizing:border-box;font:inherit}
+@media(max-width:600px){.op-opening-stock .op-stock-line{grid-template-columns:1fr}.op-opening-stock .op-stock-results li{gap:8px;flex-wrap:wrap}.op-opening-stock .op-stock-results button{margin-inline-start:auto}.op-opening-stock input,.op-opening-stock select{font-size:16px}}
+.op-opening-stock>.op-stock-form{border:0;padding:0}
+.op-opening-stock .op-field input,.op-opening-stock .op-field select,.op-opening-stock .op-field textarea{box-sizing:border-box;font:inherit}
+.op-opening-stock .op-stock-result-name small{text-align:start}

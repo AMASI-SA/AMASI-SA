@@ -1,0 +1,19 @@
+{
+  "task": "MZ2-OPENING-STOCK-PICKER",
+  "status": "IMPLEMENTED_LOCAL_TESTS_PASS_NOT_RELEASED",
+  "branch": "codex/opening-stock-product-picker-20261019",
+  "base_sha": "56919d2a8c48ca5fe85ee5543e7d86563d4c982f",
+  "scope": "Compact image/name/SKU search list with explicit add action; separate product configuration rows including text customization and color; read valid cached options only for opening inventory when canonical options are absent.",
+  "verification": [
+    "OpeningInventory, OperationalBalances, InventoryPurchases: 114 passed before final duplicate-row test; OpeningInventory rerun 19 passed after final changes (115 unique tests across the three suites).",
+    "pytest --noconftest -q backend/tests/test_operational_balance_opening_options.py: 5 passed.",
+    "Isolated browser fixture: desktop1280 and mobile390 screenshots, named silver10/15 rows, exact175.00 total; no horizontal mobile overflow.",
+    "git diff --check: PASS"
+  ],
+  "evidence": "D:/codex-evidence/opening-stock-picker-20261019",
+  "constraints": "No business writes, writer activation, Salla sync, source catalog mutation, Release Intent change or deployment. Existing canonical options win; incomplete/ambiguous cached identities fail closed. Purchase metadata behavior outside opening remains unchanged.",
+  "limitations": "Live catalog data not inspected; malformed or genuinely missing product definitions remain blocked with visible explanation. Full Mongo approval suite and governed release build not run for this change yet.",
+  "production_changed": false,
+  "next": "Review draft diff and CI, then follow source-A/intent-B release protocol before any production deployment.",
+  "ledger": "Issue1006 has2500comments and previously rejected additional comments; task PR is continuation record. Exact checkpoint SHA is in PR history."
+}
