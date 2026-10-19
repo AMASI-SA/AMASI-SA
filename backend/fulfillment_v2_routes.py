@@ -1475,7 +1475,8 @@ async def revalidate_unchanged_component_snapshot(
                 return deferred
         else:
             plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number}) or {}
-            if (previous.get("state") != "reserved" or not plan
+            if (previous.get("state") != "reserved" or plan.get("state") != "accepted"
+                    or plan.get("reconciliation_required")
                     or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
                 return deferred
         if dry_run:

@@ -474,6 +474,8 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         selector = {"user_id": "owner", "order_number": payload["reference_id"]}
         snapshot = await self.db.unified_orders.find_one(selector)
         lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one(selector)
+        plan_selector = {"user_id": "owner", "order_id": payload["reference_id"]}
+        plan = await self.db[PLANS].find_one(plan_selector)
         cases = [
             ("unified_orders", {"g47_salla_snapshot.requires_authoritative_refresh": True}),
             ("unified_orders", {"g47_salla_snapshot.source_updated_at": LATER}),
@@ -481,14 +483,17 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             (fulfillment.COMPONENT_LIFECYCLES, {"cancelled": True}),
             (fulfillment.COMPONENT_LIFECYCLES, {"accepted": False}),
             (fulfillment.COMPONENT_LIFECYCLES, {"generation": lifecycle["generation"] + 1}),
+            (PLANS, {"state": "cancelled"}),
+            (PLANS, {"reconciliation_required": True}),
         ]
         for collection, changes in cases:
             with self.subTest(collection=collection, field=next(iter(changes))):
                 await self.db.unified_orders.replace_one(selector, snapshot)
                 await self.db[fulfillment.COMPONENT_LIFECYCLES].replace_one(selector, lifecycle)
+                await self.db[PLANS].replace_one(plan_selector, plan)
                 await self.db.unified_orders.update_one(selector,
                     {"$set": {"g47_salla_snapshot.component_pending": True}})
-                await self.db[collection].update_one(selector, {"$set": changes})
+                await self.db[collection].update_one(plan_selector if collection == PLANS else selector, {"$set": changes})
                 result = await fulfillment.revalidate_unchanged_component_snapshot(self.db, **selector,
                     source_revision=snapshot["g47_salla_snapshot"]["revision"])
                 self.assertFalse(result["accepted"])
