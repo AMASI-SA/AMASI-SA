@@ -241,7 +241,8 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             "piece_id": "supplier-1", "user_id": "owner", "order_number": "local-assembly",
             "order_item_id": self.supplier_line_id, "unit_index": 1,
             "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "assembly_status": "pending",
-            "supplier_dispatch_status": "received", "preparation_receipt_status": "received",
+            "supplier_dispatch_status": "received",
+            "execution_status": "received_from_supplier", "received_at": fixture.WHEN, "preparation_receipt_status": "received",
         }
         await self.db[pieces.PIECES].insert_one(dict(supplier_piece))
         await self.db[completion.WORKFLOWS].update_one({"order_number": "local-assembly"}, {"$set": {"stage": "ready_to_ship"}})
@@ -320,6 +321,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         await self.db[pieces.PIECES].update_one({"piece_id": piece["piece_id"]}, {"$set": {
             "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
             "supplier_dispatch_status": "received",
+            "execution_status": "received_from_supplier", "received_at": fixture.WHEN,
             "services": [{**service, "status": "completed"} for service in piece.get("services", [])],
         }})
 
@@ -384,7 +386,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             await self.ready_for_receipt(piece)
             received = await self.receive(piece)
             self.assertEqual(received.status_code, 200, received.text)
-            self.assertEqual((await self.workflow())["stage"], "ready_to_ship" if index == 1 else "in_progress")
+            self.assertEqual((await self.workflow())["stage"], "in_progress")
         self.assertEqual(await self.db[pieces.SHIPPING_BATCHES].count_documents({}), 0)
 
     async def test_supplier_only_partial_quantity_receipt_and_duplicate(self):
@@ -398,7 +400,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             received = await self.receive(piece)
             self.assertEqual(received.status_code, 200, received.text)
             self.assertEqual(received.json()["progress"]["order_ready_for_assembly"], index == 1)
-            self.assertEqual((await self.workflow())["stage"], "ready_to_ship" if index == 1 else "in_progress")
+            self.assertEqual((await self.workflow())["stage"], "in_progress")
             self.assertEqual(len(await self.catalog_cards()), 0 if index == 1 else 1)
             self.assertEqual((await self.receive(piece)).status_code, 200)
         self.assertEqual(await self.db[pieces.PIECE_EVENTS].count_documents({
@@ -695,7 +697,8 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
                     "piece_id": retry_id, "user_id": "owner", "order_number": "local-assembly",
                     "order_item_id": self.supplier_line_id, "unit_index": index,
                     "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY, "assembly_status": "pending",
-                    "supplier_dispatch_status": "received", "preparation_receipt_status": "received",
+                    "supplier_dispatch_status": "received",
+            "execution_status": "received_from_supplier", "received_at": fixture.WHEN, "preparation_receipt_status": "received",
                 })
                 await self.mark(retry_id)
         self.assertEqual((await self.workflow())["stage"], "in_progress")

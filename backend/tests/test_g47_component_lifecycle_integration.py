@@ -49,6 +49,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             "_id": "owner", "revision": 0, "writes_paused": False, "control_revision": 0,
         })
         self.actor = {"id": "owner", "role": "owner", "name": "Synthetic operator"}
+        await self.db.users.insert_one(dict(self.actor))
         await self.db.settings.insert_one({"user_id": "owner", "g47_inventory": {
             "component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00",
         }})
@@ -83,7 +84,19 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         self.context = {"merchant_id": "owner", "actor_id": "owner", "is_owner": True,
             "permissions": {"fulfillment.pack.confirm", "fulfillment.carrier.handoff", "inventory.preparation.create", "inventory.preparation.work", "inventory.preparation.receive"},
             "responsibilities": set(), "warehouse_ids": ["wh"]}
+        async def receipt_provider(db, owner, method, path, **kwargs):
+            self.assertEqual(method, "GET")
+            if path == "/orders":
+                number = kwargs["params"]["keyword"]
+                return {"data": [{"id": number, "reference_id": number}]}
+            identity = path.removeprefix("/orders/")
+            source = await self.db.unified_orders.find_one({"user_id": owner, "$or": [
+                {"order_number": identity}, {"raw_by_source.salla_direct.id": identity}]}) or {}
+            raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+            return {"data": {"id": identity, "reference_id": source.get("order_number"),
+                             "status": raw.get("status"), "status_slug": raw.get("status_slug")}}
         self.patches = [
+            patch("order_engine.shipping_label_service.call_salla", side_effect=receipt_provider),
             patch.object(fulfillment, "_actor_context", AsyncMock(return_value=self.context)),
             patch.object(pieces, "_actor_context", AsyncMock(return_value=self.context)),
             patch.object(manufacturing, "_actor_context", AsyncMock(return_value=self.context)),
@@ -450,6 +463,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             "unit_index": n, "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
             "responsible_employee_id": "synthetic-preparer", "assignment_status": "assigned",
             "supplier_dispatch_status": "received", "services": [],
+            "execution_status": "received_from_supplier", "received_at": WHEN,
         } for n in (1, 2)])
         first = await self.client.post("/preparation-work-v1/receiving/pieces/receipt-1/receive",
             json={"client_request_id": "synthetic-first"})
@@ -484,6 +498,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
             "unit_index": 1, "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
             "responsible_employee_id": "synthetic-preparer", "assignment_status": "assigned",
             "supplier_dispatch_status": "received", "services": [],
+            "execution_status": "received_from_supplier", "received_at": WHEN,
         })
         await self.db.unified_orders.update_one(selector, {
             "$inc": {"g47_salla_snapshot.revision": 1},
@@ -505,26 +520,26 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         for name, documents in inventory.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents)
 
-    async def test_historical_receipt_without_review_proof_rolls_back_revalidation(self):
+    async def test_historical_receipt_without_review_proof_keeps_components_unchanged(self):
         selector, _ = await self.seed_historical_receipt_gap()
         await self.db.order_review_completion_operations.delete_many({})
-        names = await self.db.list_collection_names()
+        names = ["unified_orders", PLANS, UNITS, LOCATIONS, fulfillment.COMPONENT_LIFECYCLES, "order_review_completion_operations"]
         before = {name: await self.db[name].find({}).to_list(100) for name in names}
         result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
             json={"client_request_id": "synthetic-missing-proof"})
-        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(result.status_code, 200, result.text)
         for name, documents in before.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents, name)
 
-    async def test_historical_receipt_with_changed_components_remains_blocked(self):
+    async def test_historical_receipt_with_changed_components_keeps_components_unchanged(self):
         selector, payload = await self.seed_historical_receipt_gap()
         payload["items"][0]["quantity"] = 3
         await self.refresh(payload, allow_auto_fulfillment=False)
-        names = await self.db.list_collection_names()
+        names = ["unified_orders", PLANS, UNITS, LOCATIONS, fulfillment.COMPONENT_LIFECYCLES, "order_review_completion_operations"]
         before = {name: await self.db[name].find({}).to_list(100) for name in names}
         result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
             json={"client_request_id": "synthetic-material-change"})
-        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(result.status_code, 200, result.text)
         for name, documents in before.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents, name)
 

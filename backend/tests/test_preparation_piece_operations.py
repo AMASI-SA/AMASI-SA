@@ -437,6 +437,8 @@ def test_preparation_receipt_card_merges_customer_specs_and_marks_search_match()
             "responsible_employee_id": "employee-1",
             "responsible_employee_name": "عرفات",
             "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "received", "execution_status": "received_from_supplier",
+        "received_at": "2026-10-19T00:00:00Z",
             "specifications_snapshot": [
                 {"name": "الاسم", "value": "سارة"},
                 {"name": "اللون", "value": "ذهبي"},
@@ -463,6 +465,8 @@ def test_preparation_receipt_blocks_supplier_piece_until_supplier_receipt_finish
     base = {
         "piece_id": "piece-1",
         "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "received", "execution_status": "received_from_supplier",
+        "received_at": "2026-10-19T00:00:00Z",
         "responsible_employee_id": "employee-1",
     }
     assert preparation_receipt_blocker({
@@ -484,6 +488,8 @@ def test_preparation_receipt_blocks_every_unfinished_required_service():
     piece = {
         "piece_id": "piece-1",
         "status": PIECE_STATUS_IN_PROGRESS,
+        "supplier_dispatch_status": "received", "execution_status": "received_from_supplier",
+        "received_at": "2026-10-19T00:00:00Z",
         "responsible_employee_id": "employee-1",
         "services": [
             {
