@@ -385,7 +385,7 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
              patch("first_party_attribution.link_order_attribution", AsyncMock(return_value={"linked": False})):
             return await webhook.sync_order_from_verified_webhook(self.db, {"event": event, "merchant": "synthetic-store", "data": payload})
 
-    async def refresh(self, payload):
+    async def refresh(self, payload, **refresh_options):
         async def provider(_db, _user, method, path, **kwargs):
             self.assertEqual(method, "GET")
             if path == "/orders/items":
@@ -396,7 +396,67 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         async def bank(_db, _user, details):
             return details
         with patch.object(refresh, "call_salla", provider), patch.object(refresh, "_enrich_order_receiving_bank", bank):
-            return await refresh.refresh_order_from_salla(self.db, "owner", payload["reference_id"], force=True)
+            return await refresh.refresh_order_from_salla(self.db, "owner", payload["reference_id"], force=True, **refresh_options)
+
+    async def test_lookup_refresh_preserves_accepted_legacy_components(self):
+        await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
+        await self.assert_lookup_refresh_preserves_components(fulfillment.LEGACY_COMPONENT_COHORT)
+
+    async def test_lookup_refresh_preserves_reserved_components(self):
+        await self.assert_lookup_refresh_preserves_components("reserved")
+
+    async def assert_lookup_refresh_preserves_components(self, expected_state):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        before = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        self.assertEqual(before["state"], expected_state)
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        result = await self.refresh(payload, allow_auto_fulfillment=False)
+        self.assertTrue(result["ok"], result)
+        source = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
+        self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
+        current = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        self.assertEqual(current["snapshot_revision"], source["g47_salla_snapshot"]["revision"])
+        self.assertEqual(current["generation"], before["generation"])
+        self.assertFalse(result["auto_fulfillment"]["attempted"])
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
+    async def test_lookup_changed_quantity_stays_pending_without_stock_writes(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        payload["items"][0]["quantity"] = 3
+        result = await self.refresh(payload, allow_auto_fulfillment=False)
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(result["auto_fulfillment"]["component_revalidation"]["accepted"])
+        source = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
+        self.assertTrue(source["g47_salla_snapshot"]["component_pending"])
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
+    async def test_lookup_revalidation_cannot_clear_newer_snapshot(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        original = fulfillment.revalidate_unchanged_component_snapshot
+        async def interleave(db, **kwargs):
+            async def persist(scoped):
+                await scoped.unified_orders.update_one(
+                    {"user_id": "owner", "order_number": payload["reference_id"]},
+                    {"$set": {"raw_by_source.salla_direct.items.0.quantity": 3}})
+                return {}
+            await fulfillment.persist_component_source_snapshot(db, user_id="owner",
+                order_number=payload["reference_id"], payload=self.source_payload(version=LATER), persist=persist)
+            return await original(db, **kwargs)
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        with patch.object(fulfillment, "revalidate_unchanged_component_snapshot", interleave):
+            result = await self.refresh(payload, allow_auto_fulfillment=False)
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(result["auto_fulfillment"]["component_revalidation"]["accepted"])
+        source = await self.db.unified_orders.find_one({"order_number": payload["reference_id"]})
+        self.assertTrue(source["g47_salla_snapshot"]["component_pending"])
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
 
     async def test_real_webhook_refresh_replay_and_stale_canonical_snapshot(self):
         payload = self.source_payload()

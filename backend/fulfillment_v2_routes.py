@@ -1414,6 +1414,66 @@ def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[st
     return lines
 
 
+def component_order_fingerprint(order: Any) -> str:
+    cancelled = _component_order_cancelled(order)
+    lines = [] if cancelled else _component_order_lines(order, {})
+    return hashlib.sha256(json.dumps({
+        "cancelled": cancelled,
+        "eligible": order_is_active(order) and payment_is_eligible(order.payment),
+        "lines": [{key: row.get(key) for key in (
+            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
+        )} for row in lines],
+    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+
+
+async def revalidate_unchanged_component_snapshot(
+    db: Any, *, user_id: str, order_number: str, source_revision: int,
+) -> dict[str, Any]:
+    """Advance existing acceptance only after reading the fenced canonical order.
+
+    Lookup refreshes must not reserve stock or advance preparation. An identical
+    component contract can retain its existing acceptance; changed or incomplete
+    evidence stays pending for the normal lifecycle reconciliation.
+    """
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import get_order
+    from stock_component_consumption_service import PLANS
+
+    async def revalidate(scoped):
+        selector = {"user_id": user_id, "order_number": order_number}
+        source = await scoped.unified_orders.find_one(selector) or {}
+        watermark = source.get("g47_salla_snapshot") or {}
+        deferred = {"accepted": False, "retry_required": True, "reason": "component_reconciliation_required"}
+        if (watermark.get("revision") != source_revision or watermark.get("cancelled")
+                or watermark.get("requires_authoritative_refresh")):
+            return deferred
+        previous = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
+        if (previous.get("accepted") is not True or previous.get("retry_required")
+                or previous.get("cancelled") or not previous.get("source_fingerprint")
+                or previous.get("source_updated_at") != watermark.get("source_updated_at")):
+            return deferred
+        order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
+        if component_order_fingerprint(order) != previous["source_fingerprint"]:
+            return deferred
+        legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
+        if legacy:
+            if previous.get("state") != LEGACY_COMPONENT_COHORT:
+                return deferred
+        else:
+            plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number}) or {}
+            if (previous.get("state") != "reserved" or not plan
+                    or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
+                return deferred
+        await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
+            "snapshot_revision": source_revision, "updated_at": _now(),
+        }})
+        await scoped.unified_orders.update_one({**selector, "g47_salla_snapshot.revision": source_revision},
+            {"$set": {"g47_salla_snapshot.component_pending": False}})
+        return {"accepted": True, "retry_required": False, "reason": "unchanged_component_contract"}
+
+    return await operational_owner(db, user_id, revalidate)
+
+
 async def reconcile_component_order_lifecycle(
     db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
     actor_id: str = "system", decision: dict[str, Any] | None = None,
@@ -1433,12 +1493,7 @@ async def reconcile_component_order_lifecycle(
     created_at = component_source_time(getattr(order, "created_at", None))
     version = component_source_time(source_updated_at)
     lines = [] if cancelled else _component_order_lines(order, decision or {})
-    fingerprint = hashlib.sha256(json.dumps({
-        "cancelled": cancelled, "eligible": eligible,
-        "lines": [{key: row.get(key) for key in (
-            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
-        )} for row in lines],
-    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+    fingerprint = component_order_fingerprint(order)
 
     async def register(scoped):
         previous = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
