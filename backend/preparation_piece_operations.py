@@ -1778,6 +1778,15 @@ async def _receive_preparation_piece(
 
     async def receive(scoped):
         current_workflow = await scoped[WORKFLOWS].find_one({"user_id": user_id, "order_number": number}) or {}
+        source = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": number}) or {}
+        watermark = source.get("g47_salla_snapshot") or {}
+        if watermark.get("component_pending"):
+            # Recover pre-fix snapshots only within this requested receipt's
+            # transaction. All review/status/piece checks still run below;
+            # any rejection rolls back the acknowledgement with the receipt.
+            from fulfillment_v2_routes import revalidate_unchanged_component_snapshot
+            await revalidate_unchanged_component_snapshot(scoped, user_id=user_id,
+                order_number=number, source_revision=watermark.get("revision"))
         approved = await load_local_assignment_workflows(scoped, user_id=user_id, workflows=[current_workflow])
         current = await _current_assembly_order(scoped, user_id=user_id, order_number=number)
         if not local_review_stage_eligible(current, approved.get(number),

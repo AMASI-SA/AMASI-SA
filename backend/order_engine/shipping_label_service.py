@@ -1550,7 +1550,12 @@ async def _assert_current_print_status(db, user_id, order_number, *, expected=No
     async def check(scoped):
         workflow = await _require_print_completed_workflow(scoped, user_id=user_id, order_number=order_number)
         if await source_status(scoped, user_id, order_number) not in {"in_progress", "completed"}:
-            raise ShippingLabelError("assembly_canonical_status_blocked", "حالة الطلب الحالية لا تسمح بالطباعة.")
+            from preparation_receipt_status_message import LABELS, observed_salla_status
+            observed = await observed_salla_status(scoped, user_id=user_id, order_number=order_number)
+            message = (f"الطباعة مجمدة: حالة الطلب في سلة «{LABELS[observed]}». يلزم أن تكون حالته «تم التنفيذ»."
+                       if observed and observed not in {"in_progress", "completed"}
+                       else "الطباعة مجمدة: تعذّر تأكيد حالة الطلب أو اكتمال متطلبات التجهيز في ميزان.")
+            raise ShippingLabelError("assembly_canonical_status_blocked", message)
         fence = {"epoch": workflow.get("shipping_status_epoch", 0),
                  "shipping": await _label_baseline(scoped, user_id, order_number),
                  "assignment": {key: workflow.get(key) for key in (

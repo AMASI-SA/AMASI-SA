@@ -8,6 +8,28 @@ import order_engine.shipping_label_service as shipping
 from salla_shipping import CURRENT_SHIPPING
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,label", [("delivering", "جاري التوصيل"), ("delivered", "تم التوصيل")])
+async def test_print_rejection_names_consistent_salla_status(monkeypatch, status, label):
+    import fulfillment_carrier_label as carrier
+    db = AsyncMongoMockClient().status_message
+    await db.unified_orders.insert_one({"user_id": "owner", "order_number": "3001",
+        "order_status": status, "order_status_slug": status,
+        "raw_by_source": {"salla_direct": {"status": {"slug": status, "name": label}}}})
+    before = await db.unified_orders.find_one({})
+    async def owner(db, user_id, callback):
+        return await callback(db)
+    async def completed(*args, **kwargs):
+        return {"assembly_status": "completed"}
+    monkeypatch.setattr(shipping, "operational_owner", owner)
+    monkeypatch.setattr(carrier, "_require_print_completed_workflow", completed)
+    with pytest.raises(shipping.ShippingLabelError) as error:
+        await shipping._assert_current_print_status(db, "owner", "3001")
+    assert error.value.code == "assembly_canonical_status_blocked"
+    assert label in str(error.value)
+    assert await db.unified_orders.find_one({}) == before
+
+
 @pytest.fixture
 async def saved(monkeypatch):
     db = AsyncMongoMockClient().saved_label_print
