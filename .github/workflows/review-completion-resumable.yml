@@ -10,6 +10,7 @@ on:
       - "backend/assembly_completion_delivery.py"
       - "backend/assembly_print_completion.py"
       - "backend/tests/test_assembly_print_completion.py"
+      - "backend/tests/test_unified_completed_carrier_label.py"
       - "backend/assembly_completion_legacy_readback.py"
       - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
@@ -100,6 +101,7 @@ jobs:
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
           tests/test_assembly_print_completion.py
+          tests/test_unified_completed_carrier_label.py
           tests/test_assembly_completion_legacy_readback.py
           tests/test_assembly_completion_v2_readback.py
           tests/test_assembly_completion_status_transition.py
