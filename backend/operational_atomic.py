@@ -27,6 +27,7 @@ _OWNED = frozenset({
     "warehouse_location_events", "unified_orders",
 })
 _PROFILES = {
+    "opening_inventory": frozenset({"mz2_operational_inventory_openings_v1", "warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
     "bundle_catalog": frozenset({"mezan_bundle_definitions_v2"}),
     "bundle_policy": frozenset({"mezan_product_cost_profiles_v2", "mezan_product_operation_profiles_v2"}),
     "physical_receipt": frozenset({"warehouse_locations", "mezan_inventory_receipts_v2", "warehouse_location_events"}),
@@ -248,6 +249,8 @@ class _Collection:
                     _reject(self.__state)
             if name == "tamara_attribution_log" and method != "insert_one":
                 _reject(self.__state)
+            if self.__state["profile"] == "opening_inventory" and (method != "update_one" if name == "warehouse_locations" else method != "insert_one"):
+                _reject(self.__state)
             if self.__state["profile"] == "physical_receipt" and method not in {"insert_one", "update_one"}:
                 _reject(self.__state)
             args = list(deepcopy(args))
@@ -350,6 +353,11 @@ class _Collection:
         return await self.__collection.update_one(query, args[1], session=self.__session)
 
     def _document(self, name, doc):
+        if self.__state["profile"] == "opening_inventory":
+            from operational_opening_inventory import validate_insert
+            if not validate_insert(name, doc):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "physical_receipt":
             from operational_physical_receipts import validate_insert
             if not validate_insert(name, doc):
@@ -400,6 +408,11 @@ class _Collection:
             _reject(self.__state)
 
     async def _update(self, name, query, update, kwargs):
+        if self.__state["profile"] == "opening_inventory":
+            from operational_opening_inventory import validate_update
+            if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):
+                _reject(self.__state)
+            return
         if self.__state["profile"] == "physical_receipt":
             from operational_physical_receipts import validate_update
             if kwargs.get("upsert") or not await validate_update(self.__state["db"], self.__owner, name, query, update):
@@ -530,6 +543,11 @@ async def operational_owner(db, owner, callback, *, profile="fulfillment", revie
         return await callback(db)
     if not isinstance(owner, str) or not owner:
         raise HTTPException(409, detail={"code": "operational_owner_required"})
+    if profile == "opening_inventory":
+        from inventory_write_gate import ACTIVE as INVENTORY_ADMISSION
+        admission = INVENTORY_ADMISSION.get()
+        if admission is None or admission[0] != owner:
+            raise HTTPException(409, detail={"code": "opening_inventory_admission_required"})
     if profile not in _PROFILES:
         raise HTTPException(409, detail={"code": "operational_profile_invalid"})
     if review_session is not None:
