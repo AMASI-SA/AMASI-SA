@@ -25,6 +25,8 @@ import {
 import { useOrders } from "../hooks/useOrders";
 import { getOrderFilterSummary } from "../services/orderEngine";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
+import ArabicDateRangePicker from "../components/marketing/ArabicDateRangePicker";
+import { orderSearchDateRange, orderSearchEndDay } from "../utils/orderSearchDates";
 
 const STATUS_PRIORITY = [
     ["بإنتظار المراجعة", "بانتظار المراجعة", "انتظار المراجعة", "under review"],
@@ -195,7 +197,6 @@ export default function OrdersV2() {
     const navigate = useNavigate();
     const [urlParams] = useSearchParams();
     const loadMoreRef = useRef(null);
-    const initialUrlSearchRef = useRef(false);
     const [activeStatus, setActiveStatus] = useState(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [draftStatus, setDraftStatus] = useState(null);
@@ -217,15 +218,7 @@ export default function OrdersV2() {
     const [previewOpen, setPreviewOpen] = useState(false);
     const [nowMs, setNowMs] = useState(() => Date.now());
 
-    const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, reload, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus });
-
-    useEffect(() => {
-        if (initialUrlSearchRef.current) return;
-        initialUrlSearchRef.current = true;
-        if (Object.values(filters).some((value) => String(value || "").trim())) {
-            searchCombined(filters);
-        }
-    }, [filters, searchCombined]);
+    const { orders, hasMore, loading, initialLoading, error, searchMode, loadMore, searchCombined, resultSummary } = useOrders({ statusExact: activeStatus, autoFilters: { ...filters, q: searchDraft.trim() } });
 
     useEffect(() => {
         const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -298,7 +291,7 @@ export default function OrdersV2() {
     }
 
     function submitSearch(event) { event.preventDefault(); searchCombined({ ...filters, q: searchDraft, status_exact: activeStatus || "" }); }
-    async function clearSearch() { setSearchDraft(""); await reload(); }
+    function clearSearch() { setSearchDraft(""); setFilters((current) => Object.fromEntries(Object.keys(current).map((key) => [key, ""]))); }
 
     return (
         <div className="space-y-5" dir="rtl" data-testid="orders-v2-page">
@@ -315,14 +308,19 @@ export default function OrdersV2() {
                         {[["product","اسم المنتج"],["sku","SKU"],["provider","المصدر الإعلاني"],["campaign","Campaign"],["campaign_id","Campaign ID"],["ad_squad","Ad Squad / Ad Set"],["ad_squad_id","Ad Squad ID"],["ad","Ad"],["ad_id","Ad ID"],["utm","UTM الخام"]].map(([key,label]) => <input key={key} value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" />)}
                         <select value={filters.payment_status} onChange={(event) => setFilters((current) => ({ ...current, payment_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="partial">مدفوع جزئيًا</option></select>
                         <select value={filters.attribution_status} onChange={(event) => setFilters((current) => ({ ...current, attribution_status: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">كل حالات الإسناد</option><option value="matched">مطابق</option><option value="unattributed">غير منسوب</option><option value="conflicted">متعارض</option></select>
-                        <input type="datetime-local" value={filters.created_from} onChange={(event) => setFilters((current) => ({ ...current, created_from: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="من تاريخ الإنشاء الأصلي" />
-                        <input type="datetime-local" value={filters.created_to} onChange={(event) => setFilters((current) => ({ ...current, created_to: event.target.value }))} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" title="إلى تاريخ الإنشاء الأصلي" />
+                        <div className="md:col-span-2">
+                            <ArabicDateRangePicker valueFrom={filters.created_from.slice(0, 10)} valueTo={orderSearchEndDay(filters.created_to)} align="left" emitAppliedEvent={false} onApply={(range) => setFilters((current) => ({ ...current, ...orderSearchDateRange(range) }))} />
+                            <div className="mt-1 flex items-center justify-between text-xs text-slate-500"><span>تاريخ إنشاء الطلب بتوقيت الرياض</span>{(filters.created_from || filters.created_to) && <button type="button" onClick={() => setFilters((current) => ({ ...current, created_from: "", created_to: "" }))} className="font-bold text-violet-700">مسح الفترة</button>}</div>
+                        </div>
                     </div>
+                    <p className="text-xs text-slate-500">يبحث تلقائيًا بعد التوقف عن الكتابة أو حفظ الفترة. يمكنك استخدام حقل واحد أو أكثر.</p>
                 </form>
             </section>
 
             {resultSummary && <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5" data-testid="orders-v2-result-summary">{[["الطلبات",resultSummary.orders],["المدفوعة",resultSummary.paid_orders],["بانتظار الدفع",resultSummary.pending_payment_orders],["ملغاة/مسترجعة",Number(resultSummary.cancelled_orders || 0)+Number(resultSummary.refunded_orders || 0)],["المبيعات المدفوعة",formatMoney(resultSummary.paid_sales)],["متوسط السلة",formatMoney(resultSummary.average_basket)],["المنتجات / القطع",`${resultSummary.product_lines || 0} / ${resultSummary.units || 0}`],["غير منسوبة أو متعارضة",resultSummary.unattributed_or_conflicted],["قبل وقت القطع",resultSummary.orders_at_or_before_cutoff],["بعد وقت القطع",resultSummary.orders_after_cutoff]].map(([label,value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><div className="text-xs font-bold text-slate-500">{label}</div><div className="num mt-1 text-xl font-extrabold">{value ?? "—"}</div></div>)}</section>}
             {resultSummary?.currency_conversion_complete === false && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">تعذّر احتساب ملخص المبيعات بالريال السعودي لوجود طلب بعملة أجنبية بلا سعر صرف موثّق من سلة.</div>}
+            {resultSummary?.skipped_invalid > 0 && <div role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">النتائج جزئية: تعذّر قراءة بعض الطلبات لوجود بيانات ناقصة ({resultSummary.skipped_invalid}).</div>}
+            {resultSummary?.scan_limit_reached && <div role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">البحث الحالي يشمل أحدث 5000 طلب فقط؛ قد توجد نتائج أقدم غير معروضة.</div>}
 
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><div className="flex min-w-0 items-center gap-3"><SelectionBox checked={allVisibleSelected} disabled={!canSelectVisible} onChange={toggleVisible} label={canSelectVisible ? "تحديد الطلبات الظاهرة" : "تحديد الكل متاح داخل حالة موحدة فقط"} /><h2 className="truncate font-extrabold text-slate-900">{searchMode ? "نتيجة البحث" : activeStatusLabel ? `طلبات: ${activeStatusLabel}` : "أحدث الطلبات حسب تاريخ الإنشاء"}</h2></div>{selectedCount > 0 && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-teal-100 px-3 py-2 text-sm font-bold text-teal-900">تم تحديد {selectedCount.toLocaleString("en-US")} طلب</span><button type="button" onClick={() => setQuickEditOpen(true)} className="rounded-xl border border-teal-500 bg-white px-4 py-2 text-sm font-bold text-teal-800">تحرير سريع</button><button type="button" onClick={clearSelection} className="rounded-xl border px-3 py-2 text-sm">إلغاء التحديد</button></div>}</div>
