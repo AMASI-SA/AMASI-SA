@@ -1,5 +1,36 @@
 # Preparation receiving custody actor and current Salla status
 
+## 2026-10-19 integration on current Production — verification pending
+
+Canonical candidate branch: `codex/preparation-custody-integrated-20261019`.
+Base: `0d55bb0ce74df2759e6f9c4786f1b759b29ac0b0` (fresh Production fetch).
+Worktree: `D:/amasi-build/backend-preparation-custody-integrated-20261019`.
+
+PR1434 docs HEAD `721fe2e310f94ce20f543f9b44e5be103a7f866f` failed the
+latest Review Completion Resumable run `39241279566`: the PR merge workflow
+includes `tests/test_assembly_print_completion.py` from newer Production, but
+its explicit checkout uses the older PR head where that file does not exist.
+Pytest exited 4 with zero tests run. Earlier green code-head evidence is not
+acceptance of this latest integration state.
+
+This candidate carries only the six custody task commits onto current
+Production. The old branch is preserved. No release-intent merge history,
+guard weakening, test deletion, or change to shipping code is introduced.
+The diff remains the same five custody files, and all 36 test files referenced
+by the integrated workflow exist. The actual v5 candidate-source transition
+check passes against this base. The status helper and custody tests are
+byte-identical to PR1434; the added/deleted runtime lines match its original
+patch exactly.
+
+Fresh root verification on isolated loopback Mongo 8.0.12: the affected-suite
+command below passed **72 tests and 22 subtests in 21.67s**, exit 0, with zero
+skips/failures/errors. The formerly missing current-production suite
+`tests/test_assembly_print_completion.py` passed **17 tests and 13 subtests in
+14.80s**, exit 0, also with zero skips/failures/errors. Exact-head GitHub CI
+remains pending; no merge,
+deployment, APK or live business write has occurred. Existing live print
+incident acceptance remains failed and is outside this custody correction.
+
 ## 2026-10-19 owner follow-up: explain ineligible receipt status
 
 Added a read-only, tenant-scoped status explanation for both receiving search
