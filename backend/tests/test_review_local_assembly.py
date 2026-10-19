@@ -467,7 +467,10 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
             (fulfillment.COMPONENT_LIFECYCLES, {"generation": "changed"}),
             (fulfillment.COMPONENT_LIFECYCLES, {"retry_required": True}),
             ("unified_orders", {"g47_salla_snapshot.revision": 999}),
-            ("unified_orders", {"g47_salla_snapshot.component_pending": True}),
+            # Identical proven pending snapshots can now recover in receipt;
+            # an authoritative-refresh requirement must still block them.
+            ("unified_orders", {"g47_salla_snapshot.component_pending": True,
+                                "g47_salla_snapshot.requires_authoritative_refresh": True}),
             (completion.OPERATIONS, {"superseded_by": "later"}),
         ]
         for collection, change in mutations:

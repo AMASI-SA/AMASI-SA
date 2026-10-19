@@ -468,6 +468,66 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         for name, documents in inventory.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents)
 
+    async def seed_historical_receipt_gap(self):
+        await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        selector = {"user_id": "owner", "order_number": payload["reference_id"]}
+        await self.db[fulfillment.WORKFLOWS].update_one(selector, {"$set": {
+            "stage": "in_progress", "completion_mode": "mezan_local_v1",
+            "review_completion_operation_id": "synthetic-proof", "items": [],
+        }}, upsert=True)
+        await self.db.order_review_completion_operations.insert_one({**selector,
+            "_id": "synthetic-proof", "state": "completed", "completion_mode": "mezan_local_v1"})
+        await self.db[pieces.PIECES].insert_one({**selector,
+            "id": "historical-piece", "piece_id": "historical-piece", "order_item_id": "line-1",
+            "unit_index": 1, "status": pieces.PIECE_STATUS_READY_FOR_RECEIPT,
+            "responsible_employee_id": "synthetic-preparer", "assignment_status": "assigned",
+            "supplier_dispatch_status": "received", "services": [],
+        })
+        await self.db.unified_orders.update_one(selector, {
+            "$inc": {"g47_salla_snapshot.revision": 1},
+            "$set": {"g47_salla_snapshot.component_pending": True},
+        })
+        return selector, payload
+
+    async def test_employee_receipt_recovers_historical_unchanged_snapshot(self):
+        selector, _ = await self.seed_historical_receipt_gap()
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
+            json={"client_request_id": "synthetic-historical-receipt"})
+        self.assertEqual(result.status_code, 200, result.text)
+        source = await self.db.unified_orders.find_one(selector)
+        lifecycle = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one(selector)
+        self.assertFalse(source["g47_salla_snapshot"]["component_pending"])
+        self.assertEqual(source["g47_salla_snapshot"]["revision"], lifecycle["snapshot_revision"])
+        self.assertEqual(await self.db[pieces.PIECES].count_documents({"preparation_receipt_status": "received"}), 1)
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
+    async def test_historical_receipt_without_review_proof_rolls_back_revalidation(self):
+        selector, _ = await self.seed_historical_receipt_gap()
+        await self.db.order_review_completion_operations.delete_many({})
+        names = await self.db.list_collection_names()
+        before = {name: await self.db[name].find({}).to_list(100) for name in names}
+        result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
+            json={"client_request_id": "synthetic-missing-proof"})
+        self.assertEqual(result.status_code, 409, result.text)
+        for name, documents in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents, name)
+
+    async def test_historical_receipt_with_changed_components_remains_blocked(self):
+        selector, payload = await self.seed_historical_receipt_gap()
+        payload["items"][0]["quantity"] = 3
+        await self.refresh(payload, allow_auto_fulfillment=False)
+        names = await self.db.list_collection_names()
+        before = {name: await self.db[name].find({}).to_list(100) for name in names}
+        result = await self.client.post("/preparation-work-v1/receiving/pieces/historical-piece/receive",
+            json={"client_request_id": "synthetic-material-change"})
+        self.assertEqual(result.status_code, 409, result.text)
+        for name, documents in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents, name)
+
     async def test_revalidation_keeps_newer_timestamp_and_safety_flags_blocked(self):
         payload = self.source_payload(status="in_progress")
         self.assertTrue((await self.webhook(payload))["synced"])
