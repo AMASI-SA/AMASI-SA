@@ -191,3 +191,25 @@ async def sync_completed_carrier_label(
 
 
 __all__ = ["sync_completed_carrier_label"]
+
+
+async def prepare_completed_carrier_label(db, *, user_id, order_number, actor_id, actor_name, authorize):
+    """One explicit issue contract for completed-page and assembly clients.
+
+    Read the current label first with the existing completed-page print checks.
+    Only a confirmed not-completed response may enter durable status delivery.
+    Network/identity/shipment failures never trigger a status POST fallback.
+    """
+    from order_engine import shipping_label_service as shipping
+    from assembly_completion_delivery import resume
+    await _require_print_completed_workflow(db, user_id=user_id, order_number=order_number)
+    try:
+        result = await shipping.refresh_shipping_label(db, user_id, order_number)
+    except ShippingLabelError as exc:
+        if exc.code != "order_status_not_completed":
+            raise
+        await authorize()
+        result = await resume(db, user_id=user_id, order_number=order_number,
+                              actor_id=actor_id, actor_name=actor_name, manual=True)
+    await authorize()
+    return {**result, "order_number": order_number, "assembly_completion_confirmed": True}
