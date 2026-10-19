@@ -67,6 +67,17 @@ CI workflow executes the relevant 40-case suite with a no-skips floor.
 
 ## Boundaries and next action
 
+Owner follow-up: employee product PDF filenames now come from the persisted
+assigned employee, actual rendered piece quantity, original registry assignment
+timestamp converted to Riyadh, and stable file number. The PDF response provides
+an ASCII fallback plus UTF-8 `filename*`; the companion Android native downloader
+uses that name for both immediate print and later file reprint. No PDF geometry,
+content, assignment, permission or database records changed. Missing historical
+metadata is explicit and never replaced with the download date. Manual checks
+covered UTC-midnight rollover and a real server-header-to-Android-downloader
+fixture; existing PDF/viewer/share/session and dependency checks pass. The sample
+uses synthetic employee data only. Native file-picker readback remains pending.
+
 Production changed: **no**. No merge, release lease, deployment, APK or OTA.
 History is the stored synchronized evidence: this endpoint does not call Salla
 to fill missing history. Missing timestamps remain null, not generic update
