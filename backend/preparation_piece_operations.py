@@ -3958,10 +3958,16 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
     async def resume_assembly_completion(order_number: str, user: dict = Depends(current_user)):
         context = await _actor_context(db, user)
         _require_permission(context, "fulfillment.labels.print", responsibility="shipping_labeling")
-        from assembly_completion_delivery import resume
+        from fulfillment_carrier_label import prepare_completed_carrier_label
+        async def authorize():
+            current_context = await _actor_context(db, user)
+            _require_permission(current_context, "fulfillment.labels.print", responsibility="shipping_labeling")
+            if current_context["merchant_id"] != context["merchant_id"]:
+                raise HTTPException(403, detail={"code": "completion_owner_changed"})
         try:
-            return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
-                                actor_id=context["actor_id"], actor_name=_text(user.get("name")), manual=True)
+            return await prepare_completed_carrier_label(
+                db, user_id=context["merchant_id"], order_number=_text(order_number),
+                actor_id=context["actor_id"], actor_name=_text(user.get("name")), authorize=authorize)
         except ShippingLabelError as exc:
             raise HTTPException(exc.status_code, detail={"code": exc.code}) from exc
 
