@@ -1,0 +1,67 @@
+{
+  "task": "ORDERS-V2-SEARCH-20261017",
+  "branch": "codex/orders-v2-search-20261017",
+  "base_sha": "29ccdb81af9eb51ca2670b1bca95afa4666fb9c7",
+  "state": "MOBILE_COMPACT_LAYOUT_LOCAL_PASS_CI_PENDING",
+  "scope": "Explicit-submit orders search by campaign/product ID and SKU; one dashboard date-range picker; bounded read-only search without preparation writes.",
+  "root_causes": [
+    "Product IDs absent from search text and API",
+    "Campaign ID in UTM normalized only after filtering",
+    "Timer/focus replaced combined result set with its first order",
+    "Global5000 eager scan silently missed older matches and first50 had no continuation"
+  ],
+  "implemented": [
+    "URL/filter/date edits remain drafts until Search",
+    "Shared ArabicDateRangePicker, explicit Saudi full-day bounds",
+    "Exact product/parent/variant and campaign IDs, SKU/general search",
+    "Submitted filters retained across pagination; no combined-search polling",
+    "Streaming100-row batches using existing tenant/date index; date envelope and exact product candidate query; max1500ms DB /3s scan /1 scan per process; yield every10 rows",
+    "Over5000 candidates rejects with narrow-period message instead of incomplete totals",
+    "Search pagination50 with tenant/filter-bound cursor and full bounded-cohort summary; optional catalog name enrichment capped500ms"
+  ],
+  "verification": {
+    "frontend": "15tests/3suites PASS",
+    "backend_focused": "26 PASS, realMongo integration skipped locally (dedicated CI Mongo service added)",
+    "regressions_reproduced": "Combined result loss and unavailable next page failed before hook fix",
+    "broad_route_suite": "8 environment dependency failures (PyMuPDF missing at run time),1 pre-existing AST guard failure caused by existing mark-read update_one route; narrow real-route tests added",
+    "production_load": "NOT_TESTED",
+    "mongo_execution_plan": "NOT_TESTED",
+    "real_route": "2 real core route tests PASS, including owner boundary, product API and continuation",
+    "local_synthetic_benchmark": {
+      "rows": 1500,
+      "before": {
+        "matching_orders": 0,
+        "elapsed_seconds": 0.411,
+        "max_event_loop_gap_ms": 412.58,
+        "heartbeat_ticks": 2
+      },
+      "after": {
+        "matching_orders": 1500,
+        "elapsed_seconds": 0.392,
+        "max_event_loop_gap_ms": 17.63,
+        "heartbeat_ticks": 52
+      },
+      "scope": "Synthetic mapper only; not production/Mongo/physical preparation workload"
+    }
+  },
+  "production_changed": false,
+  "release_guard": "Not touched",
+  "remaining": [
+    "Fresh candidate CI/build",
+    "Browser recovery: credential observation restricted; user takeover requested",
+    "Protocol-v5 release and production visual acceptance"
+  ],
+  "next_safe_action": "Inspect new candidate CI, restore browser access then inspect shared guard status and follow already-authorized protocol-v5 release. No further publication permission needed.",
+  "publication_authorized": true,
+  "mobile_followup": {
+    "scope": "Owner screenshot correction: four KPIs in one phone row, compact single-line executive title and cost label/amount/share rows; desktop labels retained, mobile aliases preserve provisional ads state. Latest Orders compact single-line header; phone disclosure arrows24px without frame/extra vertical padding across dashboard cards. All dashboard card headers now share mobile nowrap titles, compact controls, metadata sizing; long supporting descriptions move into expanded body on phones and remain in desktop headers.",
+    "files": [
+      "frontend/src/index.css",
+      "frontend/src/pages/AdvancedDashboard.jsx",
+      "frontend/src/components/dashboardPanel.css",
+      "frontend/src/components/DashboardAdsSpendCard.jsx"
+    ],
+    "verification": "Dashboard/panel/ads card existing focused tests rerun; CSS visual acceptance pending browser recovery. Desktop header unchanged; no data requests or calculation changes.",
+    "publication": "Not merged/deployed; prior807 source CI all15 successful but new source must pass fresh CI."
+  }
+}
