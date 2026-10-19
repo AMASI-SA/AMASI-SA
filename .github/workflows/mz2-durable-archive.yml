@@ -1,0 +1,135 @@
+name: MZ2 approved durable archive 56919d2a
+on:
+  push:
+    branches: [codex/opening-archive-56919d2a]
+permissions:
+  contents: read
+concurrency:
+  group: mz2-durable-archive-56919d2a
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      EXPECTED_DEPLOYMENT: 56919d2a8c48ca5fe85ee5543e7d86563d4c982f
+      EXPECTED_SOURCE: fdf719e67c0385fd73bea3d1931f32e4595822fc
+      EXPECTED_RELEASE: rg5-4161b4475169f735ef9df7e52b2a8afbd6ca1799acc2f8bd22b14f3e3be32e99
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 56919d2a8c48ca5fe85ee5543e7d86563d4c982f
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.20.2'
+      - name: Validate immutable source and reviewed intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_DEPLOYMENT"
+          test -z "$(git status --porcelain)"
+          mkdir -p "$RUNNER_TEMP/archive-output" "$RUNNER_TEMP/archive-home"
+          PYTHONPATH=backend:. python - <<'PY'
+          import os
+          from scripts.emergent_deployment_adapter import load_release_intent, verify_release_intent_git
+          p = load_release_intent()
+          verify_release_intent_git(p)
+          assert p['source_git_sha'] == os.environ['EXPECTED_SOURCE']
+          assert p['runtime_identity']['release_id'] == os.environ['EXPECTED_RELEASE']
+          assert p['frontend_build']['artifact_tree_sha256'] == '125dfd50acdc054ab848c3fe5d2ceecf2284bee3a65785178f08e3fb68302fed'
+          print('PINNED_SOURCE_AND_REVIEWED_INTENT_PASS')
+          PY
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
+      - name: One official governed build without inherited runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/archive-home" LANG=C.UTF-8 \
+            TMPDIR="$RUNNER_TEMP" PYTHONDONTWRITEBYTECODE=1 \
+            XDG_CACHE_HOME="$RUNNER_TEMP/archive-cache" \
+            yarn build 2>&1 | tee "$RUNNER_TEMP/archive-output/build.log"
+          cd ..
+          env -i PATH="$PATH" HOME="$RUNNER_TEMP/archive-home" LANG=C.UTF-8 \
+            TMPDIR="$RUNNER_TEMP" PYTHONDONTWRITEBYTECODE=1 \
+            python -B scripts/emergent_deployment_adapter.py verify-packages \
+            2>&1 | tee "$RUNNER_TEMP/archive-output/packages.log"
+          test -z "$(git status --porcelain)"
+      - name: Archive allowlisted outputs and prove isolated restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B - <<'PY'
+          import hashlib, json, os, pathlib, stat, subprocess, tarfile
+          root = pathlib.Path.cwd()
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'archive-output'
+          intent = json.loads((root/'release/release-intent-v5.json').read_text())
+          identity = json.loads((root/'backend/release_identity.json').read_text())
+          assert identity == intent['runtime_identity']
+          files = [root/'backend/release_identity.json', root/'frontend/.release/reproducible-build.json']
+          build = root/'frontend/build'
+          assert build.is_dir() and not build.is_symlink()
+          for p in build.rglob('*'):
+              assert not p.is_symlink(), 'symlink forbidden'
+              if p.is_dir(): continue
+              assert p.is_file(), 'special file forbidden'
+              files.append(p)
+          records = []
+          for p in sorted(files):
+              assert p.is_file() and not p.is_symlink()
+              rel = p.relative_to(root).as_posix()
+              assert not any(x in p.relative_to(root).parts for x in ('node_modules', '.env', '.git'))
+              records.append({'path':rel,'bytes':p.stat().st_size,'mode':stat.S_IMODE(p.stat().st_mode),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          tree = hashlib.sha256(json.dumps(records,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          archive = out/'mz2-generated-release.tar.gz'
+          with tarfile.open(archive,'w:gz') as tf:
+              for r in records:
+                  tf.add(root/r['path'],arcname=r['path'],recursive=False)
+          sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+          manifest = {'schema_version':1,'deployment_sha':os.environ['EXPECTED_DEPLOYMENT'],'source_sha':os.environ['EXPECTED_SOURCE'],'release_id':os.environ['EXPECTED_RELEASE'],'archive_sha256':sha,'package_tree_sha256':tree,'tree_algorithm':'sha256 of UTF-8 JSON sorted-key compact file records sorted by path, including bytes/mode/sha256','frontend_artifact_sha256':intent['frontend_build']['artifact_tree_sha256'],'reviewed_intent_sha256':hashlib.sha256((root/'release/release-intent-v5.json').read_bytes()).hexdigest(),'files':records}
+          (out/'manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+          restore = pathlib.Path(os.environ['RUNNER_TEMP'])/'restore-check'
+          subprocess.run(['git','clone','--local','--no-hardlinks',str(root),str(restore)],check=True,stdout=subprocess.DEVNULL)
+          assert subprocess.check_output(['git','-C',str(restore),'rev-parse','HEAD'],text=True).strip() == os.environ['EXPECTED_DEPLOYMENT']
+          expected = {r['path']:r for r in records}
+          with tarfile.open(archive,'r:gz') as tf:
+              members=tf.getmembers()
+              assert len(members)==len(expected) and {m.name for m in members}==set(expected)
+              for m in members:
+                  assert m.isfile() and not pathlib.PurePosixPath(m.name).is_absolute() and '..' not in pathlib.PurePosixPath(m.name).parts
+                  target=restore/m.name
+                  assert not target.exists()
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  content=tf.extractfile(m).read()
+                  assert hashlib.sha256(content).hexdigest()==expected[m.name]['sha256']
+                  target.write_bytes(content)
+                  target.chmod(expected[m.name]['mode'])
+          for r in records:
+              p=restore/r['path']
+              assert p.stat().st_size==r['bytes'] and stat.S_IMODE(p.stat().st_mode)==r['mode']
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==r['sha256']
+          env={'PATH':os.environ['PATH'],'HOME':str(pathlib.Path(os.environ['RUNNER_TEMP'])/'archive-home'),'LANG':'C.UTF-8','TMPDIR':os.environ['RUNNER_TEMP'],'PYTHONDONTWRITEBYTECODE':'1'}
+          with (out/'restore-verification.log').open('w') as log:
+              subprocess.run(['python','-B','scripts/emergent_deployment_adapter.py','verify-packages'],cwd=restore,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
+          (out/'restore-result.json').write_text(json.dumps({'status':'PASS','files_verified':len(records),'package_tree_sha256':tree,'archive_sha256':sha},indent=2)+'\n')
+          with (out/'SHA256SUMS').open('w') as sums:
+              for p in sorted(out.iterdir()):
+                  if p.name=='SHA256SUMS': continue
+                  sums.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n')
+          print(json.dumps({'archive_sha256':sha,'package_tree_sha256':tree,'files':len(records),'restore':'PASS'}))
+          PY
+      - name: Retain archive and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mz2-durable-56919d2a-${{ github.run_id }}
+          path: ${{ runner.temp }}/archive-output/
+          retention-days: 30
+          if-no-files-found: error
