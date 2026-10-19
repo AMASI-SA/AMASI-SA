@@ -127,6 +127,6 @@ watchfiles==1.2.0
 webauthn==2.7.1
 websockets==16.0
 xlsxwriter==3.2.9
-yarl==1.24.2
+yarl==1.25.1
 zipp==4.1.0
 respx==0.23.1
