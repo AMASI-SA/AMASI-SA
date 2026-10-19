@@ -1,10 +1,10 @@
 # Read-only global Android order and physical-piece tracking
 
-Task branch: `codex/global-order-tracking-20261018`.
+Task branch: `codex/global-order-tracking-integrated-20261019`.
 Initial Production base: `e015b913ce950d6e5cf52cc0f1893da94b7b30b4`.
 Integrated Production base: `16e44c3bd5478854bc3d12a9545f05519e61f22d`.
-Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1437
-Worktree: `D:/amasi-build/backend-global-order-tracking-20261018`.
+Superseded Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1437
+Worktree: `D:/amasi-build/backend-global-order-tracking-integrated-20261019`.
 
 ## Contract
 
@@ -58,6 +58,15 @@ Merged the current Production source into this task branch without conflicts
 (`a4ce75602dbd57854461ed70d937059f059aea5e`). Root reran the same 40 tests:
 **40 passed in 28.15s**, exit 0. No guard or test floor was weakened; fresh CI
 is required for this integrated candidate. No `/app` or lease was touched.
+
+Final release-history repair: merging the newer Production branch preserved
+an intent-changing merge in full history, so the guard correctly still refused
+the candidate. Preserved that old branch/PR and cherry-picked only this task's
+three commits onto exact Production 16e44 in a new branch. Checkpoint
+`3ae031cf8` is byte-for-byte tree equivalent to old `2ec299b517084ab69bc4598d700c73f86e15dd09`
+(`git diff --exit-code`, exit 0). The actual `_assert_candidate_source_transition`
+now passes with the existing intent unchanged. No guard, intent or production
+file was altered to satisfy the check. A new Draft PR supersedes PR1437.
 
 The broader legacy permission suite has an independently reproduced baseline
 failure in `test_employee_may_have_mobile_pages_with_zero_mezan_permissions`
