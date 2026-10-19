@@ -22,7 +22,7 @@ class CompletionReadbackRouteTests(unittest.IsolatedAsyncioTestCase):
         await self.db.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.items": self.order["items"]}})
         await self.db.mezan_preparation_pieces_v1.insert_many([
             {"user_id": "owner", "order_number": "synthetic-1", "piece_id": str(i),
-             "order_item_id": "salla:synthetic-1:line", "unit_index": i + 1, "assembly_status": "ready"} for i in range(2)])
+             "order_item_id": "line", "unit_index": i + 1, "assembly_status": "ready"} for i in range(2)])
         await self.reseal()
         self.context = {"merchant_id": "owner", "actor_id": "employee", "is_owner": False,
                         "permissions": {"fulfillment.ready.read"}, "responsibilities": {"instant_ready"}}

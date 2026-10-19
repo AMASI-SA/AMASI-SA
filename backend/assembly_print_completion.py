@@ -19,24 +19,15 @@ from salla_shipping import extract_shipping, projected_shipping
 
 
 def _covers_current_products(raw, pieces):
-    from order_engine.mapper import map_salla_order
     expected = set()
     items = raw.get("items")
     if not isinstance(items, list) or not items:
         return False
-    # Preparation stores the mapper's canonical identity, never the raw Salla
-    # item id. Reuse the mapper for aliases and generated identities as well.
-    try:
-        mapped = map_salla_order(raw)
-    except (ValueError, TypeError, KeyError):
-        return False
-    if len(mapped.items) != len(items):
-        return False
     seen = set()
-    for item, canonical in zip(items, mapped.items):
+    for item in items:
         if not isinstance(item, dict):
             return False
-        identity = shipping._text(canonical.order_item_id)
+        identity = shipping._text(item.get("id"))
         try:
             quantity = Decimal(str(item.get("quantity")))
             if not quantity.is_finite() or quantity <= 0 or quantity > 10000 or quantity != quantity.to_integral_value():
