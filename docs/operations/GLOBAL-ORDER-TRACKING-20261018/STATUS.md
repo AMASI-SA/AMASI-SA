@@ -3,7 +3,8 @@
 Task branch: `codex/global-order-tracking-integrated-20261019`.
 Initial Production base: `e015b913ce950d6e5cf52cc0f1893da94b7b30b4`.
 Integrated Production base: `16e44c3bd5478854bc3d12a9545f05519e61f22d`.
-Superseded Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1437
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1438
+Superseded PR1437 is closed without merge; its branch is preserved.
 Worktree: `D:/amasi-build/backend-global-order-tracking-integrated-20261019`.
 
 ## Contract
@@ -75,6 +76,16 @@ failure in `test_employee_may_have_mobile_pages_with_zero_mezan_permissions`
 CI workflow executes the relevant 40-case suite with a no-skips floor.
 
 ## Boundaries and next action
+
+Final source checkpoint `4a3ac79d73a11132255b502f037abeddcd4b469e`: all **29
+applicable GitHub checks passed**, four release/Snapchat jobs were nonapplicable
+and skipped. Dedicated tracking run 39240084803 passed. General review run
+39240084805 passed 451 tests plus 265 subtests in 276.70s and a separate one-case
+acceptance guard, with zero skips/failures/errors. The source release build
+classification now passes (39240084548); this is not deployment verification.
+Mobile PR280 source `2022718039e8f3fa8c2485d5a34132056cc59ebf` passed
+frontend-checks run 39239121115 including the filename change. Temporary local
+preview and dedicated loopback Mongo were stopped; their directories retained.
 
 Owner follow-up: employee product PDF filenames now come from the persisted
 assigned employee, actual rendered piece quantity, original registry assignment
