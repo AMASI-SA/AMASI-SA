@@ -26,6 +26,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
+from assembly_status_policy import canonical_status
+from preparation_receipt_status_message import receipt_status_rejection
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -1439,6 +1441,31 @@ def _preparation_receipt_order_number(value: Any) -> str:
     return raw
 
 
+async def _preparation_receiving_active_order_pieces(
+    db: Any, *, user_id: str, pieces: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Read visibility follows synced Salla status, not stale local piece state."""
+    numbers = sorted({_text(piece.get("order_number")) for piece in pieces} - {""})
+    if not numbers:
+        return []
+    sources = await db["unified_orders"].find(
+        {"user_id": user_id, "order_number": {"$in": numbers}},
+        {
+            "_id": 0, "order_number": 1, "order_status": 1, "order_status_slug": 1,
+            "raw_by_source.salla_direct.status": 1,
+            "raw_by_source.salla_direct.status_slug": 1,
+            "g47_salla_snapshot.requires_authoritative_refresh": 1,
+        },
+    ).to_list(None)
+    # Component reconciliation does not change the order's status. Project only
+    # its status freshness flag so an unrelated component_pending phase does
+    # not temporarily hide valid receipts. This is a read filter, not authority
+    # for changing piece, workflow, shipping or receipt state.
+    active = {_text(source.get("order_number")) for source in sources
+              if canonical_status(source) == "in_progress"}
+    return [piece for piece in pieces if _text(piece.get("order_number")) in active]
+
+
 async def _preparation_receipt_search(
     db: Any,
     *,
@@ -1481,6 +1508,13 @@ async def _preparation_receipt_search(
         raise HTTPException(
             status_code=404,
             detail={"code": "preparation_receipt_order_not_found"},
+        )
+    pieces = await _preparation_receiving_active_order_pieces(db, user_id=user_id, pieces=pieces)
+    if not pieces:
+        raise HTTPException(
+            status_code=409,
+            detail=await receipt_status_rejection(db, user_id=user_id, order_number=order_number,
+                code="preparation_receipt_order_not_in_progress"),
         )
 
     rows = [
@@ -1719,6 +1753,7 @@ async def _preparation_receiving_custody_view(
         },
         {"_id": 0, "user_id": 0, "image_b64": 0},
     ).sort("preparation_received_at", -1).limit(10000).to_list(10000)
+    pieces = await _preparation_receiving_active_order_pieces(db, user_id=user_id, pieces=pieces)
     groups = _preparation_receiving_custody_groups(pieces)
     return {
         "receiver_employee_id": receiver_id,
@@ -1747,7 +1782,8 @@ async def _receive_preparation_piece(
         current = await _current_assembly_order(scoped, user_id=user_id, order_number=number)
         if not local_review_stage_eligible(current, approved.get(number),
                                           {"reviewed", "in_progress", "ready_to_ship", "completed"}):
-            raise HTTPException(409, detail={"code": "local_review_receipt_not_eligible"})
+            raise HTTPException(409, detail=await receipt_status_rejection(scoped, user_id=user_id,
+                order_number=number, code="local_review_receipt_not_eligible"))
         return await _receive_preparation_piece_impl(scoped, **args, update_file=False)
 
     result = await operational_owner(db, user_id, receive)
@@ -3790,7 +3826,9 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             **await _preparation_receiving_custody_view(
                 db,
                 user_id=context["merchant_id"],
-                receiver_id=context["actor_id"],
+                # Native employees use a merchant-shaped principal. Match the
+                # receiver persisted by the receipt route, not that principal.
+                receiver_id=effective_operation_actor(user, context)["id"],
             ),
             "mezan_only": True,
             "salla_updated": False,
