@@ -1,10 +1,12 @@
 # Preparation receiving custody actor and current Salla status
 
-## 2026-10-19 integration on current Production — verification pending
+## 2026-10-19 integration on current Production — source checks passed
 
 Canonical candidate branch: `codex/preparation-custody-integrated-20261019`.
 Base: `0d55bb0ce74df2759e6f9c4786f1b759b29ac0b0` (fresh Production fetch).
 Worktree: `D:/amasi-build/backend-preparation-custody-integrated-20261019`.
+Replacement Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1440.
+Use this candidate instead of PR1434; do not combine both custody branches.
 
 PR1434 docs HEAD `721fe2e310f94ce20f543f9b44e5be103a7f866f` failed the
 latest Review Completion Resumable run `39241279566`: the PR merge workflow
@@ -26,9 +28,22 @@ Fresh root verification on isolated loopback Mongo 8.0.12: the affected-suite
 command below passed **72 tests and 22 subtests in 21.67s**, exit 0, with zero
 skips/failures/errors. The formerly missing current-production suite
 `tests/test_assembly_print_completion.py` passed **17 tests and 13 subtests in
-14.80s**, exit 0, also with zero skips/failures/errors. Exact-head GitHub CI
-remains pending; no merge,
-deployment, APK or live business write has occurred. Existing live print
+14.80s**, exit 0, also with zero skips/failures/errors.
+
+Source checkpoint `e5575719ce3e57a6e14b32d5c767bb150e03487d`, tree
+`91c1d139020531c9c3f1819f2fd5466555f1ce37`, is pushed and remote-readback
+verified. All **22 applicable PR checks passed**. Four nonapplicable checks
+were skipped (manual redeploy, intent adapter rehearsal, two Snapchat-only
+jobs), not accepted as release proof. Review Completion Resumable run
+`39249625450` recorded the exact source and passed **466 tests and 292
+subtests in 284.15s**, plus the acceptance guard **1 test in 2.12s**. Both
+executed-suite gates reported zero skips/failures/errors. Artifact
+`12184877487` retains the JUnit evidence. This subsequent status-only commit
+does not change runtime code, tests or workflow.
+
+The dedicated local Mongo process was shut down after executable, PID/start
+time and replica identity checks; its port is closed. No merge, deployment,
+APK or live business write has occurred. Existing live print
 incident acceptance remains failed and is outside this custody correction.
 
 ## 2026-10-19 owner follow-up: explain ineligible receipt status
