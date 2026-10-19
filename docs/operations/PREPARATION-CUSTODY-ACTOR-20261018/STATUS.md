@@ -20,8 +20,14 @@ unchanged router creates its empty collection/index on first use.
 
 This follow-up supersedes the earlier 70-test source checkpoint only for the
 new message helper and callers/tests. It still has no Production change and
-requires review/CI before integration. The companion Android message mapping
+requires release review before integration. At source
+`01d85bf2b363098c1e631b891eb3b555d7c47259`, all 22 applicable checks passed;
+four release/Snapchat-specific jobs were nonapplicable and skipped. The
+companion Android message mapping
 is on `codex/global-order-tracking-20261018`; no APK has been built here.
+Mobile PR280 source `2022718039e8f3fa8c2485d5a34132056cc59ebf` has passing
+frontend-checks (39239121115). Backend global tracking/PDF naming PR1438 is a
+separate candidate; this custody PR1434 has not been merged or deployed.
 
 ## Scope and status
 
