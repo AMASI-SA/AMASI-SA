@@ -17,6 +17,9 @@ from operational_balance_store import RECEIPTS, AUTHORIZATION_GUARD, check_autho
 from operational_balance_service import (entity, save_opening, create_movement, report, refresh, freeze, supplier_return)
 
 
+from operational_opening_inventory import OpeningRequest as StockOpeningRequest, OpeningApproval as StockOpeningApproval
+
+
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -369,6 +372,21 @@ def make_operational_balance_router(db, current_user):
         from operational_purchase_metadata import products, locations
         return {'items':await catalog(db,owner), 'products':await products(db,owner), 'locations':await locations(db,owner)}
 
+    @router.get('/inventory-opening/context')
+    async def inventory_opening_context(user=Depends(current_user)):
+        from operational_opening_inventory import context
+        return await context(db, user)
+
+    @router.post('/inventory-opening/preview')
+    async def inventory_opening_preview(payload: StockOpeningRequest, user=Depends(current_user)):
+        from operational_opening_inventory import preview
+        return await preview(db, user, payload.model_dump())
+
+    @router.post('/inventory-opening/approve')
+    async def inventory_opening_approve(payload: StockOpeningApproval, user=Depends(current_user)):
+        from operational_opening_inventory import approve
+        return await approve(db, user, payload.model_dump())
+
     @router.get('/inventory')
     async def inventory_availability(user=Depends(current_user)):
         _,owner,_=await scope(db,user,'reports')
@@ -454,6 +472,7 @@ def make_operational_balance_router(db, current_user):
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
+                "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
