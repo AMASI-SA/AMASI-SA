@@ -20,7 +20,7 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
         await self.db.unified_orders.update_one({}, {"$set": {"raw_by_source.salla_direct.items": self.order["items"]}})
         await self.db.mezan_preparation_pieces_v1.insert_many([
             {"user_id": "owner", "order_number": "synthetic-1", "piece_id": str(i),
-             "assembly_status": "ready", "status": "ready_for_assembly", "order_item_id": "line", "unit_index": i + 1} for i in range(2)])
+             "assembly_status": "ready", "status": "ready_for_assembly", "order_item_id": "salla:synthetic-1:line", "unit_index": i + 1} for i in range(2)])
         await self.db.order_review_workflows.update_one({}, {"$set": {
             "assembly_delivery.error_code": "assembly_completion_evidence_changed",
             "assembly_delivery.workflow_fingerprint": "obsolete",
@@ -42,6 +42,23 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
         result = await delivery.read_status(self.db, "owner", "synthetic-1")
         self.assertTrue(result["order_status_completed"])
         self.assertTrue(result["ready"])
+
+    async def test_salla_identity_aliases_use_the_same_canonical_piece_id(self):
+        for alias in ("id", "item_id", "order_item_id"):
+            with self.subTest(alias=alias):
+                self.order["items"] = [{alias: "line", "quantity": 2}]
+                await self.db.unified_orders.update_one({}, {"$set": {
+                    "raw_by_source.salla_direct.items": self.order["items"]}})
+                before = await self.snapshot()
+                self.assertTrue((await self.read())["ready"])
+                self.assertEqual(await self.snapshot(), before)
+
+    async def test_raw_or_other_order_item_ids_cannot_impersonate_canonical_units(self):
+        for wrong in ("line", "salla:another-order:line"):
+            with self.subTest(identity=wrong):
+                await self.db.mezan_preparation_pieces_v1.update_many({}, {"$set": {"order_item_id": wrong}})
+                self.assertIsNone(await self.read())
+        self.provider.assert_not_awaited()
 
     async def test_any_unready_piece_blocks_before_provider(self):
         await self.db.mezan_preparation_pieces_v1.update_one({"piece_id": "0"}, {"$set": {"assembly_status": "pending"}})
@@ -164,7 +181,7 @@ class PrintCompletionTests(unittest.IsolatedAsyncioTestCase):
     async def test_virtual_units_and_operational_work_must_be_ready(self):
         await self.db.mezan_preparation_pieces_v1.delete_many({"order_number": "synthetic-1"})
         await self.db.order_review_workflows.update_one({}, {"$set": {"items": [{
-            "order_item_id": "line", "quantity": 2, "preparation_route": "direct_assembly",
+            "order_item_id": "salla:synthetic-1:line", "quantity": 2, "preparation_route": "direct_assembly",
             "direct_assembly_piece_ids": ["v1", "v2"], "assembly_ready_piece_ids": ["v1", "v2"]}]}})
         self.assertTrue((await self.read())["ready"])
         await self.db.order_review_workflows.update_one({}, {"$set": {"items.0.assembly_ready_piece_ids": ["v1"]}})
