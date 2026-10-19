@@ -1,0 +1,21 @@
+{
+  "base": "78dcf31af73581ceba3677c464c657a0b9b2c4fc",
+  "runtime_files": {
+    "backend/accounting_onboarding_domains.py": "95efa1eb0ab8201db7488d05fd37d368195cd3ec01e6089443efe94bf5d32418",
+    "backend/accounting_onboarding_identities.py": "ec18a5b24d6537a9b9053caf2f5e8d78ea0586316dc99c6631c70ab97db50b80",
+    "backend/product_v2_details_routes.py": "f6922abbdffb2ec7e765743afb5aacd57bfe65b3dd7924457040c6250a2aa7cf",
+    "frontend/src/pages/accounting/onboarding/AccountingOnboarding.jsx": "3edfa1487b2ca8d97730bc29bcf1b2a0d622d1b63d0419d99792debd421b9425",
+    "frontend/src/pages/accounting/onboarding/OnboardingSsotSetup.jsx": "cc88c0e2364e37f0c5c151a65f4290bc1130dc4d003f8dd9a03455cc02fe318b",
+    "frontend/src/pages/accounting/onboarding/OnboardingWizardView.jsx": "bdb6fb4eed213a01a459cc4614050620b10fd046a692859649502fa09bce7b9a",
+    "frontend/src/pages/accounting/onboarding/OpeningDomainContext.jsx": "f48ff9bd6c598a2de341b1d13dbd16dfbc597534cb89f07ff2a856ba3a4a7acf",
+    "frontend/src/pages/accounting/onboarding/OpeningEntityEditor.jsx": "9540c784a1594c12bf237a40bb3d732896c10128b3ce8570bb4a3752b88c3957",
+    "frontend/src/pages/accounting/onboarding/OpeningInventoryEditor.jsx": "e5c8ea7ad6ba90e43b5a22fa0f40392712d56f0b3e10e7a42349a3c271628de8",
+    "frontend/src/pages/accounting/onboarding/OpeningReview.jsx": "3e7d54166787481d5e6ecb69380f07ba51f89f79334628cfa94824066b5ae5a2",
+    "frontend/src/pages/accounting/onboarding/inventoryCatalogPresentation.js": "eb66ae84f37be1729d90bb460475106421859064d1df6f14e645af36bf31ef22",
+    "frontend/src/pages/accounting/onboarding/onboardingFinancialAdapter.js": "ae465527ae8c332de6a1326bdaf38c966c2f1c55cc2e376a70110acc718ed1da",
+    "frontend/src/services/accountingOnboarding.js": "a9273aa867f880398199e7452edaf77703903469d6cdc2e84d27fe7a57ed1f01",
+    "frontend/src/services/onboardingContext.js": "32dbc48b76001778a87f7895dcf727770314f880b8be4b261ad2e5360584dd12",
+    "frontend/src/services/onboardingDomainContext.js": "658aea56aaea043a1a91315c1bae7de6996f95a29653788a673eb1030d3fd66e"
+  },
+  "scope": "Working-source bytes tested before final verification commit; no deployed-source claim."
+}

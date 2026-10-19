@@ -1,11 +1,23 @@
 """Real native producers must remain consumable by classified V2 reports."""
 import unittest
+import os
+from copy import deepcopy
 from decimal import Decimal
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import test_mz2_employee_finance as payroll_fixture
 import test_mz2_daily_movements as daily_fixture
 from accounting_employee_finance import PayrollAccrualIn, accrue_payroll_period
 from accounting_mz2_reports import mz2_financial_position, mz2_trial_balance
+from employee_outgoing_native_fixture import NoLegacyFinancial
+
+
+class NoLegacyReports(NoLegacyFinancial):
+    def started(self, event):
+        super().started(event)
+        collection = event.command.get(event.command_name)
+        if isinstance(collection, str) and collection in {"operating_salaries", "financial_provider_apps_legacy"}:
+            self.accesses.append((event.command_name, collection))
 
 
 async def reports(test):
@@ -19,12 +31,9 @@ async def reports(test):
 
 
 class PayrollReportTests(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        await payroll_fixture.MZ2EmployeeFinanceTests.asyncSetUp(self)
-        # The reused producer fixture deliberately carries a historical alias.
-        # Report readiness additionally requires the confirmed onboarding FK.
-        await self.db.mezan_employees_v2.update_one({"user_id": self.owner, "id": self.employee},
-            {"$set": {"financial_entity_id": self.employee}})
+    # Keep the actual producer fixture's historical alias: financial legs use
+    # employee.id, and report readiness must verify that same native identity.
+    asyncSetUp = payroll_fixture.MZ2EmployeeFinanceTests.asyncSetUp
     asyncTearDown = payroll_fixture.MZ2EmployeeFinanceTests.asyncTearDown
     _open_and_activate = payroll_fixture.MZ2EmployeeFinanceTests._open_and_activate
     tx = payroll_fixture.MZ2EmployeeFinanceTests.tx
@@ -51,14 +60,53 @@ class PayrollReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(Decimal(str(position["liabilities"]["salaries_unpaid"])), Decimal("266.67"))
         self.assertEqual(balances[("expense", "salary", "")], Decimal("266.67"))
 
-    async def test_reports_keep_unconfirmed_employee_financial_identity_blocked(self):
-        await self.db.mezan_employees_v2.update_one({"user_id": self.owner, "id": self.employee},
-            {"$set": {"financial_entity_id": "unconfirmed-alias"}})
-        for reader in (mz2_financial_position, mz2_trial_balance):
-            result = await reader(self.db, owner=self.owner)
-            self.assertEqual(result["status"], "not_ready")
-            self.assertTrue(any(row["reason"] == "onboarding_employee_financial_identity_dependency"
-                for row in result["readiness_blockers"]))
+    async def test_reports_use_native_id_without_alias_and_never_access_legacy(self):
+        original_db = self.db
+        listener = NoLegacyReports()
+        client = AsyncIOMotorClient(os.environ["MZ2_TEST_MONGO_URI"], event_listeners=[listener])
+        self.db = client[original_db.name]
+        try:
+            for mapping in (None, "unconfirmed-alias"):
+                with self.subTest(financial_entity_id=mapping):
+                    await self.db.mezan_employees_v2.update_one({"user_id": self.owner, "id": self.employee},
+                        {"$set": {"financial_entity_id": mapping}})
+                    before = {name: await original_db[name].find({}).to_list(None)
+                              for name in await original_db.list_collection_names()}
+                    position, balances = await reports(self)
+                    self.assertEqual(position["totals"], {
+                        "total_assets": 10500.0, "total_liabilities": 3000.0, "net_position": 7500.0})
+                    self.assertEqual(balances[("employee", self.employee, "salary_payable")], Decimal("-3000"))
+                    self.assertEqual(balances[("employee", self.employee, "advance")], Decimal("500"))
+                    self.assertEqual(balances[("employee", self.employee, "custody")], Decimal("0"))
+                    self.assertFalse(position["legacy_financial_data_included"])
+                    self.assertEqual(listener.accesses, [])
+                    self.assertEqual({name: await original_db[name].find({}).to_list(None)
+                                      for name in await original_db.list_collection_names()}, before)
+        finally:
+            self.db = original_db
+            client.close()
+
+    async def test_reports_block_missing_foreign_archived_or_alias_only_native_employee(self):
+        original = await self.db.mezan_employees_v2.find_one({"user_id": self.owner, "id": self.employee})
+        for invalid in (None, {"user_id": "other-owner"}, {"archived": True},
+                        {"id": "different-native-id", "financial_entity_id": self.employee}):
+            with self.subTest(invalid=invalid):
+                await self.db.mezan_employees_v2.replace_one({"_id": original["_id"]}, deepcopy(original), upsert=True)
+                if invalid is None:
+                    await self.db.mezan_employees_v2.delete_one({"_id": original["_id"]})
+                else:
+                    await self.db.mezan_employees_v2.update_one({"_id": original["_id"]}, {"$set": invalid})
+                for reader in (mz2_financial_position, mz2_trial_balance):
+                    result = await reader(self.db, owner=self.owner)
+                    self.assertEqual(result["status"], "not_ready", result)
+                    self.assertEqual(result["reason"], "unresolved_mz2_identity")
+                    self.assertTrue(result["readiness_blockers"])
+                    self.assertEqual({row["entity_id"] for row in result["readiness_blockers"]}, {self.employee})
+                    self.assertEqual({row["reason"] for row in result["readiness_blockers"]}, {"native_identity_missing"})
+                    if reader is mz2_financial_position:
+                        self.assertIsNone(result["totals"])
+                    else:
+                        self.assertEqual(result["items"], [])
 
 
 class DailyOutgoingReportTests(unittest.IsolatedAsyncioTestCase):
