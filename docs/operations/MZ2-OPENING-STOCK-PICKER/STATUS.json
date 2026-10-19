@@ -1,7 +1,7 @@
 {
   "task": "MZ2-OPENING-STOCK-PICKER",
-  "status": "REINTEGRATED_ON_CURRENT_PRODUCTION_SOURCE_A_PENDING",
-  "branch": "codex/opening-stock-picker-release-20261020",
+  "status": "PUBLISHED_OFFICIAL_VERIFY_PASS_3_LIVE_OPTIONS_CONFIRMED",
+  "branch": "codex/opening-stock-picker-published-20261020",
   "base_sha": "86cd0b02607650bcedd7da7942d8ce9b98925498",
   "scope": "Compact image/name/SKU search list with explicit add action; separate product configuration rows including text customization and color; read valid cached options only for opening inventory when canonical options are absent.",
   "verification": [
@@ -12,13 +12,16 @@
     "Exact b206 remote CI artifacts independently inspected: operational backend518, G47 backend313, eligibility775 XML cases, zero failures/errors/skips; overlapping suites, not unique total. Operational frontend182 and G47 frontend118 passed.",
     "New retained real-Mongo cached-only option acceptance:3passed in3.61s. Separate named10/15 rows total175; stale cached definition rejects; guards preserved; PENDING valuation and zero journals. Added to operational CI filename glob.",
     "Independent final source review93fba50 and added success-only generated-artifact archive step: no material blocker; final CI still required.",
-    "Integrated only reviewed source files on86cd0b026; Git proved no file overlap with new production source; dependency pins already identical. git diff --check PASS."
+    "Integrated only reviewed source files on86cd0b026; Git proved no file overlap with new production source; dependency pins already identical. git diff --check PASS.",
+    "Integrated source CI521 operational/327G47/778eligibility XML cases, zero failures/errors/skips; overlapping sets. All16applicable finalB checksPASS,4non-applicable skipped.",
+    "Live AMS10250 now shows phrase,twoletters,color gold/silver,note; ready default. Second row does not copy first text. Local trial discarded; no preview/approval/save.",
+    "Postpublish financial writerSTOPPED, pending ingress0; physical writerCLOSED; added opening rows0."
   ],
   "evidence": "D:/codex-evidence/opening-stock-picker-20261019",
   "constraints": "No business writes, writer activation, Salla sync or catalog mutation. Preserve all current production receipt fixes. New release identity required; old A/B untouched.",
-  "limitations": "Postdeploy live catalog acceptance remains required. All operational blockers below persist. Full APK fresh login/upgrade not proven.",
-  "production_changed": false,
-  "next": "Fresh source CI and official external A build, new intent-only B and clean-clone rehearsal, archive; fresh guard/publisher/writer checks before authorized release. No build/install in /app.",
+  "limitations": "No completed financial activation or full APK acceptance claimed. Full Cloud Build transcript not exposed by observed runtime logs; external rehearsal logs and official runtime proof archived.",
+  "production_changed": true,
+  "next": "Opening picker is published. Remaining operational blockers require separate authorized implementation/setup. Do not publish this evidence-only branch as a release; deployed A/B unchanged.",
   "ledger": "Issue1006 has2500comments and previously rejected additional comments; task PR is continuation record. Exact checkpoint SHA is in PR history.",
   "verified_remote_checkpoint": "b20615d14f162d7f8c47ce2a65df9451de8c0fd4",
   "live_read_only": {
@@ -50,7 +53,7 @@
     "stock_writer_disabled": true,
     "product_samples": {
       "AMS11828": "Live current source shows name/color/notes after ready selection",
-      "AMS10250": "Live old source still lacks text options even when ready; must verify repaired candidate against real cached definition"
+      "AMS10250": "Postpublish actual phrase,twoletters,color,note fields confirmed; ready default and independent second row."
     }
   },
   "apk": {
@@ -83,5 +86,21 @@
     "intent": "cefcd97499607c1ee8d0fd93aa1e5ddc1a04d626",
     "run": 39308150165,
     "result": "PASS; archived, superseded because production advanced before authorization"
+  },
+  "publication": {
+    "source_sha": "0f458d1fd3c019ce96fbced05bd35284b13af9ba",
+    "intent_sha": "ffe362193a54c0a68cb439435735a66faf5cbb14",
+    "deployment_sha": "b4e5d7a39951f82dff3010f33ade210714bd70c8",
+    "release_id": "rg5-b697539246ac68c8294b49d0b285f09d1f4a6c4e15fa0aed5507b18c244c23ec",
+    "pr": 1451,
+    "official_run": 39342581203,
+    "emergent_version": "a1adb71",
+    "emergent_success_riyadh": "2026-10-20 02:51",
+    "official_verify": true,
+    "checks": 3,
+    "guard_active": false,
+    "proof_url": "https://github.com/AMASI-SA/AMASI-SA/pull/1451#issuecomment-6279960183",
+    "archive": "D:/codex-release-archives/mezan-operational/opening-stock-0f458d1f",
+    "initial_verify": "Refused while frontend still served prior metadata; subsequent canonical/cache-busted probes matched new source, then official3PASS. One publish only."
   }
 }
