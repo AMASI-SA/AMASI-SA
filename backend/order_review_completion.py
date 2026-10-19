@@ -349,6 +349,8 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         now = _now()
         source = await scoped.unified_orders.find_one(selector) or {}
         if local:
+            from review_gift_address import require_gift_address
+            require_gift_address(source)
             from order_review_approval import verify_token, approval_fingerprint, reject
             from order_review_routes import _review_item_identities
             approved_digest = verify_token(approval_token, user_id=user_id,

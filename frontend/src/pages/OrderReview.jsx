@@ -529,6 +529,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     };
 
     const finish = async () => {
+        if (detail?.gift_address_review?.blocked) return;
         setCompleting(true);
         try {
             const result = await completeOrderReview(orderNumber, detail);
@@ -650,7 +651,8 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             <p className="text-sm font-semibold text-emerald-900">اعتماد المراجعة يجمّد الصورة والتعليمات المختارة، ويخرج الطلب من هذه الصفحة نهائيًا. لا يتم إنشاء ملف تجهيز أو بوليصة شحن في هذه المرحلة.</p>
                             {confirmationPending && <p role="status">{reviewConfirmationMessage(confirmationOperation)}</p>}
                             {legacyResolutionRequired && <p role="alert">{LEGACY_REVIEW_RESOLUTION_MESSAGE}</p>}
-                            <button type="button" disabled={completing || confirmationPending || legacyResolutionRequired} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
+                            {detail?.gift_address_review?.blocked && <p role="alert">{detail.gift_address_review.message}</p>}
+                            <button type="button" disabled={completing || confirmationPending || legacyResolutionRequired || detail?.gift_address_review?.blocked} onClick={finish} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-lg font-extrabold text-white disabled:opacity-50 sm:w-auto">
                                 {completing ? <SpinnerGap className="animate-spin" /> : <CheckCircle weight="fill" />}
                                 تمت المراجعة
                             </button>
