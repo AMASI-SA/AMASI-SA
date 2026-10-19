@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 from datetime import date, datetime, timedelta
 from typing import Annotated, Any, Callable, Literal
@@ -176,6 +177,15 @@ async def _latest_level_status(
     return str((row or {}).get(field) or "partial")
 
 
+def _finite_nonnegative(value: Any) -> bool:
+    if value is None or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value)) and float(value) >= 0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     spend = _sum_projection(rows, "spend_native")
     purchases = _sum_projection(rows, "purchases")
@@ -229,6 +239,10 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             else None
         ),
         "source_fact_count": len(rows),
+        # Keep missing source amounts distinct from the display sum's zero.
+        "native_amount_complete": bool(rows) and all(
+            _finite_nonnegative(row.get("spend_native")) for row in rows
+        ),
     }
 
 
@@ -391,6 +405,10 @@ async def _entity_performance_report(
             ),
             **_metrics(fact_rows),
             "source_collection": source_collection,
+            "source_period_complete": (
+                source_collection == SNAPCHAT_TOTAL_FACTS_COLLECTION
+                and level_status == "complete"
+            ),
             "performance_sync_status": (
                 "complete"
                 if fact_rows and level_status == "complete"
@@ -444,6 +462,8 @@ async def _add_sar_spend(
             spend_native=1.0,
         )
         exchange_rate = float(cost.get("exchange_rate_to_sar") or 0) or None
+        if not _finite_nonnegative(exchange_rate) or exchange_rate == 0:
+            exchange_rate = None
         coverage = dict(cost.get("cost_coverage") or {})
     except Exception as exc:  # noqa: BLE001
         exchange_rate = None
@@ -458,6 +478,18 @@ async def _add_sar_spend(
             if exchange_rate is not None
             and int(value.get("source_fact_count") or 0) > 0
             else None
+        )
+        # Candidate financial evidence must survive the real reader/adapter
+        # boundary; the account's aggregate readiness is not row-level proof.
+        value["amount_complete"] = bool(
+            value.get("performance_sync_status") == "complete"
+            and value.get("source_period_complete") is True
+            and value.get("native_amount_complete") is True
+            and int(value.get("source_fact_count") or 0) > 0
+            and exchange_rate is not None
+            and coverage.get("complete") is True
+            and _finite_nonnegative(value.get("spend_native"))
+            and _finite_nonnegative(value.get("spend_sar"))
         )
     totals["exchange_rate_to_sar"] = exchange_rate
     totals["spend_sar"] = (
