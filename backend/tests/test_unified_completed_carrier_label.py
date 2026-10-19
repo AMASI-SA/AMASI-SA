@@ -91,3 +91,32 @@ async def test_all_unready_orders_block_shared_path_before_provider(setup):
             actor_id="employee", actor_name="test", authorize=AsyncMock())
     assert error.value.code == "assembly_completion_required"
     assert not state["calls"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("surface", ["completed", "assembly"])
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_actual_explicit_routes_share_current_label_and_permission_boundary(setup, surface, allowed):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from fulfillment_v2_routes import make_fulfillment_v2_router
+    from preparation_piece_operations import make_preparation_piece_operations_router
+    db, state = setup
+    await db.order_review_workflows.update_one({}, {"$set": {"assembly_delivery": {
+        "state": "requires_attention", "error_code": "assembly_completion_evidence_changed"}}})
+    async def user():
+        return {"id": OWNER if allowed else "employee", "role": "owner" if allowed else "employee", "created_by": OWNER}
+    app = FastAPI()
+    factory = make_fulfillment_v2_router if surface == "completed" else make_preparation_piece_operations_router
+    app.include_router(factory(db, user))
+    path = f"/fulfillment-v2/completed/{ORDER}/carrier-label" if surface == "completed" else f"/preparation-work-v1/assembly/orders/{ORDER}/completion/resume"
+    before = await dump(db)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(path)
+    assert response.status_code == (200 if allowed else 403), response.text
+    if allowed:
+        assert response.json()["ready"] and response.json()["assembly_completion_confirmed"]
+        assert response.json()["label_url"] == "https://labels.test/current.pdf"
+    else:
+        assert not state["calls"]
+    assert await dump(db) == before
