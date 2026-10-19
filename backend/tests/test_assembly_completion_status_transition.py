@@ -100,7 +100,12 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
         original = fulfillment.persist_component_source_snapshot
         observations = []
         async def persist_then_read(*args, **kwargs):
-            persisted = await original(*args, **kwargs)
+            # Exercise the deferred branch when prior acceptance cannot be
+            # revalidated; unchanged proven contracts now skip this window.
+            with patch.object(fulfillment, "revalidate_unchanged_component_snapshot", AsyncMock(
+                return_value={"accepted": False, "retry_required": True}
+            )):
+                persisted = await original(*args, **kwargs)
             intermediate = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
             observations.append(intermediate)
             return persisted
@@ -122,6 +127,31 @@ class StatusTransitionTests(unittest.IsolatedAsyncioTestCase):
             result = await delivery.resume(self.db, user_id="owner", order_number="local-assembly", manual=True)
         self.assertTrue(result["ready"], result)
         self.assertFalse(result["requires_attention"])
+        post.assert_not_awaited()
+        self.assertEqual(await self.on_hand(), 16)
+
+    async def test_unchanged_component_snapshot_is_ready_before_reconcile_callback(self):
+        await self.finish()
+        original = fulfillment.persist_component_source_snapshot
+        observations = []
+        async def persist_then_read(*args, **kwargs):
+            persisted = await original(*args, **kwargs)
+            observations.append(await delivery.resume(
+                self.db, user_id="owner", order_number="local-assembly", manual=True))
+            return persisted
+        source = await self.db.unified_orders.find_one({"user_id": "owner"})
+        payload = deepcopy(source["raw_by_source"]["salla_direct"])
+        payload.update(status={"slug": "completed", "name": "completed"}, status_slug="completed",
+                       updated_at="2026-10-18T00:00:00+00:00")
+        with patch.object(fulfillment, "persist_component_source_snapshot", persist_then_read), \
+             patch.object(delivery.shipping, "_resolve_order", AsyncMock(return_value=self.completed())), \
+             patch.object(delivery.shipping, "call_salla", AsyncMock(side_effect=AssertionError("No POST"))) as post, \
+             patch.object(delivery.shipping, "refresh_shipping_label", AsyncMock(return_value={
+                 "ready": True, "label_type": "store_courier", "print_data": {"courier_name": "Synthetic courier"}})):
+            await self.webhook(payload, event="order.updated")
+        self.assertEqual(len(observations), 1)
+        self.assertTrue(observations[0]["ready"], observations[0])
+        self.assertFalse(observations[0]["requires_attention"], observations[0])
         post.assert_not_awaited()
         self.assertEqual(await self.on_hand(), 16)
 

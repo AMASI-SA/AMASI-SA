@@ -27,8 +27,15 @@ async def run(args):
             client[name], user_id=args.user_id, order_number=args.order_number,
             source_revision=args.expected_revision, dry_run=not args.apply,
         )
-        print(json.dumps(result, ensure_ascii=False))
-        return 0 if result.get("accepted") or result.get("eligible_for_revalidation") else 2
+        # Emit fixed outcomes only: never serialize database-derived values.
+        if result.get("accepted") is True:
+            print('{"status":"revalidated"}')
+            return 0
+        if result.get("eligible_for_revalidation") is True:
+            print('{"status":"eligible_for_revalidation","dry_run":true}')
+            return 0
+        print('{"status":"component_reconciliation_required"}')
+        return 2
     except Exception as exc:
         # Driver messages can include connection details; do not print them.
         print(json.dumps({"ok": False, "error_type": type(exc).__name__}))
