@@ -1,7 +1,9 @@
 # Read-only global Android order and physical-piece tracking
 
 Task branch: `codex/global-order-tracking-20261018`.
-Production base: `e015b913ce950d6e5cf52cc0f1893da94b7b30b4`.
+Initial Production base: `e015b913ce950d6e5cf52cc0f1893da94b7b30b4`.
+Integrated Production base: `16e44c3bd5478854bc3d12a9545f05519e61f22d`.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1437
 Worktree: `D:/amasi-build/backend-global-order-tracking-20261018`.
 
 ## Contract
@@ -45,7 +47,17 @@ terminal/unknown status, Salla/Mezan timelines, local proof and re-review,
 truncation and inconsistent source identities. Twenty existing authorization
 tests also pass. External provider transport is forbidden by the fixture.
 The real ASGI synthetic response is consumed by the actual Android parser/UI
-test in the separate mobile branch (16 UI contracts passed).
+test in mobile PR280 (18 UI contracts and 7 auth/navigation contracts passed).
+
+The dedicated CI tracking suite passed on source
+`8a4af92f5268e65c6612ba5969f40111e849d141` (run 39178684499).
+Two general jobs failed because Production advanced to 16e44 after this
+candidate's base: the PR workflow required a new shipping test absent in the
+old checkout, and the release gate correctly rejected the non-ancestor base.
+Merged the current Production source into this task branch without conflicts
+(`a4ce75602dbd57854461ed70d937059f059aea5e`). Root reran the same 40 tests:
+**40 passed in 28.15s**, exit 0. No guard or test floor was weakened; fresh CI
+is required for this integrated candidate. No `/app` or lease was touched.
 
 The broader legacy permission suite has an independently reproduced baseline
 failure in `test_employee_may_have_mobile_pages_with_zero_mezan_permissions`
