@@ -408,6 +408,20 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
     async def test_lookup_refresh_preserves_consumed_components(self):
         await self.assert_lookup_refresh_preserves_components("reserved", consume=True)
 
+    async def test_lookup_newer_nonmaterial_snapshot_preserves_acceptance(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        before = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        inventory = {name: await self.db[name].find({}).to_list(100) for name in (PLANS, UNITS, LOCATIONS)}
+        payload["updated_at"] = LATER
+        result = await self.refresh(payload, allow_auto_fulfillment=False)
+        self.assertTrue(result["auto_fulfillment"]["component_revalidation"]["accepted"])
+        current = await self.db[fulfillment.COMPONENT_LIFECYCLES].find_one({})
+        self.assertEqual(current["source_updated_at"], fulfillment.component_source_time(LATER))
+        self.assertEqual(current["generation"], before["generation"])
+        for name, documents in inventory.items():
+            self.assertEqual(await self.db[name].find({}).to_list(100), documents)
+
     async def test_repeated_snapshot_does_not_wait_for_fulfillment_callback(self):
         payload = self.source_payload(status="in_progress")
         self.assertTrue((await self.webhook(payload))["synced"])

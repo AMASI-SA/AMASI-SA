@@ -1455,9 +1455,13 @@ async def revalidate_unchanged_component_snapshot(
                 or watermark.get("requires_authoritative_refresh")):
             return deferred
         previous = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
+        version = watermark.get("source_updated_at")
+        previous_version = previous.get("source_updated_at")
+        raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
         if (previous.get("accepted") is not True or previous.get("retry_required")
                 or previous.get("cancelled") or not previous.get("source_fingerprint")
-                or previous.get("source_updated_at") != watermark.get("source_updated_at")):
+                or (previous_version and (not version or version < previous_version))
+                or component_provider_version(raw, created_event=True) != version):
             return deferred
         try:
             order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
@@ -1478,7 +1482,7 @@ async def revalidate_unchanged_component_snapshot(
             return {"accepted": False, "eligible_for_revalidation": True, "dry_run": True,
                     "reason": "unchanged_component_contract"}
         await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
-            "snapshot_revision": source_revision, "updated_at": _now(),
+            "snapshot_revision": source_revision, "source_updated_at": version, "updated_at": _now(),
         }})
         await scoped.unified_orders.update_one({**selector, "g47_salla_snapshot.revision": source_revision},
             {"$set": {"g47_salla_snapshot.component_pending": False}})
