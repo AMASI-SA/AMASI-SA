@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPENING-STOCK-PICKER",
-  "status": "IMPLEMENTED_LOCAL_TESTS_PASS_NOT_RELEASED",
+  "status": "REVIEW_AND_CACHED_MONGO_ACCEPTANCE_PASS_RELEASE_PREPARATION",
   "branch": "codex/opening-stock-product-picker-20261019",
   "base_sha": "56919d2a8c48ca5fe85ee5543e7d86563d4c982f",
   "scope": "Compact image/name/SKU search list with explicit add action; separate product configuration rows including text customization and color; read valid cached options only for opening inventory when canonical options are absent.",
@@ -8,12 +8,50 @@
     "OpeningInventory, OperationalBalances, InventoryPurchases: 114 passed before final duplicate-row test; OpeningInventory rerun 19 passed after final changes (115 unique tests across the three suites).",
     "pytest --noconftest -q backend/tests/test_operational_balance_opening_options.py: 5 passed.",
     "Isolated browser fixture: desktop1280 and mobile390 screenshots, named silver10/15 rows, exact175.00 total; no horizontal mobile overflow.",
-    "git diff --check: PASS"
+    "git diff --check: PASS",
+    "Exact b206 remote CI artifacts independently inspected: operational backend518, G47 backend313, eligibility775 XML cases, zero failures/errors/skips; overlapping suites, not unique total. Operational frontend182 and G47 frontend118 passed.",
+    "New retained real-Mongo cached-only option acceptance:3passed in3.61s. Separate named10/15 rows total175; stale cached definition rejects; guards preserved; PENDING valuation and zero journals. Added to operational CI filename glob."
   ],
   "evidence": "D:/codex-evidence/opening-stock-picker-20261019",
   "constraints": "No business writes, writer activation, Salla sync, source catalog mutation, Release Intent change or deployment. Existing canonical options win; incomplete/ambiguous cached identities fail closed. Purchase metadata behavior outside opening remains unchanged.",
-  "limitations": "Live catalog data not inspected; malformed or genuinely missing product definitions remain blocked with visible explanation. Full Mongo approval suite and governed release build not run for this change yet.",
+  "limitations": "Live product option definitions still under investigation. Governed final source A/intent B and deployment pending; no new Production changes. Real operational balances/bindings/activation require separate authorization. Native setup intentionally web-only; current native writes disabled.",
   "production_changed": false,
-  "next": "Review draft diff and CI, then follow source-A/intent-B release protocol before any production deployment.",
-  "ledger": "Issue1006 has2500comments and previously rejected additional comments; task PR is continuation record. Exact checkpoint SHA is in PR history."
+  "next": "Finish live catalog read-only evidence, preserve reviewed source A, run external governed release build, archive outputs and freeze intent-only B; do not publish until all gates and writer state are checked.",
+  "ledger": "Issue1006 has2500comments and previously rejected additional comments; task PR is continuation record. Exact checkpoint SHA is in PR history.",
+  "verified_remote_checkpoint": "b20615d14f162d7f8c47ce2a65df9451de8c0fd4",
+  "live_read_only": {
+    "production_health_source": "fdf719e67c0385fd73bea3d1931f32e4595822fc",
+    "release_id": "rg5-4161b4475169f735ef9df7e52b2a8afbd6ca1799acc2f8bd22b14f3e3be32e99",
+    "identity_hashes_frontend": true,
+    "guard_active": false,
+    "opening_setup": "draft,0 entered balances",
+    "bank_options": [
+      "AlAhli",
+      "Alinma",
+      "AlRajhi",
+      "independent POS terminal SAR"
+    ],
+    "ads_selected": {
+      "snapchat": 2,
+      "tiktok": 1,
+      "google": 1,
+      "meta": 1
+    },
+    "ads_blocker": "All five require completed financial identity/funding/currency binding; no binding changed.",
+    "couriers": [
+      "iMile",
+      "Aramex",
+      "SMSA"
+    ],
+    "store_driver_excluded": true,
+    "expense_categories": "14 operational categories; no storefront product category observed"
+  },
+  "apk": {
+    "path": "D:/codex-release-archives/mezan-operational/1.0.11-code14/Mezan-Operational-1.0.11-code14-production.apk",
+    "sha256": "d686e06e679100368c329633f9023df3bbe6c4a2b97b7788d2178afb87aa4259",
+    "source": "8a3fa082d45df4233825cf331c2b38f6a70028d0",
+    "package": "com.amasi.sa.mezanoperational",
+    "write_gates": false,
+    "fresh_observation": "Existing authenticated emulator session opens and refreshes movements; setup prerequisite displayed. Reports loaded empty successfully. Fresh credential login and upgrade acceptance not proven. No reinstall/build."
+  }
 }
