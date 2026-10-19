@@ -46,6 +46,7 @@ jobs:
           PYTHONPATH: backend:.
         run: >-
           python -m unittest
+          backend.tests.test_release_intent_history
           backend.tests.test_emergent_deployment_adapter_v5
           backend.tests.test_frontend_release_toolchain
           backend.tests.test_frontend_build_identity
@@ -141,9 +142,7 @@ jobs:
                   "$candidate_source_sha" "$deployment_git_sha" &&
                 ! git diff --quiet \
                   "$candidate_base_sha" "$candidate_source_sha" &&
-                test -z "$(git rev-list --full-history \
-                  "${candidate_base_sha}..${candidate_source_sha}" -- \
-                  release/release-intent-v5.json)" &&
+                python scripts/release_intent_history.py --production-base "$candidate_base_sha" --candidate "$candidate_source_sha" &&
                 git diff --quiet \
                   "$candidate_base_sha" "$candidate_source_sha" -- \
                   release/release-intent-v5.json &&
@@ -225,9 +224,7 @@ jobs:
             git merge-base --is-ancestor \
               "$source_base_git_sha" "$source_git_sha"
             ! git diff --quiet "$source_base_git_sha" "$source_git_sha"
-            test -z "$(git rev-list --full-history \
-              "${source_base_git_sha}..${source_git_sha}" -- \
-              release/release-intent-v5.json)"
+            python scripts/release_intent_history.py --production-base "$source_base_git_sha" --candidate "$source_git_sha"
             git diff --quiet \
               "$source_base_git_sha" "$source_git_sha" -- \
               release/release-intent-v5.json
@@ -381,9 +378,7 @@ jobs:
           git merge-base --is-ancestor "$source_base_git_sha" "$source_git_sha"
           git merge-base --is-ancestor "$source_git_sha" "$deployment_git_sha"
           ! git diff --quiet "$source_base_git_sha" "$source_git_sha"
-          test -z "$(git rev-list --full-history \
-            "${source_base_git_sha}..${source_git_sha}" -- \
-            release/release-intent-v5.json)"
+          python scripts/release_intent_history.py --production-base "$source_base_git_sha" --candidate "$source_git_sha"
           git diff --quiet \
             "$source_base_git_sha" "$source_git_sha" -- \
             release/release-intent-v5.json

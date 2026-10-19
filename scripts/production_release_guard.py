@@ -22,6 +22,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .release_intent_history import IntentHistoryError, verify_intent_history
+else:
+    from release_intent_history import IntentHistoryError, verify_intent_history
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
@@ -660,15 +665,12 @@ def _assert_reviewed_source_relation(
         raise ReleaseGuardError(
             "runtime identity source base is not an ancestor of source A"
         ) from exc
-    intent_history = _run_git(
-        "rev-list", "--full-history",
-        f"{source_base_git_sha}..{source_git_sha}", "--",
-        RELEASE_INTENT_RELATIVE_PATH,
-    )
-    if intent_history:
+    try:
+        verify_intent_history(REPO_ROOT, source_base_git_sha, source_git_sha)
+    except IntentHistoryError as exc:
         raise ReleaseGuardError(
-            "source A ancestry touches the reviewed release intent after base J"
-        )
+            "source A ancestry touches the reviewed release intent after base J: " + str(exc)
+        ) from exc
     source_changes = {
         row.strip()
         for row in _run_git(
