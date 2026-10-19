@@ -118,6 +118,7 @@ from salla_marketing_attribution import (
 )
 from order_engine.routes import make_order_engine_router
 from order_activity_routes import make_order_activity_router
+from mobile_order_tracking import make_mobile_order_tracking_router
 from order_item_engine.routes import make_order_item_engine_router
 from order_review_image_modes import make_order_review_router
 from return_decision_routes import make_return_decision_router
@@ -4286,6 +4287,7 @@ api.include_router(
 )
 api.include_router(make_order_engine_router(db, current_user))
 api.include_router(make_order_activity_router(db, current_user))
+api.include_router(make_mobile_order_tracking_router(db, current_user))
 api.include_router(make_first_party_attribution_router(db, current_user))
 api.include_router(
     make_order_item_engine_router(db, current_user)

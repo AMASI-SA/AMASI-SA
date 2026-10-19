@@ -572,6 +572,7 @@ async def _detail(db: Any, user_id: str, order: OrderDTO, *, local_only: bool = 
 
 
 async def _display_detail(db: Any, user_id: str, order: OrderDTO, *, session_context=None) -> dict[str, Any]:
+    from review_gift_address import gift_address_review
     from order_review_acceptance_snapshot import acceptance_snapshot
     from order_review_approval import approval_fingerprint, issue_token
     approval_order = order
@@ -602,6 +603,7 @@ async def _display_detail(db: Any, user_id: str, order: OrderDTO, *, session_con
             order_number=order.order_number, revision=revision, session=session_context)
     return {
         "approval_fingerprint": digest,
+        "gift_address_review": gift_address_review(source),
         **({"approval_context": {**context, "approval_fingerprint": digest}} if context else {}),
         "approval_token": issue_token(digest, user_id=user_id, order_number=order.order_number, revision=revision, context=context),
         "order": {**order.model_dump(mode="json"), "salla_admin_url": await _salla_admin_url(db, user_id, order.order_number)},

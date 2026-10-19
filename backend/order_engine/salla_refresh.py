@@ -569,6 +569,8 @@ async def refresh_order_from_salla(
             "promoted": False,
             "reason": "disabled_for_read_only_lookup",
         }
+        if not allow_auto_fulfillment:
+            auto_fulfillment["component_revalidation"] = result.get("component_revalidation")
         if allow_auto_fulfillment:
             auto_fulfillment = {
                 "attempted": True,

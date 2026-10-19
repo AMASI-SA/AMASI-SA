@@ -1343,7 +1343,13 @@ async def persist_component_source_snapshot(
             "source_updated_at": version, "cancelled": cancelled,
             "revision": revision, "component_pending": True,
         }}})
-        return {**result, "snapshot_revision": revision}
+        # A replay of an accepted contract must not become unavailable while
+        # waiting for an optional/later fulfillment callback. Revalidate under
+        # this same owner transaction; material changes remain pending.
+        revalidation = await revalidate_unchanged_component_snapshot(
+            scoped, user_id=user_id, order_number=order_number, source_revision=revision,
+        )
+        return {**result, "snapshot_revision": revision, "component_revalidation": revalidation}
 
     result = await operational_owner(db, user_id, write)
     if allow_delivery_observation and not result.get("blocked") and not result.get("stale"):
@@ -1414,6 +1420,79 @@ def _component_order_lines(order: Any, decision: dict[str, Any]) -> list[dict[st
     return lines
 
 
+def component_order_fingerprint(order: Any) -> str:
+    cancelled = _component_order_cancelled(order)
+    lines = [] if cancelled else _component_order_lines(order, {})
+    return hashlib.sha256(json.dumps({
+        "cancelled": cancelled,
+        "eligible": order_is_active(order) and payment_is_eligible(order.payment),
+        "lines": [{key: row.get(key) for key in (
+            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
+        )} for row in lines],
+    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+
+
+async def revalidate_unchanged_component_snapshot(
+    db: Any, *, user_id: str, order_number: str, source_revision: int, dry_run: bool = False,
+) -> dict[str, Any]:
+    """Advance existing acceptance only after reading the fenced canonical order.
+
+    Lookup refreshes must not reserve stock or advance preparation. An identical
+    component contract can retain its existing acceptance; changed or incomplete
+    evidence stays pending for the normal lifecycle reconciliation.
+    """
+    from order_engine.repository import MongoOrderRepository
+    from order_engine.service import get_order, OrderNotFoundError
+    from stock_component_consumption_service import PLANS
+
+    async def revalidate(scoped):
+        selector = {"user_id": user_id, "order_number": order_number}
+        source = await scoped.unified_orders.find_one(selector) or {}
+        watermark = source.get("g47_salla_snapshot") or {}
+        deferred = {"accepted": False, "retry_required": True, "reason": "component_reconciliation_required"}
+        if (not isinstance(source_revision, int) or isinstance(source_revision, bool)
+                or watermark.get("revision") != source_revision or watermark.get("cancelled")
+                or watermark.get("requires_authoritative_refresh")):
+            return deferred
+        previous = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
+        version = watermark.get("source_updated_at")
+        previous_version = previous.get("source_updated_at")
+        raw = (source.get("raw_by_source") or {}).get("salla_direct") or {}
+        if (previous.get("accepted") is not True or previous.get("retry_required")
+                or previous.get("cancelled") or not previous.get("source_fingerprint")
+                or (previous_version and (not version or version < previous_version))
+                or component_provider_version(raw, created_event=True) != version):
+            return deferred
+        try:
+            order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
+        except OrderNotFoundError:
+            return deferred
+        if component_order_fingerprint(order) != previous["source_fingerprint"]:
+            return deferred
+        legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
+        if legacy:
+            if previous.get("state") != LEGACY_COMPONENT_COHORT:
+                return deferred
+        else:
+            plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number}) or {}
+            if (previous.get("state") != "reserved" or plan.get("state") != "accepted"
+                    or plan.get("reconciliation_required")
+                    or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
+                return deferred
+        if dry_run:
+            return {"accepted": False, "eligible_for_revalidation": True, "dry_run": True,
+                    "reason": "unchanged_component_contract"}
+        await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
+            "snapshot_revision": source_revision, "source_updated_at": version, "updated_at": _now(),
+        }})
+        await scoped.unified_orders.update_one({**selector, "g47_salla_snapshot.revision": source_revision},
+            {"$set": {"g47_salla_snapshot.component_pending": False}})
+        return {"accepted": True, "retry_required": False, "reason": "unchanged_component_contract"}
+
+    # A preview is advisory only. Applying always rereads under the owner fence.
+    return await revalidate(db) if dry_run else await operational_owner(db, user_id, revalidate)
+
+
 async def reconcile_component_order_lifecycle(
     db: Any, *, user_id: str, order: Any, source_updated_at: Any = None,
     actor_id: str = "system", decision: dict[str, Any] | None = None,
@@ -1433,12 +1512,7 @@ async def reconcile_component_order_lifecycle(
     created_at = component_source_time(getattr(order, "created_at", None))
     version = component_source_time(source_updated_at)
     lines = [] if cancelled else _component_order_lines(order, decision or {})
-    fingerprint = hashlib.sha256(json.dumps({
-        "cancelled": cancelled, "eligible": eligible,
-        "lines": [{key: row.get(key) for key in (
-            "order_line_id", "product_id", "variant_id", "quantity", "options_raw", "options_normalized", "custom_fields",
-        )} for row in lines],
-    }, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+    fingerprint = component_order_fingerprint(order)
 
     async def register(scoped):
         previous = await scoped[COMPONENT_LIFECYCLES].find_one({"_id": identity}) or {}
@@ -2285,25 +2359,16 @@ def make_fulfillment_v2_router(
                 reader = refresh_saved_shipping_label if action == "refresh_saved" else refresh_shipping_label
                 result = await reader(db, context["merchant_id"], _text(order_number))
                 return {**result, "assembly_completion_confirmed": True}
-            # Legacy issue buttons must read an already-completed shipment before
-            # attempting delivery recovery. This path never creates an AWB.
-            from assembly_print_completion import read_print_completion
-            try:
-                proof = await read_print_completion(db, context["merchant_id"], _text(order_number))
-            except ShippingLabelError as exc:
-                if exc.code != "order_status_not_completed":
-                    raise
-                proof = None
-            current_context = await _actor_context(db, user)
-            _require_permission(current_context, "fulfillment.labels.print")
-            if (current_context["merchant_id"] != context["merchant_id"]
-                    or not _can_operate_completed_carrier_label(current_context)):
-                raise HTTPException(403, detail={"code": "completion_owner_changed"})
-            if proof is not None:
-                return {"ok": True, **proof}
-            from assembly_completion_delivery import resume
-            return await resume(db, user_id=context["merchant_id"], order_number=_text(order_number),
-                                actor_id=context["actor_id"], actor_name=actor_name, manual=True)
+            from fulfillment_carrier_label import prepare_completed_carrier_label
+            async def authorize():
+                current_context = await _actor_context(db, user)
+                _require_permission(current_context, "fulfillment.labels.print")
+                if (current_context["merchant_id"] != context["merchant_id"]
+                        or not _can_operate_completed_carrier_label(current_context)):
+                    raise HTTPException(403, detail={"code": "completion_owner_changed"})
+            return await prepare_completed_carrier_label(
+                db, user_id=context["merchant_id"], order_number=_text(order_number),
+                actor_id=context["actor_id"], actor_name=actor_name, authorize=authorize)
         except ShippingLabelError as exc:
             raise HTTPException(
                 status_code=exc.status_code,

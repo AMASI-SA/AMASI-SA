@@ -1,0 +1,23 @@
+# Unified completed-page print contract — implementation checkpoint
+
+Base Production: 0d55bb0ce74df2759e6f9c4786f1b759b29ac0b0. Branch codex/unified-completed-print-20261019.
+
+Owner requested the completed-page black fetch button and current-label print behavior everywhere, and removal of the separate completion-error/refresh/resume panel. Shipment card stays visible and frozen before durable assembly completion; fetch enables after the last product. Printing still requires completed plus current label. Ready transaction and durable worker are unchanged.
+
+Backend: shared prepare_completed_carrier_label uses the existing completed-page refresh guards, independent of historical outbox fingerprint failures. Only order_status_not_completed can enter existing durable resume; other errors never fall back to provider writes. Both completed carrier-label and legacy assembly completion/resume use it. Current authorization rechecked after reads and before resume. No new AWB creator. GET polling remains unchanged.
+
+Web: remove the completion panel; use completed issue/refresh services inside the shipment card. Ambiguous issue switches the next action to refresh only. Polling pauses while explicit action runs. Existing Ready no-repeat protections remain. Android implementation is delegated to the existing Audit task on a separate APK47-based branch; no tracking/custody changes mixed.
+
+Verification: 85 web tests PASS (both ReadyToShipOrders and CompletedFulfillmentOrders suites). Shared helper 9 tests +4 subtests PASS including real isolated Mongo provider reads and old-outbox recovery with no writes. Existing legacy print/boundary/readback plus initial helper:305PASS,1 intentional memory-only transaction SKIP,4subtests in58.73s. Initial run used wrong pytest strict async mode and failed fixture setup; rerun with repository-compatible --asyncio-mode=auto passed. No tests disabled.
+
+Pending: final CI, actual route integration coverage/review, Android integration, current-order live acceptance and actual timing. Prior target294349906 not yet proven recovered; no performance equivalence claimed. This candidate not merged/deployed. Prior PR1439 remains Production. No financial, inventory or Ready writes in this work.
+
+Actual HTTP route acceptance added: both completed carrier-label and legacy assembly completion/resume tested against isolated Mongo and memory with permitted/denied actors, old failed outbox, GET-only provider fixture, current label returned and zero order/stock/financial mutations. Shared suite now17PASS+4subtests,4.34s. CI on the updated source still required.
+
+## Integration onto updated Production
+Production advanced through unrelated opening-stock PR1441 to56919d2a8c48ca5fe85ee5543e7d86563d4c982f. A fresh branch codex/unified-print-production-56919 cherry-picks only this task source/test commits, retaining latest production ancestry and intent unchanged. Previous1442 CI failed two obsolete fixture bans on explicit refresh and six Mongo skips from missing BUILD37_TEST_MONGO_URI. The workflow now points both test URI names to the same isolated replica set; no skip gate relaxed. Two old dispatch/authorization tests adapt only their refresh collaborator to the existing read-only fixture; new real HTTP/current-provider coverage remains independent. Corrected focused suite34PASS+17subtests22.16s. Local Mongo process had stopped; restarted only the isolated loopback fixture before that successful run. No live writes or deployment.
+
+Release blocker discovered by fresh Security Gate job118202672201: existing aiohttp3.14.3 has GHSA-5wr8-gcqf-gqf3/GHSA-2g87-pp6c-29x5/GHSA-494j-54xm-rwp3; audit specifies3.14.4. Minimal dependency pin update to3.14.4 included to pass the unchanged release gate (official release https://github.com/aio-libs/aiohttp/releases/tag/v3.14.4). No advisory ignore/waiver. Final dependency audit and full CI must rerun. Browser control unavailable (kernel asset initialization failed twice, including reset), blocking /app gates/live UAT; owner asked to reopen Codex. Production untouched.
+
+Fresh CI on1af8 exposed dependency closure mismatch: aiohttp3.14.4 requires yarl>=1.25.1, and reviewed deployment requirements still held the old pins. Pin yarl1.25.1 and synchronize the reviewed lock byte-for-byte; release gates remain unchanged. Browser access still fails after owner reopening, so live acceptance and deployment remain blocked. Production unchanged.
+Byte equality verified locally. Focused adapter test cannot run on Windows: existing POSIX safety check rejects mode0666; no guard bypass. Linux CI must prove the fix. CUA getState again failed kernel assets initialization; no browser actions performed.

@@ -6,10 +6,14 @@ on:
     paths:
       - "backend/order_review*.py"
       - "backend/review_local_policy.py"
+      - "backend/review_gift_address.py"
+      - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
+      - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
       - "backend/assembly_print_completion.py"
       - "backend/tests/test_assembly_print_completion.py"
+      - "backend/tests/test_unified_completed_carrier_label.py"
       - "backend/assembly_completion_legacy_readback.py"
       - "backend/assembly_completion_v2_readback.py"
       - "backend/assembly_status_policy.py"
@@ -22,6 +26,7 @@ on:
       - "backend/tests/test_assembly_completion_readback_routes.py"
       - "backend/tests/test_shipping_saved_label_print.py"
       - "backend/tests/test_assembly_search_instruction_batch.py"
+      - "backend/tests/test_preparation_receiving_custody.py"
       - "backend/order_tracking_notes.py"
       - "backend/preparation_route_history.py"
       - "backend/supplier_dispatch_waiting_policy.py"
@@ -57,6 +62,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
+      BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,6 +106,7 @@ jobs:
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
           tests/test_assembly_print_completion.py
+          tests/test_unified_completed_carrier_label.py
           tests/test_assembly_completion_legacy_readback.py
           tests/test_assembly_completion_v2_readback.py
           tests/test_assembly_completion_status_transition.py
@@ -108,6 +115,7 @@ jobs:
           tests/test_g47_ready_shipping_safety.py
           tests/test_g47_ready_canonical_status_race.py
           tests/test_assembly_search_instruction_batch.py
+          tests/test_preparation_receiving_custody.py
           tests/test_assignment_salla_in_progress.py
           tests/test_assignment_single_post_transport.py
           tests/test_review_catalog_eligibility.py
@@ -122,6 +130,7 @@ jobs:
           tests/test_review_completion_business_snapshot.py
           tests/test_review_completion_representation_integration.py
           tests/test_review_approval_scope.py
+          tests/test_review_gift_address.py
           tests/test_review_acceptance_config_guard.py
           tests/test_g47_component_lifecycle_integration.py
           tests/test_order_review_stage_one.py
@@ -166,6 +175,7 @@ jobs:
                                          ("test_g47_ready_shipping_safety.ProviderReadbackTests", 1),
                                          ("test_g47_ready_canonical_status_race.CanonicalStatusRaceTests", 3),
                                          ("test_assembly_search_instruction_batch.AssemblySearchInstructionTests", 4),
+                                         ("test_preparation_receiving_custody.PreparationCustodyTests", 11),
                                          ("test_review_local_downstream.LocalDownstreamTests", 10),
                                          ("test_review_local_assembly.LocalAssemblyTests", 26),
                                          ("test_assignment_salla_in_progress.AssignmentSyncTests", 15),
