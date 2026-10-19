@@ -6,6 +6,8 @@ on:
     paths:
       - "backend/order_review*.py"
       - "backend/review_local_policy.py"
+      - "backend/review_gift_address.py"
+      - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
       - "backend/preparation_receipt_status_message.py"
       - "backend/assembly_completion_delivery.py"
