@@ -1427,7 +1427,7 @@ def component_order_fingerprint(order: Any) -> str:
 
 
 async def revalidate_unchanged_component_snapshot(
-    db: Any, *, user_id: str, order_number: str, source_revision: int,
+    db: Any, *, user_id: str, order_number: str, source_revision: int, dry_run: bool = False,
 ) -> dict[str, Any]:
     """Advance existing acceptance only after reading the fenced canonical order.
 
@@ -1444,7 +1444,8 @@ async def revalidate_unchanged_component_snapshot(
         source = await scoped.unified_orders.find_one(selector) or {}
         watermark = source.get("g47_salla_snapshot") or {}
         deferred = {"accepted": False, "retry_required": True, "reason": "component_reconciliation_required"}
-        if (watermark.get("revision") != source_revision or watermark.get("cancelled")
+        if (not isinstance(source_revision, int) or isinstance(source_revision, bool)
+                or watermark.get("revision") != source_revision or watermark.get("cancelled")
                 or watermark.get("requires_authoritative_refresh")):
             return deferred
         previous = await scoped[COMPONENT_LIFECYCLES].find_one(selector) or {}
@@ -1464,6 +1465,9 @@ async def revalidate_unchanged_component_snapshot(
             if (previous.get("state") != "reserved" or not plan
                     or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
                 return deferred
+        if dry_run:
+            return {"accepted": False, "eligible_for_revalidation": True, "dry_run": True,
+                    "reason": "unchanged_component_contract"}
         await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
             "snapshot_revision": source_revision, "updated_at": _now(),
         }})
@@ -1471,7 +1475,8 @@ async def revalidate_unchanged_component_snapshot(
             {"$set": {"g47_salla_snapshot.component_pending": False}})
         return {"accepted": True, "retry_required": False, "reason": "unchanged_component_contract"}
 
-    return await operational_owner(db, user_id, revalidate)
+    # A preview is advisory only. Applying always rereads under the owner fence.
+    return await revalidate(db) if dry_run else await operational_owner(db, user_id, revalidate)
 
 
 async def reconcile_component_order_lifecycle(

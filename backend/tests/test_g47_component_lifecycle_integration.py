@@ -435,6 +435,26 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
         for name, documents in inventory.items():
             self.assertEqual(await self.db[name].find({}).to_list(100), documents)
 
+    async def test_stuck_snapshot_preview_and_apply_recheck(self):
+        payload = self.source_payload(status="in_progress")
+        self.assertTrue((await self.webhook(payload))["synced"])
+        async def persist(scoped):
+            return {}
+        saved = await fulfillment.persist_component_source_snapshot(self.db, user_id="owner",
+            order_number=payload["reference_id"], payload=payload, persist=persist)
+        kwargs = {"user_id": "owner", "order_number": payload["reference_id"],
+                  "source_revision": saved["snapshot_revision"]}
+        names = await self.db.list_collection_names()
+        before = {name: await self.db[name].find({}).to_list(1000) for name in names}
+        preview = await fulfillment.revalidate_unchanged_component_snapshot(self.db, **kwargs, dry_run=True)
+        self.assertTrue(preview["eligible_for_revalidation"])
+        for name, documents in before.items():
+            self.assertEqual(await self.db[name].find({}).to_list(1000), documents)
+        result = await fulfillment.revalidate_unchanged_component_snapshot(self.db, **kwargs)
+        self.assertTrue(result["accepted"])
+        for name in (PLANS, UNITS, LOCATIONS, fulfillment.WORKFLOWS):
+            self.assertEqual(await self.db[name].find({}).to_list(1000), before.get(name, []))
+
     async def test_lookup_revalidation_cannot_clear_newer_snapshot(self):
         payload = self.source_payload(status="in_progress")
         self.assertTrue((await self.webhook(payload))["synced"])
