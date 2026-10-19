@@ -316,9 +316,9 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
             cancelled = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
         self.assertEqual(cancelled["items"], [])
 
-    async def test_legacy_received_pieces_keep_existing_materialized_piece_contract(self):
-        # Legacy has no local source/approval-unit coverage contract. The real
-        # local source + partial assignment path is covered in LocalAssemblyTests.
+    async def test_legacy_receipt_counts_custody_without_promoting_ready(self):
+        # The custody-only contract applies to legacy and local workflows alike.
+        # Guarded Ready transitions are exercised in LocalAssemblyTests.
         await self.seed(stage="in_progress", mode=None)
         first = {"user_id": OWNER, "piece_id": "one", "order_number": "A",
                  "status": pieces.PIECE_STATUS_READY_FOR_ASSEMBLY}
@@ -333,5 +333,8 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
         complete = await pieces._refresh_preparation_receipt_progress(
             self.db, user_id=OWNER, piece=first, actor_id=OWNER, actor_name=ACTOR["name"], now=WHEN,
         )
-        self.assertTrue(complete["order_ready_for_assembly"])
-        self.assertEqual((await self.db[local.WORKFLOWS].find_one({"order_number": "A"}))["stage"], "ready_to_ship")
+        self.assertFalse(complete["order_ready_for_assembly"])
+        self.assertEqual(complete["received_count"], 2)
+        workflow = await self.db[local.WORKFLOWS].find_one({"order_number": "A"})
+        self.assertEqual(workflow["stage"], "in_progress")
+        self.assertEqual(workflow["preparation_receipt_status"], "completed")

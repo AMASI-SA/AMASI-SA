@@ -25,8 +25,11 @@ import preparation_piece_operations as operations
 class SourceReadCounter(CommandListener):
     def __init__(self):
         self.finds = 0
+        self.collections_read = set()
 
     def started(self, event):
+        if event.command_name in {"find", "aggregate", "count"}:
+            self.collections_read.add(event.command.get(event.command_name))
         if event.command_name == "find" and event.command.get("find") == "unified_orders":
             self.finds += 1
 
@@ -71,6 +74,18 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
                          "created_by": "merchant-a", "_session_client": "amasi_mobile"}
         self.user = deepcopy(self.employee)
         await self.db.users.insert_one(deepcopy(self.owner))
+        await self.db.users.insert_one(deepcopy(self.employee))
+        # Stub only the provider transport; resolution, identity/status checks,
+        # permissions and owner-serialized Mongo receipt remain real.
+        async def salla_read(db, owner, method, path, **kwargs):
+            self.assertEqual(method, "GET")
+            number = path.removeprefix("/orders/")
+            row = await self.db.unified_orders.find_one({"user_id": owner, "order_number": number}) or {}
+            return {"data": {"id": number, "reference_id": number,
+                "status": (row.get("raw_by_source", {}).get("salla_direct", {}).get("status"))}}
+        provider = patch("order_engine.shipping_label_service.call_salla", side_effect=salla_read)
+        self.provider = provider.start()
+        self.addCleanup(provider.stop)
         await self.db[MOBILE_APP_ACCESS].insert_one({
             MOBILE_APP_ACCESS_OWNER_FIELD: "merchant-a", "user_id": "receiver-a",
             "enabled": True, "permissions": ["app.page.preparation_receiving"],
@@ -92,13 +107,15 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
                "product_name": "Synthetic product", "responsible_employee_id": source,
                "responsible_employee_name": "Synthetic " + source,
                "status": operations.PIECE_STATUS_IN_PROGRESS, "assembly_status": "pending",
-               "assignment_status": "assigned", "services": [], **values}
+               "assignment_status": "assigned", "services": [],
+               "supplier_dispatch_status": "received", "execution_status": "received_from_supplier",
+               "received_at": datetime(2026, 10, 18, tzinfo=timezone.utc), **values}
         await self.db[operations.PIECES].insert_one(row)
         await self.db.unified_orders.update_one(
             {"user_id": row["user_id"], "order_number": row["order_number"]},
             {"$setOnInsert": {
                 "order_status": "in_progress", "order_status_slug": "in_progress",
-                "raw_by_source": {"salla_direct": {"status": {"slug": "in_progress"}}},
+                "raw_by_source": {"salla_direct": {"id": row["order_number"], "status": {"slug": "in_progress"}}},
             }}, upsert=True)
 
     async def seed_received(self, piece_id, source="prep-a", receiver="receiver-a", **values):
@@ -332,12 +349,12 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(detail["order_status"], status)
                     self.assertEqual(detail["order_status_label"], label)
                     self.assertIn(label, detail["message"])
-                    self.assertIn("غير مؤهل للاستلام أو التجهيز", detail["message"])
+                    self.assertIn("يلزم أن تكون", detail["message"])
                 response = await self.client.post(f"/api/preparation-work-v1/receiving/pieces/{piece_id}/receive",
                                                  json={"client_request_id": "synthetic-blocked-receipt"})
                 self.assertEqual(response.status_code, 409, response.text)
                 detail = response.json()["detail"]
-                self.assertEqual(detail["code"], "local_review_receipt_not_eligible")
+                self.assertEqual(detail["code"], "preparation_receipt_order_not_in_progress")
                 self.assertEqual(detail["order_status_label"], label)
                 self.assertEqual(await self.snapshot(), before)
 
@@ -353,3 +370,172 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(detail["order_status_label"])
         self.assertIn("تعذّر التأكد", detail["message"])
         self.assertEqual(await self.snapshot(), before)
+
+    async def test_supplier_and_services_are_required_even_with_current_salla_status(self):
+        for index, values in enumerate((
+            {"supplier_dispatch_status": "sent"}, {"execution_status": "in_progress"},
+            {"received_at": None},
+            {"services": [{"service_id": "print", "status": "pending", "required_quantity": 2, "completed_quantity": 1}]},
+        )):
+            piece_id = f"missing-{index}"
+            await self.seed_piece(piece_id, **values)
+            response = await self.client.post(f"/api/preparation-work-v1/receiving/pieces/{piece_id}/receive",
+                json={"client_request_id": "missing-proof"})
+            self.assertEqual(response.status_code, 409, response.text)
+            row = await self.db[operations.PIECES].find_one({"piece_id": piece_id})
+            self.assertNotEqual(row.get("preparation_receipt_status"), "received")
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+
+    async def test_receipt_ignores_review_components_and_payment_without_promoting(self):
+        for index, services in enumerate(([], [{"service_id": "print", "status": "completed"}],
+                                          [{"service_id": "print", "required_quantity": 2, "completed_quantity": 2}])):
+            piece_id = f"eligible-{index}"
+            number = "synthetic-" + piece_id
+            await self.seed_piece(piece_id, services=services, active_hold_id="historical",
+                                  assignment_status="unassigned", responsible_employee_id=None)
+            await self.db[operations.WORKFLOWS].insert_one({"user_id": "merchant-a", "order_number": number,
+                "stage": "in_progress", "completion_mode": operations.LOCAL_COMPLETION_MODE,
+                "component_pending": True, "review_status": "pending"})
+            await self.db.unified_orders.update_one({"order_number": number}, {"$set": {
+                "order_status": "under_review", "g47_salla_snapshot.requires_authoritative_refresh": True}})
+            component_names = ("mezan_component_order_lifecycle_v1", "mezan_component_consumption_plans_v1",
+                               "mezan_inventory_reservations_v2", "payment_transactions", "warehouse_locations")
+            for name in component_names:
+                await self.db[name].update_one({"user_id": "merchant-a", "order_number": number},
+                    {"$set": {"state": "unavailable", "revision": 77}}, upsert=True)
+            before = {name: await self.db[name].find({}).to_list(None) for name in component_names}
+            self.source_reads.collections_read.clear()
+            result = await self.receive(piece_id)
+            self.assertFalse(set(component_names) & self.source_reads.collections_read)
+            self.assertFalse(result["progress"]["order_ready_for_assembly"])
+            workflow = await self.db[operations.WORKFLOWS].find_one({"order_number": number})
+            self.assertEqual(workflow["stage"], "in_progress")
+            self.assertTrue(workflow["component_pending"])
+            self.assertEqual(workflow["preparation_receipt_status"], "completed")
+            self.assertEqual({name: await self.db[name].find({}).to_list(None) for name in component_names}, before)
+
+    async def test_status_change_during_receipt_rolls_back_custody_and_event(self):
+        await self.seed_piece("status-race")
+        original = self.provider.side_effect
+        calls = 0
+        async def changed(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            response = await original(*args, **kwargs)
+            if calls == 2:
+                response["data"]["status"] = {"slug": "completed"}
+            return response
+        self.provider.side_effect = changed
+        response = await self.client.post("/api/preparation-work-v1/receiving/pieces/status-race/receive",
+            json={"client_request_id": "receipt-race"})
+        self.assertEqual(response.status_code, 409, response.text)
+        row = await self.db[operations.PIECES].find_one({"piece_id": "status-race"})
+        self.assertNotEqual(row.get("preparation_receipt_status"), "received")
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+
+    async def test_provider_timeout_before_commit_rolls_back_and_is_bounded(self):
+        import asyncio
+        from time import monotonic
+        await self.seed_piece("timeout")
+        original = self.provider.side_effect
+        calls = 0
+        async def slow(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                await asyncio.sleep(20)
+            return await original(*args, **kwargs)
+        self.provider.side_effect = slow
+        started = monotonic()
+        with patch.object(operations, "PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS", 0.15):
+            response = await self.client.post("/api/preparation-work-v1/receiving/pieces/timeout/receive",
+                json={"client_request_id": "timeout-receipt"})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "preparation_receipt_status_unverified")
+        self.assertLess(monotonic() - started, 3)
+        row = await self.db[operations.PIECES].find_one({"piece_id": "timeout"})
+        self.assertNotEqual(row.get("preparation_receipt_status"), "received")
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+
+    async def test_permission_revoked_during_provider_read_rolls_back(self):
+        await self.seed_piece("permission-race")
+        original = self.provider.side_effect
+        calls = 0
+        async def revoke(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            result = await original(*args, **kwargs)
+            if calls == 2:
+                await self.db[MOBILE_APP_ACCESS].update_one({"user_id": "receiver-a"}, {"$set": {"enabled": False}})
+            return result
+        self.provider.side_effect = revoke
+        response = await self.client.post("/api/preparation-work-v1/receiving/pieces/permission-race/receive",
+            json={"client_request_id": "receipt-race"})
+        self.assertEqual(response.status_code, 403, response.text)
+        row = await self.db[operations.PIECES].find_one({"piece_id": "permission-race"})
+        self.assertNotEqual(row.get("preparation_receipt_status"), "received")
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+
+    async def test_concurrent_receipts_record_one_custody_event(self):
+        import asyncio
+        await self.seed_piece("concurrent")
+        results = await asyncio.gather(self.receive("concurrent", "request-one"), self.receive("concurrent", "request-two"))
+        self.assertEqual(sorted(row["idempotent"] for row in results), [False, True])
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({"piece_id": "concurrent"}), 1)
+
+    async def test_slow_status_check_serializes_same_owner_receipts_then_releases(self):
+        import asyncio
+        from time import monotonic
+        await self.seed_piece("slow-first")
+        await self.seed_piece("queued-second")
+        await self.db.mz2_atomic_owners.insert_one({"_id": "merchant-a", "revision": 0})
+        original = self.provider.side_effect
+        entered, release, second_read = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        first_calls = 0
+        async def delayed(db, owner, method, path, **kwargs):
+            nonlocal first_calls
+            if path.endswith("synthetic-slow-first"):
+                first_calls += 1
+                if first_calls == 2:
+                    entered.set()
+                    await release.wait()
+            if path.endswith("synthetic-queued-second"):
+                second_read.set()
+            return await original(db, owner, method, path, **kwargs)
+        self.provider.side_effect = delayed
+        first = asyncio.create_task(self.receive("slow-first"))
+        second = None
+        try:
+            await asyncio.wait_for(entered.wait(), 3)
+            started = monotonic()
+            second = asyncio.create_task(self.receive("queued-second"))
+            await asyncio.wait_for(second_read.wait(), 3)
+            await asyncio.sleep(0.25)
+            self.assertFalse(first.done())
+            self.assertFalse(second.done(), repr(second.exception()) if second.done() else "")
+            self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+            release.set()
+            results = await asyncio.wait_for(asyncio.gather(first, second), 5)
+            self.assertTrue(all(result["ok"] for result in results))
+            self.assertGreaterEqual(monotonic() - started, 0.25)
+        finally:
+            release.set()
+            await asyncio.gather(first, *([second] if second else []), return_exceptions=True)
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 2)
+
+    async def test_wrong_provider_identity_and_other_tenant_fail_without_receipt(self):
+        await self.seed_piece("identity")
+        original = self.provider.side_effect
+        async def wrong(*args, **kwargs):
+            result = await original(*args, **kwargs)
+            result["data"]["reference_id"] = "another-order"
+            return result
+        self.provider.side_effect = wrong
+        response = await self.client.post("/api/preparation-work-v1/receiving/pieces/identity/receive",
+            json={"client_request_id": "identity"})
+        self.assertEqual(response.status_code, 409, response.text)
+        await self.seed_piece("other-tenant", user_id="merchant-b")
+        response = await self.client.post("/api/preparation-work-v1/receiving/pieces/other-tenant/receive",
+            json={"client_request_id": "other-tenant"})
+        self.assertEqual(response.status_code, 404, response.text)
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)

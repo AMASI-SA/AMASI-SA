@@ -27,7 +27,6 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.write_concern import WriteConcern
 from operational_atomic import operational_owner
 from assembly_status_policy import canonical_status
-from preparation_receipt_status_message import receipt_status_rejection
 
 from fulfillment_v2_routes import (
     BATCHES as SHIPPING_BATCHES,
@@ -1284,27 +1283,15 @@ def preparation_receipt_blocker(piece: dict[str, Any]) -> str | None:
         return "preparation_piece_already_received"
     if status == PIECE_STATUS_CANCELLED:
         return "preparation_piece_cancelled"
-    if piece.get("active_hold_id") or status == PIECE_STATUS_BLOCKED:
-        return "preparation_piece_stopped"
-    if (
-        _text(piece.get("assignment_status")) == "unassigned"
-        or not _text(piece.get("responsible_employee_id"))
-    ):
-        return "preparation_piece_employee_required"
-    if _text(piece.get("supplier_receiving_session_id")):
-        return "preparation_piece_supplier_receiving_in_progress"
     if _preparation_incomplete_services(piece):
         return "preparation_piece_services_incomplete"
-    if supplier_dispatch_status and supplier_dispatch_status != "received":
+    # These fields are written together by supplier_service_completion_update
+    # after the supplier receipt commits. A generic UI/status="received" is
+    # not proof that the physical product came back from the supplier.
+    if not (supplier_dispatch_status == "received"
+            and _text(piece.get("execution_status")) == "received_from_supplier"
+            and piece.get("received_at")):
         return "preparation_piece_supplier_receipt_required"
-    if status == PIECE_STATUS_ASSIGNED:
-        return "preparation_piece_not_started"
-    if status not in {
-        PIECE_STATUS_IN_PROGRESS,
-        PIECE_STATUS_READY_FOR_RECEIPT,
-        PIECE_STATUS_RECEIVED,
-    }:
-        return "preparation_piece_not_ready_for_receipt"
     return None
 
 
@@ -1509,13 +1496,7 @@ async def _preparation_receipt_search(
             status_code=404,
             detail={"code": "preparation_receipt_order_not_found"},
         )
-    pieces = await _preparation_receiving_active_order_pieces(db, user_id=user_id, pieces=pieces)
-    if not pieces:
-        raise HTTPException(
-            status_code=409,
-            detail=await receipt_status_rejection(db, user_id=user_id, order_number=order_number,
-                code="preparation_receipt_order_not_in_progress"),
-        )
+    await _assert_preparation_receipt_salla_status(db, user_id=user_id, order_number=order_number)
 
     rows = [
         _preparation_receipt_piece_public(
@@ -1583,11 +1564,8 @@ async def _refresh_preparation_receipt_progress(
     total_count = len(order_pieces)
     completed = bool(total_count and received_count == total_count)
     workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": order_number}) or {}
-    local = workflow.get("completion_mode") == LOCAL_COMPLETION_MODE
-    if local:
-        current = await _current_assembly_order(db, user_id=user_id, order_number=order_number)
-        completed = bool(shipping_address_is_complete(getattr(current, "shipping", None))
-                         and _local_preparation_coverage_complete(current, workflow, order_pieces))
+    # Physical custody is independent of review, payment and components. This
+    # function records counts only; assembly/Ready owns guarded promotion.
     workflow_patch: dict[str, Any] = {
         "preparation_receipt_status": "completed" if completed else "partial",
         "preparation_received_piece_count": received_count,
@@ -1596,18 +1574,7 @@ async def _refresh_preparation_receipt_progress(
         "updated_at": now,
         "updated_by": actor_id,
     }
-    if completed:
-        workflow_patch.update({
-            "stage": "ready_to_ship",
-            "ready_to_ship_at": now,
-            "ready_to_ship_source": "preparation_receipt",
-            "preparation_completed_at": now,
-            "preparation_completed_by": actor_id,
-            "preparation_completed_by_name": actor_name,
-        })
-    elif local:
-        # A received file is not evidence that unassigned/direct work is done.
-        workflow_patch["stage"] = "in_progress"
+    # Custody alone cannot promote or demote an otherwise ineligible workflow.
     await db[WORKFLOWS].update_one(
         {
             "user_id": user_id,
@@ -1622,7 +1589,7 @@ async def _refresh_preparation_receipt_progress(
     ) if update_file else False
     return {
         "order_number": order_number, "received_count": received_count,
-        "total_count": total_count, "order_ready_for_assembly": completed,
+        "total_count": total_count, "order_ready_for_assembly": workflow.get("stage") == "ready_to_ship",
         "file_completed": file_completed,
     }
 
@@ -1762,9 +1729,37 @@ async def _preparation_receiving_custody_view(
     }
 
 
+# Bound the whole provider resolution, including token refresh, below Mongo's
+# transaction lifetime. No receipt retry loop waits on a slow provider.
+PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS = 10.0
+
+
+async def _assert_preparation_receipt_salla_status(db: Any, *, user_id: str, order_number: str) -> None:
+    """Read Salla directly; never synchronize an order or issue a shipment."""
+    from order_engine.shipping_label_service import _resolve_order
+    from preparation_receipt_status_message import _values, LABELS
+    import httpx
+    try:
+        internal_id, current = await asyncio.wait_for(
+            _resolve_order(db, user_id, order_number), PREPARATION_RECEIPT_STATUS_TIMEOUT_SECONDS)
+    except (ShippingLabelError, SallaError, TimeoutError, httpx.RequestError) as exc:
+        raise HTTPException(409, detail={"code": "preparation_receipt_status_unverified",
+            "message": "تعذّر التحقق من حالة الطلب الحالية في سلة؛ أعد المحاولة."}) from exc
+    if _text(current.get("id")) != internal_id or _text(current.get("reference_id")) != order_number:
+        raise HTTPException(409, detail={"code": "preparation_receipt_status_unverified"})
+    statuses = _values(current.get("status")) | _values(current.get("status_slug"))
+    if statuses != {"in_progress"}:
+        status = next(iter(statuses)) if len(statuses) == 1 else None
+        raise HTTPException(409, detail={"code": "preparation_receipt_order_not_in_progress",
+            "order_status": status, "order_status_label": LABELS.get(status),
+            "message": (f"حالة الطلب في سلة: «{LABELS[status]}». " if status in LABELS else "")
+                + "يلزم أن تكون حالة الطلب الحالية في سلة «قيد التنفيذ» لاستلام القطعة."})
+
+
 async def _receive_preparation_piece(
     db: Any, *, user_id: str, piece_id: str, client_request_id: str,
     actor_id: str, actor_name: str,
+    authorize: Callable | None = None,
 ) -> dict[str, Any]:
     args = dict(user_id=user_id, piece_id=piece_id, client_request_id=client_request_id,
                 actor_id=actor_id, actor_name=actor_name)
@@ -1772,28 +1767,23 @@ async def _receive_preparation_piece(
         {"piece_id": _text(piece_id).lower()}, {"id": _text(piece_id).lower()},
     ]}) or {}
     number = _text(piece.get("order_number"))
-    workflow = await db[WORKFLOWS].find_one({"user_id": user_id, "order_number": number}) or {}
-    if workflow.get("completion_mode") is None:
-        return await _receive_preparation_piece_impl(db, **args)
+    if not piece or piece.get("experiment_archived_at"):
+        raise HTTPException(404, detail={"code": "preparation_piece_not_found"})
+    await _assert_preparation_receipt_salla_status(db, user_id=user_id, order_number=number)
 
     async def receive(scoped):
-        current_workflow = await scoped[WORKFLOWS].find_one({"user_id": user_id, "order_number": number}) or {}
-        source = await scoped.unified_orders.find_one({"user_id": user_id, "order_number": number}) or {}
-        watermark = source.get("g47_salla_snapshot") or {}
-        if watermark.get("component_pending"):
-            # Recover pre-fix snapshots only within this requested receipt's
-            # transaction. All review/status/piece checks still run below;
-            # any rejection rolls back the acknowledgement with the receipt.
-            from fulfillment_v2_routes import revalidate_unchanged_component_snapshot
-            await revalidate_unchanged_component_snapshot(scoped, user_id=user_id,
-                order_number=number, source_revision=watermark.get("revision"))
-        approved = await load_local_assignment_workflows(scoped, user_id=user_id, workflows=[current_workflow])
-        current = await _current_assembly_order(scoped, user_id=user_id, order_number=number)
-        if not local_review_stage_eligible(current, approved.get(number),
-                                          {"reviewed", "in_progress", "ready_to_ship", "completed"}):
-            raise HTTPException(409, detail=await receipt_status_rejection(scoped, user_id=user_id,
-                order_number=number, code="local_review_receipt_not_eligible"))
-        return await _receive_preparation_piece_impl(scoped, **args, update_file=False)
+        if authorize:
+            await authorize()
+        current_piece = await scoped[PIECES].find_one({"user_id": user_id, "piece_id": _text(piece_id).lower()})
+        if not current_piece or _text(current_piece.get("order_number")) != number:
+            raise HTTPException(409, detail={"code": "preparation_piece_identity_changed"})
+        result = await _receive_preparation_piece_impl(scoped, **args, update_file=False)
+        # Recheck after work, before commit. A provider status change or access
+        # revocation aborts the receipt and its progress/event writes together.
+        await _assert_preparation_receipt_salla_status(db, user_id=user_id, order_number=number)
+        if authorize:
+            await authorize()
+        return result
 
     result = await operational_owner(db, user_id, receive)
     # Registry is a derived file view outside the restricted owner capability.
@@ -1825,7 +1815,7 @@ async def _receive_preparation_piece_impl(
         },
         {"_id": 0},
     )
-    if not piece:
+    if not piece or piece.get("experiment_archived_at"):
         raise HTTPException(
             status_code=404,
             detail={"code": "preparation_piece_not_found"},
@@ -1868,16 +1858,6 @@ async def _receive_preparation_piece_impl(
                 ],
             })
         raise HTTPException(status_code=409, detail=detail)
-    await enforce_stage_instructions(
-        db,
-        user_id=user_id,
-        order_number=_text(piece.get("order_number")),
-        order_item_id=_text(piece.get("order_item_id")),
-        piece_id=normalized_piece_id,
-        stage="preparation_receiving",
-        actor_id=actor_id,
-    )
-
     now = _now()
     update_result = await db[PIECES].update_one(
         {
@@ -3877,6 +3857,22 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
                 detail={"code": "preparation_receipt_permission_required"},
             )
         operation_actor = effective_operation_actor(user, context)
+        async def authorize():
+            # The native bridge lends an employee the tenant principal. Reload
+            # the actual actor before rebuilding that bridge; rechecking the
+            # owner-shaped principal would silently bypass revoked page access.
+            native = user.get("_session_client") == "amasi_mobile"
+            actor_id = operation_actor["id"]
+            live_user = await db["users"].find_one({"id": actor_id})
+            if not live_user or live_user.get("disabled") is True or live_user.get("is_active") is False or live_user.get("deleted_at"):
+                raise HTTPException(403, detail={"code": "preparation_receipt_permission_required"})
+            if native:
+                from mobile_app_request_context import mobile_app_request_user
+                live_user = await mobile_app_request_user(db, {**live_user, "_session_client": "amasi_mobile"},
+                    path="/api/preparation-work-v1/receiving/pieces/receive", method="POST")
+            fresh = await _actor_context(db, live_user)
+            if fresh["merchant_id"] != context["merchant_id"] or not _can_receive_from_preparation(live_user, fresh):
+                raise HTTPException(403, detail={"code": "preparation_receipt_permission_required"})
         return await _receive_preparation_piece(
             db,
             user_id=context["merchant_id"],
@@ -3884,6 +3880,7 @@ def make_preparation_piece_operations_router(db: Any, current_user: Callable) ->
             client_request_id=payload.client_request_id,
             actor_id=operation_actor["id"],
             actor_name=operation_actor["name"],
+            authorize=authorize,
         )
 
     @router.get("/assembly/search")
