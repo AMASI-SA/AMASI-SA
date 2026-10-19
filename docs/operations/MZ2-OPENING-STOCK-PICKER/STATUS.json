@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPENING-STOCK-PICKER",
-  "status": "REVIEW_AND_CACHED_MONGO_ACCEPTANCE_PASS_RELEASE_PREPARATION",
+  "status": "DEPENDENCY_GATE_REPAIR_FINAL_CI_PENDING",
   "branch": "codex/opening-stock-product-picker-20261019",
   "base_sha": "56919d2a8c48ca5fe85ee5543e7d86563d4c982f",
   "scope": "Compact image/name/SKU search list with explicit add action; separate product configuration rows including text customization and color; read valid cached options only for opening inventory when canonical options are absent.",
@@ -44,7 +44,12 @@
       "SMSA"
     ],
     "store_driver_excluded": true,
-    "expense_categories": "14 operational categories; no storefront product category observed"
+    "expense_categories": "14 operational categories; no storefront product category observed",
+    "stock_writer_disabled": true,
+    "product_samples": {
+      "AMS11828": "Live current source shows name/color/notes after ready selection",
+      "AMS10250": "Live old source still lacks text options even when ready; must verify repaired candidate against real cached definition"
+    }
   },
   "apk": {
     "path": "D:/codex-release-archives/mezan-operational/1.0.11-code14/Mezan-Operational-1.0.11-code14-production.apk",
@@ -53,5 +58,13 @@
     "package": "com.amasi.sa.mezanoperational",
     "write_gates": false,
     "fresh_observation": "Existing authenticated emulator session opens and refreshes movements; setup prerequisite displayed. Reports loaded empty successfully. Fresh credential login and upgrade acceptance not proven. No reinstall/build."
+  },
+  "release_preparation": {
+    "superseded_source": "20a14dbbe5b099b465c530889a7b8a40e6205a13",
+    "build_run": 39306404383,
+    "build": "PASS external A/B build and candidate intent archived; NOT frozen into B because Security Gate failed",
+    "security_failure": "aiohttp3.14.3 GHSA-5wr8-gcqf-gqf3 / GHSA-2g87-pp6c-29x5 / GHSA-494j-54xm-rwp3",
+    "correction": "aiohttp3.14.4 + required yarl1.25.1; matching runtime/release dependency lock; new source build required",
+    "archive": "D:/codex-release-archives/mezan-operational/opening-stock-20a14dbb"
   }
 }
