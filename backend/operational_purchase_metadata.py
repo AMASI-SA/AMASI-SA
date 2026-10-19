@@ -58,14 +58,18 @@ def combinations(row,options):
     return result
 
 
-async def products(db,owner):
+async def products(db,owner,*,opening_cached_options=False):
     from operational_balance_inventory import image_url
     result=[];seen=set()
     for row in await rows(db,owner,'mezan_products_v2'):
         if not usable(row) or row.get('archived') or row.get('deleted_at'):continue
         identity=row.get('mezan_product_id')
         if not isinstance(identity,str) or not identity or identity in seen or not row.get('name'):fail('inventory_catalog_ambiguous','هوية المنتج غير مكتملة')
-        seen.add(identity);options,issues=option_contract(row)
+        seen.add(identity)
+        if opening_cached_options:
+            from operational_opening_options import opening_option_source
+            row=opening_option_source(row)
+        options,issues=option_contract(row)
         result.append({'id':identity,'kind':'product','name':row['name'],'image_url':image_url(row.get('main_image')),'sku':row.get('sku') or '', 'unit':row.get('unit') or 'piece','options':options,'configuration_issues':issues,'selection_combinations':combinations(row,options),'conditional_rules_verified':False})
     return result
 

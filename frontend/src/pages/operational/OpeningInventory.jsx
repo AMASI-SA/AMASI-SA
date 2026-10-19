@@ -34,6 +34,9 @@ export default function OpeningInventory({context}) {
   const [catalog, setCatalog] = useState(null), [error, setError] = useState('');
   const [search, setSearch] = useState(''), [lines, setLines] = useState([]);
   const [kind, setKind] = useState('product');
+  const [resultsOpen, setResultsOpen] = useState(true);
+  const nextLine = useRef(0);
+  const addItem = (item, itemKind) => edit([...lines, {...item, draftKey: ++nextLine.current, kind: itemKind, quantity: '1', unit_cost: '', location_id: '', purchase_configuration: {state: itemKind === 'product' ? 'ready' : 'raw', selections: [], inputs: []}}]);
   const [preview, setPreview] = useState(null), [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false), [result, setResult] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -41,7 +44,7 @@ export default function OpeningInventory({context}) {
   useEffect(() => {
     let alive = true;
     generation.current += 1;
-    setCatalog(null); setLines([]); setPreview(null); setResult(null); setError(''); setConfirmed(false);
+    setSearch(''); setResultsOpen(true); setCatalog(null); setLines([]); setPreview(null); setResult(null); setError(''); setConfirmed(false);
     if (allowed) api.inventoryOpeningContext().then(data => {
       if (!Array.isArray(data?.products) || !Array.isArray(data?.locations) || typeof data.writer_disabled !== 'boolean' || typeof data.approved !== 'boolean') throw Error('invalid_context');
       if (alive) setCatalog(data);
@@ -81,7 +84,7 @@ export default function OpeningInventory({context}) {
   const costs = lines.map(lineCents);
   const total = lines.length && costs.every(cost => cost != null) ? costs.reduce((sum, cost) => sum + cost, BigInt(0)) : null;
   if (!allowed) return <p role="alert">إعداد المخزون الافتتاحي متاح للمالك فقط.</p>;
-  return <section dir="rtl" aria-label="إدخال المخزون الافتتاحي"><h2>المخزون الافتتاحي للمنتجات والمكونات</h2>
+  return <section className="op-opening-stock" dir="rtl" aria-label="إدخال المخزون الافتتاحي"><h2>المخزون الافتتاحي للمنتجات والمكونات</h2>
     <p>سجّل المخزون الموجود فعليًا عند البداية، وليس شراءً جديدًا. الاعتماد يثبت الكميات والتكلفة والمواقع دون إنشاء قيود مالية أو تفعيل المحاسبة الأساسية.</p>
     <p>التكلفة هنا تشغيلية؛ التسجيل وحده لا يتيح المخزون لتنفيذ الطلبات قبل استيفاء ضوابط التقييم والجاهزية.</p>
     <Notice error={error}/>
@@ -89,22 +92,31 @@ export default function OpeningInventory({context}) {
     {!catalog && error && <button onClick={() => setRevision(v => v + 1)}>إعادة تحميل الكتالوج</button>}
     {result ? <p role="status">تم اعتماد المخزون الافتتاحي. يمكنك عرضه في المخزون المتاح. لم تُنشأ قيود مالية.</p> : catalog?.approved ? <p role="status">سبق اعتماد المخزون الافتتاحي؛ لا يمكن تسجيل افتتاحية ثانية.</p> : catalog && <>
       {catalog.writer_disabled && <p role="alert">كاتب المخزون مغلق؛ يمكنك تجهيز المعاينة فقط. الاعتماد محجوب حتى يُتاح وفق التفويض المعتمد. هذه الصفحة لا تفعّل الكاتب.</p>}
-      <fieldset disabled={busy}><legend>اختيار المنتجات والكمية الفعلية</legend>
-        <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch('');}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
-        <Field label="بحث في كتالوج المنتجات والمكونات بالاسم أو الرمز"><input value={search} onChange={e => setSearch(e.target.value)}/></Field>
-        <div className="op-tile-grid">{matches.slice(0, 50).map(p => <button type="button" aria-label={`إضافة ${p.name}${p.sku ? ` · ${p.sku}` : ''}`} key={p.id} onClick={() => edit([...lines, {...p, kind, quantity: '1', unit_cost: '', location_id: '', purchase_configuration: {state: 'raw', selections: [], inputs: []}}])}><ItemImage url={p.image_url} name={p.name}/><strong>{p.name}</strong><span>{p.sku || 'بدون رمز'}</span>{kind === 'component' && <small>{unitLabel(p.component_type)} · {unitLabel(p.unit)}</small>}</button>)}</div>
-        {matches.length > 50 && <p>نعرض أول 50 من {matches.length} صنفًا؛ حدّد الاسم أو الرمز لتضييق البحث.</p>}
-        {!matches.length && <p>{kind === 'product' ? 'لا توجد منتجات مطابقة في الكتالوج.' : 'لا توجد مكونات مطابقة في كتالوج ميزان 2.'}</p>}
+      <fieldset className="op-stock-form" disabled={busy}><legend>اختيار المنتجات والكمية الفعلية</legend>
+        <Field label="نوع الصنف"><select value={kind} onChange={e => {setKind(e.target.value); setSearch(''); setResultsOpen(true);}}><option value="product">منتجات</option><option value="component">مكونات</option></select></Field>
+        <div className="op-stock-picker">
+          <Field label="بحث في كتالوج المنتجات والمكونات بالاسم أو الرمز"><input value={search} placeholder="ابحث باسم المنتج أو رقمه المخزني" aria-expanded={resultsOpen} aria-controls="opening-stock-results" onFocus={() => setResultsOpen(true)} onKeyDown={e => {if (e.key === 'Escape') setResultsOpen(false); if (e.key === 'ArrowDown') {e.preventDefault(); setResultsOpen(true);}}} onChange={e => {setSearch(e.target.value); setResultsOpen(true);}}/></Field>
+          <button type="button" className="op-stock-toggle" aria-expanded={resultsOpen} aria-controls="opening-stock-results" onClick={() => setResultsOpen(!resultsOpen)}>{resultsOpen ? 'إخفاء نتائج البحث' : 'عرض نتائج البحث'}</button>
+          {resultsOpen && <ul id="opening-stock-results" className="op-stock-results" aria-label="نتائج البحث">{matches.slice(0, 50).map(p => <li key={p.id}>
+            <ItemImage url={p.image_url} name={p.name}/><div className="op-stock-result-name"><strong>{p.name}</strong><small dir="auto">{p.sku || 'بدون رمز'}</small>{kind === 'component' && <small>{unitLabel(p.component_type)} · {unitLabel(p.unit)}</small>}</div>
+            <button type="button" aria-label={`إضافة ${p.name}${p.sku ? ` · ${p.sku}` : ''}`} onClick={() => addItem(p, kind)}>{kind === 'product' ? 'إضافة المنتج' : 'إضافة المكون'}</button>
+          </li>)}{!matches.length && <li>{kind === 'product' ? 'لا توجد منتجات مطابقة في الكتالوج.' : 'لا توجد مكونات مطابقة في كتالوج ميزان 2.'}</li>}</ul>}
+          {matches.length > 50 && <p className="op-muted">نعرض أول 50 من {matches.length} صنفًا؛ حدّد الاسم أو الرمز لتضييق البحث.</p>}
+        </div>
+        <p role="status">السطور المضافة: {lines.length} — يمكنك إضافة المنتج نفسه مرة أخرى بخيارات وكمية مختلفة.</p>
         {!catalog.locations.length && <p role="alert">لا توجد مواقع تخزين مؤهلة؛ يلزم إعداد موقع قبل اعتماد المخزون.</p>}
-        {lines.map((line, index) => <fieldset key={index} className="op-card"><legend>{index + 1} — {line.name}</legend>
-          <ItemImage url={line.image_url} name={line.name}/><p>{line.name} · {line.sku || 'بدون رمز'}</p>
+        {lines.map((line, index) => <fieldset key={line.draftKey} className="op-card op-stock-line"><legend>{index + 1} — {line.name}</legend>
+          <div className="op-stock-line-heading"><ItemImage url={line.image_url} name={line.name}/><strong>{line.name} · {line.sku || 'بدون رمز'}</strong></div>
+          {line.configuration_issues?.length > 0 && <p role="alert">{line.configuration_issues.join(' · ')} — راجع تعريف المنتج في ميزان 2؛ لا يمكن اعتماد خيارات ناقصة.</p>}
+          {line.kind === 'product' && !line.options?.length && !line.configuration_issues?.length && <p className="op-muted">لا توجد خيارات أو حقول نصية مسجلة لهذا المنتج في كتالوج ميزان 2.</p>}
           {line.kind === 'component' && <p>النوع: {unitLabel(line.component_type)} · الوحدة: {unitLabel(line.unit)} (حسب الكتالوج)</p>}
           <Field label={`موقع التخزين — ${index + 1}`}><select value={line.location_id} onChange={e => update(index, {location_id: e.target.value})}><option value="">اختر الموقع</option>{catalog.locations.map(l => <option key={l.id} value={l.id}>{l.name || l.code}{l.warehouse_name ? ` — ${l.warehouse_name}` : ''}</option>)}</select></Field>
-          {line.kind === 'product' && <Field label={`حالة المنتج — ${index + 1}`}><select value={line.purchase_configuration.state} onChange={e => config(index, {state: e.target.value, inputs: []})}><option value="raw">خام غير مخصص بالكامل</option><option value="ready">جاهز</option></select></Field>}
-          {(line.kind === 'product' ? line.options || [] : []).map(o => choices.includes(o.type) ? <Field key={o.id} label={`${o.name} — ${index + 1}`}><select value={line.purchase_configuration.selections.find(s => s.option_id === o.id)?.value_id || ''} onChange={e => config(index, {selections: [...line.purchase_configuration.selections.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value_id: e.target.value}] : [])]})}><option value="">غير محدد</option>{(o.values || []).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></Field> : texts.includes(o.type) ? line.purchase_configuration.state === 'ready' && <Field key={o.id} label={`${o.name} — ${index + 1}`}><OptionInput type={o.type} value={line.purchase_configuration.inputs.find(s => s.option_id === o.id)?.value || ''} onChange={e => config(index, {inputs: [...line.purchase_configuration.inputs.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value: e.target.value}] : [])]})}/></Field> : <p key={o.id}>الخيار {o.name} يحتاج مراجعة قبل إثبات الجاهزية.</p>)}
+          {line.kind === 'product' && <Field label={`حالة المنتج — ${index + 1}`}><select value={line.purchase_configuration.state} onChange={e => config(index, {state: e.target.value, inputs: []})}><option value="raw">خام غير مخصص بالكامل</option><option value="ready">جاهز / مخصص بالخيارات أدناه</option></select></Field>}
+          {(line.kind === 'product' ? line.options || [] : []).map(o => choices.includes(o.type) ? <Field key={o.id} label={`${o.name} — ${index + 1}`}><select value={line.purchase_configuration.selections.find(s => s.option_id === o.id)?.value_id || ''} onChange={e => config(index, {selections: [...line.purchase_configuration.selections.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value_id: e.target.value}] : [])]})}><option value="">غير محدد</option>{(o.values || []).map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></Field> : texts.includes(o.type) ? <Field key={o.id} label={`${o.name} — ${index + 1}`}><OptionInput type={o.type} disabled={line.purchase_configuration.state !== 'ready'} placeholder={line.purchase_configuration.state === 'raw' ? 'اختر حالة جاهز لإدخال النص الموجود على المنتج' : 'أدخل النص، مثل عبير أو فاطمة'} value={line.purchase_configuration.inputs.find(s => s.option_id === o.id)?.value || ''} onChange={e => config(index, {inputs: [...line.purchase_configuration.inputs.filter(s => s.option_id !== o.id), ...(e.target.value ? [{option_id: o.id, value: e.target.value}] : [])]})}/></Field> : <p key={o.id}>الخيار {o.name} يحتاج مراجعة قبل إثبات الجاهزية.</p>)}
           <Field label={`الكمية — ${index + 1}`}><input inputMode={line.kind === 'component' && line.quantity_precision ? 'decimal' : 'numeric'} value={line.quantity} onChange={e => update(index, {quantity: e.target.value})}/></Field>
           <Field label={`تكلفة الوحدة بالريال — ${index + 1}`}><input inputMode="decimal" value={line.unit_cost} onChange={e => update(index, {unit_cost: e.target.value})}/></Field>
           <p role="status" aria-label={`إجمالي السطر ${index + 1}`}>إجمالي السطر: {costs[index] == null ? 'أكمل الكمية والتكلفة' : `${money(costs[index])} SAR`}</p>
+          <button type="button" onClick={() => addItem(line, line.kind)}>إضافة سطر آخر من نفس الصنف</button>
           <button type="button" onClick={() => edit(lines.filter((_, i) => i !== index))}>إزالة السطر {index + 1}</button>
         </fieldset>)}
         <p role="status" aria-label="إجمالي تكلفة المدخلات">إجمالي تكلفة المدخلات: {total == null ? 'أكمل جميع السطور' : `${money(total)} SAR`}</p>
