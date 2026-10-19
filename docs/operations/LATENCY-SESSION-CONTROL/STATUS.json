@@ -1,0 +1,22 @@
+{
+  "task": "LATENCY-SESSION-CONTROL",
+  "state": "draft_functional_evidence_complete_release_blocked",
+  "base": "6d11803503e98fcd5727f4e11c2abc38ae3c95a7",
+  "branch": "codex/latency-session-control",
+  "production_changed": false,
+  "local_evidence": "34 passed / 1 Linux-permissions SKIP on Windows",
+  "linux_tests": "35 PASS / 0 FAIL / 0 SKIP; MongoDB8.0.12 replica set",
+  "two_process_rehearsal": "PASS; bounded off/on/off; no errors; replacement worker does not join old session",
+  "performance": "Diagnostic only; no Production acceptance claim",
+  "limitations": [
+    "No mobile rendering or phone-network measurement",
+    "No immediate group stop guarantee during a partition or frozen worker",
+    "No activation, deployment, Collector or PR1316 watcher"
+  ],
+  "next": "Technical review of Draft PR1379, inspect pending CodeQL; separate authorization required for release/activation",
+  "tested_head": "0655345be0fa443187beb682af03e8af31d6c0fc",
+  "linux_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/38910672409",
+  "evidence_zip_sha256": "1f8e2831f83ca0dac5c50412277463c5449c2c165b718134c828fb8715e75970",
+  "security": "Backend security contracts and frontend dependency/CSP PASS; CodeQL JS PASS; Python pending at checkpoint",
+  "release": "NO-GO: Production base advanced to4561ef771676142d853104b433fc9dd2897dab46; source-base ancestry and stale Intent refusal; no new Intent authorized"
+}
