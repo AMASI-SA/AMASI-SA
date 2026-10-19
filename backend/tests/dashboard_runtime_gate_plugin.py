@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ARM = os.environ['DASHBOARD_ADOPTION_ARM']
+assert ARM in {'reference', 'production', 'runtime'}, 'unknown comparison arm'
 GOLDEN = Path(os.environ['DASHBOARD_ADOPTION_GOLDEN'])
 records = {}
 calls = Counter()
@@ -135,5 +136,6 @@ def pytest_sessionfinish(session, exitstatus):
         assert len(records) == 164, len(records)
         if ARM != 'reference':
             assert set(records) == set(json.loads(GOLDEN.read_text()))
+        if ARM in {'production', 'runtime'}:
             assert all(calls[name] > 0 for name in ('parser', 'index', 'cost', 'advertising', 'forced_index_checkpoints'))
             output.with_suffix('.calls.json').write_text(json.dumps(calls, indent=2))

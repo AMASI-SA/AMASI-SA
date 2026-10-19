@@ -1,0 +1,23 @@
+{
+  "task": "LATENCY-SESSION-CONTROL",
+  "state": "additive_production_comparison_pending",
+  "base": "726cc701bf120d8aa6f7b055f91ce7463c9626b9",
+  "branch": "codex/latency-control-release-20261016",
+  "production_changed": false,
+  "local_evidence": "34 passed / 1 Linux-permissions SKIP on Windows",
+  "linux_tests": "35 PASS / 0 FAIL / 0 SKIP; MongoDB8.0.12 replica set",
+  "two_process_rehearsal": "PASS; bounded off/on/off; no errors; replacement worker does not join old session",
+  "performance": "Diagnostic only; no Production acceptance claim",
+  "limitations": [
+    "No mobile rendering or phone-network measurement",
+    "No immediate group stop guarantee during a partition or frozen worker",
+    "No activation, deployment, Collector or PR1316 watcher"
+  ],
+  "next": "Run additive full164 comparison against pinned base726; preserve historical failure and re-evaluate latest Production before release.",
+  "tested_head": "0655345be0fa443187beb682af03e8af31d6c0fc",
+  "linux_run": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/38910672409",
+  "evidence_zip_sha256": "1f8e2831f83ca0dac5c50412277463c5449c2c165b718134c828fb8715e75970",
+  "security": "Prior tested source CodeQL Python/JS and security PASS; new-base gates pending",
+  "release": "BLOCKED: historical gate FAIL retained; Production advanced to 08545aee8a168b069150643a549d548c5f34aab2; no Intent B.",
+  "lease_evidence": "Owner supplied fresh /app status active=false this turn; Publishing Idle still requires verification before publish."
+}
