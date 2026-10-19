@@ -129,7 +129,7 @@ async def context(db, user):
     actor = await owner_actor(db, user)
     owner = actor['id']
     batch = await db[BATCHES].find_one({'_id': owner, 'user_id': owner})
-    return {'products': await products(db, owner), 'components': await components(db, owner), 'locations': await locations(db, owner),
+    return {'products': await products(db, owner, opening_cached_options=True), 'components': await components(db, owner), 'locations': await locations(db, owner),
             'writer_disabled': writes_paused(await read_control(root_db(db), owner)),
             'approved': bool(batch), 'batch_id': (batch or {}).get('id'),
             'financial_effect': 'none', 'fulfillment_eligible': False,
@@ -153,7 +153,7 @@ async def compile_preview(db, owner, request):
                  'mz2_opening_inventory_initializations', 'mz2_inventory_cost_states'):
         if await db[name].find_one({'user_id': owner}):
             fail('opening_inventory_existing_stock', 'توجد حركة أو قيمة مخزون سابقة؛ يلزم مسار مطابقة')
-    metadata = await products(db, owner)
+    metadata = await products(db, owner, opening_cached_options=True)
     candidates = {(p['kind'], p['id']): p for p in metadata + await components(db, owner)}
     raw_products = await records(db, owner, 'mezan_products_v2')
     raw_components = await records(db, owner, 'mezan_cost_resources_v2')
