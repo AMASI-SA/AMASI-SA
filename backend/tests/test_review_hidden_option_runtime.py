@@ -43,17 +43,39 @@ class HiddenOptionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.app.include_router(controls.make_order_review_export_controls_router(production_db, actor), prefix="/runtime")
         self.route_prefix = "/runtime"
 
-    async def exercise(self, *, show_again=False):
+    async def exercise(self, *, show_again=False, nested_choices=False, default_route=None):
         number = "synthetic-runtime-options"
         source = self.source_payload(number=number)
         source["items"][0]["options"] = [
             {"id": "synthetic-size", "name": "المقاس", "value": "M"},
             {"id": "synthetic-note", "name": "ملاحظة", "value": "Synthetic note"},
         ]
+        hidden_keys = ["size", "ملاحظة"]
+        if nested_choices:
+            source["items"][0]["options"] = [
+                {"id": "synthetic-embroidery", "name": "هل تريد تطريز الاسم مجاني",
+                 "type": "radio", "values": [{"id": "synthetic-yes", "name": "نعم", "price": 0}]},
+                {"id": "synthetic-name", "name": "الاسم", "type": "text", "value": "اسم تجريبي"},
+            ]
+            source["items"][0]["customer_options"] = [
+                {"title": "لون المنتج", "answer": {"name": "أخضر"}},
+            ]
+            hidden_keys = ["هل تريد تطريز الاسم مجاني"]
+        if default_route:
+            from order_engine.mapper import map_salla_order
+            item = map_salla_order(source).items[0]
+            await self.db[controls.ASSIGNMENT_DEFAULTS].insert_one({
+                "user_id": "owner", "product_key": controls.preparation_assignment_product_key(item),
+                "preparation_route": default_route,
+            })
         self.assertTrue((await self.webhook(source))["synced"])
         before = await self.display(number)
         item_id = before["items"][0]["order_item_id"]
-        values = [["size", "ملاحظة"], []] if show_again else [["size", "ملاحظة"]]
+        if nested_choices:
+            options = {row["name"]: row["value"] for row in before["items"][0]["options"]}
+            self.assertEqual(options["هل تريد تطريز الاسم مجاني"], "نعم")
+            self.assertEqual(options["الاسم"], "اسم تجريبي")
+        values = [hidden_keys, []] if show_again else [hidden_keys]
         for hidden in values:
             changed = await self.client.patch(
                 f"/runtime/order-review-export-controls-v1/{number}/items/{item_id}",
@@ -69,6 +91,9 @@ class HiddenOptionRuntimeTests(unittest.IsolatedAsyncioTestCase):
         await self.assert_commit(await self.submit(request, number), detail, request)
         workflow = await self.db[completion.WORKFLOWS].find_one({"order_number": number})
         self.assertEqual(workflow["items"][0]["manual_supplier_export_excluded_spec_keys"], sorted(values[-1]))
+        self.assertEqual(workflow["items"][0]["options"], before["items"][0]["options"])
+        if default_route:
+            self.assertEqual(workflow["items"][0]["preparation_route"], default_route)
         self.assertEqual(await self.db[completion.EVENTS].count_documents({"event_type": "order_review_completed"}), 1)
         self.external.assert_not_awaited()
 
@@ -77,6 +102,15 @@ class HiddenOptionRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_hidden_then_visible_options_complete_on_same_runtime(self):
         await self.exercise(show_again=True)
+
+    async def test_nested_customer_choices_remain_in_approved_order_when_hidden_from_file(self):
+        await self.exercise(nested_choices=True)
+
+    async def test_hidden_nested_choice_with_saved_supplier_route_completes_once(self):
+        await self.exercise(nested_choices=True, default_route=controls.SUPPLIER_FILE_ROUTE)
+
+    async def test_hidden_nested_choice_with_saved_direct_route_completes_once(self):
+        await self.exercise(nested_choices=True, default_route=controls.DIRECT_ASSEMBLY_ROUTE)
 
 
 if __name__ == "__main__":

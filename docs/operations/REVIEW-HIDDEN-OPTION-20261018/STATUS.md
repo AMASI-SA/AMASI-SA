@@ -2,6 +2,36 @@
 
 Status: investigation incomplete; no production-code fix and no deployment.
 
+## 2026-10-19 nested-option investigation checkpoint
+
+Extended the real-Mongo HTTP fixture with nested radio/text customer options
+and saved supplier/direct preparation defaults. It exercises the actual
+production router wrapper, hides the radio option, obtains a fresh displayed
+approval, completes, and replays the same operation. Assertions retain option
+values, hidden keys, preparation route and exactly one completion event; all
+provider calls remain prohibited. No production-code change was made in this
+extension.
+
+Fresh results on an owned loopback-only replica set with synthetic UUID data:
+
+- Nested choice without a saved route: 1 test, 6.625s, exit 0.
+- Nested choice with supplier/direct saved routes: 2 tests, 8.523s, exit 0.
+- Original hide and hide/show runtime cases: 2 tests, 11.375s, exit 0.
+- `git diff --check`: exit 0.
+
+These passing cases do not reproduce or fix the observed live rejection.
+Fresh production fetch was `56919d2a8c48ca5fe85ee5543e7d86563d4c982f`;
+the relevant approval/control/completion source had no new explanatory change.
+The restored preview terminal returned release guard `active: false`; a bounded
+preview-log search found no matching diagnostic. A read-only database probe
+failed before environment/database access because that shell's Python lacked
+`dotenv`. No live query, approval, assignment, deployment or APK action followed.
+
+Keep this investigation separate from the Android PR279/280/281 integration.
+The next defect step remains capture of the actual sanitized rejection stage,
+followed by a regression for the proven mechanism. Do not weaken approval or
+unknown-outcome guards based on these synthetic successes.
+
 ## 2026-10-18 diagnostic preparation (not a defect fix)
 
 After the emulator reproduction, source inspection and a fresh production
