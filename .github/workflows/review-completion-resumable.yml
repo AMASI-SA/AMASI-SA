@@ -58,6 +58,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHON_DOTENV_DISABLED: "1"
       MZ2_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
+      BUILD37_TEST_MONGO_URI: mongodb://127.0.0.1:27018/?replicaSet=reviewtest
     steps:
       - uses: actions/checkout@v4
         with:
