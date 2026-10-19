@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPENING-STOCK-PICKER",
-  "status": "DEPENDENCY_GATE_REPAIR_FINAL_CI_PENDING",
+  "status": "FINAL_SOURCE_WITH_DURABLE_PACKAGE_ARCHIVE_CI_PENDING",
   "branch": "codex/opening-stock-product-picker-20261019",
   "base_sha": "56919d2a8c48ca5fe85ee5543e7d86563d4c982f",
   "scope": "Compact image/name/SKU search list with explicit add action; separate product configuration rows including text customization and color; read valid cached options only for opening inventory when canonical options are absent.",
@@ -10,7 +10,8 @@
     "Isolated browser fixture: desktop1280 and mobile390 screenshots, named silver10/15 rows, exact175.00 total; no horizontal mobile overflow.",
     "git diff --check: PASS",
     "Exact b206 remote CI artifacts independently inspected: operational backend518, G47 backend313, eligibility775 XML cases, zero failures/errors/skips; overlapping suites, not unique total. Operational frontend182 and G47 frontend118 passed.",
-    "New retained real-Mongo cached-only option acceptance:3passed in3.61s. Separate named10/15 rows total175; stale cached definition rejects; guards preserved; PENDING valuation and zero journals. Added to operational CI filename glob."
+    "New retained real-Mongo cached-only option acceptance:3passed in3.61s. Separate named10/15 rows total175; stale cached definition rejects; guards preserved; PENDING valuation and zero journals. Added to operational CI filename glob.",
+    "Independent final source review93fba50 and added success-only generated-artifact archive step: no material blocker; final CI still required."
   ],
   "evidence": "D:/codex-evidence/opening-stock-picker-20261019",
   "constraints": "No business writes, writer activation, Salla sync, source catalog mutation, Release Intent change or deployment. Existing canonical options win; incomplete/ambiguous cached identities fail closed. Purchase metadata behavior outside opening remains unchanged.",
@@ -65,6 +66,14 @@
     "build": "PASS external A/B build and candidate intent archived; NOT frozen into B because Security Gate failed",
     "security_failure": "aiohttp3.14.3 GHSA-5wr8-gcqf-gqf3 / GHSA-2g87-pp6c-29x5 / GHSA-494j-54xm-rwp3",
     "correction": "aiohttp3.14.4 + required yarl1.25.1; matching runtime/release dependency lock; new source build required",
-    "archive": "D:/codex-release-archives/mezan-operational/opening-stock-20a14dbb"
-  }
+    "archive": "D:/codex-release-archives/mezan-operational/opening-stock-20a14dbb",
+    "archive_gap_fixed": "Existing workflow archived intent/logs only. Added success-only whitelist tar+SHA256 of generated build/proof/backend identity/intent after verified external rehearsal, for permanent D-drive download. No gate/build/deploy change."
+  },
+  "remaining_operational_blockers": [
+    "Selected ads require approved financial identity/funding/currency binding.",
+    "Opening setup remains draft with0balances; no authorization to enter real balances or finish.",
+    "Opening physical receipts have no supported valuation-adoption route: operational_opening_inventory differs from operational_physical_receipt; do not clear PENDING or disguise as purchase.",
+    "Operational shipping fees require approved dated mz2_shipping_setup_v2 contract/evidence; visible historical carrier prices alone do not prove this.",
+    "APK business writer gates disabled; fresh login/upgrade and denied-actor live acceptance unproven."
+  ]
 }

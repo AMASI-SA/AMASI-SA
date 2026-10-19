@@ -652,6 +652,25 @@ jobs:
           assert shell_body == Path("build/index.html").read_bytes()
           assert "no-store" in shell_cache
           PY
+      - name: Archive verified generated release outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/mezan-generated-release-v5.tar.gz" \
+            -C "$REHEARSAL_REPO" \
+            frontend/build frontend/.release/reproducible-build.json \
+            backend/release_identity.json release/release-intent-v5.json
+          cd "$RUNNER_TEMP"
+          sha256sum mezan-generated-release-v5.tar.gz > mezan-generated-release-v5.sha256
+      - name: Retain verified generated release outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-v5-generated-outputs
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/mezan-generated-release-v5.tar.gz
+            ${{ runner.temp }}/mezan-generated-release-v5.sha256
       - name: Retain sanitized rehearsal evidence
         if: always()
         uses: actions/upload-artifact@v4
