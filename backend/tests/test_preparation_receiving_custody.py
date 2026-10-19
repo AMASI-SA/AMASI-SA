@@ -483,6 +483,46 @@ class PreparationCustodyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(row["idempotent"] for row in results), [False, True])
         self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({"piece_id": "concurrent"}), 1)
 
+    async def test_slow_status_check_serializes_same_owner_receipts_then_releases(self):
+        import asyncio
+        from time import monotonic
+        await self.seed_piece("slow-first")
+        await self.seed_piece("queued-second")
+        await self.db.mz2_atomic_owners.insert_one({"_id": "merchant-a", "revision": 0})
+        original = self.provider.side_effect
+        entered, release, second_read = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        first_calls = 0
+        async def delayed(db, owner, method, path, **kwargs):
+            nonlocal first_calls
+            if path.endswith("synthetic-slow-first"):
+                first_calls += 1
+                if first_calls == 2:
+                    entered.set()
+                    await release.wait()
+            if path.endswith("synthetic-queued-second"):
+                second_read.set()
+            return await original(db, owner, method, path, **kwargs)
+        self.provider.side_effect = delayed
+        first = asyncio.create_task(self.receive("slow-first"))
+        second = None
+        try:
+            await asyncio.wait_for(entered.wait(), 3)
+            started = monotonic()
+            second = asyncio.create_task(self.receive("queued-second"))
+            await asyncio.wait_for(second_read.wait(), 3)
+            await asyncio.sleep(0.25)
+            self.assertFalse(first.done())
+            self.assertFalse(second.done(), repr(second.exception()) if second.done() else "")
+            self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 0)
+            release.set()
+            results = await asyncio.wait_for(asyncio.gather(first, second), 5)
+            self.assertTrue(all(result["ok"] for result in results))
+            self.assertGreaterEqual(monotonic() - started, 0.25)
+        finally:
+            release.set()
+            await asyncio.gather(first, *([second] if second else []), return_exceptions=True)
+        self.assertEqual(await self.db[operations.PIECE_EVENTS].count_documents({}), 2)
+
     async def test_wrong_provider_identity_and_other_tenant_fail_without_receipt(self):
         await self.seed_piece("identity")
         original = self.provider.side_effect
