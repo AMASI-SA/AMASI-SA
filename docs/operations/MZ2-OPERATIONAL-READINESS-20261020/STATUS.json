@@ -1,0 +1,36 @@
+{
+  "task": "MZ2-OPERATIONAL-READINESS-20261020",
+  "status": "BASELINE_ACCEPTANCE_PREPARATION_NOT_READY_FOR_BUSINESS_WRITES",
+  "branch": "codex/operational-readiness-20261020",
+  "base_sha": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
+  "prior_verified_checkpoint": "37113c2c5f1a7aa1c2426278ac6168416c5ac600",
+  "scope": "Complete operational opening, movement, report and independent Production APK readiness without enabling writers or entering real balances.",
+  "resume": "Verified prior remote checkpoint, merged PR1451, and production branch advance through print/shipping PR1452. New task branch preserves all latest production source.",
+  "changes": [
+    "Add isolated acceptance runner that pins loopback replica set, disables dotenv and retains databases instead of fixture cleanup."
+  ],
+  "constraints": [
+    "No live business writes, writer activation, Salla sync, legacy migration, automatic journals, database deletion or worktree deletion.",
+    "No build or dependency installation inside /app.",
+    "No change to prior frozen release intent or publication identity."
+  ],
+  "acceptance": [
+    "Independent operational openings and movements conserve balances and totals; repeated requests cannot duplicate effects.",
+    "Inventory options, units, locations, costs and immutable evidence remain correct without financial journals.",
+    "Pending inventory must not become fulfillment eligible by clearing flags or pretending it is a purchase.",
+    "Advertising and shipping setup use verified native contracts, never guessed owner data.",
+    "Reports, purchases, returns and exchanges pass isolated acceptance.",
+    "APK authentication, tenant/disabled-user boundaries, installation and update remain explicit acceptance requirements."
+  ],
+  "design_question": "Owner asked whether opening inventory must now also be usable for order fulfillment, or only recorded and monitored. No answer yet. Financial valuation semantics and activation are not inferred.",
+  "known_gaps": [
+    "Opening inventory has no supported pending-to-adopted valuation route.",
+    "Selected advertising accounts need actual financial identities, funding and currency bindings.",
+    "Actual shipping contract evidence and effective dates require validation.",
+    "Live balances and start instant are owner inputs; no values will be invented."
+  ],
+  "verification": [],
+  "production_changed": false,
+  "next": "Run scripts/run_retained_operational_acceptance.py via durable process job; inspect XML and failures, then implement the next verified gap. Keep all test databases and logs. Do not publish or activate this checkpoint.",
+  "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded."
+}
