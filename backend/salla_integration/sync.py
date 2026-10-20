@@ -973,10 +973,10 @@ async def run_orders_sync(
                     if not doc.get("order_number"):
                         skipped += 1
                         continue
-                    res = await upsert_order(
-                        db, user_id, doc["order_number"], doc,
-                        source="salla_direct", raw=raw,
-                    )
+                    res = await _persist_sync_component_snapshot(db, user_id, doc, raw)
+                    if res.get("stale") or res.get("blocked"):
+                        skipped += 1
+                        continue
                     await _refresh_plan_b_status_snapshot(
                         db, user_id, doc["order_number"], doc
                     )
@@ -1602,6 +1602,26 @@ async def refresh_single_order_status(
     }
 
 
+async def _persist_sync_component_snapshot(db, user_id, doc, raw, *, authoritative_refresh=False):
+    """Keep provider payload and component watermark in one owner transaction.
+
+    Sync reads must not reserve stock or advance preparation. Only an unchanged
+    previously accepted component contract may acknowledge the new revision.
+    These existing sync paths do not invoke financial delivery observation.
+    """
+    from fulfillment_v2_routes import persist_component_source_snapshot
+
+    async def persist(scoped):
+        return await upsert_order(scoped, user_id, doc["order_number"], doc,
+                                  source="salla_direct", raw=raw)
+
+    return await persist_component_source_snapshot(
+        db, user_id=user_id, order_number=doc["order_number"], payload=raw,
+        persist=persist, authoritative_refresh=authoritative_refresh,
+        allow_delivery_observation=False,
+    )
+
+
 async def resync_single_order(db, user_id: str, order_number: str) -> dict:
     """Pull one authoritative Order Details payload from Salla.
 
@@ -1733,14 +1753,16 @@ async def resync_single_order(db, user_id: str, order_number: str) -> dict:
             )
 
         stage = "upsert_order"
-        res = await upsert_order(
-            db,
-            user_id,
-            doc["order_number"],
-            doc,
-            source="salla_direct",
-            raw=raw,
+        res = await _persist_sync_component_snapshot(
+            db, user_id, doc, raw, authoritative_refresh=True,
         )
+        if res.get("stale") or res.get("blocked"):
+            # Financial preflight callers require an actual fresh observation;
+            # a fenced-out stale response is not a successful refresh.
+            return {"ok": False, "found": True,
+                    "updated": False, "skipped": True,
+                    "reason": "stale_salla_snapshot" if res.get("stale") else "component_reconciliation_required",
+                    "order_number": order_number}
 
         stage = "plan_b_snapshot"
         plan_b_snapshot = await _refresh_plan_b_status_snapshot(

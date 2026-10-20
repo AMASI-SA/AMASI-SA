@@ -289,7 +289,9 @@ async def _reconcile_status_page(
 
         provider_updated_at = light_order.get("updated_at")
         if provider_updated_at is not None:
-            patch["raw_by_source.salla_direct.updated_at"] = provider_updated_at
+            # A light status observation is not a new full component snapshot.
+            # Keep its clock separate from the raw snapshot/watermark pair.
+            patch["last_salla_direct_status_source_updated_at"] = provider_updated_at
 
         from operational_atomic import operational_owner
 
