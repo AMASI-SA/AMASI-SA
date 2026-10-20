@@ -77,7 +77,7 @@ async def test_resync_returns_safe_raw_shape_only():
             return_value=doc,
         ),
         patch(
-            "salla_integration.sync.upsert_order",
+            "salla_integration.sync._persist_sync_component_snapshot",
             new=AsyncMock(return_value={"created": False}),
         ),
         patch(
