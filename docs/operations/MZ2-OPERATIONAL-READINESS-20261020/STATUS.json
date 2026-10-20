@@ -1,0 +1,55 @@
+{
+  "task": "MZ2-OPERATIONAL-READINESS-20261020",
+  "status": "HYBRID_DEBT_FIRST_PAYMENT_VERIFIED_NOT_DEPLOYED",
+  "branch": "codex/operational-readiness-20261020",
+  "base_sha": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
+  "prior_verified_checkpoint": "37113c2c5f1a7aa1c2426278ac6168416c5ac600",
+  "scope": "Complete operational opening, movement, report and independent Production APK readiness without enabling writers or entering real balances.",
+  "resume": "Verified prior remote checkpoint, merged PR1451, and production branch advance through print/shipping PR1452. New task branch preserves all latest production source.",
+  "changes": [
+    "Retained loopback acceptance runner prevents fixture database cleanup.",
+    "Latest owner rule supersedes separate-only restriction: hybrid payment settles existing debt first, excess funds wallet. Removed earlier overpayment rejection.",
+    "Reject partial explicit allocations that would leave payable debt while funding wallet; definitive replay-safe rejection.",
+    "Hybrid payment UI label explains debt-first/excess behavior. Six exact owner-case Mongo regressions added."
+  ],
+  "constraints": [
+    "No live business writes, writer activation, Salla sync, legacy migration, automatic journals, database deletion or worktree deletion.",
+    "No build or dependency installation inside /app.",
+    "No change to prior frozen release intent or publication identity."
+  ],
+  "acceptance": [
+    "Independent operational openings and movements conserve balances and totals; repeated requests cannot duplicate effects.",
+    "Inventory options, units, locations, costs and immutable evidence remain correct without financial journals.",
+    "Pending inventory must not become fulfillment eligible by clearing flags or pretending it is a purchase.",
+    "Advertising and shipping setup use verified native contracts, never guessed owner data.",
+    "Reports, purchases, returns and exchanges pass isolated acceptance.",
+    "APK authentication, tenant/disabled-user boundaries, installation and update remain explicit acceptance requirements."
+  ],
+  "design_question": "Owner explicitly chose opening inventory recording and monitoring only, not fulfillment. Pending valuation remains intentional and is not a blocker for that scope.",
+  "known_gaps": [
+    "Selected advertising accounts have cost settings but lack confirmed funding/wallet/payable binding. Cost-settings UI has no prepaid/postpaid/hybrid field. Do not invent these values.",
+    "Shipping contract mapping, effective dates and source evidence require confirmed native setup; live shipping-cod page reports no approved prices.",
+    "Live opening amounts and start instant are owner inputs. Physical writer remains off; no live activation authorized.",
+    "Full authenticated APK acceptance and upgrade remain unverified."
+  ],
+  "verification": [
+    "Full retained loopback Mongo operational suite: 521 passed, 0 failed, 0 skipped, 5 pre-existing Pydantic warnings, 123.85 seconds.",
+    "Initial collection failed because script omitted repository root from sys.path; fixed runner and complete rerun passed. Initial failure XML retained.",
+    "Old replica-set endpoint was offline. Created dedicated retained fixture at D:/codex-test-fixtures/operational-readiness-20261020, loopback27486, mezanReadiness20261020. No old database modified/deleted.",
+    "Codex Process Jobs unsupported on Windows; no background job created. Ran foreground pytest instead.",
+    "Live operational setup remains draft,0openings. Five selected ad accounts disabled pending binding.",
+    "Owner-provided /ads-manager/cost-settings verified live:18linked,4configured; settings include currency/FX/bank commission, no funding mode. Saved settings and defaults explicitly distinct.",
+    "Production APK SHA256 freshly matches archived d686e06e679100368c329633f9023df3bbe6c4a2b97b7788d2178afb87aa4259. Correct AMASI-R5-Isolated emulator existing authenticated session opens native movement categories and setup prerequisite. Temporary System UI boot ANR dismissed with Wait; no credential reset or reinstall. Fresh login/upgrade still unproven.",
+    "New real Mongo regression failed before fix: excess debt payment unexpectedly succeeded. After guard, focused test passed1 in1.25s; expanded payment/settlement variants pending broad run.",
+    "Superseded separate-only patch broad regression:523PASS; retained as historical evidence, not final-rule proof.",
+    "Final debt-first source:6new Mongo cases PASS;17focused hybrid/prepaid/settlement/rejection regression casesPASS (includes selected new cases),58OperationalBalances UI casesPASS.",
+    "Independent current-diff review: no material issues; exact bank/replay/CAS semantics preserved. Review does not establish automatic spend allocation on wallet depletion."
+  ],
+  "production_changed": false,
+  "next": "Review Draft PR and native data bindings; continue chronological funding/spend evidence work separately. No merge, deploy, financial/physical activation, or actual opening amounts authorized by these payment decisions.",
+  "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded.",
+  "ad_funding_decision": "Latest owner decision: settle debts first, add remaining payment to wallet. Debt100/payment200 => debt0/wallet100/bank debit200 once. Previous separate-only answer superseded.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1454",
+  "pr_state": "DRAFT_NOT_MERGED_NOT_DEPLOYED_CI_PENDING",
+  "verified_source_checkpoint": "6d9098819"
+}
