@@ -1318,7 +1318,13 @@ async def persist_component_source_snapshot(
         current = await scoped.unified_orders.find_one(query) or {}
         watermark = current.get("g47_salla_snapshot") or {}
         raw = (current.get("raw_by_source") or {}).get("salla_direct") or {}
-        previous_version = watermark.get("source_updated_at") or component_provider_version(raw, created_event=True)
+        # Legacy resyncs could advance raw data without its watermark. Light
+        # status reads have a separate clock and may contain a newer cancel.
+        # No full response may regress either observation while recovering.
+        observed_versions = [watermark.get("source_updated_at"),
+                             component_provider_version(raw, created_event=True),
+                             component_source_time(current.get("last_salla_direct_status_source_updated_at"))]
+        previous_version = max((value for value in observed_versions if value), default=None)
         previous_cancelled = bool(watermark.get("cancelled")) or _text(current.get("order_status_slug")).lower() in {"canceled", "cancelled"}
         if (cancelled and not version) or (watermark.get("requires_authoritative_refresh") and not authoritative_refresh):
             # An undated cancellation is ambiguous, never proven stale. Keep

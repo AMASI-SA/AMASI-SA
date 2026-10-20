@@ -1776,6 +1776,8 @@ async def _refresh_shipping_label(
             status_code=400,
         )
 
+    from shipping_pending_snapshot_recovery import recover_pending_print_snapshot
+    await recover_pending_print_snapshot(db, user_id, normalized)
     fence = await _assert_current_print_status(db, user_id, normalized)
     try:
         internal_id, order = await _resolve_order(
