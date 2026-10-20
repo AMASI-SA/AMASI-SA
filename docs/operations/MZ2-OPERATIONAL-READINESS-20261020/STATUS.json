@@ -48,5 +48,8 @@
   "production_changed": false,
   "next": "Review Draft PR and native data bindings; continue chronological funding/spend evidence work separately. No merge, deploy, financial/physical activation, or actual opening amounts authorized by these payment decisions.",
   "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded.",
-  "ad_funding_decision": "Latest owner decision: settle debts first, add remaining payment to wallet. Debt100/payment200 => debt0/wallet100/bank debit200 once. Previous separate-only answer superseded."
+  "ad_funding_decision": "Latest owner decision: settle debts first, add remaining payment to wallet. Debt100/payment200 => debt0/wallet100/bank debit200 once. Previous separate-only answer superseded.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1454",
+  "pr_state": "DRAFT_NOT_MERGED_NOT_DEPLOYED_CI_PENDING",
+  "verified_source_checkpoint": "6d9098819"
 }
