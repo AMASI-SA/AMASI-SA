@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="0" skipped="0" tests="2" time="18.847" timestamp="2026-10-20T15:38:50.905637+03:00" hostname="أماسي"><testcase classname="" name="backend.tests.test_operational_balance_cod_flow" time="0.000"><error message="collection failure">ImportError while importing test module 'D:\codex-worktrees\opening-stock-picker-release-20261020\backend\tests\test_operational_balance_cod_flow.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_operational_balance_cod_flow.py:4: in &lt;module&gt;
+    from test_operational_balance_source_fixes import shipping_data
+backend\tests\test_operational_balance_source_fixes.py:6: in &lt;module&gt;
+    from backend.tests.test_operational_balance_sources import HardBoundaryDB, row, order, run, START, NOW
+E   ModuleNotFoundError: No module named 'backend'</error></testcase><testcase classname="" name="backend.tests.test_operational_balance_source_fixes" time="0.000"><error message="collection failure">ImportError while importing test module 'D:\codex-worktrees\opening-stock-picker-release-20261020\backend\tests\test_operational_balance_source_fixes.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_operational_balance_source_fixes.py:6: in &lt;module&gt;
+    from backend.tests.test_operational_balance_sources import HardBoundaryDB, row, order, run, START, NOW
+E   ModuleNotFoundError: No module named 'backend'</error></testcase></testsuite></testsuites>

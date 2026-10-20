@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPERATIONAL-READINESS-20261020",
-  "status": "BASELINE_ACCEPTANCE_PREPARATION_NOT_READY_FOR_BUSINESS_WRITES",
+  "status": "ISOLATED_OPERATIONAL_ACCEPTANCE_PASS_521_LIVE_CONFIGURATION_INCOMPLETE",
   "branch": "codex/operational-readiness-20261020",
   "base_sha": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
   "prior_verified_checkpoint": "37113c2c5f1a7aa1c2426278ac6168416c5ac600",
@@ -22,15 +22,22 @@
     "Reports, purchases, returns and exchanges pass isolated acceptance.",
     "APK authentication, tenant/disabled-user boundaries, installation and update remain explicit acceptance requirements."
   ],
-  "design_question": "Owner asked whether opening inventory must now also be usable for order fulfillment, or only recorded and monitored. No answer yet. Financial valuation semantics and activation are not inferred.",
+  "design_question": "Owner explicitly chose opening inventory recording and monitoring only, not fulfillment. Pending valuation remains intentional and is not a blocker for that scope.",
   "known_gaps": [
-    "Opening inventory has no supported pending-to-adopted valuation route.",
-    "Selected advertising accounts need actual financial identities, funding and currency bindings.",
-    "Actual shipping contract evidence and effective dates require validation.",
-    "Live balances and start instant are owner inputs; no values will be invented."
+    "Selected advertising accounts have cost settings but lack confirmed funding/wallet/payable binding. Cost-settings UI has no prepaid/postpaid/hybrid field. Do not invent these values.",
+    "Shipping contract mapping, effective dates and source evidence require confirmed native setup; live shipping-cod page reports no approved prices.",
+    "Live opening amounts and start instant are owner inputs. Physical writer remains off; no live activation authorized.",
+    "Full authenticated APK acceptance and upgrade remain unverified."
   ],
-  "verification": [],
+  "verification": [
+    "Full retained loopback Mongo operational suite: 521 passed, 0 failed, 0 skipped, 5 pre-existing Pydantic warnings, 123.85 seconds.",
+    "Initial collection failed because script omitted repository root from sys.path; fixed runner and complete rerun passed. Initial failure XML retained.",
+    "Old replica-set endpoint was offline. Created dedicated retained fixture at D:/codex-test-fixtures/operational-readiness-20261020, loopback27486, mezanReadiness20261020. No old database modified/deleted.",
+    "Codex Process Jobs unsupported on Windows; no background job created. Ran foreground pytest instead.",
+    "Live operational setup remains draft,0openings. Five selected ad accounts disabled pending binding.",
+    "Owner-provided /ads-manager/cost-settings verified live:18linked,4configured; settings include currency/FX/bank commission, no funding mode. Saved settings and defaults explicitly distinct."
+  ],
   "production_changed": false,
-  "next": "Run scripts/run_retained_operational_acceptance.py via durable process job; inspect XML and failures, then implement the next verified gap. Keep all test databases and logs. Do not publish or activate this checkpoint.",
+  "next": "Resolve exact funding modes from owner or authoritative existing evidence, reuse saved cost settings without promoting defaults or inventing wallet bindings. Verify shipping contract setup; finish native acceptance. No production writes or activation.",
   "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded."
 }
