@@ -33,6 +33,11 @@ class CatalogueLabelProofTests(unittest.TestCase):
     def test_other_product_names_do_not_need_label_recovery(self):
         self.assertIsNone(restored_catalog_labels(self.raw, self.operation))
 
+    def test_fixed_option_field_name_can_be_renamed_without_changing_choice(self):
+        current = deepcopy(self.raw)
+        current["items"][0]["options"][0]["name"] = "نوع المنتج"
+        self.assertEqual(restored_catalog_labels(current, self.operation), self.raw)
+
     def test_changed_selection_price_or_unknown_option_data_is_not_rename(self):
         mutations = [
             lambda o: o["value"].update(id="different"),

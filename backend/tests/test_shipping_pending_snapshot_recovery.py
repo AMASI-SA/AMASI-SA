@@ -60,12 +60,19 @@ class PendingPrintTests(ComponentRouteTests):
         before = await self.db.order_review_workflows.find_one(selector)
         approval = await self.db.order_review_completion_operations.find_one(selector)
         lifecycle = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        stock = await self.db.warehouse_locations.find({}).to_list(100)
         await self.recover(payload)
         self.assertEqual(await source_status(self.db, "owner", payload["reference_id"]), "completed")
         after = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
         self.assertEqual(after["generation"], lifecycle["generation"])
         self.assertEqual(after["catalog_label_revalidation"]["previous_fingerprint"], lifecycle["source_fingerprint"])
-        self.assertEqual(await self.db.order_review_workflows.find_one(selector), before)
+        workflow_after = await self.db.order_review_workflows.find_one(selector)
+        self.assertEqual({key: workflow_after[key] for key in before}, before)
+        # Existing refresh invalidates only stale carrier proof while pending.
+        self.assertEqual(set(workflow_after) - set(before), {
+            "carrier_label_print_data", "carrier_label_ready", "carrier_label_url",
+            "salla_order_status", "salla_order_status_verified_at"})
+        self.assertEqual(await self.db.warehouse_locations.find({}).to_list(100), stock)
         self.assertEqual(await self.db.order_review_completion_operations.find_one(selector), approval)
         self.assertEqual(await self.db.mezan_component_consumption_plans_v1.count_documents({}), 0)
         await self.recover(payload)

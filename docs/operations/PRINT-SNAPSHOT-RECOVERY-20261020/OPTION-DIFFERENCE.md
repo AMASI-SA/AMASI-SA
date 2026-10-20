@@ -53,3 +53,18 @@ Five local pure regression tests pass. Windows Application Control prevents
 loading the existing PDF/PIL native dependency for full local integration, so real
 Mongo transaction/print tests run in the existing CI replica-set workflow. Not yet
 published; real UI print acceptance remains pending. Follow protocol v5 only.
+
+## Requested notification addition
+
+Owner requested red bell on changed assembly product options in web and Android,
+showing previous/current field names and values. New orders initially approved
+with new values must have no bell. Added a read-only projection from each order's
+own current integrity-verified review, exact option identity matching, with no
+acceptance or Ready side effects. Web interaction test is included in CI.
+Android UI is developed separately on its existing mobile worktree.
+
+CI first run exercised recovery successfully including repeated renames; one
+assertion incorrectly prohibited the existing refresh's carrier-proof invalidation
+fields. It now explicitly checks unchanged original workflow/Ready fields and
+warehouse stock, permitting only those five existing carrier fields. Source is
+not yet approved for release; rerun all required checks at the updated source.

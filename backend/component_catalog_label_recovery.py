@@ -59,12 +59,15 @@ def restored_catalog_labels(raw, operation):
             value = option.get("value") if isinstance(option, dict) else None
             old_value = _object(prior.get("value"))
             old_name = _string(old_value.get("name"))
+            old_field_name = _string(prior.get("name"))
             if (option.get("type") not in {"radio", "select"}
                     or not option.get("id") or _tree(option["id"]) != prior.get("id")
                     or not isinstance(value, dict) or not value.get("id")
                     or _tree(value["id"]) != old_value.get("id")
                     or not isinstance(value.get("name"), str) or not value["name"]
-                    or not old_name or old_name == value["name"]):
+                    or not old_name or not old_field_name
+                    or not isinstance(option.get("name"), str) or not option["name"]
+                    or (old_name == value["name"] and old_field_name == option["name"])):
                 return None
             # salla_refresh may add an exact display alias. Conflicting aliases
             # are not evidence of a rename.
@@ -73,6 +76,7 @@ def restored_catalog_labels(raw, operation):
                     return None
                 value["option_value"] = old_name
             value["name"] = old_name
+            option["name"] = old_field_name
             if _business_tree(option, KNOWN_NESTED) != previous_node:
                 return None
             changes += 1
