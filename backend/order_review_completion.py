@@ -251,6 +251,10 @@ async def _complete_review_operation(db, *, user_id, actor_id, actor_name,
         )):
             _conflict("component_acceptance_changed")
         current = await load_order(scoped)
+        if local:
+            # A newer webhook observed before commit must also block approval.
+            from review_salla_pending_guard import require_pending_status
+            require_pending_status(raw_status)
         if not order_is_active(current) or not payment_is_eligible(current.payment):
             _conflict("review_completion_order_ineligible")
         if uses_business_snapshot(op):

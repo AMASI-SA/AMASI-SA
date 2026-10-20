@@ -1660,6 +1660,14 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 stage="pending_review", actor_id=actor_id, order_wide=True,
             )
 
+        # New approval requires fresh provider eligibility, but remains local:
+        # no Salla status write, canonical refresh or downstream auto-routing.
+        # Completed/readback retries returned above and must not replay approval.
+        from review_salla_pending_guard import verify_salla_pending
+        await verify_salla_pending(
+            db, user_id=user_id, order_number=order.order_number,
+            source=source_snapshot, call_salla=call_salla,
+        )
         result = await complete_local_review_operation(
             db, user_id=user_id, actor_id=actor_id,
             actor_name=_text(reviewer.get("name") or reviewer.get("email")),

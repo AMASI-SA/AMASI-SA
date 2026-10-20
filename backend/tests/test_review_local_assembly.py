@@ -57,7 +57,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         self.assignment_uncertain = False
         self.external = AsyncMock(side_effect=AssertionError("local review/assembly called Salla"))
         for replacement in (
-            patch.object(review, "call_salla", self.external),
+            # Base fixture supplies the read-only Salla eligibility transport.
             patch.object(review, "_sync_salla_reviewed", self.external),
             patch.object(review, "refresh_order_from_salla", self.external),
             patch.object(pieces, "call_salla", self.external),
@@ -65,6 +65,7 @@ class LocalAssemblyTests(unittest.IsolatedAsyncioTestCase):
         ):
             replacement.start()
             self.patches.append(replacement)
+            self.addCleanup(replacement.stop)
 
     async def complete_review(self, *, mixed=False, operational=False, direct=True):
         payload = self.source_payload(number="local-assembly")
