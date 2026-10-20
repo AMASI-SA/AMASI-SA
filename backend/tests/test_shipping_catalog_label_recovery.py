@@ -31,7 +31,7 @@ class CatalogueLabelProofTests(unittest.TestCase):
         self.assertEqual(self.current, before)
 
     def test_other_product_names_do_not_need_label_recovery(self):
-        self.assertIsNone(restored_catalog_labels(self.raw, self.operation))
+        self.assertEqual(restored_catalog_labels(self.raw, self.operation), self.raw)
 
     def test_fixed_option_field_name_can_be_renamed_without_changing_choice(self):
         current = deepcopy(self.raw)

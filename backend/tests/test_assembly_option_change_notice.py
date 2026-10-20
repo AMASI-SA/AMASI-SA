@@ -51,13 +51,22 @@ class OptionNoticeTests(unittest.TestCase):
                                     {"name": "Old field", "value": "Old value"},
                                     {"name": "Size", "value": "M"}]}]
         before = deepcopy(rows)
-        after = annotate_piece_options(rows, option_changes_by_item(self.order, self.op))
+        after = annotate_piece_options(rows, option_changes_by_item(self.order, self.op),
+                                       {"line": [rows[0]["specifications"][0], rows[0]["specifications"][2]]})
         self.assertEqual(rows, before)
         self.assertTrue(after[0]["assembly_ready"])
         self.assertTrue(after[0]["can_mark_ready"])
         self.assertEqual(len(after[0]["specifications"]), 2)
         self.assertIn("change", after[0]["specifications"][0])
         self.assertNotIn("change", after[0]["specifications"][1])
+
+    def test_another_current_option_sharing_old_pair_is_not_hidden(self):
+        rows = [{"order_item_id": "line", "specifications": [
+            {"name": "New field", "value": "New value"},
+            {"name": "Old field", "value": "Old value"}]}]
+        after = annotate_piece_options(rows, option_changes_by_item(self.order, self.op),
+                                       {"line": rows[0]["specifications"]})
+        self.assertEqual(len(after[0]["specifications"]), 2)
 
     def test_operational_cards_and_missing_current_option_are_unchanged(self):
         rows = [{"order_item_id": "line", "is_operational_item": True,

@@ -4,6 +4,24 @@ import SpecificationChangeNotice from "./SpecificationChangeNotice";
 
 let container;
 let root;
+let originalShowModal;
+let originalClose;
+
+beforeAll(() => {
+    // jsdom does not implement the browser's native dialog methods.
+    originalShowModal = HTMLDialogElement.prototype.showModal;
+    originalClose = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    HTMLDialogElement.prototype.close = function () {
+        this.removeAttribute("open");
+        this.dispatchEvent(new Event("close"));
+    };
+});
+
+afterAll(() => {
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
+});
 
 beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,15 +55,22 @@ test("the bell opens the old and new field names and values and closes without c
     act(() => root.render(<SpecificationChangeNotice specification={specification} />));
     const bell = container.querySelector('button[aria-label="عرض تغييرات نوع المنتج"]');
     expect(bell).not.toBeNull();
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector("dialog[open]")).toBeNull();
     act(() => bell.click());
-    const dialog = document.querySelector('[role="dialog"]');
+    const dialog = document.querySelector("dialog[open]");
     expect(dialog.getAttribute("dir")).toBe("rtl");
+    expect(document.getElementById(dialog.getAttribute("aria-labelledby")).textContent).toBe("تغييرات خيار المنتج");
+    expect(document.activeElement.getAttribute("aria-label")).toBe("إغلاق تفاصيل التغيير");
     expect(dialog.querySelector('[aria-label="القديم"]').textContent).toContain("المنتج");
     expect(dialog.querySelector('[aria-label="القديم"]').textContent).toContain("بلوفر + ترنج");
     expect(dialog.querySelector('[aria-label="الجديد"]').textContent).toContain("نوع المنتج");
     expect(dialog.querySelector('[aria-label="الجديد"]').textContent).toContain("سويتر + ترنج");
     act(() => dialog.querySelector('button[aria-label="إغلاق تفاصيل التغيير"]').click());
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector("dialog[open]")).toBeNull();
+    expect(document.activeElement).toBe(bell);
+    act(() => bell.click());
+    act(() => dialog.dispatchEvent(new Event("cancel", { cancelable: true })));
+    expect(document.querySelector("dialog[open]")).toBeNull();
+    expect(document.activeElement).toBe(bell);
     expect(specification.value).toBe("سويتر + ترنج");
 });

@@ -2848,7 +2848,8 @@ async def _assembly_search(
     ) if local_contract else {}
     from assembly_option_change_notice import assembly_option_notices
     rows = await assembly_option_notices(
-        db, user_id=user_id, workflow=workflow, order=current_order, rows=rows)
+        db, user_id=user_id, workflow=workflow, order=current_order, rows=rows,
+        current_specs_by_item=source_specs_by_item)
     plan, evidence, units = await _historical_assembly_context(db, user_id=user_id, workflow=workflow)
     component_blocker = None
     if plan:

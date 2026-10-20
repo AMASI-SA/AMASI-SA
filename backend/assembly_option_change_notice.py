@@ -44,7 +44,7 @@ def option_changes_by_item(order, operation):
     return result
 
 
-def annotate_piece_options(rows, changes_by_item):
+def annotate_piece_options(rows, changes_by_item, current_specs_by_item=None):
     """Attach display-only notices, replacing duplicate historical display rows."""
     result = deepcopy(rows)
     for piece in result:
@@ -57,10 +57,14 @@ def annotate_piece_options(rows, changes_by_item):
                       if (change["current_name"], change["current_value"]) in current_pairs]
         old_pairs = {(change["previous_name"], change["previous_value"]) for change in applicable}
         new_pairs = {(change["current_name"], change["current_value"]) for change in applicable}
+        canonical_pairs = (None if current_specs_by_item is None else {
+            (spec.get("name"), spec.get("value"))
+            for spec in current_specs_by_item.get(piece.get("order_item_id"), [])})
         annotated = []
         for spec in specs:
             pair = (spec.get("name"), spec.get("value"))
-            if pair in old_pairs and pair not in new_pairs:
+            if (pair in old_pairs and pair not in new_pairs
+                    and canonical_pairs is not None and pair not in canonical_pairs):
                 continue
             match = [change for change in applicable
                      if pair == (change["current_name"], change["current_value"])]
@@ -69,7 +73,7 @@ def annotate_piece_options(rows, changes_by_item):
     return result
 
 
-async def assembly_option_notices(db, *, user_id, workflow, order, rows):
+async def assembly_option_notices(db, *, user_id, workflow, order, rows, current_specs_by_item=None):
     if order is None or workflow.get("completion_mode") != "mezan_local_v1":
         return rows
     operation_id = workflow.get("review_completion_operation_id")
@@ -81,4 +85,4 @@ async def assembly_option_notices(db, *, user_id, workflow, order, rows):
     }) or {}
     if not operation or operation.get("superseded_by"):
         return rows
-    return annotate_piece_options(rows, option_changes_by_item(order, operation))
+    return annotate_piece_options(rows, option_changes_by_item(order, operation), current_specs_by_item)

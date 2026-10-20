@@ -39,7 +39,6 @@ def restored_catalog_labels(raw, operation):
     if not isinstance(current_items, list) or len(current_items) != len(approved_items):
         return None
     restored = deepcopy(raw)
-    changes = 0
     for current, old_node in zip(restored["items"], approved_items):
         old = _object(old_node)
         if not isinstance(current, dict) or not current.get("id") or _tree(current["id"]) != old.get("id"):
@@ -79,8 +78,9 @@ def restored_catalog_labels(raw, operation):
             option["name"] = old_field_name
             if _business_tree(option, KNOWN_NESTED) != previous_node:
                 return None
-            changes += 1
-    return restored if changes else None
+    # Exact original options also prove a rename back to the approved labels.
+    # The caller still validates the full fingerprint and any recovery lineage.
+    return restored
 
 
 async def legacy_catalog_rename(db, *, user_id, order_number, raw, order, previous):

@@ -100,6 +100,16 @@ class PendingPrintTests(ComponentRouteTests):
         self.assertEqual(after["catalog_label_revalidation"]["approved_fingerprint"],
                          first["catalog_label_revalidation"]["approved_fingerprint"])
         self.assertNotEqual(after["source_fingerprint"], first["source_fingerprint"])
+        payload["updated_at"] = "2026-09-26T15:00:00+00:00"
+        payload["items"][0]["options"][0]["value"].update(
+            name="Old catalogue label", option_value="Old catalogue label")
+        await self.refresh(payload, allow_auto_fulfillment=False,
+                           allow_delivery_observation=False, allow_billing_eligibility=False)
+        await self.recover(payload)
+        self.assertEqual(await source_status(self.db, "owner", payload["reference_id"]), "completed")
+        returned = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        self.assertEqual(returned["source_fingerprint"],
+                         first["catalog_label_revalidation"]["approved_fingerprint"])
 
     async def test_rename_with_changed_choice_remains_blocked(self):
         selector, payload = await self.seed_catalog_rename()
