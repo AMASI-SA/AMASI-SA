@@ -97,6 +97,8 @@ class ComponentRouteTests(unittest.IsolatedAsyncioTestCase):
                              "status": raw.get("status"), "status_slug": raw.get("status_slug")}}
         self.patches = [
             patch("order_engine.shipping_label_service.call_salla", side_effect=receipt_provider),
+            # Synthetic fresh eligibility GET; real guard still executes.
+            patch.object(review, "call_salla", side_effect=receipt_provider),
             patch.object(fulfillment, "_actor_context", AsyncMock(return_value=self.context)),
             patch.object(pieces, "_actor_context", AsyncMock(return_value=self.context)),
             patch.object(manufacturing, "_actor_context", AsyncMock(return_value=self.context)),
