@@ -11,6 +11,8 @@ on:
       - "backend/tests/test_salla_sync_component_snapshot.py"
       - "backend/order_review*.py"
       - "backend/review_local_policy.py"
+      - "backend/review_salla_pending_guard.py"
+      - "backend/tests/test_review_salla_pending_guard.py"
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
@@ -107,6 +109,7 @@ jobs:
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
           tests/test_review_local_completion.py
+          tests/test_review_salla_pending_guard.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
