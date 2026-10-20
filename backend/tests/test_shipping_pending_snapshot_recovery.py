@@ -11,9 +11,11 @@ from assembly_status_policy import source_status
 
 
 class PendingPrintTests(ComponentRouteTests):
-    async def seed_gap(self):
+    async def seed_gap(self, *, options=None):
         await self.db.settings.update_one({"user_id": "owner"}, {"$unset": {"g47_inventory": ""}})
         payload = self.source_payload(status="completed")
+        if options is not None:
+            payload["items"][0]["options"] = options
         self.assertTrue((await self.webhook(payload))["synced"])
         selector = {"user_id": "owner", "order_number": payload["reference_id"]}
         await self.db.order_review_workflows.update_one(selector, {"$set": {
@@ -27,6 +29,119 @@ class PendingPrintTests(ComponentRouteTests):
                      "raw_by_source.salla_direct.updated_at": LATER}})
         payload["updated_at"] = LATER
         return selector, payload
+
+    async def seed_catalog_rename(self):
+        from order_engine.repository import MongoOrderRepository
+        from order_engine.service import get_order
+        from order_review_business_snapshot import build_snapshot
+
+        options = [{"id": "option", "product_option_id": "catalog-option",
+                    "name": "Product", "type": "radio",
+                    "value": {"id": "choice", "name": "Old catalogue label",
+                              "option_value": "Old catalogue label",
+                              "price": {"amount": 0, "currency": "SAR"}}}]
+        selector, payload = await self.seed_gap(options=options)
+        source = await self.db.unified_orders.find_one(selector)
+        order = await get_order(MongoOrderRepository(self.db), **selector)
+        op = {"_id": "current-approval", **selector, "state": "completed",
+              "completion_mode": "mezan_local_v1", "revision": 4,
+              "workflow_fingerprint": "approved-workflow"}
+        identity = {k: op.get(k) for k in ("_id", "user_id", "order_number", "revision", "workflow_fingerprint")}
+        op["business_snapshot"] = build_snapshot(source, order, {}, identity=identity, schema_version=2)
+        await self.db.order_review_completion_operations.insert_one(op)
+        await self.db.order_review_workflows.update_one(selector, {"$set": {
+            "completion_mode": "mezan_local_v1", "review_completion_operation_id": op["_id"]}})
+        payload["items"][0]["options"][0]["value"]["name"] = "New catalogue label"
+        payload["items"][0]["options"][0]["value"]["option_value"] = "New catalogue label"
+        return selector, payload
+
+    async def test_catalog_rename_retains_acceptance_without_stock_or_ready_writes(self):
+        selector, payload = await self.seed_catalog_rename()
+        before = await self.db.order_review_workflows.find_one(selector)
+        approval = await self.db.order_review_completion_operations.find_one(selector)
+        lifecycle = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        stock = await self.db.warehouse_locations.find({}).to_list(100)
+        await self.recover(payload)
+        self.assertEqual(await source_status(self.db, "owner", payload["reference_id"]), "completed")
+        after = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        self.assertEqual(after["generation"], lifecycle["generation"])
+        self.assertEqual(after["catalog_label_revalidation"]["previous_fingerprint"], lifecycle["source_fingerprint"])
+        workflow_after = await self.db.order_review_workflows.find_one(selector)
+        self.assertEqual({key: workflow_after[key] for key in before}, before)
+        # Existing refresh invalidates only stale carrier proof while pending.
+        self.assertEqual(set(workflow_after) - set(before), {
+            "carrier_label_print_data", "carrier_label_ready", "carrier_label_url",
+            "salla_order_status", "salla_order_status_verified_at"})
+        self.assertEqual(await self.db.warehouse_locations.find({}).to_list(100), stock)
+        self.assertEqual(await self.db.order_review_completion_operations.find_one(selector), approval)
+        self.assertEqual(await self.db.mezan_component_consumption_plans_v1.count_documents({}), 0)
+        await self.recover(payload)
+        self.assertEqual(await self.db.mezan_component_order_lifecycle_v1.find_one(selector), after)
+
+    async def test_rename_with_changed_quantity_remains_blocked(self):
+        selector, payload = await self.seed_catalog_rename()
+        payload["items"][0]["quantity"] = 3
+        await self.recover(payload)
+        self.assertIsNone(await source_status(self.db, "owner", payload["reference_id"]))
+
+    async def test_second_catalog_rename_retains_same_review_lineage(self):
+        selector, payload = await self.seed_catalog_rename()
+        await self.recover(payload)
+        first = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        # A new authoritative snapshot arrives after the first print recovery.
+        payload["updated_at"] = "2026-09-26T14:00:00+00:00"
+        payload["items"][0]["options"][0]["value"].update(
+            name="Another catalogue label", option_value="Another catalogue label")
+        await self.refresh(payload, allow_auto_fulfillment=False,
+                           allow_delivery_observation=False, allow_billing_eligibility=False)
+        await self.recover(payload)
+        self.assertEqual(await source_status(self.db, "owner", payload["reference_id"]), "completed")
+        after = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        self.assertEqual(after["catalog_label_revalidation"]["approved_fingerprint"],
+                         first["catalog_label_revalidation"]["approved_fingerprint"])
+        self.assertNotEqual(after["source_fingerprint"], first["source_fingerprint"])
+        payload["updated_at"] = "2026-09-26T15:00:00+00:00"
+        payload["items"][0]["options"][0]["value"].update(
+            name="Old catalogue label", option_value="Old catalogue label")
+        await self.refresh(payload, allow_auto_fulfillment=False,
+                           allow_delivery_observation=False, allow_billing_eligibility=False)
+        await self.recover(payload)
+        self.assertEqual(await source_status(self.db, "owner", payload["reference_id"]), "completed")
+        returned = await self.db.mezan_component_order_lifecycle_v1.find_one(selector)
+        self.assertEqual(returned["source_fingerprint"],
+                         first["catalog_label_revalidation"]["approved_fingerprint"])
+
+    async def test_rename_with_changed_choice_remains_blocked(self):
+        selector, payload = await self.seed_catalog_rename()
+        payload["items"][0]["options"][0]["value"]["id"] = "different"
+        await self.recover(payload)
+        self.assertIsNone(await source_status(self.db, "owner", payload["reference_id"]))
+
+    async def test_rename_with_superseded_review_remains_blocked(self):
+        selector, payload = await self.seed_catalog_rename()
+        await self.db.order_review_completion_operations.update_one(selector, {"$set": {"superseded_by": "later"}})
+        await self.recover(payload)
+        self.assertIsNone(await source_status(self.db, "owner", payload["reference_id"]))
+
+    async def test_rename_does_not_change_receiving_revalidation(self):
+        from fulfillment_v2_routes import revalidate_unchanged_component_snapshot
+        selector, payload = await self.seed_catalog_rename()
+        await self.db.unified_orders.update_one(selector, {"$set": {
+            "raw_by_source.salla_direct": payload,
+            "g47_salla_snapshot.source_updated_at": LATER}})
+        source = await self.db.unified_orders.find_one(selector)
+        result = await revalidate_unchanged_component_snapshot(
+            self.db, **selector, source_revision=source["g47_salla_snapshot"]["revision"])
+        self.assertFalse(result["accepted"])
+        self.assertTrue((await self.db.unified_orders.find_one(selector))["g47_salla_snapshot"]["component_pending"])
+
+    async def test_rename_with_component_plan_remains_blocked(self):
+        selector, payload = await self.seed_catalog_rename()
+        await self.db.mezan_component_consumption_plans_v1.insert_one({
+            "user_id": "owner", "order_id": payload["reference_id"],
+            "state": "accepted", "source_version": {"value": 1}})
+        await self.recover(payload)
+        self.assertIsNone(await source_status(self.db, "owner", payload["reference_id"]))
 
     async def recover(self, payload):
         async def provider(_db, _owner, method, path, **kwargs):
