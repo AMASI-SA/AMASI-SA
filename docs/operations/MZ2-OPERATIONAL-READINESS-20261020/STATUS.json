@@ -1,13 +1,14 @@
 {
   "task": "MZ2-OPERATIONAL-READINESS-20261020",
-  "status": "ISOLATED_OPERATIONAL_ACCEPTANCE_PASS_521_LIVE_CONFIGURATION_INCOMPLETE",
+  "status": "AD_PAYMENT_CHOICE_FIX_FOCUSED_PASS_BROAD_REGRESSION_PENDING",
   "branch": "codex/operational-readiness-20261020",
   "base_sha": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
   "prior_verified_checkpoint": "37113c2c5f1a7aa1c2426278ac6168416c5ac600",
   "scope": "Complete operational opening, movement, report and independent Production APK readiness without enabling writers or entering real balances.",
   "resume": "Verified prior remote checkpoint, merged PR1451, and production branch advance through print/shipping PR1452. New task branch preserves all latest production source.",
   "changes": [
-    "Add isolated acceptance runner that pins loopback replica set, disables dotenv and retains databases instead of fixture cleanup."
+    "Add isolated acceptance runner that pins loopback replica set, disables dotenv and retains databases instead of fixture cleanup.",
+    "Reject advertising debt payment above outstanding debt instead of silently funding wallet with excess. Wallet funding remains separate. Added exact TikTok owner-choice regression."
   ],
   "constraints": [
     "No live business writes, writer activation, Salla sync, legacy migration, automatic journals, database deletion or worktree deletion.",
@@ -36,9 +37,11 @@
     "Codex Process Jobs unsupported on Windows; no background job created. Ran foreground pytest instead.",
     "Live operational setup remains draft,0openings. Five selected ad accounts disabled pending binding.",
     "Owner-provided /ads-manager/cost-settings verified live:18linked,4configured; settings include currency/FX/bank commission, no funding mode. Saved settings and defaults explicitly distinct.",
-    "Production APK SHA256 freshly matches archived d686e06e679100368c329633f9023df3bbe6c4a2b97b7788d2178afb87aa4259. Correct AMASI-R5-Isolated emulator existing authenticated session opens native movement categories and setup prerequisite. Temporary System UI boot ANR dismissed with Wait; no credential reset or reinstall. Fresh login/upgrade still unproven."
+    "Production APK SHA256 freshly matches archived d686e06e679100368c329633f9023df3bbe6c4a2b97b7788d2178afb87aa4259. Correct AMASI-R5-Isolated emulator existing authenticated session opens native movement categories and setup prerequisite. Temporary System UI boot ANR dismissed with Wait; no credential reset or reinstall. Fresh login/upgrade still unproven.",
+    "New real Mongo regression failed before fix: excess debt payment unexpectedly succeeded. After guard, focused test passed1 in1.25s; expanded payment/settlement variants pending broad run."
   ],
   "production_changed": false,
-  "next": "Resolve exact funding modes from owner or authoritative existing evidence, reuse saved cost settings without promoting defaults or inventing wallet bindings. Verify shipping contract setup; finish native acceptance. No production writes or activation.",
-  "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded."
+  "next": "Run broad retained operational regression. Dynamic wallet depletion remains a separate unresolved chronology/source-evidence change; no fixed split or daily-total guess will be activated. Production unchanged.",
+  "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded.",
+  "ad_funding_decision": "Owner described TikTok prepaid/postpaid and explicitly selected separate wallet funding vs debt settlement, no automatic netting. See AD-FUNDING-DECISION.md."
 }
