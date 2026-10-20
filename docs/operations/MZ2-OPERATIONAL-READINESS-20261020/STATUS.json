@@ -1,14 +1,16 @@
 {
   "task": "MZ2-OPERATIONAL-READINESS-20261020",
-  "status": "AD_PAYMENT_CHOICE_FIX_FOCUSED_PASS_BROAD_REGRESSION_PENDING",
+  "status": "HYBRID_DEBT_FIRST_PAYMENT_VERIFIED_NOT_DEPLOYED",
   "branch": "codex/operational-readiness-20261020",
   "base_sha": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
   "prior_verified_checkpoint": "37113c2c5f1a7aa1c2426278ac6168416c5ac600",
   "scope": "Complete operational opening, movement, report and independent Production APK readiness without enabling writers or entering real balances.",
   "resume": "Verified prior remote checkpoint, merged PR1451, and production branch advance through print/shipping PR1452. New task branch preserves all latest production source.",
   "changes": [
-    "Add isolated acceptance runner that pins loopback replica set, disables dotenv and retains databases instead of fixture cleanup.",
-    "Reject advertising debt payment above outstanding debt instead of silently funding wallet with excess. Wallet funding remains separate. Added exact TikTok owner-choice regression."
+    "Retained loopback acceptance runner prevents fixture database cleanup.",
+    "Latest owner rule supersedes separate-only restriction: hybrid payment settles existing debt first, excess funds wallet. Removed earlier overpayment rejection.",
+    "Reject partial explicit allocations that would leave payable debt while funding wallet; definitive replay-safe rejection.",
+    "Hybrid payment UI label explains debt-first/excess behavior. Six exact owner-case Mongo regressions added."
   ],
   "constraints": [
     "No live business writes, writer activation, Salla sync, legacy migration, automatic journals, database deletion or worktree deletion.",
@@ -38,10 +40,13 @@
     "Live operational setup remains draft,0openings. Five selected ad accounts disabled pending binding.",
     "Owner-provided /ads-manager/cost-settings verified live:18linked,4configured; settings include currency/FX/bank commission, no funding mode. Saved settings and defaults explicitly distinct.",
     "Production APK SHA256 freshly matches archived d686e06e679100368c329633f9023df3bbe6c4a2b97b7788d2178afb87aa4259. Correct AMASI-R5-Isolated emulator existing authenticated session opens native movement categories and setup prerequisite. Temporary System UI boot ANR dismissed with Wait; no credential reset or reinstall. Fresh login/upgrade still unproven.",
-    "New real Mongo regression failed before fix: excess debt payment unexpectedly succeeded. After guard, focused test passed1 in1.25s; expanded payment/settlement variants pending broad run."
+    "New real Mongo regression failed before fix: excess debt payment unexpectedly succeeded. After guard, focused test passed1 in1.25s; expanded payment/settlement variants pending broad run.",
+    "Superseded separate-only patch broad regression:523PASS; retained as historical evidence, not final-rule proof.",
+    "Final debt-first source:6new Mongo cases PASS;17focused hybrid/prepaid/settlement/rejection regression casesPASS (includes selected new cases),58OperationalBalances UI casesPASS.",
+    "Independent current-diff review: no material issues; exact bank/replay/CAS semantics preserved. Review does not establish automatic spend allocation on wallet depletion."
   ],
   "production_changed": false,
-  "next": "Run broad retained operational regression. Dynamic wallet depletion remains a separate unresolved chronology/source-evidence change; no fixed split or daily-total guess will be activated. Production unchanged.",
+  "next": "Review Draft PR and native data bindings; continue chronological funding/spend evidence work separately. No merge, deploy, financial/physical activation, or actual opening amounts authorized by these payment decisions.",
   "checkpoint_sha_location": "Git commit and remote branch history; no self-referential SHA is embedded.",
-  "ad_funding_decision": "Owner described TikTok prepaid/postpaid and explicitly selected separate wallet funding vs debt settlement, no automatic netting. See AD-FUNDING-DECISION.md."
+  "ad_funding_decision": "Latest owner decision: settle debts first, add remaining payment to wallet. Debt100/payment200 => debt0/wallet100/bank debit200 once. Previous separate-only answer superseded."
 }

@@ -16,7 +16,7 @@ from operational_balance_engine import reconcile_credits
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_future_business_date", "operational_business_date_invalid",
     "operational_supplier_payment_exceeds_payable",
-    "operational_ad_payment_exceeds_payable",
+    "operational_ad_debt_priority_required",
     "operational_custody_insufficient", "operational_bank_required",
     "operational_bank_setup_incomplete", "operational_custody_source_invalid",
     "operational_custody_movement_invalid", "operational_expense_direction_invalid",
@@ -278,11 +278,6 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
-        if (row["kind"] == "ad_account" and payload["direction"] == "outgoing"
-                and payload["kind"] in {"payment", "settlement"}
-                and amount > party_available):
-            fail("operational_ad_payment_exceeds_payable",
-                 "السداد لا يتجاوز المستحق الإعلاني. لشحن الرصيد اختر تمويل المحفظة في حركة مستقلة.")
         if not requested and payload["kind"] in {"payment", "collection", "refund"} and row["kind"] not in {"bank", "cash", "employee_custody"}:
             left, requested = min(amount, party_available) if party_available is not None else amount, []
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
@@ -331,6 +326,11 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                  "التخصيص يتجاوز المتبقي المستحق بعد التصحيحات والمقاصة المعتمدة")
         if payload["kind"] == "settlement" and total != amount + fee:
             fail("operational_settlement_allocation_required", "خصص مبلغ التسوية للالتزامات المستحقة")
+        if (row["kind"] == "ad_account" and row.get("funding_mode") == "hybrid"
+                and payload["direction"] == "outgoing" and payload["kind"] == "payment"
+                and total != min(amount, party_available)):
+            fail("operational_ad_debt_priority_required",
+                 "الدفعة تسدد المستحق الإعلاني أولًا، ثم يضاف الزائد إلى المحفظة. أكمل تخصيص المستحق أو اترك التخصيص تلقائيًا.")
         item = {**payload, "id": operation_id,
                 "amount": fmt(amount), "actual_fee_amount": fmt(fee), "allocations": allocations, "actor_id": actor,
                 "source": source, "occurred_at": stamp, "name": row["name"],

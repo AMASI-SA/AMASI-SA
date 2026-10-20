@@ -23,12 +23,19 @@ Do not simply choose hybrid, invent a fraction, or reinterpret existing
 confirmed days under a new allocation rule. Preserve the existing fixed-split
 contract for accounts that actually use it.
 
-## Payment decision confirmed
+## Final payment decision — supersedes separate-only restriction
 
-The owner explicitly chose separate wallet funding and debt settlement.
-With debt 100 and a new wallet funding 200, wallet becomes 200 and debt remains
-100. A separate debt settlement 100 then clears debt without changing wallet.
-There is no automatic netting of the payment against old debt.
+The owner subsequently explicitly approved: pay outstanding debt first and add
+the excess to the wallet. With debt 100 and payment 200, debt becomes zero,
+wallet becomes 100, and bank outflow is exactly 200. A payment below the debt
+reduces debt only. With no debt, the whole payment funds the wallet.
+
+The earlier restriction against overpayment is superseded and removed.
+Hybrid generic payments now require allocation of min(payment, outstanding
+debt), including explicit allocation payloads, before any remainder becomes
+wallet credit. Existing explicit wallet funding and exact settlement endpoints
+retain their meanings. The normal hybrid payment label explains debt-first
+and excess funding.
 
 Implementation must distinguish source spend from actual bank payment; maintain
 nonduplicating cumulative daily updates and immutable closed days; account for
@@ -36,4 +43,6 @@ the timing of funding without retroactively rewriting earlier debt; preserve
 currency and tenant isolation; and test zero/partial wallet, repeated refresh,
 funding after debt, settlement and concurrent payment before live activation.
 
-Production unchanged. No new funding algorithm has been implemented or enabled.
+Production unchanged. The payment-priority guard and label are implemented
+locally. Automatic allocation of advertising spend when the wallet is depleted
+remains unimplemented; that requires the chronological evidence described above.
