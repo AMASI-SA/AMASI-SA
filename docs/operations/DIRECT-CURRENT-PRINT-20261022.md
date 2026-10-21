@@ -1,0 +1,13 @@
+# Direct current print — held for review
+
+User now reports shipping printing is very fast and smooth. This backend performance patch has NOT been deployed; do not attribute live improvement to it. Preserve current working runtime. Current release work is isolated courier address Android52, not this provider-read change.
+
+Source base 571e1704fc823c681c61b2f31de1db4f5ea5f55a. PR1456 branch codex/direct-current-shipping-20261022. Order-scoped current shipment read avoids redundant ready-label reads; initial completed-order check and final local fence remain. Provider-only changes after fresh read are no longer observed by a second read; release review still required.
+
+Verification: legacy-print/refresh-latency/unified-courier integration: 152 passed,152 skipped (no isolated Mongo). Print-boundary/current-guard/fulfillment-label:68 passed,22 skipped. Direct AST suite10 passed. Scope fallback fixture now simulates unsupported initial scoped surface, ensuring the retained legacy fallback identity/time/denial assertions still execute. Mock signatures accept the new direct_print keyword. No safety assertions deleted. Full Mongo CI not yet run on this checkpoint.
+
+Web address PR1457 ecfe5f73388905892cd028800562bda4aed3e0a7: release readiness/G47/web regression pass, security dependency audit blocked (Vite8.2.1, follow-redirects1.16.0, certifi2026.5.20, Pillow12.3.0). No audit bypass or dependency changes. No backend production release, lease or merge.
+
+Mobile PR291 address source70de26a1ab7d195d7d7a6badf8cb219859684333 passed mobile CI and shipping recovery workflow. Version-only followup a4c5225f2ddb1e681c4d040f3e69823208863bee prepares1.0.37/code52, exact-head CI in progress. Expo Android build submitted once using exact SHA, /frontend, saved-carrier-print-pilot, production environment, no store submission: https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/1495b9d1-dea7-4d27-aaee-c8bb93ec73ad . Latest observed Pending. Includes district/street and omission of product names; COD and external file handoff unchanged. No Chrome/biometric/timeout/review guard drafts included.
+
+Next: verify Android52 CI and Expo success, supply build link only as installable after success. Keep performance draft held unless renewed issue evidence warrants release. Prior Android51 build af24bb6d-4b0a-46e2-9668-1ee17e67623b observed Succeeded. Rollback mobile by rebuilding prior source with valid version progression; no OTA pushed. Backend rollback needs full v5 governed deployment, not just source revert. Production backend changed:no. Device printing/layout not verified by agent.
