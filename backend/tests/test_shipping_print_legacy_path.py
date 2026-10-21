@@ -64,7 +64,7 @@ async def setup(monkeypatch, request):
             assert kwargs["params"]["order_id"] == "salla-order"
             return {"data": deepcopy(state["rows"])}
         if path == "/orders/salla-order/shipments":
-            return deepcopy(state.get("order_shipments", {"data": []}))
+            return deepcopy(state.get("order_shipments", {"data": state["rows"]}))
         if path.endswith("/tracking"):
             return {"data": deepcopy(state.get("tracking", {}))}
         if path.startswith("/shipments/"):
@@ -147,7 +147,7 @@ async def test_no_old_label_fallback_or_writes(setup, kind):
     elif kind in {"pending", "cancelled"}:
         state["rows"][0]["status"] = kind
     elif kind == "failure":
-        state["fail"] = "/shipments"
+        state["fail"] = "/orders/salla-order/shipments"
     before = await dump(db)
     if kind == "failure":
         with pytest.raises(shipping.ShippingLabelError) as caught:
@@ -253,12 +253,13 @@ async def test_print_does_not_keep_embedded_label_when_fresh_list_is_empty(setup
     state["rows"] = []
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
-    assert "/shipments" in state["calls"]
+    assert "/orders/salla-order/shipments" in state["calls"]
 
 
 @pytest.mark.asyncio
 async def test_print_detail_failure_never_uses_list_label(setup):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["fail"] = "/shipments/200"
     with pytest.raises(shipping.ShippingLabelError):
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
@@ -321,6 +322,7 @@ async def test_tracking_response_for_other_order_is_not_opened(setup):
 ])
 async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["detail"] = detail
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
@@ -334,6 +336,7 @@ async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
 ])
 async def test_detail_identity_mismatch_cannot_open_another_order(setup, detail):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["detail"] = detail
     with pytest.raises(shipping.ShippingLabelError):
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
@@ -397,7 +400,7 @@ async def test_completed_assembly_print_requires_live_completed_status(
     assert response.json()["label_url"] == CURRENT["label_url"]
     assert response.json()["shipment_id"] == "200"
     assert response.json()["tracking_number"] == "CURRENT-AWB"
-    assert "/shipments" in state["calls"]
+    assert "/orders/salla-order/shipments" in state["calls"]
     assert await dump(db) == before
 
 
