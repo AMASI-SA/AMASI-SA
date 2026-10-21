@@ -52,6 +52,10 @@ async def setup(monkeypatch, request):
         assert owner == OWNER
         assert method == "GET", "printing must never mutate Salla"
         state["calls"].append(path)
+        if (path == "/orders/salla-order/shipments"
+                and state.get("initial_order_shipments_unsupported")
+                and state["calls"].count(path) == 1):
+            raise SallaError("synthetic unsupported direct surface", status_code=404)
         if path in state.get("denied", {}):
             raise SallaError("synthetic endpoint denial", status_code=state["denied"][path])
         if state["fail"] == path:
@@ -497,6 +501,10 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
 @pytest.fixture
 async def scope_fallback(setup, monkeypatch):
     db, state = setup
+    # Exercise the retained compatibility path when the direct surface is
+    # initially unsupported. Direct ready responses are covered separately.
+    # Later scoped reads retain all existing identity/time/denial assertions.
+    state["initial_order_shipments_unsupported"] = True
     for name in ("inventory", "mezan_preparation_pieces_v1",
                  "mezan_fulfillment_events_v2", "shipments"):
         await db[name].insert_one({"sentinel": "print must not write"})
@@ -669,7 +677,7 @@ async def test_scope_compat_non_auth_failures_do_not_fallback(scope_fallback, ph
     with pytest.raises(shipping.ShippingLabelError) as caught:
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "salla_shipping_unavailable"
-    assert "/orders/salla-order/shipments" not in state["calls"]
+    assert state["calls"].count("/orders/salla-order/shipments") == 1
 
 
 @pytest.mark.asyncio
@@ -692,7 +700,7 @@ async def test_scope_compat_terminal_details_do_not_revive_fallback(scope_fallba
     state["denied"] = {"/shipments/200/tracking": 403}
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
-    assert "/orders/salla-order/shipments" not in state["calls"]
+    assert state["calls"].count("/orders/salla-order/shipments") == 1
 
 
 @pytest.mark.asyncio

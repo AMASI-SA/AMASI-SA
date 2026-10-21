@@ -345,7 +345,7 @@ async def test_experiment_override_cannot_bypass_readonly_current_carrier_policy
     async def ensure_completed(_db, _user_id, _internal_id, order):
         return order, False
 
-    async def shipment_rows(_db, _user_id, _internal_id, _embedded=None):
+    async def shipment_rows(_db, _user_id, _internal_id, _embedded=None, **_kwargs):
         return [{
             "id": "imile-shipment-1",
             "status": "created",
