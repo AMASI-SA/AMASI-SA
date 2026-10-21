@@ -9,21 +9,28 @@ function escapePrintHtml(value) {
 
 export function storeCourierLabelHtml(data = {}) {
     const address = data.address || {};
-    const addressLine = address.address_line_two || address.address_line || [
+    const addressParts = [
+        address.address_line || address.address_line1,
+        address.address_line_two,
+        address.district || address.neighborhood || address.block,
+        address.street || address.street_name,
         address.street_number,
-        address.block,
+        address.building_number,
         address.city,
         address.country,
-    ].filter(Boolean).join("، ");
+    ].map(value => {
+        if (value && typeof value === "object") {
+            return String(value.name ?? "").trim();
+        }
+        return String(value ?? "").trim();
+    }).filter(Boolean);
+    const addressLine = [...new Set(addressParts)].join("، ");
     const shortAddress = address.short_address || "—";
     const remaining = data.remaining_amount || {};
     const remainingValue = Number(remaining.amount);
     const remainingText = Number.isFinite(remainingValue) && remaining.amount != null
         ? `${remainingValue.toFixed(2)} ${remaining.currency || "SAR"}`
         : "—";
-    const items = (data.items || []).map((item) => (
-        `<li>${escapePrintHtml(item.name || "منتج")} × ${escapePrintHtml(item.quantity || 1)}</li>`
-    )).join("");
     const logo = data.store_logo
         ? `<img class="logo" src="${escapePrintHtml(data.store_logo)}" alt="شعار المتجر" />`
         : "";
@@ -47,7 +54,6 @@ export function storeCourierLabelHtml(data = {}) {
         h1 { margin: 0 0 2mm; text-align: center; font-size: 14pt; }
         .customer { border: 0.4mm solid #555; border-radius: 3mm; padding: 3mm; font-size: 10pt; line-height: 1.65; }
         .row { margin-bottom: 1mm; overflow-wrap: anywhere; }
-        .items { margin: 2mm 0 0; padding-right: 5mm; font-size: 8.5pt; line-height: 1.5; }
         .remaining { margin-top: 2mm; font-size: 10pt; }
         .qr { display: block; width: 30mm; height: 30mm; margin: 2mm auto 1mm; image-rendering: pixelated; }
         .barcode-value { direction: ltr; text-align: center; font: 700 12pt Arial, sans-serif; letter-spacing: 0.7mm; }
@@ -72,7 +78,7 @@ export function storeCourierLabelHtml(data = {}) {
             <div class="row"><b>الهاتف:</b> <span dir="ltr">${escapePrintHtml(data.customer_phone || "—")}</span></div>
             <div class="row"><b>العنوان:</b> ${escapePrintHtml(addressLine || "—")}</div>
             <div class="row"><b>العنوان الوطني:</b> <span dir="ltr">${escapePrintHtml(shortAddress)}</span></div>
-            ${items ? `<ul class="items">${items}</ul>` : ""}
+
         </section>
         <div class="remaining"><b>المبلغ المتبقي:</b> <span dir="ltr">${escapePrintHtml(remainingText)}</span></div>
         <img class="qr" src="${escapePrintHtml(data.qr_code || "")}" alt="رمز رقم الطلب" />
