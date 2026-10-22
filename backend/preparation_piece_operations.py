@@ -37,7 +37,7 @@ from fulfillment_v2_routes import (
 )
 from fulfillment_carrier_label import sync_completed_carrier_label
 from order_engine.repository import MongoOrderRepository
-from order_engine.service import OrderNotFoundError, get_order
+from order_engine.service import OrderNotFoundError, get_order, get_orders
 from order_engine.shipping_label_service import ShippingLabelError
 from order_review_export_controls import user_can_manage_preparation
 from order_review_spec_replacements import extract_item_specs
@@ -3035,6 +3035,12 @@ async def _assembly_order_board(
         {"_id": 0},
     ).sort("updated_at", 1).limit(5000).to_list(5000)
 
+    # Preserve the existing workflow window and substring search semantics,
+    # but exclude unrelated workflows before loading their pieces and orders.
+    if normalized_query:
+        workflows = [row for row in workflows
+                     if normalized_query in _text(row.get("order_number"))]
+
     order_numbers = sorted({
         _text(row.get("order_number"))
         for row in workflows
@@ -3069,6 +3075,7 @@ async def _assembly_order_board(
         physical_by_order[_text(piece.get("order_number"))].append(piece)
 
     repository = MongoOrderRepository(db)
+    orders = await get_orders(repository, user_id=user_id, order_numbers=order_numbers)
     rows: list[dict[str, Any]] = []
     for workflow in workflows:
         if not is_known_review_mode(workflow.get("completion_mode")):
@@ -3078,13 +3085,8 @@ async def _assembly_order_board(
             continue
         if normalized_query and normalized_query not in order_number:
             continue
-        try:
-            order = await get_order(
-                repository,
-                user_id=user_id,
-                order_number=order_number,
-            )
-        except OrderNotFoundError:
+        order = orders.get(order_number)
+        if order is None:
             continue
 
         if workflow.get("completion_mode") == LOCAL_COMPLETION_MODE:

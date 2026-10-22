@@ -303,18 +303,40 @@ class LocalDownstreamTests(unittest.IsolatedAsyncioTestCase):
         for number in [*stages, "legacy", "broken", "unknown"]:
             await self.db[pieces.PIECES].insert_one({"user_id": OWNER, "order_number": number, "piece_id": number})
 
-        async def current(_repository, *, user_id, order_number):
-            return order(order_number, status="in_progress" if order_number == "unknown" else "under_review")
+        async def current(_repository, *, user_id, order_numbers):
+            return {number: order(number, status="in_progress" if number == "unknown" else "under_review") for number in order_numbers}
 
-        with patch.object(pieces, "get_order", side_effect=current):
+        with patch.object(pieces, "get_orders", side_effect=current):
             progress = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
             completed = await pieces._assembly_order_board(self.db, user_id=OWNER, state="completed", limit=50, offset=0)
         self.assertEqual({row["order_number"] for row in progress["items"]}, {"working", "received"})
         self.assertEqual({row["order_number"] for row in completed["items"]}, {"finished"})
         self.assertTrue(all(row["order_status"] == "under_review" for row in progress["items"]))
-        with patch.object(pieces, "get_order", AsyncMock(return_value=order(status="cancelled"))):
+        with patch.object(pieces, "get_orders", AsyncMock(return_value={number: order(number, status="cancelled") for number in [*stages, "legacy", "broken", "unknown"]})):
             cancelled = await pieces._assembly_order_board(self.db, user_id=OWNER, state="in_progress", limit=50, offset=0)
         self.assertEqual(cancelled["items"], [])
+
+    async def test_assembly_board_search_batches_only_matching_orders(self):
+        for number in ["1001", "2002", "1003"]:
+            await self.seed(number, stage="in_progress")
+            await self.db[pieces.PIECES].insert_one({
+                "user_id": OWNER, "order_number": number, "piece_id": number,
+            })
+
+        async def current_many(_repository, *, user_id, order_numbers):
+            self.assertEqual(user_id, OWNER)
+            return {number: order(number, status="under_review") for number in order_numbers}
+
+        bulk = AsyncMock(side_effect=current_many)
+        with patch.object(pieces, "get_orders", bulk, create=True), \
+             patch.object(pieces, "get_order", AsyncMock(side_effect=AssertionError("no per-order reads"))):
+            result = await pieces._assembly_order_board(
+                self.db, user_id=OWNER, state="in_progress", limit=1, offset=0, query="#100",
+            )
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(len(result["items"]), 1)
+        bulk.assert_awaited_once()
+        self.assertEqual(bulk.await_args.kwargs["order_numbers"], ["1001", "1003"])
 
     async def test_legacy_receipt_counts_custody_without_promoting_ready(self):
         # The custody-only contract applies to legacy and local workflows alike.
