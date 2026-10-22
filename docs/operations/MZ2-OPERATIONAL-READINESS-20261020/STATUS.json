@@ -51,5 +51,11 @@
   "ad_funding_decision": "Latest owner decision: settle debts first, add remaining payment to wallet. Debt100/payment200 => debt0/wallet100/bank debit200 once. Previous separate-only answer superseded.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1454",
   "pr_state": "DRAFT_NOT_MERGED_NOT_DEPLOYED_CI_PENDING",
-  "verified_source_checkpoint": "6d9098819"
+  "verified_source_checkpoint": "6d9098819",
+  "continuation_20261022": {
+    "branch": "codex/operational-wallet-depletion-20261022",
+    "status_file": "docs/operations/MZ2-OPERATIONAL-WALLET-20261022/STATUS.json",
+    "state": "Calculation only; not connected or deployed",
+    "owner_decision": "Wallet depletion becomes debt; subsequent payment settles debt first."
+  }
 }
