@@ -1,3 +1,4 @@
+import "../fulfillmentMobile.css";
 // Mezan OS V2 governed preparation workspace.
 import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -229,6 +230,15 @@ export default function FulfillmentV2() {
         setSearchParams(new URLSearchParams(), { replace: true });
     };
 
+    const mobileHome = !courierOnly && !searchParams.get("stage") && !searchParams.get("workspace");
+    const mobileTiles = [
+        { key: "pending_review", label: "انتظار المراجعة", Icon: Clock, description: "مراجعة بيانات الطلب والمنتجات" },
+        { key: "reviewed", label: "تمت المراجعة", Icon: CheckCircle, description: "اختيار المنتجات وإنشاء ملفات التجهيز" },
+        { ...MY_PRODUCTS_NAVIGATION_ITEM, description: "مراجعة الصور والتفاصيل والعمل المسند" },
+        { key: "assembly", label: "الاستلام من موظف التجهيز", Icon: Cube, description: "تصوير المنتج وتأكيد استلامه" },
+        { key: "ready_to_ship", label: "التجميع والعنونة", Icon: Package, description: "تجميع القطع وعنونتها وطباعة الشحنة" },
+        { key: "courier_dispatch", label: "استلام موظف التسليم", Icon: Truck, description: "إسناد الشحنات ومتابعة تسليمها" },
+    ];
     const stageContent = myProductsWorkspace ? (
         <PreparationWorkDashboard initialView="my-products" standalone />
     ) : activeStage.key === "pending_review" ? (
@@ -260,7 +270,7 @@ export default function FulfillmentV2() {
     return (
         <div className="space-y-5" dir="rtl" data-testid="fulfillment-v2-page">
             {!myProductsWorkspace && (
-                <header className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm lg:hidden" data-testid="fulfillment-mobile-stage-header">
+                <header className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm lg:hidden" data-testid="fulfillment-mobile-stage-header" data-mobile-home={mobileHome ? "true" : undefined}>
                     <div className="flex items-center gap-3 bg-emerald-800 px-3 py-3 text-white">
                         <button type="button" onClick={showFulfillmentOverview} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10" aria-label="العودة إلى بداية إدارة التجهيز">
                             <ArrowRight size={21} weight="bold" />
@@ -349,7 +359,13 @@ export default function FulfillmentV2() {
                 </header>
             )}
 
-            {stageContent}
+            {mobileHome && <section className="fulfillment-home" aria-label="مراحل التجهيز">
+                <h1>إدارة التجهيز</h1>
+                <div className="fulfillment-home-grid">{mobileTiles.map((item, index) => <button type="button" key={item.key} onClick={() => selectNavigationItem(item)}>
+                    <small>{index + 1}</small><item.Icon size={30} /><strong>{item.label}</strong><p>{item.description}</p>
+                </button>)}</div>
+            </section>}
+            <div className={mobileHome ? "fulfillment-desktop-content" : "fulfillment-stage-content"}>{stageContent}</div>
         </div>
     );
 }

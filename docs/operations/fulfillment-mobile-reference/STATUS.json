@@ -1,0 +1,27 @@
+{
+  "task": "fulfillment-mobile-reference",
+  "scope": "Phone layout for six-stage home, pending review and assembly/labeling",
+  "branch": "codex/fulfillment-mobile-reference",
+  "base": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
+  "status": "WIP first implementation; not visually accepted",
+  "verification": {
+    "jsx_parse": "passed",
+    "diff_check": "passed",
+    "jest": "3 suites, 73 tests passed",
+    "css_parse": "passed"
+  },
+  "production_changed": false,
+  "remaining": [
+    "Browser visual verification at 360, 390 and 430px",
+    "Match review detail grouping and navigation to references",
+    "Customer-review tab requires verification of existing filter API",
+    "Review mobile navigation against actual order queue semantics",
+    "Governed build and deployment not performed"
+  ],
+  "next": "Review phone renders and finish reference parity before release. Backend permissions and state transitions remain unchanged.",
+  "constraints": [
+    "Phone-only CSS below 768px",
+    "No backend, API, permission or operational mutation changes",
+    "Desktop product flow remains unchanged"
+  ]
+}
