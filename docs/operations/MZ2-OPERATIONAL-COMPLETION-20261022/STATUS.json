@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPERATIONAL-COMPLETION-20261022",
-  "status": "INTEGRATED_SOURCE_PENDING_DATABASE_ACCEPTANCE_AND_RELEASE",
+  "status": "OPERATIONAL_ACCEPTANCE_PASSED_RELEASE_BLOCKED",
   "branch": "codex/operational-completion-20261022",
   "parent_sha": "42388015bd53b324fcc0329628ace2c7502d8f0a",
   "scope": "Finish operational accounting and publish one combined release after verification, as owner requested on October 22.",
@@ -13,9 +13,11 @@
   ],
   "clarification": "Prior checkpoint overstated chronology as a blocker: aggregate final wallet/debt balances commute for spend and debt-first payments. Per-payment allocation remains the known confirmed-balance snapshot at recording, not invented transaction chronology.",
   "verification": [
-    "138 pure backend tests passed, exit 0: wallet pool/events/engine, existing engine/sources, and operational funding setup.",
-    "62 focused frontend tests passed, exit 0: operational balances and new funding settings.",
-    "Database/CAS/HTTP tests added; real Mongo execution pending CI. No local Mongo service is available."
+    "142 focused pure backend tests passed locally, exit0.",
+    "171 operational frontend tests in11 suites passed locally; remote Operational Balance Frontend also succeeded.",
+    "GitHub run39846752381 backend job120061939209:611 passed,5 warnings,84.83sec,0 skipped; includes real Mongo concurrency/replay and owner/mobile HTTP authorization.",
+    "Shipping regression:16 passed,18 subtests passed.",
+    "CodeQL, Release Readiness, stock eligibility, salary/password, G47, Qoyod and Snapchat settings workflows succeeded."
   ],
   "limitations": [
     "Wallet-first accounts currently accept outgoing payments/funding; unsupported refund/correction/explicit settlement inputs fail visibly before applying money.",
@@ -23,9 +25,21 @@
     "Live owner opening amounts and shipping contract approval require actual owner data.",
     "APK fresh login and upgrade acceptance remains unverified."
   ],
-  "next": "Run combined full repository operational CI, resolve failures and independent review, then prepare governed source/intent release from latest production branch and verify deployed identity. Do not publish an incomplete or failing checkpoint.",
+  "next": "Resolve dependency audit in a scoped compatible update or integrate an already-reviewed dependency fix; rerun exact-head CI. Restore authenticated Emergent access, verify release guard inactive, prepare governed A/B release and publish once only after remaining gates pass. No retry of cancelled sign-in unless owner requests it.",
   "production_changed": false,
   "live_business_writes": 0,
   "release_guard_lease_created": false,
-  "prior_prs": [1454,1459]
+  "prior_prs": [
+    1454,
+    1459
+  ],
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1461",
+  "tested_remote_sha": "01a5f822f07e01c22a569948c308f6de06c5c2af",
+  "tested_tree": "74c1d5119e480a3a759c2ef76a47b7a65ea21366",
+  "release_blockers": [
+    "Security Gate39846752438 failed frontend dependency audit: Vite8.2.1 (five advisories) and follow-redirects1.16.0 (two high advisories). No exceptions or bypass added.",
+    "Backend dependency audit failed: black26.5.1,certifi2026.5.20,pillow12.3.0. Audit reports fixed versions26.10.1,2026.10.19,13.0.0 respectively; compatibility and lock regeneration not yet performed.",
+    "Existing Emergent preview reports inactive/unavailable; app.emergent.sh shows sign-in page. Secure sign-in request was aborted; authentication not established.",
+    "Governed source/intent rehearsal, APK authenticated acceptance and actual production verification remain undone."
+  ]
 }
