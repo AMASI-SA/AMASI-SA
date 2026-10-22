@@ -88,6 +88,14 @@ class AdCatalogSelection(Request):
     account_ids: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(max_length=500)
 
 
+class AdFundingSettings(Request):
+    version: int = Field(ge=0, strict=True)
+    integration_account_id: str = Field(min_length=1, max_length=200)
+    currency: str = Field(pattern=r'^[A-Z]{3}$')
+    mode: Literal['wallet_first']
+    evidence: str = Field(min_length=3, max_length=1000)
+
+
 class ReturnItem(Input):
     id: str = Field(min_length=1, max_length=200)
     quantity: int = Field(gt=0, le=100000)
@@ -353,6 +361,18 @@ def make_operational_balance_router(db, current_user):
         from operational_ad_selection import save
         return await save(db, owner, actor['id'], payload.model_dump())
 
+    @router.get('/ad-funding-settings')
+    async def ad_funding_settings(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, 'ad_selection_manage')
+        from operational_ad_funding import catalog
+        return await catalog(db, owner)
+
+    @router.post('/ad-funding-settings')
+    async def save_ad_funding_settings(payload: AdFundingSettings, user=Depends(guarded('ad_selection_manage'))):
+        actor, owner, _ = await scope(db, user, 'ad_selection_manage')
+        from operational_ad_funding import save
+        return await save(db, owner, actor['id'], payload.model_dump())
+
     @router.get('/supplier-adjustments/entry/{supplier_id}/{invoice_number:path}')
     async def supplier_adjustment_entry(supplier_id:str, invoice_number:str, user=Depends(current_user)):
         _,owner,_=await scope(db,user,"move")
@@ -472,6 +492,7 @@ def make_operational_balance_router(db, current_user):
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
+                "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
                 "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
@@ -483,7 +504,9 @@ def make_operational_balance_router(db, current_user):
         actor, owner, source = await scope(db, user, "view")
         from operational_balance_sources import entities
         try:
-            rows = await entities(db, owner, kind, include_unready=source != "employee_app")
+            operational_state = await read(db, owner) if kind == 'ad_account' else None
+            funding_options = {'operational_state': operational_state} if operational_state and operational_state.get('ad_funding') else {}
+            rows = await entities(db, owner, kind, include_unready=source != "employee_app", **funding_options)
             if kind == 'ad_account':
                 from operational_ad_selection import catalog
                 selected = {r['id'] for r in (await catalog(db, owner))['items'] if r['selected']}
@@ -510,7 +533,7 @@ def make_operational_balance_router(db, current_user):
             if str(exc) not in {"operational_source_rejected", "operational_source_scope_too_large",
                                 "operational_source_owner_mismatch", "shipping_setup_ambiguous",
                                 "operational_entity_kind_invalid", "operational_entity_identity_ambiguous",
-                                "operational_expense_identity_ambiguous"}:
+                                "operational_expense_identity_ambiguous", "operational_ad_funding_invalid"}:
                 raise
             fail("operational_entity_setup_incomplete", "إعداد الجهات غير مكتمل أو متعارض؛ يلزم مراجعة المصدر", 409)
 

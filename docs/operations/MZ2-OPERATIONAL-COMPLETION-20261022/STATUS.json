@@ -1,0 +1,31 @@
+{
+  "task": "MZ2-OPERATIONAL-COMPLETION-20261022",
+  "status": "INTEGRATED_SOURCE_PENDING_DATABASE_ACCEPTANCE_AND_RELEASE",
+  "branch": "codex/operational-completion-20261022",
+  "parent_sha": "42388015bd53b324fcc0329628ace2c7502d8f0a",
+  "scope": "Finish operational accounting and publish one combined release after verification, as owner requested on October 22.",
+  "owner_authorization": "Continue remaining implementation and publish once when ready. Actual opening amounts and live activation are not supplied by this instruction.",
+  "completed": [
+    "Draft-only owner-confirmed operational advertising setup independent of native financial accounts, with exact connected selected account identity, currency and timezone.",
+    "Daily spend adapter and engine preserve evidenced daily costs; current wallet/debt projection consumes wallet first and records excess debt.",
+    "Debt-first outgoing payment/funding with atomic existing movement protocol and immutable bank effects; delayed daily spend recalculates current balance without rewriting prior movement evidence.",
+    "Operational funding setup UI, explicit opening labels, wallet-first movement choices, shipping setup link and readiness refresh."
+  ],
+  "clarification": "Prior checkpoint overstated chronology as a blocker: aggregate final wallet/debt balances commute for spend and debt-first payments. Per-payment allocation remains the known confirmed-balance snapshot at recording, not invented transaction chronology.",
+  "verification": [
+    "138 pure backend tests passed, exit 0: wallet pool/events/engine, existing engine/sources, and operational funding setup.",
+    "62 focused frontend tests passed, exit 0: operational balances and new funding settings.",
+    "Database/CAS/HTTP tests added; real Mongo execution pending CI. No local Mongo service is available."
+  ],
+  "limitations": [
+    "Wallet-first accounts currently accept outgoing payments/funding; unsupported refund/correction/explicit settlement inputs fail visibly before applying money.",
+    "Source completeness, closed-day proof, start-day baseline and currency/FX checks remain enforced.",
+    "Live owner opening amounts and shipping contract approval require actual owner data.",
+    "APK fresh login and upgrade acceptance remains unverified."
+  ],
+  "next": "Run combined full repository operational CI, resolve failures and independent review, then prepare governed source/intent release from latest production branch and verify deployed identity. Do not publish an incomplete or failing checkpoint.",
+  "production_changed": false,
+  "live_business_writes": 0,
+  "release_guard_lease_created": false,
+  "prior_prs": [1454,1459]
+}

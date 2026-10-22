@@ -31,5 +31,7 @@
   "writers_enabled": false,
   "financial_or_physical_writes": 0,
   "legacy_or_journal_changes": false,
-  "conversation_contact": "No access to the Windows Codex conversation; resumed from remote repository evidence."
+  "conversation_contact": "No access to the Windows Codex conversation; resumed from remote repository evidence.",
+  "continuation": "docs/operations/MZ2-OPERATIONAL-COMPLETION-20261022/STATUS.json",
+  "continuation_note": "Aggregate wallet/debt runtime integration supersedes chronology blocker for current balances; chronological per-event helper remains available only for separately evidenced events."
 }

@@ -268,7 +268,7 @@ async def rows(db, owner, collection):
     return result
 
 
-async def entities(db, owner, kind, *, include_unready=False):
+async def entities(db, owner, kind, *, include_unready=False, operational_state=None):
     if kind == 'operating_expense':
         catalog = {code: {'id': code, 'name': name, 'kind': kind, 'currency': 'SAR', 'source': 'mz2_builtin'}
                    for code, name in EXPENSE_CATEGORIES.items()}
@@ -394,6 +394,8 @@ async def entities(db, owner, kind, *, include_unready=False):
     elif kind == 'ad_account':
         accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
         bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
+        from operational_ad_funding import bindings as funding_bindings
+        bindings, funding_conflicts = funding_bindings(operational_state, owner, bindings)
         policies = await rows(db, owner, 'mz2_ad_automation_policies_v2')
         source = []
         for binding in bindings:
@@ -406,7 +408,11 @@ async def entities(db, owner, kind, *, include_unready=False):
                 continue
             account = matches[0]
             metadata = {}
-            if binding.get('funding_mode') == 'hybrid':
+            if binding.get('funding_policy') == 'wallet_first':
+                metadata = {'settings_complete': (binding.get('currency') == account.get('currency')
+                                                  and binding.get('timezone') == account.get('timezone')),
+                            'funding_policy': 'wallet_first'}
+            elif binding.get('funding_mode') == 'hybrid':
                 try:
                     metadata = hybrid_policy(binding, policies, owner)
                     metadata['settings_complete'] = True
@@ -461,7 +467,7 @@ async def entities(db, owner, kind, *, include_unready=False):
                        **({'ready': False} if not name or not currency or row.get('ready') is False else {}),
                        **({'setup_issue': row['setup_issue']} if row.get('setup_issue') else {}),
                        **({k: row.get(k) for k in ('platform', 'integration_account_id', 'platform_account_id', 'funding_mode',
-                           'wallet_fraction', 'hybrid_policy_id', 'settings_complete')}
+                           'wallet_fraction', 'hybrid_policy_id', 'settings_complete', 'funding_policy')}
                           if kind == 'ad_account' else {})})
     return sorted(result, key=lambda r: (r['name'], r['id']))
 
@@ -589,7 +595,7 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
-async def collect_sources(db, owner, started_at, as_of, baselines=None):
+async def collect_sources(db, owner, started_at, as_of, baselines=None, operational_state=None):
     start, now = instant(started_at), instant(as_of)
     if now < start:
         raise ValueError('operational_source_time_range_invalid')
@@ -598,6 +604,11 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None):
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
     data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    from operational_ad_funding import bindings as funding_bindings
+    data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
+        operational_state, owner, data['mz2_ad_account_bindings_v2'])
+    for identity in conflicts:
+        issue(out, 'operational_ad_funding_authority_conflict', identity)
     setup_rows = data['mz2_shipping_setup_v2']
     setup = setup_rows[0] if len(setup_rows) == 1 else {}
     if len(setup_rows) > 1:
@@ -930,7 +941,10 @@ def _advertising(data, out, start, now, baselines=None):
         accounts = [a for a in data['mezan_integration_accounts_v2']
                     if a.get('mezan_integration_account_id') == binding.get('integration_account_id')
                     and a.get('provider') == provider and a.get('external_account_id') == binding.get('platform_account_id')]
-        if len(accounts) != 1 or accounts[0].get('connection_status') != 'connected':
+        if (len(accounts) != 1 or accounts[0].get('connection_status') != 'connected'
+                or (binding.get('funding_policy') == 'wallet_first'
+                    and (binding.get('currency') != accounts[0].get('currency')
+                         or binding.get('timezone') != accounts[0].get('timezone')))):
             issue(out, 'ad_account_incomplete', binding.get('_id'))
             continue
         account = accounts[0]
@@ -939,7 +953,8 @@ def _advertising(data, out, start, now, baselines=None):
                 continue
             try:
                 day = date.fromisoformat(row.get('report_date') if platform == 'snapchat' else row.get('date'))
-                split = hybrid_policy(binding, data['mz2_ad_automation_policies_v2'], binding['user_id'], day.isoformat()) if binding['funding_mode'] == 'hybrid' else {}
+                split = ({'funding_policy': 'wallet_first'} if binding.get('funding_policy') == 'wallet_first' else
+                         hybrid_policy(binding, data['mz2_ad_automation_policies_v2'], binding['user_id'], day.isoformat()) if binding['funding_mode'] == 'hybrid' else {})
                 zone = ZoneInfo(account['timezone'])
                 end = datetime.combine(day + timedelta(days=1), time.min, zone)
                 baseline_amount = Decimal(0)
@@ -1013,7 +1028,7 @@ def _advertising(data, out, start, now, baselines=None):
                 issue(out, 'ad_daily_source_incomplete', row.get('_id'))
 
 
-async def start_baselines(db, owner, started_at):
+async def start_baselines(db, owner, started_at, operational_state=None):
     """Capture native cumulative observations without pretending stale data is exact.
 
     A start-day deduction is verified only at the exact start instant. Older
@@ -1022,6 +1037,10 @@ async def start_baselines(db, owner, started_at):
     start = instant(started_at)
     result = {'captured_at': start.isoformat(), 'ad_days': [], 'issues': []}
     bindings = await rows(db, owner, 'mz2_ad_account_bindings_v2')
+    from operational_ad_funding import bindings as funding_bindings
+    bindings, conflicts = funding_bindings(operational_state, owner, bindings)
+    for identity in conflicts:
+        issue(result, 'operational_ad_funding_authority_conflict', identity)
     accounts = await rows(db, owner, 'mezan_integration_accounts_v2')
     for binding in bindings:
         platform = binding.get('platform')
@@ -1030,7 +1049,9 @@ async def start_baselines(db, owner, started_at):
         provider, collection = AD_SOURCES[platform]
         matches = [a for a in accounts if a.get('mezan_integration_account_id') == binding.get('integration_account_id')
                    and a.get('external_account_id') == binding.get('platform_account_id') and a.get('provider') == provider]
-        if len(matches) != 1:
+        if (len(matches) != 1 or (binding.get('funding_policy') == 'wallet_first'
+                and (matches[0].get('currency') != binding.get('currency')
+                     or matches[0].get('timezone') != binding.get('timezone')))):
             issue(result, 'ad_start_account_ambiguous', binding.get('_id'))
             continue
         account = matches[0]
