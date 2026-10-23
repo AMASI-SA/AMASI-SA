@@ -1,6 +1,6 @@
 {
   "task": "MZ2-OPERATIONAL-COMPLETION-20261022",
-  "status": "OPERATIONAL_ACCEPTANCE_PASSED_RELEASE_BLOCKED",
+  "status": "DEPENDENCY_SECURITY_PATCH_PENDING_CI",
   "branch": "codex/operational-completion-20261022",
   "parent_sha": "42388015bd53b324fcc0329628ace2c7502d8f0a",
   "scope": "Finish operational accounting and publish one combined release after verification, as owner requested on October 22.",
@@ -25,7 +25,7 @@
     "Live owner opening amounts and shipping contract approval require actual owner data.",
     "APK fresh login and upgrade acceptance remains unverified."
   ],
-  "next": "Resolve dependency audit in a scoped compatible update or integrate an already-reviewed dependency fix; rerun exact-head CI. Restore authenticated Emergent access, verify release guard inactive, prepare governed A/B release and publish once only after remaining gates pass. No retry of cancelled sign-in unless owner requests it.",
+  "next": "Push dependency checkpoint to existing combined PR1461, inspect exact-head CI and fix any failures. Once green, verify authenticated Emergent access and Python>=3.11, guard inactive, governed A/B rehearsal and APK acceptance before one publish. No cancelled login retry without renewed owner request.",
   "production_changed": false,
   "live_business_writes": 0,
   "release_guard_lease_created": false,
@@ -37,9 +37,22 @@
   "tested_remote_sha": "01a5f822f07e01c22a569948c308f6de06c5c2af",
   "tested_tree": "74c1d5119e480a3a759c2ef76a47b7a65ea21366",
   "release_blockers": [
-    "Security Gate39846752438 failed frontend dependency audit: Vite8.2.1 (five advisories) and follow-redirects1.16.0 (two high advisories). No exceptions or bypass added.",
-    "Backend dependency audit failed: black26.5.1,certifi2026.5.20,pillow12.3.0. Audit reports fixed versions26.10.1,2026.10.19,13.0.0 respectively; compatibility and lock regeneration not yet performed.",
-    "Existing Emergent preview reports inactive/unavailable; app.emergent.sh shows sign-in page. Secure sign-in request was aborted; authentication not established.",
+    "Dependency patches implemented, awaiting successful exact-head Security Gate including installation, both audits, image/PDF tests and governed build.",
+    "Existing Emergent preview unavailable and secure sign-in request was aborted; authenticated deployment access not established.",
     "Governed source/intent rehearsal, APK authenticated acceptance and actual production verification remain undone."
-  ]
+  ],
+  "dependency_checkpoint": {
+    "parent_sha": "a4f2faa0649a3336a23d83fb62b3e4a0066108d0",
+    "date": "2026-10-23",
+    "versions": {
+      "vite": "8.2.4",
+      "follow-redirects": "1.16.1",
+      "black": "26.10.1",
+      "certifi": "2026.10.19",
+      "pillow": "13.0.0"
+    },
+    "changes": "Minimal advisory-reported fixed versions; preserve already-compatible PostCSS8.5.26 and Rolldown1.2.6. Backend runtime and deployment requirement files remain identical. Add offline image/PDF regressions to Security Gate. No audit exception or gate weakening.",
+    "checks": "Registry metadata verified, deployment requirements byte-identical, workflow YAML parse and diff checks passed. Actual frozen installation, audits, full frontend regression and image compatibility pending remote CI. Local lockfile-parser unavailable.",
+    "runtime_requirement": "Pillow13 requires Python>=3.11; CI uses3.11; verify Emergent Python before rehearsal."
+  }
 }
