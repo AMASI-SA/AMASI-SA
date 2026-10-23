@@ -29,3 +29,7 @@ No live rollback or successful deployment is claimed yet. Phone visual acceptanc
 Additional dependency commits: d9a991208af2c6d1d9cb70be8089e3f639ad30cc (Vite test fixture only) and 0bbb344d30623e683141cc42b34fd2ff38c23436 (Black 26.10.1). Reverse these in newest-first order before reverting 22957b5e2c14e92bc88a17b87069630709196f9e when rolling back all dependency work. The exact combined reverse diff check passed.
 
 Emergent Manage Overview exposes Rollback for retained publications 99 (a1adb71) and 98 (55a6699); latest is labeled 100 (34e6d79). No rollback was executed or runtime recovery demonstrated. The live /build-meta.json reports source bc85eddf3d5c92b370c2f59d17ac79946763863e, differing from the task production base 571e1704fc823c681c61b2f31de1db4f5ea5f55a. Reconcile this identity mismatch before publishing. Do not use an older publication blindly: preserve intervening unrelated releases and confirm the exact recovery target.
+
+## Identity reconciliation
+
+After deepening the shallow Git history, live source bc85eddf3d5c92b370c2f59d17ac79946763863e is an ancestor of production base 571e1704fc823c681c61b2f31de1db4f5ea5f55a. Their tree diff contains only release/release-intent-v5.json, and that intent records the same live source SHA. This resolves the source discrepancy; it does not prove an executed platform rollback. All 15 GitHub workflows passed on ed932f68540ddd955d641262b95da14d31c08734.

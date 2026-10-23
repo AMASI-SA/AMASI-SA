@@ -3,14 +3,16 @@
   "branch": "codex/fulfillment-mobile-reference",
   "base": "571e1704fc823c681c61b2f31de1db4f5ea5f55a",
   "checkpoint": "0bbb344d30623e683141cc42b34fd2ff38c23436",
-  "status": "WIP; deployment identity discrepancy must be reconciled before release",
+  "status": "WIP; source identity reconciled, CI green; shared environment authentication and visual/release verification pending",
   "production_changed": false,
   "verification": {
     "frontend_audit": "0 blockers; CI frontend security and full regression passed at 6f74dab",
     "focused_jest": "3 suites / 73 passed after dependency installation",
     "pdf_images": "34 passed / 1 skipped with Pillow 13",
     "runtime_fixture": "15 passed after aligning Vite fixture",
-    "rollback_source": "git apply --reverse --check passed for dependency updates and fixture"
+    "rollback_source": "git apply --reverse --check passed for dependency updates and fixture",
+    "latest_ci": "ed932f68540ddd955d641262b95da14d31c08734: all 15 workflows succeeded, including Security Gate and Mezan Release Readiness",
+    "source_identity": "bc85eddf3d5c92b370c2f59d17ac79946763863e is ancestor of production base571e170; tree diff changes only release/release-intent-v5.json, whose source_git_sha matches live bc85"
   },
   "observed_live": {
     "date": "2026-10-23",
@@ -21,11 +23,10 @@
     "source": "Browser /build-meta.json and Emergent Manage Overview"
   },
   "remaining": [
-    "Reconcile current live SHA with production branch and other releases; do not overwrite newer work",
-    "Check CI at 0bbb344 after Black update",
-    "Visual QA at 360/390/430px and remaining reference parity",
-    "Governed build, clean-clone rehearsal, shared guard status, prepare/prepublish and final verification"
+    "Authenticate shared Emergent code environment and check Release Guard status",
+    "Visual QA at 360/390/430px and reference parity",
+    "Governed build, clean-clone rehearsal, prepare/prepublish, publish and production verification"
   ],
-  "next": "Resolve deployment/source discrepancy before modifying shared /app or merging. No deployment or rollback executed.",
+  "next": "Complete secure code-server authentication; inspect shared guard before any /app modifications.",
   "ledger": "Issue 1006 read failed Transport closed; task status remains canonical recoverable checkpoint."
 }
