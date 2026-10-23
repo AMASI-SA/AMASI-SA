@@ -728,6 +728,8 @@ async def _sync_salla_reviewed(db: Any, user_id: str, order: OrderDTO) -> tuple[
 def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
     router = APIRouter(prefix="/order-reviews-v1", tags=["order-review-stage-one"])
     repository = MongoOrderRepository(db)
+    from source_added_item_review import register_source_addition_routes
+    register_source_addition_routes(router, db, current_user)
 
     @router.get("")
     async def list_pending_reviews(
