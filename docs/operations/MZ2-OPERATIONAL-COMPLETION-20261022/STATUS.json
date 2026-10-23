@@ -53,6 +53,8 @@
     },
     "changes": "Minimal advisory-reported fixed versions; preserve already-compatible PostCSS8.5.26 and Rolldown1.2.6. Backend runtime and deployment requirement files remain identical. Add offline image/PDF regressions to Security Gate. No audit exception or gate weakening.",
     "checks": "Registry metadata verified, deployment requirements byte-identical, workflow YAML parse and diff checks passed. Actual frozen installation, audits, full frontend regression and image compatibility pending remote CI. Local lockfile-parser unavailable.",
-    "runtime_requirement": "Pillow13 requires Python>=3.11; CI uses3.11; verify Emergent Python before rehearsal."
+    "runtime_requirement": "Pillow13 requires Python>=3.11; CI uses3.11; verify Emergent Python before rehearsal.",
+    "first_ci_sha": "fd4b0aadd1d61136a072b7d55cea2973c970b903",
+    "first_ci_result": "Security run39967651858: backend frozen install/pip check and strict audit PASS (no known vulnerabilities). Added image test collection failed because backend/tests missing from PYTHONPATH; fix scopes correct path to image step. Frontend frozen install passed."
   }
 }

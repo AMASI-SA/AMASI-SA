@@ -52,6 +52,8 @@ jobs:
       - name: Audit backend dependencies
         run: python -m pip_audit -r /tmp/security-requirements.txt --strict
       - name: Verify image and PDF dependency compatibility (offline)
+        env:
+          PYTHONPATH: backend:backend/tests
         # The separate real-Mongo cache persistence test is outside this
         # offline dependency check; all image inputs/providers here are fixtures.
         run: |
