@@ -34,23 +34,27 @@ review or physical preparation of additions.
 ## Verification so far
 
 - Component and real-Mongo compatibility: 39 passed, 1 pre-existing skip.
-- Source review HTTP: all 10 real-Mongo tests passed, including actual original
+- Source review HTTP: 10 real-Mongo tests passed, including actual original
   and added-product mobile preparation-file/PDF and physical-piece creation. Only
   external image download is mocked; duplicate approval, stale source, tenant and
   permission checks, rollback, original piece preservation and normal assignment
   are exercised.
 - Catalog/Ready/adjacent suites: 147 passed, 17 Mongo-only skipped, 3 environment
   proxy/PDF-client cases deselected. Baseline Ready counterexamples fail.
-- Web targeted UI/service/shipping identity: 28 passed.
-- Android dedicated 16 checks and existing 38 item tracking checks passed.
+- Web targeted UI/service/shipping identity: 28 passed; full CI frontend: 289
+  suites / 1968 tests passed.
+- Two additional legacy real-Mongo endpoint cases passed: genuine legacy review
+  proof permits ordinary assignment; absent reviewed_at blocks approval.
+- Android dedicated 17 checks and existing 38 item tracking checks passed. Full
+  mobile CI run 39977376011 passed including TypeScript and authentication checks.
 - No production data or production configuration changed.
 
 ## Android companion
 
 PR https://github.com/AMASI-SA/amasi-mobile/pull/295
-Commit `272bd187390dc57cf51403f4b8db96e2cae85ab4`.
+Commit `1473acc595eb30bcddfa3cd63f77f6f980b4ad1e`.
 Stacked on PR294, exact baseline `a8542ff3cbb6a762d1ba03447c6e2ed391509ba9`.
-Full project TypeScript, complete historical auth checks, CI, device acceptance,
+Full project TypeScript, historical auth checks and CI passed. Device acceptance
 and APK build are not yet verified. Android source was prepared from an exact
 subset; remote commit correctly uses the full baseline tree and parent.
 
@@ -60,3 +64,25 @@ Finish real assignment integration checks, inspect CI on exact remote commits,
 and review both candidate PRs before any merge/release. No release guard lease,
 APK, OTA, merge or deployment performed. Final checkpoint SHA is recorded in the
 PR and repository continuation ledger Issue #1006.
+
+## CI and continuation
+
+Server source commit 95f9db9d5174fb60f4c541c0d761aad284e172c2 ran 555 review
+contracts: 554 passed, one older test expected automatic catalog admission for a
+new Salla line. That test now preserves its exhaustion-filter assertion and
+checks exclusion before explicit review, then admission after review. A new CI
+run validates that test-only correction and the two extra legacy cases.
+
+Security Gate fails dependency audits on unchanged inherited manifests (frontend
+Vite/follow-redirects; backend audit 37 advisories in 3 packages). Dependency
+upgrades are outside this feature patch; do not merge/deploy with this gate red.
+All other completed source 95f9db9d checks passed at the checkpoint.
+
+An extra combined local test-run follow-up was rejected by automatic approval
+review for an unverified external telemetry endpoint. It was not retried or
+bypassed. The completed 10 + 2 isolated cases and GitHub CI provide verification;
+the supplementary local run is not counted as completed evidence.
+
+Issue #1006 cannot accept comments: GitHub returns 403 because it exceeds 2500
+comments. Continuation evidence is preserved in PR #1462 comments and this file.
+No production changes, merge, release lease, APK or OTA.

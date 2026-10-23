@@ -108,6 +108,62 @@ class SourceAdditionReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[review.EVENTS].count_documents({"event_type": "source_added_item_reviewed"}), 1)
         self.assertEqual(len((await self.db[review.WORKFLOWS].find_one({"order_number": self.number}))["items"]), 2)
 
+    async def legacy_source_addition(self):
+        selector = {"user_id": "owner", "order_number": self.number}
+        await self.db[review.WORKFLOWS].update_one(selector, {"$unset": {
+            "completion_mode": "", "review_completion_operation_id": ""}})
+        await self.db[completion_fixture.completion.OPERATIONS].delete_many(selector)
+        workflow = await self.db[review.WORKFLOWS].find_one(selector)
+        self.assertTrue(workflow["reviewed_at"])
+        self.assertEqual(workflow["items"], self.original_workflow["items"])
+        # Exercise source intake again after removing local-only proof, so the
+        # added line uses the legacy stock and review contracts end to end.
+        self.payload["updated_at"] = "2026-09-26T15:00:00+00:00"
+        self.payload["items"].append({"id": "legacy-added", "product_id": "p",
+            "name": "Legacy added product", "sku": "SYN-P", "quantity": 1,
+            "options": [{"name": "الاسم", "value": "legacy-added"}]})
+        self.assertTrue((await self.webhook(self.payload, "order.updated"))["synced"])
+        state = await self.capability()
+        index = next(i for i, row in enumerate(state["items"])
+                     if "legacy-added" in row["order_item_id"])
+        return state, index
+
+    async def test_legacy_addition_review_catalog_and_mobile_assignment(self):
+        state, index = await self.legacy_source_addition()
+        self.assertTrue(state["items"][index]["eligible"], state)
+        result = await self.approve(index, state)
+        self.assertEqual(result.status_code, 200, result.text)
+        cards = await self.catalog_cards()
+        self.assertEqual(len(cards), 1)
+        self.assertIn("legacy-added", str(cards))
+        assigned = await self.assign_cards(cards, "legacy-added-assignment", mobile=True)
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+        workflow = await self.db[review.WORKFLOWS].find_one({"order_number": self.number})
+        self.assertEqual(workflow["stage"], "in_progress")
+        self.assertNotIn("completion_mode", workflow)
+        self.assertEqual(await self.catalog_cards(), [])
+        self.assertEqual(await self.db.mezan_preparation_pieces_v1.count_documents({}), 3)
+        old_ids = [row["_id"] for row in self.old_pieces]
+        self.assertEqual(await self.db.mezan_preparation_pieces_v1.find(
+            {"_id": {"$in": old_ids}}).sort("_id").to_list(None), self.old_pieces)
+        self.external.assert_not_awaited()
+
+    async def test_legacy_addition_without_reviewed_at_is_blocked(self):
+        state, index = await self.legacy_source_addition()
+        await self.db[review.WORKFLOWS].update_one({"order_number": self.number},
+            {"$unset": {"reviewed_at": ""}})
+        state = await self.capability()
+        self.assertFalse(state["items"][index]["eligible"])
+        self.assertEqual(state["items"][index]["blocked_reason"],
+                         "source_addition_review_proof_missing")
+        result = await self.approve(index, state)
+        self.assertEqual(result.status_code, 409, result.text)
+        self.assertEqual(await self.catalog_cards(), [])
+        self.assertEqual(await self.db[review.EVENTS].count_documents(
+            {"event_type": "source_added_item_reviewed"}), 0)
+        self.assertEqual(await self.db.mezan_preparation_pieces_v1.find({}).sort(
+            "_id").to_list(None), self.old_pieces)
+
     async def test_stale_revision_and_source_reject_without_approval(self):
         state = await self.capability()
         stale = {**state, "revision": state["revision"] + 1}
