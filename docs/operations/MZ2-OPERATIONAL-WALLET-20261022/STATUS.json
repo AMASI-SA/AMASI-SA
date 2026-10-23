@@ -1,0 +1,37 @@
+{
+  "task": "MZ2-OPERATIONAL-WALLET-20261022",
+  "status": "CALCULATION_SEAM_ONLY_NOT_CONNECTED_NOT_DEPLOYABLE",
+  "branch": "codex/operational-wallet-depletion-20261022",
+  "base_branch": "codex/operational-readiness-20261020",
+  "base_sha": "c7800bff68ef7c3630b69ee7b7ee70e1bd1d95a4",
+  "prior_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1454",
+  "owner_decision": "Spend consumes available wallet; excess becomes debt. Payment settles debt first, excess funds wallet.",
+  "completed": [
+    "Fetched and verified the October 20 remote checkpoint; prior PR remains draft and unmerged. Its checks currently show 15 success and four skipped, superseding the old CI_PENDING note.",
+    "Added a pure event projection with Decimal amounts, exact scope, evidence identity deduplication, chronological ordering and debt-first payment allocation.",
+    "Added requirement-based examples, replay/order tests, money conservation, timezone, invalid input and source-boundary tests."
+  ],
+  "verification_command": "PYTHONPATH=backend /workspace/scratch/review-guard-venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_wallet_events.py backend/tests/test_operational_balance_engine.py backend/tests/test_operational_balance_sources.py --tb=short",
+  "verification": "98 passed, exit 0; no database or provider writes. Existing engine/source tests included; production integration and APK acceptance are not established.",
+  "blocking_integration_facts": [
+    "The operational adapter currently consumes cumulative daily spend and daily close proof, not transaction-level or bounded-interval spend events.",
+    "occurred_at on an operational payment is the recording time; a supplied business_date has no effective time. Neither alone proves the real intra-day payment/spend order.",
+    "The existing confirmed native hybrid binding and AutomationPolicy contracts support explicit_split/wallet_fraction. Do not silently reinterpret these as wallet-first or change native accounting behavior.",
+    "This module has NO runtime callers. Do not mark wallet depletion implemented in the application, enabled or ready to publish."
+  ],
+  "next": "Establish owner-scoped authoritative spend/payment chronology or explicit interval boundaries, then implement a separately selected operational wallet-first policy, atomic adapter/reducer integration, live-source eligibility diagnostics and persisted replay/concurrency acceptance. If only a daily total spans a funding event, preserve the evidence as unresolved; do not invent a timestamp or rewrite confirmed days.",
+  "remaining_readiness": [
+    "Live advertising bindings and funding modes for the selected accounts",
+    "Approved shipping contracts, prices and effective dates",
+    "Owner-provided opening amounts and separately approved live start",
+    "Authenticated APK fresh login and upgrade acceptance",
+    "Source integration, review, exact-head CI and separately authorized governed deployment"
+  ],
+  "production_changed": false,
+  "writers_enabled": false,
+  "financial_or_physical_writes": 0,
+  "legacy_or_journal_changes": false,
+  "conversation_contact": "No access to the Windows Codex conversation; resumed from remote repository evidence.",
+  "continuation": "docs/operations/MZ2-OPERATIONAL-COMPLETION-20261022/STATUS.json",
+  "continuation_note": "Aggregate wallet/debt runtime integration supersedes chronology blocker for current balances; chronological per-event helper remains available only for separately evidenced events."
+}

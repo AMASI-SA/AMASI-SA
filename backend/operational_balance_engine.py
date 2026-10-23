@@ -473,20 +473,27 @@ def reconcile(state, sources, as_of):
             funding = snapshot["funding_type"]
             if funding not in {"prepaid", "postpaid", "hybrid"}:
                 raise ValueError("advertising_funding_incomplete")
-            fraction = money(snapshot.get("wallet_fraction")) if funding == "hybrid" else (Decimal(1) if funding == "prepaid" else ZERO)
+            wallet_first = snapshot.get("funding_policy") == "wallet_first"
+            if wallet_first:
+                policy = state.get("ad_funding", {}).get(snapshot["account_id"], {})
+                if funding != "hybrid" or policy.get("mode") != "wallet_first" or policy.get("currency") != snapshot["currency"]:
+                    raise ValueError("advertising_wallet_policy_incomplete")
+            fraction = ZERO if wallet_first else (money(snapshot.get("wallet_fraction")) if funding == "hybrid" else (Decimal(1) if funding == "prepaid" else ZERO))
             if fraction > 1:
                 raise ValueError("advertising_hybrid_policy_incomplete")
             if prior and prior["closed"] and (prior.get("funding_type", funding) != funding
                                              or Decimal(prior.get("wallet_fraction", str(fraction))) != fraction
-                                             or prior.get("timezone", str(zone)) != str(zone)):
+                                             or prior.get("timezone", str(zone)) != str(zone)
+                                             or prior.get("funding_policy") != snapshot.get("funding_policy")):
                 raise ValueError("advertising_closed_funding_changed")
             engine["ad_days"][key] = {"amount": amount(value), "closed": closed, "observed_at": observed.isoformat(),
-                                      "funding_type": funding, "wallet_fraction": str(fraction), "timezone": str(zone)}
+                                      "funding_type": funding, "wallet_fraction": str(fraction), "timezone": str(zone),
+                                      **({"funding_policy": "wallet_first"} if wallet_first else {})}
             metadata = {field: snapshot.get(field) for field in ("fx_rate", "fx_source", "fx_at", "fx_date", "fx_snapshot_id", "fx_evidence", "sar_amount",
                         "source_cumulative_amount", "baseline_amount", "hybrid_policy_id", "hybrid_policy_version", "hybrid_policy_evidence",
                         "hybrid_confirmed_at", "hybrid_confirmed_by")}
-            parts = [(key, value, funding)]
-            if funding == "hybrid":
+            parts = [(key, value, "wallet_first" if wallet_first else funding)]
+            if funding == "hybrid" and not wallet_first:
                 wallet = Decimal(amount(value * fraction))
                 parts = [(key + ":wallet", wallet, "prepaid"), (key + ":credit", value-wallet, "postpaid")]
             active_parts = {part_key for part_key, _, _ in parts}
@@ -495,14 +502,15 @@ def reconcile(state, sources, as_of):
                     obligations[old_key].update(expected="0.00", superseded=True)
             for part_key, part_value, part_funding in parts:
                 part_metadata = dict(metadata)
-                if funding == "hybrid" and metadata.get("sar_amount") is not None:
+                if funding == "hybrid" and not wallet_first and metadata.get("sar_amount") is not None:
                     wallet_sar = Decimal(amount(money(metadata["sar_amount"]) * fraction))
                     part_metadata["sar_amount"] = amount(wallet_sar if part_funding == "prepaid" else money(metadata["sar_amount"])-wallet_sar)
                 put(part_key, "advertising", snapshot["account_id"], "ad_account", snapshot["currency"],
                     expected=ZERO if closed else part_value, confirmed=part_value if closed else ZERO,
                     business_date=ad_date, funding_type=part_funding, funding_mode=funding,
                     wallet_fraction=str(fraction), ad_day_id=key, ad_total_amount=amount(value),
-                    original_currency=snapshot["currency"], timezone=str(zone), **part_metadata)
+                    original_currency=snapshot["currency"], timezone=str(zone),
+                    **({"funding_policy": "wallet_first"} if wallet_first else {}), **part_metadata)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), key)
 
