@@ -60,8 +60,8 @@ subset; remote commit correctly uses the full baseline tree and parent.
 
 ## Next safe action
 
-Finish real assignment integration checks, inspect CI on exact remote commits,
-and review both candidate PRs before any merge/release. No release guard lease,
+Review both verified candidate PRs, resolve inherited dependency audit blockers,
+and perform Android device acceptance before any merge/release. No release guard lease,
 APK, OTA, merge or deployment performed. Final checkpoint SHA is recorded in the
 PR and repository continuation ledger Issue #1006.
 
@@ -70,13 +70,18 @@ PR and repository continuation ledger Issue #1006.
 Server source commit 95f9db9d5174fb60f4c541c0d761aad284e172c2 ran 555 review
 contracts: 554 passed, one older test expected automatic catalog admission for a
 new Salla line. That test now preserves its exhaustion-filter assertion and
-checks exclusion before explicit review, then admission after review. A new CI
-run validates that test-only correction and the two extra legacy cases.
+checks exclusion before explicit review, then admission after review. Final CI
+run 39978318230 passed on code commit
+`9d075b12a4ac61a9feece244f338a585997ac36d`: 557 executed review cases and 317
+subtests passed, with zero skipped/failing/error cases, plus the acceptance guard.
+The catalog correction and both extra legacy cases are included.
 
 Security Gate fails dependency audits on unchanged inherited manifests (frontend
 Vite/follow-redirects; backend audit 37 advisories in 3 packages). Dependency
 upgrades are outside this feature patch; do not merge/deploy with this gate red.
-All other completed source 95f9db9d checks passed at the checkpoint.
+All other workflows on code commit 9d075b12 passed. Security Gate is the only
+remaining failed workflow. The final status-only commit changes no implementation
+or tests; the verified implementation tree is preserved.
 
 An extra combined local test-run follow-up was rejected by automatic approval
 review for an unverified external telemetry endpoint. It was not retried or
@@ -86,3 +91,9 @@ the supplementary local run is not counted as completed evidence.
 Issue #1006 cannot accept comments: GitHub returns 403 because it exceeds 2500
 comments. Continuation evidence is preserved in PR #1462 comments and this file.
 No production changes, merge, release lease, APK or OTA.
+
+## Final mobile checkpoint
+
+Current Android head `c0251c1fbfc6c788685d3c069158dbf2341365d9` also passed the
+full AMASI Mobile CI (run 39978409078). This is a status-only follow-up to the
+previous verified code commit. Both candidates remain draft/unmerged.
