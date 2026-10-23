@@ -76,7 +76,7 @@ function fixture({
         }],
         tree_sha256: "c".repeat(64),
       },
-      toolchain: { node: "22.23.2", yarn: "1.22.22", vite: "8.2.1" },
+      toolchain: { node: "22.23.2", yarn: "1.22.22", vite: require("../package.json").dependencies.vite },
       environment: {
         mode: "production",
         effective: {

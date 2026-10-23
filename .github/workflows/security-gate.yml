@@ -51,6 +51,18 @@ jobs:
           python -m pip check
       - name: Audit backend dependencies
         run: python -m pip_audit -r /tmp/security-requirements.txt --strict
+      - name: Verify image and PDF compatibility with the audited dependency closure
+        env:
+          PYTHONPATH: backend:backend/tests
+        run: |
+          python -m pytest --noconftest --asyncio-mode=auto -q \
+            backend/tests/test_supplier_invoice_images.py \
+            backend/tests/test_reviewed_preparation_batches.py \
+            backend/tests/test_preparation_pdf_amasi_a4_layout.py \
+            backend/tests/test_preparation_pdf_media_text_gap.py \
+            backend/tests/test_preparation_pdf_card_file_number.py
+          python -m pytest --noconftest --asyncio-mode=auto -q \
+            backend/tests/test_google_ads_verification.py -k image
       - name: Compile security-critical modules
         run: |
           python -m py_compile \
