@@ -45,6 +45,7 @@ def assignment_workflow_query() -> dict[str, Any]:
     return {"$or": [
         {"stage": "reviewed"},
         {"stage": "in_progress", "completion_mode": LOCAL_COMPLETION_MODE},
+        {"stage": "in_progress", "completion_mode": None, "source_additions_reviewed": True},
     ]}
 
 
@@ -52,13 +53,40 @@ async def load_local_assignment_workflows(
     db: Any, *, user_id: str, workflows: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     """Batch approval and source/component safety reads; never repair on read."""
-    from fulfillment_v2_routes import COMPONENT_LIFECYCLES, LEGACY_COMPONENT_COHORT
-    from stock_component_consumption_service import PLANS
-
     approved = await load_local_review_workflows(
         db, user_id=user_id, order_numbers=[row.get("order_number") for row in workflows],
         workflows=workflows,
     )
+    return await load_source_current_assignment_workflows(db, user_id=user_id, workflows=list(approved.values()))
+
+
+async def load_source_addition_assignment_workflows(
+    db: Any, *, user_id: str, workflows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Legacy additions retain legacy identity, with current source/stock guards.
+
+    The explicit item-review operation grants this marker. It does not fabricate
+    a local full-order approval or bypass the existing component lifecycle.
+    """
+    approved = {
+        _text(row.get("order_number")): row for row in workflows
+        if row.get("user_id") == user_id and row.get("stage") == "in_progress"
+        and row.get("completion_mode") is None
+        and row.get("source_additions_reviewed") is True
+        and any(item.get("source_addition") is True and item.get("review_status") == "reviewed"
+                for item in row.get("items", []) if isinstance(item, dict))
+    }
+    return await load_source_current_assignment_workflows(db, user_id=user_id, workflows=list(approved.values()), strict=True)
+
+
+async def load_source_current_assignment_workflows(
+    db: Any, *, user_id: str, workflows: list[dict], strict: bool = False,
+) -> dict:
+    from fulfillment_v2_routes import COMPONENT_LIFECYCLES, LEGACY_COMPONENT_COHORT
+    from stock_component_consumption_service import PLANS
+
+    approved = {_text(row.get("order_number")): row for row in workflows
+                if row.get("user_id") == user_id and _text(row.get("order_number"))}
     if not approved:
         return {}
     numbers = sorted(approved)
@@ -89,6 +117,10 @@ async def load_local_assignment_workflows(
                     or watermark.get("revision") != lifecycle.get("snapshot_revision")):
                 continue
         elif lifecycle.get("state") != LEGACY_COMPONENT_COHORT:
+            continue
+        if strict and (lifecycle.get("accepted") is not True
+                       or watermark.get("revision") is None
+                       or watermark.get("revision") != lifecycle.get("snapshot_revision")):
             continue
         eligible[number] = workflow
     return eligible
