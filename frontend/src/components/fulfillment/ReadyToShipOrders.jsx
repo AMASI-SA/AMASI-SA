@@ -1,3 +1,4 @@
+import "../../fulfillmentMobile.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -658,9 +659,9 @@ export default function ReadyToShipOrders() {
                         />
                     )}
 
-                    {result.pieces?.map((piece) => (
+                    <div className="assembly-mobile-products">{result.pieces?.map((piece) => (
                         <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
-                    ))}
+                    ))}</div>
                 </div>
             )}
 
@@ -682,6 +683,11 @@ export default function ReadyToShipOrders() {
                 </section>
             )}
 
+            <nav className="assembly-mobile-navigation" aria-label="التنقل في التجميع">
+                <a href="#assembly-search"><MagnifyingGlass size={23} />البحث عن الطلب</a>
+                <Link to="/fulfillment-v2?stage=completed"><CheckCircle size={23} />طلبات تم التنفيذ</Link>
+                <Link to="/fulfillment-v2?stage=in_progress"><Package size={23} />طلبات قيد التنفيذ</Link>
+            </nav>
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm font-bold leading-6 text-violet-950">
                 التغليف ليس مرحلة مستقلة؛ يتم هنا فقط إذا احتاجه المنتج، ثم ينتقل الطلب إلى <strong>تم التنفيذ</strong>.
             </div>
