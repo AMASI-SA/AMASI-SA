@@ -1,49 +1,41 @@
-# Assembly board recovery — WIP
+# Assembly board recovery — release prepared; production unchanged
 
-Scope: old native in-progress/completed boards; keep the Mezan WebView experimental.
+Task branch: codex/assembly-board-recovery-20261022. Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1460
+This status is recorded on the documentation-only branch codex/assembly-board-release-status-20261023 to preserve the frozen deployment chain. Do not deploy this documentation branch.
 
-Mobile checkpoint: AMASI-SA/amasi-mobile, codex/assembly-board-recovery-20261022,
-a8542ff3cbb6a762d1ba03447c6e2ed391509ba9, PR 294.
-Component regression fails on build 54 and passes after the spinner settlement fix.
-Explicit search button verified through the actual TSX component harness.
-Android 55 candidate: 08ceebcee1d24939b005e731c58db8cc8413af9f, version 1.0.40.
-Exact-source Mobile CI 39995945207 and Shipping print latency 39995946067 passed.
-Expo build 9191f7b2-fe8b-4485-bfc1-09eae1f6d80a started from that immutable source
-with mezan-web-assembly-pilot / production / Android / internal APK / no submission.
-Last observed queued; do not start a duplicate build. Final build status is tracked
-in mobile PR 294 comments. No new installable APK confirmed yet.
+Frozen v5 chain:
+- Base J: 571e1704fc823c681c61b2f31de1db4f5ea5f55a
+- Source A: 517868b0e1ea3c50466f59b992b12fe29c7e9a43
+- Intent-only B: d2c8d78219b5d0d698f2fd872ac8c2355a7b8257
+- Intended release: rg5-6347bb1f417fabf1eed44007799d57cffc294562d91b6b899f6116e0a34800f7
+- A...B is one commit and only release/release-intent-v5.json. Do not squash/rebase.
 
-Backend base: 571e1704fc823c681c61b2f31de1db4f5ea5f55a.
-Candidate removes sequential per-order reads via existing tenant-scoped get_orders.
-Search excludes unrelated workflows before loading details, preserving the existing
-5000-workflow window, substring matching, eligibility, sorting and paging.
-Tests add a one-bulk-read search contract and retain local/legacy/cancelled cases.
-Source checkpoint: 5853bcdf552c6a9ef870e8fee7668745afdb5911, PR 1460.
-Python compile and diff checks passed. Local board tests: 52 passed, 13 skipped,
-22 subtests passed. Exact-source Review Completion Resumable 39846412019 passed
-with real Mongo; 13 other functional/security workflow runs passed except
-Security Gate 39846412985, which failed on existing dependency advisories.
+Behavior: old native assembly boards now have a candidate server optimization using existing tenant-scoped get_orders instead of sequential per-order reads. Search narrows workflows before downstream piece/detail reads. Existing 5000-workflow window, substring matching, eligibility, ordering and paging remain. No order/status/financial writes.
+Changed source: backend/preparation_piece_operations.py and backend/tests/test_review_local_downstream.py.
 
-Dependency remediation candidate: black 26.10.1, certifi 2026.10.19, Pillow 13.0.0
-in both canonical and release backend requirements; Vite 8.2.4 and follow-redirects
-1.16.1 with matching registry integrity metadata in the frontend lock. Existing
-compatible PostCSS 8.5.26 / Rolldown 1.2.6 resolutions are retained. The governed
-runtime test fixture reads the actual Vite declaration. Security Gate now also
-runs existing image/PDF compatibility tests under its audited dependency closure.
+Release audit remediation: Black 26.10.1, certifi 2026.10.19, Pillow 13.0.0 in byte-identical backend/requirements.txt and scripts/release_backend_requirements.lock; Vite 8.2.4 and follow-redirects 1.16.1 in frontend declarations/lock. Compatible PostCSS 8.5.26 and Rolldown 1.2.6 retained. Governed runtime fixture derives Vite version. Security Gate runs existing image/PDF regressions with its audited dependency graph. No security exception or weakened threshold.
 
-Verification: strict pip-audit of the updated public requirements exited 0 with
-no known vulnerabilities. Local Pillow 13 image/PDF suites: 74 passed, 1 Mongo
-skip, initially 2 missing-python-multipart failures; after installing the declared
-python-multipart pin, both affected tests passed. Google image controls: 5 passed.
-Board/shipping controls with the updated image runtime: 103 passed, 46 Mongo skips,
-22 subtests passed. Certifi trust bundle loaded; mirrored backend locks match.
-The updated frontend frozen install/audit and exact-source CI remain pending.
-An independent read-only dependency candidate review is in progress.
+Verification completed:
+- All 17 applicable workflows SUCCESS on A and B; TikTok candidate skipped by design.
+- B readiness run 39998969599: backend preflight, frontend build and clean-clone Host Node 20 adapter rehearsal (job 120570685411) SUCCESS. Reviewed identity, package boundary, isolated runtime and health verified. Manual redeploy job skipped; this is not publication.
+- Exact-source real-Mongo board/search tests passed; shipping boundary and auth/passkey workflows passed.
+- Security Gate strict pip-audit: no known vulnerabilities. Frontend production audit: zero blocking findings/no exceptions. 287 frontend suites and 1949 tests passed.
+- Canonical image/PDF: 76 passed, one Mongo-dependent case skipped; Google image: 5 passed.
+- Local board/shipping: 103 passed, 46 Mongo-dependent skips, 22 subtests. Local governed runtime tests: 28 passed. Local two clean frontend builds matched the CI-reviewed artifact hashes.
+- Local full-adapter rehearsal was refused due missing historical Git parent b4e5d7a39951f82dff3010f33ade210714bd70c8 in the reconstructed clone; no guard was bypassed. The clean-clone CI rehearsal is the completed full-adapter evidence.
+- Independent read-only candidate review completed; no concrete introduced regression found. Some older CI-only Pillow pins remain; do not count those jobs as Pillow 13 coverage.
 
-Production changed: no. Release Guard not started. No financial/order writes.
-Next: complete candidate dependency review and exact-source CI; prepare source A
-and intent-only B using protocol v5. Pillow 13 requires Python >=3.11; the actual
-deployed Backend interpreter must be verified before publication (CI/local
-interpreter evidence is insufficient). Deployment access
-must be restored through the authorized login flow; earlier declined login is not
-permission to retry silently. Web session persistence/SSO remains separate pending work.
+Observed production (read-only): live health source bc85eddf3d5c92b370c2f59d17ac79946763863e, release rg5-331c2f714358404dd155a58527d8a5334821b302ee292459c2c5ca11a9eec50d. Production Git branch remains J above. No deployment or release lease started by this task.
+Blockers: Emergent deployment access; actual backend interpreter must be proven Python >=3.11 for Pillow 13. CI 3.11/local 3.12 are not production proof. Earlier declined login must not be retried silently.
+Next safe action: restore authorized deployment access, verify actual runtime, recheck production base/active lease, then follow AGENTS.md v5 prepare/prepublish/publish and three consecutive production verifications/close. Retain prior verified deployment for rollback. Do not deploy this status branch.
+
+Android 55 (1.0.40) is now installable:
+https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/9191f7b2-fe8b-4485-bfc1-09eae1f6d80a
+Expo visibly reports Succeeded / APK / Install on 2026-10-23.
+Compiled mobile source: 08ceebcee1d24939b005e731c58db8cc8413af9f; final documentation/proof checkpoint: b55ed514fd92130673d4d72dfd9a05c5f40fc6ff.
+Mobile CI 39995945207 and shipping CI 39995946067 passed.
+Native spinner settlement and explicit search are fixed in this APK. Physical phone acceptance still pending. The Mezan WebView stays experimental; shared login/session persistence remain unresolved.
+Mobile PR: https://github.com/AMASI-SA/amasi-mobile/pull/294
+
+Issue #1006 rejects further comments at its limit; PR 1460 is the fallback continuation ledger and links this status checkpoint.
+Production server changed: no. Android internal APK availability: yes.
