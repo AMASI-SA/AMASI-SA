@@ -1,0 +1,28 @@
+{
+  "status": "PREVIEW_OPERATIONAL_PAGES_VERIFIED_TRAINING_FIXTURES_EMPTY",
+  "source_sha": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
+  "workflow_run": 40115151629,
+  "artifact_id": 12567503537,
+  "bundle_sha256": "502b04b17d0b52468e4f0f3d919e05fa75bc53891b995fd706ec51d1b7271ff3",
+  "verified_manifest_files": 4529,
+  "preview_url": "https://salla-analytics.preview.emergentagent.com/operational-balances",
+  "runtime": "/opt/mezan-training-20261024",
+  "database": "mz2_uat_1128_20260921",
+  "mongo_host": "127.0.0.1:27018",
+  "source_and_frontend_identity_match": true,
+  "existing_browser_session_verified": true,
+  "opening_balances_count": 0,
+  "actual_business_writes": false,
+  "external_network": "denied",
+  "automatic_workers": "disabled",
+  "stock_writer": "closed",
+  "limitations": [
+    "No eligible bank entities in isolated training database",
+    "No catalog products or warehouse locations in isolated training database",
+    "No opening balance or stock approval exercised",
+    "Production release identity intentionally absent",
+    "Permanent local bundle download pending due network timeout"
+  ],
+  "rollback": "Restore exact supervisor.before only if current config matches supervisor.after and Release Guard inactive. Prior runtime and signing key preserved.",
+  "verified_at": "2026-10-24T18:31:12.070530+00:00"
+}
