@@ -1,5 +1,5 @@
 import api from "../lib/api";
-import { getSourceAdditions, reviewSourceAddition } from "./sourceAdditionReview";
+import { getSourceAdditions, reviewSourceAddition, sourceAdditionError } from "./sourceAdditionReview";
 jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
 const data = { revision: 2, source_fingerprint: "fingerprint", items: [{ order_item_id: "salla:A:line", eligible: true, reviewed: false }] };
 beforeEach(() => jest.resetAllMocks());
@@ -18,4 +18,10 @@ test("POST carries only concurrency fences", async () => {
 test("mismatched POST result cannot report success", async () => {
     api.post.mockResolvedValue({ data: { ok: true, order_item_id: "wrong" } });
     await expect(reviewSourceAddition("A", "line", data)).rejects.toThrow();
+});
+test("inventory rejection is not presented as a stale page", () => {
+    const error = { response: { status: 409, data: { detail: { code: "component_insufficient_stock" } } } };
+    expect(sourceAdditionError(error)).toContain("مخزون أحد مكونات التجهيز غير كافٍ");
+    error.response.data.detail.code = "component_plan_conflict";
+    expect(sourceAdditionError(error)).toContain("لم يتم اعتماد المنتج");
 });
