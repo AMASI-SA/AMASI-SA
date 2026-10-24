@@ -1,12 +1,45 @@
 {
-  "task": "assembly-salla-link-parity-20261024",
-  "branch": "codex/assembly-navigation-link-20261024",
-  "base": "9df7ed03222bd7adcf3a8dff00c56a901a90e4ca",
-  "root_cause": "Assembly required numeric /orders/id URL and duplicate raw provider IDs; review uses stored opaque /orders/order/token URL. Live review DOM confirmed opaque URL shape and assembly lacked link.",
-  "changes": "Reuse review tenant-scoped saved-link reader; accept both official numeric and opaque admin URL shapes; preserve Android Chrome fallback and readiness/printing checks. Remove fixed mobile assembly navigation and its bottom spacing; retain in-page order search.",
-  "verification": "Backend 57 tests passed; frontend 54 tests passed including visible clickable opaque link while printing is locked; no dependency changes",
-  "production_changed": false,
-  "next": "Finalize focused tests, checkpoint PR, CI and governed release, then verify live assembly link",
-  "status": "Combined Salla link fix and footer removal; not deployed",
-  "supersedes_pr": 1474
+  "task": "assembly-navigation-link-20261024",
+  "repository": "AMASI-SA/AMASI-SA",
+  "source_branch": "codex/assembly-navigation-link-20261024",
+  "handoff_branch": "codex/assembly-navigation-handoff-20261024",
+  "source_sha": "eda00f9f71015c407972e866bbb1adeea8f341e8",
+  "intent_sha": "47daac36ee8e791c13bbad1d91b78366d17b275f",
+  "deployment_sha": "4e9695365cab73f2ed11fe05fec7427eb51d27b7",
+  "pr": 1475,
+  "platform_release": "638a0f1",
+  "rollback_platform_release": "d0a12b3",
+  "release_id": "rg5-d182a2a1c87f281c2c2fadce9ed55c605300965c97f542a57419fc5376fc201b",
+  "status": "deployed_verified",
+  "production_changed": true,
+  "verification": {
+    "backend_tests": 57,
+    "frontend_tests": 54,
+    "ci": "all applicable passed",
+    "clean_clone_rehearsal_exit": 0,
+    "prepublish_exit": 0,
+    "production_verify_exit": 0,
+    "verified": true,
+    "checks": 3,
+    "guard_active": false,
+    "live_salla_link_visible": true,
+    "live_inpage_search_visible": true,
+    "live_assembly_footer_count": 0
+  },
+  "changes": [
+    "Use review tenant-scoped stored Salla admin URL, accept numeric and opaque URL paths",
+    "Preserve explicit Android Chrome intent with exact HTTPS fallback",
+    "Remove mobile assembly bottom navigation and spacing, retain in-page search"
+  ],
+  "limitations": [
+    "Native Android WebView-to-Chrome handoff and iOS external browser behavior not device-tested",
+    "Initial post-publish health probe HTTP 520 during startup; session recovered and subsequent complete verification passed"
+  ],
+  "preserved": [
+    "Dependency versions",
+    "Readiness and printing guards",
+    "Payment changes from PR1473",
+    "Unrelated Emergent files"
+  ],
+  "next": "No further deployment required. Device test Chrome handoff inside native app; investigate native WebView handling only if device reproduction fails."
 }
