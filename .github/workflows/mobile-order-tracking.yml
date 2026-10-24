@@ -7,6 +7,11 @@ on:
       - "backend/mobile_app_permissions.py"
       - "backend/mobile_app_request_context.py"
       - "backend/server.py"
+      - "backend/order_tracking_notes_routes.py"
+      - "backend/instruction_edit_flow.py"
+      - "backend/tests/test_instruction_orders_permission.py"
+      - "backend/tests/test_instruction_edit_flow.py"
+      - "backend/tests/test_operational_instruction_notifications.py"
       - "backend/tests/test_mobile_order_tracking.py"
       - ".github/workflows/mobile-order-tracking.yml"
   workflow_dispatch:
@@ -66,6 +71,9 @@ jobs:
           tests/test_mobile_app_request_context.py
           tests/test_mobile_app_manager_role.py
           tests/test_mobile_app_permission_owner_resolution.py
+          tests/test_instruction_orders_permission.py
+          tests/test_instruction_edit_flow.py
+          tests/test_operational_instruction_notifications.py
           --junitxml=tracking-results.xml
       - name: Require real tracking tests without skips
         run: |

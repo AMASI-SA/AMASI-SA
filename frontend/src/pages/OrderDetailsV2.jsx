@@ -917,7 +917,7 @@ export default function OrderDetailsV2() {
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />
             <BundleOperationalPanel orderNumber={openedOrderNumber} canReceive={userHasPermission(user, "inventory.preparation.receive")} canChangeSource={userHasPermission(user, "products.cost.write")} />
-            {userHasPermission(user, "customer_intelligence.inbox.read") && openedOrderNumber && (
+            {(userHasPermission(user, "orders.view") || userHasPermission(user, "customer_intelligence.inbox.read")) && openedOrderNumber && (
                 <OrderTrackingNotesPanel key={openedOrderNumber} orderNumber={openedOrderNumber} embedded />
             )}
 
