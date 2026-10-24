@@ -1,5 +1,6 @@
 """Outbox/account tests with real Mongo query semantics and no provider writes."""
 import os
+import base64
 import unittest
 from datetime import timedelta
 from unittest.mock import patch
@@ -97,6 +98,21 @@ class PushTests(unittest.IsolatedAsyncioTestCase):
     def test_subscription_rejects_local_and_credentialed_urls(self):
         for endpoint in ("http://127.0.0.1/push", "https://localhost/push", "https://fcm.googleapis.com.attacker.test/push", "https://user:pass@fcm.googleapis.com/push", "https://fcm.googleapis.com:8443/push"):
             with self.assertRaises(ValueError): validate_subscription({"endpoint": endpoint})
+
+    def test_subscription_keys_accept_padding_and_reject_oversized_input_before_decode(self):
+        keys = {name: base64.urlsafe_b64encode(bytes(length)).decode()
+                for name, length in (("p256dh", 65), ("auth", 16))}
+        value = {"endpoint": "https://fcm.googleapis.com/push", "keys": keys}
+        self.assertEqual(validate_subscription(value)["keys"], keys)
+        value["keys"] = {name: raw.rstrip("=") for name, raw in keys.items()}
+        self.assertEqual(validate_subscription(value)["keys"], value["keys"])
+        for name in keys:
+            with self.subTest(name=name):
+                value["keys"] = {**keys, name: "-" * 100000 + "!"}
+                with patch("operational_push.base64.urlsafe_b64decode", wraps=base64.urlsafe_b64decode) as decode:
+                    with self.assertRaisesRegex(ValueError, "invalid_push_key"):
+                        validate_subscription(value)
+                    self.assertTrue(all(len(call.args[0]) <= 88 for call in decode.call_args_list))
 
     async def test_expo_ticket_is_not_delivery_proof(self):
         await enqueue_operational_push(self.db, recipient_id="staff", event_id="event")
