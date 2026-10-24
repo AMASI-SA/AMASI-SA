@@ -1,26 +1,7 @@
-# Source addition stage policy — WIP, not verified or deployed
+# Source addition stage policy and immutable notice
 
-Owner clarified on 2026-10-24 that prior products were all assigned, but Salla
-and the order details badge still show pending review. Order number is needed
-for read-only examination of its actual workflow, approval proof and allocations.
+Owner authorized reviewed/in_progress internal stages, hidden pending-review actions and Arabic blocked notices. Read-only live order inspection confirmed a prior review event and two allocated products while Salla remains pending and workflow UI shows reviewed. No business data changed.
 
-Verified source inspection: local completion intentionally leaves provider
-status unchanged; order details displays status_native/status, not workflow.stage.
-Thus that badge alone cannot determine whether an order is internally reviewed.
+Implementation accepts the existing provider execution envelope, retains permission/proof/component/original-line checks, appends under revision/stage CAS without changing parent stage. First accepted snapshot detecting a new source line records internal stage and observation time atomically with source snapshot. Replay retains first observation. Small note in both clients persists after item review. Historical records without observations explicitly say the stage was not recorded; never guess.
 
-Requested behavior: enable new-line review for internal reviewed/in_progress;
-hide additions action for truly pending review; show an explanation for other
-ineligible stages without asserting an unverified historical addition time.
-
-WIP broadens the server workflow gate while retaining the existing provider
-execution envelope, original-line checks, review proof, component checks, owner
-transaction and revision fence. The conditional append and event preserve the
-observed workflow stage. Web renders a stage-block explanation without a button.
-Companion mobile WIP consumes the optional Arabic blocked_message.
-
-Validation: git diff --check passed. No runtime tests yet. No claim of fix.
-Next: obtain order number, inspect actual workflow read-only, add and execute
-reviewed/in_progress/pending/terminal regression matrix, and validate both UI
-clients. Do not publish this WIP. Existing production 4e4e064 and APK57 unchanged.
-Recovery switch and existing rollback references retained. Issue1006 is at its
-comment limit; this task branch/status file is the continuation checkpoint.
+Verification: diff check passed; fresh CI pending. Added real-Mongo stage/pending/terminal and immutable history cases plus web/mobile rendering regressions. Production moved to db2cb312 (phone design PR1469) during this task: preserve it during integration, do not overwrite it. No publication/release lease/APK by this correction yet. Existing recovery switch retained. Next: run CI, review failures, integrate current production and freeze a new v5 release before any publication. Mobile remains stacked on APK57. Issue1006 comment capacity exceeded; use task PR/status as ledger.

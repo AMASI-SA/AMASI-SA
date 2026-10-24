@@ -22,6 +22,34 @@ from review_local_policy import (
 
 WORKFLOWS = "order_review_workflows"
 EVENTS = "order_review_events"
+STAGE_LABELS = {"reviewed": "تمت المراجعة", "in_progress": "قيد التنفيذ",
+                "ready_to_ship": "جاهز للشحن", "completed": "تم التنفيذ",
+                "shipped": "جاري التوصيل", "delivered": "تم التوصيل",
+                "cancelled": "ملغي", "canceled": "ملغي"}
+
+
+def addition_observations(previous, payload, workflow, observed_at):
+    """Freeze first accepted observation, never infer history from today's stage."""
+    saved = deepcopy(previous.get("source_addition_observations") or {})
+    raw = (previous.get("raw_by_source") or {}).get("salla_direct") or {}
+    old_items, new_items = raw.get("items"), payload.get("items")
+    if (not workflow.get("reviewed_at") or not isinstance(old_items, list)
+            or not old_items or not isinstance(new_items, list)):
+        return saved
+    old_ids = {str(row.get("id") or "") for row in old_items if isinstance(row, dict)}
+    for row in new_items:
+        identity = str(row.get("id") or "") if isinstance(row, dict) else ""
+        if identity and identity not in old_ids:
+            saved.setdefault(digest(identity), {"source_item_id": identity,
+                "stage": workflow.get("stage"), "observed_at": observed_at})
+    return saved
+
+
+def addition_notice(observation):
+    label = STAGE_LABELS.get((observation or {}).get("stage"))
+    if label:
+        return f"أُضيف بعد أن أصبح الطلب: {label} (عند وصول الإضافة إلى ميزان)."
+    return "أُضيف بعد مراجعة الطلب؛ الحالة وقت وصول الإضافة غير مسجلة."
 
 
 def source_addition_review_enabled():
@@ -139,7 +167,9 @@ async def context(db, owner, number):
         rows.append({"order_item_id": item.order_item_id, "reviewed": reviewed,
                      "eligible": not reviewed and item_reason is None,
                      "blocked_reason": None if reviewed else item_reason,
-                     "blocked_message": blocked_message})
+                     "blocked_message": blocked_message,
+                     "addition_notice": addition_notice((source.get("source_addition_observations") or {}).get(
+                         digest(str(item.source.source_order_item_id or ""))))})
     return {"revision": int(workflow.get("revision") or 0), "source_fingerprint": fingerprint,
             "items": rows}, order, workflow, identities
 

@@ -1343,9 +1343,12 @@ async def persist_component_source_snapshot(
             version == previous_version and previous_cancelled and not cancelled
         )):
             return {"stale": True, "created": False}
+        from source_added_item_review import addition_observations
+        review_workflow = await scoped["order_review_workflows"].find_one(query) or {}
+        observations = addition_observations(current, payload, review_workflow, _now())
         result = await persist(scoped)
         revision = int(watermark.get("revision") or 0) + 1
-        await scoped.unified_orders.update_one(query, {"$set": {"g47_salla_snapshot": {
+        await scoped.unified_orders.update_one(query, {"$set": {"source_addition_observations": observations, "g47_salla_snapshot": {
             "source_updated_at": version, "cancelled": cancelled,
             "revision": revision, "component_pending": True,
         }}})
