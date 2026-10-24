@@ -49,7 +49,7 @@ def public_instruction(row: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in row.items()
-        if key not in {"_id", "user_id"}
+        if key not in {"_id", "user_id", "edit_baseline", "edit_requested"}
     }
 
 

@@ -46,6 +46,14 @@ def _card(instruction, item, piece):
     for change in changes:
         before[change["field"]] = change.get("previous", "")
         requested[change["field"]] = change.get("requested", "")
+    before_item = (instruction.get("edit_baseline") or {}).get(iid)
+    requested_item = (instruction.get("edit_requested") or {}).get(iid)
+    if instruction.get("edit_flow") == 1 and before_item:
+        before = dict(before_item.get("options_normalized") or {})
+        requested = dict((requested_item or before_item).get("options_normalized") or {})
+        before["اسم المنتج"] = before_item.get("name") or ""
+        requested["اسم المنتج"] = (requested_item or before_item).get("name") or ""
+        changes = [{"field": key} for key in dict.fromkeys([*before, *requested]) if before.get(key) != requested.get(key)]
     pid = text(piece.get("piece_id"))
     barcode = BARCODE_PREFIX + pid if parse_preparation_piece_barcode(pid) else ""
     image = ""
@@ -63,7 +71,10 @@ def _card(instruction, item, piece):
         "quantity": 1 if pid else item.get("quantity", 1),
         "before_options": before, "requested_options": requested,
         "changed_fields": [change["field"] for change in changes],
-        "changes_source": "requester_supplied",
+        "changes_source": "salla_snapshot" if instruction.get("edit_flow") == 1 else "requester_supplied",
+        "revision_sent": bool(requested_item),
+        "before_image_url": text((before_item or {}).get("image_url")),
+        "requested_image_url": text((requested_item or {}).get("image_url")),
         "baseline_source": "preparation_snapshot" if piece else "current_order",
         "barcode_value": barcode, "barcode_image": image,
     }
