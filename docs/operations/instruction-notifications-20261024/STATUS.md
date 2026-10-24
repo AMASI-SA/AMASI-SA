@@ -48,3 +48,8 @@ Next safe action: finish the in-progress backend/native audits, rerun the combin
 - Final web integration: 42 tests passed. New per-piece stage regression first reproduced premature submission by a shared assignee, then passed after filtering current tasks and enforcing the filter on submission/comments. Future-stage creator comments no longer notify the employee before arrival. Focused task/comment suites: 32 passed.
 - User explicitly authorized publication with rollback. Publication remains blocked on Firebase configuration/device evidence and normal release gates; no lease, merge to production, APK build, or deployment performed.
 - GitHub Issue #1006 reached 2500-comment capacity; task PR and this status file are the continuation ledger.
+
+- Backend/web draft: https://github.com/AMASI-SA/AMASI-SA/pull/1471. Final integrated local backend run: 90 passed, 13 subtests (Junit saved in local evidence bundle), including source-addition and real Mongo assembly tests.
+- Remote baseline snapshots preserved: backend `codex/instructions-baseline-web-20261024`; mobile `codex/instructions-baseline-staff58-20261024` and `codex/instructions-baseline-courier12-20261024`.
+- Initial CI exposed missing WebCrypto in the comment test environment (2002 other web tests passed); test now installs/restores its explicit crypto fixture. Mobile VM harness integration is being corrected without changing authentication runtime.
+- Release guard rejects merge-history intent changes even when final intent bytes match. Preserve the pre-linearization branch, then replay only this feature's commits onto current production before a new release rehearsal; never weaken the guard or freeze an intent for the wrong source.
