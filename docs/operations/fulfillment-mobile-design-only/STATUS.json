@@ -1,22 +1,29 @@
 {
   "task": "fulfillment-mobile-design-only",
-  "status": "WIP: synthetic visual QA in progress; production unchanged",
-  "branch": "codex/fulfillment-mobile-design-only-20261024",
-  "base": "4e4e064ca9855c3a626968df55ef844de77de947",
-  "scope": "Phone presentation only; no dependency or operational changes",
-  "verification": {
-    "focused_tests": "73 passed / 3 suites",
-    "diff_check": "passed",
-    "shared_guard": "active=false observed 2026-10-24",
-    "live_source": "Last observed d34eb6f19b0df2da587a70e42b2893984580b7c5; refresh before release",
-    "live_artifact": "303987b615fb30aed8dadaf610f2e002ece862164ffadd9e4bd90f11ee17db38",
-    "reconciled_tests": "73 passed / 3 suites on latest production base before final CSS refinements",
-    "visual": "Home six tiles and initial review detail rendered at 360/390/430px; review table heading/date refinements pending recheck"
+  "status": "Release candidate verified; awaiting final B CI then authorized merge and publish",
+  "canonical_release_branch": "codex/fulfillment-mobile-release-20261024",
+  "canonical_pr": 1469,
+  "source_A": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
+  "intent_B": "92e694afc79c28c6f292b7cd2ad8eb10730361b0",
+  "production_base": "4e4e064ca9855c3a626968df55ef844de77de947",
+  "live_before": {
+    "platform_version": "9e3a61f",
+    "source": "5e99dd93f52f04f10ff4a67c49e3938a29228941"
   },
+  "verification": {
+    "focused_tests": "73 passed /3 suites",
+    "visual": "Synthetic actual components at 360/390/430px: home, queue, detail and assembly; no live writes or print",
+    "builds": "GitHub and shared-host two-clean-build output and full intent bytes identical",
+    "intent_sha256": "b3343695f817c0c05065aebbaec0e12eae314c48faa752e4b7d51cfab94f1f5e",
+    "clean_clone": "Deployment adapter build passed, runtime identity equals reviewed intent; clean git status",
+    "rollback": "Reverse presentation patch --check passed on source A",
+    "guard": "active=false; shared HEAD=production base; unrelated .emergent/testing and deployer-agent-docs retained"
+  },
+  "runtime_release_id": "rg5-a8bd6020c3f27ba09c23c51e1a83eca7e5cf9eb0c62564d9070d3c60c15e3e21",
   "production_changed_by_this_task": false,
-  "next": "Verify compact review and assembly at 360/390/430px, then governed A/B build, intent-only commit and release",
-  "rollback": "Revert this isolated presentation change on a new branch; no data migration. Retain current production deployment before publication.",
-  "checkpoint": "b3360dadbdaa2310a71075a80a36a02fa013036e",
-  "pr": 1467,
-  "preview_blocker": "Production-auth preview unavailable; isolated actual-component fixture harness now renders phone home and review. No live writes."
+  "next": "Wait all B CI, merge PR1469 with merge commit (no squash/rebase), fast-forward shared /app after fresh inactive guard, materialize approved runtime, prepare/prepublish, Republish, require new Deployment Succeeded and 3 guard probes. Never publish old PR1458/1467.",
+  "notes": [
+    "Issue1006 read failed Transport closed; no issue message sent.",
+    "Preview authentication unavailable; synthetic QA used instead. Live authenticated layout acceptance pending."
+  ]
 }
