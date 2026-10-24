@@ -470,10 +470,11 @@ test('custody inventory navigation settles exact invoice only from selected cust
  await click('حفظ السداد');expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({source_account_type:'employee_custody',bank_id:'employee_custody1',allocations:[{obligation_id:'inventory-purchase:inv',amount:'10'}]}));
 });
 
-test.each(['prepaid','postpaid'])('advertising %s only offers approved wallet mode',async mode=>{
+test.each(['prepaid','postpaid','hybrid'])('advertising %s only offers approved wallet mode',async mode=>{
  const previous=api.entities.getMockImplementation();api.entities.mockImplementation(kind=>kind==='ad_account'?Promise.resolve({items:[{id:'ad_account1',name:'حساب إعلاني',currency:'SAR',funding_mode:mode}]}):previous(kind));
  await render(<DailyMovements cards/>);await cardClick('الإعلانات');await cardClick('حساب إعلاني');
- const operation=host.querySelector('select');expect([...operation.options].some(o=>o.value==='wallet_funding')).toBe(mode==='prepaid');
+ const operation=host.querySelector('select');expect([...operation.options].some(o=>o.value==='wallet_funding')).toBe(mode!=='postpaid');
+ if(mode==='hybrid')expect(operation.querySelector('option[value="payment"]').textContent).toBe('سداد المستحق وشحن الزائد للمحفظة');
  if(mode==='prepaid')await input(operation,'wallet_funding');
  const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
  await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'30');await click('حفظ الحركة');
@@ -541,4 +542,14 @@ test('opening explains separate quantity and valuation inventory path',async()=>
  await render(<OpeningBalances context={{opening_count:0}} onFinished={jest.fn()}/>);
  expect(host.textContent).toContain('لا تُكرر قيمته هنا');
  expect(api.opening).not.toHaveBeenCalled();
+});
+
+test('wallet-first account sends debt-first payment without invoice allocation',async()=>{
+ const previous=api.entities.getMockImplementation();
+ api.entities.mockImplementation(kind=>kind==='ad_account'?Promise.resolve({items:[{id:'operational-ad:one',name:'محفظة سناب',currency:'SAR',funding_mode:'hybrid',funding_policy:'wallet_first'}]}):previous(kind));
+ await render(<DailyMovements cards/>);await cardClick('الإعلانات');await cardClick('محفظة سناب');
+ expect([...host.querySelector('select').options].map(o=>o.value)).toEqual(['payment']);
+ const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
+ await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'80');await click('حفظ الحركة');
+ expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_id:'operational-ad:one',direction:'outgoing',kind:'payment',amount:'80',allocations:[]}));
 });

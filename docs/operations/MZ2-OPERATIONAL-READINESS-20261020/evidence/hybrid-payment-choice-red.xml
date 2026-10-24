@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.352" timestamp="2026-10-20T16:01:14.821663+03:00" hostname="أماسي"><testcase classname="backend.tests.test_operational_balance_hybrid_payment_choice" name="test_tiktok_wallet_funding_and_debt_settlement_are_distinct_and_replay_safe" time="0.182"><failure message="Failed: DID NOT RAISE &lt;class 'fastapi.exceptions.HTTPException'&gt;">backend\tests\test_operational_balance_hybrid_payment_choice.py:71: in test_tiktok_wallet_funding_and_debt_settlement_are_distinct_and_replay_safe
+    run(scenario)
+backend\tests\test_operational_balance_integration.py:48: in run
+    return asyncio.run(execute())
+           ^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py:196: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py:119: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:726: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+backend\tests\test_operational_balance_integration.py:43: in execute
+    yieldless = await fn(db)
+                ^^^^^^^^^^^^
+backend\tests\test_operational_balance_hybrid_payment_choice.py:38: in scenario
+    with pytest.raises(HTTPException) as error:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE &lt;class 'fastapi.exceptions.HTTPException'&gt;</failure></testcase></testsuite></testsuites>
