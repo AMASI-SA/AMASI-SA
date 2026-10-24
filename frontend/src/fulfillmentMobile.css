@@ -61,6 +61,7 @@
 
 @media (max-width: 767px) {
   .review-mobile-dialog .review-mobile-content { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 10px; }
+  .review-mobile-dialog .review-mobile-content > :not([hidden]) ~ :not([hidden]) { margin-top: 0; }
   .review-mobile-content > * { grid-column: 1 / -1; margin-top: 0; min-width: 0; }
   .review-mobile-content .review-customer-panel, .review-mobile-content .review-payment-panel { grid-column: auto; padding: 10px; min-width: 0; }
   .review-mobile-content .review-payment-shipping { display: contents; }
