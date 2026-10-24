@@ -14,6 +14,10 @@ on:
       - "backend/tests/test_shipping_pending_snapshot_recovery.py"
       - "backend/tests/test_salla_sync_component_snapshot.py"
       - "backend/order_review*.py"
+      - "backend/source_added_item_review.py"
+      - "backend/stock_component_consumption_service.py"
+      - "backend/tests/test_source_added_item*.py"
+      - "backend/tests/test_added_item_component_stock.py"
       - "backend/review_local_policy.py"
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
@@ -110,6 +114,10 @@ jobs:
       - name: Run local approval and retained provider contract regressions
         run: >-
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short
+          tests/test_source_added_item_review.py
+          tests/test_source_added_item_catalog.py
+          tests/test_source_added_item_ready_coverage.py
+          tests/test_added_item_component_stock.py
           tests/test_review_local_completion.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
@@ -172,7 +180,11 @@ jobs:
                   confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
                       "test_review_completion_confirmation.ConfirmationTests")]
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
-                  for suite, minimum in (("test_review_local_completion.LocalCompletionTests", 16),
+                  for suite, minimum in (("test_source_added_item_review.SourceAdditionReviewTests", 12),
+                                         ("test_source_added_item_catalog", 9),
+                                         ("test_source_added_item_ready_coverage", 14),
+                                         ("test_added_item_component_stock", 9),
+                                         ("test_review_local_completion.LocalCompletionTests", 16),
                                          ("test_assembly_completion_delivery.DeliveryTests", 11),
                                          ("test_assembly_print_completion.PrintCompletionTests", 15),
                                          ("test_assembly_completion_legacy_readback.LegacyCompletionTests", 28),
@@ -194,7 +206,8 @@ jobs:
                                          ("test_assignment_single_post_transport.MongoSinglePostTests", 7),
                                          ("test_review_catalog_eligibility.CatalogEligibilityTests", 11),
                                          ("test_review_local_queues.LocalReviewQueueTests", 3)):
-                      executed = [row for row in cases if row.attrib.get("classname", "").endswith(suite)]
+                      executed = [row for row in cases if (row.attrib.get("classname", "").endswith(suite)
+                          or (suite.count(".") == 0 and suite in row.attrib.get("classname", "").split(".")))]
                       assert len(executed) >= minimum, ("Missing local contracts", suite, len(executed))
               print(f"{name}: {len(cases)} executed cases; zero skips/failures/errors")
           PY

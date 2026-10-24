@@ -29,6 +29,8 @@ import {
 } from "@phosphor-icons/react";
 import { useOrder } from "../hooks/useOrders";
 import { useOrderItems } from "../hooks/useOrderItems";
+import { useSourceAdditionReview } from "../hooks/useSourceAdditionReview";
+import { SourceAdditionReviewButton, SourceAdditionReviewNotice } from "../components/orders/SourceAdditionReview";
 import {
     markOrderRead,
     refreshOrderFromSalla,
@@ -577,7 +579,7 @@ function PaymentCard({ payment, paymentMethod, orderStatus }) {
     );
 }
 
-function ProductCard({ item, index, currency }) {
+function ProductCard({ item, index, currency, additionReview }) {
     const [imageFailed, setImageFailed] = useState(false);
     const selections = collectItemSelections(item);
     const firstImage = Array.isArray(item.image_urls) ? item.image_urls[0] : "";
@@ -601,6 +603,7 @@ function ProductCard({ item, index, currency }) {
                 <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-slate-400">{image && !imageFailed ? <img src={image} alt="" className="h-full w-full object-cover" onError={() => setImageFailed(true)} /> : <Package size={42} />}</div>
                 <div className="min-w-0 flex-1">
                     <div className="text-xl font-extrabold leading-8 text-slate-950">{item.name || `منتج ${index + 1}`}</div>
+                    {additionReview && <SourceAdditionReviewButton itemId={item.order_item_id} review={additionReview} />}
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500"><span>SKU: <b className="num text-slate-700">{item.sku || "—"}</b></span><span>الباركود: <b className="num text-slate-700">{item.barcode || "—"}</b></span></div>
                     {selections.length > 0 && (
                         <div className="mt-5 overflow-hidden rounded-xl border border-slate-200" data-testid="order-v2-customer-options">
@@ -815,6 +818,13 @@ export default function OrderDetailsV2() {
     const returnLabel = returnTo.startsWith("/dashboard") ? "العودة إلى لوحة التحكم" : "العودة إلى الطلبات";
     const { order, loading, error, reload: reloadOrder } = useOrder(orderNumber);
     const { items, loading: itemsLoading, error: itemsError, reload: reloadItems } = useOrderItems(orderNumber);
+    const additionsRefreshKey = JSON.stringify(items.map((item) => [item.order_item_id, item.quantity, item.variant_id, item.options]));
+    const additionReview = useSourceAdditionReview({
+        orderNumber: String(orderNumber || "").trim(),
+        actorKey: String(user?.id || user?.email || ""),
+        enabled: userHasPermission(user, "orders.manage"),
+        refreshKey: additionsRefreshKey,
+    });
     const [returnEngineOpen, setReturnEngineOpen] = useState(false);
     const [refreshingFromSalla, setRefreshingFromSalla] = useState(false);
     const [refreshFromSallaError, setRefreshFromSallaError] = useState("");
@@ -843,6 +853,7 @@ export default function OrderDetailsV2() {
         try {
             const result = await refreshOrderFromSalla(openedOrderNumber, { force: true });
             await Promise.all([reloadOrder(), reloadItems()]);
+            await additionReview.reload();
             setRefreshFromSallaMessage(
                 result?.address_found
                     ? "تم تحديث الطلب والعنوان من سلة."
@@ -900,7 +911,8 @@ export default function OrderDetailsV2() {
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="order-v2-items">
                 <div className="mb-4 flex items-center gap-2"><div className="rounded-lg bg-violet-100 p-2 text-violet-700"><Package size={20} weight="fill" /></div><h2 className="font-extrabold text-slate-950">عناصر الطلب ({itemCount.toLocaleString("en-US")})</h2></div>
-                {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} />)}</div>}
+                <SourceAdditionReviewNotice review={additionReview} />
+                {itemsLoading ? <div className="flex min-h-40 items-center justify-center"><SpinnerGap size={28} className="animate-spin text-violet-600" /></div> : itemsError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><b>تعذّر تحميل عناصر الطلب</b><p className="mt-2 text-sm">{itemsError}</p><button type="button" onClick={reloadItems} className="mt-3 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white">إعادة المحاولة</button></div> : items.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">لا توجد عناصر مرتبطة بهذا الطلب.</div> : <div className="space-y-4">{items.map((item, index) => <ProductCard key={item.order_item_id || index} item={item} index={index} currency={currency} additionReview={additionReview} />)}</div>}
             </section>
 
             <FulfillmentExperimentPanel orderNumber={openedOrderNumber} items={items} />

@@ -240,12 +240,28 @@ class CatalogEligibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(await self.catalog_cards()), 3)
         self.assertEqual(await self.on_hand(), 18)
 
-    async def test_new_live_line_is_not_hidden_by_exhausted_snapshot(self):
+    async def test_new_live_line_survives_exhaustion_filter_but_requires_explicit_review(self):
         await self.seed_orders(1, 0)
         row = await self.db.unified_orders.find_one({"order_number": "catalog-0000"})
         item = {**row["raw_by_source"]["salla_direct"]["items"][0], "id": "new-line"}
         await self.db.unified_orders.update_one({"_id": row["_id"]},
             {"$push": {"raw_by_source.salla_direct.items": item}})
+        # Discovery must retain the order, but the old full-order review
+        # cannot authorize a later Salla line for preparation.
+        candidates = await self.db[completion.WORKFLOWS].aggregate(
+            catalog._available_workflow_pipeline({"order_number": "catalog-0000"}),
+        ).to_list(2)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(await self.catalog_cards(), [])
+        workflow = await self.db[completion.WORKFLOWS].find_one({"order_number": "catalog-0000"})
+        reviewed_line = {**workflow["items"][0],
+                         "order_item_id": "salla:catalog-0000:new-line",
+                         "source_item_id": "new-line", "source_addition": True,
+                         "review_status": "reviewed"}
+        # Catalog fixture for the explicit-review result. Real endpoint, audit,
+        # stock intake and assignment are covered by SourceAdditionReviewTests.
+        await self.db[completion.WORKFLOWS].update_one({"_id": workflow["_id"]},
+            {"$push": {"items": reviewed_line}, "$set": {"source_additions_reviewed": True}})
         self.assertEqual(len(await self.catalog_cards()), 2)
 
     async def test_unusual_identities_are_not_exhaustion_evidence(self):

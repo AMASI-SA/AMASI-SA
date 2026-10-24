@@ -1346,7 +1346,12 @@ async def _reconcile_order_stage(
     if batch_id:
         update["$addToSet"] = {"preparation_batch_ids": batch_id}
     transitioned = remaining == 0 and stage == "reviewed"
-    restored = remaining > 0 and stage == "in_progress"
+    # Later source additions have their own review/assignment queue. They
+    # never reopen the parent or reset the already-started pieces.
+    from reviewed_products_catalog import has_unreviewed_source_additions
+    preserve_started_order = (workflow.get("source_additions_reviewed") is True
+                              or has_unreviewed_source_additions(order_document, workflow))
+    restored = remaining > 0 and stage == "in_progress" and not preserve_started_order
     if transitioned:
         update["$set"].update({
             "stage": "in_progress",

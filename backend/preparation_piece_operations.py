@@ -2552,6 +2552,29 @@ def _local_assembly_coverage_complete(
     return True
 
 
+def _source_addition_assembly_coverage_complete(
+    order: Any, workflow: dict[str, Any], pieces: list[dict[str, Any]],
+) -> bool:
+    """Explicitly reviewed Salla additions always require physical queue work."""
+    snapshots = workflow.get("items") or []
+    if not snapshots or any(not row.get("order_item_id") for row in snapshots):
+        return not workflow.get("source_additions_reviewed")
+    states = {_text(row["order_item_id"]): row for row in snapshots}
+    prefix = f"salla:{_text(workflow.get('order_number'))}:"
+    required = []
+    for item in getattr(order, "items", None) or []:
+        identity = _text(item.order_item_id)
+        state = states.get(identity)
+        if identity.startswith(prefix) and state is None:
+            return False
+        if state and state.get("source_addition") is True:
+            if state.get("review_status") != "reviewed":
+                return False
+            required.append({"order_item_id": identity, "quantity": item.quantity,
+                             "requires_preparation": True})
+    return not required or _local_assembly_coverage_complete({"lines": required}, pieces)
+
+
 async def _assembly_progress(
     db: Any,
     *,
@@ -2595,10 +2618,11 @@ async def _assembly_progress(
         and _text(workflow.get("stage")) in {"ready_to_ship", "completed"}
     )
     local_decision = None
-    if workflow.get("completion_mode") is not None:
+    current_order = eligible_order
+    expanded_review = workflow.get("source_additions_reviewed") is True
+    if workflow.get("completion_mode") is not None or expanded_review:
         # Reuse the eligible order read in this same owner transaction. Piece
         # writes do not change its source; component consumption remains guarded.
-        current_order = eligible_order
         if current_order is None:
             current_order = await _current_assembly_order(
                 db, user_id=user_id, order_number=order_number,
@@ -2611,7 +2635,8 @@ async def _assembly_progress(
         physical = [row for row in pieces if not row.get("virtual_kind")]
         if (physical and workflow.get("stage") == "in_progress"
                 and shipping_address_is_complete(getattr(current_order, "shipping", None))
-                and _local_preparation_coverage_complete(current_order, workflow, physical)):
+                and _local_preparation_coverage_complete(current_order, workflow, physical)
+                and _source_addition_assembly_coverage_complete(current_order, workflow, pieces)):
             await db[WORKFLOWS].update_one({"user_id": user_id, "order_number": order_number,
                                           "stage": "in_progress"}, {"$set": {
                 "stage": "ready_to_ship", "ready_to_ship_at": now,
@@ -2627,10 +2652,16 @@ async def _assembly_progress(
                 review_items=list(workflow.get("items") or []),
                 operational_items=list(workflow.get("operational_items") or []),
             )
+            expanded_preparation_complete = expanded_review and _local_preparation_coverage_complete(
+                current_order, {**workflow, "fulfillment_decision": local_decision}, physical,
+            )
             completed = bool(
                 shipping_address_is_complete(getattr(current_order, "shipping", None))
                 and _local_assembly_coverage_complete(local_decision, pieces)
-                and (completed or local_decision.get("ready_to_ship") is True)
+                and _source_addition_assembly_coverage_complete(current_order, workflow, pieces)
+                and (not expanded_review or expanded_preparation_complete)
+                and (completed or local_decision.get("ready_to_ship") is True
+                     or expanded_preparation_complete)
             )
             if completed:
                 # A ready-piece retry can now finish local preparation after
@@ -2640,6 +2671,11 @@ async def _assembly_progress(
                     db, user_id=user_id, order_number=order_number,
                     stage="assembly_labeling", actor_id=actor_id, order_wide=True,
                 )
+    if completed:
+        if current_order is None:
+            current_order = await _current_assembly_order(db, user_id=user_id, order_number=order_number)
+        if current_order is not None:
+            completed = _source_addition_assembly_coverage_complete(current_order, workflow, pieces)
     batch_id = _text(
         workflow.get("shipping_print_batch_id")
     )
