@@ -1,5 +1,5 @@
 /* Phone presentation for the existing governed fulfillment actions. */
-.assembly-mobile-navigation, .fulfillment-home, .review-date-short { display: none; }
+.fulfillment-home, .review-date-short { display: none; }
 .assembly-mobile-products { display: contents; }
 @media (max-width: 767px) {
   [data-testid="fulfillment-v2-page"], .review-mobile-list, [data-testid="ready-to-ship-orders"] { min-width: 0; max-width: 100%; background: #faf7f8; }
@@ -41,7 +41,6 @@
   .review-detail-field > div:last-child { text-align: end; overflow-wrap: anywhere; }
   .review-mobile-close { position: sticky; bottom: 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); background: #faf7f8; border-top: 1px solid #e6dadd; }
   .review-mobile-close button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; background: white; border: 1px solid #e6dadd; border-radius: 16px; color: #590b20; font-weight: 800; }
-  [data-testid="ready-to-ship-orders"] { padding-bottom: 86px; }
   [data-testid="ready-to-ship-orders"] > div:first-child > div:first-child { display: none; }
   [data-testid="ready-to-ship-orders"] > div:first-child > div.grid { display: none; }
   [data-testid="ready-to-ship-orders"] form { padding: 12px; }
@@ -58,8 +57,6 @@
   .assembly-mobile-products button { font-size: 12px; padding-left: 5px; padding-right: 5px; }
   .assembly-mobile-products [data-testid="mark-assembly-piece-ready"] { background: #b75b00; }
   .assembly-mobile-products span { overflow-wrap: anywhere; }
-  .assembly-mobile-navigation { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); position: fixed; bottom: 0; right: 0; left: 0; z-index: 40; background: white; border-top: 1px solid #eadfe2; padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); box-shadow: 0 -3px 12px #590b2008; }
-  .assembly-mobile-navigation > * { min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 10px; font-weight: 700; color: #590b20; }
 }
 
 @media (max-width: 767px) {
