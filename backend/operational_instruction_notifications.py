@@ -192,6 +192,7 @@ async def ensure_instruction_tasks(db, merchant_id, instruction):
         "carrier_handoff": text(workflow.get("carrier_handoff_employee_id"))}
     records = [(piece_id, stage_assignments.get(((instruction.get("activated_piece_stages") or {}).get(piece_id) if instruction.get("task_protocol") or instruction.get("operational_hold") else None) or _piece_stage(piece, workflow), assignee), piece)
         for piece_id, assignee, piece in records]
+    courier_id = ""
     if "store_courier" in instruction.get("target_stages", []):
         assignment = await db["store_delivery_assignments"].find_one({"user_id": merchant_id,
             "$or": [{"order_id": instruction["order_number"]}, {"order_number": instruction["order_number"]}],
@@ -208,6 +209,12 @@ async def ensure_instruction_tasks(db, merchant_id, instruction):
         await db[TASKS].update_many({"merchant_id": merchant_id, "instruction_id": instruction["id"]}, {"$set": {"current": False}})
     for piece_id, assignee, piece in records:
         stage = ((instruction.get("activated_piece_stages") or {}).get(piece_id) if instruction.get("task_protocol") or instruction.get("operational_hold") else None) or (_piece_stage(piece, workflow) if piece else _current_stage(workflow, []))
+        if courier_id and assignee == courier_id and set(instruction.get("target_stages", [])) == {"store_courier"}:
+            stage = "store_courier"
+        activated = instruction.get("activated_piece_stages") or {}
+        current = stage in instruction.get("target_stages", []) or bool(
+            instruction.get("task_protocol") and instruction.get("activation_state") == "active"
+            and (instruction.get("activated_order") or not activated or piece_id in activated))
         if not instruction.get("task_protocol") and stage not in instruction.get("target_stages", []):
             continue
         stage_key = "" if instruction.get("task_protocol") else ":" + stage
@@ -218,7 +225,7 @@ async def ensure_instruction_tasks(db, merchant_id, instruction):
             "product_name": text(piece.get("product_name") or piece.get("item_name")),
             "assignee_id": assignee, "status": "pending", "created_at": datetime.now(timezone.utc),
         }}, upsert=True)
-        await db[TASKS].update_one({"id": identity}, {"$set": {"current": True}})
+        await db[TASKS].update_one({"id": identity}, {"$set": {"current": current}})
         # Reassignment transfers pending work, never another person's confirmation.
         if assignee:
             await db[TASKS].update_one({"id": identity, "status": "pending"},
@@ -229,7 +236,8 @@ async def ensure_instruction_tasks(db, merchant_id, instruction):
 async def scoped_instruction(db, merchant_id, instruction, actor_id, can_manage=False):
     can_manage = can_manage and text(instruction.get("created_by")) == actor_id
     tasks = await ensure_instruction_tasks(db, merchant_id, instruction)
-    visible = tasks if can_manage else [task for task in tasks if task.get("assignee_id") == actor_id]
+    visible = tasks if can_manage else [task for task in tasks if task.get("assignee_id") == actor_id
+        and (task.get("current", True) or task.get("status") == "submitted" or task.get("acknowledged_at"))]
     result = public_instruction(instruction)
     result.pop("resolution_intent", None)
     result["tasks"] = visible

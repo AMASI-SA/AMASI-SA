@@ -55,6 +55,19 @@ class InstructionNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.client = TestClient(self.app)
     def tearDown(self): self.context_patch.stop(); self.push_patch.stop(); self.client.close()
     def select(self, uid): self.user = self.db.raw.users.find_one({'id':uid})
+    async def test_same_actor_cannot_submit_another_piece_before_target_stage(self):
+        self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({'id':'n'}, {'$set': {'target_stages':['assembly_labeling']}})
+        self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p1'}, {'$set': {'status':'ready_for_assembly'}})
+        self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p2'}, {'$set': {'responsible_employee_id':'a'}})
+        self.db.raw.order_review_workflows.update_one({'order_number':'1'}, {'$set': {'claimed_by':'a'}})
+        row = self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one({'id':'n'})
+        tasks = await notifications.ensure_instruction_tasks(self.db, 'owner', row)
+        future = next(task for task in tasks if task['piece_id']=='p2')
+        response = self.client.post('/api/order-tracking-notes/instructions/n/tasks/submit', json={
+            'task_ids':[future['id']], 'confirmation':'removed_from_preparation', 'note':'not arrived'})
+        self.assertEqual(response.status_code, 403, response.text)
+        visible = self.client.get('/api/order-tracking-notes/instructions/n').json()['instruction']['tasks']
+        self.assertEqual([task['piece_id'] for task in visible], ['p1'])
     async def test_own_piece_projection_and_cross_actor_submission(self):
         r=self.client.get('/api/order-tracking-notes/instructions/n'); self.assertEqual(r.status_code,200,r.text)
         task=r.json()['instruction']['tasks'][0]

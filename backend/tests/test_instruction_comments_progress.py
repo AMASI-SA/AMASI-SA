@@ -30,6 +30,18 @@ class CommentProgressTests(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self): self.client.close()
 
+    async def test_future_piece_thread_stays_private_until_arrival(self):
+        self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({"id":"n"}, {"$set":{"target_stages":["assembly_labeling"]}})
+        row = self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one({"id":"n"})
+        tasks = await ensure_instruction_tasks(self.db, "owner", row)
+        own = next(task for task in tasks if task["assignee_id"] == "a")
+        path = f"/order-tracking-notes/instructions/n/tasks/{own['id']}/comments"
+        self.assertEqual(self.client.get(path).status_code, 404)
+        self.actor = self.db.raw.users.find_one({"id":"creator"})
+        response = self.client.post(path, json={"body":"future stage note", "client_request_id":"future_note_12345678"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.db.raw[NOTIFICATIONS].count_documents({"recipient_id":"a"}), 0)
+
     async def test_product_stop_does_not_block_sibling_products_at_any_preparation_stage(self):
         for scope, target in (("piece", "p1"), ("item", "i1")):
             row = {**self.row, "scope": scope, "target_ids": [target],

@@ -28,6 +28,9 @@ async def conversation_context(db, actor, instruction_id, task_id):
     task = next((row for row in tasks if row["id"] == task_id), None)
     if not task or actor["id"] not in {instruction.get("created_by"), task.get("assignee_id")}:
         raise HTTPException(404, detail={"code": "instruction_task_not_found"})
+    if actor["id"] != instruction.get("created_by") and not (
+            task.get("current", True) or task.get("status") == "submitted" or task.get("acknowledged_at")):
+        raise HTTPException(404, detail={"code": "instruction_task_not_found"})
     return merchant, instruction, task
 
 
@@ -40,7 +43,10 @@ async def notify_comment(db, row):
     task = await db[TASKS].find_one({"merchant_id": row["merchant_id"], "instruction_id": row["instruction_id"], "id": row["task_id"]})
     if not instruction or not task:
         return
-    targets = {instruction.get("created_by"), task.get("assignee_id")} - {None, "", row["author_id"]}
+    targets = {instruction.get("created_by")}
+    if task.get("current", True) or task.get("status") == "submitted" or task.get("acknowledged_at"):
+        targets.add(task.get("assignee_id"))
+    targets -= {None, "", row["author_id"]}
     await emit_instruction_notification(db, merchant_id=row["merchant_id"],
         instruction={**instruction, "notification_revision": row["id"]}, event_type="comment", recipient_ids=targets)
     await db[COMMENTS].update_one({"_id": row["id"]}, {"$set": {"notification_pending": False}})
