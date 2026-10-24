@@ -5382,6 +5382,8 @@ async def _local_startup() -> None:
     app.state.assembly_completion_delivery_task = await start_assembly_delivery(db)
     from salla_integration.shipping_label_inbox import start_worker as start_label_inbox
     app.state.shipping_label_inbox_task = await start_label_inbox(db)
+    from salla_integration.payment_update_inbox import start_worker as start_payment_inbox
+    app.state.payment_update_inbox_task = await start_payment_inbox(db)
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -5453,7 +5455,7 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task"):
+    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "payment_update_inbox_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()

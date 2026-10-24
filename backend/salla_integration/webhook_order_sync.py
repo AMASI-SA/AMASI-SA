@@ -378,6 +378,7 @@ async def sync_order_from_verified_webhook(
     if event_name not in {
         "order.created",
         "order.updated",
+        "order.payment.updated",
         "order.status.updated",
         "order.cancelled",
     }:

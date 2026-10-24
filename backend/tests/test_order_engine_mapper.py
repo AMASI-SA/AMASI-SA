@@ -432,3 +432,25 @@ def test_salla_customer_choices_are_preserved_for_order_details(salla_order_payl
     assert mapped.options_normalized["هل تريد إضافة اسم على الفستان"] == "لا"
     assert mapped.options_normalized["مقاس الطفل بالعمر"] == "5 سنة"
     assert len(mapped.options_raw) == 3
+
+
+def test_settlement_clears_stale_root_balance(salla_order_payload):
+    salla_order_payload.update(payment_method="mada", paid_amount=80,
+        remaining_amount=20, has_remaining_amount=True, payment_collection_status="partial")
+    salla_order_payload["payment_actions"] = {"remaining_action": {
+        "has_remaining_amount": False, "remaining_amount": None,
+        "paid_amount": {"amount": 100, "currency": "SAR"}}}
+    order = map_salla_order(salla_order_payload)
+    assert order.payment.paid_amount == 100
+    assert order.payment.remaining_amount == 0
+    assert order.payment.has_remaining_amount is False
+    assert order.payment.collection_status == "paid"
+
+
+def test_missing_collection_flag_does_not_clear_balance(salla_order_payload):
+    salla_order_payload.update(paid_amount=80, remaining_amount=20,
+        has_remaining_amount=True, payment_collection_status="partial")
+    salla_order_payload["payment_actions"] = {"remaining_action": {"remaining_amount": None}}
+    order = map_salla_order(salla_order_payload)
+    assert order.payment.remaining_amount == 20
+    assert order.payment.collection_status == "partial"

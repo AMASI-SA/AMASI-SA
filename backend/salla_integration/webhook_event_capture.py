@@ -120,7 +120,7 @@ def _log_reason_code(value: Any) -> str | None:
             "missing_order_reference_in_webhook", "shipment_order_identity_ambiguous",
             "order_not_found", "shipment_order_identity_conflict",
             "shipping_snapshot_not_current", "shipping_snapshot_already_current",
-            "synced_from_webhook", "unhandled_exception", "isolated_abandoned_cart_event",
+            "synced_from_webhook", "payment_update_queued", "unhandled_exception", "isolated_abandoned_cart_event",
         ):
             if value == code:
                 return code
@@ -159,6 +159,8 @@ async def capture_unknown_event(
     # to durably enqueue is propagated instead of acknowledging lost data.
     from .shipping_label_inbox import enqueue_verified_label
     await enqueue_verified_label(db, event_body)
+    from .payment_update_inbox import enqueue_verified_payment
+    payment_job = await enqueue_verified_payment(db, event_body)
 
     order_sync: dict[str, Any] = {
         "attempted": False,
@@ -203,7 +205,10 @@ async def capture_unknown_event(
                 "plaintext_pii_stored": False,
             }
 
-    if not is_abandoned_cart_event:
+    if payment_job:
+        order_sync = {"attempted": True, "synced": False, "reason": "payment_update_queued"}
+
+    if not is_abandoned_cart_event and not payment_job:
         try:
             order_sync = await sync_order_from_verified_webhook(db, event_body)
         except Exception as exc:  # webhook must still return HTTP 200

@@ -561,6 +561,8 @@ def _salla_order_to_doc(salla_order: dict) -> dict:
     # Salla shapes nested objects: customer, payment_method, shipping,
     # amounts.total, status, etc. We defend against missing keys
     # because store configurations vary widely.
+    from salla_payment_collection import settled_payment_snapshot
+    salla_order = settled_payment_snapshot(salla_order)
     customer = salla_order.get("customer") or {}
     amounts = salla_order.get("amounts") or {}
     total_obj = amounts.get("total") or {}

@@ -106,6 +106,70 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(current["g47_salla_snapshot"]["requires_authoritative_refresh"])
         await self.assert_inventory_unchanged()
 
+    async def test_payment_webhook_clears_balance_and_stale_event_cannot_restore_it(self):
+        payload = self.source_payload(status="in_progress")
+        payload["payment_method"] = "mada"
+        payload["payment_actions"] = {"remaining_action": {"has_remaining_amount": True,
+            "paid_amount": {"amount": 80}, "remaining_amount": {"amount": 20}}}
+        self.assertTrue((await self.webhook(payload))["synced"])
+        paid = deepcopy(payload)
+        paid["updated_at"] = "2026-09-26T12:01:00+00:00"
+        paid["payment_actions"]["remaining_action"] = {"has_remaining_amount": False,
+            "paid_amount": {"amount": 100}, "remaining_amount": None}
+        result = await self.webhook(paid, event="order.payment.updated")
+        self.assertTrue(result["synced"], result)
+        row = await self.db.unified_orders.find_one({"user_id": "owner"})
+        self.assertEqual(row["remaining_amount"], 0)
+        self.assertEqual(row["paid_amount"], 100)
+        self.assertEqual(row["payment_collection_status"], "paid")
+        stale = await self.webhook(payload, event="order.payment.updated")
+        self.assertFalse(stale["synced"])
+        self.assertEqual((await self.db.unified_orders.find_one({"user_id": "owner"}))["remaining_amount"], 0)
+
+
+    async def test_payment_inbox_retries_deduplicates_and_settles(self):
+        from datetime import datetime, timedelta, timezone
+        from salla_integration import payment_update_inbox as inbox
+        payload = self.source_payload(status="in_progress")
+        payload["payment_method"] = "mada"
+        payload["payment_actions"] = {"remaining_action": {"has_remaining_amount": True,
+            "paid_amount": {"amount": 80}, "remaining_amount": {"amount": 20}}}
+        self.assertTrue((await self.webhook(payload))["synced"])
+        payload["updated_at"] = "2026-09-26T12:01:00+00:00"
+        payload["payment_actions"]["remaining_action"] = {"has_remaining_amount": False,
+            "paid_amount": {"amount": 100}, "remaining_amount": None}
+        event = {"event": "order.payment.updated", "merchant": "synthetic-store", "data": payload}
+        now = datetime.now(timezone.utc) + timedelta(seconds=1)
+        async def apply(_db, event):
+            return await self.webhook(event["data"], event=event["event"])
+        with patch.object(inbox, "_resolve_user_id", AsyncMock(return_value="owner")):
+            key = await inbox.enqueue_verified_payment(self.db, event)
+            self.assertEqual(await inbox.enqueue_verified_payment(self.db, event), key)
+            self.assertEqual(await self.db[inbox.COLLECTION].count_documents({}), 1)
+            with patch.object(inbox, "sync_order_from_verified_webhook", AsyncMock(side_effect=RuntimeError("synthetic failure"))):
+                await inbox.run_once(self.db, now=now)
+            queued = await self.db[inbox.COLLECTION].find_one({"_id": key})
+            self.assertEqual(queued["state"], "pending")
+            self.assertEqual(queued["attempts"], 1)
+            with patch.object(inbox, "sync_order_from_verified_webhook", apply):
+                await inbox.run_once(self.db, now=now + timedelta(minutes=1))
+            self.assertEqual((await self.db[inbox.COLLECTION].find_one({"_id": key}))["state"], "done")
+            row = await self.db.unified_orders.find_one({"user_id": "owner"})
+            self.assertEqual(row["remaining_amount"], 0)
+            self.assertEqual(row["paid_amount"], 100)
+
+    async def test_payment_inbox_pauses_if_merchant_owner_changes(self):
+        from datetime import datetime, timedelta, timezone
+        from salla_integration import payment_update_inbox as inbox
+        event = {"event": "order.payment.updated", "merchant": "synthetic-store", "data": self.source_payload()}
+        with patch.object(inbox, "_resolve_user_id", AsyncMock(return_value="owner")):
+            key = await inbox.enqueue_verified_payment(self.db, event)
+        handler = AsyncMock()
+        with patch.object(inbox, "_resolve_user_id", AsyncMock(return_value="other-owner")), patch.object(inbox, "sync_order_from_verified_webhook", handler):
+            await inbox.run_once(self.db, now=datetime.now(timezone.utc) + timedelta(seconds=1))
+        handler.assert_not_awaited()
+        self.assertEqual((await self.db[inbox.COLLECTION].find_one({"_id": key}))["state"], "paused")
+
 
 if __name__ == "__main__":
     unittest.main()

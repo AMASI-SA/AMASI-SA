@@ -298,3 +298,36 @@ def test_full_order_details_uses_embedded_ship_to_and_skips_numeric_ids():
     assert fields["shipping_street"] == "شارع الأربعين"
     assert fields["shipping_address"] == "شارع الأربعين، حي الصفا، جدة، السعودية"
     assert fields["shipping_postal_code"] == "23455"
+
+
+@pytest.mark.asyncio
+async def test_refresh_clears_settled_balance_instead_of_overlaying_old_amount(local_refresh_collaborators):
+    old = {"id": "901", "reference_id": "3001", "payment_method": "mada",
+           "payment_actions": {"remaining_action": {"has_remaining_amount": True,
+               "paid_amount": {"amount": 80}, "remaining_amount": {"amount": 20}}}}
+    db = _DB({"order_id": "901", "raw_by_source": {"salla_direct": old}})
+    fresh = {**old, "payment_actions": {"remaining_action": {
+        "has_remaining_amount": False, "paid_amount": {"amount": 100}, "remaining_amount": None}}}
+    async def provider(_db, _owner, method, path, **kwargs):
+        assert method == "GET"
+        if path == "/orders/901":
+            return {"data": fresh}
+        if path == "/orders/items":
+            return {"data": [{"id": "1", "name": "Synthetic", "quantity": 1}]}
+        raise AssertionError(path)
+    captured = {}
+    async def persist(_db, _owner, _number, doc, **kwargs):
+        captured.update(doc=doc, raw=kwargs["raw"])
+        return {"doc": doc}
+    async def bank(_db, _owner, value):
+        return value
+    with patch("order_engine.salla_refresh.call_salla", provider), \
+         patch("order_engine.salla_refresh.upsert_order", persist), \
+         patch("order_engine.salla_refresh._enrich_order_receiving_bank", bank):
+        result = await refresh_order_from_salla(db, "owner", "3001", force=True)
+    assert result["ok"]
+    assert captured["doc"]["paid_amount"] == 100
+    assert captured["doc"]["remaining_amount"] == 0
+    assert captured["doc"]["has_remaining_amount"] is False
+    assert captured["doc"]["payment_collection_status"] == "paid"
+    assert captured["raw"]["payment_actions"]["remaining_action"]["remaining_amount"] == 0

@@ -966,6 +966,8 @@ def map_salla_order(raw_order: dict[str, Any]) -> OrderDTO:
     if not isinstance(raw_order, dict):
         raise OrderMappingError("Salla order payload must be an object")
 
+    from salla_payment_collection import settled_payment_snapshot
+    raw_order = settled_payment_snapshot(raw_order)
     source_order_id = _text(raw_order.get("id"))
     order_number = _text(
         _first(
