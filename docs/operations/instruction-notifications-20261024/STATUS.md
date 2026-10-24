@@ -53,3 +53,13 @@ Next safe action: finish the in-progress backend/native audits, rerun the combin
 - Remote baseline snapshots preserved: backend `codex/instructions-baseline-web-20261024`; mobile `codex/instructions-baseline-staff58-20261024` and `codex/instructions-baseline-courier12-20261024`.
 - Initial CI exposed missing WebCrypto in the comment test environment (2002 other web tests passed); test now installs/restores its explicit crypto fixture. Mobile VM harness integration is being corrected without changing authentication runtime.
 - Release guard rejects merge-history intent changes even when final intent bytes match. Preserve the pre-linearization branch, then replay only this feature's commits onto current production before a new release rehearsal; never weaken the guard or freeze an intent for the wrong source.
+
+## Firebase and release checkpoint — 2026-10-24
+
+- Firebase project amasi-notifications is configured for staff and courier packages. Both EAS projects have the authorized FCM v1 key assigned and GOOGLE_SERVICES_JSON as a secret file variable (staff production; courier preview). No credentials committed.
+- Staff source 19a6bdb passed all enabled PR checks. Build 59 / 1.0.44 requested on EAS: 7952353b-d13d-4ca4-9840-0615d247f592. Build completion and physical delivery are not yet proven.
+- Courier source 3ae303b includes build 13 / 1.0.12 and a deterministic npm lockfile. TypeScript and 21 instruction/baseline tests pass. The first launch was rejected before building for missing lockfile; the corrected launch is in progress.
+- Backend source replayed onto production 1fbb7ea4b54ab5574f3ee6937939e21440f88b0a without conflicts. Pre-integration snapshot is retained on codex/instructions-before-cards-integration-20261024. The only tree differences from the earlier source are the newly published mobile-card changes and their release intent. Fresh CI is required.
+- Remote /app guard status reports active=false; only untracked .emergent/testing/ and deployer-agent-docs/ are present. They were not modified.
+- Production changed by this task: no. Server push enablement, new governed release intent/rehearsal, actual deployment identity, and phone delivery tests remain outstanding. Native builds are not published releases.
+- Next: complete both EAS builds, review refreshed web CI and freeze its candidate intent, configure outbound push, then perform the guarded authorized web rollout. Keep all existing production data and holds.
