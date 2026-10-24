@@ -5,7 +5,7 @@ from order_tracking_notes import (
     instruction_snapshot,
     instruction_targets,
 )
-from order_tracking_notes_routes import make_order_tracking_notes_router
+from order_tracking_notes_routes import make_order_tracking_notes_router, REQUIRED_ACTIONS
 
 
 def _instruction(**patch):
@@ -71,6 +71,6 @@ def test_router_source_contains_photo_and_customer_approval_transitions():
     source = inspect.getsource(make_order_tracking_notes_router)
 
     assert "upload_photos" in source
-    assert "arrival_confirmation" in source
+    assert "arrival_confirmation" in REQUIRED_ACTIONS
     assert "waiting_customer_service_approval" in source
     assert "_record_approval_submission" in source

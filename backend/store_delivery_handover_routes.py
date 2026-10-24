@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
-from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, enforce_stage_instructions
+from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, active_stage_instructions, enforce_instruction_rows
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
     WORKFLOWS,
@@ -32,6 +32,17 @@ ASSIGNMENTS = "store_delivery_assignments"
 EVENTS = "store_delivery_events"
 ORDERS = "unified_orders"
 HANDOVER_PERMISSION = "store_delivery.handover"
+
+
+async def enforce_assignment_instructions(db, *, user_id, order_number, actor_id):
+    rows = await active_stage_instructions(db, user_id=user_id, order_number=order_number,
+        stage="store_courier", order_wide=True)
+    # A courier-stage request needs an assigned courier before they can execute
+    # it. Assignment creates responsibility; pickup/delivery remain gated.
+    rows = [row for row in rows if not (row.get("task_protocol")
+        and set(row.get("target_stages") or []) == {"store_courier"}
+        and not row.get("operational_hold"))]
+    enforce_instruction_rows(rows, stage="store_courier", actor_id=actor_id, order_wide=True)
 
 
 def _now() -> str:
@@ -343,13 +354,11 @@ def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any
                     raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
                 if normalize_text(workflow.get("store_courier_assignee_id")):
                     raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned", "order_number": row.get("order_number")})
-                await enforce_stage_instructions(
+                await enforce_assignment_instructions(
                     db,
                     user_id=user_id,
                     order_number=normalize_text(row.get("order_number")),
-                    stage="store_courier",
                     actor_id=normalize_text(actor.get("id")),
-                    order_wide=True,
                 )
                 await db[ASSIGNMENTS].insert_one(row)
                 inserted_ids.append(row["id"])

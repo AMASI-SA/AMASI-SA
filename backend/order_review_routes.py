@@ -27,7 +27,7 @@ from order_item_engine.mapper import map_order_item_identities
 from order_engine.product_image_enrichment import enrich_order_item_images
 from order_engine.product_identity_enrichment import enrich_order_item_identity
 from order_engine.recipient_enrichment import enrich_order_recipients
-from order_tracking_notes import enforce_stage_instructions
+from order_tracking_notes import enforce_stage_instructions, instruction_banner
 from product_inventory_rules import order_item_specifications
 from salla_integration.auto_sync import schedule_salla_auto_sync
 from salla_integration.service import SallaError, call_salla
@@ -611,9 +611,7 @@ async def _display_detail(db: Any, user_id: str, order: OrderDTO, *, session_con
         "revision": int((workflow or {}).get("revision") or 0),
         "items": item_views,
         "operational_items": list((workflow or {}).get("operational_items") or []),
-        "customer_service_instructions": list(
-            (workflow or {}).get("customer_service_instructions") or []
-        ),
+        "customer_service_instructions": [instruction_banner(row) for row in (workflow or {}).get("customer_service_instructions") or []],
     }
 
 

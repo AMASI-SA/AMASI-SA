@@ -1,6 +1,14 @@
 {
   "rules": [
     {
+      "path": "/operational-notifications-sw.js",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+        "Content-Type": "application/javascript; charset=utf-8",
+        "X-Content-Type-Options": "nosniff"
+      }
+    },
+    {
       "path": "/sw.js",
       "headers": {
         "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",

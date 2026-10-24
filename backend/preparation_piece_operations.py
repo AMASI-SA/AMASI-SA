@@ -49,7 +49,7 @@ from order_review_routes import (
     _require_reviewer,
     _text,
 )
-from order_tracking_notes import active_stage_instructions, enforce_instruction_rows, enforce_stage_instructions
+from order_tracking_notes import active_stage_instructions, enforce_instruction_rows, enforce_stage_instructions, instruction_banner
 from product_fulfillment_rules import PRODUCT_RESOURCE_BINDINGS, shipping_address_is_complete
 from product_option_cost_routes import BINDINGS, RESOURCES
 from reviewed_products_catalog import (
@@ -714,7 +714,7 @@ async def materialize_preparation_pieces(
             ):
                 matching_instructions.append(instruction)
         if matching_instructions:
-            piece["customer_service_instructions"] = matching_instructions
+            piece["customer_service_instructions"] = [instruction_banner(row, piece_id=_text(piece.get("piece_id")), order_item_id=_text(piece.get("order_item_id"))) for row in matching_instructions]
         matching_hold = next((
             instruction
             for instruction in matching_instructions

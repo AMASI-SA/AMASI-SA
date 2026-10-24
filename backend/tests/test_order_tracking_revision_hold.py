@@ -18,7 +18,7 @@ class RevisionHoldTests(unittest.IsolatedAsyncioTestCase):
             'execution_status': 'ready', 'updated_at': datetime.now(timezone.utc)}
         self.db.raw['mezan_preparation_pieces_v1'].insert_one(deepcopy(self.piece))
         self.actor = {'id': 'staff', 'name': 'Customer service'}
-        self.instruction = {'id': 'n', 'scope': 'item', 'target_id': 'i',
+        self.instruction = {'id': 'n', 'created_by': 'staff', 'scope': 'item', 'target_id': 'i',
             'action_type': 'delete_product', 'note': 'Customer requested removal'}
 
     def payload(self, **patch):

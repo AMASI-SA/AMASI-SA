@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import api, { formatApiErrorDetail } from "../lib/api";
+import { disableOperationalPush } from "../lib/operationalPush";
 import {
     AUTH_SESSION_REQUEST_TIMEOUT_MS,
     isAuthBootstrapAbort,
@@ -184,6 +185,7 @@ export function AuthProvider({ children }) {
     };
 
     const logout = async () => {
+        try { await disableOperationalPush(); } catch { /* Logout must still proceed when offline. */ }
         try {
             await api.post("/auth/logout");
         } catch {

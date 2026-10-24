@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 import LateDeliveryEvidence from "../components/driver/LateDeliveryEvidence";
 import DriverPhysicalCash from "../components/driver/DriverPhysicalCash";
+import OperationalInstructionNotifications from "../components/driver/OperationalInstructionNotifications";
 import BarcodeCameraScanner from "../components/BarcodeCameraScanner";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
@@ -81,7 +82,7 @@ export default function AmasiDeliveryApp() {
       setDriver(meRes.data || null);
       setDeliveries(deliveryRes.data?.items || []);
       setSummary(summaryRes.data || {});
-      setInstructions(instructionsRes.data?.items || []);
+      setInstructions((instructionsRes.data?.items || []).filter((item) => !item.source_tracking_instruction_id));
       setBanks(banksRes.data?.items || []);
       setSelected((current) => {
         if (!current?.id) return current;
@@ -182,6 +183,7 @@ export default function AmasiDeliveryApp() {
       </header>
 
       <div className="mx-auto max-w-xl space-y-4 p-4">
+        <OperationalInstructionNotifications />
         {reminders.map((item) => <div key={`${item.instruction_id}-${item.code}`} className={`rounded-2xl border p-4 text-sm font-black ${item.overdue ? "border-rose-300 bg-rose-50 text-rose-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}><BellRinging className="ml-1 inline" size={20} />{item.message}</div>)}
 
         {tab === "deliveries" && (

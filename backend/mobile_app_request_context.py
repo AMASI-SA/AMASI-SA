@@ -8,6 +8,7 @@ when the linked employee owns the matching app-page permission.
 from __future__ import annotations
 
 from typing import Any, Iterable
+import re
 
 from fastapi import HTTPException
 
@@ -86,6 +87,23 @@ def required_mobile_permissions(path: str) -> frozenset[str] | None:
     return None
 
 
+def _notification_route_allowed(path: str, method: str, *, driver=False) -> bool:
+    path = str(path or "").rstrip("/")
+    method = str(method or "").upper()
+    root = r"/api/order-tracking-notes"
+    resource = r"[A-Za-z0-9_-]+"
+    common_get = [rf"{root}/notifications/me", rf"{root}/instructions/inbox", rf"{root}/instructions/{resource}",
+        rf"{root}/orders/{resource}/instructions/active", rf"{root}/evidence/{resource}",
+        rf"{root}/instructions/{resource}/tasks/{resource}/comments", r"/api/operational-notifications/web-push-key"]
+    common_post = [rf"{root}/notifications/{resource}/read", rf"{root}/instructions/{resource}/(?:acknowledge|evidence)",
+        rf"{root}/instructions/{resource}/tasks/submit", rf"{root}/instructions/{resource}/tasks/{resource}/comments",
+        r"/api/operational-notifications/devices/(?:register|unregister)"]
+    if not driver:
+        common_get += [rf"{root}/instructions/mine/history", rf"{root}/orders/{resource}", rf"{root}/search"]
+        common_post += [rf"{root}/orders/{resource}/instructions", rf"{root}/instructions/{resource}/(?:approve|reject|complete)", rf"{root}/instructions/{resource}/tasks/claim"]
+    return any(re.fullmatch(pattern, path) for pattern in (common_get if method == "GET" else common_post if method == "POST" else []))
+
+
 async def _linked_owner_id(db: Any, user: dict[str, Any]) -> str:
     owner_id = str(user.get("created_by") or "").strip()
     if owner_id:
@@ -121,6 +139,19 @@ async def mobile_app_request_user(
         return user
     if str(path or "").startswith("/api/auth/"):
         return user
+
+    # Instruction endpoints enforce per-task ownership themselves. Never lend
+    # the employee an owner identity for notification reads or confirmations.
+    if _notification_route_allowed(path, method, driver=role == "store_driver"):
+        if role == "store_driver":
+            return user
+        access = await mobile_app_access_for_user(db, user)
+        if not access.get("enabled") or not access.get("permissions"):
+            raise HTTPException(403, detail={"code": "mobile_app_page_permission_required"})
+        owner_id = await _linked_owner_id(db, user)
+        if not owner_id:
+            raise HTTPException(409, detail={"code": "employee_store_not_linked"})
+        return {**user, "created_by": owner_id, "mobile_app_permissions": access.get("permissions") or []}
 
     # A store_driver is a purpose-bound native identity, not an AMASI employee
     # identity. Keep it out of the employee page-permission bridge entirely:
