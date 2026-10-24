@@ -180,7 +180,7 @@ jobs:
                   confirmation = [row for row in cases if row.attrib.get("classname", "").endswith(
                       "test_review_completion_confirmation.ConfirmationTests")]
                   assert len(confirmation) == 19, ("Missing confirmation contracts", len(confirmation))
-                  for suite, minimum in (("test_source_added_item_review.SourceAdditionReviewTests", 12),
+                  for suite, minimum in (("test_source_added_item_review.SourceAdditionReviewTests", 16),
                                          ("test_source_added_item_catalog", 9),
                                          ("test_source_added_item_ready_coverage", 18),
                                          ("test_added_item_component_stock", 9),

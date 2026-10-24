@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from copy import deepcopy
 
 from fastapi import Depends, HTTPException, Response
@@ -21,6 +22,16 @@ from review_local_policy import (
 
 WORKFLOWS = "order_review_workflows"
 EVENTS = "order_review_events"
+
+
+def source_addition_review_enabled():
+    """Operational disable; unknown/empty values fail closed."""
+    return os.environ.get("SOURCE_ADDITION_REVIEW_ENABLED", "true").strip().lower() in {"true", "1", "yes", "on"}
+
+
+def require_source_addition_review_enabled():
+    if not source_addition_review_enabled():
+        fail("source_addition_review_disabled", 503)
 
 
 def digest(value):
@@ -141,6 +152,7 @@ async def live_reviewer(db, reviewer, owner):
 
 
 async def approve(db, *, owner, reviewer, number, item_id, request):
+    require_source_addition_review_enabled()
     from order_review_routes import _item_view, _now
     from order_review_export_controls import preparation_assignment_product_key
     from order_tracking_notes import enforce_stage_instructions
@@ -151,6 +163,7 @@ async def approve(db, *, owner, reviewer, number, item_id, request):
                            "actor_id": str(reviewer["id"])}
 
     async def commit(scoped):
+        require_source_addition_review_enabled()
         await live_reviewer(scoped, reviewer, owner)
         if session_context:
             from review_session_fence import fence_review_session
@@ -191,6 +204,7 @@ async def approve(db, *, owner, reviewer, number, item_id, request):
             "reviewed_by_name": str(reviewer.get("name") or ""),
             "source_fingerprint": result["source_fingerprint"],
         }
+        require_source_addition_review_enabled()
         updated = await scoped[WORKFLOWS].update_one({"user_id": owner, "order_number": number,
             "stage": "in_progress", "revision": request.expected_revision}, {
                 "$push": {"items": frozen}, "$inc": {"revision": 1},
@@ -224,7 +238,7 @@ def register_source_addition_routes(router, db, current_user):
                 scoped = ReadSnapshot(raw_db, session)
                 await live_reviewer(scoped, reviewer, owner)
                 result, *_ = await context(scoped, owner, order_number)
-                return result
+                return result if source_addition_review_enabled() else {**result, "items": []}
 
     @router.post("/{order_number}/items/{order_item_id}/review-addition")
     async def review_addition(order_number: str, order_item_id: str,

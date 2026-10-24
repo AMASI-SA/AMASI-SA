@@ -1,5 +1,6 @@
 """Real source intake -> explicit single-line review -> shared catalog."""
 import asyncio
+import os
 from copy import deepcopy
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -227,3 +228,60 @@ class SourceAdditionReviewTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(self.base_url + "/items/" + state["items"][0]["order_item_id"] + "/review-addition",
             json={"expected_revision": state["revision"], "source_fingerprint": state["source_fingerprint"], "quantity": 999})
         self.assertEqual(response.status_code, 422)
+
+
+    async def test_operational_disable_hides_capability_and_rejects_stale_post_without_writes(self):
+        state = await self.capability()
+        collections = await self.db.list_collection_names()
+        before = {name: await self.db[name].find({}).sort("_id").to_list(None) for name in collections}
+        with patch.dict(os.environ, {"SOURCE_ADDITION_REVIEW_ENABLED": "false"}):
+            hidden = await self.capability()
+            self.assertEqual(hidden, {**state, "items": []})
+            with patch("source_added_item_review.operational_owner", AsyncMock()) as transaction:
+                response = await self.approve(capability=state)
+                self.assertEqual(response.status_code, 503, response.text)
+                self.assertEqual(response.json()["detail"]["code"], "source_addition_review_disabled")
+                transaction.assert_not_awaited()
+        after = {name: await self.db[name].find({}).sort("_id").to_list(None)
+                 for name in await self.db.list_collection_names()}
+        self.assertEqual(before, after)
+        self.external.assert_not_awaited()
+
+    async def test_disable_preserves_approved_queue_and_reenable_idempotency(self):
+        state = await self.capability()
+        self.assertEqual((await self.approve(capability=state)).status_code, 200)
+        cards = await self.catalog_cards()
+        with patch.dict(os.environ, {"SOURCE_ADDITION_REVIEW_ENABLED": "0"}):
+            self.assertEqual((await self.capability())["items"], [])
+            self.assertEqual(await self.catalog_cards(), cards)
+            self.assertEqual((await self.approve(capability=state)).status_code, 503)
+        with patch.dict(os.environ, {"SOURCE_ADDITION_REVIEW_ENABLED": "true"}):
+            retried = await self.approve(capability=state)
+            self.assertEqual(retried.status_code, 200, retried.text)
+            self.assertTrue(retried.json()["already_reviewed"])
+            self.assertEqual(await self.db[review.EVENTS].count_documents(
+                {"event_type": "source_added_item_reviewed"}), 1)
+            self.assertEqual((await self.approve(1)).status_code, 200)
+        self.assertEqual(await self.db.mezan_preparation_pieces_v1.find({}).sort("_id").to_list(None), self.old_pieces)
+
+    async def test_disable_rechecked_inside_owner_transaction(self):
+        state = await self.capability()
+        before = await self.db[review.WORKFLOWS].find_one({"order_number": self.number})
+        with patch("source_added_item_review.source_addition_review_enabled", side_effect=[True, False]):
+            response = await self.approve(capability=state)
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(await self.db[review.WORKFLOWS].find_one({"order_number": self.number}), before)
+        self.assertEqual(await self.db[review.EVENTS].count_documents(
+            {"event_type": "source_added_item_reviewed"}), 0)
+
+    async def test_switch_default_and_strict_true_values(self):
+        from source_added_item_review import source_addition_review_enabled
+        with patch.dict(os.environ):
+            os.environ.pop("SOURCE_ADDITION_REVIEW_ENABLED", None)
+            self.assertTrue(source_addition_review_enabled())
+            for value in ("true", "1", "yes", "on", " TRUE "):
+                os.environ["SOURCE_ADDITION_REVIEW_ENABLED"] = value
+                self.assertTrue(source_addition_review_enabled(), value)
+            for value in ("false", "0", "", "enabled", "tru", "2"):
+                os.environ["SOURCE_ADDITION_REVIEW_ENABLED"] = value
+                self.assertFalse(source_addition_review_enabled(), value)

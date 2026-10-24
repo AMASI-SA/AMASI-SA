@@ -116,3 +116,27 @@ owner's completed verification/lease closure; do not clear or reuse it.
 
 New integrated CI pending. Android must integrate onto published Build56 source,
 not the obsolete original PR294 baseline; read-only compatibility assessment underway.
+
+## Rollback requirement and integrated verification (2026-10-24)
+
+Owner explicitly requires recovery if this update causes a code problem. Added
+SOURCE_ADDITION_REVIEW_ENABLED operational disable, with authenticated empty
+capabilities, server-side rejection and compatibility retained for approved work.
+See ROLLBACK.md; a raw baseline reset after additions exist is unsafe. Four new
+regressions await fresh CI. This is source A preparation, not deployment.
+
+Integrated checkpoint b2b9064138c4a41cffd2dbcdcdad9600069deabd passed all 18
+workflows, including Security Gate. Review run40107394999: 561 passed plus317
+subtests,32 print recovery checks and1 acceptance guard, no skipped/failing cases.
+New disable changes require a new full run before freezing source A.
+
+Prior production release is now verified: PR1465 final evidence reports three
+v5 checks and inactive lease; this task independently observed inactive guard
+and live health identity rg5-91d532b56d827c3f9380e4e20afb24ce0ab72f7e45e3d8afc9964f70dd1ab54e
+with source d34eb6f19b0df2da587a70e42b2893984580b7c5. No production changes by this task.
+Android integration PR297 source370cc036aad31b84f6f51ab3dcadc9aaaac399c5
+preserves published56 session fixes; fresh CI/build and successor version pending.
+
+Next: push recovery changes, pass CI, build/freeze intent-only B and clean-clone
+rehearsal, then merge and publish under v5. Issue1006 remains comment-capacity
+blocked; PR1466 is continuation ledger fallback. No lease or publish by this task.
