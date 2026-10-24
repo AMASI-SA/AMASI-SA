@@ -5,6 +5,10 @@ on:
     branches: [hotfix/prod-snap-meta-final, codex/review-completion-resumable, codex/review-acceptance-config-guard]
     paths:
       - "backend/shipping_pending_snapshot_recovery.py"
+      - "backend/component_catalog_label_recovery.py"
+      - "backend/assembly_option_change_notice.py"
+      - "backend/tests/test_assembly_option_change_notice.py"
+      - "backend/tests/test_shipping_catalog_label_recovery.py"
       - "backend/salla_integration/sync.py"
       - "backend/salla_integration/auto_sync.py"
       - "backend/tests/test_shipping_pending_snapshot_recovery.py"
@@ -144,7 +148,7 @@ jobs:
           tests/test_reviewed_products_catalog.py
           --asyncio-mode=auto --junitxml="${{ runner.temp }}/review-completion.xml"
       - name: Verify stranded print snapshot recovery and sync fences
-        run: python -m unittest tests.test_shipping_pending_snapshot_recovery tests.test_salla_sync_component_snapshot -v
+        run: python -m unittest tests.test_assembly_option_change_notice tests.test_shipping_catalog_label_recovery tests.test_shipping_pending_snapshot_recovery tests.test_salla_sync_component_snapshot -v
       - name: Preserve the acceptance configuration conflict guard
         if: ${{ !cancelled() }}
         run: >-

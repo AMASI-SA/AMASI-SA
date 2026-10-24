@@ -339,6 +339,10 @@ jobs:
           status=$?
           cat /tmp/fulfillment-v2-jest.log
           exit "$status"
+      - name: Verify changed-option notification interaction
+        env:
+          CI: "true"
+        run: yarn test --watchAll=false --runInBand --runTestsByPath src/components/fulfillment/SpecificationChangeNotice.test.jsx
       - name: Upload Fulfillment V2 Jest log
         if: always()
         uses: actions/upload-artifact@v4

@@ -1440,6 +1440,7 @@ def component_order_fingerprint(order: Any) -> str:
 
 async def revalidate_unchanged_component_snapshot(
     db: Any, *, user_id: str, order_number: str, source_revision: int, dry_run: bool = False,
+    allow_print_catalog_rename: bool = False,
 ) -> dict[str, Any]:
     """Advance existing acceptance only after reading the fenced canonical order.
 
@@ -1473,8 +1474,7 @@ async def revalidate_unchanged_component_snapshot(
             order = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
         except OrderNotFoundError:
             return deferred
-        if component_order_fingerprint(order) != previous["source_fingerprint"]:
-            return deferred
+        current_fingerprint = component_order_fingerprint(order)
         legacy = await legacy_component_cohort(scoped, user_id=user_id, order_number=order_number)
         if legacy:
             if previous.get("state") != LEGACY_COMPONENT_COHORT:
@@ -1485,11 +1485,29 @@ async def revalidate_unchanged_component_snapshot(
                     or plan.get("reconciliation_required")
                     or (plan.get("source_version") or {}).get("value") != previous.get("generation")):
                 return deferred
+        rename = None
+        if current_fingerprint != previous["source_fingerprint"]:
+            if not allow_print_catalog_rename or not legacy:
+                return deferred
+            # Legacy orders have no component consumption plan. Never carry a
+            # catalogue rename across an inventory reservation contract.
+            if await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number}):
+                return deferred
+            from component_catalog_label_recovery import legacy_catalog_rename
+            rename = await legacy_catalog_rename(
+                scoped, user_id=user_id, order_number=order_number,
+                raw=raw, order=order, previous=previous)
+            if not rename:
+                return deferred
         if dry_run:
             return {"accepted": False, "eligible_for_revalidation": True, "dry_run": True,
                     "reason": "unchanged_component_contract"}
         await scoped[COMPONENT_LIFECYCLES].update_one(selector, {"$set": {
             "snapshot_revision": source_revision, "source_updated_at": version, "updated_at": _now(),
+            **({"source_fingerprint": current_fingerprint,
+                "catalog_label_revalidation": {**rename, "source_revision": source_revision,
+                                              "current_fingerprint": current_fingerprint}}
+               if rename else {}),
         }})
         await scoped.unified_orders.update_one({**selector, "g47_salla_snapshot.revision": source_revision},
             {"$set": {"g47_salla_snapshot.component_pending": False}})
