@@ -1,6 +1,6 @@
 {
   "task": "fulfillment-mobile-design-only",
-  "status": "WIP: visual QA and governed release pending",
+  "status": "WIP: preview session unavailable blocks phone visual acceptance",
   "branch": "codex/fulfillment-mobile-design-only-20261024",
   "base": "f75b9fcc9e5ac48d214feba005e12e472d1aafb9",
   "scope": "Phone presentation only; no dependency or operational changes",
@@ -12,6 +12,9 @@
     "live_artifact": "303987b615fb30aed8dadaf610f2e002ece862164ffadd9e4bd90f11ee17db38"
   },
   "production_changed_by_this_task": false,
-  "next": "Visual QA of phone layouts, then governed A/B build and release; preserve shared untracked files",
-  "rollback": "Revert this isolated presentation change on a new branch; no data migration. Retain current production deployment before publication."
+  "next": "Restore preview connectivity through its owning task, then visually verify design at 360/390/430px before governed release. Shared source untouched; isolated /tmp/mezan-mobile-design-qa available.",
+  "rollback": "Revert this isolated presentation change on a new branch; no data migration. Retain current production deployment before publication.",
+  "checkpoint": "b3360dadbdaa2310a71075a80a36a02fa013036e",
+  "pr": 1467,
+  "preview_blocker": "Direct preview renders authentication unavailable: connection to Mezan server incomplete. No protected pages loaded."
 }
