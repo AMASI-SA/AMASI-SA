@@ -87,6 +87,52 @@ class SourceAdditionReviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.status_code, 200, second.text)
         self.external.assert_not_awaited()
 
+    async def test_reviewed_and_started_local_orders_allow_addition_while_salla_pending(self):
+        for stage, index in (("reviewed", 0), ("in_progress", 1)):
+            with self.subTest(stage=stage):
+                await self.db[review.WORKFLOWS].update_one({"order_number": self.number},
+                    {"$set": {"stage": stage}})
+                await self.db.unified_orders.update_one({"order_number": self.number}, {"$set": {
+                    "order_status_slug": "under_review", "order_status": "بإنتظار المراجعة",
+                    "raw_by_source.salla_direct.status": {"slug": "under_review", "name": "بإنتظار المراجعة"}}})
+                state = await self.capability()
+                self.assertTrue(state["items"][index]["eligible"], state)
+                response = await self.approve(index, state)
+                self.assertEqual(response.status_code, 200, response.text)
+                workflow = await self.db[review.WORKFLOWS].find_one({"order_number": self.number})
+                self.assertEqual(workflow["stage"], stage)
+                self.assertEqual(workflow["items"][0], self.original_workflow["items"][0])
+                self.assertEqual(await self.db.mezan_preparation_pieces_v1.find({}).sort("_id").to_list(None), self.old_pieces)
+        self.external.assert_not_awaited()
+
+    async def test_pending_internal_review_hides_additions_and_rejects_stale_click(self):
+        state = await self.capability()
+        await self.db[review.WORKFLOWS].update_one({"order_number": self.number},
+            {"$set": {"stage": "pending_review"}})
+        self.assertEqual((await self.capability())["items"], [])
+        self.assertEqual((await self.approve(capability=state)).status_code, 409)
+
+    async def test_terminal_source_shows_arabic_reason_and_blocks_approval(self):
+        for status in ("completed", "shipped", "delivered", "canceled", "unknown"):
+            with self.subTest(status=status):
+                await self.db.unified_orders.update_one({"order_number": self.number}, {"$set": {
+                    "order_status_slug": status, "order_status": status,
+                    "raw_by_source.salla_direct.status": {"slug": status, "name": status}}})
+                state = await self.capability()
+                self.assertFalse(state["items"][0]["eligible"])
+                self.assertIn("حالة الطلب الحالية", state["items"][0]["blocked_message"])
+                self.assertEqual((await self.approve(capability=state)).status_code, 409)
+
+    async def test_addition_notice_retains_first_observed_stage_after_stage_change(self):
+        state = await self.capability()
+        self.assertIn("قيد التنفيذ", state["items"][0]["addition_notice"])
+        await self.db[review.WORKFLOWS].update_one({"order_number": self.number}, {"$set": {"stage": "reviewed"}})
+        self.payload["updated_at"] = "2026-09-26T16:00:00+00:00"
+        self.assertTrue((await self.webhook(self.payload, "order.updated"))["synced"])
+        self.assertEqual((await self.capability())["items"][0]["addition_notice"], state["items"][0]["addition_notice"])
+        await self.db.unified_orders.update_one({"order_number": self.number}, {"$unset": {"source_addition_observations": ""}})
+        self.assertIn("غير مسجلة", (await self.capability())["items"][0]["addition_notice"])
+
     async def test_reviewed_addition_uses_ordinary_mobile_file_assignment(self):
         result = await self.approve()
         self.assertEqual(result.status_code, 200, result.text)
