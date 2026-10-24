@@ -55,6 +55,21 @@ class InstructionNotificationTests(unittest.IsolatedAsyncioTestCase):
         self.client = TestClient(self.app)
     def tearDown(self): self.context_patch.stop(); self.push_patch.stop(); self.client.close()
     def select(self, uid): self.user = self.db.raw.users.find_one({'id':uid})
+    async def test_detail_cards_follow_employee_scope_and_creator_order_scope(self):
+        self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p1'}, {'$set': {'product_options_snapshot': {'size':'M'}, 'image_url':'first.png'}})
+        self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p2'}, {'$set': {'product_options_snapshot': {'size':'S'}, 'image_url':'second.png'}})
+        with patch.object(routes, 'get_order', AsyncMock(side_effect=routes.OrderNotFoundError('missing'))):
+            response = self.client.get('/api/order-tracking-notes/instructions/n')
+            self.assertEqual(response.status_code, 200, response.text)
+            cards = response.json()['product_cards']
+            self.assertEqual([card['piece_id'] for card in cards], ['p1'])
+            self.assertEqual(cards[0]['image_url'], 'first.png')
+            self.assertEqual(cards[0]['requested_options']['size'], 'L')
+            self.select('cs')
+            response = self.client.get('/api/order-tracking-notes/instructions/n')
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual({card['piece_id'] for card in response.json()['product_cards']}, {'p1', 'p2'})
+
     async def test_same_actor_cannot_submit_another_piece_before_target_stage(self):
         self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({'id':'n'}, {'$set': {'target_stages':['assembly_labeling']}})
         self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id':'p1'}, {'$set': {'status':'ready_for_assembly'}})

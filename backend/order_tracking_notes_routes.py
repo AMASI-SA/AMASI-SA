@@ -1001,7 +1001,16 @@ def make_order_tracking_notes_router(
         own_current = [task for task in result["tasks"] if task.get("assignee_id") == context["actor_id"] and task.get("current", True)]
         active = row.get("status") == "active" and current
         events = await db[NOTIFICATIONS].find({"merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "instruction_id": row["id"]}, {"_id": 0, "merchant_id": 0, "recipient_id": 0}).sort("created_at", -1).to_list(100)
-        return {"instruction": result, "evidence": evidence, "events": events, "capabilities": {
+        from instruction_product_cards import product_cards
+        card_pieces = await db[PIECES].find({"user_id": context["merchant_id"], "order_number": row["order_number"]}, {"_id": 0}).to_list(5000)
+        try:
+            card_order = await get_order(repository, user_id=context["merchant_id"], order_number=row["order_number"])
+            card_items = _model_dict(card_order).get("items") or []
+        except OrderNotFoundError:
+            card_items = []
+        cards = product_cards(row, result["tasks"], card_pieces, card_items,
+                              creator=text(row.get("created_by")) == context["actor_id"])
+        return {"instruction": result, "product_cards": cards, "evidence": evidence, "events": events, "capabilities": {
             "can_manage": can_manage, "can_approve_resume": result["can_approve_resume"], "can_close_instruction": result["can_close_instruction"], "can_acknowledge": active and (bool(own_current) or not row.get("thread_protocol")),
             "can_complete": result["can_close_instruction"],
             "can_claim_task": await can_claim_review(row, user, context) and bool(await db[TASKS].find_one({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "assignee_id": "", "status": "pending"})),
