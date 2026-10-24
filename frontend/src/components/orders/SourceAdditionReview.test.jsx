@@ -64,3 +64,19 @@ test("source refresh once and disabled candidate cannot submit", async () => {
     await render(); await render({ refreshKey: "new-items" }); await render({ refreshKey: "new-items" }); expect(getSourceAdditions).toHaveBeenCalledTimes(2);
     await click(); expect(reviewSourceAddition).not.toHaveBeenCalled();
 });
+test("stage blocker is explained in Arabic without an action", async () => {
+    getSourceAdditions.mockResolvedValue({ ...pending(), items: pending().items.map(r => ({ ...r,
+        eligible: false, blocked_reason: "source_addition_order_stage_ineligible",
+        blocked_message: "حالة الطلب الحالية لا تسمح باعتماده.", addition_notice: "أُضيف بعد أن أصبح الطلب: تمت المراجعة." })) });
+    await render();
+    expect(host.querySelector('section button')).toBeNull();
+    expect(host.textContent).toContain("حالة الطلب الحالية");
+    expect(host.textContent).toContain("أُضيف بعد أن أصبح الطلب: تمت المراجعة");
+    expect(host.textContent).not.toContain("source_addition_order_stage_ineligible");
+});
+test("history note remains visible after approval", async () => {
+    const note = "أُضيف بعد أن أصبح الطلب: قيد التنفيذ.";
+    getSourceAdditions.mockResolvedValue({ ...completed(), items: completed().items.map(r => ({ ...r, addition_notice: note })) });
+    await render(); expect(host.textContent).toContain(note);
+    expect(host.textContent).toContain("تمت مراجعة المنتج المضاف");
+});
