@@ -12,10 +12,14 @@ from fastapi import HTTPException
 
 from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
 from operational_balance_engine import reconcile_credits
+from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_future_business_date", "operational_business_date_invalid",
     "operational_supplier_payment_exceeds_payable",
+    "operational_ad_debt_priority_required",
+    "operational_wallet_movement_unsupported", "operational_wallet_pool_allocation_unsupported",
+    "operational_wallet_balance_invalid",
     "operational_custody_insufficient", "operational_bank_required",
     "operational_bank_setup_incomplete", "operational_custody_source_invalid",
     "operational_custody_movement_invalid", "operational_expense_direction_invalid",
@@ -58,7 +62,8 @@ async def entity(db, owner, kind, identity, currency):
     if kind not in KINDS:
         fail("operational_party_type_invalid", "نوع الجهة غير صحيح", 422)
     try:
-        rows = [r for r in await entities(db, owner, kind) if r["id"] == identity]
+        options = {"operational_state": await read(db, owner)} if kind == "ad_account" and identity.startswith("operational-ad:") else {}
+        rows = [r for r in await entities(db, owner, kind, **options) if r["id"] == identity]
     except ValueError:
         fail("operational_entity_setup_incomplete", "إعداد الجهات في ميزان 2 غير مكتمل أو ملتبس")
     if len(rows) != 1:
@@ -122,7 +127,8 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
                 fail("operational_opening_required", "أدخل الأرصدة قبل الإنهاء")
             from operational_balance_sources import start_baselines
             try:
-                state["source_baselines"] = await start_baselines(db, owner, stamp)
+                options = {"operational_state": state} if state.get("ad_funding") else {}
+                state["source_baselines"] = await start_baselines(db, owner, stamp, **options)
             except ValueError:
                 fail("operational_source_setup_incomplete", "تعذر تثبيت مصادر بداية النظام؛ أكمل إعداد ميزان 2")
             state.update(status="active", started_at=stamp)
@@ -187,6 +193,12 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         amount = money(payload["amount"])
         currency = payload["currency"]
         row = await entity(db, owner, payload["party_type"], payload["party_id"], currency)
+        wallet_pool = row["kind"] == "ad_account" and wallet_pool_enabled(state, row["id"], currency)
+        if wallet_pool:
+            if payload["direction"] != "outgoing" or payload["kind"] not in {"payment", "wallet_funding"}:
+                fail("operational_wallet_movement_unsupported", "حساب المحفظة يقبل دفعة صادرة تسدد الدين أولًا ثم تشحن الرصيد؛ التصحيح والاسترداد يحتاجان تسوية موثقة مستقلة")
+            if payload.get("allocations"):
+                fail("operational_wallet_pool_allocation_unsupported", "توزع دفعة المحفظة تلقائيًا على الدين ثم الرصيد؛ اترك تخصيص الالتزامات فارغًا")
         if row['kind'] == 'employee' and any(
                 key.startswith('salary:' + row['id'] + ':')
                 for key in state.get('engine', {}).get('salary_conflicts', {})):
@@ -277,7 +289,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
-        if not requested and payload["kind"] in {"payment", "collection", "refund"} and row["kind"] not in {"bank", "cash", "employee_custody"}:
+        if not wallet_pool and not requested and payload["kind"] in {"payment", "collection", "refund"} and row["kind"] not in {"bank", "cash", "employee_custody"}:
             left, requested = min(amount, party_available) if party_available is not None else amount, []
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
             for oid in candidates:
@@ -325,12 +337,28 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                  "التخصيص يتجاوز المتبقي المستحق بعد التصحيحات والمقاصة المعتمدة")
         if payload["kind"] == "settlement" and total != amount + fee:
             fail("operational_settlement_allocation_required", "خصص مبلغ التسوية للالتزامات المستحقة")
+        if (not wallet_pool and row["kind"] == "ad_account" and row.get("funding_mode") == "hybrid"
+                and payload["direction"] == "outgoing" and payload["kind"] == "payment"
+                and total != min(amount, party_available)):
+            fail("operational_ad_debt_priority_required",
+                 "الدفعة تسدد المستحق الإعلاني أولًا، ثم يضاف الزائد إلى المحفظة. أكمل تخصيص المستحق أو اترك التخصيص تلقائيًا.")
         item = {**payload, "id": operation_id,
                 "amount": fmt(amount), "actual_fee_amount": fmt(fee), "allocations": allocations, "actor_id": actor,
                 "source": source, "occurred_at": stamp, "name": row["name"],
                 "bank_kind": bank["kind"] if bank else None, "bank_name": bank["name"] if bank else None,
                 "funding_mode": row.get("funding_mode"),
                 "receipt_hash": receipt["sha256"] if receipt else None}
+        if wallet_pool:
+            item["funding_policy"] = "wallet_first"
+            item["wallet_first_allocation"] = {
+                "debt_settled": fmt(min(amount, party_available)),
+                "wallet_funded": fmt(max(amount-party_available, Decimal(0))),
+                "basis": "confirmed_balance_at_recording",
+            }
+            try:
+                project_pool({**state, "movements": [*state["movements"], item]}, row["id"], currency)
+            except ValueError:
+                fail("operational_wallet_balance_invalid", "تعذر اعتماد رصيد المحفظة؛ راجع مبالغ الحساب وأدلته")
         for identity, value in promotions.items():
             obligation = state["engine"]["obligations"][identity]
             before_confirmation = deepcopy(obligation)
@@ -378,7 +406,8 @@ async def refresh(db, owner, *, clock=None):
         try:
             from operational_balance_inventory import assert_no_source_collision
             await assert_no_source_collision(db, owner, state)
-            sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"))
+            options = {"operational_state": state} if state.get("ad_funding") else {}
+            sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), **options)
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")
         sources.setdefault("supplier_returns", []).extend(state.get("supplier_returns", []))
@@ -411,7 +440,8 @@ async def refresh(db, owner, *, clock=None):
         names = {}
         for kind in {r["party_type"] for r in result["engine"].get("obligations", {}).values()}:
             try:
-                names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind)}
+                options = {"operational_state": state} if kind == "ad_account" and state.get("ad_funding") else {}
+                names[kind] = {r["id"]: r["name"] for r in await entities(db, owner, kind, **options)}
             except ValueError:
                 names[kind] = {}
         for obligation in result["engine"].get("obligations", {}).values():
@@ -499,6 +529,12 @@ def report(state, *, as_of=None):
                                 "direction": "receivable" if signed >= 0 else "payable"})
     for obligation in obligations:
         row = get(obligation["party_type"], obligation["party_id"], obligation["currency"], obligation.get("name"))
+        if obligation["party_type"] == "ad_account" and wallet_pool_enabled(state, obligation["party_id"], obligation["currency"]):
+            # These rows retain the source amount and day, but payment belongs
+            # to the revolving account balance, never to a fabricated day split.
+            obligation.update(settled="0.00", outstanding="0.00", available_to_pay="0.00",
+                              pending_confirmation=False, balance_role="wallet_pool_evidence")
+            continue
         if obligation.get("funding_type"):
             row["funding_mode"] = obligation.get("funding_mode", obligation["funding_type"])
         direction = obligation["direction"]
@@ -527,6 +563,9 @@ def report(state, *, as_of=None):
             if movement["bank_kind"] == "employee_custody":
                 row["custody_spent"] += amount
         party = get(movement["party_type"], movement["party_id"], movement["currency"], movement.get("name"))
+        if movement["party_type"] == "ad_account" and wallet_pool_enabled(state, movement["party_id"], movement["currency"]):
+            party["actual"] -= signed
+            continue
         if movement.get("funding_mode"):
             party["funding_mode"] = movement["funding_mode"]
         if movement["direction"] == "outgoing" and movement["party_type"] not in {"operating_expense", "owner_withdrawal"}:
@@ -566,9 +605,26 @@ def report(state, *, as_of=None):
         if row["party_type"] == "employee_custody":
             row["custody_remaining"] = row["actual"]
         if row["party_type"] == "ad_account":
-            row["ad_wallet_balance"] = row["outstanding_receivable"] - row["ad_wallet_spent"]
-            row["outstanding_receivable"] = max(row["ad_wallet_balance"], Decimal(0))
-            row["ad_payable"] = row["outstanding_payable"]
+            if wallet_pool_enabled(state, row["party_id"], row["currency"]):
+                pool = project_pool(state, row["party_id"], row["currency"])
+                row.update(funding_mode="hybrid", funding_policy="wallet_first",
+                           ad_wallet_spent_basis="cumulative_funded_spend",
+                           ad_wallet_balance=pool["wallet_balance"], ad_payable=pool["payable"],
+                           outstanding_receivable=pool["wallet_balance"], outstanding_payable=pool["payable"],
+                           ad_wallet_spent=pool["wallet_spent"], expected_payable=pool["expected_spend"],
+                           confirmed_payable=pool["opening_debt"]+pool["spend"], settled=pool["debt_settled"])
+                obligations.append({"id": "operational-ad-balance:" + party_key("ad_account", row["party_id"], row["currency"]),
+                    "party_id": row["party_id"], "party_type": "ad_account", "currency": row["currency"],
+                    "name": row["name"], "kind": "advertising_balance", "direction": "payable",
+                    "expected": "0.00", "confirmed": fmt(pool["gross_debt"]),
+                    "settled": fmt(pool["debt_settled"]), "outstanding": fmt(pool["payable"]),
+                    "available_to_pay": fmt(pool["payable"]), "funding_policy": "wallet_first",
+                    "balance_role": "wallet_pool_balance", "allocation_mode": "automatic_account_balance",
+                    "business_date": None, "pending_confirmation": False})
+            else:
+                row["ad_wallet_balance"] = row["outstanding_receivable"] - row["ad_wallet_spent"]
+                row["outstanding_receivable"] = max(row["ad_wallet_balance"], Decimal(0))
+                row["ad_payable"] = row["outstanding_payable"]
         if row["party_type"] == "employee":
             offset = min(row["outstanding_receivable"], row["outstanding_payable"])
             row["outstanding_receivable"] -= offset
