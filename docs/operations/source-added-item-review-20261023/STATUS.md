@@ -140,3 +140,71 @@ preserves published56 session fixes; fresh CI/build and successor version pendin
 Next: push recovery changes, pass CI, build/freeze intent-only B and clean-clone
 rehearsal, then merge and publish under v5. Issue1006 remains comment-capacity
 blocked; PR1466 is continuation ledger fallback. No lease or publish by this task.
+
+## Final publication and recovery handoff — 2026-10-24
+
+Production changed: YES. Owner authorized publication and recovery preparation.
+Source A: `5e99dd93f52f04f10ff4a67c49e3938a29228941`.
+Intent B: `e97c41d7af6bd03613f6771e9659a0867d595541`.
+Deployment merge: `4e4e064ca9855c3a626968df55ef844de77de947` (tree equals B).
+Runtime release: `rg5-79259e335434682b97811e55e0ba54abfb6c807cde71fb06b0bd733721a1dd9a`.
+Frontend artifact tree: `39c9852195a1d25f944abda1a6ad2f63520248421cdc30096ad58bbf878c112c`.
+
+All applicable final B workflows passed. Review40108302695:565 passed +317
+subtests,32 print recovery checks and1 acceptance guard, no skipped/failing
+cases. The earlier A run was cancelled when B superseded it; the completed B
+run proves the exact implementation. Release40108302622 passed governed A/B,
+clean-clone Host20 adapter, isolated package and governed route checks.
+Root independently checked the generated bundle and local package boundaries.
+The slow supplementary local dependency installation was cancelled(exit130);
+no local build is claimed. Verified CI outputs supplied the release bundle.
+
+Generated artifact12565089664 ZIP SHA256:
+`859886a9d532b19a1c03966041853fb597b4595c6aa66f21b3c5e94a5fff33b3`.
+Inner tar SHA256:
+`73d4b06f20ad527edf06f0a7a090d70dca7d42eb7a31e59b3a8f9295e84ad26d`.
+/app fast-forwarded without altering pre-existing untracked files. Prior
+generated outputs and runtime-created backend bytecode were preserved at
+/root/source-addition-prior-release-20261024. An initial package check rejected
+prepackaged bytecode; after preserving it outside governed source, package
+verification passed. No dependency install/build ran in /app.
+
+V5 prepare succeeded2026-10-24T15:58:20.231781Z, actor
+`codex-source-addition-release-20261024-62b367ca`. Prepublish returned
+ready_to_publish=true, then one Republish/Publish changes action started at
+19:01 Riyadh. Emergent explicitly reported Deployment finished19:09 Riyadh,
+platform version `9e3a61f`; previous version `1025b98` remains listed.
+Official verify returned verified=true, checks=3 with exact intended backend
+and frontend identity; boot2026-10-24T16:08:59.260114Z. Status then active=false.
+A display-only wrapper initially attempted len(integer checks) after successful
+verification; corrected readback confirmed checks=3 and inactive status.
+Do not rerun verification as if the successful lease were still active.
+
+Cloud Build's full adapter transcript was not exposed by the viewed UI; its
+View Logs surface showed runtime logs. Do not claim observation of undocumented
+platform packaging commands. Clean-clone evidence and live identity probes passed.
+No customer order review, financial/accounting, advertising, stock-edit or other
+business write was used for deployment acceptance. Physical device/reviewer
+end-to-end acceptance remains unverified.
+
+Recovery: previous deployment `f75b9fcc9e5ac48d214feba005e12e472d1aafb9`
+(source `d34eb6f19b0df2da587a70e42b2893984580b7c5`) is pinned on
+`codex/source-addition-rollback-baseline-20261024`. Prefer the documented
+SOURCE_ADDITION_REVIEW_ENABLED=false operational disable across all instances,
+retaining approved-work compatibility. It is not an instant cross-instance
+switch. Do not click raw platform rollback after additions exist without the
+cohort audit described in ROLLBACK.md; no database restore/deletion authorized.
+
+Android57 (1.0.42) source `d0053c51ff4ae241c5a18dce1928d401cf145803`: full
+CI40108121290 and40108121246 passed, Expo build succeeded.
+https://expo.dev/accounts/amasi-gulf/projects/amasi/builds/edd4f430-8a81-4b05-af5a-e4e3aaf9f3b5
+No store submission or OTA. Device installation/fresh login are unverified.
+Android final status branch `codex/source-addition-android57-status-20261024`
+at `b2a4cf83842d279e3ac5da189b46e04d21f829db`; prior56 pinned on
+`codex/source-addition-rollback-android56-20261024`.
+
+This final status-only checkpoint lives separately from frozen release source.
+PR1466 is the final continuation ledger (Issue1006 comment capacity exceeded).
+Task publication is complete; next action is owner device acceptance or a
+specific reported issue. Do not duplicate deployment, rebuild or create a lease
+without a new reason; preserve all unrelated work and the recovery references.
