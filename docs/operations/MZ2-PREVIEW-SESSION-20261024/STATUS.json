@@ -1,6 +1,6 @@
 {
   "task": "MZ2-PREVIEW-SESSION-20261024",
-  "status": "DIAGNOSED_SHARED_RELEASE_LEASE_BLOCKS_RUNTIME_CHANGE",
+  "status": "PREVIEW_RECOVERED_BROWSER_VERIFIED",
   "base": "4e4e064ca",
   "branch": "codex/preview-session-recovery-20261024",
   "request": "Repair Preview auth-unavailable without bypassing authentication or writing business data.",
@@ -10,10 +10,16 @@
     "PreviewHostBoundary rejects host before auth. Sanitized runtime log reports host_allowed=false; origin absent. Actual rejected Host not logged, so new allowlist identity is not yet established.",
     "Wrapper pins public salla-analytics.preview.emergentagent.com plus cluster-12 preview upstream and loopback, and checks local Mongo/private session signing.",
     "Release Guard active=true, actor codex-source-addition-release-20261024-62b367ca, source5e99dd93f52f04f10ff4a67c49e3938a29228941.",
-    "Fresh retry still GUARD active=true for codex-source-addition-release-20261024-62b367ca. Passive Host-only diagnostic unavailable: container disallows raw socket; no protection changed or alternative privilege attempted."
+    "Fresh retry still GUARD active=true for codex-source-addition-release-20261024-62b367ca. Passive Host-only diagnostic unavailable: container disallows raw socket; no protection changed or alternative privilege attempted.",
+    "Release Guard freshly inactive before changes.",
+    "Sanitized request-host diagnostic proved gateway now sends salla-analytics.cluster-9.preview.emergentcf.cloud. Old exact allowlist pinned cluster-12.",
+    "Changed only Preview adapter cluster-12 to cluster-9 in upstream origin and allowed Host; added sanitized request_host diagnostic. Updated adapter.sha256 to 551b4a0549bca9186e92c63041e01910df7388ffd3d50c3e7c9b67f239b70f6d.",
+    "8 ASGI host/origin tests PASS in service venv, including production/old cluster/null Origin rejection.",
+    "Preview health HTTP200. Browser existing session successfully reached /dashboard-advanced with demo data.",
+    "Initial diagnostic-only restart failed adapter integrity check; restored original immediately, then updated adapter and matching fingerprint together. No check bypassed."
   ],
-  "changes": "Diagnostic checkpoint only; no runtime source, protection, allowlist or service change.",
-  "next": "After lease owner closes release, inspect exact forwarded host with sanitized diagnostics in Preview boundary. Verify host belongs to this project, apply exact-host correction preserving origin/CSRF/session/local-DB protections, regression test approved and denied hosts, restart Preview only and verify browser login recovery. Never clear other lease.",
+  "changes": "Preview private adapter host correction and matching integrity hash only; production source, DB, signing key, auth policy and isolation unchanged.",
+  "next": "Preview available. Before accounting training verify Preview source includes current operational accounting features; its isolated runtime uses older source and automatic workers remain disabled.",
   "production_changed": false,
-  "preview_changed": false
+  "preview_changed": true
 }
