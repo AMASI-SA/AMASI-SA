@@ -29,6 +29,7 @@ jest.mock("./PreparationEmployeeReceivingWorkspace", () => ({
 
 import ReadyToShipOrders, {
     AssemblyProductCard,
+    sallaOrderHref,
     CompletedAssemblyOrderCard,
 } from "./ReadyToShipOrders";
 
@@ -518,4 +519,31 @@ test("confirmed order with pending label permits fetching but cannot print", () 
     const markup = renderToStaticMarkup(<CompletedAssemblyOrderCard assemblyCompletionConfirmed canPrint orderNumber="42" carrierLabel={{ order_status_completed: true, ready: false }} />);
     expect(markup).toContain('data-testid="assembly-issue-carrier-label"');
     expect(markup).not.toContain('data-testid="assembly-download-official-carrier-label"');
+});
+
+
+test("Salla links request Chrome on Android and retain the exact order fallback", () => {
+    const url = "https://s.salla.sa/orders/12345";
+    const intent = sallaOrderHref(url, "Android");
+    expect(intent).toContain("package=com.android.chrome;");
+    expect(intent).toContain(`S.browser_fallback_url=${encodeURIComponent(url)};end`);
+    expect(sallaOrderHref(url, "iPhone")).toBe(url);
+    for (const unsafe of ["javascript:alert(1)", "https://evil.test/orders/12345", "https://s.salla.sa/orders/123?token=x"]) {
+        expect(sallaOrderHref(unsafe, "Android")).toBeUndefined();
+    }
+});
+
+test("piece stages and employees are available in the expandable history", () => {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<AssemblyProductCard piece={{
+        piece_id: "one", responsible_employee_name: "موظف التجهيز",
+        route_steps: [{ label: "تم الاستلام", actor_name: "المستلم" }],
+        specifications: [{ name: "الاسم", value: "نورة" }], can_mark_ready: false,
+    }} />);
+    const history = host.querySelector("details");
+    expect(history.hasAttribute("open")).toBe(false);
+    expect(history.querySelector("summary").getAttribute("aria-label")).toBe("عرض مراحل تجهيز المنتج");
+    expect(history.textContent).toContain("تم الاستلام");
+    expect(history.textContent).toContain("المستلم");
+    expect(host.querySelector('[aria-label="نسخ الاسم"]')).not.toBeNull();
 });

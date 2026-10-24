@@ -1651,3 +1651,25 @@ def test_build37_historical_actor_repair_does_not_guess_from_owner_or_ambiguous_
         ambiguous,
         merchant_owner_id="owner-1",
     ) == {}
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', ['in_progress', 'pending_review', 'completed', 'shipped', 'delivered', 'canceled', 'unknown'])
+async def test_assembly_phone_card_status_gate_and_trusted_order_link(monkeypatch, status):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+    # A stale UI DTO cannot override current canonical provider status.
+    monkeypatch.setattr(operations, '_current_assembly_order', AsyncMock(return_value=SimpleNamespace(
+        status='in_progress', status_native='in_progress', items=[], created_at=None, shipping=SimpleNamespace(company=None))))
+    source = _canonical_assembly_source('10452', status)
+    raw = source.row['raw_by_source']['salla_direct']
+    raw.update(id='98765', urls={'admin': 'https://s.salla.sa/orders/98765'})
+    db = {WORKFLOWS: _AssemblySearchCollection(row={'order_number': '10452', 'stage': 'in_progress'}),
+          PIECES: _AssemblySearchCollection(rows=[{'piece_id': 'a'*32, 'order_number': '10452',
+              'status': PIECE_STATUS_READY_FOR_ASSEMBLY, 'preparation_receipt_status': 'received'}]),
+          'unified_orders': source}
+    result = await _assembly_search(db, user_id='merchant-1', query='10452')
+    assert result['pieces'][0]['can_mark_ready'] is (status == 'in_progress')
+    assert result['salla_admin_url'] == 'https://s.salla.sa/orders/98765'
+    raw['reference_id'] = 'other'
+    assert (await _assembly_search(db, user_id='merchant-1', query='10452'))['salla_admin_url'] is None
+    assert all(q.get('user_id') == 'merchant-1' for q in source.find_one_queries)
