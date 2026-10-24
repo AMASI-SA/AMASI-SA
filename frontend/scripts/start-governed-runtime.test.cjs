@@ -76,7 +76,10 @@ function fixture({
         }],
         tree_sha256: "c".repeat(64),
       },
-      toolchain: { node: "22.23.2", yarn: "1.22.22", vite: "8.2.1" },
+      toolchain: {
+        node: "22.23.2", yarn: "1.22.22",
+        vite: require("../package.json").dependencies.vite,
+      },
       environment: {
         mode: "production",
         effective: {
@@ -146,6 +149,22 @@ test("runtime refuses missing, malformed, non-object, or SPA metadata", async (t
       value.cleanup();
     }
   });
+});
+
+test("runtime rejects proof from a different Vite version", () => {
+  const value = fixture();
+  try {
+    const metadataPath = path.join(value.build, "build-meta.json");
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    metadata.toolchain.vite = "0.0.0";
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata), "utf8");
+    assert.throws(
+      () => validateGovernedRuntimeArtifact({ artifactRoot: value.build }),
+      /toolchain proof is invalid/,
+    );
+  } finally {
+    value.cleanup();
+  }
 });
 
 test("runtime validates first then launches only local Vite preview with exact argv", async () => {
