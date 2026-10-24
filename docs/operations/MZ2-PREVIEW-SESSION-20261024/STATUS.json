@@ -1,12 +1,19 @@
 {
- "task":"MZ2-PREVIEW-SESSION-20261024",
- "status":"DIAGNOSED_SHARED_RELEASE_LEASE_BLOCKS_RUNTIME_CHANGE",
- "base":"4e4e064ca",
- "branch":"codex/preview-session-recovery-20261024",
- "request":"Repair Preview auth-unavailable without bypassing authentication or writing business data.",
- "evidence":["Preview /api/health returns HTTP403 detail Preview origin required, including with its own Origin header.","Running backend is private /app/.worktrees/mz2-uat-1128-runtime-20260921/preview_password_runtime.py, not current production source.","PreviewHostBoundary rejects host before auth. Sanitized runtime log reports host_allowed=false; origin absent. Actual rejected Host not logged, so new allowlist identity is not yet established.","Wrapper pins public salla-analytics.preview.emergentagent.com plus cluster-12 preview upstream and loopback, and checks local Mongo/private session signing.","Release Guard active=true, actor codex-source-addition-release-20261024-62b367ca, source5e99dd93f52f04f10ff4a67c49e3938a29228941."],
- "changes":"Diagnostic checkpoint only; no runtime source, protection, allowlist or service change.",
- "next":"After lease owner closes release, inspect exact forwarded host with sanitized diagnostics in Preview boundary. Verify host belongs to this project, apply exact-host correction preserving origin/CSRF/session/local-DB protections, regression test approved and denied hosts, restart Preview only and verify browser login recovery. Never clear other lease.",
- "production_changed":false,
- "preview_changed":false
+  "task": "MZ2-PREVIEW-SESSION-20261024",
+  "status": "DIAGNOSED_SHARED_RELEASE_LEASE_BLOCKS_RUNTIME_CHANGE",
+  "base": "4e4e064ca",
+  "branch": "codex/preview-session-recovery-20261024",
+  "request": "Repair Preview auth-unavailable without bypassing authentication or writing business data.",
+  "evidence": [
+    "Preview /api/health returns HTTP403 detail Preview origin required, including with its own Origin header.",
+    "Running backend is private /app/.worktrees/mz2-uat-1128-runtime-20260921/preview_password_runtime.py, not current production source.",
+    "PreviewHostBoundary rejects host before auth. Sanitized runtime log reports host_allowed=false; origin absent. Actual rejected Host not logged, so new allowlist identity is not yet established.",
+    "Wrapper pins public salla-analytics.preview.emergentagent.com plus cluster-12 preview upstream and loopback, and checks local Mongo/private session signing.",
+    "Release Guard active=true, actor codex-source-addition-release-20261024-62b367ca, source5e99dd93f52f04f10ff4a67c49e3938a29228941.",
+    "Fresh retry still GUARD active=true for codex-source-addition-release-20261024-62b367ca. Passive Host-only diagnostic unavailable: container disallows raw socket; no protection changed or alternative privilege attempted."
+  ],
+  "changes": "Diagnostic checkpoint only; no runtime source, protection, allowlist or service change.",
+  "next": "After lease owner closes release, inspect exact forwarded host with sanitized diagnostics in Preview boundary. Verify host belongs to this project, apply exact-host correction preserving origin/CSRF/session/local-DB protections, regression test approved and denied hosts, restart Preview only and verify browser login recovery. Never clear other lease.",
+  "production_changed": false,
+  "preview_changed": false
 }
