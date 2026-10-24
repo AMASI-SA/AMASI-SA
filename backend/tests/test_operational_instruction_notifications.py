@@ -12,6 +12,7 @@ from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS
 class Cursor:
     def __init__(self, raw): self.raw = raw
     def sort(self, *args): self.raw = self.raw.sort(*args); return self
+    def limit(self, value): self.raw = self.raw.limit(value); return self
     async def to_list(self, length): return list(self.raw.limit(length))
 class Collection:
     def __init__(self, raw): self.raw = raw

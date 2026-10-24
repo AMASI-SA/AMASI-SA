@@ -47,7 +47,6 @@ from preparation_piece_operations import PIECES, PIECE_EVENTS
 from store_delivery_customer_instruction_routes import (
     STORE_DELIVERY_INSTRUCTIONS,
     STORE_DELIVERY_INSTRUCTION_EVENTS,
-    _require_customer_service,
 )
 from supplier_receiving_routes import RECEIVING_EVENTS
 
@@ -155,11 +154,22 @@ def _model_dict(value: Any) -> dict[str, Any]:
     return legacy() if callable(legacy) else {}
 
 
+def _has_orders_page_access(user: dict[str, Any]) -> bool:
+    if text(user.get("role")).casefold() == "store_driver":
+        return False
+    if user.get("_session_client") == "amasi_mobile":
+        # Supplied by the authenticated native bridge, never the request body.
+        return "app.page.orders" in (user.get("mobile_app_permissions") or [])
+    # The server resolves this with the same legacy permission function as
+    # /auth/me, including role defaults and explicit orders.view denials.
+    return user.get("_tracking_orders_page_allowed") is True
+
+
 def _can_manage_tracking_instructions(
     user: dict[str, Any],
     context: dict[str, Any],
 ) -> bool:
-    """Customer service owns these gates even without fulfillment-stop ACLs."""
+    """Orders-page staff may create instructions without broader admin ACLs."""
     role = text(user.get("role")).casefold()
     granted = (
         set(user.get("extra_permissions") or [])
@@ -173,6 +183,7 @@ def _can_manage_tracking_instructions(
         context.get("is_owner")
         or user.get("is_owner") is True
         or role in {"owner", "admin", "customer_service"}
+        or _has_orders_page_access(user)
         or TRACKING_MANAGE_PERMISSION in granted
         or _can_manage_stops(context)
     )
@@ -956,8 +967,15 @@ def make_order_tracking_notes_router(
                 "disabled": {"$ne": True}, "is_active": {"$ne": False}}, {"_id": 0})
             if not actual:
                 raise HTTPException(status_code=403, detail={"code": "instruction_actor_not_active"})
-            return {**actual, "mobile_app_permissions": user.get("_mobile_app_permissions") or []}
+            return {**actual, "_session_client": "amasi_mobile",
+                "mobile_app_permissions": user.get("_mobile_app_permissions") or []}
         return user
+
+    async def tracking_manager_context(user):
+        context = await _actor_context(db, user)
+        if not _can_manage_tracking_instructions(user, context):
+            raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        return user, context
 
 
     async def can_claim_review(instruction, user, context):
@@ -1163,8 +1181,7 @@ def make_order_tracking_notes_router(
         limit: int = Query(default=20, ge=1, le=50),
         user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
-        actor = _require_customer_service(user)
-        context = await _actor_context(db, actor)
+        actor, context = await tracking_manager_context(user)
         query = text(q).lstrip("#")
         pattern = re.compile(re.escape(query), re.IGNORECASE)
         rows = await db.unified_orders.find(
@@ -1194,8 +1211,7 @@ def make_order_tracking_notes_router(
         order_number: str,
         user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
-        actor = _require_customer_service(user)
-        context = await _actor_context(db, actor)
+        actor, context = await tracking_manager_context(user)
         normalized = text(order_number).lstrip("#")
         try:
             order = await get_order(repository, user_id=context["merchant_id"], order_number=normalized)
@@ -1344,10 +1360,7 @@ def make_order_tracking_notes_router(
         payload: TrackingInstructionCreate,
         user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
-        actor = _require_customer_service(user)
-        context = await _actor_context(db, actor)
-        if not _can_manage_tracking_instructions(actor, context):
-            raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        actor, context = await tracking_manager_context(user)
         if payload.action_type not in ACTION_TYPES:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_action_invalid"})
         if payload.priority not in NOTE_PRIORITIES:
@@ -1813,10 +1826,7 @@ def make_order_tracking_notes_router(
         payload: InstructionApprovalRequest,
         user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
-        actor = _require_customer_service(user)
-        context = await _actor_context(db, actor)
-        if not _can_manage_tracking_instructions(actor, context):
-            raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        actor, context = await tracking_manager_context(user)
         instruction = await db[ORDER_TRACKING_INSTRUCTIONS].find_one(
             {
                 "user_id": context["merchant_id"],
@@ -1841,10 +1851,7 @@ def make_order_tracking_notes_router(
         payload: InstructionApprovalRequest,
         user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
-        actor = _require_customer_service(user)
-        context = await _actor_context(db, actor)
-        if not _can_manage_tracking_instructions(actor, context):
-            raise HTTPException(status_code=403, detail={"code": "customer_service_instruction_manage_permission_required"})
+        actor, context = await tracking_manager_context(user)
         reason = text(payload.note)
         if not reason:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_rejection_reason_required"})

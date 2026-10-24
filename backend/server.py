@@ -275,6 +275,13 @@ async def current_user(request: Request) -> dict:
     # data scoping. Keep the original signed login-family proof separately;
     # never inherit a similarly named field stored on the merchant document.
     principal["_review_session"] = user.get("_review_session")
+    if request.url.path.startswith("/api/order-tracking-notes/"):
+        # Keep the browser Orders-page decision identical to /auth/me. This
+        # flag is overwritten for every request; native access stays separate.
+        principal["_tracking_orders_page_allowed"] = (
+            user.get("_session_client") != "amasi_mobile"
+            and "orders.view" in _effective_perms(user)
+        )
     return principal
 
 
