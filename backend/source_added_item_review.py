@@ -113,7 +113,7 @@ def source_identities_match(raw, number, identities):
                     for i in identities))
 
 
-async def context(db, owner, number):
+async def context(db, owner, number, *, allow_pending_reconciliation=True):
     try:
         order = await get_order(MongoOrderRepository(db), user_id=owner, order_number=number)
     except OrderNotFoundError:
@@ -144,9 +144,23 @@ async def context(db, owner, number):
             reason = "source_addition_review_proof_missing"
     elif workflow.get("completion_mode") is not None or not workflow.get("reviewed_at"):
         reason = "source_addition_review_proof_missing"
+    needs_reconciliation = False
     if reason is None and number not in await load_source_current_assignment_workflows(
             db, user_id=owner, workflows=[workflow], strict=True):
-        reason = "source_addition_components_not_current"
+        from fulfillment_v2_routes import component_provider_version
+        watermark = source.get("g47_salla_snapshot") or {}
+        # Source-only refreshes cannot reserve stock. Offer the explicit review
+        # action, which must reconcile under the same transaction before approval.
+        # Reads never repair stock, and assignment still requires current proof.
+        needs_reconciliation = bool(allow_pending_reconciliation
+            and watermark.get("component_pending") is True
+            and type(watermark.get("revision")) is int
+            and not watermark.get("cancelled")
+            and not watermark.get("requires_authoritative_refresh")
+            and watermark.get("source_updated_at")
+            and component_provider_version(raw, created_event=True) == watermark["source_updated_at"])
+        if not needs_reconciliation:
+            reason = "source_addition_components_not_current"
     rows = []
     for item in identities:
         # Pending orders use the normal full-order review. An absent workflow
@@ -166,6 +180,7 @@ async def context(db, owner, number):
                                "يمكن اعتماد الإضافة في حالتي تمت المراجعة وقيد التنفيذ فقط.")
         rows.append({"order_item_id": item.order_item_id, "reviewed": reviewed,
                      "eligible": not reviewed and item_reason is None,
+                     "requires_component_reconciliation": not reviewed and needs_reconciliation,
                      "blocked_reason": None if reviewed else item_reason,
                      "blocked_message": blocked_message,
                      "addition_notice": addition_notice((source.get("source_addition_observations") or {}).get(
@@ -223,6 +238,18 @@ async def approve(db, *, owner, reviewer, number, item_id, request):
             fail("source_addition_source_changed")
         await enforce_stage_instructions(scoped, user_id=owner, order_number=number,
             order_item_id=item_id, stage="pending_review", actor_id=str(reviewer["id"]))
+        if capability.get("requires_component_reconciliation"):
+            from fulfillment_v2_routes import reconcile_component_order_lifecycle
+            source = await scoped.unified_orders.find_one({"user_id": owner, "order_number": number}) or {}
+            watermark = source.get("g47_salla_snapshot") or {}
+            await reconcile_component_order_lifecycle(scoped, user_id=owner, order=order,
+                source_updated_at=watermark.get("source_updated_at"),
+                source_revision=watermark.get("revision"), actor_id=str(reviewer["id"]), strict=True)
+            result, order, workflow, identities = await context(
+                scoped, owner, number, allow_pending_reconciliation=False)
+            current = next((r for r in result["items"] if r["order_item_id"] == item_id), None)
+            if not current or not current["eligible"]:
+                fail((current or {}).get("blocked_reason") or "source_addition_components_not_current")
         view = _item_view(target, None, None)
         now = _now()
         frozen = {
