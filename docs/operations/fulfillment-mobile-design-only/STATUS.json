@@ -1,20 +1,22 @@
 {
   "task": "fulfillment-mobile-design-only",
-  "status": "WIP: preview session unavailable blocks phone visual acceptance",
+  "status": "WIP: synthetic visual QA in progress; production unchanged",
   "branch": "codex/fulfillment-mobile-design-only-20261024",
-  "base": "f75b9fcc9e5ac48d214feba005e12e472d1aafb9",
+  "base": "4e4e064ca9855c3a626968df55ef844de77de947",
   "scope": "Phone presentation only; no dependency or operational changes",
   "verification": {
     "focused_tests": "73 passed / 3 suites",
     "diff_check": "passed",
     "shared_guard": "active=false observed 2026-10-24",
-    "live_source": "d34eb6f19b0df2da587a70e42b2893984580b7c5 matches current production intent",
-    "live_artifact": "303987b615fb30aed8dadaf610f2e002ece862164ffadd9e4bd90f11ee17db38"
+    "live_source": "Last observed d34eb6f19b0df2da587a70e42b2893984580b7c5; refresh before release",
+    "live_artifact": "303987b615fb30aed8dadaf610f2e002ece862164ffadd9e4bd90f11ee17db38",
+    "reconciled_tests": "73 passed / 3 suites on latest production base before final CSS refinements",
+    "visual": "Home six tiles and initial review detail rendered at 360/390/430px; review table heading/date refinements pending recheck"
   },
   "production_changed_by_this_task": false,
-  "next": "Restore preview connectivity through its owning task, then visually verify design at 360/390/430px before governed release. Shared source untouched; isolated /tmp/mezan-mobile-design-qa available.",
+  "next": "Verify compact review and assembly at 360/390/430px, then governed A/B build, intent-only commit and release",
   "rollback": "Revert this isolated presentation change on a new branch; no data migration. Retain current production deployment before publication.",
   "checkpoint": "b3360dadbdaa2310a71075a80a36a02fa013036e",
   "pr": 1467,
-  "preview_blocker": "Direct preview renders authentication unavailable: connection to Mezan server incomplete. No protected pages loaded."
+  "preview_blocker": "Production-auth preview unavailable; isolated actual-component fixture harness now renders phone home and review. No live writes."
 }

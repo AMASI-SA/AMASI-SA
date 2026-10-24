@@ -573,7 +573,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                 ) : error ? (
                     <div className="m-6 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800"><WarningCircle className="ml-2 inline" />{error}</div>
                 ) : (
-                    <div className="space-y-5 p-4 sm:p-6">
+                    <div className="review-mobile-content space-y-5 p-4 sm:p-6">
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4">
                             <div><b className="text-lg">#{order.order_number}</b><div className="text-sm text-slate-500">{new Date(order.created_at).toLocaleString("ar-SA")}</div></div>
                             <div className="flex flex-wrap gap-2">
@@ -588,7 +588,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             onUpdated={load}
                         />
 
-                        <section className="rounded-2xl border bg-white p-4">
+                        <section className="review-customer-panel rounded-2xl border bg-white p-4">
                             <h3 className="mb-3 text-lg font-extrabold">معلومات العميل</h3>
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                 <Field label="الاسم" value={customer.name} />
@@ -599,8 +599,8 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             </div>
                         </section>
 
-                        <div className="grid gap-5 lg:grid-cols-2">
-                            <section className="rounded-2xl border bg-white p-4">
+                        <div className="review-payment-shipping grid gap-5 lg:grid-cols-2">
+                            <section className="review-payment-panel rounded-2xl border bg-white p-4">
                                 <h3 className="mb-3 text-lg font-extrabold">معلومات الدفع</h3>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <Field label="طريقة الدفع" value={paymentText(order)} />
@@ -813,7 +813,7 @@ export default function OrderReview({ initialSearch = "" }) {
                     <button key={order.order_number} type="button" onClick={() => setSelectedOrder(order.order_number)} className={`review-table-row grid w-full gap-2 border-b px-4 py-4 text-right last:border-b-0 md:grid-cols-[70px_1fr_1fr_1fr_1fr] md:items-center ${rowTone(order)}`}>
                         <span className="inline-flex items-center gap-1 font-bold text-violet-700"><ArrowLeft /> <span className="md:hidden">التفاصيل</span></span>
                         <span className="font-extrabold" dir="ltr">#{order.order_number}</span>
-                        <span className="text-sm text-slate-600">{new Date(order.created_at).toLocaleString("ar-SA")}</span>
+                        <span className="text-sm text-slate-600" title={new Date(order.created_at).toLocaleString("ar-SA")}><span className="review-date-full">{new Date(order.created_at).toLocaleString("ar-SA")}</span><span className="review-date-short" dir="ltr">{new Date(order.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })}</span></span>
                         <span className="font-bold">{paymentText(order)}</span>
                         <span>{order.customer?.name || "عميل بدون اسم"}</span>
                     </button>

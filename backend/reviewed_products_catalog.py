@@ -19,6 +19,7 @@ from order_review_routes import WORKFLOWS, _merchant_user_id, _require_reviewer,
 from review_local_policy import (
     ASSIGNMENT_STAGES, LOCAL_COMPLETION_MODE, assignment_workflow_query,
     is_known_review_mode, load_local_assignment_workflows, local_review_stage_eligible,
+    load_source_addition_assignment_workflows,
 )
 from product_category_variant_support import _build_category_catalog, _flatten_categories
 from reviewed_preparation_v3 import (
@@ -93,6 +94,23 @@ def _review_state_map(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
         for row in workflow.get("items") or []
         if isinstance(row, dict) and _text(row.get("order_item_id"))
     }
+
+
+def has_unreviewed_source_additions(order: dict[str, Any], workflow: dict[str, Any]) -> bool:
+    """A complete identified review snapshot cannot approve a later Salla line.
+
+    Anonymous legacy snapshots retain their established recovery behavior:
+    matching product/SKU is not proof of a newly added order-line identity.
+    """
+    snapshots = workflow.get("items") or []
+    if (workflow.get("stage") not in {"reviewed", "in_progress"} or not snapshots
+            or any(not isinstance(row, dict) or not _text(row.get("order_item_id")) for row in snapshots)):
+        return False
+    approved_ids = {_text(row["order_item_id"]) for row in snapshots}
+    prefix = f"salla:{_text(order.get('order_number') or workflow.get('order_number'))}:"
+    return any(_text(_dict(item).get("order_item_id")).startswith(prefix)
+               and _text(_dict(item).get("order_item_id")) not in approved_ids
+               for item in order.get("items") or [])
 
 
 def reviewed_customer_spec_fields(
@@ -296,13 +314,19 @@ def aggregate_reviewed_products(
             reviewed_order_numbers.add(order_number)
         states = _review_state_map(workflow)
         order_items = order_items_with_review_snapshot(order, workflow)
+        unreviewed_additions = has_unreviewed_source_additions(order, workflow)
         total_products_in_order = sum(
             _unit_quantity(item.get("quantity")) for item in order_items
         ) or 1
         shipping = _dict(order.get("shipping"))
 
         for line_index, item in enumerate(order_items):
-            state = states.get(_text(item.get("order_item_id")), {})
+            item_id = _text(item.get("order_item_id"))
+            state = states.get(item_id, {})
+            if (unreviewed_additions and item_id.startswith(f"salla:{order_number}:") and not state):
+                continue
+            if state.get("source_addition") is True and state.get("review_status") != "reviewed":
+                continue
             if item.get("_review_snapshot_state"):
                 state = {**item, **state}
             # A reviewer may deliberately exclude a line from supplier files or
@@ -866,6 +890,9 @@ async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
     approved = {} if historical else await load_local_assignment_workflows(
         db, user_id=user_id, workflows=workflows,
     )
+    addition_approved = {} if historical else await load_source_addition_assignment_workflows(
+        db, user_id=user_id, workflows=workflows,
+    )
     pairs = []
     for workflow in workflows:
         number = _text(workflow.get("order_number"))
@@ -883,6 +910,10 @@ async def _load_catalog_pairs(db, *, user_id, workflows, historical=False):
                 order, approved.get(number), ASSIGNMENT_STAGES,
             )
         ))):
+            continue
+        if (not historical and mode is None and workflow.get("stage") == "in_progress"
+                and workflow.get("source_additions_reviewed") is True
+                and not local_review_stage_eligible(order, addition_approved.get(number), ASSIGNMENT_STAGES)):
             continue
         pairs.append((order, workflow))
     allocations = await db[PREPARATION_UNIT_ALLOCATIONS].find({

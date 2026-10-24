@@ -1766,8 +1766,13 @@ async def _auto_route_instant_order(
     if component_lifecycle.get("accepted") is not True:
         return {"promoted": False, "reverted": False, "stage": current_stage,
                 "component_lifecycle": component_lifecycle, "reason": "component_acceptance_blocked"}
+    from reviewed_products_catalog import has_unreviewed_source_additions
     if workflow and (
-        current_stage in TERMINAL_WORKFLOW_STAGES
+        (current_stage == "in_progress" and (
+            workflow.get("source_additions_reviewed") is True
+            or has_unreviewed_source_additions(order.model_dump(mode="json"), workflow)
+        ))
+        or current_stage in TERMINAL_WORKFLOW_STAGES
         or workflow.get("claim_batch_id")
     ):
         return {
