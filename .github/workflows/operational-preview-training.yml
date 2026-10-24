@@ -1,0 +1,46 @@
+name: Isolated operational Preview training bundle
+on:
+  push:
+    branches: [codex/operational-preview-training-20261024]
+    paths: [.github/workflows/operational-preview-training.yml]
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fda6ab558023d2c29bb200951ec47fb7a87f1c90
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+      - run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - run: yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Build Preview only
+        working-directory: frontend
+        env:
+          NODE_ENV: production
+          REACT_APP_BACKEND_URL: https://salla-analytics.preview.emergentagent.com
+        run: node node_modules/vite/bin/vite.js build --mode preview
+      - name: Package immutable source and Preview frontend
+        run: |
+          mkdir -p bundle/source bundle/frontend
+          git archive HEAD | tar -x -C bundle/source
+          cp -a frontend/build bundle/frontend/
+          python - <<'PY'
+          import hashlib,json,pathlib
+          root=pathlib.Path('bundle')
+          meta={'environment':'preview','api_origin':'https://salla-analytics.preview.emergentagent.com','source_git_sha':'fda6ab558023d2c29bb200951ec47fb7a87f1c90','external_network':'denied','automatic_workers':'disabled','contains_production_release_identity':False}
+          assert not (root/'frontend/build/build-meta.json').exists()
+          meta['index_sha256']=hashlib.sha256((root/'frontend/build/index.html').read_bytes()).hexdigest()
+          (root/'frontend/build/preview-meta.json').write_text(json.dumps(meta))
+          (root/'manifest.json').write_text(json.dumps({str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.rglob('*')) if p.is_file()},sort_keys=True))
+          PY
+          tar -czf operational-preview-training.tar.gz -C bundle .
+          sha256sum operational-preview-training.tar.gz > operational-preview-training.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-preview-training
+          path: operational-preview-training.*
+          retention-days: 90
