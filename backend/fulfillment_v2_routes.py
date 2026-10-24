@@ -1556,7 +1556,18 @@ async def reconcile_component_order_lifecycle(
         if version and previous_version and version == previous_version and previous.get("cancelled") and not cancelled:
             return {**previous, "stale": True}
         if version and version == previous_version and previous.get("source_fingerprint") not in {None, fingerprint} and not cancelled:
-            return {**previous, "stale": True}
+            # A source-only authoritative refresh can change line/payment facts
+            # without advancing the provider timestamp. Only an explicit strict
+            # operation with the current canonical revision may reconcile it.
+            # An event replay or a caller DTO alone is never sufficient proof.
+            canonical_match = False
+            if strict and source_revision is not None and version == watermark.get("source_updated_at"):
+                from order_engine.repository import MongoOrderRepository
+                from order_engine.service import get_order
+                canonical = await get_order(MongoOrderRepository(scoped), user_id=user_id, order_number=order_number)
+                canonical_match = component_order_fingerprint(canonical) == fingerprint
+            if not canonical_match:
+                return {**previous, "stale": True}
         if not version and previous_version and not strict and not cancelled:
             return {**previous, "stale": True}
         if previous.get("source_fingerprint") == fingerprint and (not version or version == previous_version):

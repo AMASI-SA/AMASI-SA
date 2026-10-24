@@ -80,3 +80,23 @@ test("history note remains visible after approval", async () => {
     await render(); expect(host.textContent).toContain(note);
     expect(host.textContent).toContain("تمت مراجعة المنتج المضاف");
 });
+
+test("pending component check requires an explicit review click", async () => {
+    getSourceAdditions.mockResolvedValue({ ...pending(), items: pending().items.map(r => ({ ...r, requires_component_reconciliation: true })) });
+    await render();
+    expect(host.querySelector('section button').disabled).toBe(false);
+    expect(host.textContent).toContain("سيتم التحقق من مكونات التجهيز");
+    expect(reviewSourceAddition).not.toHaveBeenCalled();
+    getSourceAdditions.mockResolvedValueOnce(completed());
+    await click();
+    expect(reviewSourceAddition).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("تمت مراجعة المنتج المضاف");
+});
+
+test("blocked component proof has an Arabic explanation", async () => {
+    getSourceAdditions.mockResolvedValue({ ...pending(), items: pending().items.map(r => ({ ...r, eligible: false, blocked_reason: "source_addition_components_not_current" })) });
+    await render();
+    expect(host.querySelector('section button').disabled).toBe(true);
+    expect(host.textContent).toContain("بيانات مكونات التجهيز لا تطابق آخر تحديث");
+    expect(host.textContent).not.toContain("source_addition_components_not_current");
+});
