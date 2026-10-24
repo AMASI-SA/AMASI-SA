@@ -11,3 +11,9 @@ Rollback branch codex/payment-sync-rollback-baseline-20261024 retains J. Preserv
 Live Salla payment-event subscription remains unverified. Partner sign-in reached OTP. Automated secure OTP request was rejected by auto-review for field-description safety; no OTP entered, no workaround attempted. User handoff is needed to finish that verification after unaffected code/release work. Never record credentials or customer payloads.
 
 Next: inspect B CI, merge without squash/rebase only if green and base unchanged; obtain generated v5 outputs from B CI; recheck shared lease; fast-forward /app preserving unrelated files; verify packages; prepare/prepublish; publish once; require explicit Deployment Succeeded and three verified identity probes. Refresh the already-paid order from authoritative Salla once and verify remaining=0 plus product eligibility. Complete partner subscription check before claiming automatic live delivery verified.
+
+## Publication in progress
+
+All applicable B checks passed (only unrelated TikTok workflow skipped). PR #1473 merged as 9df7ed03222bd7adcf3a8dff00c56a901a90e4ca; merge tree matches B. CI generated outputs artifact 12572267195 from run 40123307212 passed SHA-256, intent-byte and package checks locally and in /app. Shared /app fast-forwarded preserving unrelated files. Prior generated outputs backed up to /root/payment-sync-prior-release-20261024.
+
+Guard prepared by codex-payment-sync-20261024 at 2026-10-24T19:08:58Z; prepublish ready=true. Runtime rg5-0128e1df393b5a29e97bc383022bafa433d89c67f73330f17b25259e2cad8697. Publish changes clicked exactly once; UI Publishing. Do not click publish again. Next: wait for a new explicit Deployment Succeeded newer than previous Oct 24 21:41 Riyadh; run guard verify against https://mezansalla.com, then status inactive. Live order verification and subscription OTP remain pending.
