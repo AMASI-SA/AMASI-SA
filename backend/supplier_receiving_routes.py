@@ -2673,6 +2673,9 @@ def _supplier_receiving_search_piece_view(
     else:
         blocker = piece_scan_blocker(piece)
         if blocker is None:
+            blocker = piece_scan_blocker(piece)
+            if blocker:
+                raise HTTPException(status_code=409, detail=blocker)
             dispatch_blocker = supplier_receiving_dispatch_blocker(piece, supplier_id)
             if (
                 dispatch_blocker
@@ -4750,9 +4753,6 @@ def make_supplier_receiving_router(
                     status_code=409,
                     detail={"code": "supplier_receiving_experiment_mode_mismatch"},
                 )
-            blocker = piece_scan_blocker(piece)
-            if blocker:
-                raise HTTPException(status_code=409, detail=blocker)
             await enforce_stage_instructions(
                 db,
                 user_id=context["merchant_id"],
