@@ -5,7 +5,8 @@ import InstructionTaskComments from "./InstructionTaskComments";
 jest.mock("../../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
 test("comment retries reuse request identity and never call execution or release", async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  Object.defineProperty(crypto, "randomUUID", { configurable: true, value: () => "request-1" });
+  const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  Object.defineProperty(globalThis, "crypto", { configurable: true, value: { randomUUID: () => "request-1" } });
   const node = document.createElement("div"), root = createRoot(node); document.body.appendChild(node);
   api.get.mockResolvedValue({ data: { items: [] } }); api.post.mockRejectedValueOnce(new Error("response lost")).mockResolvedValue({ data: {} });
   try {
@@ -17,5 +18,9 @@ test("comment retries reuse request identity and never call execution or release
     const expected = ["/order-tracking-notes/instructions/instruction-1/tasks/task-1/comments", { body: "هل المطلوب المقاس الجديد؟", client_request_id: "request-1" }];
     expect(api.post.mock.calls).toEqual([expected, expected]);
     expect(node.querySelector("textarea").value).toBe("");
-  } finally { act(() => root.unmount()); node.remove(); }
+  } finally {
+    act(() => root.unmount()); node.remove();
+    if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto);
+    else delete globalThis.crypto;
+  }
 });
