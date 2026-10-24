@@ -1,5 +1,9 @@
 import api from "../lib/api";
 
+export async function getMyTrackingInstructionHistory() {
+    return (await api.get("/order-tracking-notes/instructions/mine/history")).data;
+}
+
 export async function searchTrackedOrders(query, limit = 20) {
     return (await api.get("/order-tracking-notes/search", {
         params: { q: query, limit },
@@ -48,9 +52,9 @@ export async function approveTrackingInstruction(instructionId, note = "") {
     )).data;
 }
 
-export async function rejectTrackingInstruction(instructionId, note) {
+export async function rejectTrackingInstruction(instructionId, note, taskIds = []) {
     return (await api.post(
         `/order-tracking-notes/instructions/${encodeURIComponent(instructionId)}/reject`,
-        { note },
+        { note, task_ids: taskIds },
     )).data;
 }

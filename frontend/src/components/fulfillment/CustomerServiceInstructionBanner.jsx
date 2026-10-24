@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Camera, CheckCircle, SpinnerGap, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useOptionalAuth } from "../../context/AuthContext";
+import OperationalInstructionNotifications from "../driver/OperationalInstructionNotifications";
 
 import {
     acknowledgeTrackingInstruction,
@@ -16,7 +17,7 @@ const ENFORCEMENT_LABELS = {
 };
 
 function applies(row, stage) {
-    return Array.isArray(row?.target_stages) && row.target_stages.includes(stage);
+    return row?.activation_state !== "scheduled" && Array.isArray(row?.target_stages) && row.target_stages.includes(stage);
 }
 
 export default function CustomerServiceInstructionBanner({
@@ -33,6 +34,7 @@ export default function CustomerServiceInstructionBanner({
     const [files, setFiles] = useState({});
     const [results, setResults] = useState({});
     const [waiting, setWaiting] = useState({});
+    const [opened, setOpened] = useState("");
     if (!rows.length) return null;
 
     async function act(row, action) {
@@ -62,13 +64,16 @@ export default function CustomerServiceInstructionBanner({
                 const needsPhotos = ["upload_photos", "upload_photos_and_result"].includes(requiredAction);
                 const needsResult = ["write_result", "upload_photos_and_result"].includes(requiredAction);
                 const awaitingApproval = waiting[row.id] || row.status === "waiting_customer_service_approval";
-                const acknowledged = (row.acknowledged_by_ids || []).includes(user?.id);
+                const noteTasks = (row.tasks || []).filter((task) => task.current && task.stage === stage && task.assignee_id === user?.id);
+                const acknowledged = row.thread_protocol ? noteTasks.length > 0 && noteTasks.every((task) => Boolean(task.acknowledged_at)) : (row.acknowledged_by_ids || []).includes(user?.id);
+                const blocking = ["edit_product", "edit_order", "delete_product", "cancel_order"].includes(row.action_type);
                 return (
                     <article key={row.id} className={`rounded-2xl border p-3 text-sm ${row.priority === "urgent" ? "border-rose-300 bg-rose-50 text-rose-950" : "border-amber-300 bg-amber-50 text-amber-950"}`}>
                         <div className="flex items-start gap-2">
                             <WarningCircle size={22} weight="fill" className="mt-0.5 shrink-0" />
                             <div className="min-w-0 flex-1">
                                 <div className="font-black">تعليمات خدمة العملاء · {ENFORCEMENT_LABELS[row.enforcement] || "تنبيه"}</div>
+                                {(blocking || row.thread_protocol) && <button type="button" onClick={() => setOpened(opened === row.id ? "" : row.id)} className="mt-2 rounded-xl bg-rose-100 px-3 py-2 text-xs font-black text-rose-900">{blocking ? (row.scope === "order" ? "الطلب متوقف من خدمة العملاء" : "المنتج متوقف من خدمة العملاء") : "ملاحظة من خدمة العملاء"}{row.created_by_name ? ` — ${row.created_by_name}` : ""} — عرض المطلوب</button>}
                                 {row.scope !== "order" && <div className="mt-1 text-[11px] font-black opacity-75">خاصة بـ {(row.target_ids || []).length || 1} {row.scope === "piece" ? "قطعة محددة" : "منتج محدد"}</div>}
                                 <p className="mt-1 whitespace-pre-wrap font-bold leading-6">{row.note}</p>
                                 {row.rejection_note && <div className="mt-2 rounded-xl border border-rose-200 bg-white p-2 text-xs font-black text-rose-900">ملاحظة خدمة العملاء بعد الرفض: {row.rejection_note}</div>}
@@ -76,13 +81,13 @@ export default function CustomerServiceInstructionBanner({
                             </div>
                         </div>
 
-                        {awaitingApproval ? (
+                        {(blocking || row.thread_protocol) ? (opened === row.id && <OperationalInstructionNotifications instructionId={row.id} detailOnly />) : awaitingApproval ? (
                             <div className="mt-3 rounded-xl border border-violet-200 bg-white p-3 text-xs font-black text-violet-900">وصل الطلب إلى خدمة العملاء وهو بانتظار موافقتهم. لا يمكن تجاوز المرحلة الآن.</div>
-                        ) : row.enforcement === "acknowledgement_required" && acknowledged ? (
+                        ) : (row.enforcement === "acknowledgement_required" || row.action_type === "general") && acknowledged ? (
                             <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3 text-xs font-black text-emerald-800"><CheckCircle className="ml-1 inline" /> تم تأكيد اطلاعك على التعليمات</div>
-                        ) : row.enforcement === "acknowledgement_required" ? (
+                        ) : (row.enforcement === "acknowledgement_required" || row.action_type === "general") ? (
                             <button type="button" disabled={Boolean(busy)} onClick={() => act(row, () => acknowledgeTrackingInstruction(row.id))} className="mt-3 min-h-10 rounded-xl bg-amber-900 px-4 text-xs font-black text-white disabled:opacity-50">
-                                {busy === row.id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} اطلعت على التعليمات
+                                {busy === row.id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} الملاحظة واضحة وسيتم تنفيذها
                             </button>
                         ) : row.enforcement === "completion_required" ? (
                             <div className="mt-3 space-y-2">

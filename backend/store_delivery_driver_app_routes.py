@@ -15,6 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from mobile_app_permissions import MOBILE_APP_CLIENT
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from accounting_financial_identity import find_financial_account, list_financial_accounts
+from order_tracking_notes import enforce_stage_instructions
+
+
+async def enforce_driver_instruction_gate(db, *, merchant_id, actor_id, assignment):
+    """Gate before Salla, delivery, proof binding or financial writes."""
+    await enforce_stage_instructions(db, user_id=merchant_id,
+        order_number=normalize_text(assignment.get("order_number") or assignment.get("order_id")),
+        stage="store_courier", actor_id=actor_id, order_wide=True)
 
 from store_delivery_domain import (
     DELIVERY_STATUS_ASSIGNED,
@@ -681,6 +689,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
     ) -> dict[str, Any]:
         if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        await enforce_driver_instruction_gate(db, merchant_id=merchant_id,
+            actor_id=normalize_text(actor.get("id")), assignment=assignment)
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
         salla_sync = await _push_salla_delivery_status(
             db,
@@ -1246,6 +1256,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
     ) -> dict[str, Any]:
         if normalize_text(assignment.get("status")) != DELIVERY_STATUS_ASSIGNED:
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        await enforce_driver_instruction_gate(db, merchant_id=merchant_id,
+            actor_id=normalize_text(actor.get("id")), assignment=assignment)
         order = await canonical_order_for_assignment(db, user_id=merchant_id, assignment=assignment)
         salla_sync = await _push_salla_delivery_status(
             db,
@@ -1721,6 +1733,8 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             return result
         if target not in DRIVER_STATUS_TRANSITIONS.get(current, frozenset()):
             raise HTTPException(status_code=409, detail={"code": "driver_delivery_status_transition_invalid"})
+        await enforce_driver_instruction_gate(db, merchant_id=merchant_id,
+            actor_id=normalize_text(actor.get("id")), assignment=assignment)
 
         # Delivery proof is a system-level prerequisite for every new delivered
         # transition. Validate it before any assigned -> out_for_delivery shortcut
