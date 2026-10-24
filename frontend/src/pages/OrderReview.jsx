@@ -1,3 +1,4 @@
+import "../fulfillmentMobile.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowLeft, ArrowSquareOut, CaretLeft, CaretRight, CheckCircle, Clipboard, Eye, EyeSlash,
@@ -50,7 +51,7 @@ function copy(value, label = "القيمة") {
 
 function Field({ label, value, dir }) {
     return (
-        <div className="rounded-xl bg-slate-50 p-3">
+        <div className="review-detail-field rounded-xl bg-slate-50 p-3">
             <div className="text-xs font-bold text-slate-400">{label}</div>
             <div className="mt-1 break-words font-semibold text-slate-800" dir={dir}>{value || "—"}</div>
         </div>
@@ -557,7 +558,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     };
 
     return (
-        <div className="fixed inset-0 z-[80] flex bg-slate-950/45" dir="rtl">
+        <div className="review-mobile-dialog fixed inset-0 z-[80] flex bg-slate-950/45" dir="rtl">
             <button type="button" className="hidden flex-1 md:block" onClick={onClose} aria-label="إغلاق" />
             <section className="h-full w-full overflow-y-auto bg-slate-50 shadow-2xl md:max-w-7xl">
                 <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white/95 px-5 py-4 backdrop-blur">
@@ -659,6 +660,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                         </div>
                     </div>
                 )}
+                <footer className="review-mobile-close md:hidden"><button type="button" onClick={onClose}><X size={20} /> إغلاق المراجعة</button></footer>
                 {operationalDialog && (
                     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/55 p-4" dir="rtl">
                         <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-2xl">
@@ -774,7 +776,7 @@ export default function OrderReview({ initialSearch = "" }) {
     };
 
     return (
-        <div className="mx-auto max-w-7xl space-y-5 p-4" dir="rtl">
+        <div className="review-mobile-list mx-auto max-w-7xl space-y-5 p-4" dir="rtl">
             <header className="rounded-2xl border bg-white p-5 shadow-sm">
                 <h1 className="text-2xl font-extrabold text-slate-900">طلبات بانتظار المراجعة</h1>
                 <p className="mt-1 text-sm text-slate-500">المرحلة الأولى من محرك تجهيز الطلب — مراجعة بيانات العميل والدفع والشحن والمنتجات.</p>
@@ -798,7 +800,7 @@ export default function OrderReview({ initialSearch = "" }) {
             </header>
 
             <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-                <div className="hidden grid-cols-[70px_1fr_1fr_1fr_1fr] gap-3 border-b bg-slate-100 px-4 py-3 text-sm font-extrabold text-slate-600 md:grid">
+                <div className="review-table-heading hidden grid-cols-[70px_1fr_1fr_1fr_1fr] gap-3 border-b bg-slate-100 px-4 py-3 text-sm font-extrabold text-slate-600 md:grid">
                     <div>تفاصيل</div><div>رقم الطلب</div><div>تاريخ الطلب</div><div>طريقة الدفع</div><div>العميل</div>
                 </div>
                 {loading ? (
@@ -808,7 +810,7 @@ export default function OrderReview({ initialSearch = "" }) {
                 ) : orders.length === 0 ? (
                     <div className="flex min-h-64 items-center justify-center text-slate-500">{searchQuery ? "لم يتم العثور على طلب بهذا الرقم ضمن انتظار المراجعة" : "لا توجد طلبات بانتظار المراجعة"}</div>
                 ) : orders.map((order) => (
-                    <button key={order.order_number} type="button" onClick={() => setSelectedOrder(order.order_number)} className={`grid w-full gap-2 border-b px-4 py-4 text-right last:border-b-0 md:grid-cols-[70px_1fr_1fr_1fr_1fr] md:items-center ${rowTone(order)}`}>
+                    <button key={order.order_number} type="button" onClick={() => setSelectedOrder(order.order_number)} className={`review-table-row grid w-full gap-2 border-b px-4 py-4 text-right last:border-b-0 md:grid-cols-[70px_1fr_1fr_1fr_1fr] md:items-center ${rowTone(order)}`}>
                         <span className="inline-flex items-center gap-1 font-bold text-violet-700"><ArrowLeft /> <span className="md:hidden">التفاصيل</span></span>
                         <span className="font-extrabold" dir="ltr">#{order.order_number}</span>
                         <span className="text-sm text-slate-600">{new Date(order.created_at).toLocaleString("ar-SA")}</span>
