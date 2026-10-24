@@ -77,3 +77,47 @@
   .review-mobile-dialog [data-testid="order-review-product-card"] > .p-4 { padding: 8px; }
   .review-mobile-dialog [data-testid="order-review-product-card"] button { max-width: 100%; white-space: normal; font-size: 11px; }
 }
+
+.assembly-mobile-order-status { display: none; }
+.assembly-salla-link { display:flex; align-items:center; justify-content:center; gap:8px; padding:16px; border-radius:16px; background:#f5e9ed; color:#590b20; font-weight:800; }
+.assembly-piece-history summary { display:flex; align-items:center; gap:6px; }
+@media (max-width:767px) {
+  .assembly-order-layout { display:flex; flex-direction:column; }
+  .assembly-label-panel { order:2; }
+  .assembly-salla-link { order:3; font-size:13px; }
+  .assembly-mobile-order-status { display:block; font-size:12px; font-weight:700; color:#64748b; }
+  .assembly-mobile-products .assembly-product-card { position:relative; }
+  .assembly-product-summary > .min-w-0 { width:100%; }
+  .assembly-mobile-products .assembly-employee { padding:4px 0; background:transparent; font-size:9px; border-radius:0; display:block; line-height:1.8; }
+  .assembly-employee svg { display:none; }
+  .assembly-product-summary h3, .assembly-product-summary .text-\[10px\], .assembly-product-summary .break-all, .assembly-product-summary [data-testid="assembly-piece-stage"] { display:none; }
+  .assembly-specifications { margin-top:8px; padding:4px!important; }
+  .assembly-specifications .grid > div { padding:6px; border-radius:10px; }
+  .assembly-specifications span { display:inline; font-size:10px!important; line-height:1.7; }
+  .assembly-specifications span + span::before { content: ": "; }
+  .assembly-piece-history { margin:0; padding:0!important; border:0; }
+  .assembly-piece-history summary { position:absolute; top:8px; left:8px; width:34px; height:34px; justify-content:center; background:white; border:1px solid #e5e7eb; border-radius:50%; box-shadow:0 2px 5px #0002; list-style:none; }
+  .assembly-piece-history summary::-webkit-details-marker { display:none; }
+  .assembly-piece-history summary span { display:none; }
+  .assembly-piece-history ol { padding:6px; border:1px solid #e5e7eb; border-radius:12px; }
+  .assembly-mobile-products [data-testid="mark-assembly-piece-ready"] { background:#087f5b; }
+}
+
+.assembly-copy-option { display:none; }
+@media (max-width:767px) {
+  .assembly-mobile-products .assembly-copy-option { display:flex; flex-shrink:0; align-items:center; justify-content:center; width:26px; min-height:26px; border-radius:8px; background:#f7eaee; color:#590b20; }
+  [data-testid="ready-to-ship-orders"] form { display:grid; grid-template-columns:minmax(0,1fr) 44px; gap:8px; }
+  [data-testid="ready-to-ship-orders"] form label { grid-column:1/-1; font-size:13px; }
+  [data-testid="ready-to-ship-orders"] form input { height:46px; font-size:16px; padding-right:30px; }
+  [data-testid="ready-to-ship-orders"] form [data-testid="open-assembly-camera"] { width:44px; height:46px; }
+  [data-testid="ready-to-ship-orders"] form button[type="submit"] { margin:0; min-height:46px; font-size:0; }
+  [data-testid="ready-to-ship-orders"] form button[type="submit"] svg { width:22px; }
+  .assembly-order-summary { background:#fffbea; border-color:#e9dca1; padding:10px; }
+  .assembly-route-hint { display:none; }
+}
+
+.assembly-piece-history { display:none; }
+@media (max-width:767px) {
+  .assembly-desktop-route { display:none; }
+  .assembly-piece-history { display:block; }
+}

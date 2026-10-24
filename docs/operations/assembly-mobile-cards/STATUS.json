@@ -1,0 +1,14 @@
+{
+  "task": "assembly-mobile-cards-20261024",
+  "branch": "codex/assembly-mobile-cards-20261024",
+  "base": "c045341c7153e563ae2c68c736e862f000c4c01f",
+  "scope": "Phone assembly cards, compact options/copy, expandable route and actors, green Ready, label after products, trusted Salla order link with Android Chrome intent and HTTPS fallback",
+  "status": "Implemented; focused tests and development build pass; visual acceptance and governed release pending",
+  "verification": {"frontend": "52 tests passed", "backend": "56 tests passed including canonical non-in-progress gate and trusted link", "build": "Vite development validation build passed; not a governed release build", "diff": "passed"},
+  "invariants": "No readiness, receipt, permission, print or fulfillment mutation policy changed. No dependency changes. Shared production untouched by this increment.",
+  "limitations": ["Android Chrome launch requires device acceptance; iOS/desktop retain normal HTTPS link", "Screenshots show order page link; implemented order link, not product storefront link", "No live readiness or printing action run"],
+  "next": "Visual QA 360/390/430; CI; governed source/intent freeze before merge/deploy. Recheck current production and shared release guard first.",
+  "production_changed": false,
+  "prior_design_release": {"platform": "2d4f595", "source": "fda6ab558023d2c29bb200951ec47fb7a87f1c90", "verify_exit": 0},
+  "ledger": "Issue1006 body read; historical general ledger. Task-specific status is current continuity record."
+}

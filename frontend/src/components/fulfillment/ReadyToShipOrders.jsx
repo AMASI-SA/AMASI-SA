@@ -8,6 +8,9 @@ import {
     CheckCircle,
     ClipboardText,
     DownloadSimple,
+    DotsThree,
+    Copy,
+    ArrowSquareOut,
     MagnifyingGlass,
     Package,
     Printer,
@@ -36,6 +39,12 @@ import CustomerServiceInstructionBanner from "./CustomerServiceInstructionBanner
 import ShippingBarcodeScanner from "./ShippingBarcodeScanner";
 import { shippingScanFeedback } from "./shippingScanFeedback";
 import SpecificationChangeNotice from "./SpecificationChangeNotice";
+
+export function sallaOrderHref(value, userAgent = navigator.userAgent) {
+    if (typeof value !== "string" || !/^https:\/\/s\.salla\.sa\/orders\/[0-9]+\/?$/.test(value)) return undefined;
+    if (/Android/i.test(userAgent)) return `intent://${value.slice(8)}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(value)};end`;
+    return value;
+}
 
 const ASSEMBLY_BLOCKERS = {
     assembly_piece_supplier_receipt_required: "استلم المنتج من المورد أولًا، ثم من موظف التجهيز",
@@ -77,7 +86,7 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
     const blockerMessage = ASSEMBLY_BLOCKERS[piece.assembly_blocker_code] || "المنتج غير جاهز";
     return (
         <article
-            className={`overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : piece.assembly_ready ? "border-emerald-300" : "border-slate-200"}`}
+            className={`assembly-product-card overflow-hidden rounded-3xl border-2 bg-white shadow-sm ${piece.search_match ? "border-violet-500 ring-4 ring-violet-100" : piece.assembly_ready ? "border-emerald-300" : "border-slate-200"}`}
             data-testid="assembly-product-card"
         >
             {piece.search_match && (
@@ -86,21 +95,21 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                 </div>
             )}
             <div className="p-4">
-                <div className="flex items-start gap-3">
+                <div className="assembly-product-summary flex items-start gap-3">
                     <ProductImage piece={piece} />
                     <div className="min-w-0 flex-1">
                         <div className="text-[10px] font-black text-slate-400">القطعة {piece.unit_index || "—"}</div>
                         <h3 className="mt-1 text-lg font-black leading-7 text-slate-950">{piece.product_name || "منتج"}</h3>
                         {piece.sku && <div className="mt-1 break-all text-xs font-bold text-slate-500">SKU: {piece.sku}</div>}
-                        <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">
-                            <UserCircle size={15} weight="fill" /> جهّزه: {piece.responsible_employee_name || "—"}
+                        <div className="assembly-employee mt-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">
+                            <UserCircle size={15} weight="fill" /> الكمية: 1 · موظف التجهيز: {piece.responsible_employee_name || "—"}
                         </div>
                         <div className="mt-2 text-xs font-black text-violet-800" data-testid="assembly-piece-stage">المرحلة الحالية: {piece.current_stage_label || piece.status_label || "بانتظار التجهيز"}</div>
                     </div>
                 </div>
 
-                <div className="mt-4 rounded-2xl bg-slate-50 p-3">
-                    <div className="text-[11px] font-black text-slate-500">مواصفات العميل</div>
+                <div className="assembly-specifications mt-4 rounded-2xl bg-slate-50 p-3">
+                    <div className="text-[11px] font-black text-slate-500">خيارات العميل</div>
                     {piece.specifications?.length ? (
                         <div className="mt-2 grid grid-cols-2 gap-2">
                             {piece.specifications.map((spec, index) => (
@@ -110,6 +119,7 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                                             <span className="block break-words text-[10px] font-bold text-slate-400">{spec.name}</span>
                                             <span className="mt-0.5 block break-words text-sm font-black text-slate-900">{spec.value}</span>
                                         </div>
+                                        <button type="button" className="assembly-copy-option" aria-label={`نسخ ${spec.name}`} onClick={async () => { try { await navigator.clipboard.writeText(String(spec.value ?? "")); toast.success("تم نسخ الخيار"); } catch { toast.error("تعذر النسخ؛ انسخ النص يدويًا"); } }}><Copy size={15} /></button>
                                         <SpecificationChangeNotice specification={spec} />
                                     </div>
                                 </div>
@@ -136,8 +146,14 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                 <div className="mt-3"><CustomerServiceInstructionBanner instructions={piece.customer_service_instructions || []} stage="assembly_labeling" onUpdated={onUpdated} /></div>
 
                 {!!piece.route_steps?.length && (
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3" data-testid="assembly-piece-route">
-                        <div className="text-xs font-black text-slate-700">مسار تتبع المنتج</div>
+                    <div className="assembly-route-wrapper"><div className="assembly-desktop-route rounded-2xl border border-slate-200 p-3"><div className="text-xs font-black">مسار تتبع المنتج</div>                        <ol className="mt-2 space-y-2 text-xs font-bold text-slate-600">
+                            {piece.route_steps.map((step, index) => (
+                                <li key={`${step.label}-${index}`} className="flex flex-wrap gap-1 rounded-xl bg-slate-50 px-3 py-2">
+                                    <span>{step.label}</span>{step.actor_name && <span>· {step.actor_name}</span>}
+                                </li>
+                            ))}
+                        </ol></div><details className="assembly-piece-history mt-3 rounded-2xl border border-slate-200 bg-white p-3" data-testid="assembly-piece-route">
+                        <summary aria-label="عرض مراحل تجهيز المنتج" className="cursor-pointer text-xs font-black text-slate-700"><DotsThree size={26} weight="bold" /><span>مسار تتبع المنتج</span></summary>
                         <ol className="mt-2 space-y-2 text-xs font-bold text-slate-600">
                             {piece.route_steps.map((step, index) => (
                                 <li key={`${step.label}-${index}`} className="flex flex-wrap gap-1 rounded-xl bg-slate-50 px-3 py-2">
@@ -145,7 +161,8 @@ export function AssemblyProductCard({ piece, busy, onReady, onBlocked, onUpdated
                                 </li>
                             ))}
                         </ol>
-                    </div>
+                    </details></div>
+
                 )}
 
                 {piece.can_mark_ready ? (
@@ -630,7 +647,7 @@ export default function ReadyToShipOrders() {
             {searching && <div className="flex min-h-40 items-center justify-center rounded-3xl border bg-white"><SpinnerGap size={34} className="animate-spin text-violet-700" /></div>}
 
             {result && !searching && (
-                <div className="space-y-3" data-testid="assembly-order-products">
+                <div className="assembly-order-layout space-y-3" data-testid="assembly-order-products">
                     <button
                         type="button"
                         onClick={() => { setResult(null); setSuccess(""); setError(""); }}
@@ -638,14 +655,14 @@ export default function ReadyToShipOrders() {
                     >
                         العودة إلى الطلبات الجاهزة
                     </button>
-                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    <div className="assembly-order-summary flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                         <div><div className="text-[10px] font-black text-slate-400">الطلب</div><div className="text-xl font-black">#{result.order_number}</div></div>
                         <div className="text-left"><div className="text-[10px] font-black text-slate-400">جاهز</div><div className="text-base font-black text-emerald-700">{result.summary?.ready || 0} من {result.summary?.total || 0}</div></div>
                     </div>
-                    <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
+                    <div className="assembly-route-hint rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-black text-violet-800">مسار تتبع الطلب وقطعه: تظهر المرحلة الحالية وسجل الاستلام لكل منتج أدناه.</div>
 
                     {(
-                        <CompletedAssemblyOrderCard
+                        <div className="assembly-label-panel"><CompletedAssemblyOrderCard
                             orderNumber={result.order_number}
                             onIssue={updateCompletion}
                             busy={Boolean(busy)}
@@ -662,12 +679,14 @@ export default function ReadyToShipOrders() {
                                 setResult((current) => current?.order_number === result.order_number ? invalidateShipping(current) : current);
                             }}
                             canConfirmPrint={Boolean(permissions.can_print) && confirmationEligible}
-                        />
+                        /></div>
                     )}
 
+                    <div className="assembly-mobile-order-status">حالة الطلب في سلة: {result.order_status_native || result.order_status || "غير مؤكدة"}</div>
                     <div className="assembly-mobile-products">{result.pieces?.map((piece) => (
                         <AssemblyProductCard key={piece.piece_id} piece={piece} busy={Boolean(busy)} onReady={handleReady} onBlocked={(blocked) => setError(`المنتج لم يجهز بعد. ${ASSEMBLY_BLOCKERS[blocked.assembly_blocker_code] || "راجع مرحلة المنتج الحالية."}`)} onUpdated={() => openOrder(result.order_number)} />
                     ))}</div>
+                    {result.salla_admin_url && <a className="assembly-salla-link" href={sallaOrderHref(result.salla_admin_url)} target="_blank" rel="noopener noreferrer"><ArrowSquareOut size={20} /> الانتقال إلى صفحة الطلب في سلة</a>}
                 </div>
             )}
 
