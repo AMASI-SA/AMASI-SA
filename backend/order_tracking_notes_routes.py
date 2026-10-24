@@ -1043,7 +1043,7 @@ def make_order_tracking_notes_router(
         if not row.get("task_protocol"):
             raise HTTPException(status_code=409, detail={"code": "instruction_is_informational"})
         tasks = await ensure_instruction_tasks(db, context["merchant_id"], row)
-        own = {task["id"]: task for task in tasks if task["assignee_id"] == context["actor_id"]}
+        own = {task["id"]: task for task in tasks if task["assignee_id"] == context["actor_id"] and task.get("current", True)}
         if not payload.task_ids or not set(payload.task_ids).issubset(own):
             raise HTTPException(status_code=403, detail={"code": "instruction_task_not_assigned"})
         expected = "removed_from_preparation" if row.get("action_type") in {"cancel_order", "delete_product"} else "modified"

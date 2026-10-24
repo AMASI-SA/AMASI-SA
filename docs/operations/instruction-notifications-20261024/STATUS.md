@@ -39,3 +39,12 @@ Production changed: **no**. No APK has been built or published for this feature.
 - Native push delivery and production deployment remain unverified.
 
 Next safe action: finish the in-progress backend/native audits, rerun the combined tests, refresh the local recovery bundle, then finish the authorized remote checkpoints and release prerequisites. Both apps lack FCM v1 and GOOGLE_SERVICES_JSON; awaiting Firebase project access. Issue #1006 has reached its comment limit, so task PR/status is the continuation ledger. Preserve unrelated main-workspace accounting changes.
+
+## Remote continuation checkpoint
+
+- Staff draft: https://github.com/AMASI-SA/amasi-mobile/pull/300 (head `e0a0371`, includes latest released 58). All 18 source-addition checks, authentication preservation, instruction scripts and TypeScript passed after integration.
+- Courier draft: https://github.com/AMASI-SA/amasi-mobile/pull/299 (head `3de1dd1`). 21 tests and TypeScript passed.
+- Backend/web integrated current production `c045341c7153e563ae2c68c736e862f000c4c01f`, preserving source-addition stage policy and mobile web design changes.
+- Final web integration: 42 tests passed. New per-piece stage regression first reproduced premature submission by a shared assignee, then passed after filtering current tasks and enforcing the filter on submission/comments. Future-stage creator comments no longer notify the employee before arrival. Focused task/comment suites: 32 passed.
+- User explicitly authorized publication with rollback. Publication remains blocked on Firebase configuration/device evidence and normal release gates; no lease, merge to production, APK build, or deployment performed.
+- GitHub Issue #1006 reached 2500-comment capacity; task PR and this status file are the continuation ledger.
