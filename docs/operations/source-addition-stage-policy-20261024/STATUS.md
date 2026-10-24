@@ -1,0 +1,7 @@
+# Source addition stage policy and immutable notice
+
+Owner authorized reviewed/in_progress internal stages, hidden pending-review actions and Arabic blocked notices. Read-only live order inspection confirmed a prior review event and two allocated products while Salla remains pending and workflow UI shows reviewed. No business data changed.
+
+Implementation accepts the existing provider execution envelope, retains permission/proof/component/original-line checks, appends under revision/stage CAS without changing parent stage. First accepted snapshot detecting a new source line records internal stage and observation time atomically with source snapshot. Replay retains first observation. Small note in both clients persists after item review. Historical records without observations explicitly say the stage was not recorded; never guess.
+
+Verification: diff check passed; fresh CI pending. Added real-Mongo stage/pending/terminal and immutable history cases plus web/mobile rendering regressions. Production moved to db2cb312 (phone design PR1469) during this task: preserve it during integration, do not overwrite it. No publication/release lease/APK by this correction yet. Existing recovery switch retained. Next: run CI, review failures, integrate current production and freeze a new v5 release before any publication. Mobile remains stacked on APK57. Issue1006 comment capacity exceeded; use task PR/status as ledger.

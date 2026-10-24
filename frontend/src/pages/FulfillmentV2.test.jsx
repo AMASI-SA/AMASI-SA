@@ -372,3 +372,25 @@ test("store courier is forced back to its assignment queue from unrelated stages
     expect(markup).toContain('data-testid="store-courier-my-shipments-waiting"');
     expect(markup).not.toContain('data-testid="pending-review-queue"');
 });
+
+test("phone home exposes six reference destinations using existing stage navigation", async () => {
+    mockSearchParams = new URLSearchParams();
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () => root.render(<FulfillmentV2 />));
+    const buttons = host.querySelectorAll(".fulfillment-home-grid button");
+    expect(buttons).toHaveLength(6);
+    const destinations = ["stage=pending_review", "stage=reviewed&view=products", "workspace=my-products", "stage=assembly", "stage=ready_to_ship", "stage=courier_dispatch"];
+    for (let index = 0; index < buttons.length; index += 1) {
+        await act(async () => buttons[index].click());
+        expect(mockSetSearchParams.mock.calls.at(-1)[0].toString()).toBe(destinations[index]);
+    }
+    await act(async () => root.unmount());
+});
+
+test("phone home does not appear on a direct stage link or in courier-only access", () => {
+    expect(renderToStaticMarkup(<FulfillmentV2 />)).not.toContain('class="fulfillment-home"');
+    mockSearchParams = new URLSearchParams();
+    mockUser = { role: "viewer", permissions: ["fulfillment.store_courier.deliver"] };
+    expect(renderToStaticMarkup(<FulfillmentV2 />)).not.toContain('class="fulfillment-home"');
+});
