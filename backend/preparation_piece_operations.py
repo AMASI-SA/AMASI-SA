@@ -47,6 +47,7 @@ from order_review_routes import (
     _merchant_user_id,
     _normalized,
     _require_reviewer,
+    _salla_admin_url,
     _text,
 )
 from order_tracking_notes import active_stage_instructions, enforce_instruction_rows, enforce_stage_instructions
@@ -2990,12 +2991,7 @@ async def _assembly_search(
         or _text(workflow.get("stage")) in {"delivering", "delivered"}
     )
     order = current_order
-    from assembly_mobile_settings import trusted_admin_url
-    link_source = await db["unified_orders"].find_one(
-        {"user_id": user_id, "order_number": order_number},
-        {"raw_by_source.salla_direct": 1}) or {}
-    raw_link = (link_source.get("raw_by_source") or {}).get("salla_direct") or {}
-    admin_url = trusted_admin_url(raw_link) if str(raw_link.get("reference_id") or "") == order_number else None
+    admin_url = await _salla_admin_url(db, user_id, order_number)
     return {
         "salla_admin_url": admin_url,
         "order_number": order_number,

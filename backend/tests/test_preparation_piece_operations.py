@@ -1670,6 +1670,24 @@ async def test_assembly_phone_card_status_gate_and_trusted_order_link(monkeypatc
     result = await _assembly_search(db, user_id='merchant-1', query='10452')
     assert result['pieces'][0]['can_mark_ready'] is (status == 'in_progress')
     assert result['salla_admin_url'] == 'https://s.salla.sa/orders/98765'
-    raw['reference_id'] = 'other'
-    assert (await _assembly_search(db, user_id='merchant-1', query='10452'))['salla_admin_url'] is None
+    raw.pop('reference_id', None)
+    assert (await _assembly_search(db, user_id='merchant-1', query='10452'))['salla_admin_url'] == 'https://s.salla.sa/orders/98765'
     assert all(q.get('user_id') == 'merchant-1' for q in source.find_one_queries)
+
+
+@pytest.mark.asyncio
+async def test_assembly_saved_salla_link_matches_review_without_duplicate_provider_ids(monkeypatch):
+    from unittest.mock import AsyncMock
+    import preparation_piece_operations as operations
+    monkeypatch.setattr(operations, '_current_assembly_order', AsyncMock(return_value=SimpleNamespace(
+        status='in_progress', status_native='in_progress', items=[], created_at=None, shipping=SimpleNamespace(company=None))))
+    source = _canonical_assembly_source('10452')
+    raw = source.row['raw_by_source']['salla_direct']
+    raw.pop('id')
+    raw.pop('reference_id')
+    raw['urls'] = {'admin': 'https://s.salla.sa/orders/order/AbCd1234xyZ'}
+    db = {WORKFLOWS: _AssemblySearchCollection(row={'order_number': '10452', 'stage': 'in_progress'}),
+          PIECES: _AssemblySearchCollection(rows=[{'piece_id': 'a'*32, 'order_number': '10452', 'status': PIECE_STATUS_READY_FOR_ASSEMBLY, 'preparation_receipt_status': 'received'}]), 'unified_orders': source}
+    result = await _assembly_search(db, user_id='merchant-1', query='10452')
+    assert result['salla_admin_url'] == 'https://s.salla.sa/orders/order/AbCd1234xyZ'
+    assert all(q == {'user_id': 'merchant-1', 'order_number': '10452'} for q in source.find_one_queries)

@@ -41,7 +41,7 @@ import { shippingScanFeedback } from "./shippingScanFeedback";
 import SpecificationChangeNotice from "./SpecificationChangeNotice";
 
 export function sallaOrderHref(value, userAgent = navigator.userAgent) {
-    if (typeof value !== "string" || !/^https:\/\/s\.salla\.sa\/orders\/[0-9]+\/?$/.test(value)) return undefined;
+    if (typeof value !== "string" || !/^https:\/\/s\.salla\.sa\/orders\/(?:[0-9]+|order\/[A-Za-z0-9_-]+)\/?$/.test(value)) return undefined;
     if (/Android/i.test(userAgent)) return `intent://${value.slice(8)}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(value)};end`;
     return value;
 }

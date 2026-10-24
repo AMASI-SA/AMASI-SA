@@ -1,0 +1,10 @@
+{
+  "task": "assembly-salla-link-parity-20261024",
+  "branch": "codex/assembly-salla-link-parity-20261024",
+  "base": "1fbb7ea4b54ab5574f3ee6937939e21440f88b0a",
+  "root_cause": "Assembly required numeric /orders/id URL and duplicate raw provider IDs; review uses stored opaque /orders/order/token URL. Live review DOM confirmed opaque URL shape and assembly lacked link.",
+  "changes": "Reuse review tenant-scoped saved-link reader; accept both official numeric and opaque admin URL shapes; preserve Android Chrome fallback and readiness/printing checks.",
+  "verification": "Backend 57 tests passed; frontend 54 tests passed including visible clickable opaque link while printing is locked; no dependency changes",
+  "production_changed": false,
+  "next": "Finalize focused tests, checkpoint PR, CI and governed release, then verify live assembly link"
+}
