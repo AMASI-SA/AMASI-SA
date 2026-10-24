@@ -6,6 +6,41 @@ from operational_balance_service import refresh, report, create_movement
 from operational_balance_store import read
 
 
+def test_courier_delivery_confirms_both_sides_without_bank_transfer():
+    """Owner contract: delivery establishes COD debt; transfer settles it later."""
+    from decimal import Decimal
+
+    async def scenario(db):
+        await started(db)
+        data = shipping_data(payment={'method': 'cod'}, paid_amount='100', status='in_progress')
+        for collection, documents in data.items():
+            await db[collection].insert_many(documents)
+        pending = report(await refresh(db, 'owner', clock=NOW))
+        assert all(Decimal(r['confirmed']) == 0 for r in pending['obligations']
+                   if r['kind'] in {'shipping', 'cod'})
+        await db.unified_orders.update_one({'user_id': 'owner'},
+            {'$set': {'raw_by_source.salla_direct.status': 'delivered'}})
+        delivered = report(await refresh(db, 'owner', clock=NOW))
+        cod = next(iter(delivered['details']['cod_reports'].values()))
+        assert cod['confirmed_custody'] == '200.00'
+        assert cod['outstanding'] == '200.00'
+        assert sum(Decimal(r['confirmed']) for r in delivered['obligations']
+                   if r['kind'] == 'shipping') == Decimal('12')
+        assert delivered['summary']['actual_liquidity'] == '1000.00'
+        assert (await read(db, 'owner'))['movements'] == []
+        assert report(await refresh(db, 'owner', clock=NOW)) == delivered
+    run(scenario)
+
+
+@pytest.mark.parametrize('method,custody', [('cash', 200), ('bank_transfer', 0), ('card_terminal', 0)])
+def test_driver_delivery_payment_choice_controls_custody(method, custody):
+    from store_delivery_domain import collection_requirements
+    result = collection_requirements(outstanding_amount='200', payment_method=method)
+    assert result['cod_custody_amount'] == custody
+    assert result['bank_account_required'] is (method == 'bank_transfer')
+    assert result['receipt_required'] is (method != 'cash')
+
+
 async def native_order(db, method=None):
     data = shipping_data(payment={'method': 'cod'}, paid_amount='100', status='delivered')
     if method:
