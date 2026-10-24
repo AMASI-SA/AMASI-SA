@@ -823,7 +823,7 @@ export default function OrderDetailsV2() {
         orderNumber: String(orderNumber || "").trim(),
         actorKey: String(user?.id || user?.email || ""),
         enabled: userHasPermission(user, "orders.manage"),
-        refreshKey: additionsRefreshKey,
+        refreshKey: `${additionsRefreshKey}:${JSON.stringify(order?.payment || {})}`,
     });
     const [returnEngineOpen, setReturnEngineOpen] = useState(false);
     const [refreshingFromSalla, setRefreshingFromSalla] = useState(false);

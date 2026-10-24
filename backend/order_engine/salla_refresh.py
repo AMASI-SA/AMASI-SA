@@ -507,6 +507,13 @@ async def refresh_order_from_salla(
         merged_raw["id"] = details.get("id") or internal_id
         merged_raw["reference_id"] = details.get("reference_id") or normalized
         merged_raw["items"] = items
+        # Payment actions are an authoritative collection snapshot, unlike
+        # optional customer/address enrichment. Null clears a settled balance.
+        actions = details.get("payment_actions")
+        if isinstance(actions, dict) and isinstance(actions.get("remaining_action"), dict):
+            merged_raw.setdefault("payment_actions", {})["remaining_action"] = deepcopy(actions["remaining_action"])
+        from salla_payment_collection import settled_payment_snapshot
+        merged_raw = settled_payment_snapshot(merged_raw)
 
         shipping_fields, address, address_source = extract_order_details_shipping_fields(details)
         if address:

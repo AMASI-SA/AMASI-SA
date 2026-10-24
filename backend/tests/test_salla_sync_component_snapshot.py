@@ -109,3 +109,23 @@ class SyncComponentSnapshotTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    async def test_payment_webhook_clears_balance_and_stale_event_cannot_restore_it(self):
+        payload = self.source_payload(status="in_progress")
+        payload["payment_method"] = "mada"
+        payload["payment_actions"] = {"remaining_action": {"has_remaining_amount": True,
+            "paid_amount": {"amount": 80}, "remaining_amount": {"amount": 20}}}
+        self.assertTrue((await self.webhook(payload))["synced"])
+        paid = deepcopy(payload)
+        paid["updated_at"] = "2026-09-26T12:01:00+00:00"
+        paid["payment_actions"]["remaining_action"] = {"has_remaining_amount": False,
+            "paid_amount": {"amount": 100}, "remaining_amount": None}
+        result = await self.webhook(paid, event="order.payment.updated")
+        self.assertTrue(result["synced"], result)
+        row = await self.db.unified_orders.find_one({"user_id": "owner"})
+        self.assertEqual(row["remaining_amount"], 0)
+        self.assertEqual(row["paid_amount"], 100)
+        self.assertEqual(row["payment_collection_status"], "paid")
+        stale = await self.webhook(payload, event="order.payment.updated")
+        self.assertFalse(stale["synced"])
+        self.assertEqual((await self.db.unified_orders.find_one({"user_id": "owner"}))["remaining_amount"], 0)
