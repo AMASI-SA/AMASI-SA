@@ -1,0 +1,34 @@
+{
+  "task": "MZ2-OPERATIONAL-INTEGRATION-20261024",
+  "status": "SOURCE_ONLY_INTEGRATION_DEPENDENCY_FIX_PENDING_CI",
+  "branch": "codex/operational-source-integration-20261024",
+  "production_base": "0acd4bd11ebf8f8b417df666c2b2ce41b300ca84",
+  "reviewed_source": "c61843b06c0874e4934fa52f5ab57b266b5ab196",
+  "previous_pr": 1461,
+  "changes": "Exact source-only integration preserving production print fixes. Prior merge checkpoint ff7cd1d46 retained in PR1464: full-history guard rejected merge topology. Frozen PR1461 unchanged. filelock4.2.1 and zod4.6.6 fix fresh audit findings; no audit exemptions.",
+  "verification": [
+    "git diff --cached --check passed",
+    "Operational source matches reviewed source exactly; production print files preserved exactly",
+    "74 wallet/funding unit tests passed, no skips",
+    "Combined initial check:87 passed,79 Mongo-dependent skips,12 subtests. Not full acceptance.",
+    "Full local retained Mongo suite on ff7cd1d46:611 passed,0 skipped,5 warnings,252.50sec. Evidence copied unchanged.",
+    "Remote ff7cd1d46 operational backend/frontend PASS. Security failed on new filelock and zod advisories; fixed registry versions now awaiting CI.",
+    "Live read-only:3 banks + separate terminal;5 selected ads accounts require funding setup;3 external shippers, no store courier;14 operational expense categories.",
+    "APK1.0.11 code14 installed; archived SHA256 matches. Existing authenticated session shows setup prerequisite. Fresh login and upgrade not verified."
+  ],
+  "live_probe": {
+    "scope": "Read-only health, not official deployment verify",
+    "source": "bc85eddf3d5c92b370c2f59d17ac79946763863e",
+    "release": "rg5-331c2f714358404dd155a58527d8a5334821b302ee292459c2c5ca11a9eec50d",
+    "verified_identity": true
+  },
+  "blockers": [
+    "Emergent authenticated Home available but Salla Analytics returns to Home after loading; no project console or guard access established.",
+    "New Source A/build/intent B required; no release rehearsal until shared guard inactive is confirmed.",
+    "APK fresh login and upgrade remain unverified."
+  ],
+  "next": "Inspect exact-head CI including installation/audit of filelock4.2.1 and zod4.6.6. Recover shared Emergent project console and read guard inactive before official rehearsal, then fresh Source A and intent B.",
+  "production_changed": false,
+  "real_business_writes": 0,
+  "lease_created": false
+}

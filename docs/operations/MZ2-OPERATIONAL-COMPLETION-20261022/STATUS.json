@@ -1,0 +1,61 @@
+{
+  "task": "MZ2-OPERATIONAL-COMPLETION-20261022",
+  "status": "DEPENDENCY_SECURITY_PATCH_PENDING_CI",
+  "branch": "codex/operational-completion-20261022",
+  "parent_sha": "42388015bd53b324fcc0329628ace2c7502d8f0a",
+  "scope": "Finish operational accounting and publish one combined release after verification, as owner requested on October 22.",
+  "owner_authorization": "Continue remaining implementation and publish once when ready. Actual opening amounts and live activation are not supplied by this instruction.",
+  "completed": [
+    "Draft-only owner-confirmed operational advertising setup independent of native financial accounts, with exact connected selected account identity, currency and timezone.",
+    "Daily spend adapter and engine preserve evidenced daily costs; current wallet/debt projection consumes wallet first and records excess debt.",
+    "Debt-first outgoing payment/funding with atomic existing movement protocol and immutable bank effects; delayed daily spend recalculates current balance without rewriting prior movement evidence.",
+    "Operational funding setup UI, explicit opening labels, wallet-first movement choices, shipping setup link and readiness refresh."
+  ],
+  "clarification": "Prior checkpoint overstated chronology as a blocker: aggregate final wallet/debt balances commute for spend and debt-first payments. Per-payment allocation remains the known confirmed-balance snapshot at recording, not invented transaction chronology.",
+  "verification": [
+    "142 focused pure backend tests passed locally, exit0.",
+    "171 operational frontend tests in11 suites passed locally; remote Operational Balance Frontend also succeeded.",
+    "GitHub run39846752381 backend job120061939209:611 passed,5 warnings,84.83sec,0 skipped; includes real Mongo concurrency/replay and owner/mobile HTTP authorization.",
+    "Shipping regression:16 passed,18 subtests passed.",
+    "CodeQL, Release Readiness, stock eligibility, salary/password, G47, Qoyod and Snapchat settings workflows succeeded."
+  ],
+  "limitations": [
+    "Wallet-first accounts currently accept outgoing payments/funding; unsupported refund/correction/explicit settlement inputs fail visibly before applying money.",
+    "Source completeness, closed-day proof, start-day baseline and currency/FX checks remain enforced.",
+    "Live owner opening amounts and shipping contract approval require actual owner data.",
+    "APK fresh login and upgrade acceptance remains unverified."
+  ],
+  "next": "Push dependency checkpoint to existing combined PR1461, inspect exact-head CI and fix any failures. Once green, verify authenticated Emergent access and Python>=3.11, guard inactive, governed A/B rehearsal and APK acceptance before one publish. No cancelled login retry without renewed owner request.",
+  "production_changed": false,
+  "live_business_writes": 0,
+  "release_guard_lease_created": false,
+  "prior_prs": [
+    1454,
+    1459
+  ],
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1461",
+  "tested_remote_sha": "01a5f822f07e01c22a569948c308f6de06c5c2af",
+  "tested_tree": "74c1d5119e480a3a759c2ef76a47b7a65ea21366",
+  "release_blockers": [
+    "Dependency patches implemented, awaiting successful exact-head Security Gate including installation, both audits, image/PDF tests and governed build.",
+    "Existing Emergent preview unavailable and secure sign-in request was aborted; authenticated deployment access not established.",
+    "Governed source/intent rehearsal, APK authenticated acceptance and actual production verification remain undone."
+  ],
+  "dependency_checkpoint": {
+    "parent_sha": "a4f2faa0649a3336a23d83fb62b3e4a0066108d0",
+    "date": "2026-10-23",
+    "versions": {
+      "vite": "8.2.4",
+      "follow-redirects": "1.16.1",
+      "black": "26.10.1",
+      "certifi": "2026.10.19",
+      "pillow": "13.0.0"
+    },
+    "changes": "Minimal advisory-reported fixed versions; preserve already-compatible PostCSS8.5.26 and Rolldown1.2.6. Backend runtime and deployment requirement files remain identical. Add offline image/PDF regressions to Security Gate. No audit exception or gate weakening.",
+    "checks": "Registry metadata verified, deployment requirements byte-identical, workflow YAML parse and diff checks passed. Actual frozen installation, audits, full frontend regression and image compatibility pending remote CI. Local lockfile-parser unavailable.",
+    "runtime_requirement": "Pillow13 requires Python>=3.11; CI uses3.11; verify Emergent Python before rehearsal.",
+    "first_ci_sha": "fd4b0aadd1d61136a072b7d55cea2973c970b903",
+    "first_ci_result": "Security run39967651858: backend frozen install/pip check and strict audit PASS (no known vulnerabilities). Added image test collection failed because backend/tests missing from PYTHONPATH; fix scopes correct path to image step. Frontend frozen install passed.",
+    "runtime_fixture_fix": "CI9c47684 found3 runtime-launch fixture failures because fixture still asserted oldVite8.2.1. Fixture now uses declared Vite version, adds explicit rejection of different version. All52 release frontend contract tests pass locally,0skips,0failures,0.69sec; installed local Vite unchanged, new-version build remains remote-CI acceptance."
+  }
+}
