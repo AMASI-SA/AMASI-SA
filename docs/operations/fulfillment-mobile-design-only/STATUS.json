@@ -1,6 +1,6 @@
 {
   "task": "fulfillment-mobile-design-only",
-  "status": "Release candidate verified; awaiting final B CI then authorized merge and publish",
+  "status": "Merged; authorized Emergent publish in progress",
   "canonical_release_branch": "codex/fulfillment-mobile-release-20261024",
   "canonical_pr": 1469,
   "source_A": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
@@ -17,13 +17,20 @@
     "intent_sha256": "b3343695f817c0c05065aebbaec0e12eae314c48faa752e4b7d51cfab94f1f5e",
     "clean_clone": "Deployment adapter build passed, runtime identity equals reviewed intent; clean git status",
     "rollback": "Reverse presentation patch --check passed on source A",
-    "guard": "active=false; shared HEAD=production base; unrelated .emergent/testing and deployer-agent-docs retained"
+    "guard": "prepare and prepublish passed for source A and deployment db2cb3129; owned actor codex-fulfillment-mobile-20261024",
+    "final_B_CI": "All required workflows passed; TikTok candidate skipped"
   },
   "runtime_release_id": "rg5-a8bd6020c3f27ba09c23c51e1a83eca7e5cf9eb0c62564d9070d3c60c15e3e21",
   "production_changed_by_this_task": false,
-  "next": "Wait all B CI, merge PR1469 with merge commit (no squash/rebase), fast-forward shared /app after fresh inactive guard, materialize approved runtime, prepare/prepublish, Republish, require new Deployment Succeeded and 3 guard probes. Never publish old PR1458/1467.",
+  "next": "Wait explicit newer successful deployment; run shared /app production_release_guard.py verify --url https://mezansalla.com; require 3 matching probes and inactive guard; inspect authenticated live fulfillment read-only. Do not start a second publish.",
   "notes": [
     "Issue1006 read failed Transport closed; no issue message sent.",
     "Preview authentication unavailable; synthetic QA used instead. Live authenticated layout acceptance pending."
-  ]
+  ],
+  "deployment_commit": "db2cb3129f5d6ad01ca8d44d5269eecded173410",
+  "publish": {
+    "started": "2026-10-24 19:53 Asia/Riyadh",
+    "platform_state": "Workspace ready, changes packaged, building website",
+    "previous_version": "9e3a61f"
+  }
 }
