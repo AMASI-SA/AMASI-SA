@@ -53,6 +53,21 @@ def public_instruction(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def instruction_banner(row: dict[str, Any], *, piece_id="", order_item_id="") -> dict[str, Any]:
+    """Public stage banner: detailed discussion requires the scoped detail API."""
+    keys = ("id", "order_number", "action_type", "priority", "note", "target_stages",
+        "enforcement", "required_action", "approval_required", "status", "created_by_name",
+        "created_at", "activation_state", "task_protocol", "thread_protocol")
+    result = {key: row.get(key) for key in keys if key in row}
+    if piece_id:
+        result.update(scope="piece", target_id=piece_id, target_ids=[piece_id])
+    elif order_item_id:
+        result.update(scope="item", target_id=order_item_id, target_ids=[order_item_id])
+    else:
+        result["scope"] = "order"
+    return result
+
+
 def instruction_snapshot(row: dict[str, Any]) -> dict[str, Any]:
     """Small snapshot embedded in workflow and piece read models.
 
@@ -60,7 +75,7 @@ def instruction_snapshot(row: dict[str, Any]) -> dict[str, Any]:
     in this read-model copy lets operational screens render an approval wait or
     a customer-service rejection correctly after a full page refresh.
     """
-    return {
+    snapshot = {
         "id": text(row.get("id")),
         "order_number": text(row.get("order_number")),
         "scope": text(row.get("scope")),
@@ -83,7 +98,19 @@ def instruction_snapshot(row: dict[str, Any]) -> dict[str, Any]:
         "delivery_time": row.get("delivery_time"),
         "created_at": row.get("created_at"),
         "created_by_name": text(row.get("created_by_name")) or None,
+        "task_protocol": row.get("task_protocol"),
+        "thread_protocol": row.get("thread_protocol"),
+        "proposed_changes": list(row.get("proposed_changes") or []),
+        "activation_state": row.get("activation_state"),
+        "activated_piece_stages": row.get("activated_piece_stages") or {},
+        "activated_order": bool(row.get("activated_order")),
     }
+    if row.get("thread_protocol"):
+        # Keep internal routing only. Notes, evidence and previous/requested
+        # values belong to the creator/current assignee's authenticated detail.
+        for field in ("submitted_by_name", "submitted_result", "rejection_note", "proposed_changes", "acknowledged_by_ids"):
+            snapshot.pop(field, None)
+    return snapshot
 
 
 def instruction_applies_to(
@@ -96,7 +123,11 @@ def instruction_applies_to(
 ) -> bool:
     if text(row.get("status")) not in {"active", "waiting_customer_service_approval"}:
         return False
-    if stage not in set(row.get("target_stages") or []):
+    activated = row.get("action_type") in BLOCKING_ACTION_TYPES and (
+        row.get("activated_order") or
+        (row.get("activation_state") == "active" and (
+            not row.get("activated_piece_stages") or order_wide or piece_id in row.get("activated_piece_stages", {}))))
+    if not activated and stage not in set(row.get("target_stages") or []):
         return False
     return instruction_targets(
         row,
@@ -147,7 +178,7 @@ async def active_stage_instructions(
             "user_id": text(user_id),
             "order_number": text(order_number),
             "status": {"$in": ["active", "waiting_customer_service_approval"]},
-            "target_stages": stage,
+            "$or": [{"target_stages": stage}, {"activation_state": "active", "action_type": {"$in": list(BLOCKING_ACTION_TYPES)}}],
         },
         {"_id": 0},
     ).sort("created_at", 1).to_list(200)
@@ -191,6 +222,16 @@ async def enforce_stage_instructions(
         order_item_id=order_item_id,
         order_wide=order_wide,
     )
+    for row in rows:
+        if row.get("action_type") in BLOCKING_ACTION_TYPES and row.get("activation_state") == "scheduled":
+            patch = {"activation_state": "active"}
+            if piece_id:
+                patch[f"activated_piece_stages.{piece_id}"] = stage
+            else:
+                patch["activated_order"] = True
+            await db[ORDER_TRACKING_INSTRUCTIONS].update_one(
+                {"user_id": text(user_id), "id": row["id"], "status": {"$in": ["active", "waiting_customer_service_approval"]}},
+                {"$set": patch})
     return enforce_instruction_rows(
         rows, stage=stage, actor_id=actor_id, piece_id=piece_id,
         order_item_id=order_item_id, order_wide=order_wide,
@@ -212,6 +253,10 @@ def enforce_instruction_rows(
     )]
     blocking: list[dict[str, Any]] = []
     for row in rows:
+        # Notes (including urgent notes) request acknowledgment without stopping
+        # work. Old stored enforcement settings must not turn them into holds.
+        if row.get("action_type") in {"general", "urgent_preparation", "delivery_instruction"}:
+            continue
         enforcement = text(row.get("enforcement")) or "notice"
         if text(row.get("status")) == "waiting_customer_service_approval":
             blocking.append(row)
@@ -229,10 +274,10 @@ def enforce_instruction_rows(
                 "code": "customer_service_instruction_action_required",
                 "stage": stage,
                 "message": "توجد تعليمات إلزامية من خدمة العملاء قبل إكمال هذه المرحلة.",
-                "instructions": [public_instruction(row) for row in blocking],
+                "instructions": [instruction_banner(row, piece_id=piece_id, order_item_id=order_item_id) for row in blocking],
             },
         )
-    return [public_instruction(row) for row in rows]
+    return [instruction_banner(row, piece_id=piece_id, order_item_id=order_item_id) for row in rows]
 
 
 __all__ = [

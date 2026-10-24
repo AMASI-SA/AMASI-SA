@@ -1,5 +1,6 @@
 """Ready-to-ship routing, employee claiming and print batches for Mezan V2."""
 from __future__ import annotations
+from order_tracking_notes import instruction_banner
 
 import io
 import hashlib
@@ -2223,9 +2224,7 @@ async def _order_view(
         ),
         "delivering_at": workflow.get("delivering_at"),
         "delivered_at": workflow.get("delivered_at"),
-        "customer_service_instructions": list(
-            workflow.get("customer_service_instructions") or []
-        ),
+        "customer_service_instructions": [instruction_banner(row) for row in workflow.get("customer_service_instructions") or []],
         "customer_service_hold_active": bool(
             workflow.get("customer_service_hold_active")
         ),

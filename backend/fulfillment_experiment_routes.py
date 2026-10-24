@@ -841,6 +841,9 @@ def make_fulfillment_experiment_router(
         )
         if not hold:
             raise HTTPException(status_code=404, detail={"code": "fulfillment_hold_not_found"})
+        if hold.get("source") == "customer_service_order_tracking" or hold.get("instruction_id"):
+            raise HTTPException(status_code=409, detail={"code": "tracking_instruction_release_required",
+                "message": "يجب أن يعتمد صاحب طلب الإيقاف استكمال العمل من بطاقة الطلب بعد تأكيد الموظفين."})
         can_release = _can_manage_stops(context) or (
             _can_self_stop(context)
             and _text(hold.get("created_by")) == context["actor_id"]

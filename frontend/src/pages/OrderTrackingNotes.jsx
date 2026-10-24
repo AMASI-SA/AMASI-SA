@@ -13,12 +13,14 @@ import {
     XCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import InstructionTaskComments from "../components/driver/InstructionTaskComments";
 
 import {
     approveTrackingInstruction,
     completeTrackingInstruction,
     createTrackingInstruction,
     getTrackedOrder,
+    getMyTrackingInstructionHistory,
     rejectTrackingInstruction,
     searchTrackedOrders,
 } from "../services/orderTrackingNotes";
@@ -107,6 +109,7 @@ const EMPTY_FORM = {
     approval_required: false,
     delivery_date: "",
     delivery_time: "",
+    proposed_changes: [],
 };
 
 export default function OrderTrackingNotes() {
@@ -126,6 +129,14 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
     const [form, setForm] = useState(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [approvalBusy, setApprovalBusy] = useState("");
+    const [rejectedTaskIds, setRejectedTaskIds] = useState({});
+    const [history, setHistory] = useState([]);
+    const [historyError, setHistoryError] = useState("");
+    const loadHistory = useCallback(async () => {
+        try { const response = await getMyTrackingInstructionHistory(); setHistory(response.items || []); setHistoryError(""); }
+        catch { setHistoryError("تعذر تحميل طلبات الإيقاف التي أرسلتها."); }
+    }, []);
+    useEffect(() => { if (!embedded) loadHistory(); }, [embedded, loadHistory]);
 
     const load = useCallback(async (orderNumber) => {
         if (!orderNumber) return;
@@ -169,9 +180,9 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
     function toggleStage(stage) {
         setForm((current) => ({
             ...current,
-            target_stages: current.target_stages.includes(stage)
+            target_stages: stage === "current_stage" ? ["current_stage"] : current.target_stages.includes(stage)
                 ? current.target_stages.filter((value) => value !== stage)
-                : [...current.target_stages, stage],
+                : [...current.target_stages.filter((value) => value !== "current_stage"), stage],
         }));
     }
 
@@ -189,16 +200,19 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
         if (!form.note.trim()) return toast.error("اكتب الملاحظة أو المهمة المطلوبة");
         if (!form.target_stages.length) return toast.error("اختر مرحلة ظهور واحدة على الأقل");
         if (form.scope === "item" && !form.target_ids.length) return toast.error("اختر منتجًا واحدًا أو أكثر");
-        const requiredAction = BLOCKING_ACTIONS.has(form.action_type) && form.required_action === "none"
+        const changes = ["edit_product", "edit_order"].includes(form.action_type) ? form.proposed_changes : [];
+        if (changes.some((change) => !change.field.trim() || !change.previous.trim() || !change.requested.trim() || (form.scope === "item" && !form.target_ids.includes(change.order_item_id)))) return toast.error("أكمل اسم الحقل والقيمة السابقة والمطلوبة واختر المنتج المحدد لكل تعديل.");
+        const requiredAction = form.action_type === "general" ? "none" : BLOCKING_ACTIONS.has(form.action_type) && form.required_action === "none"
             ? "arrival_confirmation"
             : form.required_action;
         const payload = {
             ...form,
             target_id: form.target_ids[0] || null,
             note: form.note.trim(),
+            proposed_changes: changes.map((change) => ({ field: change.field.trim(), previous: change.previous.trim(), requested: change.requested.trim(), ...(change.order_item_id ? { order_item_id: change.order_item_id } : {}) })),
             required_action: requiredAction,
-            enforcement: requiredAction === "none" ? form.enforcement : "completion_required",
-            approval_required: requiredAction === "arrival_confirmation" || form.approval_required,
+            enforcement: form.action_type === "general" ? "notice" : requiredAction === "none" ? form.enforcement : "completion_required",
+            approval_required: form.action_type === "general" ? false : requiredAction === "arrival_confirmation" || form.approval_required,
             delivery_date: form.delivery_date || null,
             delivery_time: form.delivery_time || null,
         };
@@ -219,6 +233,7 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
                 await createTrackingInstruction(selectedNumber, { ...payload, ready_item_confirmations: confirmations });
             }
             toast.success("حُفظت التعليمات وربطت بالمراحل المختارة.");
+            if (!embedded) await loadHistory();
             await load(selectedNumber);
         } catch (error) {
             toast.error(errorMessage(error));
@@ -231,14 +246,15 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
         if (approvalBusy) return;
         let note = "";
         if (!approved) {
+            if (instruction.task_protocol && !(rejectedTaskIds[instruction.id] || []).length) return toast.error("حدد مهام المنتجات المطلوب إعادتها للموظف أولًا.");
             note = window.prompt("اكتب سبب رفض التنفيذ وما المطلوب من الموظف:", "") || "";
             if (!note.trim()) return;
         }
         setApprovalBusy(instruction.id);
         try {
             if (approved) await approveTrackingInstruction(instruction.id, "تمت موافقة خدمة العملاء");
-            else await rejectTrackingInstruction(instruction.id, note.trim());
-            toast.success(approved ? "تمت الموافقة وفُتح المسار للموظف." : "أُعيدت المهمة للموظف مع سبب الرفض.");
+            else await rejectTrackingInstruction(instruction.id, note.trim(), rejectedTaskIds[instruction.id] || []);
+            toast.success(approved ? (["delete_product", "cancel_order"].includes(instruction.action_type) ? "أُغلقت مهمة المتابعة ورُفع إيقافها. الإلغاء النهائي يتم من سلة." : "تمت الموافقة وفُتح المسار للموظف.") : "أُعيدت المهمة للموظف مع سبب الرفض.");
             await load(selectedNumber);
         } catch (error) {
             toast.error(errorMessage(error));
@@ -285,6 +301,8 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
                 </form>}
             </header>
 
+            {!embedded && <section className="rounded-3xl border bg-white p-4"><div className="flex items-center justify-between"><h2 className="font-black">طلبات الإيقاف والتعديل التي أرسلتها</h2><button type="button" onClick={loadHistory} className="rounded border px-3 py-2 text-xs">تحديث طلباتي</button></div>{historyError && <p role="alert" className="mt-2 text-sm text-rose-700">{historyError}</p>}<div className="mt-3 space-y-2">{history.map((row) => <button key={row.id} type="button" onClick={() => load(row.order_number)} className="block w-full rounded-xl border p-3 text-right text-sm"><b>طلب #{row.order_number} — {row.action_label || ACTIONS.find(([value]) => value === row.action_type)?.[1] || "تعليمات"}</b><div>{row.activation_state === "scheduled" ? "بانتظار الوصول للمرحلة المحددة" : STATUS_LABELS[row.status] || row.status}</div><div className="mt-1 text-xs">{(row.tasks || []).filter((task) => task.status === "submitted").length} / {(row.tasks || []).length} تأكيدات تنفيذ</div></button>)}</div><p className="mt-2 text-xs text-slate-500">فتح المسار بعد التنفيذ متاح لصاحب طلب الإيقاف فقط.</p></section>}
+
             {!embedded && results.length > 0 && <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{results.map((row) => <button key={row.order_number} onClick={() => load(row.order_number)} className={`rounded-2xl border p-4 text-right shadow-sm ${selectedNumber === row.order_number ? "border-violet-500 bg-violet-50" : "border-slate-200 bg-white"}`}><div className="font-black">طلب #{row.order_number}</div><div className="mt-1 text-sm font-bold text-slate-600">{row.customer_name || "—"} · {row.shipping_city || "—"}</div><div className="mt-2 text-xs font-black text-violet-700">{row.order_status || "غير محدد"}</div></button>)}</section>}
 
             {loading && <div className="flex min-h-64 items-center justify-center"><SpinnerGap size={38} className="animate-spin text-violet-700" /></div>}
@@ -304,18 +322,20 @@ export function OrderTrackingNotesPanel({ orderNumber = "", embedded = false }) 
                         <label className="mt-4 block text-xs font-black text-slate-600">النطاق<select value={form.scope} onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value, target_ids: [] }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="order">الطلب كاملًا</option><option value="item">منتجات محددة</option></select></label>
                         {form.scope === "item" && <div className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border bg-slate-50 p-2">{orderItems(data).map((item) => { const id = itemId(item); return <label key={id} className="flex cursor-pointer items-center gap-2 rounded-xl bg-white p-2 text-xs font-black"><input type="checkbox" checked={form.target_ids.includes(id)} onChange={() => toggleTarget(id)} />{itemImage(item) ? <img src={itemImage(item)} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <Package size={30} className="text-slate-300" />}<span>{item.name || "منتج"}</span></label>; })}</div>}
                         <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-black text-slate-600">نوع الملاحظة<select value={form.action_type} onChange={(event) => setForm((current) => ({ ...current, action_type: event.target.value, scope: ["edit_product", "delete_product"].includes(event.target.value) ? "item" : current.scope }))} className="mt-1 h-11 w-full rounded-xl border px-3">{ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-black text-slate-600">الأولوية<select value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="normal">عادية</option><option value="high">مهمة</option><option value="urgent">مستعجلة</option></select></label></div>
-                        {BLOCKING_ACTIONS.has(form.action_type) && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">هذا النوع يوقف المنتج أو الطلب إلزاميًا، ولا يُفتح المسار إلا بعد موافقة خدمة العملاء.</div>}
+                        {BLOCKING_ACTIONS.has(form.action_type) && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-black text-rose-900">يُنفّذ الإيقاف في المرحلة المختارة، ويبقى حتى تأكيد تنفيذ المطلوب وموافقة خدمة العملاء.</div>}
                         <label className="mt-3 block text-xs font-black text-slate-600">الملاحظة أو المطلوب<textarea rows={4} value={form.note} onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))} className="mt-1 w-full rounded-xl border p-3 text-sm" placeholder="اكتب المطلوب بوضوح للموظف…" /></label>
+                        {["edit_product", "edit_order"].includes(form.action_type) && <fieldset className="mt-3 space-y-2 rounded-xl border p-3"><legend className="text-xs font-black">تفاصيل التعديل المطلوب</legend>{form.proposed_changes.map((change, index) => <div key={index} className="space-y-2 rounded border p-2">{form.scope === "item" && <select aria-label={`منتج التعديل ${index + 1}`} value={change.order_item_id || ""} onChange={(event) => setForm((current) => ({ ...current, proposed_changes: current.proposed_changes.map((row, n) => n === index ? { ...row, order_item_id: event.target.value } : row) }))} className="w-full rounded border p-2"><option value="">اختر المنتج</option>{orderItems(data).filter((item) => form.target_ids.includes(itemId(item))).map((item) => <option key={itemId(item)} value={itemId(item)}>{item.name || "منتج"}</option>)}</select>}{[["field", "اسم الحقل"], ["previous", "القيمة السابقة"], ["requested", "القيمة المطلوبة"]].map(([key, label]) => <input key={key} aria-label={`${label} ${index + 1}`} placeholder={label} value={change[key]} onChange={(event) => setForm((current) => ({ ...current, proposed_changes: current.proposed_changes.map((row, n) => n === index ? { ...row, [key]: event.target.value } : row) }))} className="w-full rounded border p-2 text-sm" />)}<button type="button" onClick={() => setForm((current) => ({ ...current, proposed_changes: current.proposed_changes.filter((_, n) => n !== index) }))} className="text-xs text-rose-700">حذف سطر التعديل</button></div>)}<button type="button" onClick={() => setForm((current) => ({ ...current, proposed_changes: [...current.proposed_changes, { field: "", previous: "", requested: "", order_item_id: current.scope === "item" && current.target_ids.length === 1 ? current.target_ids[0] : "" }] }))} className="rounded border px-3 py-2 text-xs font-black">إضافة حقل تغيّر</button><p className="text-xs text-slate-500">هذه القيم توضح المطلوب للموظف؛ لا تعدّل المنتج تلقائيًا.</p></fieldset>}
                         <div className="mt-3"><div className="text-xs font-black text-slate-600">مرحلة الظهور</div><div className="mt-2 flex max-h-44 flex-wrap gap-2 overflow-y-auto">{STAGES.map(([value, label]) => <button key={value} type="button" onClick={() => toggleStage(value)} className={`rounded-full border px-3 py-1.5 text-xs font-black ${form.target_stages.includes(value) ? "border-violet-700 bg-violet-700 text-white" : "border-slate-300 bg-white text-slate-600"}`}>{label}</button>)}</div></div>
-                        <label className="mt-3 block text-xs font-black text-slate-600">المطلوب قبل السماح بالإكمال<select value={form.required_action} onChange={(event) => setForm((current) => ({ ...current, required_action: event.target.value, approval_required: event.target.value === "arrival_confirmation" ? true : current.approval_required }))} className="mt-1 h-11 w-full rounded-xl border px-3">{REQUIRED_ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                        {form.required_action === "none" && !BLOCKING_ACTIONS.has(form.action_type) && <label className="mt-3 block text-xs font-black text-slate-600">درجة الإلزام<select value={form.enforcement} onChange={(event) => setForm((current) => ({ ...current, enforcement: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="notice">تنبيه فقط</option><option value="acknowledgement_required">يجب تأكيد الاطلاع</option></select></label>}
-                        {["upload_photos", "write_result", "upload_photos_and_result"].includes(form.required_action) && <label className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-black"><input type="checkbox" checked={form.approval_required} onChange={(event) => setForm((current) => ({ ...current, approval_required: event.target.checked }))} />بعد التنفيذ يبقى متوقفًا حتى موافقة خدمة العملاء</label>}
+                        <p className="mt-2 text-xs font-bold text-slate-600">{form.target_stages.includes("current_stage") ? "المرحلة الحالية: يظهر الإيقاف فورًا للمسؤول الحالي، حتى في انتظار المراجعة." : "مرحلة محددة: يظهر التنبيه ويُفعّل الإيقاف عند وصول المنتج أو مسحه في هذه المرحلة."}</p>
+                        {form.action_type !== "general" && <label className="mt-3 block text-xs font-black text-slate-600">المطلوب قبل السماح بالإكمال<select value={form.required_action} onChange={(event) => setForm((current) => ({ ...current, required_action: event.target.value, approval_required: event.target.value === "arrival_confirmation" ? true : current.approval_required }))} className="mt-1 h-11 w-full rounded-xl border px-3">{REQUIRED_ACTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+                        {form.action_type !== "general" && form.required_action === "none" && !BLOCKING_ACTIONS.has(form.action_type) && <label className="mt-3 block text-xs font-black text-slate-600">درجة الإلزام<select value={form.enforcement} onChange={(event) => setForm((current) => ({ ...current, enforcement: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-3"><option value="notice">تنبيه فقط</option><option value="acknowledgement_required">يجب تأكيد الاطلاع</option></select></label>}
+                        {form.action_type !== "general" && ["upload_photos", "write_result", "upload_photos_and_result"].includes(form.required_action) && <label className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-black"><input type="checkbox" checked={form.approval_required} onChange={(event) => setForm((current) => ({ ...current, approval_required: event.target.checked }))} />بعد التنفيذ يبقى متوقفًا حتى موافقة خدمة العملاء</label>}
                         {form.action_type === "delivery_instruction" && <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-xs font-black text-slate-600">تاريخ التوصيل<input type="date" value={form.delivery_date} onChange={(event) => setForm((current) => ({ ...current, delivery_date: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-2" /></label><label className="text-xs font-black text-slate-600">الوقت<input type="time" value={form.delivery_time} onChange={(event) => setForm((current) => ({ ...current, delivery_time: event.target.value }))} className="mt-1 h-11 w-full rounded-xl border px-2" /></label></div>}
                         <button disabled={saving} className="mt-4 min-h-12 w-full rounded-2xl bg-violet-800 px-4 font-black text-white disabled:opacity-50">{saving ? <SpinnerGap className="ml-1 inline animate-spin" /> : null} حفظ وربط التعليمات بالمسار</button>
                     </form>
 
                     <div className="space-y-5">
-                        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="text-lg font-black">تعليمات وملاحظات الطلب</h2><button onClick={() => load(selectedNumber)} className="rounded-xl border p-2 text-violet-700"><ArrowClockwise size={20} /></button></div><div className="mt-4 space-y-3">{!(data.instructions || []).length ? <div className="rounded-2xl border border-dashed p-8 text-center text-sm font-bold text-slate-400">لا توجد ملاحظات حتى الآن.</div> : (data.instructions || []).map((row) => <article key={row.id} className={`rounded-2xl border p-4 ${row.status === "waiting_customer_service_approval" ? "border-violet-300 bg-violet-50" : row.status === "active" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-black">{row.action_label || row.action_type}</div><div className="mt-1 text-xs font-black text-slate-500">{STATUS_LABELS[row.status] || row.status} · {row.target_stage_labels?.join("، ") || row.target_stages?.join("، ")}</div></div><span className="rounded-full bg-white px-3 py-1 text-xs font-black">{row.scope === "order" ? "الطلب كاملًا" : `${row.target_ids?.length || 1} منتج`}</span></div><p className="mt-3 whitespace-pre-wrap text-sm font-bold leading-7">{row.note}</p>{row.submitted_result && <div className="mt-3 rounded-xl bg-white p-3 text-xs font-bold"><span className="font-black">نتيجة الموظف:</span> {row.submitted_result}</div>}{row.evidence?.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">{row.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><img src={evidence.url} alt="إثبات التنفيذ" className="aspect-square w-full rounded-xl border object-cover" /></a>)}</div>}{row.status === "waiting_customer_service_approval" && <div className="mt-3 flex gap-2"><button disabled={Boolean(approvalBusy)} onClick={() => decide(row, true)} className="min-h-11 flex-1 rounded-xl bg-emerald-700 px-3 text-xs font-black text-white">{approvalBusy === row.id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} تمت الموافقة — فتح المسار</button><button disabled={Boolean(approvalBusy)} onClick={() => decide(row, false)} className="min-h-11 rounded-xl bg-rose-700 px-3 text-xs font-black text-white"><XCircle className="ml-1 inline" /> رفض وإعادة للموظف</button></div>}{row.status === "active" && <button disabled={Boolean(approvalBusy)} onClick={() => releaseActiveStop(row)} className="mt-3 min-h-11 w-full rounded-xl bg-emerald-700 px-3 text-xs font-black text-white"><CheckCircle className="ml-1 inline" /> {row.operational_hold ? "إنهاء الإيقاف وفتح المسار" : "إنهاء الملاحظة"}</button>}<div className="mt-3 text-[11px] font-bold text-slate-400">أضافها {row.created_by_name || "خدمة العملاء"} · {formatDate(row.created_at)}</div></article>)}</div></section>
+                        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="text-lg font-black">تعليمات وملاحظات الطلب</h2><button onClick={() => load(selectedNumber)} className="rounded-xl border p-2 text-violet-700"><ArrowClockwise size={20} /></button></div><div className="mt-4 space-y-3">{!(data.instructions || []).length ? <div className="rounded-2xl border border-dashed p-8 text-center text-sm font-bold text-slate-400">لا توجد ملاحظات حتى الآن.</div> : (data.instructions || []).map((row) => <article key={row.id} className={`rounded-2xl border p-4 ${row.status === "waiting_customer_service_approval" ? "border-violet-300 bg-violet-50" : row.status === "active" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="font-black">{row.action_label || row.action_type}</div><div className="mt-1 text-xs font-black text-slate-500">{STATUS_LABELS[row.status] || row.status} · {row.target_stage_labels?.join("، ") || row.target_stages?.join("، ")}</div></div><span className="rounded-full bg-white px-3 py-1 text-xs font-black">{row.scope === "order" ? "الطلب كاملًا" : `${row.target_ids?.length || 1} منتج`}</span></div><p className="mt-3 whitespace-pre-wrap text-sm font-bold leading-7">{row.note}</p>{(row.tasks || []).map((task) => <div key={task.id} className="mt-3">{row.task_protocol && row.can_approve_resume === true && task.status === "submitted" && <label className="mb-2 block text-xs"><input type="checkbox" aria-label={`إعادة مهمة ${task.product_name || task.id}`} checked={(rejectedTaskIds[row.id] || []).includes(task.id)} onChange={(event) => setRejectedTaskIds((current) => ({ ...current, [row.id]: event.target.checked ? [...(current[row.id] || []), task.id] : (current[row.id] || []).filter((id) => id !== task.id) }))} /> إعادة هذه المهمة عند رفض التنفيذ</label>}<b className="text-xs">{task.product_name || "مهمة الطلب"} — {task.status === "submitted" ? "تم تأكيد التنفيذ" : "بانتظار التنفيذ"}</b><InstructionTaskComments instructionId={row.id} taskId={task.id} /></div>)}{row.submitted_result && <div className="mt-3 rounded-xl bg-white p-3 text-xs font-bold"><span className="font-black">نتيجة الموظف:</span> {row.submitted_result}</div>}{row.evidence?.length > 0 && <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">{row.evidence.map((evidence) => <a key={evidence.id} href={evidence.url} target="_blank" rel="noreferrer"><img src={evidence.url} alt="إثبات التنفيذ" className="aspect-square w-full rounded-xl border object-cover" /></a>)}</div>}{row.status === "waiting_customer_service_approval" && (!BLOCKING_ACTIONS.has(row.action_type) || row.can_approve_resume === true) && <div className="mt-3 flex gap-2"><button disabled={Boolean(approvalBusy)} onClick={() => decide(row, true)} className="min-h-11 flex-1 rounded-xl bg-emerald-700 px-3 text-xs font-black text-white">{approvalBusy === row.id ? <SpinnerGap className="ml-1 inline animate-spin" /> : <CheckCircle className="ml-1 inline" />} {["delete_product", "cancel_order"].includes(row.action_type) ? "اعتماد التأكيد وإغلاق المهمة" : "تمت الموافقة — فتح المسار"}</button><button disabled={Boolean(approvalBusy)} onClick={() => decide(row, false)} className="min-h-11 rounded-xl bg-rose-700 px-3 text-xs font-black text-white"><XCircle className="ml-1 inline" /> رفض وإعادة للموظف</button></div>}{row.status === "active" && (row.can_close_instruction === true || row.can_approve_resume === true) && <button disabled={Boolean(approvalBusy)} onClick={() => releaseActiveStop(row)} className="mt-3 min-h-11 w-full rounded-xl bg-emerald-700 px-3 text-xs font-black text-white"><CheckCircle className="ml-1 inline" /> {row.operational_hold ? "إنهاء الإيقاف وفتح المسار" : "إنهاء الملاحظة"}</button>}<div className="mt-3 text-[11px] font-bold text-slate-400">أضافها {row.created_by_name || "خدمة العملاء"} · {formatDate(row.created_at)}</div></article>)}</div></section>
 
                         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black">مسار كل منتج وقطعة</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{(data.pieces || []).map((piece) => <article key={piece.piece_id} className="rounded-2xl border bg-slate-50 p-3"><div className="flex gap-3">{piece.image_url ? <img src={piece.image_url} alt="" className="h-16 w-16 rounded-xl object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white"><Package size={30} className="text-slate-300" /></div>}<div className="min-w-0"><div className="truncate font-black">{piece.product_name}</div><div className="mt-1 text-xs font-black text-violet-700">{piece.stage_label}</div><div className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500"><UserCircle /> {piece.custody?.name || "—"}</div></div></div>{piece.active_hold_id && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs font-black text-rose-900">متوقف: {piece.hold_note || "راجع خدمة العملاء"}</div>}<details className="mt-3"><summary className="cursor-pointer text-xs font-black text-violet-700">عرض مسار القطعة ({piece.timeline?.length || 0})</summary><div className="mt-2 space-y-2">{(piece.timeline || []).map((event) => <div key={event.id} className="border-r-2 border-violet-200 pr-3 text-xs"><div className="font-black">{event.label}</div><div className="mt-0.5 font-bold text-slate-400">{formatDate(event.occurred_at)} {event.actor_name ? `· ${event.actor_name}` : ""}</div></div>)}</div></details></article>)}</div></section>
 

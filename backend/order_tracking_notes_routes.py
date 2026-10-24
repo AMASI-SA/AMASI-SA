@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from alerts_routes import _fp, _upsert_alert
+from operational_instruction_notifications import (NOTIFICATIONS, TASKS, recipients,
+    emit_instruction_notification, notification_feed, ensure_instruction_tasks, scoped_instruction, instruction_inbox)
 from carrier_handoff import EVENTS as CARRIER_EVENTS
 from fulfillment_experiment_routes import (
     ACTIVE_PIECE_STATUSES,
@@ -28,7 +30,7 @@ from order_revision_eligibility import (READY_STATES, read_preparation, item_rev
     validate_ready_confirmation, validate_order_state)
 from order_engine.repository import MongoOrderRepository
 from order_engine.service import OrderNotFoundError, get_order
-from order_review_routes import EVENTS as REVIEW_EVENTS, WORKFLOWS
+from order_review_routes import EVENTS as REVIEW_EVENTS, WORKFLOWS, _can_review
 from order_tracking_notes import (
     BLOCKING_ACTION_TYPES,
     ENFORCEMENT_LEVELS,
@@ -175,6 +177,21 @@ def _can_manage_tracking_instructions(
     )
 
 
+class ProposedChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field: str = Field(min_length=1, max_length=120)
+    previous: str = Field(max_length=1000)
+    requested: str = Field(max_length=1000)
+    order_item_id: str | None = Field(default=None, max_length=180)
+
+
+class TaskSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_ids: list[str] = Field(min_length=1, max_length=200)
+    note: str = Field(default="", max_length=1000)
+    confirmation: Literal["modified", "removed_from_preparation"]
+
+
 class TrackingInstructionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -188,6 +205,7 @@ class TrackingInstructionCreate(BaseModel):
     enforcement: str = Field(default="notice", max_length=40)
     required_action: str = Field(default="none", max_length=40)
     approval_required: bool = False
+    proposed_changes: list[ProposedChange] = Field(default_factory=list, max_length=100)
     ready_item_confirmations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     delivery_date: str | None = Field(default=None, max_length=10)
     delivery_time: str | None = Field(default=None, max_length=5)
@@ -209,6 +227,7 @@ class InstructionActionRequest(BaseModel):
 
 class InstructionApprovalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    task_ids: list[str] = Field(default_factory=list, max_length=200)
     note: str | None = Field(default=None, max_length=1000)
 
 
@@ -447,18 +466,9 @@ async def _notify_current_responsibilities(
     pieces: list[dict[str, Any]],
     instruction: dict[str, Any],
 ) -> int:
-    target_ids = {merchant_id}
-    for piece in pieces:
-        if text(piece.get("responsible_employee_id")):
-            target_ids.add(text(piece.get("responsible_employee_id")))
-    for field in (
-        "preparation_received_by",
-        "claimed_by",
-        "carrier_handoff_employee_id",
-        "store_courier_assignee_id",
-    ):
-        if text(workflow.get(field)):
-            target_ids.add(text(workflow.get(field)))
+    target_ids = await recipients(db, merchant_id, instruction)
+    await ensure_instruction_tasks(db, merchant_id, instruction)
+    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="created")
     delivered = 0
     for target_id in target_ids:
         try:
@@ -530,10 +540,11 @@ async def _sync_instruction_snapshot(
         target_query["piece_id"] = {"$in": target_values}
     elif instruction.get("scope") == "item":
         target_query["order_item_id"] = {"$in": target_values}
-    await db[PIECES].update_many(
-        target_query,
-        {"$addToSet": {"customer_service_instructions": snapshot}, "$set": {"updated_at": _now()}},
-    )
+    target_pieces = await db[PIECES].find(target_query, {"_id": 0, "piece_id": 1}).to_list(10000)
+    for piece in target_pieces:
+        piece_snapshot = {**snapshot, "scope": "piece", "target_id": piece["piece_id"], "target_ids": [piece["piece_id"]]}
+        await db[PIECES].update_one({**target_query, "piece_id": piece["piece_id"]},
+            {"$addToSet": {"customer_service_instructions": piece_snapshot}, "$set": {"updated_at": _now()}})
 
 
 async def _notify_customer_service_approval(
@@ -566,6 +577,8 @@ async def _notify_customer_service_approval(
     except Exception:
         rows = []
     target_ids.update(text(row.get("id")) for row in rows if text(row.get("id")))
+    if instruction.get("task_protocol") or instruction.get("thread_protocol"):
+        target_ids = {text(instruction.get("created_by"))} - {""}
     delivered = 0
     for target_id in target_ids:
         try:
@@ -621,6 +634,7 @@ async def _record_approval_submission(
         "note": instruction.get("submitted_result"),
         "occurred_at": instruction.get("submitted_at") or _now(),
     })
+    await emit_instruction_notification(db, merchant_id=merchant_id, instruction=instruction, event_type="submitted")
     await _notify_customer_service_approval(
         db,
         merchant_id=merchant_id,
@@ -789,6 +803,27 @@ async def _create_operational_hold(
     return hold_id, before_states
 
 
+async def _claim_instruction_resolution(db, *, merchant_id, instruction, actor_id, kind, task_ids=None):
+    """Durable CAS intent; same creator retries recover, competing actions fail closed."""
+    existing = instruction.get("resolution_intent") or {}
+    if existing:
+        if existing.get("actor_id") == actor_id and existing.get("kind") == kind and (not task_ids or sorted(existing.get("task_ids") or []) == sorted(task_ids)):
+            return existing
+        raise HTTPException(409, detail={"code": "instruction_resolution_in_progress"})
+    intent = {"id": uuid.uuid4().hex, "actor_id": actor_id, "kind": kind,
+        "task_ids": sorted(set(task_ids or [])), "started_at": _now()}
+    updated = await db[ORDER_TRACKING_INSTRUCTIONS].find_one_and_update({"user_id": merchant_id,
+        "id": instruction["id"], "status": instruction.get("status"), "resolution_intent": None},
+        {"$set": {"resolution_intent": intent}}, return_document=ReturnDocument.AFTER)
+    if not updated:
+        current = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"user_id": merchant_id, "id": instruction["id"]})
+        previous = (current or {}).get("resolution_intent") or {}
+        if previous.get("actor_id") == actor_id and previous.get("kind") == kind and (not task_ids or sorted(previous.get("task_ids") or []) == sorted(task_ids)):
+            return previous
+        raise HTTPException(409, detail={"code": "instruction_resolution_in_progress"})
+    return intent
+
+
 async def _release_linked_hold(
     db: Any,
     *,
@@ -797,6 +832,8 @@ async def _release_linked_hold(
     actor: dict[str, Any],
     note: str,
 ) -> None:
+    if instruction.get("action_type") in BLOCKING_ACTION_TYPES and text(instruction.get("created_by")) != text(actor.get("id")):
+        raise HTTPException(status_code=403, detail={"code": "instruction_creator_resume_required"})
     hold_id = text(instruction.get("hold_id"))
     if not hold_id:
         return
@@ -897,11 +934,146 @@ def make_order_tracking_notes_router(
     )
     repository = MongoOrderRepository(db)
 
+    async def instruction_user(user: dict = Depends(current_user)):
+        if user.get("_session_client") == "amasi_mobile" and user.get("_mobile_actor_id"):
+            actual = await db["users"].find_one({"id": text(user["_mobile_actor_id"]),
+                "$or": [{"created_by": text(user.get("_mobile_owner_id"))}, {"id": text(user.get("_mobile_owner_id"))}],
+                "disabled": {"$ne": True}, "is_active": {"$ne": False}}, {"_id": 0})
+            if not actual:
+                raise HTTPException(status_code=403, detail={"code": "instruction_actor_not_active"})
+            return {**actual, "mobile_app_permissions": user.get("_mobile_app_permissions") or []}
+        return user
+
+
+    async def can_claim_review(instruction, user, context):
+        if not _can_review(user) or instruction.get("status") != "active" or "pending_review" not in instruction.get("target_stages", []):
+            return False
+        workflow = await db[WORKFLOWS].find_one({"user_id": context["merchant_id"], "order_number": instruction["order_number"]}) or {}
+        return workflow.get("stage", "pending_review") == "pending_review"
+
+    async def authorized_instruction(instruction_id, user, *, history=False):
+        context = await _actor_context(db, user)
+        row = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"user_id": context["merchant_id"], "id": text(instruction_id)}, {"_id": 0})
+        can_manage = _can_manage_tracking_instructions(user, context)
+        allowed = row and (text(row.get("created_by")) == context["actor_id"] or (can_manage and not (row.get("task_protocol") or row.get("thread_protocol"))) or context["actor_id"] in await recipients(db, context["merchant_id"], row))
+        if row and not allowed and history and await can_claim_review(row, user, context):
+            allowed = True
+        if row and not allowed and history and row.get("status") not in {"active", "waiting_customer_service_approval"}:
+            allowed = bool(await db[NOTIFICATIONS].find_one({"merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "instruction_id": row["id"]}))
+        if not allowed:
+            raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_not_found"})
+        return context, row, can_manage
+
+    @router.get("/notifications/me")
+    async def my_notifications(user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        return await notification_feed(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"])
+
+    @router.get("/instructions/inbox")
+    async def my_instruction_inbox(status: Literal["active", "completed"] = "active", cursor: str | None = Query(default=None, max_length=1024), user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        return await instruction_inbox(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"], status=status, cursor=cursor)
+
+    @router.get("/instructions/mine/history")
+    async def authored_instructions(cursor: str | None = Query(default=None, max_length=1024), user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        return await instruction_inbox(db, merchant_id=context["merchant_id"], actor_id=context["actor_id"], status="all", cursor=cursor, authored_only=True)
+
+    @router.post("/notifications/{notification_id}/read")
+    async def read_notification(notification_id: str, user: dict = Depends(instruction_user)):
+        context = await _actor_context(db, user)
+        result = await db[NOTIFICATIONS].update_one({"id": notification_id, "merchant_id": context["merchant_id"], "recipient_id": context["actor_id"]}, {"$set": {"read_at": _now()}})
+        if not result.matched_count:
+            raise HTTPException(status_code=404, detail={"code": "notification_not_found"})
+        return {"ok": True}
+
+    @router.get("/instructions/{instruction_id}")
+    async def instruction_detail(instruction_id: str, user: dict = Depends(instruction_user)):
+        context, row, can_manage = await authorized_instruction(instruction_id, user, history=True)
+        current_recipients = await recipients(db, context["merchant_id"], row)
+        current = context["actor_id"] in current_recipients
+        result = await scoped_instruction(db, context["merchant_id"], row, context["actor_id"], can_manage)
+        if row.get("status") in {"active", "waiting_customer_service_approval"}:
+            result["activation_state"] = "active" if current_recipients else "scheduled"
+        evidence = await db[ORDER_TRACKING_EVIDENCE].find({"user_id": context["merchant_id"], "instruction_id": row["id"]}, {"_id": 0, "content": 0, "user_id": 0}).to_list(100)
+        if text(row.get("created_by")) != context["actor_id"]:
+            evidence = [entry for entry in evidence if entry.get("created_by") == context["actor_id"]]
+        own_current = [task for task in result["tasks"] if task.get("assignee_id") == context["actor_id"] and task.get("current", True)]
+        active = row.get("status") == "active" and current
+        events = await db[NOTIFICATIONS].find({"merchant_id": context["merchant_id"], "recipient_id": context["actor_id"], "instruction_id": row["id"]}, {"_id": 0, "merchant_id": 0, "recipient_id": 0}).sort("created_at", -1).to_list(100)
+        return {"instruction": result, "evidence": evidence, "events": events, "capabilities": {
+            "can_manage": can_manage, "can_approve_resume": result["can_approve_resume"], "can_close_instruction": result["can_close_instruction"], "can_acknowledge": active and (bool(own_current) or not row.get("thread_protocol")),
+            "can_complete": result["can_close_instruction"],
+            "can_claim_task": await can_claim_review(row, user, context) and bool(await db[TASKS].find_one({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "assignee_id": "", "status": "pending"})),
+            "can_submit_tasks": active and bool(row.get("task_protocol")) and any(task["assignee_id"] == context["actor_id"] and task["status"] == "pending" for task in result["tasks"]),
+            "can_submit_evidence": active and bool(own_current) and row.get("required_action") in {"upload_photos", "upload_photos_and_result"}}}
+
+    @router.get("/orders/{order_number}/instructions/active")
+    async def active_order_instructions(order_number: str, stage: str = Query(...), user: dict = Depends(instruction_user)):
+        if stage not in TARGET_STAGES:
+            raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_stage_invalid"})
+        context = await _actor_context(db, user)
+        rows = await db[ORDER_TRACKING_INSTRUCTIONS].find({"user_id": context["merchant_id"], "order_number": text(order_number).lstrip("#"), "status": {"$in": ["active", "waiting_customer_service_approval"]}, "$or": [{"target_stages": stage}, {"activation_state": "active", "action_type": {"$in": list(BLOCKING_ACTION_TYPES)}}]}, {"_id": 0}).to_list(200)
+        result = []
+        for row in rows:
+            current_recipients = await recipients(db, context["merchant_id"], row)
+            if context["actor_id"] in current_recipients or (stage == "pending_review" and await can_claim_review(row, user, context)):
+                projected = await scoped_instruction(db, context["merchant_id"], row, context["actor_id"], _can_manage_tracking_instructions(user, context))
+                projected["activation_state"] = "active"
+                result.append(projected)
+        return {"items": result}
+
+    @router.post("/instructions/{instruction_id}/tasks/claim")
+    async def claim_review_task(instruction_id: str, user: dict = Depends(instruction_user)):
+        context, row, _ = await authorized_instruction(instruction_id, user, history=True)
+        if not await can_claim_review(row, user, context):
+            raise HTTPException(status_code=403, detail={"code": "instruction_review_claim_not_allowed"})
+        await ensure_instruction_tasks(db, context["merchant_id"], row)
+        claimed = await db[TASKS].find_one_and_update({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "assignee_id": "", "status": "pending"}, {"$set": {"assignee_id": context["actor_id"], "claimed_for_review": True}}, return_document=ReturnDocument.AFTER)
+        if not claimed:
+            raise HTTPException(status_code=409, detail={"code": "instruction_task_already_claimed"})
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=row, event_type="assigned", recipient_ids={context["actor_id"], text(row.get("created_by"))} - {""})
+        return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], row, context["actor_id"])}
+
+    @router.post("/instructions/{instruction_id}/tasks/submit")
+    async def submit_tasks(instruction_id: str, payload: TaskSubmission, user: dict = Depends(instruction_user)):
+        context, row, _ = await authorized_instruction(instruction_id, user)
+        if context["actor_id"] not in await recipients(db, context["merchant_id"], row):
+            raise HTTPException(status_code=409, detail={"code": "instruction_stage_not_reached"})
+        if not row.get("task_protocol"):
+            raise HTTPException(status_code=409, detail={"code": "instruction_is_informational"})
+        tasks = await ensure_instruction_tasks(db, context["merchant_id"], row)
+        own = {task["id"]: task for task in tasks if task["assignee_id"] == context["actor_id"] and task.get("current", True)}
+        if not payload.task_ids or not set(payload.task_ids).issubset(own):
+            raise HTTPException(status_code=403, detail={"code": "instruction_task_not_assigned"})
+        expected = "removed_from_preparation" if row.get("action_type") in {"cancel_order", "delete_product"} else "modified"
+        if payload.confirmation != expected:
+            raise HTTPException(status_code=422, detail={"code": "instruction_confirmation_required", "confirmation": expected})
+        if row.get("resolution_intent"):
+            raise HTTPException(status_code=409, detail={"code": "instruction_resolution_in_progress"})
+        if row.get("status") != "active":
+            raise HTTPException(status_code=409, detail={"code": "instruction_not_active"})
+        if row.get("required_action") in {"write_result", "upload_photos_and_result"} and not text(payload.note):
+            raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_result_required"})
+        if row.get("required_action") in {"upload_photos", "upload_photos_and_result"} and not await db[ORDER_TRACKING_EVIDENCE].count_documents({"user_id": context["merchant_id"], "instruction_id": row["id"], "created_by": context["actor_id"], "status": "submitted"}):
+            raise HTTPException(status_code=409, detail={"code": "customer_service_instruction_photo_evidence_required"})
+        now = _now()
+        for task_id in set(payload.task_ids):
+            await db[TASKS].update_one({"id": task_id, "merchant_id": context["merchant_id"], "assignee_id": context["actor_id"], "status": "pending"}, {"$set": {"status": "submitted", "submitted_at": now, "submitted_by": context["actor_id"], "confirmation": payload.confirmation, "result_note": text(payload.note)}})
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**row, "notification_revision": f"{context['actor_id']}:{now.isoformat()}", "note": text(payload.note) or "أكد الموظف تنفيذ المطلوب للقطع المسندة إليه"}, event_type="submitted", recipient_ids={text(row.get("created_by"))} - {""})
+        pending = await db[TASKS].count_documents({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "status": "pending"})
+        if not pending:
+            updated = await db[ORDER_TRACKING_INSTRUCTIONS].find_one_and_update({"user_id": context["merchant_id"], "id": row["id"], "status": "active", "resolution_intent": None}, {"$set": {"status": "waiting_customer_service_approval", "submitted_at": now, "submitted_by": context["actor_id"], "submitted_by_name": text(user.get("name")), "submitted_result": text(payload.note), "updated_at": now}}, return_document=ReturnDocument.AFTER)
+            if updated:
+                await _record_approval_submission(db, merchant_id=context["merchant_id"], instruction=updated, actor_id=context["actor_id"], actor_name=text(user.get("name")))
+                row = updated
+        return {"ok": True, "waiting_customer_service_approval": not pending, "instruction": await scoped_instruction(db, context["merchant_id"], row, context["actor_id"])}
+
     @router.get("/search")
     async def search_orders(
         q: str = Query(min_length=2, max_length=120),
         limit: int = Query(default=20, ge=1, le=50),
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         actor = _require_customer_service(user)
         context = await _actor_context(db, actor)
@@ -932,7 +1104,7 @@ def make_order_tracking_notes_router(
     @router.get("/orders/{order_number}")
     async def order_tracking(
         order_number: str,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         actor = _require_customer_service(user)
         context = await _actor_context(db, actor)
@@ -1069,7 +1241,7 @@ def make_order_tracking_notes_router(
             "timeline": events,
             "pieces": piece_views,
             "archived_piece_count": len(pieces) - len(active_pieces),
-            "instructions": [public_instruction(row) for row in instruction_rows],
+            "instructions": [await scoped_instruction(db, context["merchant_id"], row, context["actor_id"], True) for row in instruction_rows],
             "holds": holds,
             "stage_options": [{"value": key, "label": value} for key, value in STAGE_LABELS.items()],
             "action_options": [{"value": key, "label": value} for key, value in ACTION_LABELS.items()],
@@ -1082,7 +1254,7 @@ def make_order_tracking_notes_router(
     async def create_instruction(
         order_number: str,
         payload: TrackingInstructionCreate,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         actor = _require_customer_service(user)
         context = await _actor_context(db, actor)
@@ -1102,12 +1274,6 @@ def make_order_tracking_notes_router(
         requested_target_ids = [value for value in requested_target_ids if value]
         if payload.scope != "order" and not requested_target_ids:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_target_required"})
-        if (
-            payload.approval_required
-            and payload.required_action == "none"
-            and payload.action_type not in BLOCKING_ACTION_TYPES
-        ):
-            raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_approval_action_required"})
         if payload.delivery_date:
             try:
                 datetime.strptime(payload.delivery_date, "%Y-%m-%d")
@@ -1141,6 +1307,8 @@ def make_order_tracking_notes_router(
             for row in getattr(order, "items", None) or []
             if text(getattr(row, "order_item_id", None))
         }
+        if any(change.order_item_id and change.order_item_id not in order_item_ids for change in payload.proposed_changes):
+            raise HTTPException(status_code=422, detail={"code": "proposed_change_item_not_in_order"})
         piece_ids = {
             text(row.get("piece_id")) for row in pieces if text(row.get("piece_id"))
         }
@@ -1165,18 +1333,17 @@ def make_order_tracking_notes_router(
             target_stages = [row for row in target_stages if row != "current_stage"]
             target_stages.insert(0, _current_stage(workflow, target_pieces or pieces))
             target_stages = list(dict.fromkeys(target_stages))
-        if payload.action_type in {"edit_product", "delete_product"}:
-            target_stages = sorted(TARGET_STAGES)
+        activated_piece_stages = {text(piece.get("piece_id")): _piece_stage(piece, workflow)
+            for piece in target_pieces if _piece_stage(piece, workflow) in target_stages}
+        activate_now = bool(activated_piece_stages) or (not target_pieces and _current_stage(workflow, []) in target_stages)
+        if set(target_stages) == {"store_courier"}:
+            courier_assignment = await db["store_delivery_assignments"].find_one({"user_id": context["merchant_id"], "$or": [{"order_id": normalized}, {"order_number": normalized}], "active": True, "status": {"$in": ["assigned", "out_for_delivery"]}})
+            if not courier_assignment:
+                activate_now = False
+                activated_piece_stages = {}
         now = _now()
         instruction_id = f"customer-instruction-{uuid.uuid4().hex}"
-        effective_enforcement = (
-            "completion_required"
-            if (
-                payload.required_action != "none"
-                or payload.action_type in BLOCKING_ACTION_TYPES
-            )
-            else payload.enforcement
-        )
+        effective_enforcement = "completion_required" if payload.action_type in BLOCKING_ACTION_TYPES else "notice"
         instruction = {
             "id": instruction_id,
             "user_id": context["merchant_id"],
@@ -1186,21 +1353,22 @@ def make_order_tracking_notes_router(
             "target_ids": requested_target_ids,
             "action_type": payload.action_type,
             "action_label": ACTION_LABELS[payload.action_type],
+            "task_protocol": 1 if payload.action_type in BLOCKING_ACTION_TYPES else None,
+            "thread_protocol": 1,
+            "proposed_changes": [change.model_dump() for change in payload.proposed_changes],
             "priority": payload.priority,
             "note": text(payload.note),
             "target_stages": target_stages,
             "target_stage_labels": [STAGE_LABELS[row] for row in target_stages],
             "enforcement": effective_enforcement,
-            "required_action": payload.required_action,
-            "approval_required": bool(
-                payload.approval_required
-                or payload.required_action == "arrival_confirmation"
-                or payload.action_type in BLOCKING_ACTION_TYPES
-            ),
+            "required_action": payload.required_action if payload.action_type in BLOCKING_ACTION_TYPES else "none",
+            "approval_required": payload.action_type in BLOCKING_ACTION_TYPES,
             "delivery_date": payload.delivery_date,
             "delivery_time": payload.delivery_time,
             "status": "active",
-            "operational_hold": payload.action_type in BLOCKING_ACTION_TYPES,
+            "operational_hold": payload.action_type in BLOCKING_ACTION_TYPES and activate_now,
+            "activation_state": "active" if activate_now else "scheduled",
+            "activated_piece_stages": activated_piece_stages,
             "ready_item_confirmations": ready_confirmations,
             "target_piece_ids": [text(row.get("piece_id")) for row in target_pieces if text(row.get("piece_id"))],
             "acknowledged_by_ids": [],
@@ -1223,7 +1391,7 @@ def make_order_tracking_notes_router(
                     db,
                     merchant_id=context["merchant_id"],
                     order_number=normalized,
-                    pieces=target_pieces,
+                    pieces=[piece for piece in target_pieces if text(piece.get("piece_id")) in activated_piece_stages],
                     instruction=instruction,
                     actor=actor,
                 )
@@ -1249,10 +1417,12 @@ def make_order_tracking_notes_router(
                 workflow_update,
                 upsert=True,
             )
-            if target_pieces:
-                await db[PIECES].update_many(
-                    {"user_id": context["merchant_id"], "piece_id": {"$in": instruction["target_piece_ids"]}},
-                    {"$addToSet": {"customer_service_instructions": snapshot}, "$set": {"updated_at": _now()}},
+            for target_piece in target_pieces:
+                piece_id = text(target_piece.get("piece_id"))
+                piece_snapshot = {**snapshot, "scope": "piece", "target_id": piece_id, "target_ids": [piece_id]}
+                await db[PIECES].update_one(
+                    {"user_id": context["merchant_id"], "piece_id": piece_id},
+                    {"$addToSet": {"customer_service_instructions": piece_snapshot}, "$set": {"updated_at": _now()}},
                 )
             driver_instruction_id = await _materialize_driver_instruction(
                 db,
@@ -1296,6 +1466,8 @@ def make_order_tracking_notes_router(
                     )
                 await db[FULFILLMENT_HOLDS].delete_one({"user_id": context["merchant_id"], "id": hold_id})
             await db[ORDER_TRACKING_INSTRUCTIONS].delete_one({"user_id": context["merchant_id"], "id": instruction_id})
+            await db[TASKS].delete_many({"merchant_id": context["merchant_id"], "instruction_id": instruction_id})
+            await db[NOTIFICATIONS].delete_many({"merchant_id": context["merchant_id"], "instruction_id": instruction_id})
             await db[WORKFLOWS].update_one(
                 {"user_id": context["merchant_id"], "order_number": normalized},
                 {"$pull": {
@@ -1336,8 +1508,16 @@ def make_order_tracking_notes_router(
     @router.post("/instructions/{instruction_id}/acknowledge")
     async def acknowledge_instruction(
         instruction_id: str,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
+        await authorized_instruction(instruction_id, user)
+        _, target, _ = await authorized_instruction(instruction_id, user)
+        if text(user.get("id")) not in await recipients(db, text(target.get("user_id")), target):
+            raise HTTPException(status_code=409, detail={"code": "instruction_stage_not_reached"})
+        if target.get("thread_protocol"):
+            owned = await ensure_instruction_tasks(db, text(target.get("user_id")), target)
+            if not any(task.get("assignee_id") == text(user.get("id")) and task.get("current", True) for task in owned):
+                raise HTTPException(status_code=403, detail={"code": "instruction_task_not_assigned"})
         context = await _actor_context(db, user)
         instruction = await db[ORDER_TRACKING_INSTRUCTIONS].find_one(
             {"user_id": context["merchant_id"], "id": text(instruction_id), "status": "active"},
@@ -1365,6 +1545,12 @@ def make_order_tracking_notes_router(
             return_document=ReturnDocument.AFTER,
             projection={"_id": 0, "user_id": 0},
         )
+        if instruction.get("thread_protocol"):
+            tasks = await ensure_instruction_tasks(db, context["merchant_id"], instruction)
+            for task in tasks:
+                if task.get("assignee_id") == context["actor_id"] and task.get("current", True):
+                    await db[TASKS].update_one({"id": task["id"], "assignee_id": context["actor_id"]}, {"$set": {"acknowledged_at": now, "acknowledged_by": context["actor_id"]}})
+            await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**instruction, "notification_revision": f"ack:{context['actor_id']}:{now.isoformat()}", "notification_metadata": {"actor_id": context["actor_id"], "actor_name": history["actor_name"], "piece_ids": [task["piece_id"] for task in tasks if task.get("assignee_id") == context["actor_id"]]}}, event_type="acknowledged", recipient_ids={text(instruction.get("created_by"))} - {""})
         await _sync_instruction_snapshot(
             db,
             merchant_id=context["merchant_id"],
@@ -1380,15 +1566,23 @@ def make_order_tracking_notes_router(
             "actor_name": history["actor_name"],
             "occurred_at": now,
         })
-        return {"ok": True, "instruction": updated}
+        return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     @router.post("/instructions/{instruction_id}/evidence")
     async def upload_instruction_evidence(
         instruction_id: str,
         files: list[UploadFile] = File(default=[]),
         result_note: str = Form(default=""),
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
+        await authorized_instruction(instruction_id, user)
+        _, target, _ = await authorized_instruction(instruction_id, user)
+        if text(user.get("id")) not in await recipients(db, text(target.get("user_id")), target):
+            raise HTTPException(status_code=409, detail={"code": "instruction_stage_not_reached"})
+        if target.get("thread_protocol"):
+            owned = await ensure_instruction_tasks(db, text(target.get("user_id")), target)
+            if not any(task.get("assignee_id") == text(user.get("id")) and task.get("current", True) for task in owned):
+                raise HTTPException(status_code=403, detail={"code": "instruction_task_not_assigned"})
         context = await _actor_context(db, user)
         instruction = await db[ORDER_TRACKING_INSTRUCTIONS].find_one(
             {
@@ -1455,6 +1649,9 @@ def make_order_tracking_notes_router(
                     "id": {"$in": [row["id"] for row in saved]},
                 })
             raise
+        if instruction.get("task_protocol"):
+            await db[ORDER_TRACKING_INSTRUCTIONS].update_one({"user_id": context["merchant_id"], "id": instruction["id"]}, {"$push": {"evidence_ids": {"$each": [row["id"] for row in saved]}}})
+            return {"ok": True, "waiting_customer_service_approval": False, "instruction": await scoped_instruction(db, context["merchant_id"], instruction, context["actor_id"]), "evidence": saved}
         status_value = (
             "waiting_customer_service_approval"
             if instruction.get("approval_required")
@@ -1499,7 +1696,7 @@ def make_order_tracking_notes_router(
     @router.get("/evidence/{evidence_id}")
     async def get_instruction_evidence(
         evidence_id: str,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> Response:
         context = await _actor_context(db, user)
         row = await db[ORDER_TRACKING_EVIDENCE].find_one({
@@ -1507,6 +1704,9 @@ def make_order_tracking_notes_router(
             "id": text(evidence_id),
         })
         if not row:
+            raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_evidence_not_found"})
+        _, parent, can_manage = await authorized_instruction(row["instruction_id"], user, history=True)
+        if text(parent.get("created_by")) != context["actor_id"] and row.get("created_by") != context["actor_id"]:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_evidence_not_found"})
         return Response(
             content=bytes(row["content"]),
@@ -1518,7 +1718,7 @@ def make_order_tracking_notes_router(
     async def approve_instruction(
         instruction_id: str,
         payload: InstructionApprovalRequest,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         actor = _require_customer_service(user)
         context = await _actor_context(db, actor)
@@ -1534,6 +1734,8 @@ def make_order_tracking_notes_router(
         )
         if not instruction:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_waiting_approval_not_found"})
+        if instruction.get("action_type") in BLOCKING_ACTION_TYPES and text(instruction.get("created_by")) != context["actor_id"]:
+            raise HTTPException(status_code=403, detail={"code": "instruction_creator_resume_required"})
         return await complete_instruction(
             instruction["id"],
             InstructionActionRequest(note=text(payload.note) or "وافقت خدمة العملاء على التنفيذ"),
@@ -1544,7 +1746,7 @@ def make_order_tracking_notes_router(
     async def reject_instruction(
         instruction_id: str,
         payload: InstructionApprovalRequest,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         actor = _require_customer_service(user)
         context = await _actor_context(db, actor)
@@ -1553,14 +1755,29 @@ def make_order_tracking_notes_router(
         reason = text(payload.note)
         if not reason:
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_rejection_reason_required"})
+        existing = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"user_id": context["merchant_id"], "id": text(instruction_id), "status": "waiting_customer_service_approval"})
+        if existing and existing.get("action_type") in BLOCKING_ACTION_TYPES and text(existing.get("created_by")) != context["actor_id"]:
+            raise HTTPException(status_code=403, detail={"code": "instruction_creator_resume_required"})
+        if existing and existing.get("task_protocol"):
+            tasks = await ensure_instruction_tasks(db, context["merchant_id"], existing)
+            retry_ids = set((existing.get("resolution_intent") or {}).get("task_ids") or []) if (existing.get("resolution_intent") or {}).get("kind") == "reject" else set()
+            allowed_ids = {task["id"] for task in tasks if task["status"] == "submitted" or task["id"] in retry_ids}
+            if not payload.task_ids or not set(payload.task_ids).issubset(allowed_ids):
+                raise HTTPException(status_code=422, detail={"code": "instruction_rejection_tasks_required"})
+        if not existing:
+            raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_waiting_approval_not_found"})
+        resolution = await _claim_instruction_resolution(db, merchant_id=context["merchant_id"], instruction=existing, actor_id=context["actor_id"], kind="reject", task_ids=payload.task_ids)
+        if existing.get("task_protocol"):
+            await db[TASKS].update_many({"merchant_id": context["merchant_id"], "instruction_id": existing["id"], "id": {"$in": payload.task_ids}}, {"$set": {"status": "pending", "rejection_note": reason}, "$unset": {"submitted_at": "", "confirmation": ""}})
         now = _now()
         updated = await db[ORDER_TRACKING_INSTRUCTIONS].find_one_and_update(
             {
                 "user_id": context["merchant_id"],
                 "id": text(instruction_id),
                 "status": "waiting_customer_service_approval",
+                "resolution_intent.id": resolution["id"],
             },
-            {"$set": {
+            {"$unset": {"resolution_intent": ""}, "$set": {
                 "status": "active",
                 "rejected_at": now,
                 "rejected_by": context["actor_id"],
@@ -1594,13 +1811,17 @@ def make_order_tracking_notes_router(
             instruction_id=updated["id"],
             approval_only=True,
         )
-        return {"ok": True, "instruction": updated}
+        rejected_recipients = None
+        if updated.get("task_protocol"):
+            rejected_recipients = {task["assignee_id"] for task in tasks if task["id"] in payload.task_ids and task.get("assignee_id")}
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type="rejected", recipient_ids=rejected_recipients)
+        return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     @router.post("/instructions/{instruction_id}/complete")
     async def complete_instruction(
         instruction_id: str,
         payload: InstructionActionRequest,
-        user: dict = Depends(current_user),
+        user: dict = Depends(instruction_user),
     ) -> dict[str, Any]:
         context = await _actor_context(db, user)
         instruction = await db[ORDER_TRACKING_INSTRUCTIONS].find_one(
@@ -1608,6 +1829,21 @@ def make_order_tracking_notes_router(
         )
         if not instruction:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_not_found"})
+        if instruction.get("action_type") not in BLOCKING_ACTION_TYPES:
+            projected = await scoped_instruction(db, context["merchant_id"], instruction, context["actor_id"], True)
+            if text(instruction.get("created_by")) != context["actor_id"]:
+                raise HTTPException(status_code=403, detail={"code": "instruction_creator_close_required"})
+            if instruction.get("status") in {"active", "waiting_customer_service_approval"} and not projected["can_close_instruction"]:
+                raise HTTPException(status_code=409, detail={"code": "instruction_acknowledgments_pending"})
+        if instruction.get("action_type") in BLOCKING_ACTION_TYPES and _can_manage_tracking_instructions(user, context) and text(instruction.get("created_by")) != context["actor_id"]:
+            raise HTTPException(status_code=403, detail={"code": "instruction_creator_resume_required"})
+        await authorized_instruction(instruction_id, user)
+        if instruction.get("task_protocol"):
+            tasks = await ensure_instruction_tasks(db, context["merchant_id"], instruction)
+            if not tasks or any(task["status"] != "submitted" for task in tasks):
+                raise HTTPException(status_code=409, detail={"code": "instruction_tasks_pending"})
+            if not _can_manage_tracking_instructions(user, context):
+                raise HTTPException(status_code=403, detail={"code": "customer_service_approval_required"})
         can_manage_instruction = _can_manage_tracking_instructions(user, context)
         if text(instruction.get("status")) not in {"active", "waiting_customer_service_approval"}:
             if text(instruction.get("status")) == "completed":
@@ -1682,6 +1918,7 @@ def make_order_tracking_notes_router(
             return {"ok": True, "waiting_customer_service_approval": True, "instruction": updated}
         if instruction.get("operational_hold") and not can_manage_instruction:
             raise HTTPException(status_code=403, detail={"code": "fulfillment_hold_release_permission_required"})
+        resolution = await _claim_instruction_resolution(db, merchant_id=context["merchant_id"], instruction=instruction, actor_id=context["actor_id"], kind="resume")
         await _release_linked_hold(
             db,
             merchant_id=context["merchant_id"],
@@ -1695,8 +1932,9 @@ def make_order_tracking_notes_router(
                 "user_id": context["merchant_id"],
                 "id": instruction["id"],
                 "status": {"$in": ["active", "waiting_customer_service_approval"]},
+                "resolution_intent.id": resolution["id"],
             },
-            {"$set": {
+            {"$unset": {"resolution_intent": ""}, "$set": {
                 "status": "completed",
                 "completed_at": now,
                 "completed_by": context["actor_id"],
@@ -1707,6 +1945,11 @@ def make_order_tracking_notes_router(
             return_document=ReturnDocument.AFTER,
             projection={"_id": 0, "user_id": 0},
         )
+        if not updated:
+            current = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({"user_id": context["merchant_id"], "id": instruction["id"]}, {"_id": 0})
+            if current and current.get("status") == "completed":
+                return {"ok": True, "idempotent_replay": True, "instruction": await scoped_instruction(db, context["merchant_id"], current, context["actor_id"], True)}
+            raise HTTPException(status_code=409, detail={"code": "instruction_resolution_in_progress"})
         await db[WORKFLOWS].update_one(
             {"user_id": context["merchant_id"], "order_number": instruction["order_number"]},
             {
@@ -1752,7 +1995,8 @@ def make_order_tracking_notes_router(
             db,
             instruction_id=instruction["id"],
         )
-        return {"ok": True, "instruction": updated}
+        await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction=updated, event_type=("closed" if instruction.get("action_type") not in BLOCKING_ACTION_TYPES else "approved" if instruction.get("status") == "waiting_customer_service_approval" else "completed"))
+        return {"ok": True, "instruction": await scoped_instruction(db, context["merchant_id"], updated, context["actor_id"], _can_manage_tracking_instructions(user, context))}
 
     return router
 
