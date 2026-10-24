@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.366" timestamp="2026-10-20T16:00:32.039557+03:00" hostname="أماسي"><testcase classname="backend.tests.test_operational_balance_hybrid_payment_choice" name="test_tiktok_wallet_funding_and_debt_settlement_are_distinct_and_replay_safe" time="0.188"><failure message="TypeError: dict() got multiple values for keyword argument 'kind'">backend\tests\test_operational_balance_hybrid_payment_choice.py:61: in test_tiktok_wallet_funding_and_debt_settlement_are_distinct_and_replay_safe
+    run(scenario)
+backend\tests\test_operational_balance_integration.py:48: in run
+    return asyncio.run(execute())
+           ^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py:196: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py:119: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\amasi\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py:726: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+backend\tests\test_operational_balance_integration.py:43: in execute
+    yieldless = await fn(db)
+                ^^^^^^^^^^^^
+backend\tests\test_operational_balance_hybrid_payment_choice.py:33: in scenario
+    funding = movement(kind="wallet_funding", party_type="ad_account",
+backend\tests\test_operational_balance_integration.py:137: in movement
+    return dict(request_id="movement1", party_type="supplier", party_id="supplier", bank_id="bank",
+E   TypeError: dict() got multiple values for keyword argument 'kind'</failure></testcase></testsuite></testsuites>
