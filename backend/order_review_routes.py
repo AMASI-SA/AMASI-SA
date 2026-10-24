@@ -546,7 +546,7 @@ async def _review_item_identities(db: Any, user_id: str, order: OrderDTO, *, loc
 
 
 async def _salla_admin_url(db: Any, user_id: str, order_number: str) -> str:
-    row = await db.unified_orders.find_one(
+    row = await db["unified_orders"].find_one(
         {"user_id": user_id, "order_number": order_number},
         {"_id": 0, "raw_by_source.salla_direct.urls.admin": 1, "raw_by_source.salla_direct.urls.customer": 1},
     ) or {}

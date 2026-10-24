@@ -1,0 +1,12 @@
+{
+  "task": "assembly-salla-link-parity-20261024",
+  "branch": "codex/assembly-navigation-link-20261024",
+  "base": "9df7ed03222bd7adcf3a8dff00c56a901a90e4ca",
+  "root_cause": "Assembly required numeric /orders/id URL and duplicate raw provider IDs; review uses stored opaque /orders/order/token URL. Live review DOM confirmed opaque URL shape and assembly lacked link.",
+  "changes": "Reuse review tenant-scoped saved-link reader; accept both official numeric and opaque admin URL shapes; preserve Android Chrome fallback and readiness/printing checks. Remove fixed mobile assembly navigation and its bottom spacing; retain in-page order search.",
+  "verification": "Backend 57 tests passed; frontend 54 tests passed including visible clickable opaque link while printing is locked; no dependency changes",
+  "production_changed": false,
+  "next": "Finalize focused tests, checkpoint PR, CI and governed release, then verify live assembly link",
+  "status": "Combined Salla link fix and footer removal; not deployed",
+  "supersedes_pr": 1474
+}

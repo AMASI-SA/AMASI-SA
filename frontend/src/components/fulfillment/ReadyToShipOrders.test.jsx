@@ -342,6 +342,16 @@ describe("assembly and current Salla completion are both required", () => {
         await act(async () => container.querySelector("article button").click());
     }
 
+    test("Salla navigation remains visible when shipment and readiness are locked", async () => {
+        const url = "https://s.salla.sa/orders/order/AbCd1234xyZ";
+        await search({ salla_admin_url: url, assembly_completion_confirmed: false });
+        const link = container.querySelector("a.assembly-salla-link");
+        expect(link.textContent).toContain("الانتقال إلى صفحة الطلب في سلة");
+        expect(link.getAttribute("href")).toBe(url);
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(window.open).not.toHaveBeenCalled();
+    });
+
     test.each([undefined, false, "true"])("completion %s cannot be inferred from ready totals or delivered status", async (proof) => {
         await search({ assembly_completion_confirmed: proof, status: "delivered", stage: "completed", summary: { all_ready: true }, progress: { order_completed: true } });
         expect(container.querySelector('[data-testid="assembly-order-completed"]')).toBeNull();
@@ -546,4 +556,14 @@ test("piece stages and employees are available in the expandable history", () =>
     expect(history.textContent).toContain("تم الاستلام");
     expect(history.textContent).toContain("المستلم");
     expect(host.querySelector('[aria-label="نسخ الاسم"]')).not.toBeNull();
+});
+
+
+test("assembly accepts the opaque admin order URL used by review", () => {
+    const url = "https://s.salla.sa/orders/order/AbCd1234xyZ";
+    expect(sallaOrderHref(url, "iPhone")).toBe(url);
+    expect(sallaOrderHref(url, "Android")).toContain(`S.browser_fallback_url=${encodeURIComponent(url)};end`);
+    for (const value of ["https://s.salla.sa.evil.test/orders/order/AbCd1234xyZ", "https://s.salla.sa/orders/order/", "https://s.salla.sa/orders/order/AbCd?redirect=evil"]) {
+        expect(sallaOrderHref(value, "Android")).toBeUndefined();
+    }
 });
