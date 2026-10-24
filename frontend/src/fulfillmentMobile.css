@@ -22,6 +22,9 @@
   .review-mobile-list .review-table-heading { display: grid; }
   .review-date-full { display: none; }
   .review-date-short { display: inline; white-space: nowrap; }
+  .review-table-heading > div { min-width: 0; overflow-wrap: anywhere; }
+  .review-table-heading > div:first-child { font-size: 0; }
+  .review-table-heading > div:first-child::after { content: "فتح"; font-size: 10px; }
   .review-table-heading { background: #fff9cd; color: #392c21; }
   .review-table-row { min-height: 62px; }
   .review-table-row > span { min-width: 0; overflow-wrap: anywhere; font-size: 10px; }
