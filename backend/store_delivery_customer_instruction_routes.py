@@ -191,7 +191,11 @@ def make_store_delivery_customer_instruction_router(db: Any, current_user: Calla
             {"user_id": owner_id, "account_user_id": normalize_text(actor.get("id")), "status": "active"}, {"_id": 0, "id": 1})
         if not driver:
             raise HTTPException(status_code=403, detail={"code": "store_driver_account_not_linked"})
-        query: dict[str, Any] = {"user_id": owner_id, "driver_id": driver["id"], "status": "active"}
+        # Unified tracking requests have a separate account/stage-scoped inbox;
+        # returning their legacy mirrors would expose stale assignments and a
+        # second acknowledgment button which never confirms the current task.
+        query: dict[str, Any] = {"user_id": owner_id, "driver_id": driver["id"], "status": "active",
+            "source_tracking_instruction_id": {"$exists": False}}
         if not include_acknowledged: query["acknowledged_at"] = None
         items = await db[STORE_DELIVERY_INSTRUCTIONS].find(query, {"_id": 0, "user_id": 0}).sort(
             [("delivery_date", 1), ("delivery_time", 1), ("created_at", 1)]).to_list(length=500)
@@ -205,6 +209,10 @@ def make_store_delivery_customer_instruction_router(db: Any, current_user: Calla
         if not driver:
             raise HTTPException(status_code=403, detail={"code": "store_driver_account_not_linked"})
         now = _now()
+        linked = await db[STORE_DELIVERY_INSTRUCTIONS].find_one({"user_id": owner_id,
+            "id": instruction_id, "driver_id": driver["id"], "source_tracking_instruction_id": {"$exists": True}})
+        if linked:
+            raise HTTPException(status_code=409, detail={"code": "use_operational_instruction_acknowledgment"})
         result = await db[STORE_DELIVERY_INSTRUCTIONS].find_one_and_update(
             {"user_id": owner_id, "id": instruction_id, "driver_id": driver["id"], "status": "active"},
             {"$set": {"acknowledged_at": now, "acknowledged_by_driver_id": driver["id"]}},
