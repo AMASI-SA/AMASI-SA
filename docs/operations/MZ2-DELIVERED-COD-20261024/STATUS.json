@@ -1,12 +1,21 @@
 {
-  "task":"MZ2-DELIVERED-COD-20261024",
-  "branch":"codex/operational-delivered-cod-20261024",
-  "production_base":"f75b9fcc9e5ac48d214feba005e12e472d1aafb9",
-  "status":"VERIFYING_EXISTING_DELIVERY_RULE",
-  "contract":"External courier COD receivable and shipping payable confirm on delivered, remain until settlement. Cash driver has custody; bank/card collection has zero driver custody. No real business writes or activation.",
-  "findings":["Current production source already implements these recognition rules.","Driver completion requires an explicit payment choice for outstanding amounts; missing/ambiguous evidence is flagged rather than assumed.","Noncash driver choice does not automatically create bank cash in operational accounting; existing tests explicitly enforce this.","Source collection excludes orders created at/before operational start; legacy or in-flight orders at start need separate reconciliation, not automatic import."],
-  "changes":["Regression asserting no confirmed courier amounts before delivery, both sides on delivery without transfer, and refresh idempotency.","Payment-choice contract coverage for cash, bank transfer and card terminal."],
-  "verification":"Full retained local Mongo acceptance running; no database deletion.",
-  "production_changed":false,
-  "next":"Inspect acceptance result, retain evidence, push checkpoint and draft PR. No publication needed for tests-only confirmation."
+  "task": "MZ2-DELIVERED-COD-20261024",
+  "branch": "codex/operational-delivered-cod-20261024",
+  "production_base": "f75b9fcc9e5ac48d214feba005e12e472d1aafb9",
+  "status": "VERIFIED_EXISTING_RULE_LIVE_SETUP_INCOMPLETE",
+  "contract": "External courier COD receivable and shipping payable confirm on delivered, remain until settlement. Cash driver has custody; bank/card collection has zero driver custody. No real business writes or activation.",
+  "findings": [
+    "Current production source already implements these recognition rules.",
+    "Driver completion requires an explicit payment choice for outstanding amounts; missing/ambiguous evidence is flagged rather than assumed.",
+    "Noncash driver choice does not automatically create bank cash in operational accounting; existing tests explicitly enforce this.",
+    "Source collection excludes orders created at/before operational start; legacy or in-flight orders at start need separate reconciliation, not automatic import.",
+    "Live MZ2 shipping-cod page explicitly reports no approved shipping prices. General shipping settings are not proof of approved contracts. No live changes performed."
+  ],
+  "changes": [
+    "Regression asserting no confirmed courier amounts before delivery, both sides on delivery without transfer, and refresh idempotency.",
+    "Payment-choice contract coverage for cash, bank transfer and card terminal."
+  ],
+  "verification": "Retained loopback Mongo full operational acceptance:615 passed,0 skipped,5 deprecation warnings,107.16s. No database deletion. git diff --check passed.",
+  "production_changed": false,
+  "next": "Review tests-only PR; complete owner-approved shipping contract evidence and opening cutover before operational start. No runtime change or deployment required for the verified delivery rule."
 }
