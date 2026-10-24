@@ -63,3 +63,9 @@ Next safe action: finish the in-progress backend/native audits, rerun the combin
 - Remote /app guard status reports active=false; only untracked .emergent/testing/ and deployer-agent-docs/ are present. They were not modified.
 - Production changed by this task: no. Server push enablement, new governed release intent/rehearsal, actual deployment identity, and phone delivery tests remain outstanding. Native builds are not published releases.
 - Next: complete both EAS builds, review refreshed web CI and freeze its candidate intent, configure outbound push, then perform the guarded authorized web rollout. Keep all existing production data and holds.
+
+## Integrated release candidate — 2026-10-25
+
+Production changed by this task: no. Current reviewed production base is b505921915185272d40102d1efef2b8200f2c572. Frozen earlier A/B remain preserved on codex/order-instruction-notifications-20261024. New candidate branch codex/instructions-release-20261025 replays only feature source changes. Integration preserves both payment inbox and operational push startup/shutdown workers. Fresh focused backend checks: 54 passed and 2 subtests passed.
+
+Both native builds are complete: staff 59/1.0.44 (7952353b-d13d-4ca4-9840-0615d247f592), courier 13/1.0.12 (55a43f70-7003-4532-8986-550cc1effea7). Firebase and EAS credentials are configured. Physical phone delivery is pending user acceptance. Server push enablement and governed deployment are pending. Remote /app is reachable and guard reports active=false; untracked files preserved. Next: fresh candidate CI, freeze reviewed intent, adapter rehearsal, prepare/prepublish, deployment success and three-probe identity verification. Do not treat native build completion as server publication.
