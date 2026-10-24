@@ -1,14 +1,39 @@
 {
   "task": "assembly-mobile-cards-20261024",
+  "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/assembly-mobile-cards-20261024",
-  "base": "c045341c7153e563ae2c68c736e862f000c4c01f",
-  "scope": "Phone assembly cards, compact options/copy, expandable route and actors, green Ready, label after products, trusted Salla order link with Android Chrome intent and HTTPS fallback",
-  "status": "Implemented; focused tests and development build pass; visual acceptance and governed release pending",
-  "verification": {"frontend": "52 tests passed", "backend": "56 tests passed including canonical non-in-progress gate and trusted link", "build": "Vite development validation build passed; not a governed release build", "diff": "passed"},
-  "invariants": "No readiness, receipt, permission, print or fulfillment mutation policy changed. No dependency changes. Shared production untouched by this increment.",
-  "limitations": ["Android Chrome launch requires device acceptance; iOS/desktop retain normal HTTPS link", "Screenshots show order page link; implemented order link, not product storefront link", "No live readiness or printing action run"],
-  "next": "Visual QA 360/390/430; CI; governed source/intent freeze before merge/deploy. Recheck current production and shared release guard first.",
-  "production_changed": false,
-  "prior_design_release": {"platform": "2d4f595", "source": "fda6ab558023d2c29bb200951ec47fb7a87f1c90", "verify_exit": 0},
-  "ledger": "Issue1006 body read; historical general ledger. Task-specific status is current continuity record."
+  "handoff_branch": "codex/assembly-mobile-cards-handoff-20261024",
+  "source_commit": "05c22522ae0ac0fe8b7372806ee44960a0101e60",
+  "intent_commit": "a8bb03ea51ad6c978def6713378c957c61ef839b",
+  "deployment_commit": "1fbb7ea4b54ab5574f3ee6937939e21440f88b0a",
+  "pr": 1472,
+  "scope": "Mobile assembly cards, compact options/copy, expandable preparation stages/actors, green Ready, shipment panel after products, trusted Salla order link",
+  "verification": {
+    "frontend_tests": 52,
+    "backend_tests": 56,
+    "ci": "All 14 applicable workflows passed on intent commit",
+    "clean_clone_adapter_exit": 0,
+    "prepublish_exit": 0,
+    "production": {
+      "verified": true,
+      "checks": 3,
+      "guard_active": false
+    }
+  },
+  "release_id": "rg5-69673af880641302fd8abd21e4e946f6863179dba4e3de1a16b99cfe2c3bed06",
+  "status": "Deployed and verified",
+  "rollback_platform": "ed3db46",
+  "limitations": [
+    "Phone visual acceptance incomplete: fixed-width cloud browser and embedded previews unavailable",
+    "Actual Android Chrome launch unverified; HTTPS fallback retained",
+    "No live Ready or print action performed"
+  ],
+  "invariants": "No dependencies updated; no readiness, receipt, permission or printing mutation rules changed",
+  "preserved": [
+    ".emergent/testing/",
+    "deployer-agent-docs/"
+  ],
+  "next": "No repeat publish. Phone visual acceptance and Android Chrome launch remain device checks. Rollback target ed3db46 if needed.",
+  "production_changed": true,
+  "platform": "ca15a48"
 }
