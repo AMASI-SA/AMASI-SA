@@ -1,0 +1,22 @@
+{
+  "task": "fulfillment-mobile-design-only",
+  "status": "WIP: clean production-based source candidate; governed release pending",
+  "branch": "codex/fulfillment-mobile-release-20261024",
+  "base": "4e4e064ca9855c3a626968df55ef844de77de947",
+  "scope": "Phone presentation only; no dependency or operational changes",
+  "verification": {
+    "focused_tests": "73 passed / 3 suites after compact layout refinements",
+    "diff_check": "passed",
+    "shared_guard": "active=false observed 2026-10-24",
+    "live_source": "Last observed d34eb6f19b0df2da587a70e42b2893984580b7c5; refresh before release",
+    "live_artifact": "303987b615fb30aed8dadaf610f2e002ece862164ffadd9e4bd90f11ee17db38",
+    "reconciled_tests": "73 passed / 3 suites on latest production base before final CSS refinements",
+    "visual": "Synthetic actual-component harness: home and assembly render at 360/390/430px; review refinements under final inspection. No live writes."
+  },
+  "production_changed_by_this_task": false,
+  "next": "Complete review visual check; governed A/B build and intent-only commit. Merge-history checkpoint c53ae1e4517d18d12e5d4a4f52d3ce0bdd659c4b retained; fresh single-parent source avoids prior intent ancestry.",
+  "rollback": "Revert this isolated presentation change on a new branch; no data migration. Retain current production deployment before publication.",
+  "checkpoint": "b3360dadbdaa2310a71075a80a36a02fa013036e",
+  "pr": 1467,
+  "preview_blocker": "Production-auth preview unavailable; isolated actual-component fixture harness now renders phone home and review. No live writes."
+}
