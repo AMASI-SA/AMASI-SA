@@ -71,7 +71,9 @@ def validate_subscription(value):
     keys = value.get("keys") or {}
     for key, length in (("p256dh", 65), ("auth", 16)):
         raw = str(keys.get(key) or "")
-        if not re.fullmatch(r"[A-Za-z0-9_-]+={0,2}", raw):
+        # A 65-byte public key is at most 88 encoded characters; reject oversized
+        # input before regex/decoding and bound matching work independently.
+        if len(raw) > 4 * ((length + 2) // 3) or not re.fullmatch(r"[A-Za-z0-9_-]{1,87}={0,2}", raw):
             raise ValueError("invalid_push_key")
         if len(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))) != length:
             raise ValueError("invalid_push_key")
