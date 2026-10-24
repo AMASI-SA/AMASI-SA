@@ -1,6 +1,6 @@
 {
   "task": "MZ2-PREVIEW-SESSION-20261024",
-  "status": "PREVIEW_RECOVERED_BROWSER_VERIFIED",
+  "status": "LOGIN_FIXED_OPERATIONAL_PREVIEW_UPDATE_PENDING",
   "base": "4e4e064ca",
   "branch": "codex/preview-session-recovery-20261024",
   "request": "Repair Preview auth-unavailable without bypassing authentication or writing business data.",
@@ -16,10 +16,11 @@
     "Changed only Preview adapter cluster-12 to cluster-9 in upstream origin and allowed Host; added sanitized request_host diagnostic. Updated adapter.sha256 to 551b4a0549bca9186e92c63041e01910df7388ffd3d50c3e7c9b67f239b70f6d.",
     "8 ASGI host/origin tests PASS in service venv, including production/old cluster/null Origin rejection.",
     "Preview health HTTP200. Browser existing session successfully reached /dashboard-advanced with demo data.",
-    "Initial diagnostic-only restart failed adapter integrity check; restored original immediately, then updated adapter and matching fingerprint together. No check bypassed."
+    "Initial diagnostic-only restart failed adapter integrity check; restored original immediately, then updated adapter and matching fingerprint together. No check bypassed.",
+    "Follow-up: Preview launcher pins source8d7307a71fcdae5975d2696636d9b88335564cdc in mz2-uat-1128-runtime-20260921; operational accounting is not in this old snapshot. Fresh guard check became active=true again; no update applied."
   ],
   "changes": "Preview private adapter host correction and matching integrity hash only; production source, DB, signing key, auth policy and isolation unchanged.",
-  "next": "Preview available. Before accounting training verify Preview source includes current operational accounting features; its isolated runtime uses older source and automatic workers remain disabled.",
+  "next": "Build current reviewed operational source outside /app, archive artifact permanently, preserve Preview DB/signing key and egress/startup isolation, test compatibility, then activate only after Release Guard inactive. Verify operational opening page before training. Do not use production frontend bundle with production API origin.",
   "production_changed": false,
   "preview_changed": true
 }
