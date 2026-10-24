@@ -17,7 +17,7 @@ from product_inventory_rules import order_item_specifications
 from product_fulfillment_rules import order_is_active, payment_is_eligible
 from review_local_policy import (
     LOCAL_COMPLETION_MODE, load_local_review_workflows,
-    load_source_current_assignment_workflows,
+    load_source_current_assignment_workflows, execution_status_allowed,
 )
 
 WORKFLOWS = "order_review_workflows"
@@ -101,12 +101,11 @@ async def context(db, owner, number):
     fingerprint = digest({"source": raw, "watermark": source.get("g47_salla_snapshot"),
                           "items": [i.model_dump(mode="json") for i in identities]})
     reason = None
-    statuses = {str(v or "").strip().casefold().replace("_", " ")
-                for v in (order.status, order.status_native)} - {""}
-    if (workflow.get("stage") != "in_progress" or not statuses
-            or not statuses.issubset({"in progress", "processing", "قيد التنفيذ", "جاري التنفيذ"})
+    stage = workflow.get("stage")
+    if (stage not in {"reviewed", "in_progress"}
+            or not execution_status_allowed(order.status, order.status_native)
             or not order_is_active(order) or not payment_is_eligible(order.payment)):
-        reason = "source_addition_order_not_in_progress"
+        reason = "source_addition_order_stage_ineligible"
     elif not source_identities_match(raw, number, identities):
         reason = "source_addition_identity_unproven"
     elif not original_lines_unchanged(states, identities):
@@ -122,16 +121,25 @@ async def context(db, owner, number):
         reason = "source_addition_components_not_current"
     rows = []
     for item in identities:
+        # Pending orders use the normal full-order review. An absent workflow
+        # has no reviewed snapshot proving that any line is a later addition.
+        if not stage or stage == "pending_review" or not states:
+            continue
         state = by_id.get(item.order_item_id)
         if state and not state.get("source_addition"):
             continue
         reviewed = bool(state and state.get("review_status") == "reviewed")
         item_reason = reason
-        if not math.isfinite(item.quantity) or item.quantity <= 0 or not float(item.quantity).is_integer():
+        if item_reason is None and (not math.isfinite(item.quantity) or item.quantity <= 0 or not float(item.quantity).is_integer()):
             item_reason = "source_addition_whole_quantity_required"
+        blocked_message = None
+        if not reviewed and item_reason == "source_addition_order_stage_ineligible":
+            blocked_message = ("هذا المنتج مضاف بعد مراجعة الطلب، وحالة الطلب الحالية لا تسمح باعتماده. "
+                               "يمكن اعتماد الإضافة في حالتي تمت المراجعة وقيد التنفيذ فقط.")
         rows.append({"order_item_id": item.order_item_id, "reviewed": reviewed,
                      "eligible": not reviewed and item_reason is None,
-                     "blocked_reason": None if reviewed else item_reason})
+                     "blocked_reason": None if reviewed else item_reason,
+                     "blocked_message": blocked_message})
     return {"revision": int(workflow.get("revision") or 0), "source_fingerprint": fingerprint,
             "items": rows}, order, workflow, identities
 
@@ -206,7 +214,7 @@ async def approve(db, *, owner, reviewer, number, item_id, request):
         }
         require_source_addition_review_enabled()
         updated = await scoped[WORKFLOWS].update_one({"user_id": owner, "order_number": number,
-            "stage": "in_progress", "revision": request.expected_revision}, {
+            "stage": workflow["stage"], "revision": request.expected_revision}, {
                 "$push": {"items": frozen}, "$inc": {"revision": 1},
                 "$set": {"source_additions_reviewed": True, "updated_at": now}})
         if updated.matched_count != 1:
@@ -216,7 +224,7 @@ async def approve(db, *, owner, reviewer, number, item_id, request):
             "event_type": "source_added_item_reviewed", "occurred_at": now,
             "actor_id": str(reviewer["id"]), "source_fingerprint": result["source_fingerprint"],
             "workflow_revision": request.expected_revision + 1,
-            "parent_stage": "in_progress", "salla_updated": False})
+            "parent_stage": workflow["stage"], "salla_updated": False})
         return {"ok": True, "order_item_id": item_id, "already_reviewed": False,
                 "revision": request.expected_revision + 1}
     return await operational_owner(db, owner, commit, review_session=session_context)

@@ -10,6 +10,9 @@ export function SourceAdditionReviewButton({ itemId, review }) {
     const row = review.items.find((entry) => entry.order_item_id === itemId);
     if (!review.enabled || !row) return null;
     if (row.reviewed) return <div role="status" className="mt-3 text-sm font-bold text-emerald-700">تمت مراجعة المنتج المضاف</div>;
+    if (row.blocked_reason === "source_addition_order_stage_ineligible") return <p role="status" className="mt-2 text-xs text-amber-800">
+        {row.blocked_message || "حالة الطلب الحالية لا تسمح باعتماد المنتج المضاف. الاعتماد متاح في تمت المراجعة وقيد التنفيذ فقط."}
+    </p>;
     return <div className="mt-3">
         <button type="button" onClick={() => review.approve(itemId)}
             disabled={!row.eligible || review.loading || Boolean(review.pending) || Boolean(review.error)}
