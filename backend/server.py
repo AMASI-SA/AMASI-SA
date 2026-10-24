@@ -4640,6 +4640,10 @@ api.include_router(make_account_drift_detail_router(db, current_user))
 api.include_router(make_endpoint_ledger_coverage_router(db, current_user))
 
 app.include_router(make_mezan_mcp_router(db))
+from operational_push import make_operational_push_router
+api.include_router(make_operational_push_router(db, current_user))
+from operational_instruction_comments import make_instruction_comments_router
+api.include_router(make_instruction_comments_router(db, current_user))
 app.include_router(api)
 
 # CORS — production origins are explicit and never fall back to wildcard.
@@ -5382,6 +5386,8 @@ async def _local_startup() -> None:
     app.state.assembly_completion_delivery_task = await start_assembly_delivery(db)
     from salla_integration.shipping_label_inbox import start_worker as start_label_inbox
     app.state.shipping_label_inbox_task = await start_label_inbox(db)
+    from operational_push import run as run_operational_push
+    app.state.operational_push_task = _asyncio.create_task(run_operational_push(db))
     app.state.startup_phase = "ready"
     app.state.readiness = "ready"
     process_local_readiness_event.set()
@@ -5453,7 +5459,7 @@ async def on_shutdown():
     await stop_salla_orders_v3_shadow_worker(
         getattr(app.state, "salla_orders_v3_shadow_task", None)
     )
-    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task"):
+    for task_name in ("event_loop_lag_task", "operational_balance_task", "assembly_completion_delivery_task", "shipping_label_inbox_task", "operational_push_task"):
         task = getattr(app.state, task_name, None)
         if task is not None:
             task.cancel()

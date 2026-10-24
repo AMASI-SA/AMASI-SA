@@ -48,6 +48,38 @@ def test_linked_employee_reads_owner_orders_with_app_permission():
     assert result["_mobile_actor_id"] == "staff-1"
 
 
+@pytest.mark.parametrize("path,method", [
+    ("/api/order-tracking-notes/instructions/inbox", "GET"),
+    ("/api/order-tracking-notes/instructions/n/tasks/submit", "POST"),
+    ("/api/order-tracking-notes/instructions/n/tasks/t/comments", "POST"),
+    ("/api/operational-notifications/devices/register", "POST"),
+])
+def test_native_notifications_preserve_actual_actor(path, method):
+    result = asyncio.run(mobile_app_request_user(DB(), staff(), path=path, method=method))
+    assert result["id"] == "staff-1"
+    assert result["created_by"] == "owner-1"
+    assert result.get("_mobile_actor_id") is None
+    driver = asyncio.run(mobile_app_request_user(DB(), store_driver(), path=path, method=method))
+    assert driver["id"] == "driver-user-1"
+
+
+def test_disabled_native_notifications_fail_closed():
+    db = DB(); db.cols["mezan_mobile_app_access_v1"].rows[0]["enabled"] = False
+    with pytest.raises(HTTPException):
+        asyncio.run(mobile_app_request_user(db, staff(), path="/api/order-tracking-notes/instructions/inbox", method="GET"))
+
+
+@pytest.mark.parametrize("path,method", [
+    ("/api/order-tracking-notes/instructions/n/approve", "POST"),
+    ("/api/order-tracking-notes/orders/1/instructions", "POST"),
+    ("/api/operational-notifications/arbitrary", "POST"),
+    ("/api/order-tracking-notes/instructions/n", "DELETE"),
+])
+def test_driver_only_receives_explicit_notification_surface(path, method):
+    with pytest.raises(HTTPException):
+        asyncio.run(mobile_app_request_user(DB(), store_driver(), path=path, method=method))
+
+
 def test_page_without_permission_fails_closed():
     with pytest.raises(HTTPException) as caught:
         asyncio.run(mobile_app_request_user(DB(), staff(), path="/api/products-v2", method="GET"))
