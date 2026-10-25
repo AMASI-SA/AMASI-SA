@@ -492,6 +492,7 @@ test("selected-period Google spend is included in executive ad cost and profit",
                 google: 34.60,
             },
             total_sar: 758.53,
+            spend_quality: { status: "complete", amount_available: true, amount_complete: true },
         }),
         setData: (value) => { currentData = value; },
         setLoading: jest.fn(),
@@ -579,4 +580,204 @@ test("a stale dashboard response never replaces the latest successful response",
     await staleRequest;
 
     expect(currentData).toEqual({ snapshot_id: "latest-snapshot" });
+});
+
+
+function currentProvisionalPlatform(snapchat = 307.11) {
+    return { date_from: "2026-10-26", date_to: "2026-10-26", total_sar: snapchat + 18.39,
+        provider_totals_sar: { snapchat, meta: 18.39, tiktok: 0, google: 0 },
+        spend_quality: { status: "provisional", amount_available: true, amount_complete: false, provisional: true } };
+}
+
+
+function pendingAdDashboard() {
+    return { totals: { total_sales: 1000, total_orders: 10, total_ads_cost: null, net_profit: null,
+        net_sales: null, ads_spend_amount_available: false, ads_spend_data_complete: false },
+        ads_v2: { total: null, spend_quality: { status: "incomplete", amount_available: false } } };
+}
+
+
+function recomputedProvisionalDashboard(snapchat = 307.11) {
+    return { totals: { total_sales: 1000, total_orders: 10, total_product_cost: 100,
+        total_ads_cost: snapchat + 18.39, net_profit: 600.23, net_sales: 650.23,
+        total_payment_fees: 6.14, ads_spend_amount_available: true,
+        ads_spend_data_complete: false, ads_spend_provisional: true },
+        ads_v2: { total: snapchat + 18.39, spend_quality: currentProvisionalPlatform(snapchat).spend_quality } };
+}
+
+
+test.each([0, 307.11])("new full provisional spend %s triggers one same-filter canonical GET and preserves backend profit", async (amount) => {
+    const pending = pendingAdDashboard();
+    const recomputed = recomputedProvisionalDashboard(amount);
+    const apiClient = { get: jest.fn(async (url) => ({ config: { method: "get", url },
+        data: url.includes("spend-recompute") ? recomputed : pending })) };
+    const platformSpendLoader = jest.fn().mockResolvedValue(currentProvisionalPlatform(amount));
+    const setData = jest.fn();
+    await loadDashboardPeriodSnapshot({
+        next: { from: "2026-10-26", to: "2026-10-26", payment_methods: ["mada"], shipping_companies: ["carrier"] },
+        requestSequence: 1, isLatest: () => true, apiClient, platformSpendLoader,
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1,
+    });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    for (const [url] of apiClient.get.mock.calls) {
+        const query = new URLSearchParams(url.split("?")[1]);
+        expect(query.get("from_date")).toBe("2026-10-26");
+        expect(query.get("to_date")).toBe("2026-10-26");
+        expect(query.get("payment_methods")).toBe("mada");
+        expect(query.get("shipping_companies")).toBe("carrier");
+    }
+    expect(platformSpendLoader).toHaveBeenCalledTimes(1);
+    expect(platformSpendLoader).toHaveBeenCalledWith({ dateFrom: "2026-10-26", dateTo: "2026-10-26", refresh: false });
+    const result = setData.mock.calls[0][0];
+    expect(result.totals).toBe(recomputed.totals);
+    expect(result.totals.net_profit).toBe(600.23);
+    expect(result.totals.ads_spend_amount_available).toBe(true);
+    expect(result.totals.ads_spend_data_complete).toBe(false);
+    expect(result.ads_v2.spend_quality).toBe(recomputed.ads_v2.spend_quality);
+    const markup = renderToStaticMarkup(<ProfitCard data={result} />);
+    expect(markup).toContain("مؤقت");
+    expect(markup).not.toContain("غير مكتمل");
+    expect(markup).toContain("600.23");
+});
+
+
+test("known-only or wrong-range platform data never initiates canonical profit recomputation", async () => {
+    for (const platform of [
+        { ...currentProvisionalPlatform(), total_sar: null, known_total_sar: 307.11,
+            spend_quality: { status: "incomplete", amount_available: false } },
+        { ...currentProvisionalPlatform(), date_from: "2026-10-25", date_to: "2026-10-25" },
+    ]) {
+        const pending = pendingAdDashboard();
+        const apiClient = { get: jest.fn(async (url) => ({ config: { url }, data: pending })) };
+        const setData = jest.fn();
+        await loadDashboardPeriodSnapshot({ next: { from: "2026-10-26", to: "2026-10-26" },
+            requestSequence: 1, isLatest: () => true, apiClient,
+            platformSpendLoader: jest.fn().mockResolvedValue(platform),
+            setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
+        expect(apiClient.get).toHaveBeenCalledTimes(1);
+        expect(setData.mock.calls[0][0].totals).toBe(pending.totals);
+        expect(setData.mock.calls[0][0].totals.net_profit).toBeNull();
+    }
+});
+
+
+test("a late canonical recomputation cannot overwrite a newer period", async () => {
+    let resolveRecomputed, entered;
+    const recomputationEntered = new Promise((resolve) => { entered = resolve; });
+    const apiClient = { get: jest.fn((url) => {
+        if (!url.includes("spend-recompute")) return Promise.resolve({ config: { url }, data: pendingAdDashboard() });
+        entered();
+        return new Promise((resolve) => { resolveRecomputed = (data) => resolve({ config: { url }, data }); });
+    }) };
+    let latest = 1;
+    const setData = jest.fn();
+    const request = loadDashboardPeriodSnapshot({ next: { from: "2026-10-26", to: "2026-10-26" },
+        requestSequence: 1, isLatest: (sequence) => sequence === latest, apiClient,
+        platformSpendLoader: jest.fn().mockResolvedValue(currentProvisionalPlatform()),
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
+    await recomputationEntered;
+    latest = 2;
+    resolveRecomputed(recomputedProvisionalDashboard());
+    await request;
+    expect(setData).not.toHaveBeenCalled();
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+});
+
+
+test("broker-returned canonical data for another range is never applied", async () => {
+    const setData = jest.fn();
+    const apiClient = { get: jest.fn()
+        .mockResolvedValueOnce({ config: { url: "/dashboard-v2?from_date=2026-10-26&to_date=2026-10-26" }, data: pendingAdDashboard() })
+        .mockResolvedValueOnce({ config: { url: "/dashboard-v2?from_date=2026-10-27&to_date=2026-10-27" }, data: recomputedProvisionalDashboard() }) };
+    await loadDashboardPeriodSnapshot({ next: { from: "2026-10-26", to: "2026-10-26" },
+        requestSequence: 1, isLatest: () => true, apiClient,
+        platformSpendLoader: jest.fn().mockResolvedValue(currentProvisionalPlatform()),
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
+    expect(setData).not.toHaveBeenCalled();
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+});
+
+
+test("still-incomplete canonical evidence stops after one recomputation and keeps profit null", async () => {
+    const pending = pendingAdDashboard();
+    const apiClient = { get: jest.fn(async (url) => ({ config: { url }, data: pending })) };
+    const setData = jest.fn();
+    await loadDashboardPeriodSnapshot({ next: { from: "2026-10-26", to: "2026-10-26" },
+        requestSequence: 1, isLatest: () => true, apiClient,
+        platformSpendLoader: jest.fn().mockResolvedValue(currentProvisionalPlatform()),
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    expect(setData.mock.calls[0][0].totals.net_profit).toBeNull();
+    expect(setData.mock.calls[0][0].totals.ads_spend_amount_available).toBe(false);
+});
+
+
+test("canonical provisional profit explains an observed no-activity account without claiming final reporting", () => {
+    const data = recomputedProvisionalDashboard();
+    data.ads_v2.spend_quality.snapchat = { reason_codes: ["snapchat_operational_no_activity_observed"] };
+    const markup = renderToStaticMarkup(<ProfitCard data={data} />);
+    expect(markup).toContain("advanced-profit-no-activity-hint");
+    expect(markup).toContain("لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.");
+    expect(markup).toContain("600.23");
+    expect(markup).toContain("مؤقت");
+    expect(markup).not.toContain("غير مكتمل");
+});
+
+
+test.each(["unavailable", "missing_amount", "confirmed", "hour_only", "absent"])(
+    "profit no-activity hint does not authorize %s financial data", (scenario) => {
+        const data = scenario === "unavailable" ? pendingAdDashboard() : recomputedProvisionalDashboard();
+        data.ads_v2.spend_quality.snapchat = { reason_codes: scenario === "hour_only"
+            ? ["snapchat_operational_hour_observation"] : scenario === "absent" ? []
+            : ["snapchat_operational_no_activity_observed"] };
+        if (scenario === "missing_amount") data.totals.total_ads_cost = null;
+        if (scenario === "confirmed") {
+            Object.assign(data.totals, { ads_spend_data_complete: true, ads_spend_provisional: false });
+            Object.assign(data.ads_v2.spend_quality, { status: "complete", amount_complete: true, provisional: false });
+        }
+        const profit = data.totals.net_profit;
+        const available = data.totals.ads_spend_amount_available;
+        const markup = renderToStaticMarkup(<ProfitCard data={data} />);
+        expect(markup).not.toContain("advanced-profit-no-activity-hint");
+        expect(data.totals.net_profit).toBe(profit);
+        expect(data.totals.ads_spend_amount_available).toBe(available);
+        if (scenario === "unavailable") expect(data.totals.net_profit).toBeNull();
+    },
+);
+
+
+test("provisional operational Snapchat to complete spend uses one backend read without fabricating conversion denominators", async () => {
+    const initial = recomputedProvisionalDashboard();
+    initial.ads_v2.providers = { snapchat: { spend: 307.11, orders: null, revenue: null,
+        impressions: null, clicks: null, cpa: null, roas: null, platform_reported_metrics_complete: false } };
+    initial.ads_v2.executive_breakdown = { providers: { snapchat: { salla_orders: 3, salla_sales_sar: 500,
+        platform_reported_orders: null, platform_cost_per_order_sar: null } },
+        total: { platform_reported_orders: null }, coverage: { platform_cpa_denominator_complete: false } };
+    const platform = { ...currentProvisionalPlatform(400),
+        spend_quality: { status: "complete", amount_available: true, amount_complete: true, provisional: false } };
+    const recomputed = { ...initial, totals: { ...initial.totals, total_ads_cost: 418.39,
+        net_profit: 511.25, total_payment_fees: 7.66, ads_spend_data_complete: true, ads_spend_provisional: false },
+        ads_v2: { ...initial.ads_v2, total: 418.39, spend_quality: platform.spend_quality } };
+    const apiClient = { get: jest.fn(async (url) => ({ config: { url },
+        data: url.includes("spend-recompute") ? recomputed : initial })) };
+    const setData = jest.fn();
+    const loader = jest.fn().mockResolvedValue(platform);
+    await loadDashboardPeriodSnapshot({ next: { from: "2026-10-26", to: "2026-10-26" },
+        requestSequence: 1, isLatest: () => true, apiClient, platformSpendLoader: loader,
+        setData, setLoading: jest.fn(), setLoadError: jest.fn(), now: () => 1 });
+    expect(apiClient.get).toHaveBeenCalledTimes(2);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledWith({ dateFrom: "2026-10-26", dateTo: "2026-10-26", refresh: false });
+    const result = setData.mock.calls[0][0];
+    expect(result.totals).toBe(recomputed.totals);
+    expect(result.totals.net_profit).toBe(511.25);
+    expect(result.totals.total_payment_fees).toBe(7.66);
+    expect(result.ads_v2.spend_quality).toBe(platform.spend_quality);
+    expect(result.ads_v2.providers.snapchat.orders).toBeNull();
+    expect(result.ads_v2.providers.snapchat.cpa).toBeNull();
+    expect(result.ads_v2.providers.snapchat.roas).toBeNull();
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.platform_reported_orders).toBeNull();
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_orders).toBe(3);
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_sales_sar).toBe(500);
+    expect(result.ads_v2.executive_breakdown.coverage.platform_cpa_denominator_complete).toBe(false);
 });

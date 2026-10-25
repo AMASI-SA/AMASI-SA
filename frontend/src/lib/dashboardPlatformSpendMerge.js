@@ -1,6 +1,8 @@
 const PROVIDERS = Object.freeze(["snapchat", "meta", "tiktok", "google"]);
 
 function finiteNumber(value) {
+    if (value === null || value === undefined || typeof value === "boolean"
+        || !(typeof value === "number" || typeof value === "string" && value.trim() !== "")) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
 }
@@ -17,8 +19,46 @@ function roundMoney(value) {
 function providerTotals(platformSpend = {}) {
     const source = platformSpend?.provider_totals_sar || {};
     return Object.fromEntries(
-        PROVIDERS.map((provider) => [provider, roundMoney(source[provider])]),
+        PROVIDERS.map((provider) => {
+            const value = finiteNumber(source[provider]);
+            return [provider, value !== null && value >= 0 ? roundMoney(value) : null];
+        }),
     );
+}
+
+function availablePlatformSpend(platformSpend) {
+    const quality = platformSpend?.spend_quality || {};
+    const total = finiteNumber(platformSpend?.total_sar);
+    return total !== null && total >= 0
+        && (quality.amount_available === true || quality.amount_complete === true)
+        && quality.status !== "incomplete";
+}
+
+function provisionalCanonicalSpend(dashboardPayload) {
+    const quality = dashboardPayload?.ads_v2?.spend_quality || {};
+    return quality.provisional === true || quality.status === "provisional";
+}
+
+function unknownSnapchatMetrics(dashboardPayload) {
+    const snapchat = dashboardPayload?.ads_v2?.providers?.snapchat;
+    const executive = dashboardPayload?.ads_v2?.executive_breakdown?.providers?.snapchat;
+    return Boolean(snapchat && (snapchat.platform_reported_metrics_complete === false
+        || ["orders", "revenue", "impressions", "clicks"].some((field) =>
+            Object.hasOwn(snapchat, field) && finiteNumber(snapchat[field]) === null)))
+        || Boolean(executive && Object.hasOwn(executive, "platform_reported_orders")
+            && finiteNumber(executive.platform_reported_orders) === null);
+}
+
+export function needsCanonicalDashboardSpendRefresh(dashboardPayload, platformSpend) {
+    if (!availablePlatformSpend(platformSpend)) return false;
+    const total = finiteNumber(dashboardPayload?.totals?.total_ads_cost);
+    const quality = dashboardPayload?.ads_v2?.spend_quality || {};
+    return total === null || total < 0
+        || dashboardPayload?.totals?.ads_spend_amount_available === false
+        || quality.amount_available === false || quality.status === "incomplete"
+        || (provisionalCanonicalSpend(dashboardPayload)
+            && platformSpend.spend_quality?.status === "complete"
+            && platformSpend.spend_quality?.amount_complete === true);
 }
 
 function mergeProviderMetrics(existing = {}, spend = 0) {
@@ -124,26 +164,34 @@ export function mergeDashboardWithPlatformSpend(
     const totals = dashboardPayload?.totals && typeof dashboardPayload.totals === "object"
         ? dashboardPayload.totals
         : {};
+    // A partial known subtotal never supplies a full expense or profit base.
+    // Provisional finances remain backend-owned, including account bank fees.
+    // The page loader can request one new canonical snapshot when the complete
+    // provisional portfolio becomes available after this snapshot was built.
+    if (!availablePlatformSpend(platformSpend)
+        || needsCanonicalDashboardSpendRefresh(dashboardPayload, platformSpend)
+        || provisionalCanonicalSpend(dashboardPayload)
+        || unknownSnapchatMetrics(dashboardPayload)
+        || platformSpend?.spend_quality?.provisional === true
+        || platformSpend?.spend_quality?.status === "provisional"
+        || Object.values(providerTotals(platformSpend)).some((value) => value === null)) {
+        return { ...dashboardPayload, dashboard_platform_spend: platformSpend };
+    }
     const spendByProvider = providerTotals(platformSpend);
-    const summedSpend = roundMoney(
-        PROVIDERS.reduce((sum, provider) => sum + spendByProvider[provider], 0),
-    );
     const platformTotal = finiteNumber(platformSpend?.total_sar);
-    const newAdsTotal = platformTotal !== null
-        ? roundMoney(platformTotal)
-        : summedSpend;
+    const newAdsTotal = roundMoney(platformTotal);
     const oldAdsTotal = roundMoney(totals.total_ads_cost);
     const adsDelta = oldAdsTotal - newAdsTotal;
-    const sales = nonnegative(totals.total_sales);
+    const sales = finiteNumber(totals.total_sales);
+    const productCost = finiteNumber(totals.total_product_cost);
     const orders = Math.max(0, Math.trunc(nonnegative(totals.total_orders)));
     const nextTotals = {
         ...totals,
         total_ads_cost: newAdsTotal,
         daily_ads_total: newAdsTotal,
-        daily_costs_total: roundMoney(
-            nonnegative(totals.total_product_cost) + newAdsTotal,
-        ),
-        overall_roas: newAdsTotal > 0
+        daily_costs_total: productCost !== null && productCost >= 0
+            ? roundMoney(productCost + newAdsTotal) : null,
+        overall_roas: newAdsTotal > 0 && sales !== null
             ? Math.round((sales / newAdsTotal) * 100) / 100
             : null,
         avg_cost_per_order: newAdsTotal > 0 && orders > 0

@@ -13,7 +13,9 @@ Its known-subtotal card did not satisfy the owner's chart/profit requirement.
 The owner supplied fresh evidence showing the available Snapchat amount while
 hourly chart and executive profit remained incomplete.
 
-This increment is WIP, not approved for release. Production has not changed by
+Task PR: https://github.com/AMASI-SA/AMASI-SA/pull/1525. Initial remote WIP
+checkpoint: `e1077221ac75071edb0ae56c19acf4f1c8ccd187`. Final source CI,
+governed release and live acceptance are pending. Production has not changed by
 this increment. No campaign activation or budget change is a test action.
 Saudi campaigns being paused does not disable the account or its reads.
 
@@ -37,18 +39,29 @@ Saudi campaigns being paused does not disable the account or its reads.
 ## Fresh evidence
 
 Actual old1519 reader/portfolio regression: four intended behavioral failures,
-35 passes, 0.78s; valid collection/imports, not setup failures. New parser and
-actual reader/portfolio/route/storage regressions: 76 passes, 1.00s.
+35 passes, 0.78s; valid collection/imports, not setup failures. Native transport
+and actual reader/portfolio/route/storage regressions initially passed76 tests
+in1.00s, before the additional canonical-snapshot cases below.
 
-Broader affected backend selection: 257 passes, one conditional skip and four
-failures in the old heartbeat fixture, which rejected the newly accessed
-projection collection. The fixture now models that collection with isolated
-mongomock storage; rerun pending. No production guard was relaxed.
+The first broader selection exposed four old heartbeat-fixture failures: its
+FakeDB rejected the newly accessed projection collection. The fixture now
+models that collection with isolated mongomock storage. All five heartbeat
+tests pass in2.08s. No production guard was relaxed.
 
-Independent review found canonical dashboard aggregation still coercing absent
-operational conversion metrics to zero. A bounded Snapchat aggregation and
-executive denominator correction plus actual canonical-snapshot regressions
-are being authored. This checkpoint is not final acceptance.
+Independent review found canonical aggregation coercing absent operational
+conversion metrics to zero. The bounded Snapchat correction preserves unknown
+metrics and the incomplete platform conversion denominator in both executive
+builders, including a zero-spend account. Actual stored-fixture tests traverse
+reader, portfolio, canonical ads snapshot and both executive builders; Salla
+orders/sales and spend stay numeric. The frontend complete-spend transition
+also preserves unknown conversion metrics and backend-owned profit/fees.
+
+Fresh final local backend selection:297 passes, one conditional skip,6.61s
+(all reporting-v2 tests, multi-account/range proof, four-platform spend,
+hourly dashboard and issue727 regressions). Separate existing executive and
+inline-fallback suites:7 passes,0.78s. Two inherited Pydantic deprecation
+warnings. Frontend tests are selected explicitly by reporting CI; final exact
+source CI and live acceptance are still required.
 
 ## Release and live acceptance still required
 

@@ -19,7 +19,8 @@ import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
-import { mergeDashboardWithPlatformSpend } from "../lib/dashboardPlatformSpendMerge";
+import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
+import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
 import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
 import { buildMezanProductCostHref, buildMissingMezanCostHref } from "../lib/mezanV2CostLinks";
 import {
@@ -563,6 +564,9 @@ export function ProfitCard({ data, loading = false }) {
         && t.ads_spend_provisional === true
         && adsQuality.provisional === true
     );
+    const operationalNoActivityObserved = adsSpendProvisional
+        && Array.isArray(adsQuality.snapchat?.reason_codes)
+        && adsQuality.snapchat.reason_codes.includes("snapchat_operational_no_activity_observed");
     const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
     const rows = [
         { key: "sales", label: "المبيعات", value: t.total_sales, Icon: CircleDollarSign, color: "text-emerald-700" },
@@ -589,7 +593,9 @@ export function ProfitCard({ data, loading = false }) {
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
     };
     const initialLoading = loading && !data;
-    return <Panel className="border-emerald-200" testid="advanced-profit-summary" title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div><div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
+    return <Panel className="border-emerald-200" testid="advanced-profit-summary" title="الملخص التنفيذي للأرباح"><div className="flex h-14 items-center justify-between border-b border-emerald-800 bg-emerald-700 px-4 text-white"><h2 className="flex items-center gap-2 font-extrabold"><TrendingUp className="h-5 w-5" />الملخص التنفيذي للأرباح</h2><span className="text-[9px] font-bold text-emerald-100">{initialLoading ? "جارٍ مزامنة الفترة…" : !salesConversionComplete ? "تحويل العملات غير مكتمل" : adsSpendProvisional ? "الفترة المحددة · مؤقت" : "الفترة المحددة"}</span></div>
+        {operationalNoActivityObserved && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[10px] font-semibold text-amber-800" data-testid="advanced-profit-no-activity-hint">لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</p>}
+        <div className="grid grid-cols-2 gap-2 border-b border-emerald-100 bg-emerald-50/40 p-3 sm:grid-cols-4"><Metric label="تكلفة الطلب" value={initialLoading || !adsSpendAvailable || t.avg_cost_per_order == null ? "—" : `${money(t.avg_cost_per_order)} ر.س`} Icon={ShoppingBag} tone="bg-blue-50 text-blue-700" /><Metric label="عدد الطلبات" value={initialLoading ? "—" : integer(orderCount)} Icon={ShoppingCart} tone="bg-emerald-50 text-emerald-700" /><Metric label="العائد" value={initialLoading || !salesConversionComplete || !adsSpendAvailable || t.overall_roas == null ? "—" : `${Number(t.overall_roas).toFixed(2)}×`} Icon={TrendingUp} tone="bg-violet-50 text-violet-700" /><Metric label="متوسط قيمة سلة المشتريات" value={initialLoading || averageBasket == null ? "—" : `${money(averageBasket)} ر.س`} Icon={ShoppingBag} tone="bg-rose-50 text-rose-600" /></div><div className="px-4 py-2">{rows.map((row, index) => { const rowValue = finiteFinancialValue(row.value); const rowIncomplete = (row.key === "ads" && !adsSpendAvailable) || (row.key === "sales" && !salesConversionComplete); const percentage = index > 0 && sales > 0 && rowValue !== null && !rowIncomplete ? (rowValue / sales * 100).toFixed(2) : null; return <div key={row.key}><button type="button" disabled={!row.expandable} onClick={() => row.expandable && setExpanded((value) => value === row.key ? null : row.key)} aria-expanded={row.expandable ? expanded === row.key : undefined} data-testid={`advanced-profit-row-${row.key}`} dir="rtl" className={`flex min-h-[56px] w-full items-center gap-3 border-b text-right last:border-0 ${row.expandable ? "cursor-pointer rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-200" : "cursor-default"}`}><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50 ${row.color}`}><row.Icon className="h-4 w-4" /></span><p className="flex min-w-0 flex-1 items-center gap-1 text-right text-xs font-extrabold text-slate-700">{row.label}{row.expandable && <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${expanded === row.key ? "rotate-180" : ""}`} />}</p><div dir="ltr" className={`num flex shrink-0 items-baseline gap-1 text-left text-base font-black ${row.color}`}><span>{initialLoading ? "—" : rowIncomplete ? "غير مكتمل" : optionalMoney(row.value)}</span>{!initialLoading && !rowIncomplete && rowValue !== null && <span className="text-[11px] font-extrabold">ر.س</span>}{percentage && <span className="ml-1 rounded-md bg-current/10 px-1.5 py-0.5 text-[9px] opacity-80">{percentage}%</span>}</div></button>{row.expandable && expanded === row.key && details[row.key]}</div>; })}</div><div dir="ltr" className="m-4 flex min-h-[64px] items-center justify-between rounded-xl bg-emerald-600 px-5 text-white"><p className="num flex items-baseline gap-1 text-xl font-black">{!initialLoading && netMargin && <span data-testid="advanced-profit-net-margin" title="هامش صافي الأرباح">{netMargin}%</span>}<span>{initialLoading ? "—" : !salesConversionComplete || !adsSpendAvailable ? "غير مكتمل" : optionalMoney(t.net_profit)}</span>{!initialLoading && salesConversionComplete && adsSpendAvailable && netProfit !== null && <span className="text-sm">ر.س</span>}</p><div dir="rtl"><p className="font-black">صافي الأرباح</p><p className="text-[9px] text-emerald-100">{!initialLoading && !salesConversionComplete ? "بانتظار سعر صرف موثّق من طلب سلة" : !initialLoading && !adsSpendAvailable ? "بانتظار اكتمال بيانات الإعلانات" : adsSpendProvisional ? "تقديري حتى آخر مزامنة للإعلانات" : "بعد جميع التكاليف والمصروفات"}</p></div></div></Panel>;
 }
 
 function orderSource(order) {
@@ -722,11 +728,13 @@ export async function loadDashboardPeriodSnapshot({
             ? platformSpendLoader({
                 dateFrom: next.from,
                 dateTo: next.to || next.from,
+                refresh: false,
             }).catch(() => null)
             : Promise.resolve(null);
-        const response = await apiClient.get(`/dashboard-v2?${query.toString()}`, {
-            headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-        });
+        const requestConfig = { headers: { "Cache-Control": "no-cache", Pragma: "no-cache" } };
+        const matchesRange = (response) => !response?.config
+            || dashboardRequestRangeKey(response.config) === dashboardRequestRangeKey({ url: `/dashboard-v2?${query.toString()}` });
+        let response = await apiClient.get(`/dashboard-v2?${query.toString()}`, requestConfig);
         let timeoutId;
         const platformSpend = await Promise.race([
             platformSpendPromise,
@@ -734,8 +742,19 @@ export async function loadDashboardPeriodSnapshot({
                 timeoutId = setTimeout(() => resolve(null), platformSpendTimeoutMs);
             }),
         ]).finally(() => clearTimeout(timeoutId));
-        const periodData = platformSpend
-            ? mergeDashboardWithPlatformSpend(response.data, platformSpend)
+        if (!isLatest(requestSequence) || !matchesRange(response)) return;
+        const sameRangeSpend = platformSpend?.date_from === next.from
+            && platformSpend?.date_to === (next.to || next.from) ? platformSpend : null;
+        if (sameRangeSpend && needsCanonicalDashboardSpendRefresh(response.data, sameRangeSpend)) {
+            // Recompute profit and fees on the backend after saved spend proof
+            // becomes available. Never derive them from a null prior base or
+            // request another native platform refresh solely for this read.
+            query.set("_refresh", `${now()}-spend-recompute`);
+            response = await apiClient.get(`/dashboard-v2?${query.toString()}`, requestConfig);
+            if (!isLatest(requestSequence) || !matchesRange(response)) return;
+        }
+        const periodData = sameRangeSpend
+            ? mergeDashboardWithPlatformSpend(response.data, sameRangeSpend)
             : response.data;
         if (isLatest(requestSequence)) {
             setData(periodData);

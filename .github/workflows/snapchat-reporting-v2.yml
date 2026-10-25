@@ -24,6 +24,9 @@ on:
       - "backend/tests/test_unified_marketing_multi_account_dashboard.py"
       - "backend/tests/test_unified_marketing_snapchat_range_proof.py"
       - "backend/unified_marketing/**"
+      - "backend/dashboard_v2_routes.py"
+      - "backend/dashboard_v2_ads_executive.py"
+      - "backend/tests/test_dashboard_v2_salla_ads_executive.py"
       - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
       - "backend/campaign_ai_unified*.py"
       - "backend/campaign_ai_execution_quality_gate.py"
@@ -115,6 +118,7 @@ jobs:
           tests/test_snapchat_salla_account_scope.py
           tests/test_unified_marketing_multi_account_dashboard.py
           tests/test_unified_marketing_snapchat_range_proof.py
+          tests/test_dashboard_v2_salla_ads_executive.py
           tests/test_campaign_ai_unified_execution_evidence.py
           tests/test_campaign_ai_execution_quality_p0_3.py
           -q
