@@ -373,6 +373,10 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         if not claimed.matched_count:
             raise problem("google_ads_execution_already_started", "تمت المطالبة بالعملية سابقًا.")
         proposal_claimed = True
+        # Bind the complete automation read bundle to its EARLIEST read. A
+        # slow credential/metadata/snapshot/inventory read must not refresh the
+        # apparent age of settings read earlier in this execution attempt.
+        native_read_started_at = now().isoformat() if automation else None
         client, epoch = await account_client(db, actor["user_id"], row["account_id"], client_factory=client_factory)
         metadata = await client.account_metadata()
         if epoch != row["auth_epoch"] or metadata["currency_code"] != row["currency"] or metadata["time_zone"] != row["time_zone"]:
@@ -385,7 +389,8 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         if automation:
             from .google_ads_automation_gateway import _authorize_dispatch
             automation_authority_entered = True
-            await _authorize_dispatch(db, row, client, metadata, epoch, fresh)
+            await _authorize_dispatch(db, row, client, metadata, epoch, fresh,
+                read_started_at=native_read_started_at)
         else:
             persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
             fresh_actor = await principal(db, persisted_actor, write=True)

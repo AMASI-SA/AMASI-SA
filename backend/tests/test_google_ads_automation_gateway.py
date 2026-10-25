@@ -351,3 +351,35 @@ async def test_missing_policy_at_settlement_is_unproved_and_cannot_release_fence
     with pytest.raises(HTTPException) as error:await execute(db,row)
     assert error.value.detail['code']=='google_automation_settlement_unconfirmed'
     assert provider.writes==1 and db[management.FENCES].rows[0]['status']=='claimed'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('slow_phase',['credential','metadata','snapshot','inventory'])
+async def test_oldest_native_read_time_is_not_reset_by_later_slow_reads(integration,monkeypatch,slow_phase):
+    from datetime import timedelta
+    db,provider=integration;row=await preview(db)
+    clock={'current':NOW}
+    monkeypatch.setattr(management,'now',lambda:clock['current'])
+    monkeypatch.setattr(authority,'_now',lambda current=None:current or clock['current'])
+    if slow_phase=='credential':
+        original=management.account_client
+        async def slow(*args,**kwargs):
+            result=await original(*args,**kwargs);clock['current']+=timedelta(seconds=91);return result
+        monkeypatch.setattr(management,'account_client',slow)
+    elif slow_phase=='inventory':
+        original=gateway._inventory
+        async def slow(*args,**kwargs):
+            result=await original(*args,**kwargs);clock['current']+=timedelta(seconds=91);return result
+        monkeypatch.setattr(gateway,'_inventory',slow)
+    else:
+        name='account_metadata' if slow_phase=='metadata' else 'campaign_snapshot'
+        original=getattr(provider,name)
+        async def slow(*args,**kwargs):
+            result=await original(*args,**kwargs);clock['current']+=timedelta(seconds=91);return result
+        monkeypatch.setattr(provider,name,slow)
+    result=await execute(db,row)
+    assert provider.writes==0
+    assert result['status']=='uncertain' and result['submission_started'] is False
+    configured=db[gateway.AUTOMATION_POLICIES].rows[0]
+    assert configured.get('_dispatch_claim') is None and not configured.get('_dispatch_days')
+    assert not any('_dispatch_claim' in update.get('$set',{}) for _,update in db[gateway.AUTOMATION_POLICIES].updates)
+    assert db[management.FENCES].rows[0]['status']=='claimed'

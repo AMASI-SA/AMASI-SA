@@ -108,12 +108,12 @@ async def _execution_preflight(db, row):
         raise problem("google_automation_native_evidence_invalid", "لا توجد إعدادات حملة مثبتة للتنفيذ.", 409)
 
 
-async def _authorize_dispatch(db, row, client, metadata, epoch, snapshot):
+async def _authorize_dispatch(db, row, client, metadata, epoch, snapshot, *, read_started_at):
     inventory = await _inventory(client, metadata)
     reply = await authority.authorize_google_automation_claim(db, user_id=row["user_id"],
         account_id=row["account_id"], proposal_id=row["proposal_id"], execution_claim_id=row["execution_claim_id"],
         native_evidence={"metadata": metadata, "auth_epoch": epoch, "campaign_snapshot": snapshot,
-            "inventory": inventory, "observed_at": management.now().isoformat()})
+            "inventory": inventory, "observed_at": read_started_at})
     if (not isinstance(reply, dict) or reply.get("authorized") is not True
         or reply.get("claim_id") != row["execution_claim_id"] or reply.get("proposal_id") != row["proposal_id"]
         or reply.get("submission_floor_required") is not True):
