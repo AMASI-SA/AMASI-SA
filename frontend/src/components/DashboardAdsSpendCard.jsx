@@ -207,6 +207,11 @@ export function DashboardAdsSpendCardContent({
                     {DASHBOARD_ADS_PROVIDERS.map((provider) => {
                         const meta = PROVIDER_META[provider];
                         const state = data?.providers?.[provider] || {};
+                        const operationalNoActivityObserved = provider === "snapchat"
+                            && state.amount_available === true && state.provisional === true
+                            && hasAmount(data?.provider_totals_sar?.snapchat)
+                            && Array.isArray(state.reason_codes)
+                            && state.reason_codes.includes("snapchat_operational_no_activity_observed");
                         return (
                             <div
                                 key={provider}
@@ -250,6 +255,10 @@ export function DashboardAdsSpendCardContent({
                                                 ? "بانتظار البيانات"
                                                 : "غير متصل"}
                                 </div>
+                                {operationalNoActivityObserved && <p
+                                    className="mt-1 text-[9px] font-semibold leading-4 text-amber-700"
+                                    data-testid="dashboard-snapchat-no-activity-hint"
+                                >لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.</p>}
                             </div>
                         );
                     })}

@@ -1,4 +1,4 @@
-import { mergeDashboardWithPlatformSpend } from "./dashboardPlatformSpendMerge";
+import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "./dashboardPlatformSpendMerge";
 
 test("aligns executive ad cost, ROAS, CPA and profit to the selected four-platform period", () => {
     const dashboard = {
@@ -72,10 +72,11 @@ test("aligns executive ad cost, ROAS, CPA and profit to the selected four-platfo
         provider_totals_sar: {
             snapchat: 6670.2,
             meta: 624.14,
-            tiktok: null,
+            tiktok: 0,
             google: 84.36,
         },
         total_sar: 7378.7,
+        spend_quality: { status: "complete", amount_available: true, amount_complete: true },
     };
 
     const result = mergeDashboardWithPlatformSpend(dashboard, platformSpend);
@@ -124,10 +125,111 @@ test("does not double-adjust profit when dashboard already uses the same ad tota
                 google: 0,
             },
             total_sar: 200,
+            spend_quality: { status: "complete", amount_available: true, amount_complete: true },
         },
     );
 
     expect(result.totals.net_profit).toBe(500);
     expect(result.totals.net_sales).toBe(700);
     expect(result.totals.total_ads_cost).toBe(200);
+});
+
+
+function provisionalSpend(snapchat = 307.11) {
+    return { date_from: "2026-10-26", date_to: "2026-10-26", total_sar: snapchat + 18.39,
+        provider_totals_sar: { snapchat, meta: 18.39, tiktok: 0, google: 0 },
+        spend_quality: { status: "provisional", amount_available: true, amount_complete: false, provisional: true } };
+}
+
+
+function incompleteDashboard() {
+    return { totals: { total_sales: 1000, total_ads_cost: null, net_profit: null, net_sales: null,
+        daily_costs_total: null, ads_spend_amount_available: false, ads_spend_data_complete: false },
+        ads_v2: { total: null, spend_quality: { status: "incomplete", amount_available: false, amount_complete: false } } };
+}
+
+
+test.each([null, undefined, false, "", NaN])("unknown platform total %p and known subtotal cannot fabricate profit", (total) => {
+    const dashboard = incompleteDashboard();
+    const platform = { ...provisionalSpend(), total_sar: total, known_total_sar: 307.11,
+        provider_totals_sar: { snapchat: null, meta: 18.39, tiktok: 0, google: 0 },
+        spend_quality: { status: "incomplete", amount_available: false, provisional: false } };
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals).toBe(dashboard.totals);
+    expect(result.totals.net_profit).toBeNull();
+    expect(result.totals.net_sales).toBeNull();
+    expect(result.totals.total_ads_cost).toBeNull();
+    expect(result.ads_v2.spend_quality.amount_available).toBe(false);
+    expect(needsCanonicalDashboardSpendRefresh(dashboard, platform)).toBe(false);
+});
+
+
+test.each([0, 307.11])("available provisional Snapchat %s requires a canonical recomputation over an unknown base", (amount) => {
+    const dashboard = incompleteDashboard();
+    const platform = provisionalSpend(amount);
+    expect(needsCanonicalDashboardSpendRefresh(dashboard, platform)).toBe(true);
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals).toBe(dashboard.totals);
+    expect(result.ads_v2).toBe(dashboard.ads_v2);
+    expect(result.totals.net_profit).toBeNull();
+});
+
+
+test("preserves canonical provisional profit, fee basis, and quality rather than overlaying a newer amount", () => {
+    const dashboard = { totals: { total_ads_cost: 325.5, net_profit: 600.23, ad_bank_commission_fees: 6.14,
+        ads_spend_amount_available: true, ads_spend_data_complete: false, ads_spend_provisional: true },
+        ads_v2: { total: 325.5, spend_quality: provisionalSpend().spend_quality } };
+    const platform = provisionalSpend(400);
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals).toBe(dashboard.totals);
+    expect(result.ads_v2).toBe(dashboard.ads_v2);
+    expect(result.totals.net_profit).toBe(600.23);
+    expect(needsCanonicalDashboardSpendRefresh(dashboard, platform)).toBe(false);
+});
+
+
+test("a complete spend update never treats null prior profit, sales, or product cost as zero", () => {
+    const dashboard = { totals: { total_ads_cost: 10, net_profit: null, net_sales: null,
+        total_sales: null, total_product_cost: null }, ads_v2: { spend_quality: { status: "complete", amount_available: true } } };
+    const platform = { ...provisionalSpend(20), spend_quality: { status: "complete", amount_available: true, amount_complete: true } };
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals.total_ads_cost).toBe(38.39);
+    expect(result.totals.net_profit).toBeNull();
+    expect(result.totals.net_sales).toBeNull();
+    expect(result.totals.daily_costs_total).toBeNull();
+    expect(result.totals.overall_roas).toBeNull();
+});
+
+
+test("an available-looking payload with an unknown provider amount preserves the complete canonical snapshot", () => {
+    const dashboard = { totals: { total_ads_cost: 100, net_profit: 500 }, ads_v2: { total: 100 } };
+    const platform = { ...provisionalSpend(), provider_totals_sar: { snapchat: null, meta: 18.39, tiktok: 0, google: 0 } };
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals).toBe(dashboard.totals);
+    expect(result.ads_v2).toBe(dashboard.ads_v2);
+});
+
+
+test("a complete platform response cannot replace provisional operational Snapchat metrics with zeros", () => {
+    const dashboard = { totals: { total_ads_cost: 325.5, net_profit: 600.23, ads_spend_amount_available: true },
+        ads_v2: { total: 325.5, spend_quality: provisionalSpend().spend_quality,
+            providers: { snapchat: { spend: 307.11, orders: null, revenue: null,
+                impressions: null, clicks: null, cpa: null, roas: null, platform_reported_metrics_complete: false } },
+            executive_breakdown: { providers: { snapchat: { platform_reported_orders: null,
+                salla_orders: 3, salla_sales_sar: 500, platform_cost_per_order_sar: null } },
+                total: { platform_reported_orders: null }, coverage: { platform_cpa_denominator_complete: false } } } };
+    const platform = { ...provisionalSpend(400), spend_quality: { status: "complete", amount_available: true, amount_complete: true } };
+    const result = mergeDashboardWithPlatformSpend(dashboard, platform);
+    expect(result.totals).toBe(dashboard.totals);
+    expect(result.ads_v2).toBe(dashboard.ads_v2);
+    expect(result.ads_v2.providers.snapchat.orders).toBeNull();
+    expect(result.ads_v2.providers.snapchat.cpa).toBeNull();
+    expect(result.ads_v2.providers.snapchat.roas).toBeNull();
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.platform_reported_orders).toBeNull();
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_orders).toBe(3);
+    expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_sales_sar).toBe(500);
+    expect(result.ads_v2.executive_breakdown.coverage.platform_cpa_denominator_complete).toBe(false);
+    expect(needsCanonicalDashboardSpendRefresh(dashboard, platform)).toBe(true);
+    const completeCanonical = { ...dashboard, ads_v2: { ...dashboard.ads_v2, spend_quality: platform.spend_quality } };
+    expect(mergeDashboardWithPlatformSpend(completeCanonical, platform).ads_v2).toBe(completeCanonical.ads_v2);
 });

@@ -25,9 +25,11 @@ from resource_governor import (
 )
 from .projections import (
     RIYADH_TIMEZONE,
+    SNAPCHAT_DAILY_PROJECTIONS_COLLECTION,
     build_and_persist_daily_projections,
     business_day_window,
 )
+from .operational_hours import fetch_current_operational_hours
 from .provider_total import fetch_provider_total
 from .reconciliation import reconcile_day
 from .sync_runs import (
@@ -73,6 +75,31 @@ async def _release_lease_then_admission(
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def _reset_operational_observation(
+    db: Any, identity: dict[str, Any], *, sync_run_id: str, owner_id: str,
+    heartbeat: Callable[..., Any],
+) -> bool:
+    """Invalidate only the projection observed before checking lease ownership.
+
+    The heartbeat may lose its acknowledgement after another worker acquires
+    the lease. Snapshot CAS prevents that former worker clearing the winner's
+    attempt or completed observation after the await returns.
+    """
+    collection = db[SNAPCHAT_DAILY_PROJECTIONS_COLLECTION]
+    previous = await collection.find_one(identity, {"_id": 1, "sync_run_id": 1,
+        "generated_at": 1, "operational_attempt_run_id": 1, "operational_attempt_owner_id": 1})
+    if previous is None:
+        return False
+    await heartbeat({})
+    predicate = {**identity, "_id": previous["_id"],
+        **{key: previous.get(key) for key in ("sync_run_id", "generated_at",
+            "operational_attempt_run_id", "operational_attempt_owner_id")}}
+    result = await collection.update_one(predicate, {
+        "$unset": {"operational_observation": "", "operational_hours": ""},
+        "$set": {"operational_attempt_run_id": sync_run_id, "operational_attempt_owner_id": owner_id}})
+    return result.matched_count == 1
 
 
 def _parse_date(value: date | str | None, *, field: str) -> date | None:
@@ -562,11 +589,21 @@ class SnapchatV2SyncPipeline:
         warnings: list[dict[str, Any]] = []
         financial_committed = False
         identity_summary: dict[str, Any] = {}
+        operational_summary: dict[str, Any] = {}
         try:
             # Admission happened before the lease in the shared entry-point
             # governor. This checkpoint is still safe: no provider page or
             # fact write has started yet.
             governor.safe_checkpoint()
+            # A newer attempt invalidates the former short-lived observation,
+            # even if this run fails before building a replacement projection.
+            open_day = current.astimezone(ZoneInfo(RIYADH_TIMEZONE)).date()
+            operational_identity = {"user_id": str(user_id), "provider": "snapchat_ads",
+                "ad_account_id": account_id, "report_date": open_day.isoformat(),
+                "projection_timezone": RIYADH_TIMEZONE, "action_report_time": action_report_time}
+            if open_day in report_dates:
+                await _reset_operational_observation(self.db, operational_identity,
+                    sync_run_id=sync_run_id, owner_id=owner_id, heartbeat=publish_heartbeat)
             await update_sync_stage(
                 self.db,
                 sync_run_id,
@@ -728,6 +765,16 @@ class SnapchatV2SyncPipeline:
                 (row["report_date"], row["projection_timezone"]): row
                 for row in projections
             }
+            if open_day in report_dates:
+                # A first-ever projection did not exist at the reset above.
+                # Never replace a newer worker's attempt marker.
+                await self.db[SNAPCHAT_DAILY_PROJECTIONS_COLLECTION].update_one(
+                    {**operational_identity, "sync_run_id": sync_run_id,
+                        "operational_attempt_run_id": {"$in": [None, sync_run_id]},
+                        "operational_attempt_owner_id": {"$in": [None, owner_id]}},
+                    {"$set": {"operational_attempt_run_id": sync_run_id,
+                        "operational_attempt_owner_id": owner_id},
+                     "$unset": {"operational_observation": "", "operational_hours": ""}})
 
             await update_sync_stage(
                 self.db,
@@ -789,6 +836,26 @@ class SnapchatV2SyncPipeline:
                 # Do not cancel between authoritative daily writes without a
                 # staging/commit gate; pressure remains observable in metrics.
 
+            # Spend-only observations never enter canonical hourly facts or
+            # campaign/conversion metrics. The optional current-day UI path
+            # cannot turn a financially incomplete source run into complete.
+            open_projection = by_key.get((open_day.isoformat(), RIYADH_TIMEZONE))
+            if open_projection and not open_projection.get("source_fact_count"):
+                try:
+                    observation = await fetch_current_operational_hours(
+                        client, account, report_date=open_day, sync_run_id=sync_run_id,
+                        now=self.now(), projection_generated_at=open_projection["generated_at"],
+                        owner_id=owner_id, action_report_time=action_report_time)
+                    await publish_heartbeat({})
+                    result = await self.db[SNAPCHAT_DAILY_PROJECTIONS_COLLECTION].update_one(
+                        {**operational_identity, "sync_run_id": sync_run_id,
+                            "generated_at": open_projection["generated_at"],
+                            "operational_attempt_run_id": sync_run_id,
+                            "operational_attempt_owner_id": owner_id}, {"$set": observation})
+                    operational_summary = {"status": "complete" if result.matched_count == 1 else "superseded"}
+                except Exception as exc:  # optional observation fails closed
+                    operational_summary = {"status": "unavailable", "code": str(getattr(exc, "code", type(exc).__name__))[:96]}
+
             summary = {
                 "date_from": report_dates[0].isoformat(),
                 "date_to": report_dates[-1].isoformat(),
@@ -802,6 +869,7 @@ class SnapchatV2SyncPipeline:
                 "provider_calls": client.provider_calls,
                 "request_windows": hourly["request_windows"],
                 "identity": identity_summary,
+                "operational_observation": operational_summary,
                 "reconciliation_days": len(reconciliations),
                 "reconciled_days": sum(
                     bool(row.get("reconciled")) for row in reconciliations

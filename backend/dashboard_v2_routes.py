@@ -1413,6 +1413,15 @@ async def build_mezan_v2_ads(
         provider_metrics["snapchat"] = _aggregate_provider_rows(
             platform_rows["snapchat"], start, end
         )
+        # Current operational observations prove spend only. A portfolio with
+        # one such account has unknown aggregate provider conversion metrics;
+        # the legacy reducer's numeric defaults must not manufacture zeros.
+        if {"snapchat_operational_no_activity_observed", "snapchat_operational_hour_observation"}.intersection(
+                snap_quality.get("reason_codes") or []):
+            provider_metrics["snapchat"].update({key: None for key in (
+                "orders", "revenue", "impressions", "clicks", "roas", "cpa",
+                "cost_per_order", "cpc", "cpm", "ctr")})
+            provider_metrics["snapchat"]["platform_reported_metrics_complete"] = False
     else:
         provider_metrics["snapchat"] = {
             key: None

@@ -155,7 +155,12 @@ def build_salla_ads_executive_breakdown(
             spend_complete = False
             total_cpa_complete = False
         provider_metrics = (ads.get("providers") or {}).get(provider) or {}
-        if spend is None:
+        snapchat_metrics_unknown = (provider == "snapchat"
+            and provider_metrics.get("platform_reported_metrics_complete") is False)
+        if snapchat_metrics_unknown:
+            platform_orders = None
+            total_cpa_complete = False
+        elif spend is None:
             platform_orders = None
         elif provider == "google":
             platform_orders = None
@@ -209,6 +214,8 @@ def build_salla_ads_executive_breakdown(
                 "roas": "salla_sales_divided_by_ad_platform_spend",
             },
         }
+        if snapchat_metrics_unknown:
+            providers[provider]["platform_reported_metrics_complete"] = False
         if spend is not None:
             known_total_spend += spend
         total_salla_orders += salla_orders
@@ -344,7 +351,12 @@ async def build_salla_ads_executive_breakdown_cooperative(
             spend_complete = False
             total_cpa_complete = False
         provider_metrics = (ads.get("providers") or {}).get(provider) or {}
-        if spend is None:
+        snapchat_metrics_unknown = (provider == "snapchat"
+            and provider_metrics.get("platform_reported_metrics_complete") is False)
+        if snapchat_metrics_unknown:
+            platform_orders = None
+            total_cpa_complete = False
+        elif spend is None:
             platform_orders = None
         elif provider == "google":
             platform_orders = None
@@ -398,6 +410,8 @@ async def build_salla_ads_executive_breakdown_cooperative(
                 "roas": "salla_sales_divided_by_ad_platform_spend",
             },
         }
+        if snapchat_metrics_unknown:
+            providers[provider]["platform_reported_metrics_complete"] = False
         if spend is not None:
             known_total_spend += spend
         total_salla_orders += salla_orders
