@@ -1,5 +1,18 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+## Latest checkpoint — supersedes earlier pending candidates
+
+Current PR1506/branch codex/snap-shared-owner-control-20261025-r3: J04db2224d68d6e5ed5629391355c4b45ab8b6d15; source A6530628a70647f881b6c9fa5b527b05a07ad1b17; intent B7ca4aa766b1190a82b8c216c65e5e284c24bf04e; tree9fb3190f566c1ee6ff3b89d51c8ed7d1186ffe0a; runtime rg5-a8c299e321a96179c853994087dce2ec675bac90326df731472b93800675fe47. Source run40228746984/artifact12611762761 ZIPf471531944b328c96fd965351f99715cb95a3c44fd177b006b0e82726d53550f. Intent0891ec7ee8727666a217b580f79639745a80e3c496d1eeffb20dd5b243353225/blob115391472bdd4b23d26d3ba9dd687a4e8111819a.
+
+Exact Git manifest verification passed. Independent monitor seam CLEAR: removing20 Snapchat lines yields byte-identical J monitor, preserving Google, TikTok periodic and new spend guard. Latest final-B37/38 workflows complete including HostNode20; Security remains running. No own rehearsal/lease/merge/publication yet. Foreign lease codex-tiktok1503 observed active for exactJ; UI deployment started23:00Riyadh. Assertinactive before own rehearsal or app mutation. Never clear another owner’s lease.
+
+Historical1505 passed all38 latest workflows and actual Emergent55.84s rehearsal, then Production advanced before merge.1505 closed without merge/deployment; its intent is obsolete.1502/1499 also superseded.
+
+Binding user clarification: create campaign/group/ad ACTIVE directly. Publication is a separate unfinished vertical excluded from1506. ACTIVE configuration and actual Snap review/delivery are distinct. ACTIVE WIP38f8dbe8dcff2c189596e11dd4c032925f450584, branch codex/snap-publication-active-20261025-wip,13files/treebffb3de475b232b49fabc4fc1e41c6b5d977ebd7. Seven seams, exact approved-parent/child binding, signed existing tracking token and current inventory checks authored. Initial focused run21failed30passed3.27s without isolated signingkey; explicitly fake key yielded47passed4failed1.76s (creative-recovery selected-account fixture). Author now fixed fixture/key and is completing docs/UI assertions and actual post-token MockTransport test; no rerun claimed. Separate real-Mongo parent race/lost-checkpoint file being authored. WIP must not be merged/deployed.
+
+Next: finish1506 CI, wait foreign owner lease closure, exact-B actual rehearsal, normal merge/tree equivalence, appffonly/build/prepare/prepublish/oneUIpublish/verify3/inactive. Then live USD/SAR provenance and safe profile denial diagnostics. Publication must separately pass focused, actual-Mongo, frontend, independent review and v5 release gates.
+
+
 User authorized parallel implementation and a separate governed production publication/live test after each completed increment. Root owns integration and publication. This documentation-only branch is NOT a deployment candidate.
 
 ## First increment — campaign amount evidence: deployed and live-tested
