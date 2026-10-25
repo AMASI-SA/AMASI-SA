@@ -6,16 +6,20 @@ provider/confirmation/recovery engine; they are not a production configuration
 switch and must never be installed by a shared or default application fixture.
 """
 from contextlib import ExitStack, contextmanager
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 
 def _legacy_contract_patches():
     import order_review_completion as completion
     import order_review_resume_worker as worker
+    import review_salla_pending_guard as pending
 
     return (
         patch.object(completion, "complete_local_review_operation", completion.complete_review_operation),
         patch.object(worker, "run_once", worker.run_legacy_once),
+        # This opt-in fixture executes the retained pre-local provider engine.
+        # Current local eligibility is covered through the public local route.
+        patch.object(pending, "verify_salla_pending", AsyncMock(return_value=None)),
     )
 
 

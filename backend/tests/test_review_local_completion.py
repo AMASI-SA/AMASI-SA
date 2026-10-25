@@ -1,4 +1,4 @@
-"""Local-v1 HTTP contracts on a real loopback Mongo replica set, no provider IO."""
+"""Local-v1 HTTP contracts; one eligibility GET, no provider writes."""
 import asyncio
 import os
 from copy import deepcopy
@@ -31,6 +31,12 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.payload = self.source_payload(number="local-review")
         self.assertTrue((await self.webhook(self.payload))["synced"])
         self.external = AsyncMock(side_effect=AssertionError("Review called Salla"))
+        async def eligibility_read(_db, owner, method, path):
+            self.assertEqual(owner, "owner")
+            self.assertEqual(method, "GET")
+            self.assertEqual(path, f"/orders/{self.payload['id']}")
+            return {"data": deepcopy(self.payload)}
+        self.eligibility_read = AsyncMock(side_effect=eligibility_read)
         http_request = AsyncClient.request
         async def local_http_only(client, *args, **kwargs):
             if client is not self.client:
@@ -38,7 +44,7 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
             return await http_request(client, *args, **kwargs)
         for replacement in (
             patch.object(AsyncClient, "request", local_http_only),
-            patch.object(routes, "call_salla", self.external),
+            patch.object(routes, "call_salla", self.eligibility_read),
             patch.object(routes, "_sync_salla_reviewed", self.external),
             patch.object(routes, "refresh_order_from_salla", self.external),
             patch.object(routes, "schedule_salla_auto_sync", side_effect=AssertionError("Review scheduled Salla")),
@@ -52,6 +58,27 @@ class LocalCompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(detail.status_code, 200, detail.text)
         return await self.client.post("/order-reviews-v1/local-review/complete", json={
             "expected_revision": 0, "approval_token": detail.json()["approval_token"]})
+
+    async def test_fresh_salla_delivered_blocks_stale_pending_approval(self):
+        self.payload["status"] = {"slug": "delivered", "name": "تم التوصيل"}
+        response = await self.post()
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"]["salla_status"], "تم التوصيل")
+        await self.assert_no_completion()
+
+    async def test_salla_read_failure_blocks_local_approval(self):
+        self.eligibility_read.side_effect = TimeoutError()
+        response = await self.post()
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(response.json()["detail"]["code"], "review_salla_status_unavailable")
+        await self.assert_no_completion()
+
+    async def test_committed_retry_does_not_need_another_salla_read(self):
+        await self.assert_completed(await self.post())
+        self.assertEqual(self.eligibility_read.await_count, 1)
+        self.eligibility_read.side_effect = TimeoutError()
+        await self.assert_completed(await self.post())
+        self.assertEqual(self.eligibility_read.await_count, 1)
 
     async def saved(self):
         return await self.db[completion.OPERATIONS].find_one({"order_number": "local-review"})

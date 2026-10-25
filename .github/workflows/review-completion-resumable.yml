@@ -19,6 +19,8 @@ on:
       - "backend/tests/test_source_added_item*.py"
       - "backend/tests/test_added_item_component_stock.py"
       - "backend/review_local_policy.py"
+      - "backend/review_salla_pending_guard.py"
+      - "backend/tests/test_review_salla_pending_guard.py"
       - "backend/review_gift_address.py"
       - "backend/tests/test_review_gift_address.py"
       - "backend/preparation_piece_operations.py"
@@ -119,6 +121,7 @@ jobs:
           tests/test_source_added_item_ready_coverage.py
           tests/test_added_item_component_stock.py
           tests/test_review_local_completion.py
+          tests/test_review_salla_pending_guard.py
           tests/test_review_local_downstream.py
           tests/test_review_local_assembly.py
           tests/test_assembly_completion_delivery.py
