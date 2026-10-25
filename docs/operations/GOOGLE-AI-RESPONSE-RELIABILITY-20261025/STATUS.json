@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-25T20:26:22.487Z",
+  "updated_at": "2026-10-25T20:33:44.452Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -19,9 +19,10 @@
     "B": "81f98c4fd24169da7388daa5deec23834d002e66",
     "tree": "74a36d27a6b8c501a3fc2e1d5171e24ea590dc26",
     "runtime": "rg5-e15e59a26de8ca612263bcbf255bfb9de234cd6b2f6ccff86d35bdc2748759ab",
-    "status": "exact B CI running; source candidate frozen, unmerged, unpublished",
+    "status": "merged exact B tree; all24checkrecords completed success/expected skips; original /app ff-only updated, actual host adapter running",
     "readiness_run": 40230592053,
-    "superseded_pairs": "1504/1507 closed unmerged, immutable;1507 all checks passed"
+    "superseded_pairs": "1504/1507 closed unmerged, immutable;1507 all checks passed",
+    "merge": "81e8dc1eb808d6b3fb0306d07b8e7c0a6d8f880a"
   },
   "live_acceptance": {
     "account": "5052346701",
@@ -43,13 +44,7 @@
       "829489626912"
     ]
   },
-  "blockers": [
-    {
-      "actor": "codex-snap1506",
-      "active": true,
-      "action": "do not mutate original /app or override lease"
-    }
-  ],
+  "blockers": [],
   "remaining": [
     "exact B CI and independent Host20 rehearsal",
     "merge exact B tree while preserving concurrent work",
@@ -58,7 +53,7 @@
     "investigate saved-analysis list loading error",
     "standing policy and full autonomous executor remain incomplete"
   ],
-  "next_safe_action": "Finish1509 exact-B CI and preserve frozen pair. Recheck production HEAD before merge, exact B tree required. After inactive actual guard run original host adapter, prepare/publish/verify3probes. Then apply stored ad-read followup patch on latest source, fresh CI and live acceptance. Full autonomy remains incomplete.",
+  "next_safe_action": "Read original /app .git/google1509-evidence/build.exit; require0, then fresh guard inactive and prepare --actor codex-google1509, prepublish, ONE toolbar Republish/Publish changes, explicit newer finished event, guard verify3probes and inactive. Do not mix ad-read followup patch into frozen release.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
