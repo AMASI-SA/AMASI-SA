@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-response-reliability-r2-20261025",
   "base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "status": "SOURCE_CI_RUNNING_WAITING_FOR_FOREIGN_SNAPCHAT_RELEASE",
+  "status": "CURRENT_SOURCE_ALL_CI_PASS_WAITING_FOR_FOREIGN_RELEASE",
   "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
@@ -22,7 +22,16 @@
   "verification": {
     "red": "3focused regressions failed; compatible-model case passed",
     "backend": "101 AI/actions/context tests passed in1.64s",
-    "frontend": "CI pending"
+    "frontend": "CI pending",
+    "current_source_ci": {
+      "head_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
+      "all_9_workflows": "success",
+      "google_run": 40214882914,
+      "backend_job": 121233748852,
+      "backend": "379passed realMongo/officialv25 10.64s",
+      "frontend_job": 121233748638,
+      "frontend": "96tests/12suites/build3.53s"
+    }
   },
   "user_autonomy_preferences": {
     "budget_mode": "preserve_current_approved_total_budget",
@@ -34,7 +43,7 @@
   "provider_writes": 0,
   "financial_writes": 0,
   "production_changed": false,
-  "next_safe_action": "Run exact NEW source CI; check actual /app guard (cd /app first), then wait until foreign lease inactive before new host rehearsal. Rebuild/refreeze against442bdd...; never deploy oldA2 intent.",
+  "next_safe_action": "Actual /app guard (cd /app) must become active:false when codex-snap1483 closes its lease. Confirm production remains442bdd..., then create fresh independent clone for A1a34..., governed install/build/bootstrap/freeze against442bdd...; verify downloaded JSON source/base before any B upload. Do not deploy oldA2 intent.",
   "concurrent_update": {
     "pr": 1482,
     "scope": "TikTok creator readiness",
