@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r5-20261026",
   "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_release_fully_prepared_waiting_Emergent_UI_recovery_no_publish",
+  "state": "R5_prepared_owner_lease_publish_dialog_open",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "User handoff requested only to recover/open Emergent Manage in sharedbrowser;do NOT publish manually yet. Once UI usable re-read guard inactive,/app exactM+identity,Production exactM. Then own prepare --actor codex-tiktok1524,openRepublishdialog,prepublish immediatelybeforeone finalPublishchanges,observe NEWexplicitfinish,and verify --url https://mezansalla.com three probes/activefalse. No native public/sample post. After deployed:privateofficialfixture nativeFILE test and captioncatalogsmoke(no liveAIrequest budget remaining).",
+  "next": "Run own prepublish and confirm ready_to_publish:true exactA/M/runtime,then finalPublishchanges once. Observe newerexplicitfinish than Oct26 02:09 Riyadh;ownverify3 exactidentity and activefalse;privateFILEnative test and captioncatalogsmoke.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -41,9 +41,13 @@
   "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
-    "guard_active": false,
-    "actor": null,
-    "ui_blocker": "Emergent project view repeatedly times out in current cloud browser. Home and CodeServer work. Fresh tab/reload/closing internal project tab then reopen did not resolve. Console shows unhandled Redux Toolkit #38 refreshCredits rejection. No bot/sign-in block observed. No Publish click. Isolated and actual host adapters now complete;only UI prevents final publishing. Manual handoff may recover Manage. This is not a permission/approval request."
+    "guard_active": true,
+    "actor": "codex-tiktok1524",
+    "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+    "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+    "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+    "prepared_at": "2026-10-25T23:37:49.946806+00:00",
+    "ui_blocker": "Resolved by owner;Publish changes dialog visible. No final Publish click yet."
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -68,7 +72,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:30:59.141Z",
+  "observed_at": "2026-10-25T23:38:13.571Z",
   "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
   "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
   "superseded_R4": {
