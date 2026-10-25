@@ -34,7 +34,7 @@ class StrictInput(BaseModel):
 
 
 class AutomationPolicyInput(StrictInput):
-    expected_revision: int = Field(ge=0)
+    expected_revision: int = Field(ge=0, le=2**63 - 2)
     enabled: bool = False
     campaign_ids: list[str] = Field(default_factory=list, max_length=50)
     allowed_actions: list[Literal["pause", "enable", "set_budget"]] = Field(default_factory=list, max_length=3)
@@ -66,7 +66,7 @@ class AutomationPolicyInput(StrictInput):
 
 
 class AutomationPolicyRevoke(StrictInput):
-    expected_revision: int = Field(ge=1)
+    expected_revision: int = Field(ge=1, le=2**63 - 2)
 
 
 def _expiry(value, current):
@@ -178,7 +178,7 @@ def attach_google_ads_automation_policy_routes(router, db, current_user, *, clie
             if not changed.matched_count:
                 raise problem("google_automation_policy_changed", "تغيرت سياسة جوجل؛ حدّثها قبل الحفظ.", 409)
         row = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
-        return public_policy(row, account_id=scope["account_id"], current=current)
+        return public_policy(row, account_id=scope["account_id"], current=now())
 
     @router.post(root + "/revoke")
     async def revoke_policy(account_id: str, body: AutomationPolicyRevoke, user=Depends(current_user)):
@@ -192,4 +192,4 @@ def attach_google_ads_automation_policy_routes(router, db, current_user, *, clie
         if not changed.matched_count:
             raise problem("google_automation_policy_changed", "تغيرت سياسة جوجل؛ حدّثها قبل إيقافها.", 409)
         row = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
-        return public_policy(row, account_id=scope["account_id"], current=current)
+        return public_policy(row, account_id=scope["account_id"], current=now())

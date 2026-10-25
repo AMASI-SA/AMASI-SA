@@ -180,3 +180,17 @@ def test_unknown_or_stale_enabled_campaign_budget_prevents_aggregate_proof():
     other=deepcopy(data["workspace"]["campaigns"][0]);other.update(campaign_id="789",status="ENABLED",observed_at=(NOW-timedelta(minutes=10)).isoformat())
     data["workspace"]["campaigns"].append(other)
     assert plan_google_autonomy(**data)["candidates"][0]["blockers"] == ["account_budget_unproved"]
+
+
+@pytest.mark.parametrize("status", [None, "UNKNOWN", "UNSPECIFIED"])
+def test_unknown_campaign_status_prevents_account_budget_proof(status):
+    data=inputs("RESUME_CAMPAIGN")
+    other=deepcopy(data["workspace"]["campaigns"][0]);other.update(campaign_id="789",status=status,budget_native="40")
+    data["workspace"]["campaigns"].append(other)
+    assert plan_google_autonomy(**data)["candidates"][0]["blockers"] == ["account_budget_unproved"]
+
+
+@pytest.mark.parametrize("campaign_id", [["456"], 456, "٤٥٦", "9"*31])
+def test_malformed_completed_history_campaign_identity_fails_closed(campaign_id):
+    data=inputs();data["history"]["items"]=[history_row(campaign_id=campaign_id)]
+    assert plan_google_autonomy(**data)["blockers"] == ["history_unproved"]

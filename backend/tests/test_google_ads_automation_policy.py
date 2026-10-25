@@ -159,6 +159,7 @@ async def test_unlinked_account_cannot_be_configured(monkeypatch):
     {"max_campaign_daily_budget_native": "1e10"}, {"max_campaign_daily_budget_native": "1.0000001"},
     {"cooldown_seconds": 3599}, {"cooldown_seconds": True}, {"max_actions_per_day": 21},
     {"expected_revision": True}, {"enabled": "true"}, {"user_id": "other"},
+    {"expected_revision": 2**63 - 1},
 ])
 async def test_invalid_policy_is_rejected_without_provider_reads(monkeypatch, changes):
     instance, db, calls = app(monkeypatch)
@@ -247,3 +248,22 @@ async def test_policy_update_keeps_bounded_atomic_revocation_history(monkeypatch
             assert result.status_code == 200
     events = db.collection.rows[0]["events"]
     assert len(events) == 50 and events[0]["revision"] == 6 and events[-1]["revision"] == 55
+
+
+@pytest.mark.asyncio
+async def test_revoke_revision_cannot_overflow_mongo_int64(monkeypatch):
+    instance, _, _ = app(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(instance), base_url="http://test") as client:
+        response = await client.post("/google_ads/automation/policy/123/revoke", json={"expected_revision": 2**63 - 1})
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_expiry_uses_fresh_response_time_after_native_metadata_read(monkeypatch):
+    instance, _, _ = app(monkeypatch)
+    times = iter([CURRENT, CURRENT + timedelta(minutes=2)])
+    monkeypatch.setattr(policy, "now", lambda: next(times))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(instance), base_url="http://test") as client:
+        response = await client.put("/google_ads/automation/policy/123", json=body(enabled=True, expires_at=(CURRENT + timedelta(seconds=1)).isoformat()))
+    assert response.status_code == 200
+    assert response.json()["expired"] is True and response.json()["effective_enabled"] is False

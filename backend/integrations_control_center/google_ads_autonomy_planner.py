@@ -15,7 +15,7 @@ import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 _ACTIONS = {"PAUSE_CAMPAIGN": "pause", "RESUME_CAMPAIGN": "enable", "CHANGE_BUDGET": "set_budget"}
-_PENDING = {"executing", "approved", "submitted", "verifying", "uncertain"}
+_PENDING = ("executing", "approved", "submitted", "verifying", "uncertain")
 _AMOUNT = re.compile(r"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$")
 
 
@@ -137,7 +137,9 @@ def plan_google_autonomy(*, user_id, account_id, policy, analysis, workspace, hi
             return blocked("account_execution_pending")
         if row.get("status") == "completed" or row.get("submission_started") is True:
             stamp = _instant(row.get("executed_at") or row.get("submitted_at") or row.get("created_at"))
-            if stamp is None or stamp > current or not row.get("campaign_id"):
+            cid = row.get("campaign_id")
+            if (stamp is None or stamp > current or not isinstance(cid, str)
+                or not re.fullmatch(r"[0-9]{1,30}", cid)):
                 return blocked("history_unproved")
             if stamp.astimezone(zone).date() == today:
                 action_count += 1
@@ -153,6 +155,8 @@ def plan_google_autonomy(*, user_id, account_id, policy, analysis, workspace, hi
         return blocked("recommendations_ambiguous")
     total, total_proven = Decimal(0), True
     for campaign in campaigns:
+        if campaign.get("status") not in ("ENABLED", "PAUSED", "REMOVED"):
+            total_proven = False
         if campaign.get("status") == "ENABLED":
             amount = _amount(campaign.get("budget_native"))
             if (amount is None or campaign.get("budget_mode") != "DAILY" or campaign.get("source") != "google_ads_api"
