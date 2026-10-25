@@ -57,6 +57,13 @@ def _instant(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
 
 
+def _server_instant(value: Any) -> datetime | None:
+    """Interpret trusted BSON datetime values as UTC with either Mongo codec."""
+    if isinstance(value, datetime) and value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return _instant(value)
+
+
 def _key(*parts: Any) -> str:
     return hashlib.sha256(json.dumps(parts, separators=(",", ":"), default=str).encode()).hexdigest()
 
@@ -538,7 +545,7 @@ def _known_linked_resolution(execution, binding, proposal):
             and verification.get("field_changes_verified") is True
             and verification.get("entity_id") == target_id
             and verification.get("verification_source") in {"readback", "post_error_readback"}
-            and _instant(verification.get("verified_at")) is not None
+            and _server_instant(verification.get("verified_at")) is not None
             and snapshot.get("id") == target_id
             and snapshot.get("ad_account_id") in {None, execution["account_id"]}
             and management._changed_values_match(expected, snapshot)[0]):
@@ -625,13 +632,7 @@ async def _recover_stale_unstarted_execution(db, user_id, account_id, execution,
     # reuses this server-generated token; leave every current lease untouched.
     if lease is None:
         return False
-    lease_value = lease.get("lease_until")
-    # BSON dates are UTC even when a worker's Mongo codec returns naive
-    # datetimes. This normalization is only for trusted server lease dates;
-    # owner-entered policy expiry must still carry an explicit timezone.
-    if isinstance(lease_value, datetime) and lease_value.tzinfo is None:
-        lease_value = lease_value.replace(tzinfo=timezone.utc)
-    lease_until = _instant(lease_value)
+    lease_until = _server_instant(lease.get("lease_until"))
     if lease.get("owner") == lease_owner and (lease_until is None or lease_until > current):
         return False
     if await db[BINDING_COLLECTION].find_one({
@@ -695,14 +696,14 @@ async def refresh_linked_execution_outcomes(db, user_id, account_id, *, now=_utc
         resolution = _known_linked_resolution(execution, binding, proposal)
         if resolution is None:
             continue
-        observed_at = _instant(resolution["proof_at"])
+        observed_at = _server_instant(resolution["proof_at"])
         if observed_at is None:
             # The not-applied branch retains its exact provider snapshot and
             # releases the exact entity lease in the same reconciliation.
             lease = await db["mezan_snapchat_campaign_entity_leases_v1"].find_one({
                 "user_id": user_id, "proposal_id": proposal["proposal_id"], "active": False,
             }, sort=[("released_at", -1)])
-            observed_at = _instant((lease or {}).get("released_at")) or now()
+            observed_at = _server_instant((lease or {}).get("released_at")) or now()
         if observed_at > now() + timedelta(minutes=5):
             continue
         # Persist the fresh-plan fence before clearing the blocking execution.
@@ -774,8 +775,8 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
             account_state = await db[LEASE_COLLECTION].find_one({
                 "_id": _key("account", user_id, account_id), "user_id": user_id,
             }) or {}
-            fresh_after = _instant(account_state.get("require_snapshot_after"))
-            generated_at = _instant(snapshot.get("generated_at"))
+            fresh_after = _server_instant(account_state.get("require_snapshot_after"))
+            generated_at = _server_instant(snapshot.get("generated_at"))
             if fresh_after is not None and (generated_at is None or generated_at <= fresh_after):
                 outcome["blockers"] = ["fresh_snapshot_required_after_reconciliation"]
                 continue

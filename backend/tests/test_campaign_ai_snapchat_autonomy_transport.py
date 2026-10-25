@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from bson.codec_options import CodecOptions
 
 from integrations_control_center import snapchat_campaign_management as management
 import campaign_ai_snapchat_autonomy as autonomy
@@ -162,10 +163,15 @@ async def test_governed_management_passes_final_fence_through_real_token_transpo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reconciled_applied,tamper", [(False, None), (True, None), (False, "binding"), (True, "proof")])
+@pytest.mark.parametrize("reconciled_applied,tamper,naive_bson", [
+    (False, None, False), (True, None, False), (False, "binding", False), (True, "proof", False),
+    (False, None, True), (True, None, True),
+])
 async def test_provider_timeout_and_failed_readback_remain_uncertain_in_runner_and_next_cycle(
-    db, monkeypatch, reconciled_applied, tamper,
+    db, monkeypatch, reconciled_applied, tamper, naive_bson,
 ):
+    if naive_bson:
+        db = db.with_options(codec_options=CodecOptions(tz_aware=False))
     operation = await transport_binding(db, monkeypatch)
     proof = checked(action="pause")
     await snapshot(db, [proof])
@@ -230,9 +236,11 @@ async def test_provider_timeout_and_failed_readback_remain_uncertain_in_runner_a
         "$set": {"owner": None, "lease_until": NOW - timedelta(minutes=1),
                   "last_cycle_at": NOW - timedelta(days=1)},
     })
+    next_generated_at = autonomy._utcnow()
+    next_generated_at = next_generated_at.replace(microsecond=(next_generated_at.microsecond // 1000) * 1000)
     await db[autonomy.RECOMMENDATION_COLLECTION].insert_one({
         "user_id": "owner", "snapshot_id": "snapshot-next",
-        "generated_at": autonomy._utcnow().isoformat(),
+        "generated_at": next_generated_at if naive_bson else next_generated_at.isoformat(),
         "recommendations": [proof["recommendation"]],
         "execution_targets": {"rec-a": proof["target"]},
     })
@@ -274,6 +282,9 @@ async def test_provider_timeout_and_failed_readback_remain_uncertain_in_runner_a
     assert execution["reconciliation"]["outcome"] == ("applied" if reconciled_applied else "not_applied")
     assert execution["audit"][-1]["actor_id"] == "snapchat-reconciliation-projection"
     assert len(patch_attempts) == 1
+    cutoff = await db[autonomy.LEASE_COLLECTION].find_one({"user_id": "owner", "account_id": "account-a"})
+    assert (cutoff["require_snapshot_after"].tzinfo is None) is naive_bson
+    assert autonomy._server_instant(cutoff["require_snapshot_after"]) >= next_generated_at
     # Neither the deterministic old claim nor its runner can issue a replay.
     duplicate = await legacy.claim_campaign_recommendation_execution(
         db, "owner", snapshot_id="snapshot-a", recommendation_id="rec-a",
@@ -286,9 +297,11 @@ async def test_provider_timeout_and_failed_readback_remain_uncertain_in_runner_a
     claim = AsyncMock(return_value={"claimed": False, "execution_id": "future-existing",
                                    "execution": {"status": "completed"}})
     monkeypatch.setattr(legacy, "claim_campaign_recommendation_execution", claim)
+    fresh_generated_at = autonomy._utcnow() + timedelta(milliseconds=2)
+    assert fresh_generated_at > autonomy._server_instant(cutoff["require_snapshot_after"])
     await db[autonomy.RECOMMENDATION_COLLECTION].insert_one({
         "user_id": "owner", "snapshot_id": "snapshot-fresh",
-        "generated_at": (autonomy._utcnow() + timedelta(microseconds=1)).isoformat(),
+        "generated_at": fresh_generated_at if naive_bson else fresh_generated_at.isoformat(),
         "recommendations": [proof["recommendation"]], "execution_targets": {"rec-a": proof["target"]},
     })
     future_cycle = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-fresh")
