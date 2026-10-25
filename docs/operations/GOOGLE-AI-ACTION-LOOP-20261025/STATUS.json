@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-action-loop-status-20261025",
   "source_base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
-  "status": "REVIEWED_INTENT_B_CI_PASS_EXCEPT_PENDING_CODEQL_HOST_ADAPTER_RUNNING",
+  "status": "MERGED_HOST_ADAPTER_PASS_PUBLICATION_STARTED_PUBLIC_VERIFY_PENDING",
   "scope": "Continue Google AI creation/management toward bounded autonomy; first prove saved advice through the existing native approval, single dispatch, readback and audit workflow.",
   "implemented": [
     "Persisted native analysis identity returned to the UI; saved recommendation preview recovers action and decimal amount server-side.",
@@ -23,22 +23,24 @@
     "frontend": "PENDING; native uppercase advice through explicit approval, request cancellation, duplicate clicks, diagnostic suppression and identity-only request regressions added.",
     "ci": "PENDING; focused Google workflow includes the new backend/frontend suites.",
     "source_ci": "All9 workflows SUCCESS; Google backend374 PASS with real Mongo/official SDK, frontend93 PASS/12suites, buildPASS.",
-    "intent_ci": "All applicable workflows completedSUCCESS except CodeQL stillin_progress at checkpoint; specialtyTikTokcandidate skipped by branch scope.",
+    "intent_ci": "All applicable exactB workflowsSUCCESS, CodeQLSUCCESS; specialtyTikTokbranchcandidate skipped.",
     "original_build": "Governed ensure/install/two-clean-build PASS; first freeze refused missing reviewed client origin; explicit REACT_APP_BACKEND_URL freeze exited0 without rebuilding.",
     "intent_transfer": "898830bytes; SHA25667227a0900546117b230771b07d45b4033f9499d5af6257ad37bbf3567e906ec; exactGitblob b54e285261357ddfff2fc6ef16e7cbac6a0988ca verified after native Download.",
-    "adapter": "ExactB running in/tmp/google1479-release; inspect/tmp/google1479-adapter.log before any merge/publication."
+    "adapter": "Independent exactB PASS; original/app first attempt refused prepackaged ignored bytecode. Two regular ignoredpyc files verified untracked and preserved by atomic rename to/app/.git/google1479-bytecode-quarantine. PYTHONDONTWRITEBYTECODE original adapter second attempt exited0.",
+    "prepare": "Actual/app prepare actorcodex-google1479 exited0.",
+    "prepublish": "Actual/app prepublish exited0,ready_to_publish:true; exactA25076/M39a7/runtime rg5-285482ba matched."
   },
   "production_changed": false,
   "provider_writes": 0,
   "financial_writes": 0,
-  "merge": false,
+  "merge": true,
   "deployment": false,
   "remaining": [
     "Finish frontend and real-Mongo gateway verification; inspect final diff and CI.",
     "Owner-defined autonomous Google policy and measured rollout gates; no autonomous spending enabled by this checkpoint.",
     "Full live paused campaign creation and supported-family acceptance; conversion/profit evidence completeness and post-action outcome learning remain unproven."
   ],
-  "next_safe_action": "Inspect exact-B adapter and CodeQL completion. Recheck Production and protocol-v5 before exact expected-head merge. No lease/merge/publication yet.",
+  "next_safe_action": "Wait for explicit newer platformDeploymentfinished; then actual/app guard verify --url https://mezansalla.com. Require3 exact public probes and matching leaseclosed. No duplicate publish. If deployment fails, inspect platformlogs,publichealth and abort only matchingowned lease before repair.",
   "code_checkpoint": "ec559575c8b30bd8cbd943439900b54bc4534390",
   "remote_checkpoint": "UPLOADED_AFTER_EXPLICIT_OWNER_AUTHORIZATION_20261025",
   "source_branch": "codex/google-ai-action-loop-20261025",
@@ -55,5 +57,21 @@
     ],
     "unsaved_editor_preserved": true
   },
-  "ledger": "Issue1006 commenting disabled by GitHub above2500comments; continuation is recorded in PR1479 and this evidence-only branch. DO NOT DEPLOY evidence branch."
+  "ledger": "Issue1006 commenting disabled by GitHub above2500comments; continuation is recorded in PR1479 and this evidence-only branch. DO NOT DEPLOY evidence branch.",
+  "deployment_sha": "39a7dc82f0ef606cbdd54a1b6a9941514ba02f94",
+  "runtime_release_id": "rg5-285482ba2323c373e229ac91ba334c64092ecf68b6183179ae1f64d5db15dfae",
+  "production_git_changed": true,
+  "production_live_verified": false,
+  "owned_lease": {
+    "actor": "codex-google1479",
+    "active": true,
+    "matching_release": "rg5-285482ba2323c373e229ac91ba334c64092ecf68b6183179ae1f64d5db15dfae"
+  },
+  "publication": {
+    "toolbar_only": true,
+    "republish_clicked_once": true,
+    "publish_changes_confirmed_once": true,
+    "state": "Publishing…",
+    "success_unverified": true
+  }
 }
