@@ -42,7 +42,7 @@ const ACTIONS = [
     ["campaign.update", "تعديل حملة"],
     ["ad_squad.create", "إنشاء مجموعة إعلانية"],
     ["ad_squad.update", "تعديل مجموعة إعلانية"],
-    ["creative.create", "إنشاء إبداع من Media ID"],
+    ["creative.create", "تجهيز المحتوى الإعلاني"],
     ["ad.create", "إنشاء إعلان"],
     ["ad.update", "تعديل إعلان"],
 ];

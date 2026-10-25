@@ -1,0 +1,100 @@
+name: Snapchat AI Autonomy V1
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/campaign_ai_snapchat_autonomy.py"
+      - "backend/campaign_ai_monitor_legacy.py"
+      - "backend/campaign_ai_monitor.py"
+      - "backend/ads_manager/__init__.py"
+      - "backend/integrations_control_center/snapchat_campaign_management.py"
+      - "backend/tests/test_campaign_ai_snapchat_autonomy.py"
+      - "backend/tests/test_campaign_ai_snapchat_autonomy_mongo.py"
+      - "backend/tests/test_campaign_ai_snapchat_autonomy_transport.py"
+      - "frontend/src/components/marketing/SnapchatAutonomyPanel.jsx"
+      - "frontend/src/components/marketing/SnapchatAutonomyPanel.test.jsx"
+      - "frontend/src/services/snapchatAutonomy.js"
+      - "frontend/src/services/snapchatAutonomy.test.js"
+      - "frontend/src/pages/CampaignRecommendations.jsx"
+      - ".github/workflows/snapchat-ai-autonomy-v1.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  backend:
+    name: Delegation, real Mongo races and final transport revocation
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      SNAPCHAT_AUTONOMY_TEST_MONGO_URL: mongodb://127.0.0.1:27017
+      REQUIRE_SNAPCHAT_AUTONOMY_MONGO: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: >-
+          python -m pip install -q fastapi==0.110.1 pydantic==2.13.4
+          pymongo==4.6.3 motor==3.3.1 httpx==0.28.1 openai==1.99.9
+          pytest==9.0.3 pytest-asyncio openpyxl cryptography bcrypt PyJWT reportlab
+          python-multipart python-dotenv email-validator pymupdf pillow qrcode arabic-reshaper python-bidi
+      - name: Compile policy, common executor and regressions
+        run: >-
+          python -m py_compile campaign_ai_snapchat_autonomy.py campaign_ai_monitor.py
+          campaign_ai_monitor_legacy.py ads_manager/__init__.py
+          tests/test_campaign_ai_snapchat_autonomy.py tests/test_campaign_ai_snapchat_autonomy_mongo.py
+          tests/test_campaign_ai_snapchat_autonomy_transport.py
+      - name: Test delegation and isolated storage/transport boundaries
+        run: >-
+          python -m pytest -q
+          tests/test_campaign_ai_snapchat_autonomy.py
+          tests/test_campaign_ai_snapchat_autonomy_mongo.py
+          tests/test_campaign_ai_snapchat_autonomy_transport.py
+          tests/test_campaign_ai_snap_budget_drift_p0_5.py
+          tests/test_campaign_ai_approval_preflight_p1_3.py
+          tests/test_campaign_ai_execution_alignment.py
+          tests/test_campaign_ai_execution_quality_p0_3.py
+          tests/test_campaign_ai_unified_execution_evidence.py
+          tests/test_campaign_ai_observation_window_guard_p1_4.py
+          tests/test_campaign_ai_profit_accounting_completeness_p1_1.py
+          tests/test_snapchat_management_execution_hardening_v1.py
+          tests/test_snapchat_management_safety_regressions_v1.py --tb=short
+
+  frontend:
+    name: Owner delegation UI and exact native amounts
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable Yarn Classic
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Install frozen dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Test owner form, service boundaries and recommendation compatibility
+        run: >-
+          CI=true yarn test --watchAll=false --runInBand
+          src/components/marketing/SnapchatAutonomyPanel.test.jsx
+          src/services/snapchatAutonomy.test.js
+          src/pages/CampaignRecommendations.test.jsx
+      - name: Build frontend
+        run: CI=false yarn build

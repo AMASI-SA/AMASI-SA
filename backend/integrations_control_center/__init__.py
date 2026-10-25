@@ -76,6 +76,7 @@ from .snapchat_campaign_management import (
     attach_snapchat_campaign_management_routes,
 )
 from .snapchat_media_upload import attach_snapchat_media_upload_routes
+from .snapchat_readiness_provenance import attach_snapchat_readiness_provenance_routes
 from .snapchat_campaign_preview_async import (
     attach_snapchat_campaign_preview_async_routes,
 )
@@ -213,6 +214,9 @@ def make_integrations_control_center_router(db: Any, current_user: Callable):
         router, db, current_user, _require_owner
     )
     attach_snapchat_media_upload_routes(
+        router, db, current_user, _require_owner
+    )
+    attach_snapchat_readiness_provenance_routes(
         router, db, current_user, _require_owner
     )
     attach_snapchat_campaign_preview_async_routes(
