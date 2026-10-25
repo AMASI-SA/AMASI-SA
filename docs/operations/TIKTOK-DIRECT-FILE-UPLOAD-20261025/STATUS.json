@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r5-20261026",
   "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_website_built_installing_on_cloud_servers",
+  "state": "R5_PUBLISHED_VERIFIED3_NATIVE_FILE_READINESS_PASS_LOCAL_PREVIEW_FAILURE",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -15,9 +15,9 @@
     "Fresh backend/frontend/contract tests and actual browser-to-TikTok CORS/native acceptance required before claiming end-to-end success."
   ],
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
-  "production_changed": false,
+  "production_changed": true,
   "provider_writes": 0,
-  "next": "Do not click Publish again. Observe newexplicitDeploymentfinished after02:09Riyadh/currentownpublish;then own guard verify --urlhttps://mezansalla.com checks3 exactA/M/runtime,finalactivefalse. Then newUI privateFILEofficialfixture/nativecompletion and captioncatalogsmoke,no liveAIrequest.",
+  "next": "Diagnose local video metadata failure using DOM/console/CSP and runtime headers before changing source. Preserve published exactM verified3. Do not initialize any video until localproof passes. Native upload/private completion stillunproven;no public fixture post.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -72,9 +72,9 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:47:33.138Z",
+  "observed_at": "2026-10-25T23:52:12.493Z",
   "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
-  "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
+  "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
     "pr": 1523,
     "A": "092ce35d31c459d971bf74c595b0a11dd09aae20",
@@ -96,7 +96,19 @@
     "ui_after_click": "Publishing your website to cloud...8m28s;Workspace ready,Changes packaged,Website built,Database ready,Keys & settings applied. Still no newer explicitfinish.",
     "previous_explicit_finish": "Oct26 02:09AM Asia/Riyadh",
     "new_finish_observed": false,
-    "started": "Oct26 02:38AM Asia/Riyadh"
+    "started": "Oct26 02:38AM Asia/Riyadh",
+    "finished": "Oct26 02:47AM Asia/Riyadh explicit Deployment finished and Deployment successful"
   },
-  "runtime_probe": "Read-only /api/health during build still served prior Google1522 source2589081034abeda50d6151611f0ffc6fb0d350ed/runtime rg5-d5d75bda9223f6b82b825e56093d8517b4221ee426fae2fcc8238e127afb8788;not ownrelease yet. No guard verify attempted before explicitfinish."
+  "runtime_probe": "Read-only /api/health during build still served prior Google1522 source2589081034abeda50d6151611f0ffc6fb0d350ed/runtime rg5-d5d75bda9223f6b82b825e56093d8517b4221ee426fae2fcc8238e127afb8788;not ownrelease yet. No guard verify attempted before explicitfinish.",
+  "production_verification": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+    "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+    "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+    "frontend_requests_per_probe": 42,
+    "final_guard_active": false
+  },
+  "live_file_test": "Official MP4 H264High/AAC fixture and 5s derived WebM VP8/Opus both fail local metadata with تعذر تشغيل هذا الفيديو على جهازك. Investigating actual cause;not claiming codec cause. No native proposal/init/upload. No byte proxy/storage substitution.",
+  "live_caption": "Livecatalog search هودي returned10 products;selected بوكس الشتاء | هودي وسلسال. Generate button enabled. No model request,within prior consumed live-test budget."
 }
