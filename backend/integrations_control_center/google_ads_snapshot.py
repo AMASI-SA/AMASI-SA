@@ -190,6 +190,19 @@ async def snapshot(client, campaign_id, *, children=False, duplicate_controls=Fa
     owned_resource(rows[0]["campaign"].get("resourceName"), client.customer_id, "campaigns")
     owned_resource(rows[0].get("campaignBudget", {}).get("resourceName"), client.customer_id, "campaignBudgets")
     result = {"campaign": rows[0].get("campaign") or {}, "campaign_budget": rows[0].get("campaignBudget") or {}, "groups": [], "ads": [], "criteria": [], "field_gaps": gaps}
+    # GAQL may omit an empty standard Smart Bidding message when its optional
+    # target is unset. Prove the scheme by its enum and that target's selected
+    # child; an unread child or a portfolio reference is not an absent target.
+    campaign = result["campaign"]
+    optional_scheme = {
+        "MAXIMIZE_CONVERSIONS": ("maximizeConversions", "campaign.maximize_conversions.target_cpa_micros"),
+        "MAXIMIZE_CONVERSION_VALUE": ("maximizeConversionValue", "campaign.maximize_conversion_value.target_roas"),
+    }.get(campaign.get("biddingStrategyType"))
+    schemes = ("manualCpc", "percentCpc", "targetSpend", "targetCpa", "targetRoas", "maximizeConversions", "maximizeConversionValue", "targetImpressionShare", "manualCpm", "targetCpm")
+    if optional_scheme and not campaign.get("biddingStrategy") and not any(key in campaign for key in schemes):
+        field, target_child = optional_scheme
+        if target_child not in gaps:
+            campaign[field] = {}
 
     async def read(fields, root, payload, where, required):
         rows, complete, _ = await compatible_read(client, fields, root, where, required=required)

@@ -1,0 +1,38 @@
+{
+  "task_id": "GOOGLE-AD-CONTENT-ACCEPTANCE-20261025",
+  "scope": "Google only: lossless read and additional draft ad review",
+  "base": "81e8dc1eb808d6b3fb0306d07b8e7c0a6d8f880a",
+  "observed": {
+    "campaign": "24390429267",
+    "state": "PAUSED",
+    "budget": "15SAR average daily",
+    "spend": 0,
+    "group": "202214240780",
+    "ads": [
+      "829489626909",
+      "829489626912"
+    ],
+    "errors": [
+      "policySummaryInfo incorrectly unsupported",
+      "empty optional Smart Bidding parent omitted by GAQL",
+      "additional group.ads omitted from editable draft and frozen preview"
+    ]
+  },
+  "changes": [
+    "Recognize Google text policy review metadata without resending it as copy; preserve pinned/unrecognized-setting blocks",
+    "Restore targetless standard Maximize scheme only from provider enum plus selected optional target child; do not infer unread or portfolio targets",
+    "Show/edit/remove additional draft ads and show every frozen creative and its status/media/cards"
+  ],
+  "verification": {
+    "backend_red": "3failed163passed before fix",
+    "backend_green": "216passed27integration skips after fix, repeat216passed27skipped2.28s",
+    "frontend": "three new public DOM workflow regressions added; local dependencies unavailable, CI required",
+    "diff_check": "exit0"
+  },
+  "release": {
+    "state": "WIP source CI, no intent B, no merge/publish",
+    "budget1509": "separate frozen release currently publishing; do not modify original /app during own lease"
+  },
+  "next": "Run source Google frontend/backend and release CI. Resolve failures, then freeze fresh intent only after actual release guard inactive. Preserve all other provider work. After publication verify both created RSA content edit and additional-draft/frozen-preview UI without enabling test campaign.",
+  "full_autonomy_complete": false
+}

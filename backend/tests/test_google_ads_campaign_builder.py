@@ -691,6 +691,19 @@ def test_existing_creative_projection_is_lossless_and_source_revision_tracks_cop
     assert result["source_revision"] != project_google_group(before, CUSTOMER, "901")["source_revision"]
 
 
+def test_google_text_policy_summary_info_is_read_only_evidence_not_creative_input():
+    before = complete_source_snapshot()
+    ad = before["ads"][0]["ad"]["responsiveSearchAd"]
+    for text in ad["headlines"] + ad["descriptions"]:
+        text["policySummaryInfo"] = {"approvalStatus": "APPROVED", "reviewStatus": "REVIEWED"}
+    result = project_google_group(before, CUSTOMER, "901")
+    assert result["editable"] is True
+    assert result["group"]["headlines"] == draft_for()["groups"][0]["headlines"]
+    assert "policySummaryInfo" not in str(result["creative"])
+    ad["headlines"][0]["pinnedField"] = "HEADLINE_1"
+    assert project_google_group(before, CUSTOMER, "901")["editable"] is False
+
+
 @pytest.mark.parametrize("change,field", [
     ("pinned", "pinnedField"),
     ("tracking", "trackingUrlTemplate"),

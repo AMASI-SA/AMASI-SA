@@ -117,7 +117,9 @@ class _Projection:
             return None
         if value.get("pinnedField") not in (None, "", "UNSPECIFIED"):
             self.gap(path + ".pinnedField")
-        self.only(value, {"text", "pinnedField", "assetPerformanceLabel", "policySummary"}, path)
+        # Google returns review evidence alongside the editable text. It is
+        # retained in the source revision, but never sent as replacement copy.
+        self.only(value, {"text", "pinnedField", "assetPerformanceLabel", "policySummary", "policySummaryInfo"}, path)
         return value["text"]
 
     def texts(self, values: Any, path: str) -> list[str]:
