@@ -1,0 +1,38 @@
+{
+  "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-response-reliability-20261025",
+  "base": "c410cab8c6835e6575fdd3e792a983767182f966",
+  "status": "WIP_SOURCE_CI_PENDING",
+  "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
+  "evidence": {
+    "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
+    "google_account_analysis": "still timed out",
+    "single_campaign": "generic failure",
+    "core_assistant": "neutral technical request returned invalid result after ~16s; no raw response available",
+    "credential_safety": "no credentials read, copied, provisioned or changed; existing Mezan AI integration only"
+  },
+  "hypothesis": "Reasoning/output budget and response contract may cause failures; exact production code not yet logged. Do not claim root cause proven.",
+  "implemented": [
+    "At most6concise recommendations from all supplied campaign evidence",
+    "GPT5 family minimal reasoning with low fallback for configured later models;8000 total output token budget; bounded40s retained",
+    "Safe constant error codes, allowlisted incomplete reason/numeric token counts, allowlisted exception class only; no model output or exception text",
+    "Distinct safe UI explanations for incomplete or unverified results"
+  ],
+  "verification": {
+    "red": "3focused regressions failed; compatible-model case passed",
+    "backend": "101AI/actions/context tests passed in1.64s",
+    "frontend": "CI pending"
+  },
+  "user_autonomy_preferences": {
+    "budget_mode": "preserve_current_approved_total_budget",
+    "objective": "google_native_roas",
+    "source": "user answered structured questions",
+    "provider": "google_ads",
+    "financial_attribution": "native conversion_value/spend only; not net profit"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "production_changed": false,
+  "next_safe_action": "Exact-source CI, independent governed build and new intent-only B; adapter rehearsals, exact-tree merge, original guard then one authorized publish and public/UI probes."
+}

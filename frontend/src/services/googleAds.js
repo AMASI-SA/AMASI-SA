@@ -43,6 +43,8 @@ export function googleErrorMessage(error, fallback = "تعذر إكمال الط
     const detail = error?.response?.data?.detail;
     const message = typeof detail === "object" && !Array.isArray(detail) ? detail?.message : null;
     if (typeof message === "string" && message.trim()) return message;
+    if (detail?.code === "google_ai_response_incomplete") return "لم تكتمل نتيجة ذكاء جوجل. أعد تحليل حملة واحدة؛ لم تُنفّذ أي تغييرات على الحملات.";
+    if (["google_ai_analysis_contract_invalid", "google_ai_recommendation_campaign_unknown", "google_ai_recommendation_evidence_unknown", "google_ai_recommendation_action_not_permitted"].includes(detail?.code)) return "تعذر اعتماد توصية الذكاء على بيانات جوجل المثبتة. أعد التحليل؛ لم تُنفّذ أي تغييرات على الحملات.";
     const analysisRequest = /\/ai\/analyze$/.test(error?.config?.url || "");
     if (analysisRequest && (detail?.code === "google_ai_timeout" || error?.code === "ECONNABORTED" || error?.response?.status === 504)) return "انتهت مهلة تحليل أداء جوجل. جرّب تحليل حملة واحدة أو أعد المحاولة بعد قليل. لم تُنفّذ أي تغييرات على الحملات.";
     if (detail?.code === "google_ai_timeout" || error?.code === "ECONNABORTED" && /\/ai\/draft$/.test(error?.config?.url || "")) return "انتهت مهلة تجهيز مسودة الذكاء. قلّل تفاصيل الطلب ثم أعد تجهيز المسودة للمراجعة.";
