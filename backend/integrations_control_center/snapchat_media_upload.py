@@ -191,7 +191,16 @@ async def available_public_profile_ids(provider: Any, account_id: str) -> set[st
                 seen.add(url)
                 response = await client.get(url, headers=headers, params=params)
                 if response.status_code in {401, 403}:
-                    raise _failure(409, "snapchat_media_needs_reauth_or_role")
+                    # This capability belongs to the Business API. Do not
+                    # confuse its denial with the separately verified Ads
+                    # account role or trigger the application's login retry.
+                    raise HTTPException(status_code=409, detail={
+                        "code": ("snapchat_media_profile_permission_required"
+                                 if response.status_code == 403
+                                 else "snapchat_media_profile_authorization_required"),
+                        "provider_http_status": response.status_code,
+                        "required_capability": "public_profile_sharing_read",
+                    })
                 if response.status_code != 200:
                     raise _failure(502, "snapchat_media_profile_catalog_unavailable")
                 try:

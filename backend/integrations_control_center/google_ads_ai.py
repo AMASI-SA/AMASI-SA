@@ -11,6 +11,7 @@ import asyncio
 import copy
 import inspect
 import json
+import logging
 import os
 import re
 from datetime import date, datetime
@@ -52,6 +53,7 @@ _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,160}$")
 _EMAIL = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _PHONE = re.compile(r"(?<!\w)\+?\d[\d ()-]{7,}\d(?!\w)")
 _CREDENTIAL = re.compile(r"(?i)\b(?:sk[-_][A-Za-z0-9_-]{12,}|bearer\s+[A-Za-z0-9._-]+|(?:api[_ -]?key|access[_ -]?token|password|secret)\s*[:=]\s*\S+)")
+logger = logging.getLogger(__name__)
 
 
 class GoogleAIProductOfferSelection(BaseModel):
@@ -132,12 +134,13 @@ class _Recommendation(BaseModel):
 class _AnalysisOutput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     summary: str = Field(min_length=1, max_length=1600)
-    recommendations: list[_Recommendation] = Field(max_length=30)
+    recommendations: list[_Recommendation] = Field(max_length=6)
     limitations: list[str] = Field(default_factory=list, max_length=20)
 
 
 def _fail(code: str, *, status: int = 502) -> None:
     # Never echo model output, brief text, credentials or provider error bodies.
+    logger.warning("google_ai_failure code=%s status=%s", code, status)
     raise HTTPException(status_code=status, detail={"code": code, "provider_writes": 0})
 
 
@@ -338,16 +341,28 @@ async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[st
         except ValueError:
             timeout = default_timeout
         timeout = min(max(timeout if timeout == timeout else default_timeout, 0.05), 45.0)
+        model = os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini"))
+        # Minimal is supported by the original GPT-5 family, not GPT-5.1+.
+        # Keep explicit model overrides compatible with the existing low effort.
+        if reasoning_effort == "minimal" and not re.fullmatch(r"gpt-5(?:-mini|-nano)?(?:-\d{4}-\d{2}-\d{2})?", model):
+            reasoning_effort = "low"
         response = await asyncio.wait_for(client.responses.create(
             # Same model precedence as campaign_ai_decision_v3._model, without
             # importing/starting the global campaign worker from this boundary.
-            model=os.environ.get("MEZAN_CAMPAIGN_AI_MODEL", os.environ.get("MEZAN_OPENAI_MODEL", "gpt-5-mini")),
+            model=model,
             instructions=instructions, input=encoded_input,
             store=False, tools=[], max_output_tokens=tokens,
             reasoning={"effort": reasoning_effort}, timeout=timeout,
             text={"format": {"type": "json_schema", "name": schema_name, "strict": True, "schema": strict_schema}},
         ), timeout=timeout)
         if getattr(response, "status", "completed") != "completed":
+            reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+            reason = reason if reason in {"max_output_tokens", "content_filter", "max_messages", "steered"} else "unknown"
+            usage = getattr(response, "usage", None)
+            output_tokens = getattr(usage, "output_tokens", None)
+            reasoning_tokens = getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", None)
+            counts = [value if type(value) is int and 0 <= value < 1_000_000_000 else None for value in (output_tokens, reasoning_tokens)]
+            logger.warning("google_ai_incomplete reason=%s output_tokens=%s reasoning_tokens=%s", reason, *counts)
             _fail("google_ai_response_incomplete")
         output = getattr(response, "output_text", None)
         if not isinstance(output, str) or not output.strip() or len(output.encode("utf-8")) > MAX_RESPONSE_BYTES:
@@ -361,6 +376,9 @@ async def _reason(*, instructions: str, payload: dict[str, Any], schema: dict[st
     except asyncio.TimeoutError:
         _fail("google_ai_timeout", status=504)
     except Exception as exc:
+        # Exception text and response bodies may contain private provider data.
+        safe_type = type(exc).__name__ if type(exc).__name__ in {"APITimeoutError", "RateLimitError", "AuthenticationError", "APIConnectionError", "BadRequestError"} else "other"
+        logger.warning("google_ai_provider_failure type=%s", safe_type)
         _fail("google_ai_timeout" if type(exc).__name__ == "APITimeoutError" else "google_ai_unavailable",
               status=504 if type(exc).__name__ == "APITimeoutError" else 502)
     finally:
@@ -692,6 +710,9 @@ def _validate_draft_references(draft: dict[str, Any], resources: dict[str, Any],
 
 
 _ANALYSIS_INSTRUCTIONS = """You provide read-only Google Ads recommendations in Arabic.
+Return at most SIX concise, prioritized recommendations. Do not generate one
+recommendation per campaign. Prefer a small actionable set; zero is valid when
+the available evidence does not support a useful recommendation.
 Use only the supplied evidence and exact currency/account timezone/window.
 Every recommendation must target a supplied campaign_id and cite its exact
 evidence_ids. Do not invent any metric, evidence ID, order result, price,
@@ -796,9 +817,9 @@ async def analyze_google_campaigns(
                         schema=_AnalysisOutput.model_json_schema(), schema_name="mezan_google_readonly_analysis",
                         # Native account reads precede structured reasoning.
                         # Keep the model within the interactive 90s deadline,
-                        # with the same bounded low-effort budget as drafts.
-                        client_factory=client_factory, tokens=6000,
-                        default_timeout=40.0, reasoning_effort="low")
+                        # while limiting the generated recommendation set.
+                        client_factory=client_factory, tokens=8000,
+                        default_timeout=40.0, reasoning_effort="minimal")
     try:
         output = _AnalysisOutput.model_validate(raw)
     except Exception:

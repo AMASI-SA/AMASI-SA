@@ -844,3 +844,39 @@ async def test_incomplete_catalog_exception_cannot_adopt_an_earlier_candidate():
     row = await module._load(db, "owner", preview["upload_id"])
     assert row["status"] == "create_unknown" and row["provider_media_id"] is None
     assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("upstream_status,code", [
+    (401, "snapchat_media_profile_authorization_required"),
+    (403, "snapchat_media_profile_permission_required"),
+])
+async def test_profile_denial_is_capability_specific_and_never_exports_provider_body(
+    monkeypatch, upstream_status, code,
+):
+    requests = []
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(upstream_status, json={
+            "error": "access_denied", "private": "must-not-export",
+        })
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handler), **kwargs,
+    ))
+    provider = SimpleNamespace(context=SimpleNamespace(
+        access_token=AsyncMock(return_value="synthetic-secret"),
+    ))
+    with pytest.raises(HTTPException) as caught:
+        await module.available_public_profile_ids(provider, "account-test")
+    assert caught.value.status_code == 409
+    assert caught.value.detail == {
+        "code": code, "provider_http_status": upstream_status,
+        "required_capability": "public_profile_sharing_read",
+    }
+    assert "must-not-export" not in str(caught.value.detail)
+    assert "synthetic-secret" not in str(caught.value.detail)
+    assert len(requests) == 1 and requests[0].method == "GET"
+    assert str(requests[0].url).startswith(module.BUSINESS_API_BASE + "/adaccounts/account-test/sharing_policies?")
