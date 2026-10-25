@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-publishing-settings-20261025",
   "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "state": "publication_started_waiting_explicit_host_completion",
+  "state": "published_v5_verified_three_probes_live_creator_acceptance_pending",
   "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
   "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
   "behavior": [
@@ -25,11 +25,11 @@
     "ci": "All9 applicable workflows PASS on A and B; creator-candidate workflow skipped by its branch condition.",
     "native_backend": "Exact source native CI407 cases PASS."
   },
-  "production_changed_by_this_source": false,
+  "production_changed_by_this_source": true,
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
-  "next": "Wait for newer explicit Deployment finished, then matching-owner guard verify and require verified:true/checks:3 followed active:false; refresh Mezan and test both creator accounts once. Never repeat Publish changes while this publication is running.",
+  "next": "Reload Mezan,load creators,test readiness once on each connected Amasi account. Record either ready:true or exact fixed-field diagnosis; no provider publishing write until exact approved media selection.",
   "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented.",
   "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
   "deployment_candidate_git_sha": "d6277f4c880f268dd214eb24fe2d972f69929fcc",
@@ -48,8 +48,15 @@
       "release_id": "rg5-34d6e326fc15ee802d4be26820cd3492ebb99e85c8e7e794dfbf53839bfc47bb",
       "validated": true
     },
-    "publish": "Clicked final Publish changes once after exact prepublish; UI Publishing… observed.",
-    "verify": "not started",
+    "publish": "Final Publish changes once; Deployment Started Oct25 20:43 Riyadh, newer Deployment finished20:53 Riyadh.",
+    "verify": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
+      "deployment_git_sha": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
+      "release_id": "rg5-34d6e326fc15ee802d4be26820cd3492ebb99e85c8e7e794dfbf53839bfc47bb",
+      "result_path": "/tmp/tiktok1487-verify.json"
+    },
     "merge_tree": "git --no-pager diff --quiet B..M exit0",
     "actual_host_adapter": "exit0 /tmp/tiktok1487-host-adapter.log on /app fast-forwarded to exact M; no generated cache relocation needed in this build.",
     "merge_ci": "All3 push workflows PASS including CodeQL40217314689,Security40217314694,Release40217314595.",
@@ -59,6 +66,9 @@
       "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
       "deployment_git_sha": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
       "release_id": "rg5-34d6e326fc15ee802d4be26820cd3492ebb99e85c8e7e794dfbf53839bfc47bb"
+    },
+    "guard_after": {
+      "active": false
     }
   },
   "evidence_branch": "codex/tiktok-publishing-settings-evidence-20261025",
