@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-owner-tools-release-r2-20261025",
   "base": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
-  "state": "merged_exact_frozen_tree_app_preflight_pending",
+  "state": "actual_app_adapter_pass_own_lease_prepared_not_published",
   "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
   "source_recovery": "Latest reviewed Google1495 production2a43e8ce introduced seven files,none overlapping the28 TikTok source paths except the old intent,which is retained exactly from J. Fresh candidate parent is J; no previous frozen handoff rewritten.",
   "behavior": [
@@ -70,7 +70,7 @@
     "No actual selected approved public video/caption or live paid activation performed",
     "Fresh exact final-source CI and v5 A/B/host acceptance; manual owner tools now defaulton but not deployed from this branch. Periodic observations remain opt-in and automatic financial action gateway remains incomplete."
   ],
-  "next": "Fresh inactive guard and clean/app tracked state,fastforward exact M,actual/app adapter then own prepare/prepublish and one Publish changes. Verify exact three probes after newer explicit finish.",
+  "next": "Matching prepublish immediately before one final Publish changes. Require newer explicit Deployment finished then verify:true checks3 exact A/runtime/M and active:false.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -115,7 +115,12 @@
     "intent_matches_local_blob": true,
     "B_ci": "All13 applicable workflows PASS including CodeQL40223873194.",
     "host_rehearsal": "First /tmp/tiktok1498-release log lost after code-server reconnection; no acceptance inferred. Fresh inactive guard then clean /tmp/tiktok1498-r2-release at exact B6d3614ac: adapter exit0, backend identity exact Afe7a1ca8 and runtime9d7b9464. No /app source changes or own lease.",
-    "prepare": "not started",
+    "prepare": {
+      "actor": "codex-tiktok1498",
+      "source_git_sha": "fe7a1ca85ef67300b7f4bf5872999ed51349c9e7",
+      "deployment_git_sha": "f72a350e13e896cc384313a450365ad27abeec61",
+      "release_id": "rg5-9d7b946497765f235853ea22224a2bbc86e2fd8e512b60bfe31535fbd8144878"
+    },
     "publish": "not started",
     "verify": "not started",
     "merge": {
@@ -123,7 +128,8 @@
       "commit": "f72a350e13e896cc384313a450365ad27abeec61",
       "tree": "b3cf48acdef34e696a38610a6eee939ff0dcb831",
       "exact_frozen_B_tree": true
-    }
+    },
+    "app_adapter": "exit0 exact Afe7a1ca8/runtime9d7b9464 at/app HEADf72a350e; tracked clean before ff,unrelated untracked/emergent docs preserved."
   },
   "deployment_git_sha": "f72a350e13e896cc384313a450365ad27abeec61"
 }
