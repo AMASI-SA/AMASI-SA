@@ -393,20 +393,17 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
             request = GoogleAIAnalysisInput.model_validate(payload)
         except ValidationError:
             raise problem("google_ai_input_invalid", "راجع الحساب والفترة المطلوب تحليلها.", 422) from None
-        workspace_result = await read_google_workspace(db, actor, from_date=request.date_from, to_date=request.date_to, account_id=request.account_id, campaign_id=request.campaign_id, client_factory=client_factory)
-        policy = await db[POLICIES].find_one({"user_id": actor["user_id"], "account_id": request.account_id, "subject_id": actor["actor_id"], "enabled": True}, {"_id": 0}) or {}
-        if policy.get("expires_at") and policy["expires_at"] <= now().isoformat():
-            policy = {}
-        from .google_ads_ai_actions import REVIEWABLE_ACTIONS
-        permitted = [key for key, action in REVIEWABLE_ACTIONS.items() if
-            (actor["owner"] and action in {"pause", "enable"}) or action in policy.get("allowed_actions", [])]
-        facts = {**workspace_result, "date_from": request.date_from, "date_to": request.date_to, "campaigns": workspace_result["campaigns"] if workspace_result["complete"] else [],
-            "permitted_actions": permitted, "limits": policy}
-        result = await analyze_google_campaigns(db, actor["user_id"], request, facts=facts, client_factory=ai_client_factory)
-        analysis_id = uuid.uuid4().hex
-        created_at = now().isoformat()
-        await db[ANALYSES].insert_one({"analysis_id": analysis_id, "user_id": actor["user_id"], "actor_id": actor["actor_id"], "account_id": request.account_id, "date_from": request.date_from, "date_to": request.date_to, "created_at": created_at, "result": result})
-        return {**result, "analysis_id": analysis_id, "created_at": created_at}
+        from .google_ads_ai_runs import run_analysis
+        return await run_analysis(db, actor, request, reader=read_google_workspace,
+            analyzer=analyze_google_campaigns, client_factory=client_factory,
+            ai_client_factory=ai_client_factory)
+
+    @router.get(root + "/ai/analysis-attempts")
+    async def analysis_attempts(account_id: str, date_from: str | None = None,
+        date_to: str | None = None, actor=Depends(actor_read)):
+        from .google_ads_ai_runs import list_attempts
+        return await list_attempts(db, actor["user_id"], account_id=identifier(account_id),
+            date_from=date_from, date_to=date_to)
 
     @router.post(root + "/ai/recommendations/preview")
     async def recommendation_preview(body: RecommendationPreview, actor=Depends(actor_write)):
