@@ -68,7 +68,7 @@
     "Owner financial policy/budgets/loss limits,trustworthy financial coverage and bounded AI action execution/outcome measurements",
     "No actual selected approved public video/caption or live paid activation performed"
   ],
-  "next": "Financial1503 publication in progress under owncodex-tiktok1503 lease. Require newer explicit finish then verify3/activefalse and owner policy/history read-only smoke. Public video still needs selected owned video and verified external hosting.",
+  "next": "Manual tools and defensive policy releases published/verified. Collect actual owned video/caption/verified external hosting and owner campaign/budget/loss limits; complete remaining financial attribution/growth gateway separately. Actual test-video asset alreadycompleted;never resubmit.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -156,5 +156,16 @@
       "public_post": false,
       "paid_activation": false
     }
+  },
+  "followup_financial_release": {
+    "pr": 1503,
+    "source": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+    "deployment": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+    "explicit_finished": "Oct25 23:11 Asia/Riyadh",
+    "verified": true,
+    "checks": 3,
+    "active_after": false,
+    "owner_policy": "GET passed;saved disabled;no policy writes",
+    "evidence": "ff2d26cc0c388436397e10e7b9b0b096797b6d1b"
   }
 }
