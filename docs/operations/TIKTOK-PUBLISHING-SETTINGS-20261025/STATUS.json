@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-publishing-settings-20261025",
   "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "state": "actual_production_adapter_pass_prepare_pending",
+  "state": "prepared_own_lease_awaiting_publish",
   "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
   "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
   "behavior": [
@@ -29,7 +29,7 @@
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
-  "next": "Read/validate own prepare result, require final merge CodeQL success, then immediate prepublish,one publish,new Deployment finished,matching verify3 and inactive guard; test both creators.",
+  "next": "Final merge CodeQL then immediate prepublish,one Publish changes,new Deployment finished,matching owner verify3 and active:false; recheck two creators.",
   "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented.",
   "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
   "deployment_candidate_git_sha": "d6277f4c880f268dd214eb24fe2d972f69929fcc",
@@ -41,7 +41,13 @@
     "intent_sha256": "5ac916dc8d3b747ec0f07bf044edb69ab30b026325ccca4d4331cf805492f2d1",
     "zip_sha256": "efe92ce2687ed028d9b1edf090448eb161525aa7dc144647d48a7dc884171420",
     "host_rehearsal": "exit0 on /tmp/tiktok1487-release; materialized source A and runtime match exactly; fresh guard inactive after rehearsal.",
-    "prepare": "not started",
+    "prepare": {
+      "actor": "codex-tiktok1487",
+      "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
+      "deployment_git_sha": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
+      "release_id": "rg5-34d6e326fc15ee802d4be26820cd3492ebb99e85c8e7e794dfbf53839bfc47bb",
+      "validated": true
+    },
     "publish": "not started",
     "verify": "not started",
     "merge_tree": "git --no-pager diff --quiet B..M exit0",
