@@ -8,6 +8,8 @@ const ERROR_LABELS = {
     duplicate_piece_group: "يوجد تكرار غير متوقع في مجموعة القطع؛ حدّث الملف ثم أعد الإرسال.",
     invalid_piece_selection: "تعذّر مطابقة القطع المحددة مع الملف الحالي؛ حدّث الصفحة.",
     supplier_dispatch_supplier_not_found: "المورد غير موجود أو موقوف.",
+    supplier_dispatch_category_mismatch: "تصنيف المنتج غير مرتبط بالمورد المحدد.",
+    supplier_dispatch_product_category_required: "حدّد تصنيف المنتج في إعدادات المنتجات قبل إسناده لهذا المورد.",
     supplier_dispatch_service_mismatch: "المورد المحدد لا يقدم خدمة متبقية لهذا المنتج.",
     supplier_dispatch_piece_conflict: "تغيّرت إحدى القطع أثناء الرفع؛ حدّث الملف.",
     preparation_rejection_piece_conflict: "تغيّرت إحدى القطع أثناء الرفض؛ حدّث الملف.",
