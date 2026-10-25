@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-spend-guard-release-20261025",
   "source_base": "f72a350e13e896cc384313a450365ad27abeec61",
-  "state": "frozen_A_B_all_applicable_CI_and_original_host_pass",
+  "state": "superseded_frozen_handoff_production_advanced_before_merge",
   "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
   "contract": [
     "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
@@ -33,7 +33,7 @@
   "manual_release": "PR1498 published Oct25 22:32Riyadh,verified:true checks3 exact Afe7a1ca8/Mf72a350e/runtime9d7b,active:false. Evidence f699864a53f4491ac6613d36e9cabaa146ece7ec.",
   "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
   "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
-  "next": "Fresh production Jf72a350e unchanged; normal exact-tree merge1501 then actual/app adapter,own prepare/prepublish,publish once,explicit finish/verify3/activefalse.",
+  "next": "Preserve frozen1501 A/B. Fresh source directly on Google1500 reviewed J0d8f4524,apply only financial delta,retain J intent; fresh A/B CI required. No1501 merge/publish.",
   "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory.",
   "recovered_wip": {
     "branch": "codex/tiktok-spend-guard-20261025",
@@ -59,6 +59,8 @@
     "prepare": "not started",
     "publish": "not started",
     "A_ci": "All12 applicable workflows PASS; creator-candidate skipped.",
-    "B_ci": "All12 applicable workflows PASS; creator-candidate skipped."
+    "B_ci": "All12 applicable workflows PASS; creator-candidate skipped.",
+    "not_deployed": true,
+    "production_advanced_to": "0d8f4524a26978471a72662cb56bc5e3a4584530"
   }
 }
