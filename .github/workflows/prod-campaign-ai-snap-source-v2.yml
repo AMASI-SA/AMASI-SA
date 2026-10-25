@@ -19,6 +19,7 @@ on:
       - "backend/tests/test_campaign_ai_source_policy_v2.py"
       - "backend/tests/test_campaign_ai_execution_alignment.py"
       - "backend/tests/test_campaign_ai_execution_retry.py"
+      - "backend/tests/test_campaign_ai_snap_budget_drift_p0_5.py"
       - "backend/integrations_control_center/snapchat_account_timezone_manager.py"
       - "backend/integrations_control_center/snapchat_adsquad_performance.py"
       - "backend/integrations_control_center/snapchat_ad_performance.py"
@@ -77,6 +78,7 @@ jobs:
           tests/test_campaign_ai_source_policy_v2.py
           tests/test_campaign_ai_execution_alignment.py
           tests/test_campaign_ai_execution_retry.py
+          tests/test_campaign_ai_snap_budget_drift_p0_5.py
       - name: Run campaign AI regression suite
         run: >-
           python -m pytest -q
@@ -86,6 +88,7 @@ jobs:
           tests/test_campaign_ai_source_policy_v2.py
           tests/test_campaign_ai_execution_alignment.py
           tests/test_campaign_ai_execution_retry.py
+          tests/test_campaign_ai_snap_budget_drift_p0_5.py
           --tb=short
       - name: Enforce source-of-truth and execution policy
         run: |
