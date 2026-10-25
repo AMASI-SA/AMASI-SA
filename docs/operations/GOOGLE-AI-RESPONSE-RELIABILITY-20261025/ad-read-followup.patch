@@ -1,0 +1,102 @@
+diff --git a/backend/integrations_control_center/google_ads_creative_projection.py b/backend/integrations_control_center/google_ads_creative_projection.py
+index b460f101..d6a6a0e3 100644
+--- a/backend/integrations_control_center/google_ads_creative_projection.py
++++ b/backend/integrations_control_center/google_ads_creative_projection.py
+@@ -117,7 +117,9 @@ class _Projection:
+             return None
+         if value.get("pinnedField") not in (None, "", "UNSPECIFIED"):
+             self.gap(path + ".pinnedField")
+-        self.only(value, {"text", "pinnedField", "assetPerformanceLabel", "policySummary"}, path)
++        # Google returns review evidence alongside the editable text. It is
++        # retained in the source revision, but never sent as replacement copy.
++        self.only(value, {"text", "pinnedField", "assetPerformanceLabel", "policySummary", "policySummaryInfo"}, path)
+         return value["text"]
+ 
+     def texts(self, values: Any, path: str) -> list[str]:
+diff --git a/backend/integrations_control_center/google_ads_snapshot.py b/backend/integrations_control_center/google_ads_snapshot.py
+index 372af950..44bd1eaa 100644
+--- a/backend/integrations_control_center/google_ads_snapshot.py
++++ b/backend/integrations_control_center/google_ads_snapshot.py
+@@ -190,6 +190,19 @@ async def snapshot(client, campaign_id, *, children=False, duplicate_controls=Fa
+     owned_resource(rows[0]["campaign"].get("resourceName"), client.customer_id, "campaigns")
+     owned_resource(rows[0].get("campaignBudget", {}).get("resourceName"), client.customer_id, "campaignBudgets")
+     result = {"campaign": rows[0].get("campaign") or {}, "campaign_budget": rows[0].get("campaignBudget") or {}, "groups": [], "ads": [], "criteria": [], "field_gaps": gaps}
++    # GAQL may omit an empty standard Smart Bidding message when its optional
++    # target is unset. Prove the scheme by its enum and that target's selected
++    # child; an unread child or a portfolio reference is not an absent target.
++    campaign = result["campaign"]
++    optional_scheme = {
++        "MAXIMIZE_CONVERSIONS": ("maximizeConversions", "campaign.maximize_conversions.target_cpa_micros"),
++        "MAXIMIZE_CONVERSION_VALUE": ("maximizeConversionValue", "campaign.maximize_conversion_value.target_roas"),
++    }.get(campaign.get("biddingStrategyType"))
++    schemes = ("manualCpc", "percentCpc", "targetSpend", "targetCpa", "targetRoas", "maximizeConversions", "maximizeConversionValue", "targetImpressionShare", "manualCpm", "targetCpm")
++    if optional_scheme and not campaign.get("biddingStrategy") and not any(key in campaign for key in schemes):
++        field, target_child = optional_scheme
++        if target_child not in gaps:
++            campaign[field] = {}
+ 
+     async def read(fields, root, payload, where, required):
+         rows, complete, _ = await compatible_read(client, fields, root, where, required=required)
+diff --git a/backend/tests/test_google_ads_campaign_builder.py b/backend/tests/test_google_ads_campaign_builder.py
+index 518df5bc..a7b54484 100644
+--- a/backend/tests/test_google_ads_campaign_builder.py
++++ b/backend/tests/test_google_ads_campaign_builder.py
+@@ -691,6 +691,19 @@ def test_existing_creative_projection_is_lossless_and_source_revision_tracks_cop
+     assert result["source_revision"] != project_google_group(before, CUSTOMER, "901")["source_revision"]
+ 
+ 
++def test_google_text_policy_summary_info_is_read_only_evidence_not_creative_input():
++    before = complete_source_snapshot()
++    ad = before["ads"][0]["ad"]["responsiveSearchAd"]
++    for text in ad["headlines"] + ad["descriptions"]:
++        text["policySummaryInfo"] = {"approvalStatus": "APPROVED", "reviewStatus": "REVIEWED"}
++    result = project_google_group(before, CUSTOMER, "901")
++    assert result["editable"] is True
++    assert result["group"]["headlines"] == draft_for()["groups"][0]["headlines"]
++    assert "policySummaryInfo" not in str(result["creative"])
++    ad["headlines"][0]["pinnedField"] = "HEADLINE_1"
++    assert project_google_group(before, CUSTOMER, "901")["editable"] is False
++
++
+ @pytest.mark.parametrize("change,field", [
+     ("pinned", "pinnedField"),
+     ("tracking", "trackingUrlTemplate"),
+diff --git a/backend/tests/test_google_ads_workspace.py b/backend/tests/test_google_ads_workspace.py
+index e8e40661..49d02565 100644
+--- a/backend/tests/test_google_ads_workspace.py
++++ b/backend/tests/test_google_ads_workspace.py
+@@ -74,6 +74,34 @@ def campaign_row(metrics=None):
+     return row
+ 
+ 
++@pytest.mark.asyncio
++@pytest.mark.parametrize("strategy,field,target", [
++    ("MAXIMIZE_CONVERSIONS", "maximizeConversions", "target_cpa_micros"),
++    ("MAXIMIZE_CONVERSION_VALUE", "maximizeConversionValue", "target_roas"),
++])
++async def test_snapshot_preserves_targetless_smart_bidding_when_selected_optional_child_is_omitted(strategy, field, target):
++    row = campaign_row()
++    row["campaign"].pop("maximizeConversions")
++    row["campaign"]["biddingStrategyType"] = strategy
++    parent = "campaign.maximize_conversions" if field == "maximizeConversions" else "campaign.maximize_conversion_value"
++    instance = ReadClient({"campaign": [row]}, unavailable_fields={parent})
++    result = await google_ads_snapshot.snapshot(instance, "900")
++    assert result["campaign"][field] == {}
++    # An unavailable optional child is not evidence of an absent target.
++    unavailable = ReadClient({"campaign": [row]}, unavailable_fields={parent, parent + "." + target})
++    unknown = await google_ads_snapshot.snapshot(unavailable, "900")
++    assert field not in unknown["campaign"]
++    # Portfolio targets must be read from their own resource, never fabricated.
++    row["campaign"]["biddingStrategy"] = f"customers/{CUSTOMER}/biddingStrategies/909"
++    portfolio = await google_ads_snapshot.snapshot(ReadClient({"campaign": [row]}), "900")
++    assert field not in portfolio["campaign"]
++    row["campaign"].pop("biddingStrategy")
++    target_key = "targetCpaMicros" if field == "maximizeConversions" else "targetRoas"
++    row["campaign"][field] = {target_key: "2500000" if field == "maximizeConversions" else 2.5}
++    targeted = await google_ads_snapshot.snapshot(ReadClient({"campaign": [row]}), "900")
++    assert targeted["campaign"][field] == row["campaign"][field]
++
++
+ def linked(monkeypatch, instance, *, accounts=None):
+     calls = []
+     async def available_accounts(db, user_id):
