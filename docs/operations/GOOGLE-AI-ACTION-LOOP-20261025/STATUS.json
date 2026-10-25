@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-action-loop-status-20261025",
   "source_base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
-  "status": "MERGED_HOST_ADAPTER_PASS_PUBLICATION_STARTED_PUBLIC_VERIFY_PENDING",
+  "status": "DEPLOYED_PUBLIC_VERIFIED_NATIVE_ANALYSIS_TIMEOUT",
   "scope": "Continue Google AI creation/management toward bounded autonomy; first prove saved advice through the existing native approval, single dispatch, readback and audit workflow.",
   "implemented": [
     "Persisted native analysis identity returned to the UI; saved recommendation preview recovers action and decimal amount server-side.",
@@ -28,9 +28,27 @@
     "intent_transfer": "898830bytes; SHA25667227a0900546117b230771b07d45b4033f9499d5af6257ad37bbf3567e906ec; exactGitblob b54e285261357ddfff2fc6ef16e7cbac6a0988ca verified after native Download.",
     "adapter": "Independent exactB PASS; original/app first attempt refused prepackaged ignored bytecode. Two regular ignoredpyc files verified untracked and preserved by atomic rename to/app/.git/google1479-bytecode-quarantine. PYTHONDONTWRITEBYTECODE original adapter second attempt exited0.",
     "prepare": "Actual/app prepare actorcodex-google1479 exited0.",
-    "prepublish": "Actual/app prepublish exited0,ready_to_publish:true; exactA25076/M39a7/runtime rg5-285482ba matched."
+    "prepublish": "Actual/app prepublish exited0,ready_to_publish:true; exactA25076/M39a7/runtime rg5-285482ba matched.",
+    "public": {
+      "command": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "exit_status": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "25076ac3d4b7dda335394132c3be1c700cd29a4b",
+      "release_id": "rg5-285482ba2323c373e229ac91ba334c64092ecf68b6183179ae1f64d5db15dfae"
+    },
+    "original_adapter": {
+      "exit_status": 0,
+      "log": "/tmp/google1479-host-adapter-2.log",
+      "preserved_ignored_bytecode": ".git/google1479-bytecode-quarantine"
+    },
+    "native_ui": {
+      "account_workspace": "loaded real Google campaigns",
+      "analysis": "POST /api/integrations-v2/google_ads/ai/analyze returned 504; visible error; actionable preview not demonstrated",
+      "provider_writes": 0
+    }
   },
-  "production_changed": false,
+  "production_changed": true,
   "provider_writes": 0,
   "financial_writes": 0,
   "merge": true,
@@ -40,7 +58,7 @@
     "Owner-defined autonomous Google policy and measured rollout gates; no autonomous spending enabled by this checkpoint.",
     "Full live paused campaign creation and supported-family acceptance; conversion/profit evidence completeness and post-action outcome learning remain unproven."
   ],
-  "next_safe_action": "Wait for explicit newer platformDeploymentfinished; then actual/app guard verify --url https://mezansalla.com. Require3 exact public probes and matching leaseclosed. No duplicate publish. If deployment fails, inspect platformlogs,publichealth and abort only matchingowned lease before repair.",
+  "next_safe_action": "Diagnose and fix bounded Google AI analysis timeout, then fresh source/intent release; do not republish PR1479 or claim full autonomy.",
   "code_checkpoint": "ec559575c8b30bd8cbd943439900b54bc4534390",
   "remote_checkpoint": "UPLOADED_AFTER_EXPLICIT_OWNER_AUTHORIZATION_20261025",
   "source_branch": "codex/google-ai-action-loop-20261025",
@@ -61,17 +79,16 @@
   "deployment_sha": "39a7dc82f0ef606cbdd54a1b6a9941514ba02f94",
   "runtime_release_id": "rg5-285482ba2323c373e229ac91ba334c64092ecf68b6183179ae1f64d5db15dfae",
   "production_git_changed": true,
-  "production_live_verified": false,
+  "production_live_verified": true,
   "owned_lease": {
     "actor": "codex-google1479",
-    "active": true,
-    "matching_release": "rg5-285482ba2323c373e229ac91ba334c64092ecf68b6183179ae1f64d5db15dfae"
+    "active": false,
+    "closed_by": "successful three-probe verify",
+    "status_command_exit": 0
   },
   "publication": {
-    "toolbar_only": true,
-    "republish_clicked_once": true,
-    "publish_changes_confirmed_once": true,
-    "state": "Publishing…",
-    "success_unverified": true
+    "state": "Deployment finished",
+    "platform_timestamp": "Oct 25, 06:42 PM",
+    "publish_count": 1
   }
 }
