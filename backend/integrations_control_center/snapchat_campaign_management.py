@@ -2381,6 +2381,8 @@ PROPOSAL_LIST_PROJECTION = {
     "pixel_eligibility": 1,
     "execution_pixel_eligibility": 1,
     "execution_ad_dependency_verification": 1,
+    "creative_dependency_verification": 1,
+    "execution_creative_dependency_verification": 1,
     "intent_fingerprint": 1,
 }
 
@@ -2620,6 +2622,10 @@ def _public_proposal(
         "execution_ad_dependency_verification": _safe_provider_value(
             row.get("execution_ad_dependency_verification") or {}
         ),
+        **({"creative_dependency_verification": _safe_provider_value(row["creative_dependency_verification"])}
+           if row.get("creative_dependency_verification") else {}),
+        **({"execution_creative_dependency_verification": _safe_provider_value(row["execution_creative_dependency_verification"])}
+           if row.get("execution_creative_dependency_verification") else {}),
         "intent_fingerprint": row.get("intent_fingerprint"),
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
@@ -3014,6 +3020,7 @@ async def create_snapchat_management_proposal(
 
     original: dict[str, Any] | None = None
     pixel_eligibility: dict[str, Any] | None = None
+    creative_dependency_verification: dict[str, Any] | None = None
     if payload.action in UPDATE_ACTIONS:
         original = await _read_provider_entity(
             client,
@@ -3176,6 +3183,13 @@ async def create_snapchat_management_proposal(
                     "allowed_ad_types": list(allowed_ad_types),
                 },
             )
+
+    if payload.action == "creative.create":
+        from .snapchat_media_upload import verify_creative_media_dependencies
+
+        creative_dependency_verification = await verify_creative_media_dependencies(
+            client, account_id=payload.account_id, operation=operation
+        )
 
     from .snapchat_decision_metrics import resolve_decision_campaign_id
 
@@ -3342,6 +3356,8 @@ async def create_snapchat_management_proposal(
         "trend_override_reason": payload.trend_override_reason,
         "safety_protocol_version": protocol_version,
         "pixel_eligibility": _safe_provider_value(pixel_eligibility or {}),
+        **({"creative_dependency_verification": _safe_provider_value(creative_dependency_verification)}
+           if creative_dependency_verification else {}),
         "intent_fingerprint": intent_fingerprint,
         "role": role.get("role"),
         "confirm_token_hash": hashlib.sha256(token.encode()).hexdigest(),
@@ -5221,6 +5237,7 @@ async def _execute_snapchat_management_proposal_under_lease(
             )
     final_pixel_eligibility: dict[str, Any] | None = None
     final_ad_dependency_verification: dict[str, Any] | None = None
+    final_creative_dependency_verification: dict[str, Any] | None = None
     if str(row.get("action") or "") == "ad_squad.create":
         try:
             # This is the final provider-read sequence after the durable lease
@@ -5259,6 +5276,19 @@ async def _execute_snapchat_management_proposal_under_lease(
                 user_id=user_id,
                 proposal_id=proposal_id,
                 failure={"code": "snapchat_management_ad_final_preflight_failed"},
+            )
+            raise
+    if str(row.get("action") or "") == "creative.create":
+        try:
+            from .snapchat_media_upload import verify_creative_media_dependencies
+
+            final_creative_dependency_verification = await verify_creative_media_dependencies(
+                client, account_id=str(row.get("account_id") or ""), operation=operation
+            )
+        except Exception:
+            await _reset_execution_claim(
+                db, user_id=user_id, proposal_id=proposal_id,
+                failure={"code": "snapchat_management_creative_final_preflight_failed"},
             )
             raise
     if not snapchat_campaign_mutations_enabled():
@@ -5408,6 +5438,8 @@ async def _execute_snapchat_management_proposal_under_lease(
                     "execution_ad_dependency_verification": _safe_provider_value(
                         final_ad_dependency_verification or {}
                     ),
+                    **({"execution_creative_dependency_verification": _safe_provider_value(final_creative_dependency_verification)}
+                       if final_creative_dependency_verification else {}),
                 }
             },
         )
