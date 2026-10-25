@@ -497,7 +497,7 @@ def _matches(row, after):
     return True
 
 
-async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_factory=TikTokCampaignProvider):
+async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_factory=TikTokCampaignProvider, authorization_check=None):
     async with _admission():
         row = await _get(db, user_id, proposal_id)
         if not secrets.compare_digest(row.get("confirmation_digest", ""), digest) or _digest(_immutable(row)) != digest:
@@ -537,6 +537,11 @@ async def execute_tiktok_campaign(db, user_id, proposal_id, digest, *, provider_
             if claim.modified_count != 1:
                 raise _problem("tiktok_management_already_claimed", "سبق بدء تنفيذ الاقتراح.")
             claimed = True
+            if authorization_check is not None:
+                # A configured automatic policy can be revoked while native
+                # preflight is running. Recheck its exact immutable version at
+                # the final write boundary; ordinary owner approvals unchanged.
+                await authorization_check()
             # Persist submission before the socket call. A crash after here is
             # deliberately uncertain, even if the provider never received it.
             submitted = True
