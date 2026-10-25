@@ -1,5 +1,14 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+## Current source checkpoint — 1519 replaces stale1514
+
+Owner confirms Saudi ads are paused. Preserve that status; no ad/campaign/budget activation is part of this incident or release acceptance. Source A b21814aaaf6314c5a723a4d858a768f8d3be5437/tree501711daa330650032a46bbf422941d68127f47f is remotely recoverable on codex/snap-midnight-spend-20261026, PR1519. Base Jdede6648da7306adb8d0f26a5093f1e7bcb0348d.29sourcepaths carry exact20oldcompletionpaths plus9boundedmidnightpaths;19of20oldpathsarebyteidentical, settingsCI gets exactnewallowlist. Own isolated mezan-snap-midnight now matches remoteA/tree and is clean. Other sharedcheckouts preserved.
+
+Newsubtotal source+tests and fourUI files independently reviewed CLEAR. Root18newregressions: baseline18intendedmissing-contractfailures0.62s;fixed18pass0.63s. Existing48affectedcasespass1.41s/twoexistingPydanticwarnings. Initialbaseline invocation had a wrong destinationpath(no tests); corrected. Initialmalformedheadlinefixture also hit unrelatedlegacy dailyOverflowError; isolateddailyseriesandreranfinalred/green. Only ownedtemporarybaselinefilewasremoved; baselineclean. No product arithmetic changes were made for that adjacentcase.
+
+PR1514closedunmerged/comment6403962798;itsintentMUSTNOTdeploy.1519sourceCIstarted(38runs);sourceReadiness40238354213 pending. No newintentB/lease/rehearsal/merge/publish is claimed. Next: inspectsourceCIactualtests+readinessartifact, freezeOWNintentB, exactGitmanifest/allBchecks inclHostNode20/realMongo, actualEmergentcleanclone under freshinactivegate, normalmerge/treeproof, governed/appbuild/prepare/prepublish/onepublish/verify3/inactive. Then livecardmustshowexplicitknownSnap subtotalaspartial/fullprofitremainsincompletewhileSARunknown; hourlynullsremainnull. Also verify ACTIVEpublisher/recommendationrender and boundedSaudi childreport recovery separately. Sourcev5PublicProfile403 remains independent blocker to nativeadlaunch.
+
+
 ## New-day spend incident — verified diagnosis, 2026-10-26
 
 Owner screenshot and fresh live reads at00:43–00:46Riyadh show Snapchat unavailable while USD has81.32SAR provisional spend. SAR is connected and its exact rolling financial run completed, but it has no hourly rows/source run IDs. Portfolio requires every account amountavailable, so it hides the full total. UI additionally drops quality metadata, says no-data and coerces the unknown grand total to0.
