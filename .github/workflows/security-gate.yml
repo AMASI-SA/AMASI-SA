@@ -179,7 +179,7 @@ jobs:
             throw new Error("Emergent edge header rule for /* is missing");
           }
           const expected = {
-            "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests",
+            "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests",
             "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
@@ -196,6 +196,16 @@ jobs:
           }
           if (!rule.headers["Content-Security-Policy"].includes("connect-src 'self' https: wss:")) {
             throw new Error("HTTP CSP must preserve API and WebSocket connections");
+          }
+          for (const [surface, policy] of Object.entries({
+            edge: rule.headers["Content-Security-Policy"],
+            static: fs.readFileSync("build/_headers", "utf8"),
+            html: fs.readFileSync("build/index.html", "utf8"),
+            preview: fs.readFileSync("vite.config.js", "utf8"),
+          })) {
+            if (!policy.includes("media-src 'self' blob:;")) {
+              throw new Error(`${surface} CSP must allow local video previews`);
+            }
           }
           if (!rule.headers["Permissions-Policy"].startsWith("camera=(self)")) {
             throw new Error("Barcode camera permission must remain same-origin");
