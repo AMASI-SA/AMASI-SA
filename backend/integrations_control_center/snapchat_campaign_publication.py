@@ -393,7 +393,7 @@ def _request(row: dict[str, Any], index: int) -> dict[str, Any]:
         "publication_id": row["publication_id"], "activation_acknowledged": index != 2}
 
 
-async def _active_ancestors(row: dict[str, Any], index: int, provider: Any) -> None:
+async def _active_ancestors(row: dict[str, Any], index: int, provider: Any, *, db: Any = None) -> None:
     if index >= 1:
         campaign = await provider.read_entity("campaign", _verified_id(row, 0))
         if campaign.get("ad_account_id") != row["account_id"] or campaign.get("status") != "ACTIVE":
@@ -410,6 +410,19 @@ async def _active_ancestors(row: dict[str, Any], index: int, provider: Any) -> N
             management.SnapchatManagementProposalInput(**_request(row, 1)), publication_active=True))
         if not management._changed_values_match(expected, group)[0]:
             raise _fail("group_controls_changed")
+    if index >= 3:
+        if db is None:
+            raise _fail("creative_approval_proof_unavailable")
+        child = await _child(db, row, 2)
+        creative_id = _verified_id(row, 2)
+        if not child or _child_id(child) != creative_id:
+            raise _fail("creative_parent_binding_failed")
+        creative = await provider.read_entity("creative", creative_id)
+        expected = management._operation_expected_values(_expected_child_operation(
+            row, 2, child["proposal_id"], child["operation"]))
+        if (creative.get("id") != creative_id or creative.get("ad_account_id") != row["account_id"]
+                or not management._changed_values_match(expected, creative)[0]):
+            raise _fail("approved_creative_controls_changed")
 
 
 async def validate_publication_creation_proof(db: Any, user_id: str,
@@ -434,8 +447,8 @@ async def validate_publication_creation_proof(db: Any, user_id: str,
         raise _fail("direct_active_required")
     provider = management.SnapchatManagementProvider(db, user_id)
     await _dependencies(db, user_id, row["plan"], provider)
-    await _active_ancestors(row, index, provider)
     inventory = await _inventory_proof(db, user_id, row["plan"], _verified_id(row, 0) if index else None)
+    await _active_ancestors(row, index, provider, db=db)
     # Any long provider reads must still be followed by a fresh DB fence.
     fresh = await _load(db, user_id, publication_id)
     _assert_grant(fresh)
@@ -477,8 +490,10 @@ async def assert_publication_write_fence(db: Any, user_id: str,
         raise _fail("activation_disabled")
     provider = management.SnapchatManagementProvider(db, user_id)
     await _dependencies(db, user_id, row["plan"], provider)
-    await _active_ancestors(row, index, provider)
     await _inventory_proof(db, user_id, row["plan"], _verified_id(row, 0) if index else None)
+    # This final provider sequence follows all inventory/dependency awaits.
+    # For an ad it verifies the approved creative content, not merely its type.
+    await _active_ancestors(row, index, provider, db=db)
     fresh = await _load(db, user_id, publication_id)
     _assert_grant(fresh)
     if fresh["revision"] != row["revision"] or fresh.get("lease_token") != row.get("lease_token"):
@@ -722,7 +737,7 @@ async def _child(db: Any, row: dict[str, Any], index: int) -> dict[str, Any] | N
 async def _final_readback(db: Any, row: dict[str, Any]) -> dict[str, Any]:
     provider = management.SnapchatManagementProvider(db, row["user_id"])
     await _dependencies(db, row["user_id"], row["plan"], provider)
-    await _active_ancestors(row, 3, provider)
+    await _active_ancestors(row, 3, provider, db=db)
     creative = await provider.read_entity("creative", _verified_id(row, 2))
     child = await _child(db, row, 2)
     expected = _expected_child_operation(row, 2, child["proposal_id"], child["operation"]) if child else {}

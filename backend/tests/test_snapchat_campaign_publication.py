@@ -19,6 +19,7 @@ from integrations_control_center import snapchat_media_upload as media
 ACTUAL_PRODUCT_READER = module._product
 ACTUAL_PROVIDER_REQUEST = management.SnapchatManagementProvider._request
 ACTUAL_PROVIDER_EXECUTE = management.SnapchatManagementProvider.execute
+ACTUAL_PROVIDER_READ_ENTITY = management.SnapchatManagementProvider.read_entity
 
 
 @pytest.fixture(autouse=True)
@@ -819,19 +820,23 @@ def test_untrusted_reference_alone_does_not_change_the_default_native_builder():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["none", "changed_claim", "same_plan_reapproved"])
+@pytest.mark.parametrize("change", ["none", "changed_claim", "same_plan_reapproved",
+    "creative_headline", "creative_media", "creative_destination"])
 async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolution(environment, monkeypatch, change):
     env = environment
     job = await approved(env)
     calls, token_awaits = [], []
     altered = False
+    ad_token_awaited = False
     real_client = httpx.AsyncClient
 
     async def token_for(method):
-        nonlocal altered
+        nonlocal altered, ad_token_awaited
         token_awaits.append(method)
         await asyncio.sleep(0)
-        if method == "POST" and change != "none" and not altered:
+        if method == "POST" and len(env.writes) == 3:
+            ad_token_awaited = True
+        if method == "POST" and change in {"changed_claim", "same_plan_reapproved"} and not altered:
             altered = True
             parent = env.db[module.PUBLICATION_COLLECTION].rows[0]
             parent["lease_token"] = "different-server-worker-claim"
@@ -840,6 +845,15 @@ async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolu
                 parent.update({"status": "running", "approved_by": "owner",
                     "approved_plan_fingerprint": parent["plan_fingerprint"],
                     "approved_at": media._iso(), "approval_revision": parent["revision"]})
+        elif method == "POST" and change.startswith("creative_") and len(env.writes) == 3 and not altered:
+            altered = True
+            creative = env.entities["provider-creative-1"]
+            if change == "creative_headline":
+                creative["headline"] = "unapproved provider edit"
+            elif change == "creative_media":
+                creative["top_snap_media_id"] = "unapproved-media"
+            else:
+                creative["web_view_properties"]["url"] = "https://unapproved.example/landing"
         return "isolated-provider-test-token"
 
     async def actual_request(self, method, path, **kwargs):
@@ -854,6 +868,12 @@ async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolu
             return httpx.Response(200, json={"request_status": "SUCCESS", "media": [{
                 "sub_request_status": "SUCCESS", "media": {"id": "media-1", "ad_account_id": "account-1",
                     "type": "VIDEO", "media_status": "READY"}}]})
+        if request.method == "GET":
+            plural, entity_id = request.url.path.rsplit("/", 2)[-2:]
+            singular = {"campaigns": "campaign", "adsquads": "adsquad",
+                "creatives": "creative", "ads": "ad"}[plural]
+            return httpx.Response(200, json={"request_status": "SUCCESS", plural: [{
+                "sub_request_status": "SUCCESS", singular: deepcopy(env.entities[entity_id])}]})
         assert request.method == "POST"
         body = json.loads(request.content)
         plural = next(iter(body))
@@ -886,12 +906,23 @@ async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolu
     monkeypatch.setattr(management.httpx, "AsyncClient", client)
     monkeypatch.setattr(management.SnapchatManagementProvider, "_request", actual_request)
     monkeypatch.setattr(management.SnapchatManagementProvider, "execute", ACTUAL_PROVIDER_EXECUTE)
+    monkeypatch.setattr(management.SnapchatManagementProvider, "read_entity", ACTUAL_PROVIDER_READ_ENTITY)
     if change == "none":
         result = await module.run_publication(env.db, "owner", job["publication_id"])
         assert result["configured_delivery_status"] == "ACTIVE"
         assert result["provider_delivery_status"] == ["PENDING_REVIEW"]
         assert env.writes == list(module.ACTIONS)
         assert sum(method == "POST" for method, _ in calls) == 4
+    elif change.startswith("creative_"):
+        with pytest.raises(HTTPException):
+            await module.run_publication(env.db, "owner", job["publication_id"])
+        assert ad_token_awaited and altered
+        assert env.writes == list(module.ACTIONS[:3])
+        assert not any(method == "POST" and path.endswith("/ads") for method, path in calls)
+        # A repeated explicit resume also cannot publish the edited content.
+        with pytest.raises(HTTPException):
+            await module.run_publication(env.db, "owner", job["publication_id"])
+        assert env.writes == list(module.ACTIONS[:3])
     else:
         with pytest.raises(HTTPException):
             await module.run_publication(env.db, "owner", job["publication_id"])

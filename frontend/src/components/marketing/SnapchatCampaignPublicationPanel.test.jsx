@@ -26,6 +26,7 @@ jest.mock("./SnapchatMediaUploadPanel", () => function FakeUpload(props) {
 });
 
 let root, container;
+const originalCrypto = Object.getOwnPropertyDescriptor(window, "crypto");
 const job = { publication_id: "job-1", account_id: "account-1", status: "approved", revision: 2,
     plan: { campaign_name: "Campaign", daily_budget_micro: 25000000, currency: "SAR", country: "sa" },
     steps: [{ action: "campaign.create", status: "pending", provider_entity_id: null }] };
@@ -44,11 +45,21 @@ beforeEach(() => {
     service.approveSnapchatPublication.mockResolvedValue(job);
     service.executeSnapchatPublication.mockResolvedValue(job);
     service.getSnapchatPublication.mockResolvedValue(job);
-    Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: () => "stable-browser-key" });
+    Object.defineProperty(window, "crypto", {
+        configurable: true,
+        value: { randomUUID: () => "stable-browser-key" },
+    });
     container = document.createElement("div"); document.body.appendChild(container);
     root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => {
+    if (root) await act(async () => root.unmount());
+    container?.remove();
+    root = undefined;
+    container = undefined;
+    if (originalCrypto) Object.defineProperty(window, "crypto", originalCrypto);
+    else delete window.crypto;
+});
 async function render(accountId = "account-1", ownerId = "owner") {
     await act(async () => root.render(<Panel ownerId={ownerId} accountId={accountId} />));
 }

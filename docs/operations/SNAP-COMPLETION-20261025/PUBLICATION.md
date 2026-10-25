@@ -47,6 +47,14 @@ Both native mutation and activation flags must permit the write. The flags,
 inventory, dependencies and invoking worker claim are rechecked at the final
 boundary after awaited credential resolution.
 
+Before an ACTIVE ad POST, the final provider-read sequence additionally rereads
+the exact already-created creative against the approved parent content, after
+the inventory/dependency awaits. It requires the bound completed child, verified
+creative ID/account and every approved creative control, including headline,
+media and signed destination URL. Only then may the final parent claim/revision
+fence and flag checks permit transport. Content drift during the ad's token
+await is blocked before the ad POST, rather than discovered after publication.
+
 ## Native integration
 
 The bounded integration surfaces are:
@@ -199,3 +207,12 @@ approval/launch/lost-checkpoint tests are required before publication. The
 dedicated workflow requires the Mongo cases and includes existing native write
 guard regressions. All verification results must reference the exact integrated
 source checkpoint. No test is authorized to send live advertising/budget writes.
+
+The transport regression mutates provider headline, media or destination during
+the actual ad credential await. It exercises public orchestration and the real
+native provider HTTP methods through MockTransport, expects only the first
+three creates and zero ad POSTs, and checks that an explicit resume cannot
+recreate or publish the changed creative. The valid-content four-create path
+remains the positive control. These tests can be copied onto the earlier source
+to demonstrate that the original defect reaches the ad POST before readback
+detects the content change.
