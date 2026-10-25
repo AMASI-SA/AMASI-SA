@@ -43,6 +43,8 @@ test("AI timeout has an actionable safe explanation without echoing private erro
 test("incomplete and unverified AI results have distinct safe explanations", () => {
     const incomplete = googleErrorMessage({ response: { data: { detail: { code: "google_ai_response_incomplete", raw: "private-model-text" } } } });
     expect(incomplete).toContain("لم تكتمل نتيجة");
+    // The same boundary serves draft generation and account analysis.
+    expect(incomplete).not.toContain("تحليل حملة");
     const invalid = googleErrorMessage({ response: { data: { detail: { code: "google_ai_recommendation_evidence_unknown", raw: "private-model-text" } } } });
     expect(invalid).toContain("بيانات جوجل المثبتة");
     for (const message of [incomplete, invalid]) expect(message).not.toContain("private-model-text");
