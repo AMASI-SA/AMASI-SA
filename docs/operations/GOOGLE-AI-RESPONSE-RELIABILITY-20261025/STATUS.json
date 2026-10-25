@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-25T20:50:23.857Z",
+  "updated_at": "2026-10-25T20:59:37.938Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -35,7 +35,7 @@
       "pmax_analysis": "5recommendations succeeded",
       "evidence_units": "4conversions with no SAR;31.49×ROAS;moneySAR",
       "budget_prose": "No billing breach/cut recommendation inferred, but summary still says spend above announced daily budget; average wording not fully accepted",
-      "account_analysis": "onegeneric failure on refresh; oneexplicit account analysis nowrunning after PMaxsuccess",
+      "account_analysis": "2generic failures after1509 publish, including explicit account analysis after PMaxsuccess; latest stored account success20:29:59Z, PMaxsuccess20:47:37Z. Need rootcause; no retries claimed as proof.",
       "screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/google1509-live-analysis.jpg"
     }
   },
@@ -68,7 +68,7 @@
     "investigate saved-analysis list loading error",
     "standing policy and full autonomous executor remain incomplete"
   ],
-  "next_safe_action": "Read current explicit account AI analysis result in native Mezan. Finish1512 exact-B CI including independent Host20; check current production HEAD and merge ONLY exactBtree. If base advances preservefrozenpair and recreate source onlatest; neverrebase. Actual guard inactive after1509verify. Original/app ff-only to ownnextM thenadapterexit0prepareprepublishONEpublishexplicitfinishguard3probes. Testadedit+extraadreview onPAUSEDtestcampaign; neveractivateoldsecondcreative. Google standingpolicy/autoexecutor stillincomplete. Do not touch Snapchat.",
+  "next_safe_action": "Read sanitized diagnostic lines from original /app. After process finished, actual guard inactive, ff-only f01beac1e04055694f02110d69020ce691bb0ad9, originalhostadapter andexit0; preparecodex-google1512/prepublish/ONEpublish/explicitfinish/guard3probes/inactive. Test contentedit and additionaladpreview on PAUSED campaign. Then address accountanalysis failure and standingpolicy/autoexecutor; fullgoalnotcomplete. NoSnapchat edits.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -83,7 +83,16 @@
     "intent_sha256": "910155a83faa28368e76fdfc72f0a7546ddb9e51b50fe27dd1e70e51c47a0ca4",
     "sourceCI": "386backend passed11.20s;100frontend12suites pass",
     "final_B_readiness_run": 40232531614,
-    "status": "frozen exact B finalCI running, unmerged/unpublished",
-    "live_verified": false
+    "status": "MERGED exact B tree; all24checks success/expected skips; original/App NOT yet updated or rehearsed, no1512lease/publish",
+    "live_verified": false,
+    "merge": "f01beac1e04055694f02110d69020ce691bb0ad9"
+  },
+  "diagnostic": {
+    "commit": "8ac86216f3e0b7c01edef3f4d446309b16913f72",
+    "path": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/diagnose_google_account_analysis.py",
+    "scope": "sameaccount native read + structuredmodel only, no campaign execution, prints phases/count/code only",
+    "first_attempt": "system python missing dotenv before anyprovider/model call",
+    "actual_runtime_python": "/root/.venv/bin/python from supervisor config",
+    "current_state": "running actual runtime diagnostic; output .git/google1509-evidence/diagnose-runtime.log, do not modify sharedsource until completes"
   }
 }
