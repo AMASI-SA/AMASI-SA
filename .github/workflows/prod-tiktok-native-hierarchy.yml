@@ -26,6 +26,7 @@ on:
       - "frontend/src/pages/CustomerIntelligenceCenter*"
       - "frontend/src/marketingAdsLiveWorkspaceEnhancer*"
       - "frontend/src/components/marketing/TikTok*"
+      - "frontend/src/components/marketing/tiktokFileTransfer*"
       - "frontend/src/components/marketing/AdsPerformanceExplorer*"
       - ".github/workflows/prod-tiktok-native-hierarchy.yml"
 
@@ -80,6 +81,8 @@ jobs:
           tests/test_tiktok_creator_accounts.py
           tests/test_tiktok_content_routes.py
           tests/test_tiktok_content_publishing.py
+          tests/test_tiktok_file_publishing.py
+          tests/test_tiktok_post_copy.py
           tests/test_tiktok_comments_routes.py
           tests/test_tiktok_comments_ingress.py
           tests/test_tiktok_comment_replies.py
@@ -118,7 +121,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokAdBuilder|TikTokChildControls|TikTokSpendGuard|TikTokCampaignAnalysis|TikTokCampaignProducts|CampaignResearchStatus|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|TikTokReplyDelivery|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|tiktokFileTransfer|TikTokFilePublishing|TikTokCaptionComposer|TikTokEntityWorkspace|TikTokAdBuilder|TikTokChildControls|TikTokSpendGuard|TikTokCampaignAnalysis|TikTokCampaignProducts|CampaignResearchStatus|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|TikTokReplyDelivery|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"

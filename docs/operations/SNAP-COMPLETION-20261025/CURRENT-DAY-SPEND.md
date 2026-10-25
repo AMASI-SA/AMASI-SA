@@ -1,7 +1,7 @@
 # Current-day Snapchat chart and executive profit
 
 Task branch: `codex/snap-zero-source-20261026`. Reviewed starting Production:
-`cb08def11cdf5ef01ea28df253bd201891b91adc` (includes unrelated Google1522).
+`219c4db4a45cbfc2bc5499909c0fcad5e3ddb318` (retains Google1522 and TikTok1524).
 
 ## Acceptance and present state
 
@@ -89,3 +89,10 @@ The Public Profile sharing/read403 remains a separate ad-launch capability
 blocker. No wider authorization or real campaign launch is implied here.
 Issue1006 has reached its comment limit; the task PR and committed task records
 carry continuation evidence.
+
+Production advanced to the reviewed TikTok1524 merge while source CI was running.
+Its19 changed paths do not overlap this17-path Snapchat increment. The new
+source is a normal ancestry-preserving integration of current Production and
+the Snapchat task; its intent remains byte-identical to the new Production
+base. Fresh exact-source CI/artifact is required again; prior-source artifacts
+are not deployment inputs.
