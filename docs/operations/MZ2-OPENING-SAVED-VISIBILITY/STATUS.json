@@ -1,6 +1,6 @@
 {
-  "status": "PREVIEW_BUNDLE_BUILD_RUNNING_ACTIVATION_BLOCKED",
-  "preview_source": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
+  "status": "PREVIEW_ACTIVATED_VERIFIED",
+  "preview_source": "1f61d4d416d9f47858e4e7cfab54fd572a702e6d",
   "scope": "Saved opening visibility and server-confirmed acknowledgement; no financial behavior changes",
   "checks": {
     "frontend": "62 passed",
@@ -14,9 +14,13 @@
     "Retain selected kind after success",
     "Remount opening view on session scope change"
   ],
-  "deployment": "Not deployed. Integrated browser control is not available in this turn. Before activation inspect fresh remote Release Guard, current Supervisor and persistent Preview runtime. Preserve existing DB/key and unrelated files; do not switch to production Mongo or activate writers.",
+  "deployment": "Preview only activated 2026-10-25 via cooperating task. HTTP 200 health, policy and frontend meta verified; source matches. Five existing balances visible with saved markers; database hashes unchanged. Release Guard inactive before and after. Production not deployed; no business writes or writer activation.",
   "business_writes": false,
   "source_sha": "1f61d4d416d9f47858e4e7cfab54fd572a702e6d",
   "workflow_run": 40199686191,
-  "workflow_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/40199686191"
+  "workflow_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/40199686191",
+  "activation_evidence": "/app/.worktrees/mz2-opening-saved-visibility-20261025/activation-evidence.json",
+  "runtime_path": "/app/.worktrees/mz2-opening-saved-visibility-20261025",
+  "artifact_id": 12601356351,
+  "verification_limit": "Save and Save-and-finish were not executed live; save behavior covered by automated tests."
 }
