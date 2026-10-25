@@ -188,3 +188,93 @@ test("reads a multi-day four-platform series without forcing refresh", async () 
     expect(result.daily_spend).toHaveLength(2);
     expect(result.daily_spend[1].google).toBe(8);
 });
+
+
+test("preserves incomplete Snapchat proof and null totals without inventing zero", () => {
+    const payload = fourPlatformPayload();
+    payload.provider_totals_sar.snapchat = null;
+    payload.total_sar = null;
+    payload.daily_spend[0].snapchat = 81.32;
+    payload.hourly_spend[0].snapchat = null;
+    payload.providers.snapchat = {
+        ...payload.providers.snapchat, total_sar: null, data_quality: "incomplete",
+        data_state: "unknown_incomplete", amount_available: false, amount_complete: false,
+        coverage_complete: false, provisional: false,
+        reason_codes: ["unified_projection_financial_reconciliation_or_fx_incomplete", { unsupported: true }],
+    };
+    payload.spend_quality = { status: "incomplete", amount_available: false, amount_complete: false, provisional: false };
+    const normalized = normalizeDashboardAdsSpend(payload);
+    expect(normalized.total_sar).toBeNull();
+    expect(normalized.provider_totals_sar.snapchat).toBeNull();
+    expect(normalized.daily_spend[0].snapchat).toBe(81.32);
+    expect(normalized.hourly_spend.find((hour) => hour.hour_index === 3).snapchat).toBeNull();
+    expect(normalized.providers.snapchat).toMatchObject({
+        connected: true, data_quality: "incomplete", data_state: "unknown_incomplete",
+        amount_available: false, amount_complete: false, coverage_complete: false, provisional: false,
+        reason_codes: ["unified_projection_financial_reconciliation_or_fx_incomplete"],
+    });
+    expect(normalized.spend_quality).toEqual(payload.spend_quality);
+    expect(normalized.provider_totals_sar.google).toBe(7.5);
+});
+
+
+test.each([81.32, 0])("preserves available provisional Snapchat amount %s and missing hourly detail", (amount) => {
+    const payload = fourPlatformPayload();
+    payload.provider_totals_sar.snapchat = amount;
+    payload.total_sar = amount + 32.5;
+    payload.providers.snapchat = {
+        ...payload.providers.snapchat, total_sar: amount, data_quality: "provisional",
+        data_state: amount > 0 ? "provisional_data" : "provisional_zero",
+        amount_available: true, amount_complete: false, coverage_complete: false, provisional: true,
+        reason_codes: ["open_riyadh_day_reconciliation_pending"],
+    };
+    payload.spend_quality = { status: "provisional", amount_available: true, amount_complete: false, provisional: true };
+    payload.hourly_spend = [{ date: payload.date_from, hour_index: 0, hour: "00:00", snapchat: null }];
+    const normalized = normalizeDashboardAdsSpend(payload);
+    expect(normalized.provider_totals_sar.snapchat).toBe(amount);
+    expect(normalized.providers.snapchat).toMatchObject({
+        data_state: payload.providers.snapchat.data_state,
+        amount_available: true, amount_complete: false, provisional: true,
+    });
+    expect(normalized.hourly_spend[0].snapchat).toBeNull();
+    expect(normalized.spend_quality).toEqual(payload.spend_quality);
+    expect(normalized.total_sar).toBe(amount + 32.5);
+});
+
+
+test.each([[81.32, 99.71], [0, 0], [null, null]])(
+    "keeps explicit known Snapchat amount %s separate from the unavailable full total", (known, knownAll) => {
+        const payload = fourPlatformPayload();
+        payload.provider_totals_sar.snapchat = null;
+        payload.total_sar = null;
+        payload.known_total_sar = knownAll;
+        payload.providers.snapchat = {
+            ...payload.providers.snapchat, amount_available: false, data_quality: "incomplete",
+            data_state: "unknown_incomplete", known_total_sar: known,
+            known_account_count: known === null ? 0 : 1, incomplete_account_count: 1,
+        };
+        payload.hourly_spend[0].snapchat = null;
+        const normalized = normalizeDashboardAdsSpend(payload);
+        expect(normalized.providers.snapchat).toMatchObject({
+            known_total_sar: known, known_account_count: known === null ? 0 : 1,
+            incomplete_account_count: 1, amount_available: false,
+        });
+        expect(normalized.total_sar).toBeNull();
+        expect(normalized.provider_totals_sar.snapchat).toBeNull();
+        expect(normalized.known_total_sar).toBe(knownAll);
+        expect(normalized.hourly_spend.find((hour) => hour.hour_index === 3).snapchat).toBeNull();
+    },
+);
+
+
+test.each([false, true, { amount: 81.32 }, -1, NaN])("rejects unsupported known amount %p without making zero", (known) => {
+    const payload = fourPlatformPayload();
+    payload.known_total_sar = known;
+    payload.providers.snapchat = { ...payload.providers.snapchat,
+        known_total_sar: known, known_account_count: -1, incomplete_account_count: 1.5 };
+    const normalized = normalizeDashboardAdsSpend(payload);
+    expect(normalized.known_total_sar).toBeNull();
+    expect(normalized.providers.snapchat.known_total_sar).toBeNull();
+    expect(normalized.providers.snapchat.known_account_count).toBeNull();
+    expect(normalized.providers.snapchat.incomplete_account_count).toBeNull();
+});

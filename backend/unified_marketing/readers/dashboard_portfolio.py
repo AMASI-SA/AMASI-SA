@@ -13,12 +13,28 @@ def _sum_known(values):
         return None
 
 
+def _available_account_amount(report):
+    value = report.get("total_sar")
+    if ((report.get("quality") or {}).get("amount_available") is not True
+            or not isinstance(value, (int, float)) or isinstance(value, bool)):
+        return None
+    try:
+        amount = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return amount if isfinite(amount) and amount >= 0 else None
+
+
 def combine_dashboard_spend(reports, accounts, date_from, date_to, timezone_name):
     qualities = [r.get("quality") or {} for r in reports]
     available = all(q.get("amount_available") is True for q in qualities)
     complete = all(q.get("complete") is True for q in qualities)
     provisional = any(q.get("provisional") is True for q in qualities)
     total = _sum_known([r.get("total_sar") for r in reports]) if available else None
+    known_amounts = [amount for report in reports
+                     if (amount := _available_account_amount(report)) is not None]
+    known_sum = sum(known_amounts)
+    known_total = round(known_sum, 2) if known_amounts and isfinite(known_sum) else None
     daily, states, hourly = {}, {}, {}
     for offset in range((date_to - date_from).days + 1):
         day = (date_from + timedelta(days=offset)).isoformat()
@@ -51,6 +67,8 @@ def combine_dashboard_spend(reports, accounts, date_from, date_to, timezone_name
     return {
         "accounts": accounts, "rows": [row for r in reports for row in r.get("rows", [])] if available else [],
         "total_sar": total, "daily_sar": daily, "daily_state": states, "hourly_sar": hourly,
+        "known_total_sar": known_total, "known_account_count": len(known_amounts),
+        "incomplete_account_count": len(reports) - len(known_amounts),
         "bank_commissions": commission_summary,
         "period": {"date_from": date_from.isoformat(), "date_to": date_to.isoformat(), "timezone": timezone_name},
         "quality": {"status": "complete" if complete else "provisional" if available and provisional else "incomplete",

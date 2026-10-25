@@ -68,13 +68,41 @@ function hasSeries(points, key) {
     ));
 }
 
+function hasAmount(value) {
+    return value !== null && value !== undefined && value !== ""
+        && Number.isFinite(Number(value)) && Number(value) >= 0;
+}
+
+function hasKnownAmount(value) {
+    return (typeof value === "number" || typeof value === "string" && value.trim() !== "")
+        && hasAmount(value);
+}
+
+function incompleteSnapchatValue(state) {
+    return hasKnownAmount(state.known_total_sar)
+        ? `المتاح ${money(state.known_total_sar)} · غير مكتمل`
+        : "بيانات غير مكتملة";
+}
+
+function snapchatAmountIncomplete(state) {
+    return state.connected === true && (
+        state.amount_available === false
+        || state.data_state === "unknown_incomplete"
+        || state.data_quality === "incomplete"
+    );
+}
+
 function providerValue(data, provider) {
     const state = data?.providers?.[provider] || {};
     const total = data?.provider_totals_sar?.[provider];
-    if (total !== null && total !== undefined && Number.isFinite(Number(total))) {
-        return money(total);
+    if (provider === "snapchat" && snapchatAmountIncomplete(state)) {
+        return incompleteSnapchatValue(state);
+    }
+    if (hasAmount(total)) {
+        return `${money(total)}${provider === "snapchat" && state.provisional === true ? " · أولي" : ""}`;
     }
     if (!state.connected) return "غير مربوط";
+    if (provider === "snapchat") return incompleteSnapchatValue(state);
     return "لا بيانات";
 }
 
@@ -93,7 +121,17 @@ export function DashboardAdsSpendCardContent({
         () => chartPoints(data, singleDay),
         [data, singleDay],
     );
-    const total = Number(data?.total_sar || 0);
+    const snapchatState = data?.providers?.snapchat || {};
+    const totalIncomplete = data?.spend_quality?.amount_available === false
+        || data?.spend_quality?.status === "incomplete"
+        || snapchatAmountIncomplete(snapchatState);
+    const totalProvisional = data?.spend_quality?.provisional === true
+        || snapchatState.provisional === true;
+    const totalLabel = hasAmount(data?.total_sar) && !totalIncomplete
+        ? `${money(data.total_sar)}${totalProvisional ? " · أولي" : ""}`
+        : hasKnownAmount(data?.known_total_sar)
+            ? `غير مكتمل، المتاح ${money(data.known_total_sar)}`
+        : data ? "بيانات غير مكتملة" : "بانتظار البيانات";
     const displayError = error || data?.refresh_error || "";
     const xKey = singleDay ? "hour" : "date";
     const availableSeries = useMemo(
@@ -159,8 +197,8 @@ export function DashboardAdsSpendCardContent({
                         <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
                             {singleDay ? "عرض ساعي" : "عرض يومي"}
                         </div>
-                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900">
-                            إجمالي المنصات: {money(total)}
+                        <div className="rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-[11px] font-extrabold text-yellow-900" data-testid="dashboard-ads-spend-total">
+                            إجمالي المنصات: {totalLabel}
                         </div>
                     </div>
                 </div>
@@ -186,7 +224,16 @@ export function DashboardAdsSpendCardContent({
                                     {providerValue(data, provider)}
                                 </div>
                                 <div className="mt-0.5 text-[9px] font-semibold text-slate-400">
-                                    {singleDay
+                                    {provider === "snapchat" && state.connected && (
+                                        snapchatAmountIncomplete(state)
+                                        || !hasAmount(data?.provider_totals_sar?.snapchat)
+                                    )
+                                        ? hasKnownAmount(state.known_total_sar)
+                                            ? "بيانات الحسابات غير مكتملة"
+                                            : "بانتظار اكتمال بيانات سناب"
+                                        : provider === "snapchat" && state.connected && singleDay && !availableSeries.snapchat
+                                            ? "تفصيل سناب الساعي غير مكتمل"
+                                        : singleDay
                                         ? provider === "tiktok"
                                             && state.hourly_source === "make_daily_total_marker"
                                             ? "إجمالي Make عند آخر تحديث"

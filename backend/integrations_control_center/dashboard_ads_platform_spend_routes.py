@@ -494,6 +494,9 @@ async def build_dashboard_platform_spend(
                 "hourly_available": hourly_facts[provider],
                 "hourly_source": hourly_sources[provider] or None,
                 "total_sar": totals[provider],
+                "known_total_sar": _number(snapchat.get("known_total_sar")),
+                "known_account_count": snapchat.get("known_account_count"),
+                "incomplete_account_count": snapchat.get("incomplete_account_count"),
                 "data_quality": snap_quality.get("status"),
                 "data_state": snap_quality.get("data_state"),
                 "coverage_complete": snap_quality.get("coverage_complete") is True,
@@ -527,6 +530,10 @@ async def build_dashboard_platform_spend(
     known_total_sar = round(
         sum(value for value in totals.values() if value is not None), 2
     )
+    full_provider_total_sar = known_total_sar
+    snapchat_known = _number(snapchat.get("known_total_sar"))
+    if totals["snapchat"] is None and snapchat_known is not None:
+        known_total_sar = round(known_total_sar + snapchat_known, 2)
     snap_amount_complete = (
         (snapchat.get("quality") or {}).get("amount_complete") is True
     )
@@ -539,7 +546,7 @@ async def build_dashboard_platform_spend(
         and not snap_amount_complete
         and (snapchat.get("quality") or {}).get("provisional") is True
     )
-    total_sar = known_total_sar if snap_amount_available else None
+    total_sar = full_provider_total_sar if snap_amount_available else None
     return {
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),

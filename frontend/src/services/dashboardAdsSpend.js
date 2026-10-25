@@ -15,6 +15,15 @@ function nonnegative(value) {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function knownAmount(value) {
+    if (!(typeof value === "number" || typeof value === "string" && value.trim() !== "")) return null;
+    return nonnegative(value);
+}
+
+function accountCount(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 function safeDate(value) {
     return ISO_DATE_RE.test(value || "") ? value : null;
 }
@@ -55,6 +64,19 @@ function normalizeProvider(provider, value = {}) {
         hourly_source: String(row.hourly_source || ""),
         total_sar: nonnegative(row.total_sar),
         data_quality: row.data_quality ? String(row.data_quality) : null,
+        ...(provider === "snapchat" ? {
+            data_state: typeof row.data_state === "string" ? row.data_state : null,
+            provisional: row.provisional === true,
+            amount_available: typeof row.amount_available === "boolean" ? row.amount_available : null,
+            amount_complete: typeof row.amount_complete === "boolean" ? row.amount_complete : null,
+            coverage_complete: typeof row.coverage_complete === "boolean" ? row.coverage_complete : null,
+            known_total_sar: knownAmount(row.known_total_sar),
+            known_account_count: accountCount(row.known_account_count),
+            incomplete_account_count: accountCount(row.incomplete_account_count),
+            reason_codes: Array.isArray(row.reason_codes)
+                ? row.reason_codes.filter((code) => typeof code === "string").slice(0, 20)
+                : [],
+        } : {}),
         last_sync_at: row.last_sync_at ? String(row.last_sync_at) : null,
         data_delay_minutes: nonnegative(row.data_delay_minutes),
     };
@@ -94,7 +116,17 @@ export function normalizeDashboardAdsSpend(payload = {}) {
         hourly_spend: hourly,
         providers,
         provider_totals_sar: totals,
-        total_sar: nonnegative(value.total_sar) ?? 0,
+        total_sar: nonnegative(value.total_sar),
+        known_total_sar: knownAmount(value.known_total_sar),
+        spend_quality: value.spend_quality && typeof value.spend_quality === "object"
+            && !Array.isArray(value.spend_quality) ? {
+                status: typeof value.spend_quality.status === "string" ? value.spend_quality.status : null,
+                provisional: value.spend_quality.provisional === true,
+                amount_available: typeof value.spend_quality.amount_available === "boolean"
+                    ? value.spend_quality.amount_available : null,
+                amount_complete: typeof value.spend_quality.amount_complete === "boolean"
+                    ? value.spend_quality.amount_complete : null,
+            } : null,
         refresh: value.refresh && typeof value.refresh === "object"
             ? value.refresh
             : null,
