@@ -29,6 +29,8 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "tiktok_creator_api.py",
         base / "tiktok_creator_accounts.py",
         base / "tiktok_content_publishing.py",
+        base / "tiktok_file_api.py",
+        base / "tiktok_file_publishing.py",
         base / "tiktok_comments_ingress.py",
         base / "tiktok_comment_replies.py",
     )

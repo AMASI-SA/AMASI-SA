@@ -1,6 +1,6 @@
 import React, { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import TikTokContentWorkspace from "./TikTokContentWorkspace";
+import { TikTokURLContentWorkspace as TikTokContentWorkspace } from "./TikTokContentWorkspace";
 import api from "../../lib/api";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() } }));
