@@ -1,9 +1,9 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-ai-response-reliability-20261025",
-  "base": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
-  "status": "WIP_SOURCE_REBASED_ON_CURRENT_PRODUCTION_CI_PENDING",
+  "branch": "codex/google-ai-response-reliability-r2-20261025",
+  "base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
+  "status": "SOURCE_CI_RUNNING_WAITING_FOR_FOREIGN_SNAPCHAT_RELEASE",
   "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
@@ -34,18 +34,41 @@
   "provider_writes": 0,
   "financial_writes": 0,
   "production_changed": false,
-  "next_safe_action": "Run exact new-A CI; wait until OTHER release owner closes its active lease. Do not touch /app, publish or start host rehearsal. Then fresh status inactive, independent A build/freeze B.",
+  "next_safe_action": "Run exact NEW source CI; check actual /app guard (cd /app first), then wait until foreign lease inactive before new host rehearsal. Rebuild/refreeze against442bdd...; never deploy oldA2 intent.",
   "concurrent_update": {
     "pr": 1482,
     "scope": "TikTok creator readiness",
     "files_overlap": false,
     "preserved": true
   },
-  "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
+  "prior_frozen_source": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
+  "prior_source_ci": "all9pass/379backend/96frontend",
+  "prior_freeze": "exit0 against73901...; superseded before B/merge/publish; immutable prior source retained",
+  "concurrent_updates": [
+    {
+      "pr": 1482,
+      "scope": "TikTok",
+      "preserved": true
+    },
+    {
+      "pr": 1483,
+      "scope": "Snapchat",
+      "preserved": true
+    }
+  ],
+  "source_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1485",
   "shared_release_guard": {
     "active": true,
-    "actor": "codex-tiktok1482",
-    "deployment_git_sha": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
-    "source_git_sha": "7e45de885ee0605f4f43ec1fb9983e679b633cae"
-  }
+    "actor": "codex-snap1483",
+    "source_git_sha": "0477d67281e8dd170220a1d12e7388a332c805c6",
+    "deployment_git_sha": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
+    "release_id": "rg5-ce92c2291c610ca725e9ab5dc0ca1597fec9ea1ce2174e2d509b73bd7ea87c35"
+  },
+  "previous_pr": {
+    "number": 1484,
+    "state": "closed_unmerged_superseded_before_B",
+    "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
+  },
+  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload."
 }
