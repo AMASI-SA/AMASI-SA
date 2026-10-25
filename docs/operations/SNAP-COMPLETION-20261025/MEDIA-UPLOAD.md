@@ -1,7 +1,9 @@
 # Snapchat media upload vertical — 2026-10-25
 
-Task branch: codex/snap-media-upload-20261025. Authoring baseline:
-442bddc40493a05945cd6dd17fb1fe1ef1ea5a20. The parent/root task owns Git,
+Candidate branch: codex/snap-media-upload-20261025-r2, PR1492. Reviewed
+Production base: 5065c605004595e06606e2bfc99454ec629c733e, preserving budget
+PR1488 and TikTok PR1487. Initial authoring used 442bddc; the reviewed source
+blobs were reapplied on the new base without autonomy changes. Root owns Git,
 commands, test execution, reviewed release intent, publication and live checks.
 This working checkpoint is not a deployment or live acceptance claim.
 
@@ -46,10 +48,15 @@ merely to fetch optional names.
 ## Acceptance and checks
 
 Root verification: the final integrated backend selection passed 172 tests in
-2.72 seconds, including 27 media tests. Frontend CI on the first immutable
-snapshot passed 127 tests across 8 suites and its build. Independent static
-review of 74ce1e6 found no confirmed blocking defect. Fresh CI remains required
-after source integration and before publication.
+2.72 seconds, including 27 media tests. CI on source 641fe418 independently
+passed all 172 backend tests in 3.64 seconds and 127 frontend tests across
+8 suites plus build. Its exact scope guard passed. Independent static review
+of 74ce1e6 found no confirmed blocking defect.
+
+The first source-readiness run was cancelled in the shared workflow queue
+before creating jobs, so its missing artifact is not accepted as success.
+This updated checkpoint must complete a fresh source build and frozen intent
+before publication. All source code remains the same reviewed media slice.
 
 An older campaign-create assertion also failed on unchanged Production
 b0144e2. The test now checks retained failed-readback evidence explicitly:
