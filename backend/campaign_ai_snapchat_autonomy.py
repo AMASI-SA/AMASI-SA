@@ -479,6 +479,193 @@ async def require_snapchat_autonomy_write_authorization(
         raise _problem("snapchat_autonomy_policy_revoked_before_write")
 
 
+async def trusted_execution_proposal(db, user_id, execution, *, allow_incomplete_link=False):
+    """Return only a server-bound proposal in the same exact execution scope."""
+    if (execution.get("user_id") != user_id or execution.get("provider") != "snapchat"
+            or execution.get("authorization_kind") != "account_policy"):
+        return None
+    proposal_id = execution.get("provider_proposal_id")
+    if proposal_id:
+        binding = await db[BINDING_COLLECTION].find_one({
+            "_id": _key("binding", user_id, proposal_id), "user_id": user_id,
+        })
+    elif allow_incomplete_link:
+        bindings = await db[BINDING_COLLECTION].find({
+            "user_id": user_id, "execution_id": execution["execution_id"],
+        }).limit(2).to_list(length=2)
+        binding = bindings[0] if len(bindings) == 1 else None
+        proposal_id = (binding or {}).get("proposal_id")
+    else:
+        return None
+    if not binding or not proposal_id or binding.get("proposal_id") != proposal_id:
+        return None
+    if (binding.get("execution_id") != execution.get("execution_id")
+            or binding.get("account_id") != execution.get("account_id")
+            or binding.get("target_id") != execution.get("entity_id")
+            or binding.get("entity_level") != execution.get("entity_level")
+            or binding.get("expected_changes") != (execution.get("autonomy_reserved") or {}).get("expected_changes")):
+        return None
+    proposal = await db["mezan_snapchat_campaign_proposals_v1"].find_one({
+        "user_id": user_id, "proposal_id": proposal_id, "account_id": execution["account_id"],
+    })
+    if not proposal:
+        return None
+    from integrations_control_center import snapchat_campaign_management as management
+    expected_action = {"campaign": "campaign.update", "ad_group": "ad_squad.update", "ad": "ad.update"}.get(execution.get("entity_level"))
+    operation = proposal.get("operation") or {}
+    if (proposal.get("action") != expected_action
+            or management._provider_target_id(proposal) != binding["target_id"]
+            or management._operation_expected_values(operation) != binding["expected_changes"]):
+        return None
+    return binding, proposal
+
+
+def _known_linked_resolution(execution, binding, proposal):
+    """Interpret proved outcomes; terminal status strings alone prove nothing."""
+    from integrations_control_center import snapchat_campaign_management as management
+    if proposal.get("provider_write_uncertain") is not False or proposal.get("rollback_write_uncertain") is True:
+        return None
+    target_id = binding["target_id"]
+    operation = proposal["operation"]
+    expected = binding["expected_changes"]
+    verification = proposal.get("verification") or {}
+    snapshot = verification.get("provider_snapshot") or {}
+    if (proposal.get("status") == "completed"
+            and proposal.get("provider_write_state") == "confirmed"
+            and proposal.get("provider_write_reached") is True
+            and proposal.get("provider_entity_id") == target_id
+            and verification.get("verified") is True
+            and verification.get("field_changes_verified") is True
+            and verification.get("entity_id") == target_id
+            and verification.get("verification_source") in {"readback", "post_error_readback"}
+            and _instant(verification.get("verified_at")) is not None
+            and snapshot.get("id") == target_id
+            and snapshot.get("ad_account_id") in {None, execution["account_id"]}
+            and management._changed_values_match(expected, snapshot)[0]):
+        return {"status": "completed", "writes_performed": True,
+                "provider_write_outcome_known": True, "outcome": "applied",
+                "proof_at": verification["verified_at"], "snapshot": snapshot}
+    current = proposal.get("reconciliation_snapshot") or {}
+    original = proposal.get("original_snapshot") or {}
+    if (proposal.get("status") == "failed"
+            and proposal.get("provider_write_state") == "confirmed_not_applied"
+            and proposal.get("provider_write_reached") is False
+            and current.get("id") == target_id and original.get("id") == target_id
+            and current.get("ad_account_id") in {None, execution["account_id"]}
+            and not management._changed_values_match(expected, current)[0]
+            and not management._provider_state_conflict_fields(operation, original, current)):
+        return {"status": "failed", "writes_performed": False,
+                "provider_write_outcome_known": True, "outcome": "not_applied",
+                "proof_at": None, "snapshot": current}
+    return None
+
+
+async def cancelled_execution_outcome(db, user_id, execution, *, now=_utcnow):
+    """Cancellation is not proof that a provider request was never sent."""
+    base = {"finished_at": now().isoformat(), "cancelled_at": now().isoformat()}
+    if execution.get("authorization_kind") != "account_policy":
+        return {**base, "status": "provider_state_uncertain", "writes_performed": False,
+                "provider_write_outcome_known": False,
+                "failure": {"code": "campaign_execution_cancelled_outcome_unknown"}}
+    linked = await trusted_execution_proposal(db, user_id, execution, allow_incomplete_link=True)
+    if linked is not None:
+        binding, proposal = linked
+        known = _known_linked_resolution(execution, binding, proposal)
+        if known:
+            return {**base, "status": known["status"], "writes_performed": known["writes_performed"],
+                    "provider_write_outcome_known": True,
+                    "failure": {"code": "campaign_execution_cancelled_after_known_provider_outcome"}}
+        no_send = bool(
+            proposal.get("provider_write_state") in {"not_attempted", "preflighting"}
+            and proposal.get("provider_write_reached") is False
+            and proposal.get("provider_write_uncertain") is not True
+        )
+        if no_send:
+            return {**base, "status": "cancelled", "writes_performed": False,
+                    "provider_write_outcome_known": True,
+                    "failure": {"code": "campaign_execution_cancelled_before_provider_write"}}
+        return {**base, "status": "provider_state_uncertain",
+                "writes_performed": proposal.get("provider_write_reached") is True,
+                "provider_write_outcome_known": False,
+                "failure": {"code": "campaign_execution_cancelled_outcome_unknown"}}
+    # Only the absence of BOTH a proposal link and a trusted binding proves
+    # that this automatic runner has not reached its write-capable phase.
+    binding = await db[BINDING_COLLECTION].find_one({
+        "user_id": user_id, "execution_id": execution["execution_id"],
+    })
+    no_send = not execution.get("provider_proposal_id") and binding is None
+    return {**base, "status": "cancelled" if no_send else "provider_state_uncertain",
+            "writes_performed": False, "provider_write_outcome_known": no_send,
+            "failure": {"code": "campaign_execution_cancelled_before_provider_write"
+                        if no_send else "campaign_execution_cancelled_outcome_unknown"}}
+
+
+async def refresh_linked_execution_outcomes(db, user_id, account_id, *, now=_utcnow):
+    """Bounded projection of trusted read-only management reconciliation.
+
+    This does not call the provider or replay an execution. The original claim
+    and increase allowance stay intact even when the provider proves no write.
+    """
+    pending = await db[EXECUTION_COLLECTION].find({
+        "user_id": user_id, "account_id": account_id, "authorization_kind": "account_policy",
+        "status": {"$in": ["executing", "provider_state_uncertain", "verification_required"]},
+    }).limit(19).to_list(length=19)
+    if len(pending) > 18:
+        return {"refreshed": 0, "blocked": "pending_execution_limit"}
+    refreshed = 0
+    for execution in pending:
+        linked = await trusted_execution_proposal(db, user_id, execution)
+        if linked is None:
+            continue
+        binding, proposal = linked
+        resolution = _known_linked_resolution(execution, binding, proposal)
+        if resolution is None:
+            continue
+        observed_at = _instant(resolution["proof_at"])
+        if observed_at is None:
+            # The not-applied branch retains its exact provider snapshot and
+            # releases the exact entity lease in the same reconciliation.
+            lease = await db["mezan_snapchat_campaign_entity_leases_v1"].find_one({
+                "user_id": user_id, "proposal_id": proposal["proposal_id"], "active": False,
+            }, sort=[("released_at", -1)])
+            observed_at = _instant((lease or {}).get("released_at")) or now()
+        if observed_at > now() + timedelta(minutes=5):
+            continue
+        # Persist the fresh-plan fence before clearing the blocking execution.
+        # A crash between the two writes must retain blocking, never expose an
+        # old plan as executable without its reconciliation cutoff.
+        fenced = await db[LEASE_COLLECTION].update_one(
+            {"_id": _key("account", user_id, account_id), "user_id": user_id},
+            {"$max": {"require_snapshot_after": observed_at}},
+        )
+        if not fenced.matched_count:
+            continue
+        changed = await db[EXECUTION_COLLECTION].update_one(
+            {"execution_id": execution["execution_id"], "user_id": user_id,
+             "account_id": account_id, "provider_proposal_id": proposal["proposal_id"],
+             "status": execution["status"]},
+            {"$set": {
+                "status": resolution["status"], "writes_performed": resolution["writes_performed"],
+                "provider_write_outcome_known": True, "reconciled_at": now().isoformat(),
+                "reconciliation": {"source": "linked_management_read_only_reconciliation",
+                    "outcome": resolution["outcome"], "proposal_id": proposal["proposal_id"],
+                    "proof_at": observed_at.isoformat(), "snapshot_digest": _key(resolution["snapshot"])},
+             }, "$push": {"audit": {"$each": [{
+                 "event": "provider_outcome_reconciled", "actor_id": "snapchat-reconciliation-projection",
+                 "occurred_at": now().isoformat(), "outcome": resolution["outcome"],
+             }], "$slice": -50}}},
+        )
+        if not changed.matched_count:
+            continue
+        refreshed += 1
+        await db[RECOMMENDATION_COLLECTION].update_one(
+            {"user_id": user_id, "snapshot_id": execution["snapshot_id"]},
+            {"$set": {"recommendations.$[item].execution_status": resolution["status"]}},
+            array_filters=[{"item.recommendation_id": execution["recommendation_id"]}],
+        )
+    return {"refreshed": refreshed}
+
+
 async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
     """Process only this exact newly saved snapshot, once per account/cycle."""
     from campaign_ai_monitor_legacy import (
@@ -503,11 +690,20 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
             if blockers:
                 outcome["blockers"] = blockers
                 continue
+            await refresh_linked_execution_outcomes(db, user_id, account_id, now=now)
             if await db[EXECUTION_COLLECTION].find_one({
                 "user_id": user_id, "account_id": account_id, "authorization_kind": "account_policy",
                 "status": {"$in": ["executing", "provider_state_uncertain", "verification_required"]},
             }):
                 outcome["blockers"] = ["previous_execution_requires_reconciliation"]
+                continue
+            account_state = await db[LEASE_COLLECTION].find_one({
+                "_id": _key("account", user_id, account_id), "user_id": user_id,
+            }) or {}
+            fresh_after = _instant(account_state.get("require_snapshot_after"))
+            generated_at = _instant(snapshot.get("generated_at"))
+            if fresh_after is not None and (generated_at is None or generated_at <= fresh_after):
+                outcome["blockers"] = ["fresh_snapshot_required_after_reconciliation"]
                 continue
             token = await _claim_account_cycle(db, user_id, policy, now=now)
             if not token:

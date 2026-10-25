@@ -2720,6 +2720,22 @@ async def run_claimed_campaign_execution(db: Any, user_id: str, execution_id: st
                   "writes_performed": result.get("provider_write_reached") is True,
                   "provider_write_outcome_known": result.get("provider_write_reached") is not None,
                   "result": result}
+    except asyncio.CancelledError:
+        from campaign_ai_snapchat_autonomy import cancelled_execution_outcome
+        refreshed = await collection.find_one({"execution_id": execution_id, "user_id": user_id}) or row
+        cancelled = await cancelled_execution_outcome(db, user_id, refreshed)
+        saved_cancel = await collection.update_one(
+            {"execution_id": execution_id, "user_id": user_id, "status": "executing"},
+            {"$set": cancelled},
+        )
+        if saved_cancel.matched_count:
+            await db[RECOMMENDATION_COLLECTION].update_one(
+                {"user_id": user_id, "snapshot_id": row["snapshot_id"]},
+                {"$set": {"recommendations.$[item].execution_status": cancelled["status"]}},
+                array_filters=[{"item.recommendation_id": row["recommendation_id"]}],
+            )
+        # The existing worker/cadence owner must still observe cancellation.
+        raise
     except Exception as exc:
         if isinstance(exc, _execution_quality.ExecutionQualityBlocked):
             detail = _execution_quality_http_exception(exc).detail
@@ -2735,7 +2751,10 @@ async def run_claimed_campaign_execution(db: Any, user_id: str, execution_id: st
         ) if proposal_id else {}
         uncertain = bool(proposal and (
             proposal.get("provider_write_reached") is True
-            or proposal.get("provider_write_state") in {"attempting", "confirmed", "uncertain"}
+            or proposal.get("provider_write_uncertain") is True
+            or proposal.get("provider_write_state") in {
+                "attempting", "confirmed", "uncertain", "unknown_needs_reconciliation",
+            }
             or proposal.get("status") in {"provider_state_uncertain", "verification_required"}
         ))
         final_status = "provider_state_uncertain" if uncertain else "failed"
@@ -2743,7 +2762,14 @@ async def run_claimed_campaign_execution(db: Any, user_id: str, execution_id: st
                   "writes_performed": proposal.get("provider_write_reached") is True if proposal else False,
                   "provider_write_outcome_known": not uncertain}
         logger.exception("Governed campaign recommendation execution did not complete")
-    await collection.update_one({"execution_id": execution_id, "user_id": user_id}, {"$set": finish})
+    saved_finish = await collection.update_one(
+        {"execution_id": execution_id, "user_id": user_id, "status": "executing"}, {"$set": finish},
+    )
+    if not saved_finish.matched_count:
+        # A trusted reconciliation may have completed this projection while
+        # the runner was returning. Do not downgrade its proved outcome.
+        current = await collection.find_one({"execution_id": execution_id, "user_id": user_id}) or row
+        return _public_campaign_execution(current)
     await db[RECOMMENDATION_COLLECTION].update_one(
         {"user_id": user_id, "snapshot_id": row["snapshot_id"]},
         {"$set": {"recommendations.$[item].execution_status": final_status,

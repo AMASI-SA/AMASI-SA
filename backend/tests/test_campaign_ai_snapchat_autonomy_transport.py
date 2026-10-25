@@ -1,4 +1,6 @@
+import asyncio
 from copy import deepcopy
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import httpx
@@ -7,8 +9,8 @@ import pytest
 from integrations_control_center import snapchat_campaign_management as management
 import campaign_ai_snapchat_autonomy as autonomy
 import campaign_ai_monitor_legacy as legacy
-from tests.test_campaign_ai_snapchat_autonomy import checked
-from tests.test_campaign_ai_snapchat_autonomy_mongo import db, grant, install_preflight
+from tests.test_campaign_ai_snapchat_autonomy import NOW, checked
+from tests.test_campaign_ai_snapchat_autonomy_mongo import db, grant, install_preflight, snapshot
 from tests.test_snapchat_management_execution_hardening_v1 import (
     _DB, _Provider, _approved_row, _operation, _prepare,
 )
@@ -157,3 +159,221 @@ async def test_governed_management_passes_final_fence_through_real_token_transpo
     assert stored["provider_write_reached"] is False
     assert stored.get("provider_write_uncertain", False) is False
     assert await db[management.ENTITY_LEASE_COLLECTION].count_documents({"active": True}) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reconciled_applied,tamper", [(False, None), (True, None), (False, "binding"), (True, "proof")])
+async def test_provider_timeout_and_failed_readback_remain_uncertain_in_runner_and_next_cycle(
+    db, monkeypatch, reconciled_applied, tamper,
+):
+    operation = await transport_binding(db, monkeypatch)
+    proof = checked(action="pause")
+    await snapshot(db, [proof])
+    original = {"id": "rec-a", "ad_account_id": "account-a", "name": "Synthetic campaign",
+                "status": "ACTIVE", "daily_budget_micro": 100_000_000}
+    row = _approved_row("proposal-a", operation)
+    row.update(user_id="owner", account_id="account-a", target_id="rec-a", original_snapshot=original)
+    await db[management.PROPOSAL_COLLECTION].insert_one(row)
+    monkeypatch.setenv(management.MUTATIONS_ENABLED_ENV, "true")
+    monkeypatch.setattr(management, "_selected_account", AsyncMock(return_value={
+        "ad_account_id": "account-a", "currency": "USD",
+    }))
+    provider = management.SnapchatManagementProvider(db, "owner")
+    provider.management_role = AsyncMock(return_value={"allowed": True, "role": "admin"})
+    provider.context.access_token = AsyncMock(return_value="synthetic-token")
+    patch_attempts, failed_readbacks = [], []
+    recovered_snapshot = None
+
+    async def handler(request):
+        if request.method == "PATCH":
+            patch_attempts.append(request)
+            # The provider may have applied this request before the socket
+            # timed out. The caller has no acknowledgement either way.
+            raise httpx.ReadTimeout("synthetic write acknowledgement unavailable", request=request)
+        if patch_attempts and recovered_snapshot is None:
+            failed_readbacks.append(request)
+            raise httpx.ReadTimeout("synthetic provider reread unavailable", request=request)
+        return httpx.Response(200, json={"request_status": "SUCCESS", "campaigns": [{
+            "sub_request_status": "SUCCESS", "campaign": recovered_snapshot or original,
+        }]})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(management.httpx, "AsyncClient", lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handler), **kwargs,
+    ))
+
+    async def execute_seeded_approved_proposal(_db, user_id, **options):
+        # Proposal creation/evidence is already represented by the server-owned
+        # binding fixture. Exercise the real governed write and reconciliation.
+        return await management.execute_snapchat_management_proposal(
+            db, user_id, options["actor_id"], "proposal-a", provider=provider,
+        )
+
+    monkeypatch.setattr(legacy, "_execute_approved_recommendation", execute_seeded_approved_proposal)
+    binding = await db[autonomy.BINDING_COLLECTION].find_one({"user_id": "owner", "proposal_id": "proposal-a"})
+    result = await legacy.run_claimed_campaign_execution(db, "owner", binding["execution_id"])
+    proposal = await db[management.PROPOSAL_COLLECTION].find_one({"user_id": "owner", "proposal_id": "proposal-a"})
+    # Assert the actual management shape which caused the regression, rather
+    # than injecting a convenient provider_state_uncertain proposal status.
+    assert proposal["status"] == "failed"
+    assert proposal["provider_write_state"] == "unknown_needs_reconciliation"
+    assert proposal["provider_write_uncertain"] is True
+    assert proposal["provider_write_reached"] is False
+    assert len(patch_attempts) == 1 and failed_readbacks
+    assert result["status"] == "provider_state_uncertain"
+    assert result["provider_write_outcome_known"] is False
+    assert result["writes_performed"] is False
+
+    # Remove lease/cooldown as alternative explanations and publish a later
+    # snapshot. The uncertain execution itself must fence the next account run.
+    await db[autonomy.LEASE_COLLECTION].update_one({"user_id": "owner", "account_id": "account-a"}, {
+        "$set": {"owner": None, "lease_until": NOW - timedelta(minutes=1),
+                  "last_cycle_at": NOW - timedelta(days=1)},
+    })
+    await db[autonomy.RECOMMENDATION_COLLECTION].insert_one({
+        "user_id": "owner", "snapshot_id": "snapshot-next",
+        "generated_at": autonomy._utcnow().isoformat(),
+        "recommendations": [proof["recommendation"]],
+        "execution_targets": {"rec-a": proof["target"]},
+    })
+    next_cycle = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-next")
+    assert next_cycle["accounts"][0]["blockers"] == ["previous_execution_requires_reconciliation"]
+    assert len(patch_attempts) == 1
+
+    # Owner reconciliation reads the actual mocked provider; it must send no
+    # second PATCH and must not itself replay the execution claim.
+    recovered_snapshot = {**original, "status": "PAUSED"} if reconciled_applied else original
+    reconciled = await management.reconcile_snapchat_management_proposal(
+        db, "owner", "owner", "proposal-a", provider=provider,
+    )
+    assert reconciled["status"] == ("completed" if reconciled_applied else "failed")
+    if tamper == "binding":
+        await db[autonomy.BINDING_COLLECTION].update_one(
+            {"user_id": "owner", "proposal_id": "proposal-a"}, {"$set": {"account_id": "foreign"}},
+        )
+    if tamper == "proof":
+        await db[management.PROPOSAL_COLLECTION].update_one(
+            {"user_id": "owner", "proposal_id": "proposal-a"},
+            {"$set": {"verification.field_changes_verified": False}},
+        )
+    updated = await autonomy.refresh_linked_execution_outcomes(db, "owner", "account-a")
+    execution = await db[autonomy.EXECUTION_COLLECTION].find_one({"execution_id": binding["execution_id"]})
+    if tamper:
+        assert updated["refreshed"] == 0
+        assert execution["status"] == "provider_state_uncertain"
+        assert execution["provider_write_outcome_known"] is False
+        blocked = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-next")
+        assert blocked["accounts"][0]["blockers"] == ["previous_execution_requires_reconciliation"]
+        assert len(patch_attempts) == 1
+        return
+    assert updated["refreshed"] == 1
+    assert execution["status"] == ("completed" if reconciled_applied else "failed")
+    assert execution["provider_write_outcome_known"] is True
+    assert execution["writes_performed"] is reconciled_applied
+    assert execution["approved_by"] is None
+    assert execution["reconciliation"]["outcome"] == ("applied" if reconciled_applied else "not_applied")
+    assert execution["audit"][-1]["actor_id"] == "snapchat-reconciliation-projection"
+    assert len(patch_attempts) == 1
+    # Neither the deterministic old claim nor its runner can issue a replay.
+    duplicate = await legacy.claim_campaign_recommendation_execution(
+        db, "owner", snapshot_id="snapshot-a", recommendation_id="rec-a",
+    )
+    assert duplicate["claimed"] is False
+    await legacy.run_claimed_campaign_execution(db, "owner", binding["execution_id"])
+    assert len(patch_attempts) == 1
+    old_cycle = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-next")
+    assert old_cycle["accounts"][0]["blockers"] == ["fresh_snapshot_required_after_reconciliation"]
+    claim = AsyncMock(return_value={"claimed": False, "execution_id": "future-existing",
+                                   "execution": {"status": "completed"}})
+    monkeypatch.setattr(legacy, "claim_campaign_recommendation_execution", claim)
+    await db[autonomy.RECOMMENDATION_COLLECTION].insert_one({
+        "user_id": "owner", "snapshot_id": "snapshot-fresh",
+        "generated_at": (autonomy._utcnow() + timedelta(microseconds=1)).isoformat(),
+        "recommendations": [proof["recommendation"]], "execution_targets": {"rec-a": proof["target"]},
+    })
+    future_cycle = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-fresh")
+    assert future_cycle["accounts"][0]["actions"][0]["status"] == "completed"
+    claim.assert_awaited_once()
+    assert claim.await_args.kwargs["snapshot_id"] == "snapshot-fresh"
+    allowance = await db[autonomy.ALLOWANCE_COLLECTION].find_one({"user_id": "owner"})
+    assert allowance["execution_ids"] == [binding["execution_id"]]
+    assert len(patch_attempts) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancellation_before_binding_is_known_no_send_and_never_replays(db, monkeypatch):
+    _, authorization = await grant(db)
+    proof = checked()
+    await snapshot(db, [proof]); install_preflight(monkeypatch, proof)
+    claim = await legacy.claim_campaign_recommendation_execution(
+        db, "owner", snapshot_id="snapshot-a", recommendation_id="rec-a", authorization=authorization,
+    )
+    entered, forever = asyncio.Event(), asyncio.Event()
+    async def prepare(*args, **kwargs):
+        entered.set()
+        await forever.wait()
+    monkeypatch.setattr(autonomy, "prepare_autonomous_execution", prepare)
+    execute = AsyncMock()
+    monkeypatch.setattr(legacy, "_execute_approved_recommendation", execute)
+    task = asyncio.create_task(legacy.run_claimed_campaign_execution(db, "owner", claim["execution_id"]))
+    await asyncio.wait_for(entered.wait(), timeout=3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    row = await db[autonomy.EXECUTION_COLLECTION].find_one({"execution_id": claim["execution_id"]})
+    assert row["status"] == "cancelled"
+    assert row["provider_write_outcome_known"] is True and row["writes_performed"] is False
+    assert row["failure"]["code"] == "campaign_execution_cancelled_before_provider_write"
+    assert await db[autonomy.BINDING_COLLECTION].count_documents({}) == 0
+    assert await db[management.PROPOSAL_COLLECTION].count_documents({}) == 0
+    await legacy.run_claimed_campaign_execution(db, "owner", claim["execution_id"])
+    execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_transport_retains_uncertainty_and_account_fence(db, monkeypatch):
+    operation = await transport_binding(db, monkeypatch)
+    proof = checked(action="pause")
+    await snapshot(db, [proof])
+    original = {"id": "rec-a", "ad_account_id": "account-a", "name": "Synthetic campaign",
+                "status": "ACTIVE", "daily_budget_micro": 100_000_000}
+    row = _approved_row("proposal-a", operation)
+    row.update(user_id="owner", account_id="account-a", target_id="rec-a", original_snapshot=original)
+    await db[management.PROPOSAL_COLLECTION].insert_one(row)
+    monkeypatch.setenv(management.MUTATIONS_ENABLED_ENV, "true")
+    monkeypatch.setattr(management, "_selected_account", AsyncMock(return_value={"ad_account_id": "account-a", "currency": "USD"}))
+    provider = management.SnapchatManagementProvider(db, "owner")
+    provider.management_role = AsyncMock(return_value={"allowed": True, "role": "admin"})
+    provider.context.access_token = AsyncMock(return_value="synthetic-token")
+    entered, forever = asyncio.Event(), asyncio.Event()
+    writes = []
+    async def handler(request):
+        if request.method == "PATCH":
+            writes.append(request)
+            entered.set()
+            await forever.wait()
+        return httpx.Response(200, json={"request_status": "SUCCESS", "campaigns": [{
+            "sub_request_status": "SUCCESS", "campaign": original,
+        }]})
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(management.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
+    async def execute(_db, user_id, **options):
+        return await management.execute_snapchat_management_proposal(db, user_id, options["actor_id"], "proposal-a", provider=provider)
+    monkeypatch.setattr(legacy, "_execute_approved_recommendation", execute)
+    binding = await db[autonomy.BINDING_COLLECTION].find_one({"user_id": "owner", "proposal_id": "proposal-a"})
+    task = asyncio.create_task(legacy.run_claimed_campaign_execution(db, "owner", binding["execution_id"]))
+    await asyncio.wait_for(entered.wait(), timeout=3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    execution = await db[autonomy.EXECUTION_COLLECTION].find_one({"execution_id": binding["execution_id"]})
+    assert execution["status"] == "provider_state_uncertain"
+    assert execution["provider_write_outcome_known"] is False
+    assert execution["writes_performed"] is False
+    assert execution["failure"]["code"] == "campaign_execution_cancelled_outcome_unknown"
+    assert len(writes) == 1
+    await legacy.run_claimed_campaign_execution(db, "owner", binding["execution_id"])
+    assert len(writes) == 1
+    later = await autonomy.dispatch_snapchat_autonomy(db, "owner", "snapshot-a")
+    assert later["accounts"][0]["blockers"] == ["previous_execution_requires_reconciliation"]
+    assert len(writes) == 1
