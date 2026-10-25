@@ -1,0 +1,27 @@
+{
+  "task_id": "GOOGLE-AI-EVIDENCE-BINDING-20261026",
+  "scope": "Google only; evidence binding and readonly attempt history UI",
+  "base": "e6694a7198ab828996852cbf383149d0ab06364f",
+  "state": "source checkpoint; not published",
+  "production_failure": {
+    "analysis_id": "1067da3f4aae4693a13b969f873b1b93",
+    "phase": "structured_analysis",
+    "error_code": "google_ai_recommendation_evidence_unknown",
+    "duration_ms": 16885,
+    "http_status": 502,
+    "provider_writes": 0,
+    "period": [
+      "2026-10-25",
+      "2026-10-25"
+    ]
+  },
+  "changes": "Per-campaign structured schema binds campaign/actions/citations; unchanged independent postvalidation; readonly safe attempts UI with cancellation and GET refresh.",
+  "tests": {
+    "regression": "2red beforefix;77AI pass incl100campaign schema limits",
+    "focused": "124passed27localMongo skips;2inheritedwarnings",
+    "frontend": "6newDOMtests pending exact-source CI; no localReactdeps"
+  },
+  "full_autonomy_complete": false,
+  "provider_writes": 0,
+  "next": "ExactA CI/review; freezeB;24checks inclHost20;guardedpublish3probes;oneaccountanalysislive"
+}

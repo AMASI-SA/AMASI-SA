@@ -737,6 +737,48 @@ You have no tools or write authority.
 """
 
 
+def _analysis_reasoning_schema(campaigns: dict[str, dict[str, Any]],
+                               registry: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Constrain generation to exact per-campaign citations, before validation.
+
+    A free string list let the model invent references or mix two campaigns in
+    an account analysis. Keep the independent post-response checks as well.
+    """
+    schema = _AnalysisOutput.model_json_schema()
+    template = schema["$defs"].pop("_Recommendation")
+    # Reuse enum definitions: 100 campaigns must not duplicate thousands of
+    # enum values beyond the structured-output service's supported limit.
+    for field in ("priority", "confidence"):
+        name = "Analysis" + field.title()
+        schema["$defs"][name] = template["properties"][field]
+        template["properties"][field] = {"$ref": f"#/$defs/{name}"}
+    action_definitions: dict[tuple[str, ...], str] = {}
+    branches = []
+    for campaign_id, campaign in campaigns.items():
+        evidence_ids = sorted(key for key, value in registry.items()
+                              if value["campaign_id"] == campaign_id)
+        if not evidence_ids:
+            continue
+        branch = copy.deepcopy(template)
+        properties = branch["properties"]
+        properties["campaign_id"] = {"type": "string", "enum": [campaign_id]}
+        actions = tuple(campaign["allowed_actions"])
+        if actions not in action_definitions:
+            name = f"AnalysisActions{len(action_definitions)}"
+            action_definitions[actions] = name
+            schema["$defs"][name] = {"type": "string", "enum": list(actions)}
+        properties["action"] = {"$ref": f"#/$defs/{action_definitions[actions]}"}
+        # An anchored exact-choice pattern avoids the global enum-value limit
+        # even when all 100 campaigns have commerce and platform evidence.
+        properties["evidence_ids"]["items"] = {"type": "string", "pattern":
+            "^(?:" + "|".join(re.escape(key) for key in evidence_ids) + ")$"}
+        branches.append(branch)
+    schema["properties"]["recommendations"]["items"] = {"anyOf": branches}
+    if not schema["$defs"]:
+        schema.pop("$defs")
+    return schema
+
+
 async def analyze_google_campaigns(
     db: Any, user_id: str, body: GoogleAIAnalysisInput, *, facts: dict[str, Any],
     client_factory: Callable[[], Any] | None = None,
@@ -828,7 +870,7 @@ async def analyze_google_campaigns(
                                      "billing_limits_verified": False, "budget_history_verified": False,
                                  },
                                  "limitations": list(dict.fromkeys(limitations))},
-                        schema=_AnalysisOutput.model_json_schema(), schema_name="mezan_google_readonly_analysis",
+                        schema=_analysis_reasoning_schema(campaigns, registry), schema_name="mezan_google_readonly_analysis",
                         # Native account reads precede structured reasoning.
                         # Keep the model within the interactive 90s deadline,
                         # while limiting the generated recommendation set.
