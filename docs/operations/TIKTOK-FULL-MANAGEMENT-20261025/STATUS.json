@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-full-management-20261025",
   "base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
-  "state": "implementation_in_progress_not_release_ready",
+  "state": "WIP_paused_ad_builder_and_periodic_observations_verified_backend",
   "scope": [
     "current product catalog and campaign AI response repair",
     "creator publishing readiness",
@@ -21,7 +21,16 @@
       "exit": 0,
       "command": "PYTHONPATH=backend python -B -m pytest -p no:cacheprovider -q backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_campaign_products.py backend/tests/test_amasi_storefront.py"
     },
-    "response_schema_regression": "New model text-limit contract failed with KeyError before fix; now passes. Model schema and local 700/400-character validation agree. No increased token budget or retries."
+    "response_schema_regression": "New model text-limit contract failed with KeyError before fix; now passes. Model schema and local 700/400-character validation agree. No increased token budget or retries.",
+    "expanded_backend": {
+      "passed": 182,
+      "warnings": 2,
+      "exit": 0,
+      "seconds": 12.01,
+      "environment": "isolated real Mongo plus fixed TikTok/model transports; includes existing Google periodic regression"
+    },
+    "builder_route_baseline": "Public route returned404 before attachment,422 after attachment; eight initial builder tests passed, then reconcile/feature-flag tests included in182-case run.",
+    "frontend": "Two owner-approval/uncertain-send UI tests added; existing native-workspace CI and source build pending. No new frontend dependency."
   },
   "live_readonly_evidence": [
     "2026-10-25: TikTok advertising connected; today's reporting visible",
@@ -39,16 +48,24 @@
   "production_changed": false,
   "provider_business_writes": 0,
   "live_model_calls": 0,
-  "next_action": "Complete focused implementation and tests; obtain hosting sign-in for exact live502 diagnosis, then fresh source CI, reviewed v5 intent, rehearsal and authorized publication. Real media, budget limits and live acceptance remain separate concrete actions.",
+  "next_action": "Inspect fresh source CI and new UI tests, review typed provider contracts against real responses after hosting access returns. Fix root readiness502, complete child activation and governed AI Action Gateway before any full-autonomy claim. Preserve flags defaultoff and use fresh v5 A/B release gates.",
   "completed_behavior": [
     "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
     "Safe fixed-stage AI failure diagnostics",
-    "Structured model response enforces local summary/next-step text length limits"
+    "Structured model response enforces local summary/next-step text length limits",
+    "Owner-only encrypted preview and one-shot paused Smart+ adgroup/video-ad creation, verified native account/parents/video/identity, fresh preflight, explicit group ceiling and timezone-aware schedule",
+    "TikTok imports video directly from URL using multipart text metadata; no video file part or Mezan media fetch/storage",
+    "Durable content fences across new idempotency keys, readonly reconciliation with confirmed created IDs, bounded history",
+    "Native workspace controls for asset import, paused adgroup/ad creation and exact owner approval",
+    "Optional three-campaign periodic observations in existing global five-hour cycle, replica claim before model work, rotated pages, shared recommendations; financial execution remains disabled"
   ],
   "remaining": [
-    "Authenticated hosting logs required before identifying readiness502 root cause",
-    "Exact live AI rejection cause and new runtime acceptance not verified",
-    "Adgroup/video-ad composer, periodic recommendation bridge and bounded autonomous gateway not implemented in this checkpoint",
-    "No live media publication, paid activation or measured outcome test"
-  ]
+    "Publishing readiness502 root cause unresolved: authenticated hosting logs unavailable; secure login was declined, do not retry without user request",
+    "New code not deployed or enabled: TIKTOK_AD_BUILDER_ENABLED and MEZAN_TIKTOK_AI_PERIODIC_ENABLED defaultfalse",
+    "New frontend CI/source build and fresh integrated release validation required",
+    "Full Smart+ activation/child editing, Spark post-to-ad linking, bounded autonomous financial Action Gateway and measured outcomes remain incomplete",
+    "Financial attribution/coverage must be proved before profit-based automatic scale decisions; never treat TikTok conversions as Salla financial orders",
+    "No selected approved public media/caption or owner-configured autonomous spend/loss limits; no real post, paid activation or live model call performed"
+  ],
+  "remote_checkpoint_before_this_source": "632f0d66bcc1845b8c14a1bd0c0074456907c204; Draft PR1480"
 }

@@ -29,6 +29,15 @@ _ENDPOINTS = {
     ("GET", "/business/video/list/"),
     ("GET", "/business/comment/list/"),
     ("POST", "/business/comment/reply/create/"),
+    ("GET", "/advertiser/info/"),
+    ("GET", "/smart_plus/campaign/get/"),
+    ("GET", "/smart_plus/adgroup/get/"),
+    ("GET", "/smart_plus/ad/get/"),
+    ("POST", "/smart_plus/adgroup/create/"),
+    ("POST", "/smart_plus/ad/create/"),
+    ("GET", "/file/video/ad/info/"),
+    ("POST", "/file/video/ad/upload/"),
+    ("GET", "/identity/get/"),
 }
 
 
@@ -119,18 +128,27 @@ class TikTokCreatorAPI:
         except TimeoutError:
             pass
 
-    async def call(self, method, path, *, token=None, body=None, params=None):
+    async def call(self, method, path, *, token=None, body=None, params=None, form=None):
         if (method, path) not in _ENDPOINTS:
             raise problem("tiktok_creator_endpoint_denied", "مسار TikTok غير مدعوم.", 500)
         if body is not None and len(json.dumps(body, ensure_ascii=False).encode("utf-8")) > MAX_REQUEST_BYTES:
             raise problem("tiktok_content_metadata_too_large", "بيانات المنشور أكبر من الحد المسموح.", 413)
+        if form is not None:
+            if (method, path) != ("POST", "/file/video/ad/upload/") or body is not None or params is not None or not isinstance(form, dict) or set(form) != {"advertiser_id", "upload_type", "video_url", "file_name"} or form.get("upload_type") != "UPLOAD_BY_URL" or any(not isinstance(v, str) for v in form.values()) or len(json.dumps(form).encode()) > MAX_REQUEST_BYTES:
+                raise problem("tiktok_video_import_metadata_invalid", "استيراد الفيديو يقبل رابطًا وبيانات نصية فقط.", 422)
         headers = {"Content-Type": "application/json", "Accept-Encoding": "identity"}
+        request_data = {"json": body}
+        if form is not None:
+            headers.pop("Content-Type")
+            # TikTok's asset import uses multipart text fields. There is no
+            # video file part and Mezan never opens or downloads the video URL.
+            request_data = {"files": {key: (None, value) for key, value in form.items()}}
         if token:
             headers["Access-Token"] = token
         private = _private_request.set(True)
         try:
             async with asyncio.timeout(14):
-                async with self.client.stream(method, API_BASE + path, headers=headers, params=params, json=body) as response:
+                async with self.client.stream(method, API_BASE + path, headers=headers, params=params, **request_data) as response:
                     if response.status_code < 200 or response.status_code >= 300:
                         raise problem("tiktok_creator_provider_http_error", "رفض TikTok الطلب. راجع الربط والصلاحيات.", 502)
                     if "application/json" not in response.headers.get("content-type", "").lower():
@@ -152,6 +170,8 @@ class TikTokCreatorAPI:
                 payload = json.loads(data)
             except (ValueError, UnicodeError):
                 raise problem("tiktok_creator_invalid_response", "تعذر التحقق من استجابة TikTok.", 502) from None
+            if isinstance(payload, dict) and path == "/file/video/ad/upload/" and isinstance(payload.get("data"), list) and len(payload["data"]) == 1 and isinstance(payload["data"][0], dict):
+                payload["data"] = payload["data"][0]
             if not isinstance(payload, dict) or type(payload.get("code")) is not int or payload["code"] != 0 or not isinstance(payload.get("data"), dict):
                 # Never project a raw provider message or request URL.
                 raise problem("tiktok_creator_provider_error", "رفض TikTok العملية. راجع حالة الربط والصلاحيات.", 502)
