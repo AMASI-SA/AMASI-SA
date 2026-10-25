@@ -97,6 +97,10 @@ async def owner(db, user):
 
 def attach_google_ads_management_routes(router, db, current_user, *, client_factory=GoogleAdsClient, ai_client_factory=None):
     root = "/google_ads"
+    from .google_ads_automation_policy import attach_google_ads_automation_policy_routes
+    attach_google_ads_automation_policy_routes(router, db, current_user, client_factory=client_factory)
+    from .google_ads_automation_plan import attach_google_ads_automation_plan_routes
+    attach_google_ads_automation_plan_routes(router, db, current_user, client_factory=client_factory)
 
     async def actor_read(user=Depends(current_user)):
         return await principal(db, user)

@@ -1,0 +1,34 @@
+{
+  "task_id": "GOOGLE-AUTONOMY-FOUNDATION-20261026",
+  "scope": "Google only; owner disabled standing policy UI + readonly native dryrun",
+  "base": "d88877c8fe7d001448dd0fbe7f569ebb591e37a1",
+  "state": "Source checkpoint; wait exactCI includingrealMongo/frontend; doNOTmergeuntil1520publishverifiedclosed",
+  "source_files": [
+    "backend/integrations_control_center/google_ads_automation_policy.py",
+    "backend/tests/test_google_ads_automation_policy.py",
+    "backend/integrations_control_center/google_ads_autonomy_planner.py",
+    "backend/tests/test_google_ads_autonomy_planner.py",
+    "backend/tests/test_google_ads_automation_policy_mongo.py",
+    "frontend/src/components/marketing/GoogleAutomationPolicy.jsx",
+    "frontend/src/components/marketing/GoogleAutomationPolicy.test.jsx",
+    "frontend/src/services/googleAutomationPolicy.js",
+    "backend/integrations_control_center/google_ads_automation_plan.py",
+    "backend/tests/test_google_ads_automation_plan.py",
+    "backend/integrations_control_center/google_ads_routes.py",
+    "frontend/src/components/marketing/GoogleAdsWorkspace.jsx",
+    ".github/workflows/google-ads-full-management.yml"
+  ],
+  "tests": {
+    "policy": "46passed",
+    "planner": "52passed",
+    "plan": "23passed",
+    "combined": "247passed31localMongo skips2inheritedwarnings4.16s",
+    "mongo": "4actualstorageconcurrency scenarios pendingCI",
+    "frontend": "11newcases pendingCI"
+  },
+  "behavior": "Policy disableddefault/ownerpersisted/revisionCAS/explicitlimits/nativecurrencytimezone/expiry/revoke; UIsavesenabledfalseonly. Pureplanner withscopedfreshnativeinventory/alltimehistory/idempotencykey. Actualcreate/duplicatecreatedIDandassetdaycounts recognized. Unsegmentednativeinventoryincludeszero-deliverycampaigns.",
+  "provider_writes": 0,
+  "full_autonomy_complete": false,
+  "worker_installed": false,
+  "next": "Independentreview/exactsourceCI,freezeBHost20;onlyafter1520publishcomplete mergeexactBtree+guardedpublish3probes. LiveownerpolicyGETmustdisabled/unconfigured; no realpolicyenable/budgetcampaignwrites."
+}
