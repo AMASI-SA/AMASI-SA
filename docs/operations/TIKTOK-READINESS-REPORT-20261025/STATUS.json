@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-readiness-report-20261025",
   "source_base": "c410cab8c6835e6575fdd3e792a983767182f966",
   "scope": "Narrow diagnostic release within the owner's explicitly authorized complete TikTok upload, publication and testing task.",
-  "state": "PUBLISHING_ONCE_AWAIT_NEW_COMPLETION_AND_IDENTITY_ACCEPTANCE",
+  "state": "PUBLISHED_VERIFIED_THREE_PROBES_SETTINGS_PROOF_FAILURE_IDENTIFIED",
   "behavior": [
     "Owner-only bounded readiness report returns explicit ready:false and a fixed local phase/code for blocked checks; the check runs once and performs no publishing action.",
     "The UI clears any prior readiness proof and cannot prepare content from a blocked report.",
@@ -28,11 +28,11 @@
     "intent_ci": "All9 applicable B workflows PASS; release3454/40211064094 original clean-clone adapter PASS.",
     "merge_push_ci": "All3 applicable M workflows PASS:release40211937915,security40211937949,CodeQL40211938792."
   },
-  "production_changed_by_this_task": false,
+  "production_changed_by_this_task": true,
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "PR1480 remains separate WIP; paused builder,periodic observations,child activation,Spark linking,financial policy and measured outcomes are not accepted by this diagnostic release.",
-  "next": "Wait for explicit newer deployment completion; run matching guard verify for three consecutive identity probes, then inspect creator readiness report. Continue full TikTok implementation and testing; do not call diagnostic publication full-management completion.",
+  "next": "Inspect official Business API settings schema and obtain safe field-level evidence; implement a tested schema/validation correction,then fresh A/B release and live readiness acceptance. Continue full TikTok task; PR1480 builder/periodic/AI source remains WIP,not deployed.",
   "source_a": "7e45de885ee0605f4f43ec1fb9983e679b633cae",
   "intent_b": "725877de47f49af27b7db257a623c7e2bfd87f14",
   "merge_m": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
@@ -40,9 +40,11 @@
   "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
   "pr": 1482,
   "actual_host": "Independent clean clone B adapter exit0. First original/app adapter rejected generated __pycache__; one untracked generated directory reversibly preserved at/tmp/tiktok1482-bytecode-preserved-20261025. Second original/app adapter completed with exact intended identity; host_build_exit=0. Original source M retained, unrelated .emergent/testing and deployer-agent-docs preserved.",
-  "lease": "Own codex-tiktok1482 prepare JSON validated exact A/M/runtime; prepublish JSON validated exact runtime and deployment M. No foreign lease reused.",
+  "lease": "Matching codex-tiktok1482 guard verify completed verified:true,checks:3,sourceA7e45de885ee0605f4f43ec1fb9983e679b633cae,deploymentM73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9. Subsequent guard status active:false.",
   "public_identity_before_tiktok": "Read-only /api/health shows Google8cce9baf source and verified v5 identity; not TikTok acceptance.",
   "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482.",
   "publish_attempts": 1,
-  "publish_ui": "Clicked final Publish changes once; Publishing... and Deployment Started October25,19:43 Riyadh observed. Do not resubmit while result is pending."
+  "publish_ui": "Clicked final Publish changes once; Publishing... and Deployment Started October25,19:43 Riyadh observed. Do not resubmit while result is pending.",
+  "publication_completion": "Explicit newer Deployment finished October25,19:51 Riyadh.",
+  "live_readiness": "Refreshed Mezan,selected same connected new Amasi creator,readiness once. Report ready:false at settings phase with fixed tiktok_creator_settings_unproven; identity proof passed. This local settings validation boundary is established; exact rejected provider field/schema remains unproven."
 }
