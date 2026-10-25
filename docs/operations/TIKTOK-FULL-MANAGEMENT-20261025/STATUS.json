@@ -30,7 +30,25 @@
       "environment": "isolated real Mongo plus fixed TikTok/model transports; includes existing Google periodic regression"
     },
     "builder_route_baseline": "Public route returned404 before attachment,422 after attachment; eight initial builder tests passed, then reconcile/feature-flag tests included in182-case run.",
-    "frontend": "Two owner-approval/uncertain-send UI tests added; existing native-workspace CI and source build pending. No new frontend dependency."
+    "frontend": "127 tests in22suites and source build passed on exact remote runtime source97fba1c5; new UI tests are included.",
+    "native_ci": {
+      "run_id": 40207080665,
+      "head": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
+      "backend": {
+        "passed": 413,
+        "warnings": 1,
+        "seconds": 18.81
+      },
+      "frontend": {
+        "tests": 127,
+        "suites": 22,
+        "new_ad_builder_tests": "PASS"
+      },
+      "source_build": "PASS 6.17s",
+      "source_isolation": "PASS"
+    },
+    "source_checks": "12 applicable workflows successful; CodeQL still running at capture; separate TikTok Creator Release Candidate skipped by its existing condition. Not a release acceptance verdict.",
+    "remote_recovery": "Fetched source97fba1c5 locally; zero file diff against local verified source; identical tree3bd0cd45ad729840b61bfeacd0c3e7cc5e7a4a54."
   },
   "live_readonly_evidence": [
     "2026-10-25: TikTok advertising connected; today's reporting visible",
@@ -48,7 +66,7 @@
   "production_changed": false,
   "provider_business_writes": 0,
   "live_model_calls": 0,
-  "next_action": "Inspect fresh source CI and new UI tests, review typed provider contracts against real responses after hosting access returns. Fix root readiness502, complete child activation and governed AI Action Gateway before any full-autonomy claim. Preserve flags defaultoff and use fresh v5 A/B release gates.",
+  "next_action": "Restore explicitly authorized hosting access when user requests it; inspect live readiness502 logs before root-cause patch. Complete child activation/editing, Spark linking and bounded autonomous financial Action Gateway with trustworthy financial coverage and owner limits. Then fresh integrated CI and protocol-v5 A/B/actual-host/deployment acceptance; never treat this default-off WIP as100% autonomy.",
   "completed_behavior": [
     "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
     "Safe fixed-stage AI failure diagnostics",
@@ -62,10 +80,11 @@
   "remaining": [
     "Publishing readiness502 root cause unresolved: authenticated hosting logs unavailable; secure login was declined, do not retry without user request",
     "New code not deployed or enabled: TIKTOK_AD_BUILDER_ENABLED and MEZAN_TIKTOK_AI_PERIODIC_ENABLED defaultfalse",
-    "New frontend CI/source build and fresh integrated release validation required",
     "Full Smart+ activation/child editing, Spark post-to-ad linking, bounded autonomous financial Action Gateway and measured outcomes remain incomplete",
     "Financial attribution/coverage must be proved before profit-based automatic scale decisions; never treat TikTok conversions as Salla financial orders",
     "No selected approved public media/caption or owner-configured autonomous spend/loss limits; no real post, paid activation or live model call performed"
   ],
-  "remote_checkpoint_before_this_source": "632f0d66bcc1845b8c14a1bd0c0074456907c204; Draft PR1480"
+  "remote_checkpoint_before_this_source": "632f0d66bcc1845b8c14a1bd0c0074456907c204; Draft PR1480",
+  "reviewed_runtime_source": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
+  "authentication": "Secure Emergent method-selection request declined. Respect refusal; no automated credential retry or bypass."
 }
