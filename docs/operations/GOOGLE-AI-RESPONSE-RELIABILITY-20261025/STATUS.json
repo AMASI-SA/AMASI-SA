@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-response-reliability-r4-20261025",
   "base": "a35b5e4ede35b00cdd9599ceb878c07593627221",
-  "status": "MERGED_ALL9_B_CI_PASS_AWAIT_FOREIGN_LEASE",
+  "status": "MERGED_READY_BLOCKED_BY_FOREIGN_RELEASE_LEASE",
   "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
@@ -21,8 +21,8 @@
   ],
   "verification": {
     "red": "3focused regressions failed; compatible-model case passed",
-    "backend": "101 AI/actions/context tests passed in1.64s",
-    "frontend": "CI pending",
+    "backend": "379 passed in10.59s; exactB job121255596863",
+    "frontend": "96 passed/12suites; exactB job121255597051",
     "current_source_ci": {
       "head": "97a5ed5cc428afd74046513cd59142d58a896910",
       "readiness": "passed",
@@ -85,7 +85,12 @@
   "shared_release_guard": {
     "active": true,
     "actor": "codex-snap1492",
-    "deployment_git_sha": "a35b5e4ede35b00cdd9599ceb878c07593627221"
+    "source_git_sha": "738e2cffa32166c024eb1521bf90ce7e3121b064",
+    "deployment_git_sha": "a35b5e4ede35b00cdd9599ceb878c07593627221",
+    "release_id": "rg5-d03ae026d977873e39fb4d6d95a733029dfc9e97ff7e9cccfbd9bef410860b85",
+    "platform": "explicit Deployment finished Oct25 09:45PM Riyadh observed",
+    "checked_at": "2026-10-25T18:47:44Z",
+    "restriction": "AGENTS prohibits clearing another conversation lease; no foreign verify/abort and no shared source changes"
   },
   "previous_pr": {
     "number": 1484,
