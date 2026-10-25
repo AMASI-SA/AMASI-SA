@@ -1,5 +1,7 @@
 """Internal, default-off standing-policy authorization; no provider dispatch.
 
+Only an explicit future owner activation may persist activation_version=1;
+legacy enabled policies never gain execution rights when the worker is installed.
 A successful claim is ONE acknowledgement to the current execution owner. It is
 not replayable permission and cannot replace the native proposal's durable
 submission floor. Revocation and claim linearize on the same policy document:
@@ -24,7 +26,8 @@ from .google_ads_client import identifier, problem
 from .google_ads_management import ANALYSES, FENCES, PROPOSALS, available_accounts, digest, human_snapshot, immutable
 
 SERVICE_ACTOR_ID = "mezan_google_automation_v1"
-POLICY_BINDING_FIELDS = ("schema_version", "user_id", "account_id", "revision", "enabled", "currency_code", "time_zone",
+ACTIVATION_VERSION = 1
+POLICY_BINDING_FIELDS = ("schema_version", "user_id", "account_id", "revision", "enabled", "activation_version", "activation_revision", "activated_by", "activated_at", "currency_code", "time_zone",
     "campaign_ids", "allowed_actions", "max_campaign_daily_budget_native", "max_account_daily_budget_native",
     "max_budget_change_percent", "cooldown_seconds", "max_actions_per_day", "expires_at", "updated_by", "updated_at")
 SOURCE_FIELDS = {"kind", "policy_revision", "policy_digest", "analysis_id", "recommendation_id"}
@@ -53,6 +56,21 @@ def _instant(value):
         return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
     except (TypeError, ValueError):
         return None
+
+
+def activation_proof_valid(policy, current=None):
+    """A legacy enabled setting is never an explicit current owner activation."""
+    if (not isinstance(policy, dict) or not isinstance(policy.get("user_id"), str) or not policy["user_id"]
+        or type(policy.get("activation_version")) is not int or policy["activation_version"] != ACTIVATION_VERSION
+        or type(policy.get("revision")) is not int or policy["revision"] < 1
+        or type(policy.get("activation_revision")) is not int or policy["activation_revision"] != policy["revision"]
+        or policy.get("activated_by") != policy["user_id"]):
+        return False
+    stamp = _instant(policy.get("activated_at"))
+    comparison = _now() if current is None else current
+    if not isinstance(comparison, datetime) or comparison.tzinfo is None:
+        return False
+    return stamp is not None and stamp <= comparison.astimezone(timezone.utc)
 
 
 def _fail(code):
@@ -271,6 +289,10 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         or policy.get("revision") != source["policy_revision"]
         or policy_authorization_digest(policy) != source["policy_digest"]):
         _fail("google_automation_policy_changed")
+    # Policies saved while no executor was installed are configuration only.
+    # Installing/enabling a worker must never activate those legacy rows.
+    if not activation_proof_valid(policy, current_time):
+        _fail("google_automation_activation_required")
     if policy.get("_dispatch_claim") is not None:
         _fail("google_automation_claim_pending")
     expiry, proposal_expiry = _instant(policy.get("expires_at")), _instant(row.get("expires_at"))
@@ -295,6 +317,8 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
     cas_time = current_time = _now(current)
     if min(expiry, proposal_expiry) <= cas_time:
         _fail("google_automation_policy_changed")
+    if not activation_proof_valid(policy, cas_time):
+        _fail("google_automation_activation_required")
     inventory, target = _native_proof(row, native_evidence, policy, cas_time)
     if not execution_enabled():
         raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)

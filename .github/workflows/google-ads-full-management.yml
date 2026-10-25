@@ -60,6 +60,10 @@ jobs:
           backend/tests/test_google_ads_automation_policy_mongo.py
           backend/tests/test_google_ads_autonomy_planner.py
           backend/tests/test_google_ads_automation_plan.py
+          backend/tests/test_google_ads_automation_authority.py
+          backend/tests/test_google_ads_automation_authority_mongo.py
+          backend/tests/test_google_ads_automation_worker.py
+          backend/tests/test_google_ads_automation_worker_mongo.py
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py

@@ -19,7 +19,8 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
     data = inputs(action)
     data["current"] = current
     policy = data["policy"]
-    policy.update(updated_by="owner", updated_at=current.isoformat(), expires_at=(current+timedelta(days=1)).isoformat())
+    policy.update(updated_by="owner", updated_at=current.isoformat(), expires_at=(current+timedelta(days=1)).isoformat(), activation_version=1,
+        activation_revision=policy["revision"], activated_by="owner", activated_at=current.isoformat())
     analysis = data["analysis"]
     analysis.update(analysis_id=analysis_id, created_at=current.isoformat())
     for fact in analysis["result"]["recommendations"][0]["evidence"]:
@@ -211,6 +212,7 @@ async def test_uncertain_claim_survives_disabled_policy_and_cannot_be_released_b
 async def test_read_proved_terminal_settlement_clears_claim_without_refunding_quota(final,monkeypatch):
     docs,native=case_documents();db=DB(docs);await authorize(db,native)
     db[AUTOMATION_POLICIES].rows[0].update(enabled=False,revision=4)
+    db[AUTOMATION_POLICIES].rows[0].pop("activation_version",None)
     row=db[PROPOSALS].rows[0]
     if final=="completed":row.update(status="completed",verified=True,submission_started=True)
     elif final=="cancelled_before_dispatch":row.update(status="failed",submission_started=False,safe_error="execution_cancelled_before_dispatch")
@@ -308,7 +310,8 @@ async def test_reserved_daily_slot_is_not_reset_by_cancel_or_policy_revisions():
     db=DB(docs);await authorize(db,native)
     db[PROPOSALS].rows[0].update(status="failed",submission_started=False,safe_error="execution_cancelled_before_dispatch")
     await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
-    db[AUTOMATION_POLICIES].rows[0].update(revision=5,enabled=True,updated_at=(NOW+timedelta(hours=1)).isoformat())
+    db[AUTOMATION_POLICIES].rows[0].update(revision=5,enabled=True,updated_at=(NOW+timedelta(hours=1)).isoformat(),
+        activation_revision=5,activated_by="owner",activated_at=(NOW+timedelta(hours=1)).isoformat())
     later=NOW+timedelta(hours=2);fresh=next_attempt(db,later)
     with pytest.raises(HTTPException) as error:
         await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
@@ -395,3 +398,68 @@ async def test_pre_cas_failure_with_existing_claim_never_permits_fence_cleanup(s
     assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]["claim_id"] == "claim1"
     assert db[FENCES].rows[0]["status"] == "claimed"
     assert db[PROPOSALS].rows[0]["status"] == "approved"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("activation",[None,0,True,"1",2])
+async def test_legacy_or_unrecognized_activation_cannot_start_when_execution_flag_is_enabled(activation):
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    if activation is None:configured.pop("activation_version",None)
+    else:configured["activation_version"]=activation
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs)
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_activation_required"
+    assert error.value.detail["preserve_execution_fence"] is True
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+def test_explicit_activation_version_is_part_of_the_frozen_policy_digest():
+    docs,_=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    activated=authority.policy_authorization_digest({**configured,"activation_version":1})
+    legacy=authority.policy_authorization_digest({k:v for k,v in configured.items() if k!="activation_version"})
+    assert activated != legacy
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value",[
+    ("activation_revision",None),("activation_revision",True),("activation_revision","3"),("activation_revision",4),
+    ("activated_by","staff"),("activated_by",None),("activated_at",None),
+    ("activated_at","2026-10-26T01:00:00"),("activated_at",(NOW+timedelta(seconds=1)).isoformat()),
+])
+async def test_activation_ack_must_match_current_revision_owner_and_aware_nonfuture_time(field,value):
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    configured.update(activation_revision=3,activated_by="owner",activated_at=NOW.isoformat())
+    configured[field]=value
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs)
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_activation_required"
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_generic_policy_revision_bump_cannot_reactivate_a_previous_owner_acknowledgement():
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    configured.update(activation_version=1,activation_revision=3,activated_by="owner",activated_at=NOW.isoformat())
+    # The existing generic PUT/revoke increments revision and preserves internal
+    # activation fields. That preservation must not reactivate the new settings.
+    configured.update(revision=4,enabled=True)
+    row=docs[PROPOSALS][0]
+    from integrations_control_center.google_ads_autonomy_planner import plan_google_autonomy
+    row["idempotency_key"]=plan_google_autonomy(user_id="owner",account_id="123",policy=configured,analysis=docs[ANALYSES][0],
+        workspace=native["inventory"],history={"user_id":"owner","account_id":"123","items":[],"complete":True},current=NOW)["candidates"][0]["idempotency_key"]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    with pytest.raises(HTTPException) as error:await authorize(DB(docs),native)
+    assert error.value.detail["code"] == "google_automation_activation_required"
+
+
+@pytest.mark.parametrize("field,value",[("activation_revision",99),("activated_by","other"),("activated_at","2026-10-26T00:00:00Z")])
+def test_activation_acknowledgement_fields_are_frozen_in_policy_digest(field,value):
+    docs,_=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    assert authority.policy_authorization_digest(configured) != authority.policy_authorization_digest({**configured,field:value})

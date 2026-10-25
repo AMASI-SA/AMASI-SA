@@ -19,6 +19,9 @@ def matches(row, query):
             if not all(matches(row, clause) for clause in value): return False
         elif key == "$or":
             if not any(matches(row, clause) for clause in value): return False
+        elif key == "$expr":
+            left,right=value["$eq"]
+            if row.get(left[1:]) != row.get(right[1:]): return False
         elif isinstance(value, dict):
             for op, bound in value.items():
                 current = row.get(key)
@@ -67,7 +70,7 @@ def fixtures():
     period=dict(account_id="123",currency_code="SAR",time_zone="Asia/Riyadh",date_from="2026-10-24",date_to="2026-10-26")
     evidence=dict(evidence_id="google:campaign:123:456:spend_native",campaign_id="456",source="google_ads_api",metric="spend_native",value="20",observed_at=NOW.isoformat(),**{k:v for k,v in period.items() if k!="account_id"})
     recommendation=dict(provider="google_ads",account_id="123",campaign_id="456",recommendation_id="rec1",action="PAUSE_CAMPAIGN",confidence="high",evidence=[evidence],proposed_budget_native=None)
-    policy=dict(user_id="owner",account_id="123",schema_version=1,revision=1,enabled=True,currency_code="SAR",time_zone="Asia/Riyadh",campaign_ids=["456"],allowed_actions=["pause"],max_campaign_daily_budget_native="40",max_account_daily_budget_native="55",max_budget_change_percent="10",cooldown_seconds=3600,max_actions_per_day=3,expires_at=(NOW+timedelta(days=1)).isoformat())
+    policy=dict(user_id="owner",account_id="123",schema_version=1,activation_version=1,activation_revision=1,activated_by="owner",activated_at=NOW.isoformat(),revision=1,enabled=True,currency_code="SAR",time_zone="Asia/Riyadh",campaign_ids=["456"],allowed_actions=["pause"],max_campaign_daily_budget_native="40",max_account_daily_budget_native="55",max_budget_change_percent="10",cooldown_seconds=3600,max_actions_per_day=3,expires_at=(NOW+timedelta(days=1)).isoformat())
     analysis=dict(provider="google_ads",account_id="123",period=period,recommendations=[recommendation])
     campaign=dict(account_id="123",campaign_id="456",source="google_ads_api",observed_at=NOW.isoformat(),currency_code="SAR",time_zone="Asia/Riyadh",status="ENABLED",budget_native="20",budget_mode="DAILY")
     inventory=dict(account_id="123",currency_code="SAR",time_zone="Asia/Riyadh",observed_at=NOW.isoformat(),complete=True,campaigns=[campaign])
@@ -159,6 +162,59 @@ async def test_expired_or_disabled_policy_does_no_provider_or_model_work(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_legacy_enabled_configuration_is_not_an_owner_activation(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch)
+    db[AUTOMATION_POLICIES].rows[0].pop("activation_version")
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["accounts"]==0 and calls==[]
+    assert db[ANALYSES].rows==[] and worker.CYCLES not in db.collections
+
+
+@pytest.mark.asyncio
+async def test_boolean_activation_value_is_not_an_integer_owner_activation(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch)
+    db[AUTOMATION_POLICIES].rows[0]["activation_version"]=True
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert calls==[] and result["accounts"]==0
+
+
+@pytest.mark.asyncio
+async def test_policy_revision_change_does_not_inherit_an_older_owner_activation(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch)
+    db[AUTOMATION_POLICIES].rows[0]["revision"]=2
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["accounts"]==0 and calls==[] and worker.CYCLES not in db.collections
+
+
+@pytest.mark.asyncio
+async def test_missing_activation_revision_is_not_an_owner_activation(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch)
+    db[AUTOMATION_POLICIES].rows[0].pop("activation_revision")
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["accounts"]==0 and calls==[]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changes",[{"activated_by":"other"},{"activated_at":None},
+    {"activated_at":NOW.replace(tzinfo=None).isoformat()}, {"activated_at":(NOW+timedelta(seconds=1)).isoformat()}])
+async def test_unproved_activation_owner_or_time_never_reaches_model(monkeypatch,changes):
+    db,calls,dependencies=setup(monkeypatch)
+    db[AUTOMATION_POLICIES].rows[0].update(changes)
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["accounts"]==0 and not calls and worker.CYCLES not in db.collections
+
+
+@pytest.mark.asyncio
+async def test_activation_version_revoked_while_analysis_runs_stops_native_preview(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch);original=dependencies["analysis_builder"]
+    async def changed(*args,**kwargs):
+        result=await original(*args,**kwargs);db[AUTOMATION_POLICIES].rows[0].pop("activation_version");return result
+    dependencies["analysis_builder"]=changed
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["results"][0]["status"]=="policy_changed" and calls==["analyze"]
+
+
+@pytest.mark.asyncio
 async def test_persisted_owner_revocation_prevents_native_work(monkeypatch):
     db,calls,dependencies=setup(monkeypatch);db.users.rows[0]["role"]="viewer"
     result=await worker.run_google_automation_cycle(db,**dependencies)
@@ -168,6 +224,7 @@ async def test_persisted_owner_revocation_prevents_native_work(monkeypatch):
 @pytest.mark.asyncio
 async def test_pending_autonomous_outcome_reconciles_even_when_policy_revoked_and_never_executes(monkeypatch):
     db,calls,dependencies=setup(monkeypatch);db[AUTOMATION_POLICIES].rows[0]["enabled"]=False
+    db[AUTOMATION_POLICIES].rows[0].pop("activation_version")
     db[PROPOSALS].rows=[{"user_id":"owner","account_id":"123","proposal_id":"pending1","status":"uncertain","submission_started":True,"automation_source":{"kind":"standing_policy"}}]
     result=await worker.run_google_automation_cycle(db,**dependencies)
     assert calls==["reconcile"] and result["results"][0]["status"]=="uncertain"
@@ -183,6 +240,24 @@ async def test_pending_recovery_bypasses_analysis_cadence_but_never_resends(monk
     result=await worker.run_google_automation_cycle(db,**dependencies)
     assert result["results"][0]["status"]=="uncertain" and calls.count("execute")==1
     assert calls[-1]=="reconcile"
+
+
+@pytest.mark.asyncio
+async def test_recovery_preserves_naive_utc_mongo_cadence_timestamp(monkeypatch):
+    db,calls,dependencies=setup(monkeypatch)
+    await worker.run_google_automation_cycle(db,**dependencies)
+    expected=NOW+worker.INTERVAL
+    db[AUTOMATION_POLICIES].rows[0]["enabled"]=False
+    db[PROPOSALS].rows=[{"user_id":"owner","account_id":"123","proposal_id":"pending1","status":"uncertain","submission_started":True,"automation_source":{"kind":"standing_policy"}}]
+    original=worker._claim
+    async def decoded(*args,**kwargs):
+        result=await original(*args,**kwargs)
+        if result: result["next_run_at"]=result["next_run_at"].replace(tzinfo=None)
+        return result
+    monkeypatch.setattr(worker,"_claim",decoded)
+    result=await worker.run_google_automation_cycle(db,**dependencies)
+    assert result["results"][0]["status"]=="uncertain"
+    assert db[worker.CYCLES].rows[0]["next_run_at"]==expected
 
 
 @pytest.mark.asyncio
@@ -323,3 +398,15 @@ async def test_native_analysis_has_service_read_actor_and_policy_limited_model_a
     assert captured[0]["permitted_actions"]==["PAUSE_CAMPAIGN"]
     assert captured[0]["limits"]["max_daily_budget_native"]=="40"
     assert [row["campaign_id"] for row in captured[0]["campaigns"]]==["456"]
+
+
+@pytest.mark.asyncio
+async def test_direct_analysis_helper_also_rejects_legacy_configuration_before_native_reads(monkeypatch):
+    from fastapi import HTTPException
+    from integrations_control_center import google_ads_workspace
+    policy,_,_=fixtures();policy.pop("activation_version")
+    async def forbidden(*args,**kwargs): raise AssertionError("unactivated policy reached native read")
+    monkeypatch.setattr(google_ads_workspace,"read_google_workspace",forbidden)
+    with pytest.raises(HTTPException) as error:
+        await worker.build_google_automation_analysis(DB(),policy,current=NOW)
+    assert error.value.status_code==403 and error.value.detail["code"]=="google_automation_activation_required"

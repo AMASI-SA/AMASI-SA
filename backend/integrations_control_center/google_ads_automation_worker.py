@@ -57,7 +57,11 @@ def _scope_ok(user_id, account_id):
 
 
 def _policy_gate(policy, current, *, user_id, account_id):
+    from .google_ads_automation_authority import activation_proof_valid
     if not isinstance(policy,dict): return False
+    # Older configuration could store enabled=True while no executor existed.
+    # Only a new explicit owner activation may authorize the installed worker.
+    if not activation_proof_valid(policy,current): return False
     result = plan_google_autonomy(user_id=user_id, account_id=account_id,
         policy=policy, analysis={}, workspace={}, history={}, current=current)
     return result["blockers"] == ["analysis_scope_unproved"]
@@ -68,6 +72,8 @@ async def build_google_automation_analysis(db, policy, *, current):
     from .google_ads_ai import GoogleAIAnalysisInput, analyze_google_campaigns
     from .google_ads_client import problem
     from .google_ads_workspace import read_google_workspace
+    if not _policy_gate(policy,current,user_id=policy.get("user_id"),account_id=policy.get("account_id")):
+        raise problem("google_automation_activation_required", "يلزم تفعيل صريح جديد للإدارة الآلية من المالك.", 403)
     end = current.astimezone(ZoneInfo(policy["time_zone"])).date()
     request = GoogleAIAnalysisInput(account_id=policy["account_id"],
         date_from=(end-timedelta(days=2)).isoformat(), date_to=end.isoformat())
@@ -213,7 +219,12 @@ async def run_google_automation_cycle(db, *, analysis_builder=None, inventory_re
     analysis_builder=analysis_builder or build_google_automation_analysis
     inventory_reader=inventory_reader or read_google_automation_inventory
     current=clock()
-    policies=(await db[AUTOMATION_POLICIES].find({"enabled":True,"expires_at":{"$gt":current.isoformat()}}, {"_id":0}).to_list(length=MAX_ACCOUNTS+1)) if allow_analysis else []
+    from .google_ads_automation_authority import ACTIVATION_VERSION,activation_proof_valid
+    policies=(await db[AUTOMATION_POLICIES].find({"enabled":True,"activation_version":ACTIVATION_VERSION,
+        "$expr":{"$eq":["$activation_revision","$revision"]},
+        "activated_by":{"$exists":True},"activated_at":{"$exists":True},
+        "expires_at":{"$gt":current.isoformat()}}, {"_id":0}).to_list(length=MAX_ACCOUNTS+1)) if allow_analysis else []
+    policies=[policy for policy in policies if activation_proof_valid(policy,current)]
     pending=await db[PROPOSALS].find({"automation_source.kind":"standing_policy","status":{"$in":list(PENDING)}},
         {"_id":0,"user_id":1,"account_id":1}).to_list(length=MAX_ACCOUNTS+1)
     accounts={}
@@ -238,8 +249,13 @@ async def run_google_automation_cycle(db, *, analysis_builder=None, inventory_re
             finally:
                 finished=clock()
                 next_run=finished+(RETRY_DELAY if result["status"]=="failed" else INTERVAL)
-                if recovery and isinstance(claim.get("next_run_at"),datetime) and claim["next_run_at"]>finished:
-                    next_run=claim["next_run_at"]
+                previous=claim.get("next_run_at")
+                # Motor's default codec decodes BSON UTC datetimes as naive.
+                # Treat that decoded value as UTC, never as local wall time.
+                if isinstance(previous,datetime):
+                    previous=previous.replace(tzinfo=previous.tzinfo or timezone.utc).astimezone(timezone.utc)
+                if recovery and isinstance(previous,datetime) and previous>finished:
+                    next_run=previous
                 await db[CYCLES].update_one({"_id":claim["_id"],"state":"running","claim_token":claim["claim_token"]},
                     {"$set":{"state":"idle","finished_at":finished,"next_run_at":next_run,"last_status":result["status"]}})
         results.append({"account_id":account_id,**result})

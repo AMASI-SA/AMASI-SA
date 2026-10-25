@@ -48,7 +48,8 @@ def rebased_case(current, *, proposal_id="proposal1", claim_id="claim1", stored_
     docs,native=case_documents(proposal_id=proposal_id,claim_id=claim_id)
     configured=deepcopy(stored_policy) if stored_policy is not None else docs[policy.AUTOMATION_POLICIES][0]
     if stored_policy is None:
-        configured.update(updated_at=current.isoformat(),expires_at=(current+timedelta(days=1)).isoformat())
+        configured.update(updated_at=current.isoformat(),expires_at=(current+timedelta(days=1)).isoformat(),
+            activated_at=current.isoformat())
     configured.pop("_id",None)
     docs[policy.AUTOMATION_POLICIES]=[configured]
     analysis=docs[management.ANALYSES][0]
@@ -201,12 +202,20 @@ async def test_real_unused_reservation_survives_revoke_and_renewal_revision(monk
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app),base_url="http://test") as client:
         assert (await client.post("/google_ads/automation/policy/123/revoke",json={"expected_revision":3})).status_code == 200
         assert (await client.put("/google_ads/automation/policy/123",json=renewal_body(configured,4))).status_code == 200
+    renewed=await authority_db[policy.AUTOMATION_POLICIES].find_one({"user_id":"owner","account_id":"123"})
+    assert renewed["revision"] == 5 and renewed["activation_revision"] == 3
+    assert authority.activation_proof_valid(renewed,later) is False
+    # Model the future explicit owner-activation CAS, not the generic PUT above.
+    # The activation endpoint itself is deliberately outside this module/slice.
+    activated=await authority_db[policy.AUTOMATION_POLICIES].update_one({"user_id":"owner","account_id":"123","revision":5},
+        {"$set":{"revision":6,"activation_version":1,"activation_revision":6,"activated_by":"owner",        "activated_at":later.isoformat(),"updated_at":later.isoformat()}})
+    assert activated.matched_count == 1
     fresh=await insert_attempt(authority_db,later)
     with pytest.raises(HTTPException) as error:
         await authorize(authority_db,fresh,later,"proposal2","claim2")
     assert error.value.detail["code"] == "google_automation_daily_action_limit"
     stored=await authority_db[policy.AUTOMATION_POLICIES].find_one({"user_id":"owner","account_id":"123"})
-    assert stored["revision"] == 5 and stored["enabled"] is True and stored["_dispatch_claim"] is None
+    assert stored["revision"] == 6 and stored["enabled"] is True and stored["_dispatch_claim"] is None
     assert stored["_dispatch_days"][0]["proposal_ids"] == ["proposal1"]
 
 

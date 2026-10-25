@@ -1,18 +1,20 @@
 {
-  "scope": "Google only; standing-policy CAS authority and defaultoff worker",
-  "state": "WIP UNWIRED NOTDEPLOYABLE; no nativeautogateway orstartuphook",
+  "scope": "Google only; explicit standing-authority CAS and defaultoff worker",
+  "state": "WIP UNWIRED NOTDEPLOYABLE; rootnativegatewayunderimplementation; no startup/activationendpoint",
   "base": "c464ccb0588862c45ce2cba48658b923b2e10110",
   "files": [
     "backend/integrations_control_center/google_ads_automation_authority.py",
     "backend/tests/test_google_ads_automation_authority.py",
     "backend/tests/test_google_ads_automation_authority_mongo.py",
     "backend/integrations_control_center/google_ads_automation_worker.py",
-    "backend/tests/test_google_ads_automation_worker.py"
+    "backend/tests/test_google_ads_automation_worker.py",
+    "backend/tests/test_google_ads_automation_worker_mongo.py",
+    ".github/workflows/google-ads-full-management.yml"
   ],
-  "verification": "Root fresh180passed6Mongo skips1.93s; authority35unit,worker24unit;6realMongo cases pendingCI; noApp/providerwrites",
-  "contract": "Samepolicyclaim/quotaCAS; ALLfailed/ambiguousauthorizations preserveaccountfence/noautomaticretry; cancelledtaskpreservesclaim; read-onlyterminalsettlementnofundrefund. WorkerdefaultoffnoDB; executionoff+workeron recoveryonly; oneaction/account.",
-  "required_next": "Independentreview; actualgatewayseparateautomatedentrypoints withoptionalimmutablebinding andmanualproposalrejection; keepnativepreview/drift/fence/submittedfloor/readback/uncertainsemantics. Handleauthorizationfailureholdfence; terminalCAScancelbeforeunlock ifprovenunsubmitted/noactiveforeignclaim. Defaultoffisolatedchildscheduler+APIownerstatus/revokeshowsinflight. RealMongoCI. No syntheticownerprincipal, no policyenable/campaignactivation.",
-  "production": "1520publishedverified+6reclivepass;1522Mcb08defhostbuildrunning, nolease/publishyet",
+  "verification": "Rootfresh210passed9Mongo skips2.09s; authority54,worker35,9realMongo cases nowaddedtoexactCI",
+  "activation": "version1+activation_revision==policyrevision+activated_byissuer+awarepastactivated_at required; genericpolicy/revokerevisionbumpinvalidatesoldack",
+  "contract": "ALLauthorizationfailures/cancellationholdfence; noautomaticretry; samepolicydocquota/claimCAS; read-onlyterminalsettlementnofundrefund. WorkerdefaultoffnoDB; executionoffrecoveryonly;4accountsoneactioneach.",
+  "required_next": "ExactCIrealMongo9; finishprivatecore manual/auto separatednativegateway tests; rootowneractivation/status/revokeinflight+defaultoffchildstartup; independentintegratedreview. No providerwrites or actualenable.1520publishedverified6reclive,1522hostretry1running.",
   "provider_writes": 0,
   "full_autonomy_complete": false
 }
