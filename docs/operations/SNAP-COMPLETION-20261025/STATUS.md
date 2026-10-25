@@ -1,5 +1,14 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+##1519 release resumed — rehearsal passed and merged, build in progress
+
+Owner explicitly confirms Google publication complete and requests publication of preparedSnapchatupdates. Freshguard /tmp/snap1519-authorized-gate.json reportsactivefalse; ProductionstillreviewedJdede. ExactB actualEmergentcleanclone /tmp/snap1519-rehearsal completed successfully65.560s, runtime rg5-f0ac0fa23585221808f842f34aef4f64b5e2bfa1cdc09cceb01c9496dc033c85/sourceAb21814aaaf6314c5a723a4d858a768f8d3be5437. All68Bchecks remaingreen.
+
+NormalPR1519merge M e6694a7198ab828996852cbf383149d0ab06364f. VerifiedMtree7e417af49e4a3b3ff08ed4b85a9505aef6331226 equalsBtree;parentsJdede+B38eee; A→MdiffONLYrelease/release-intent-v5.json. ProductionbranchchangedYES; live1519runtimepublication NOTYETclaimed. Freshinactivegate before/appffonly; officialbuildcommandinprogress /tmp/snap1519-official-build.log. Onlyderivednonsymlinkbackendbytecodecaches mayberemoved;unrelated/appfilespreserved. No ownleaseyet.
+
+Next:officialbuildsuccess/exactM identity→prepareactorcodex-snap1519→immediateprepublish→oneUIpublish(newerthanobservedGoogleDeploymentfinishedOct26 01:25Riyadh)→explicitnewfinish→officialverify3/inactive→liveknownsubtotal/zero/nonblocking/recommendations/ACTIVEpublisheracceptance. Never repeat an alreadyacceptedpublish or closeforeignlease. SaudiCAMPAIGNSpausedtemporarily/accountremainsenabled; no nativead/budgetactivationasatest. This documentationbranchMUSTNOTdeploy.
+
+
 ## Owner clarification — zero spend must never block the dashboard
 
 Saudi CAMPAIGNS are temporarily paused and may be started at any time; the account stays enabled/included in normal sync. A valid observed0 is a numeric value and must not block loading, reading, or the other accounts. No account exclusion/disable is requested. Root freshpublic combine_dashboard_spend contract check on exactfrozenB used USD81.32SAR+Saudi0SAR: fullportfolio81.32, known81.32, amountavailabletrue, completetrue and hourly81.32. Exit0; no source/DB/provider mutation. Unknown evidence remains distinct from observed0; the known-subtotal repair does not relabel it as0.
