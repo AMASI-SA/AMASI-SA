@@ -21,7 +21,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: mezan-release-readiness
+  # Readiness uses isolated checkouts; serialize revisions of each PR/ref.
+  # A different PR must not replace this candidate's pending verification.
+  group: mezan-release-readiness-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:

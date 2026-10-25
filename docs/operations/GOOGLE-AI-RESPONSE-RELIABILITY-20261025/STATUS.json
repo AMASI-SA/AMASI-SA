@@ -1,0 +1,101 @@
+{
+  "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-response-reliability-r3-20261025",
+  "base": "5065c605004595e06606e2bfc99454ec629c733e",
+  "status": "SOURCE_ON_LATEST_SNAPCHAT_BASE_CI_ARTIFACT_HANDOFF_PENDING",
+  "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
+  "evidence": {
+    "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
+    "google_account_analysis": "still timed out",
+    "single_campaign": "generic failure",
+    "core_assistant": "neutral technical request returned invalid result after ~16s; no raw response available",
+    "credential_safety": "no credentials read, copied, provisioned or changed; existing Mezan AI integration only"
+  },
+  "hypothesis": "Reasoning/output budget and response contract may cause failures; exact production code not yet logged. Do not claim root cause proven.",
+  "implemented": [
+    "At most6concise recommendations from all supplied campaign evidence",
+    "GPT5 family minimal reasoning with low fallback for configured later models;8000 total output token budget; bounded40s retained",
+    "Safe constant error codes, allowlisted incomplete reason/numeric token counts, allowlisted exception class only; no model output or exception text",
+    "Distinct safe UI explanations for incomplete or unverified results"
+  ],
+  "verification": {
+    "red": "3focused regressions failed; compatible-model case passed",
+    "backend": "101 AI/actions/context tests passed in1.64s",
+    "frontend": "CI pending",
+    "current_source_ci": {
+      "previous_sha": "92c174be2297d1b9b0eb27b3bb1f45d46bcb2b60",
+      "success": 8,
+      "cancelled_readiness": 40217891164,
+      "readiness_jobs_created": 0
+    },
+    "clone": "exit0 /tmp/google1485-release literalA",
+    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
+  },
+  "user_autonomy_preferences": {
+    "budget_mode": "preserve_current_approved_total_budget",
+    "objective": "google_native_roas",
+    "source": "user answered structured questions",
+    "provider": "google_ads",
+    "financial_attribution": "native conversion_value/spend only; not net profit"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "production_changed": false,
+  "next_safe_action": "Use exact new-A Readiness CI candidate artifact (release-v5-reviewed-intent-candidate) and clean-clone rehearsal evidence; download with GitHub workflow-artifact connector, validate JSON A/J/hash, then create intent-only B. Wait foreign actual /app lease inactive before merge/shared adapter/prepare/publish. CI queue isolated perPR. Do not use any old host/temp intent.",
+  "concurrent_update": {
+    "pr": 1482,
+    "scope": "TikTok creator readiness",
+    "files_overlap": false,
+    "preserved": true
+  },
+  "prior_frozen_source": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
+  "prior_source_ci": "all9pass/379backend/96frontend",
+  "prior_freeze": "exit0 against73901...; superseded before B/merge/publish; immutable prior source retained",
+  "concurrent_updates": [
+    {
+      "pr": 1482,
+      "scope": "TikTok",
+      "preserved": true
+    },
+    {
+      "pr": 1483,
+      "scope": "Snapchat",
+      "preserved": true
+    },
+    {
+      "pr": 1487,
+      "scope": "TikTok publishing settings",
+      "preserved": true
+    },
+    {
+      "pr": 1488,
+      "scope": "Snapchat budget direction",
+      "preserved": true
+    }
+  ],
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1485",
+  "shared_release_guard": {
+    "active": true,
+    "actor": "codex-snap1488",
+    "source_git_sha": "0aaac598d41851359dd61df92ae8994ad27f4060",
+    "deployment_git_sha": "5065c605004595e06606e2bfc99454ec629c733e",
+    "release_id": "rg5-4a0d28846078c5e719e3cd76cb928966cf899efcf7bdb87a60ab405912efe4cb"
+  },
+  "previous_pr": {
+    "number": 1484,
+    "state": "closed_unmerged_superseded_before_B",
+    "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
+  },
+  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload.",
+  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc",
+  "ci_queue_fix": {
+    "from": "one repository-wide mezan-release-readiness group",
+    "to": "one group per PR/ref",
+    "cancel_in_progress": false,
+    "jobs_permissions_and_production_guard": "unchanged",
+    "yaml_parse": "pass; semantic comparison only concurrency group changed; all4jobs and contents:read retained",
+    "source": "official GitHub concurrency docs and observed cancelled-before-jobs run"
+  },
+  "prior_source": "d11c2598c37f94858c62adfb15d3c6a76223be70"
+}
