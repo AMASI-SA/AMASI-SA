@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r4-20261026",
   "source_base": "d88877c8fe7d001448dd0fbe7f569ebb591e37a1",
-  "state": "fresh_R4_source_preserving_concurrent_Google1520_pending_CI",
+  "state": "R4_reviewed_B_CI_running_foreign_Google1520_lease_active",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Fresh R4 A CI and reviewed intentB/B CI. Original-host freshinactive guard before R4 adapter;normal exact-tree merge only if current Production remainsJd888;actualhost adapter/freshownprepare+prepublish/onePublish+explicitfinish+verify3;ownerUI nativefile readiness/privatefiletest+captioncatalogsmoke,no new liveAIbudget. Preserve frozen1521 pair and other actorsleases.",
+  "next": "Finish current B checks and exact manifest diff. After Google1520 closes lease,read freshactive:false;isolated /tmp/tiktok1523-release exactB20a8e60c... adapter0/exactA092ce.../runtime0f00 required;fresh ProductionJd888 and exacthead checks;normal merge;freshinactiveguardbefore/app fast-forward+actualadapter;ownprepare/prepublish;onePublish+explicitfinish+verify3;ownerUI nativefile readiness/private officialfixture/CORS/native status;captionproductsearch(no liveAIbudget). Preserve frozen1523pair if Productionadvances.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -38,8 +38,12 @@
   "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
-    "state": "Fresh original-host guard read required before rehearsal or /app changes",
-    "previous_actor": "codex-google1515"
+    "guard_active": true,
+    "actor": "codex-google1520",
+    "deployment_git_sha": "d88877c8fe7d001448dd0fbe7f569ebb591e37a1",
+    "original_host_HEAD": "d88877c8fe7d001448dd0fbe7f569ebb591e37a1",
+    "rehearsal_not_started": true,
+    "rule": "Fresh active:false before R4 original-host rehearsal or /app changes. Never clear/reuse/verify another actor lease."
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -63,5 +67,11 @@
     "B": "3bc44b0576f4c32f9676a50e52f426735bc1893e",
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
-  }
+  },
+  "source_A": "092ce35d31c459d971bf74c595b0a11dd09aae20",
+  "intent_B": "20a8e60c0b81d05af433bcf23ba44cec4e37efbb",
+  "runtime": "rg5-0f00f6363313152f0eb7e4578a043dcad879a26db32a19d690b28fbd97231891",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1523",
+  "observed_at": "2026-10-25T23:01:40.280Z",
+  "original_host": "Code-server lost connection during obsolete R3 isolated build. Reload Window restored editor;new container session has new Terminal2 owned by this task and /tmp prior task clones absent. No completed R3 result can be used;R4 fresh clone/adapter required. /app tracked clean;preserved untracked .emergent/testing/ and deployer-agent-docs/."
 }
