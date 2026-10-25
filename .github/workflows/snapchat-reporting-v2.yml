@@ -24,6 +24,7 @@ on:
       - "backend/tests/test_unified_marketing_multi_account_dashboard.py"
       - "backend/tests/test_unified_marketing_snapchat_range_proof.py"
       - "backend/unified_marketing/**"
+      - "backend/integrations_control_center/dashboard_ads_platform_spend_routes.py"
       - "backend/campaign_ai_unified*.py"
       - "backend/campaign_ai_execution_quality_gate.py"
       - "backend/campaign_ai_policy_v2.py"
@@ -34,6 +35,10 @@ on:
       - "frontend/src/components/marketing/SnapchatDecisionReadiness*"
       - "frontend/src/components/marketing/MarketingDecisionReadiness*"
       - "frontend/src/pages/SnapchatV2Page*"
+      - "frontend/src/components/DashboardAdsSpendCard.jsx"
+      - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/services/dashboardAdsSpend.js"
+      - "frontend/src/services/dashboardAdsSpend.test.js"
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
       - "backend/tests/test_snapchat_reporting_v2_*.py"
@@ -132,3 +137,5 @@ jobs:
           src/components/marketing/UnifiedMarketingOrdersPanel.test.jsx
           src/components/marketing/SnapchatDecisionReadiness.test.jsx
           src/pages/SnapchatV2Page.test.jsx
+          src/components/DashboardAdsSpendCard.test.jsx
+          src/services/dashboardAdsSpend.test.js

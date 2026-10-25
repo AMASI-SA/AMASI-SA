@@ -103,3 +103,62 @@ test("periodic Google advice shares the list but cannot execute through the Snap
     }
 });
 
+test.each(["evidence", "decision_facts"])("structured %s renders beside Snapchat strings without writes", async (field) => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const fact = (metric, value, currency_code = "USD") => ({
+        evidence_id: "private-evidence-id", campaign_id: "private-campaign-id", metric, value,
+        source: "private-provider-source", currency_code, time_zone: "Asia/Riyadh",
+        date_from: "2026-10-24", date_to: "2026-10-25", observed_at: "2026-10-25T09:00:00Z",
+    });
+    const google = {
+        recommendation_id: "structured-google", provider: "google", account_id: "123",
+        entity_level: "campaign", entity_name: "Structured Google campaign", priority: "high",
+        recommended_action: "REVIEW_TRACKING", action_type: "diagnostic", confidence: "high",
+        [field]: [fact("spend_native", 12.34), fact("clicks", 1234), fact("roas", 2.5), fact("ctr", 0.025),
+            fact("spend_native", 25, "SAR"), fact("conversions", 0), fact("ctr_pct", 7.25),
+            fact("spend_native", { amount: "nested-value-must-not-render" }), { nested: { detail: "private-detail" } }],
+        evidence_for: [fact("orders", 7)],
+        evidence_against: [fact("roas", 0)],
+        primary_hypothesis: { category: "TRACKING", confidence: "high", statement: "Review the verified measurements",
+            evidence_for: [fact("clicks", 1234)], evidence_against: [fact("conversions", 0)] },
+    };
+    const snapchat = {
+        recommendation_id: "string-snapchat", provider: "snapchat", entity_level: "campaign",
+        entity_name: "Snapchat string campaign", priority: "medium", recommended_action: "DECREASE_BUDGET",
+        action_type: "ads_write", executable: true, approval_available: true,
+        evidence: ["صرف سناب 100 ر.س", "المخزون متاح", { text: "دليل سناب النصي محفوظ" }, { value: { nested: true } }],
+    };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/latest")
+        ? { snapshot_id: "mixed-evidence-snapshot", recommendations: [google, snapchat] } : {} }));
+    api.post.mockReset(); api.put.mockReset();
+    const container = document.createElement("div"); document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<CampaignRecommendations />));
+        let cards = container.querySelectorAll('[data-testid="campaign-recommendations-list"] article');
+        expect(cards).toHaveLength(2);
+        for (const text of ["الصرف: 12.34 USD", "النقرات: 1,234", "العائد على الإنفاق: 2.5×", "نسبة النقر: 2.5%"])
+            expect(cards[0].textContent).toContain(text);
+        for (const text of snapchat.evidence.slice(0, 2)) expect(cards[1].textContent).toContain(text);
+        expect(cards[1].textContent).toContain("دليل سناب النصي محفوظ");
+        expect(cards[1].textContent).toContain("تفاصيل الدليل غير متاحة");
+        const expand = [...cards[0].querySelectorAll("button")].find((button) => button.textContent === "عرض التحليل المتقدم");
+        await act(async () => expand.click());
+        const explanation = container.querySelector('[data-testid="recommendation-explanation-structured-google"]');
+        for (const text of ["الصرف: 25 SAR", "التحويلات: 0", "نسبة النقر: 7.25%", "الطلبات: 7", "العائد على الإنفاق: 0×", "تفاصيل الدليل غير متاحة"])
+            expect(explanation.textContent).toContain(text);
+        for (const hidden of ["[object Object]", "private-evidence-id", "private-campaign-id", "private-provider-source",
+            "nested-value-must-not-render", "private-detail", "evidence_id", "currency_code"])
+            expect(container.textContent).not.toContain(hidden);
+        const refresh = [...container.querySelectorAll("button")].find((button) => button.textContent === "تحديث");
+        await act(async () => refresh.click());
+        cards = container.querySelectorAll('[data-testid="campaign-recommendations-list"] article');
+        expect(cards).toHaveLength(2);
+        expect(cards[1].textContent).toContain("صرف سناب 100 ر.س");
+        expect(api.post).not.toHaveBeenCalled();
+        expect(api.put).not.toHaveBeenCalled();
+    } finally {
+        await act(async () => root.unmount()); container.remove(); globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+});
+

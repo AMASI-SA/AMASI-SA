@@ -7,7 +7,7 @@ import {
     selectedPeriodLabel,
     default as DashboardAdsSpendCard,
 } from "./DashboardAdsSpendCard";
-import { getDashboardAdsSpend } from "../services/dashboardAdsSpend";
+import { getDashboardAdsSpend, normalizeDashboardAdsSpend } from "../services/dashboardAdsSpend";
 
 jest.mock("../services/dashboardAdsSpend", () => ({
     ...jest.requireActual("../services/dashboardAdsSpend"), getDashboardAdsSpend: jest.fn(),
@@ -259,4 +259,119 @@ test("uses Riyadh today and yesterday labels", () => {
     expect(selectedPeriodLabel(yesterday, yesterday)).toContain("صرفيات أمس");
     expect(selectedPeriodLabel("2026-08-01", "2026-08-04"))
         .toBe("من 2026-08-01 إلى 2026-08-04");
+});
+
+
+function midnightSpend({ amount = null, available = false, provisional = false, connected = true, hour = null,
+    knownTotal = null, knownAllTotal = null } = {}) {
+    return normalizeDashboardAdsSpend({
+        date_from: "2026-10-26", date_to: "2026-10-26", chart_granularity: "hour",
+        provider_totals_sar: { snapchat: amount, meta: 20, tiktok: 5, google: 7.5 },
+        total_sar: amount === null ? null : amount + 32.5,
+        known_total_sar: knownAllTotal,
+        providers: {
+            ...providers(),
+            snapchat: { ...providers().snapchat, connected,
+                amount_available: available, amount_complete: available && !provisional,
+                provisional, data_quality: available ? provisional ? "provisional" : "complete" : "incomplete",
+                known_total_sar: knownTotal, known_account_count: knownTotal === null ? 0 : 1,
+                incomplete_account_count: available ? 0 : 1,
+                data_state: available ? provisional ? "provisional_data" : "confirmed_zero" : "unknown_incomplete",
+                reason_codes: available ? ["open_riyadh_day_reconciliation_pending"]
+                    : ["unified_projection_financial_reconciliation_or_fx_incomplete"] },
+        },
+        spend_quality: { status: available ? provisional ? "provisional" : "complete" : "incomplete",
+            amount_available: available, amount_complete: available && !provisional, provisional },
+        daily_spend: [{ date: "2026-10-26", snapchat: 81.32, meta: 20, tiktok: 5, google: 7.5 }],
+        hourly_spend: [{ date: "2026-10-26", hour_index: 0, hour: "00:00", snapchat: hour, meta: 20, tiktok: 5, google: 7.5 }],
+    });
+}
+
+
+function midnightMarkup(data) {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<DashboardAdsSpendCardContent
+        fromDate="2026-10-26" toDate="2026-10-26" data={data} onRefresh={() => {}} />);
+    return host;
+}
+
+
+test.each([null, 0, 81.32])("connected incomplete Snapchat never presents %s as a full amount or no data", (amount) => {
+    const host = midnightMarkup(midnightSpend({ amount }));
+    const snapchat = host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+    expect(snapchat.textContent).toContain("بيانات غير مكتملة");
+    expect(snapchat.textContent).toContain("بانتظار اكتمال بيانات سناب");
+    expect(snapchat.textContent).not.toContain("لا بيانات");
+    expect(snapchat.textContent).not.toContain("81.32");
+    expect(snapchat.textContent).not.toContain("0.00 ر.س");
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toBe("إجمالي المنصات: بيانات غير مكتملة");
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-meta"]').textContent).toContain("20.00 ر.س");
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-tiktok"]').textContent).toContain("5.00 ر.س");
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-google"]').textContent).toContain("7.50 ر.س");
+    expect(host.textContent).not.toContain("line:سناب شات");
+    expect(host.textContent).toContain("line:Google Ads");
+});
+
+
+test.each([81.32, 0])("labels available Snapchat amount %s as provisional without inventing hour zero", (amount) => {
+    const data = midnightSpend({ amount, available: true, provisional: true });
+    const host = midnightMarkup(data);
+    const snapchat = host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+    expect(snapchat.textContent).toContain(`${amount.toFixed(2)} ر.س · أولي`);
+    expect(snapchat.textContent).toContain("تفصيل سناب الساعي غير مكتمل");
+    expect(snapchat.textContent).not.toContain("لا بيانات");
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toContain(`${(amount + 32.5).toFixed(2)} ر.س · أولي`);
+    expect(data.hourly_spend[0].snapchat).toBeNull();
+    expect(host.textContent).not.toContain("line:سناب شات");
+});
+
+
+test("preserves confirmed Snapchat zero and disconnected status", () => {
+    const zero = midnightMarkup(midnightSpend({ amount: 0, available: true, hour: 0 }));
+    const zeroCard = zero.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+    expect(zeroCard.textContent).toContain("0.00 ر.س");
+    expect(zeroCard.textContent).not.toContain("أولي");
+    expect(zeroCard.textContent).not.toContain("غير مكتمل");
+    expect(zero.textContent).toContain("line:سناب شات");
+    const disconnected = midnightMarkup(midnightSpend({ connected: false }));
+    const disconnectedCard = disconnected.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+    expect(disconnectedCard.textContent).toContain("غير مربوط");
+    expect(disconnectedCard.textContent).not.toContain("بيانات غير مكتملة");
+});
+
+
+test.each([[81.32, 99.71, 18.39], [0, 0, 0]])(
+    "shows only explicit known Snapchat %s and platform %s amounts as incomplete", (known, knownAll, meta) => {
+        const data = midnightSpend({ knownTotal: known, knownAllTotal: knownAll });
+        // Match the known all-platform amount supplied by the backend; no
+        // missing Snapchat account or hour is counted as an observed zero.
+        Object.assign(data.provider_totals_sar, { meta, tiktok: 0, google: 0 });
+        Object.assign(data.daily_spend[0], { meta, tiktok: 0, google: 0 });
+        Object.assign(data.hourly_spend[0], { meta, tiktok: 0, google: 0 });
+        const host = midnightMarkup(data);
+        const snapchat = host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+        expect(snapchat.textContent).toContain(`المتاح ${known.toFixed(2)} ر.س · غير مكتمل`);
+        expect(snapchat.textContent).toContain("بيانات الحسابات غير مكتملة");
+        expect(snapchat.textContent).not.toContain("لا بيانات");
+        expect(snapchat.textContent).not.toContain("أولي");
+        expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+            .toBe(`إجمالي المنصات: غير مكتمل، المتاح ${knownAll.toFixed(2)} ر.س`);
+        expect(data.total_sar).toBeNull();
+        expect(data.provider_totals_sar.snapchat).toBeNull();
+        expect(data.hourly_spend[0].snapchat).toBeNull();
+        expect(host.textContent).not.toContain("line:سناب شات");
+    },
+);
+
+
+test("known other-platform spend never supplies a missing Snapchat known amount", () => {
+    const host = midnightMarkup(midnightSpend({ knownAllTotal: 32.5 }));
+    const snapchat = host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]');
+    expect(snapchat.textContent).toContain("بيانات غير مكتملة");
+    expect(snapchat.textContent).not.toContain("المتاح");
+    expect(snapchat.textContent).not.toContain("0.00 ر.س");
+    expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
+        .toBe("إجمالي المنصات: غير مكتمل، المتاح 32.50 ر.س");
 });
