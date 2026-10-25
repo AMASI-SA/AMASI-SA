@@ -727,7 +727,13 @@ recommending spend changes. A recommendation may only use the campaign's
 allowed_actions. A budget proposal must be a decimal string within the supplied
 budget_ceiling_native and max_budget_change_percent; otherwise propose a
 diagnostic action. Set proposed_budget_native null on other actions. Supply an
-observation plan and disclose limitations. You have no tools or write authority.
+observation plan and disclose limitations. Follow the supplied budget_semantics.
+A DAILY budget is an average, not a hard daily spend cap. Do not cite spend
+exceeding that average as a budget breach, inefficiency, targeting failure or
+reason to pause/reduce. Period spend may cover multiple days. Actual billed
+limits and budget-change history are unverified: do not derive or claim a
+verified billing-limit violation from the current budget and reported spend.
+You have no tools or write authority.
 """
 
 
@@ -736,6 +742,8 @@ async def analyze_google_campaigns(
     client_factory: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
     """Analyze an already authorized native read; never re-query raw orders."""
+    from .google_ads_campaign_contract import DAILY_BUDGET_EXPLANATION
+
     if not isinstance(body, GoogleAIAnalysisInput):
         body = GoogleAIAnalysisInput.model_validate(body)
     account = _account(facts, body.account_id)
@@ -813,6 +821,12 @@ async def analyze_google_campaigns(
         limitations.append("profitability_unverified")
     raw = await _reason(instructions=_ANALYSIS_INSTRUCTIONS,
                         payload={"period": period, "campaigns": list(campaigns.values()), "evidence": registry,
+                                 "budget_semantics": {
+                                     "DAILY": {"kind": "average_daily_budget", "hard_daily_spend_cap": False,
+                                               "explanation": DAILY_BUDGET_EXPLANATION},
+                                     "TOTAL": {"kind": "campaign_total_budget"},
+                                     "billing_limits_verified": False, "budget_history_verified": False,
+                                 },
                                  "limitations": list(dict.fromkeys(limitations))},
                         schema=_AnalysisOutput.model_json_schema(), schema_name="mezan_google_readonly_analysis",
                         # Native account reads precede structured reasoning.
