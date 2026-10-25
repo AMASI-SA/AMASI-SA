@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-spend-guard-20261025",
   "source_base": "04b8778d7afd727fba3970054ffa3c0531de6455",
-  "state": "WIP_backend_real_mongo_verified_owner_UI_implemented_frontend_CI_pending",
+  "state": "WIP_source_preserved_integrated_via_fresh_release1503",
   "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
   "contract": [
     "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
@@ -18,7 +18,8 @@
     "focused": "68 PASS in5.39s: real Mongo policies/CAS/concurrent cycles,final-boundary revocation,native day rollover,report validation,uncertain-write fencing,owner isolation,history filters and unknown coverage.",
     "full_native_backend": "495 PASS in30.09s before last unknown-inventory coverage regression; latest focused68 covers that subsequent change. Native transport is fixed in tests; no live provider writes or model calls.",
     "frontend": "Owner policy form and scoped action history implemented; four component tests plus workspace entry regression added. Frontend CI pending.",
-    "remaining": "Fresh frontend/native CI,review,then a separate fresh production-parent source A/intent B and actual-host rehearsal are required. This WIP is not approved for merge or deployment."
+    "remaining": "Fresh frontend/native CI,review,then a separate fresh production-parent source A/intent B and actual-host rehearsal are required. This WIP is not approved for merge or deployment.",
+    "exact_release": "Fresh ec33d33f/c287fba7 source-intent released viaPR1503; current B all13 applicable CI PASS,source496backend/140frontend24suites/build4.51s/isolationPASS; original-host adapter0. Exact-tree merge04db2224d68d6e5ed5629391355c4b45ab8b6d15."
   },
   "provider_business_writes": 0,
   "live_model_calls": 0,
@@ -26,6 +27,6 @@
   "manual_release": "Separate current PR1498 Afe7a1ca85ef67300b7f4bf5872999ed51349c9e7/B6d3614ac0a416b70aa2d20d62c04d7d0e51a859a all13applicable A/B CI PASS. Clean original-host rehearsal running. No merge or publication yet; do not edit frozen source.",
   "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
   "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
-  "next": "Checkpoint UI and verified backend; run frontend/native CI on WIP PR1497. Continue separate1498 original-host rehearsal/publication acceptance. Build any financial release directly on newest reviewed production J with only this task delta.",
+  "next": "Do not merge/deploy this WIP ancestry. Continue1503 actual/app adapter/own prepare/prepublish/publish/verify3 on evidence branch codex/tiktok-spend-guard-r2-evidence-20261025.",
   "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory."
 }
