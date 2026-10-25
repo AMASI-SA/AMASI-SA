@@ -1,0 +1,24 @@
+{
+  "task_id": "TIKTOK-DIRECT-FILE-UPLOAD-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-direct-file-upload-20261025",
+  "source_base": "81e8dc1eb808d6b3fb0306d07b8e7c0a6d8f880a",
+  "state": "WIP_contract_and_public_route_baseline",
+  "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
+  "acceptance": [
+    "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
+    "Mezan accepts bounded JSON metadata only. Native TikTok FILE_UPLOAD capability goes only to the exact owner; encrypted at rest,no logs,never proxied by Mezan.",
+    "Fresh existing creator token proof plus native OpenAPI identity/settings proof before preview and final one-shot initialization. Existing Business credentials are never assumed compatible without that native proof.",
+    "Immutable encrypted proposals,digest approval,owner isolation,permanent uncertain-initialization fence,read-only native reconciliation. Native status alone establishes published/draft completion.",
+    "No automatic retry after uncertain initialization or chunk transmission. No automatic public privacy choice or permission expansion.",
+    "Existing URL/photo publishing remains accessible. Default video workflow becomes file selection.",
+    "Fresh backend/frontend/contract tests and actual browser-to-TikTok CORS/native acceptance required before claiming end-to-end success."
+  ],
+  "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
+  "production_changed": false,
+  "provider_writes": 0,
+  "next": "Demonstrate typed route missing404,then implement a fixed-origin OpenAPI metadata transport and a thin owner file-upload slice. Preserve latest Google/Snap changes. Follow fresh production-parent v5 A/B release protocol before publication.",
+  "verification": {
+    "baseline": "Focused pytest exit1,one expected failure: public metadata route404 instead of required422,in1.09s. No implementation yet."
+  }
+}
