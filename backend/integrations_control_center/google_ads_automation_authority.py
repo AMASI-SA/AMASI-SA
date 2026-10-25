@@ -193,6 +193,14 @@ def _budget_reservation(inventory, target, candidate):
         "budget_increase_reserved_native": str(increase), "budget_semantics": "average_daily_budget"}
 
 
+async def _require_active_owner(db, user_id):
+    from auth import account_is_disabled
+    owner = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "role": 1,
+        "disabled": 1, "is_active": 1, "deleted_at": 1})
+    if not owner or str(owner.get("role") or "").lower() != "owner" or account_is_disabled(owner):
+        _fail("google_automation_owner_unavailable")
+
+
 async def authorize_google_automation_claim(db, *, user_id, account_id, proposal_id, execution_claim_id,
         native_evidence, current=None):
     """Reserve one standing-policy claim for the exact current native executor.
@@ -201,22 +209,35 @@ async def authorize_google_automation_claim(db, *, user_id, account_id, proposal
     client reads, never HTTP/model input. The gateway must freeze automation_source
     in its confirmation digest and claim the normal account/proposal fences first.
     Success does NOT submit or transition the proposal. An acknowledged native
-    submission floor is still mandatory. No resume/retry API is provided here.
+    submission floor is still mandatory. EVERY failure requires retaining the
+    execution fence: a prior invocation may already own a committed claim.
+    Recovery must terminally CAS-cancel the exact unsubmitted proposal, settle
+    any matching policy claim from that read proof, and only then release the
+    account fence. Read uncertainty or a submitted floor keeps it held. No
+    exception authorizes an automatic resend; no resume/retry API exists here.
     """
     if not execution_enabled():
-        raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)
+        raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503,
+            authorization_cas_attempted=False, preserve_execution_fence=True, automatic_retry_allowed=False)
     phase = {"cas_attempted": False}
     try:
         return await asyncio.wait_for(_authorize(db, user_id=user_id, account_id=account_id,
             proposal_id=proposal_id, execution_claim_id=execution_claim_id, native_evidence=native_evidence,
             current=current, phase=phase), timeout=15)
+    except asyncio.CancelledError as exc:
+        # Cancellation can arrive after Mongo committed but before its reply.
+        # The gateway must retain its fence once this call has begun, including
+        # when no HTTPException/detail could be returned to classify the phase.
+        exc.authorization_cas_attempted = phase["cas_attempted"]
+        exc.preserve_execution_fence = True
+        exc.automatic_retry_allowed = False
+        raise
     except HTTPException as exc:
         if isinstance(exc.detail, dict):
-            # Even an acknowledged losing CAS can race an already granted
-            # same-owner invocation. Only fenced recovery may release it.
-            preserve = phase["cas_attempted"] or exc.detail.get("code") == "google_automation_claim_pending"
+            # Even a pre-CAS failure can be a retry of an earlier invocation
+            # whose claim committed. No error proves that the claim is absent.
             exc.detail.update(authorization_cas_attempted=phase["cas_attempted"],
-                preserve_execution_fence=preserve, automatic_retry_allowed=False)
+                preserve_execution_fence=True, automatic_retry_allowed=False)
         raise
     except Exception:
         # Includes timeout and an acknowledgement lost after Mongo committed.
@@ -227,15 +248,12 @@ async def authorize_google_automation_claim(db, *, user_id, account_id, proposal
 
 
 async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id, native_evidence, current, phase):
-    from auth import account_is_disabled
     current_time = _now(current)
     account_id = identifier(account_id)
     if (not isinstance(user_id, str) or not user_id or not isinstance(proposal_id, str) or not _ID.fullmatch(proposal_id)
         or not isinstance(execution_claim_id, str) or not _ID.fullmatch(execution_claim_id)):
         _fail("google_automation_execution_claim_unproved")
-    owner = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "role": 1, "disabled": 1, "is_active": 1, "deleted_at": 1})
-    if (not owner or str(owner.get("role") or "").lower() != "owner" or account_is_disabled(owner)):
-        _fail("google_automation_owner_unavailable")
+    await _require_active_owner(db, user_id)
     connection = await db.mezan_integrations_v2.find_one({"user_id": user_id, "provider": "google_ads",
         "connection_status": "connected", "connection_provenance": "api_connection"}, {"_id": 0, "provider": 1})
     if not connection or account_id not in {a["account_id"] for a in await available_accounts(db, user_id)}:
@@ -249,7 +267,8 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         _fail("google_automation_execution_claim_unproved")
     source = _bound_proposal(row)
     policy = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
-    if (not policy or policy.get("enabled") is not True or policy.get("revision") != source["policy_revision"]
+    if (not policy or policy.get("enabled") is not True or policy.get("updated_by") != user_id
+        or policy.get("revision") != source["policy_revision"]
         or policy_authorization_digest(policy) != source["policy_digest"]):
         _fail("google_automation_policy_changed")
     if policy.get("_dispatch_claim") is not None:
@@ -267,6 +286,18 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         _fail("google_automation_history_unproved")
     rows = [item for item in rows if not (item.get("proposal_id") == proposal_id
         and item.get("execution_claim_id") == execution_claim_id)]
+    # Finish all local reads/index work before the final owner, time, evidence
+    # and quota checks. No further read/audit await separates them from the CAS.
+    await db[AUTOMATION_POLICIES].create_index([("user_id", 1), ("account_id", 1)], unique=True, name="google_automation_tenant_account")
+    if not await db[PROPOSALS].find_one(row_scope, {"_id": 0, "proposal_id": 1}) or not await db[FENCES].find_one(fence_scope, {"_id": 0, "proposal_id": 1}):
+        _fail("google_automation_execution_claim_unproved")
+    await _require_active_owner(db, user_id)
+    cas_time = current_time = _now(current)
+    if min(expiry, proposal_expiry) <= cas_time:
+        _fail("google_automation_policy_changed")
+    inventory, target = _native_proof(row, native_evidence, policy, cas_time)
+    if not execution_enabled():
+        raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)
     # Ignore only the exact currently proved self-claim, never other pending work.
     plan = plan_google_autonomy(user_id=user_id, account_id=account_id, policy=policy, analysis=analysis,
         workspace=inventory, history={**scope, "complete": True, "items": rows}, current=current_time)
@@ -296,15 +327,8 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
     generation = policy.get("_dispatch_generation", 0)
     if type(generation) is not int or not 0 <= generation < 2**63 - 2:
         _fail("google_automation_quota_unproved")
-    # Re-prove ownership after reads. If cancellation wins after this read, the
-    # native submission-floor CAS must fail, so no stale owner can send a write.
-    if not await db[PROPOSALS].find_one(row_scope, {"_id": 0, "proposal_id": 1}) or not await db[FENCES].find_one(fence_scope, {"_id": 0, "proposal_id": 1}):
-        _fail("google_automation_execution_claim_unproved")
-    if not execution_enabled():
-        raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)
-    cas_time = _now(current)
-    if min(expiry, proposal_expiry) <= cas_time:
-        _fail("google_automation_policy_changed")
+    # A cancellation after these reads still has to defeat the separate native
+    # submission-floor CAS. Authorization alone never permits provider dispatch.
     claim = {"claim_id": execution_claim_id, "proposal_id": proposal_id, "execution_claim_id": execution_claim_id,
         "policy_revision": source["policy_revision"], "policy_digest": source["policy_digest"],
         "confirmation_digest": row["confirmation_digest"], "operations_digest": digest(operations),
@@ -317,12 +341,15 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         "_dispatch_claim": {"$in": [None]},
         "_dispatch_generation": generation if "_dispatch_generation" in policy else {"$exists": False},
         "_dispatch_days": policy["_dispatch_days"] if "_dispatch_days" in policy else {"$exists": False}}
-    await db[AUTOMATION_POLICIES].create_index([("user_id", 1), ("account_id", 1)], unique=True, name="google_automation_tenant_account")
     phase["cas_attempted"] = True
     changed = await _linearize_claim(db[AUTOMATION_POLICIES], query,
         {"$set": {"_dispatch_claim": claim, "_dispatch_days": days}, "$inc": {"_dispatch_generation": 1}})
     if not changed.matched_count:
         _fail("google_automation_policy_claim_changed")
+    if not execution_enabled():
+        # Preserve the reservation/claim for explicit recovery; do not hand the
+        # caller fresh permission after a global stop raced the acknowledgement.
+        raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)
     return {"authorized": True, "authorization_kind": "standing_policy", "claim_id": execution_claim_id,
         "proposal_id": proposal_id, "policy_revision": source["policy_revision"], "submission_floor_required": True,
         "provider_writes": 0}

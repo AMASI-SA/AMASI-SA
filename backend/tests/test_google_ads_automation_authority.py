@@ -15,12 +15,19 @@ from tests.test_google_ads_autonomy_planner import inputs
 NOW = datetime(2026, 10, 26, 1, tzinfo=timezone.utc)
 
 
-def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposal1", claim_id="claim1"):
+def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposal1", claim_id="claim1", analysis_id="analysis1"):
     data = inputs(action)
+    data["current"] = current
     policy = data["policy"]
-    policy.update(updated_by="owner", updated_at=NOW.isoformat())
+    policy.update(updated_by="owner", updated_at=current.isoformat(), expires_at=(current+timedelta(days=1)).isoformat())
     analysis = data["analysis"]
+    analysis.update(analysis_id=analysis_id, created_at=current.isoformat())
+    for fact in analysis["result"]["recommendations"][0]["evidence"]:
+        fact["observed_at"] = current.isoformat()
     inventory = data["workspace"]
+    inventory["observed_at"] = current.isoformat()
+    for campaign in inventory["campaigns"]:
+        campaign["observed_at"] = current.isoformat()
     snapshot = {"campaign": {"id":"456", "resourceName":"customers/123/campaigns/456", "status":"PAUSED" if action == "RESUME_CAMPAIGN" else "ENABLED",
         "advertisingChannelType":"SEARCH", "campaignBudget":"customers/123/campaignBudgets/999"},
         "campaign_budget":{"resourceName":"customers/123/campaignBudgets/999", "period":"DAILY", "amountMicros":"20000000", "explicitlyShared":False, "referenceCount":1}, "groups":[],"ads":[]}
@@ -34,12 +41,12 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
         "status":"approved", "submission_started":False, "auth_epoch":"test-epoch", "currency":"SAR", "time_zone":"Asia/Riyadh",
         "planned":{"action":native_action, **changes}, "before_digest":digest(snapshot), "before_snapshot":snapshot,
         "operations":build_update_operations(native_action,"123",snapshot,changes),
-        "created_at":NOW.isoformat(), "expires_at":(NOW+timedelta(minutes=30)).isoformat(),
+        "created_at":current.isoformat(), "expires_at":(current+timedelta(minutes=30)).isoformat(),
         "automation_source":source, "idempotency_key":candidate["idempotency_key"]}
     row["confirmation_digest"] = authority.automation_confirmation_digest(row)
     fence = {"user_id":"owner","account_id":"123","status":"claimed","proposal_id":proposal_id,"execution_claim_id":claim_id}
     native = {"metadata":{"account_id":"123","identity_verified":True,"currency_code":"SAR","time_zone":"Asia/Riyadh"},
-        "auth_epoch":"test-epoch","observed_at":NOW.isoformat(),"inventory":inventory,"campaign_snapshot":snapshot}
+        "auth_epoch":"test-epoch","observed_at":current.isoformat(),"inventory":inventory,"campaign_snapshot":snapshot}
     docs = {AUTOMATION_POLICIES:[policy], ANALYSES:[analysis], PROPOSALS:[row], FENCES:[fence],
         "users":[{"id":"owner","role":"owner"}],
         "mezan_integrations_v2":[{"user_id":"owner","provider":"google_ads","connection_status":"connected","connection_provenance":"api_connection"}],
@@ -214,3 +221,177 @@ async def test_read_proved_terminal_settlement_clears_claim_without_refunding_qu
     stored=db[AUTOMATION_POLICIES].rows[0]
     assert stored["_dispatch_claim"] is None and stored["enabled"] is False
     assert stored["_dispatch_days"][0]["proposal_ids"] == ["proposal1"]
+
+
+@pytest.mark.asyncio
+async def test_owner_disabled_after_history_reads_cannot_win_policy_claim():
+    docs,native=case_documents();db=DB(docs)
+    original=db.users.find_one
+    calls=[]
+    async def revoked_owner(*args,**kwargs):
+        calls.append(True)
+        if len(calls)>1:db.users.rows[0]["disabled"]=True
+        return await original(*args,**kwargs)
+    db.users.find_one=revoked_owner
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_owner_unavailable"
+    assert error.value.detail["authorization_cas_attempted"] is False
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_cancellation_after_policy_commit_retains_claim_and_classifies_fence_preservation(monkeypatch):
+    import asyncio
+    docs,native=case_documents();db=DB(docs)
+    committed=asyncio.Event();never=asyncio.Event()
+    original=authority._linearize_claim
+    async def commit_then_pause(*args,**kwargs):
+        await original(*args,**kwargs)
+        committed.set();await never.wait()
+    monkeypatch.setattr(authority,"_linearize_claim",commit_then_pause)
+    task=asyncio.create_task(authorize(db,native))
+    await asyncio.wait_for(committed.wait(),1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError) as error:await task
+    assert getattr(error.value,"preserve_execution_fence",False) is True
+    assert getattr(error.value,"authorization_cas_attempted",False) is True
+    assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]["claim_id"] == "claim1"
+    assert db[FENCES].rows[0]["status"] == "claimed"
+    assert db[PROPOSALS].rows[0]["submission_started"] is False
+
+
+@pytest.mark.asyncio
+async def test_global_write_switch_disabled_during_cas_prevents_a_permission_return(monkeypatch):
+    docs,native=case_documents();db=DB(docs)
+    original=authority._linearize_claim
+    async def commit_then_disable(*args,**kwargs):
+        result=await original(*args,**kwargs)
+        monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED","false")
+        return result
+    monkeypatch.setattr(authority,"_linearize_claim",commit_then_disable)
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_execution_disabled"
+    assert error.value.detail["preserve_execution_fence"] is True
+    assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]
+
+
+@pytest.mark.asyncio
+async def test_native_proof_ages_during_authorization_reads_and_is_rechecked_before_cas(monkeypatch):
+    docs,native=case_documents();db=DB(docs)
+    times=iter([NOW,NOW+timedelta(minutes=2)])
+    monkeypatch.setattr(authority,"_now",lambda current=None:next(times))
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_native_evidence_invalid"
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+def next_attempt(db,current,*,action="PAUSE_CAMPAIGN"):
+    from integrations_control_center.google_ads_autonomy_planner import plan_google_autonomy
+    docs,native=case_documents(action,current=current,proposal_id="proposal2",claim_id="claim2",analysis_id="analysis2")
+    configured=db[AUTOMATION_POLICIES].rows[0]
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis2",recommendation_id="rec1")
+    candidate=plan_google_autonomy(user_id="owner",account_id="123",policy=configured,analysis=docs[ANALYSES][0],workspace=native["inventory"],
+        history={"complete":True,"user_id":"owner","account_id":"123","items":[]},current=current)["candidates"][0]
+    row["idempotency_key"]=candidate["idempotency_key"]
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db[PROPOSALS].rows.append(row);db[ANALYSES].rows.extend(docs[ANALYSES]);db[FENCES].rows=docs[FENCES]
+    return native
+
+
+@pytest.mark.asyncio
+async def test_reserved_daily_slot_is_not_reset_by_cancel_or_policy_revisions():
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=1
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs);await authorize(db,native)
+    db[PROPOSALS].rows[0].update(status="failed",submission_started=False,safe_error="execution_cancelled_before_dispatch")
+    await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
+    db[AUTOMATION_POLICIES].rows[0].update(revision=5,enabled=True,updated_at=(NOW+timedelta(hours=1)).isoformat())
+    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later)
+    with pytest.raises(HTTPException) as error:
+        await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
+    assert error.value.detail["code"] == "google_automation_daily_action_limit"
+    assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"][0]["proposal_ids"] == ["proposal1"]
+
+
+@pytest.mark.asyncio
+async def test_history_and_existing_reservation_are_unioned_without_double_counting():
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=2
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs);await authorize(db,native)
+    db[PROPOSALS].rows[0].update(status="completed",verified=True,submission_started=True,submitted_at=NOW.isoformat(),executed_at=NOW.isoformat())
+    await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
+    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="RESUME_CAMPAIGN")
+    result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
+    assert result["authorized"] is True
+    assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"][0]["proposal_ids"] == ["proposal1","proposal2"]
+
+
+@pytest.mark.asyncio
+async def test_quota_rollover_uses_account_local_midnight_with_unchanged_utc_date():
+    before=datetime(2026,10,25,20,59,tzinfo=timezone.utc);after=before+timedelta(minutes=2)
+    docs,native=case_documents(current=before);configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=1
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs)
+    await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal1",execution_claim_id="claim1",native_evidence=native,current=before)
+    db[PROPOSALS].rows[0].update(status="failed",submission_started=False,safe_error="execution_cancelled_before_dispatch")
+    await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=before)
+    fresh=next_attempt(db,after)
+    result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=after)
+    assert result["authorized"] is True and before.date() == after.date()
+    assert [b["date"] for b in db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"]] == ["2026-10-25","2026-10-26"]
+
+
+@pytest.mark.asyncio
+async def test_policy_must_record_the_actual_owner_as_authorizer():
+    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0]
+    configured["updated_by"]="staff"
+    row=docs[PROPOSALS][0]
+    row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs)
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_policy_changed"
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_extra_mutation_cannot_be_authorized_even_with_a_recomputed_frozen_digest():
+    docs,native=case_documents();row=docs[PROPOSALS][0]
+    row["operations"].append({"campaignOperation":{"remove":"customers/123/campaigns/789"}})
+    row["confirmation_digest"]=authority.automation_confirmation_digest(row)
+    db=DB(docs)
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_proposal_binding_invalid"
+    assert not db[AUTOMATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_authorization_never_constructs_provider_client_or_impersonates_a_principal(monkeypatch):
+    from integrations_control_center import google_ads_client,google_ads_management
+    def forbidden(*args,**kwargs):raise AssertionError("provider or principal boundary must not be called")
+    monkeypatch.setattr(google_ads_client.GoogleAdsClient,"__init__",forbidden)
+    monkeypatch.setattr(google_ads_management,"principal",forbidden)
+    docs,native=case_documents();result=await authorize(DB(docs),native)
+    assert result["authorized"] is True and result["provider_writes"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop",["revoked","global_disabled"])
+async def test_pre_cas_failure_with_existing_claim_never_permits_fence_cleanup(stop,monkeypatch):
+    docs,native=case_documents();db=DB(docs);await authorize(db,native)
+    if stop=="revoked":db[AUTOMATION_POLICIES].rows[0].update(enabled=False,revision=4)
+    else:monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED","false")
+    with pytest.raises(HTTPException) as error:await authorize(db,native)
+    assert error.value.detail["authorization_cas_attempted"] is False
+    assert error.value.detail["preserve_execution_fence"] is True
+    assert error.value.detail["automatic_retry_allowed"] is False
+    assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]["claim_id"] == "claim1"
+    assert db[FENCES].rows[0]["status"] == "claimed"
+    assert db[PROPOSALS].rows[0]["status"] == "approved"

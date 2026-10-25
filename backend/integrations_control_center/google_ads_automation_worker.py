@@ -1,0 +1,246 @@
+"""Default-off, bounded Google standing-policy cycles for an isolated child.
+
+This module attaches no scheduler and imports no gateway while disabled. Native
+reads use a service context without human write permissions. Only the explicit
+automation gateway may authorize, submit or reconcile an operation.
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+import hashlib
+import os
+import re
+import uuid
+from zoneinfo import ZoneInfo
+
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+
+from .google_ads_automation_policy import AUTOMATION_POLICIES
+from .google_ads_autonomy_planner import plan_google_autonomy
+from .google_ads_management import ANALYSES, PROPOSALS
+
+CYCLES = "mezan_google_ads_automation_worker_cycles_v1"
+MAX_ACCOUNTS = 4
+INTERVAL = timedelta(hours=5)
+RETRY_DELAY = timedelta(minutes=15)
+ACCOUNT_TIMEOUT_SECONDS = 240
+LEASE_DURATION = timedelta(minutes=10)
+PENDING = ("executing", "approved", "submitted", "verifying", "uncertain")
+READBACK_PENDING = ("submitted", "verifying", "uncertain")
+_ACTIONS = {"pause":"PAUSE_CAMPAIGN", "enable":"RESUME_CAMPAIGN", "set_budget":"CHANGE_BUDGET"}
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
+def worker_enabled():
+    values = {"1", "true", "yes", "on", "enabled"}
+    return str(os.getenv("GOOGLE_ADS_AUTOMATION_WORKER_ENABLED", "false")).strip().lower() in values
+
+
+def execution_enabled():
+    from .google_ads_automation_authority import execution_enabled as allowed
+    return allowed()
+
+
+def _service_actor(user_id):
+    from .google_ads_automation_authority import SERVICE_ACTOR_ID
+    return {"user_id": user_id, "actor_id": SERVICE_ACTOR_ID, "owner": False, "can_draft": False}
+
+
+def _scope_ok(user_id, account_id):
+    return (isinstance(user_id,str) and 0 < len(user_id) <= 128 and "\x00" not in user_id
+        and isinstance(account_id,str) and re.fullmatch(r"[0-9]{1,30}",account_id) is not None)
+
+
+def _policy_gate(policy, current, *, user_id, account_id):
+    if not isinstance(policy,dict): return False
+    result = plan_google_autonomy(user_id=user_id, account_id=account_id,
+        policy=policy, analysis={}, workspace={}, history={}, current=current)
+    return result["blockers"] == ["analysis_scope_unproved"]
+
+
+async def build_google_automation_analysis(db, policy, *, current):
+    """Generate policy-limited advice; no model write tools or owner context."""
+    from .google_ads_ai import GoogleAIAnalysisInput, analyze_google_campaigns
+    from .google_ads_client import problem
+    from .google_ads_workspace import read_google_workspace
+    end = current.astimezone(ZoneInfo(policy["time_zone"])).date()
+    request = GoogleAIAnalysisInput(account_id=policy["account_id"],
+        date_from=(end-timedelta(days=2)).isoformat(), date_to=end.isoformat())
+    facts = await read_google_workspace(db, _service_actor(policy["user_id"]),
+        from_date=request.date_from, to_date=request.date_to, account_id=policy["account_id"])
+    if (facts.get("complete") is not True or facts.get("account_id") != policy["account_id"]
+        or any(facts.get(key) != policy[key] for key in ("currency_code", "time_zone"))):
+        raise problem("google_automation_analysis_evidence_unproved", "بيانات حساب جوجل غير مكتملة أو تغيرت.", 409)
+    allowed = set(policy["campaign_ids"])
+    scoped = [row for row in facts.get("campaigns", []) if row.get("campaign_id") in allowed]
+    return await analyze_google_campaigns(db, policy["user_id"], request,
+        facts={**facts, "campaigns": scoped, "date_from": request.date_from, "date_to": request.date_to,
+            "permitted_actions": sorted(_ACTIONS[value] for value in policy["allowed_actions"]),
+            "limits": {"max_daily_budget_native": policy["max_campaign_daily_budget_native"],
+                       "max_budget_change_percent": policy["max_budget_change_percent"]}})
+
+
+async def _claim(db, user_id, account_id, current, *, recovery=False):
+    key = hashlib.sha256(f"{user_id}:{account_id}".encode()).hexdigest()
+    collection = db[CYCLES]
+    try:
+        await collection.insert_one({"_id": key, "user_id": user_id, "account_id": account_id,
+            "state": "idle", "next_run_at": current, "created_at": current})
+    except DuplicateKeyError:
+        pass
+    due = {} if recovery else {"$or":[{"next_run_at":{"$lte":current}}, {"next_run_at":{"$exists":False}}]}
+    token = uuid.uuid4().hex
+    return await collection.find_one_and_update({"_id":key, "user_id":user_id, "account_id":account_id,
+        "$and":[due, {"$or":[{"state":{"$ne":"running"}}, {"lease_until":{"$lte":current}}]}]},
+        {"$set":{"state":"running", "claim_token":token, "started_at":current,
+                 "lease_until":current+LEASE_DURATION}}, return_document=ReturnDocument.AFTER)
+
+
+async def _owns_claim(db, claim, current):
+    return await db[CYCLES].find_one({"_id":claim["_id"], "state":"running", "claim_token":claim["claim_token"],
+        "lease_until":{"$gt":current}}, {"_id":1}) is not None
+
+
+async def _history(db, user_id, account_id):
+    from .google_ads_automation_plan import HISTORY_PROJECTION
+    scope = {"user_id":user_id, "account_id":account_id}
+    rows = await db[PROPOSALS].find(scope, HISTORY_PROJECTION).sort("created_at",-1).to_list(length=1001)
+    return {**scope, "complete":len(rows)<=1000, "items":rows[:1000]}
+
+
+async def _account_cycle(db, account, claim, *, analysis_builder, inventory_reader, previewer, executor, reconciler, clock, allow_analysis):
+    from auth import account_is_disabled
+    user_id,account_id = account["user_id"],account["account_id"]
+    owner = await db.users.find_one({"id":user_id}, {"_id":0})
+    if (not owner or str(owner.get("role") or "").lower() != "owner" or account_is_disabled(owner)
+        or owner.get("id") != user_id):
+        return {"status":"owner_unproved"}
+    pending = await db[PROPOSALS].find({"user_id":user_id,"account_id":account_id,
+        "automation_source.kind":"standing_policy", "status":{"$in":list(PENDING)}},
+        {"_id":0,"proposal_id":1,"status":1,"submission_started":1}).to_list(length=2)
+    if pending:
+        if len(pending)>1:
+            return {"status":"pending_ambiguous"}
+        row=pending[0]
+        if row.get("status") not in READBACK_PENDING or row.get("submission_started") is not True:
+            return {"status":"pending_dispatch", "proposal_id":row["proposal_id"]}
+        if not worker_enabled() or not await _owns_claim(db,claim,clock()): return {"status":"claim_lost"}
+        # This gateway reads back the original dispatch; it must never resend it.
+        result=await reconciler(db,user_id=user_id,account_id=account_id,proposal_id=row["proposal_id"])
+        return {"status":result.get("status") if result.get("status") in ("completed","uncertain","verifying","submitted") else "pending",
+            "proposal_id":row["proposal_id"], "reconciled":True}
+    if not allow_analysis or not execution_enabled(): return {"status":"execution_disabled"}
+    policy=await db[AUTOMATION_POLICIES].find_one({"user_id":user_id,"account_id":account_id}, {"_id":0})
+    if not policy or not _policy_gate(policy,clock(),user_id=user_id,account_id=account_id):
+        return {"status":"policy_disabled"}
+    history=await _history(db,user_id,account_id)
+    if not history["complete"]:
+        return {"status":"history_incomplete"}
+    if any(row.get("status") in PENDING for row in history["items"]):
+        return {"status":"account_execution_pending"}
+    if not execution_enabled(): return {"status":"execution_disabled"}
+    if not worker_enabled() or not await _owns_claim(db,claim,clock()): return {"status":"claim_lost"}
+    analysis=await analysis_builder(db,policy,current=clock())
+    latest=await db[AUTOMATION_POLICIES].find_one({"user_id":user_id,"account_id":account_id}, {"_id":0})
+    if not latest or latest.get("revision") != policy["revision"] or not _policy_gate(latest,clock(),user_id=user_id,account_id=account_id):
+        return {"status":"policy_changed"}
+    if not execution_enabled(): return {"status":"execution_disabled"}
+    if not worker_enabled() or not await _owns_claim(db,claim,clock()): return {"status":"claim_lost"}
+    if not isinstance(analysis,dict) or analysis.get("provider") != "google_ads" or analysis.get("account_id") != account_id:
+        return {"status":"analysis_unproved"}
+    period=analysis.get("period") or {}
+    if (period.get("account_id") != account_id or any(period.get(k)!=policy[k] for k in ("currency_code","time_zone"))
+        or not period.get("date_from") or not period.get("date_to")):
+        return {"status":"analysis_unproved"}
+    analysis_id=hashlib.sha256(f"{claim['claim_token']}:{user_id}:{account_id}:{policy['revision']}".encode()).hexdigest()
+    saved={"analysis_id":analysis_id,"user_id":user_id,"account_id":account_id,
+        "actor_id":_service_actor(user_id)["actor_id"],"created_at":clock().isoformat(),
+        "date_from":period["date_from"],"date_to":period["date_to"],"result":analysis,
+        "source":"google_standing_policy_cycle","policy_revision":policy["revision"]}
+    await db[ANALYSES].insert_one(saved)
+    inventory=await inventory_reader(db,_service_actor(user_id),account_id=account_id)
+    history=await _history(db,user_id,account_id)
+    plan=plan_google_autonomy(user_id=user_id,account_id=account_id,policy=latest,
+        analysis=saved,workspace=inventory,history=history,current=clock())
+    candidates=[row for row in plan["candidates"] if row.get("decision")=="eligible_for_preview"]
+    if not candidates:
+        return {"status":"no_eligible_action","analysis_id":analysis_id,
+            "blockers":plan["blockers"] or sorted({code for row in plan["candidates"] for code in row.get("blockers",[])})}
+    if not execution_enabled(): return {"status":"execution_disabled"}
+    if not worker_enabled() or not await _owns_claim(db,claim,clock()): return {"status":"claim_lost"}
+    candidate=candidates[0]
+    proposal=await previewer(db,user_id=user_id,account_id=account_id,policy_revision=policy["revision"],
+        analysis_id=analysis_id,recommendation_id=candidate["recommendation_id"])
+    if not isinstance(proposal,dict) or not isinstance(proposal.get("proposal_id"),str):
+        return {"status":"preview_unproved"}
+    if proposal.get("status")=="completed" and proposal.get("verified") is True:
+        return {"status":"completed","proposal_id":proposal["proposal_id"],"already_completed":True}
+    if proposal.get("status")!="previewed": return {"status":"pending", "proposal_id":proposal["proposal_id"]}
+    latest=await db[AUTOMATION_POLICIES].find_one({"user_id":user_id,"account_id":account_id}, {"_id":0})
+    if not latest or latest.get("revision") != policy["revision"] or not _policy_gate(latest,clock(),user_id=user_id,account_id=account_id):
+        return {"status":"policy_changed","proposal_id":proposal["proposal_id"]}
+    if not execution_enabled(): return {"status":"execution_disabled","proposal_id":proposal["proposal_id"]}
+    if not worker_enabled() or not await _owns_claim(db,claim,clock()): return {"status":"claim_lost"}
+    # The gateway re-reads policy and owner at dispatch, binds native evidence,
+    # reserves the durable claim and preserves the original submission floor.
+    result=await executor(db,user_id=user_id,account_id=account_id,proposal_id=proposal["proposal_id"])
+    return {"status":result.get("status") if result.get("status") in ("completed","failed","submitted","verifying","uncertain") else "pending",
+        "proposal_id":proposal["proposal_id"]}
+
+
+async def run_google_automation_cycle(db, *, analysis_builder=None, inventory_reader=None,
+        previewer=None, executor=None, reconciler=None, clock=utcnow):
+    """Run at most four accounts and one prospective dispatch per account.
+
+    A child-process scheduler is deliberately outside this module. Production
+    defaults import only the dedicated automation gateway, never human execute.
+    """
+    if not worker_enabled(): return {"status":"disabled","accounts":0,"results":[]}
+    allow_analysis=execution_enabled()
+    from .google_ads_automation_plan import read_google_automation_inventory
+    if reconciler is None:
+        from .google_ads_automation_gateway import reconcile_google_automation_proposal
+        reconciler=reconcile_google_automation_proposal
+    if allow_analysis and (previewer is None or executor is None):
+        from .google_ads_automation_gateway import preview_google_automation_recommendation,execute_google_automation_proposal
+        previewer=previewer or preview_google_automation_recommendation
+        executor=executor or execute_google_automation_proposal
+    analysis_builder=analysis_builder or build_google_automation_analysis
+    inventory_reader=inventory_reader or read_google_automation_inventory
+    current=clock()
+    policies=(await db[AUTOMATION_POLICIES].find({"enabled":True,"expires_at":{"$gt":current.isoformat()}}, {"_id":0}).to_list(length=MAX_ACCOUNTS+1)) if allow_analysis else []
+    pending=await db[PROPOSALS].find({"automation_source.kind":"standing_policy","status":{"$in":list(PENDING)}},
+        {"_id":0,"user_id":1,"account_id":1}).to_list(length=MAX_ACCOUNTS+1)
+    accounts={}
+    for row in [*pending,*policies]:
+        if _scope_ok(row.get("user_id"),row.get("account_id")):
+            accounts.setdefault((row["user_id"],row["account_id"]),row)
+    recovery_scopes={(row.get("user_id"),row.get("account_id")) for row in pending if _scope_ok(row.get("user_id"),row.get("account_id"))}
+    results=[]
+    for (user_id,account_id),account in list(accounts.items())[:MAX_ACCOUNTS]:
+        recovery=(user_id,account_id) in recovery_scopes
+        claim=await _claim(db,user_id,account_id,clock(),recovery=recovery)
+        result={"status":"not_due"}
+        if claim:
+            try:
+                result=await asyncio.wait_for(_account_cycle(db,account,claim,analysis_builder=analysis_builder,
+                    inventory_reader=inventory_reader,previewer=previewer,executor=executor,reconciler=reconciler,clock=clock,allow_analysis=allow_analysis),timeout=ACCOUNT_TIMEOUT_SECONDS)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                code=(exc.detail or {}).get("code") if isinstance(getattr(exc,"detail",None),dict) else None
+                result={"status":"failed","code":code if isinstance(code,str) and re.fullmatch(r"[a-z0-9_]{1,100}",code) else "google_automation_cycle_failed"}
+            finally:
+                finished=clock()
+                next_run=finished+(RETRY_DELAY if result["status"]=="failed" else INTERVAL)
+                if recovery and isinstance(claim.get("next_run_at"),datetime) and claim["next_run_at"]>finished:
+                    next_run=claim["next_run_at"]
+                await db[CYCLES].update_one({"_id":claim["_id"],"state":"running","claim_token":claim["claim_token"]},
+                    {"$set":{"state":"idle","finished_at":finished,"next_run_at":next_run,"last_status":result["status"]}})
+        results.append({"account_id":account_id,**result})
+    return {"status":"complete" if allow_analysis else "recovery_only","accounts":len(results),"deferred":max(0,len(accounts)-MAX_ACCOUNTS),"results":results}
