@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-owner-tools-release-20261025",
   "base": "a35b5e4ede35b00cdd9599ceb878c07593627221",
-  "state": "fresh_source_candidate_directly_on_reviewed_production",
+  "state": "frozen_v5_intent_B_exact_source_CI_pass_host_rehearsal_requested",
   "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
   "source_recovery": "Recover exact runtime source content from preserved5928c62d tree33dac2daec0fff4c0ae5e3995d8d87598bf32731 while retaining current production a35b5e4e intent bytes. New candidate has direct parent J,with no old WIP ancestry/intent-edit commits.",
   "behavior": [
@@ -60,7 +60,7 @@
     "No actual selected approved public video/caption or live paid activation performed",
     "Fresh exact final-source CI and v5 A/B/host acceptance; manual owner tools now defaulton but not deployed from this branch. Periodic observations remain opt-in and automatic financial action gateway remains incomplete."
   ],
-  "next": "Require fresh exact CI/release artifact for this new source,then intent-only B,original-host inactive-guard rehearsal,normal exact-tree merge,prepare/prepublish,publish once and verify3. Remaining autonomous financial policy/action gateway and media/public-video inputs are separate incomplete scope.",
+  "next": "Require fresh inactive guard and original-host adapter exit0/exact identity; all B CI pass; fresh production must still be a35b5e4e before normal merge. If production source advances after freeze,new A/B from newest reviewed J required.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -74,5 +74,30 @@
     "head": "5928c62d79586b9be83a0f04663737763d5a8232",
     "preserved": true
   },
-  "release_history_failure": "Run40221562141/frontend job121254042925 failed the existing full-history source transition check. WIP merges carried historical intent edits into J..A even though final intent bytes equal J. No source/runtime test failure. No B frozen or publication from that source. Keep old WIP; create fresh source with only parent J and the same reviewed source tree. Do not weaken the guard or rewrite frozen handoffs."
+  "release_history_failure": "Run40221562141/frontend job121254042925 failed the existing full-history source transition check. WIP merges carried historical intent edits into J..A even though final intent bytes equal J. No source/runtime test failure. No B frozen or publication from that source. Keep old WIP; create fresh source with only parent J and the same reviewed source tree. Do not weaken the guard or rewrite frozen handoffs.",
+  "source_git_sha": "04b8778d7afd727fba3970054ffa3c0531de6455",
+  "intent_git_sha": "433587752e0b840eb1f9e880e51e563fb25c3e0a",
+  "runtime_release_id": "rg5-b0afe840581e5ba33a87aa74fa9d2ae1e0396c17994eb0a26e11c00cb5ca1a65",
+  "evidence_only_no_deploy": true,
+  "evidence_branch": "codex/tiktok-owner-tools-evidence-20261025",
+  "release": {
+    "source_ci": "All13 applicable workflows PASS; creator-candidate skipped by its own condition.",
+    "source_release_run": 40222010352,
+    "source_native_run": 40222010441,
+    "artifact": {
+      "bytes": 904518,
+      "sha256": "cb388154f2d233bd0957cb56514f9e154e66ace8593ddb0f65b9c5c111ccc961",
+      "runtime": "rg5-b0afe840581e5ba33a87aa74fa9d2ae1e0396c17994eb0a26e11c00cb5ca1a65",
+      "zip_sha256": "14520c040119f35cafabf7f2af88ac9e4cdd3410c30abb2f7a6ecd2ce0953232",
+      "artifact": 12608839386,
+      "source": "04b8778d7afd727fba3970054ffa3c0531de6455",
+      "base": "a35b5e4ede35b00cdd9599ceb878c07593627221"
+    },
+    "intent_blob": "6953bd9ac6eff0d90280261fa330524de8507f28",
+    "intent_matches_local_blob": true,
+    "host_rehearsal": "Guard-gated command requested on original host; read guard/adapter result before claiming started or passed.",
+    "prepare": "not started",
+    "publish": "not started",
+    "verify": "not started"
+  }
 }
