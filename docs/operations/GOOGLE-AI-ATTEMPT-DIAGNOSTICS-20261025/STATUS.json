@@ -1,0 +1,23 @@
+{
+  "task_id": "GOOGLE-AI-ATTEMPT-DIAGNOSTICS-20261025",
+  "scope": "Google analysis failure diagnosis only; no campaign execution",
+  "base": "f01beac1e04055694f02110d69020ce691bb0ad9",
+  "problem": "Two account-wide native analyses failed generically after1509 publish while PMax analysis succeeded5recommendations. Limited runtime logs did not retain the code. Original editor DB has no approved Google account, so standalone diagnosis could not prove production cause.",
+  "behavior": [
+    "Record tenant/account/period-scoped phases native_workspace,policy_read,structured_analysis,save_analysis",
+    "Record bounded constant failure code/status/type and duration, cancellation distinct",
+    "Read-only authenticated history capped20rows with7dayTTL; no prompts, model/provider bodies or credentials",
+    "Diagnostic writes best-effort with2sinitial/1supdate bounds; failures do not replace successful analysis or original HTTPfailure"
+  ],
+  "verification": {
+    "before": "6new route cases failed,2existing passed",
+    "after": "122passed27localMongo integration skips,2inheritedPydanticwarnings,3.01s",
+    "diff_check": "exit0",
+    "source_baseline": "both tracked files equal current production before own edits; new module absent"
+  },
+  "release": {
+    "state": "WIPsource,noB,unmerged,unpublished",
+    "other_release": "1512ownactorcodex-google1512 publishing,started2026-10-2600:05Asia/Riyadh; do not mutate original/App or publishagain"
+  },
+  "next": "ExactsourceCI thenfreezev5intent/finalBHost20/mergeexacttree. Finish1512publishand3probeverificationbeforeanysharedchange. AfterdiagnosticpublishreproduceONEaccountanalysisandreadnativeGET/ai/analysis-attemptsmetadata toidentifyactualcause,thenfix. Fullautonomy/standingpolicy/executorremainincomplete."
+}
