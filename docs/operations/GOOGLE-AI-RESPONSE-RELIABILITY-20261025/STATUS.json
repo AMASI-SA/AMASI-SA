@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-response-reliability-r4-20261025",
   "base": "a35b5e4ede35b00cdd9599ceb878c07593627221",
-  "status": "SOURCE_REFRESH_AFTER_SNAP1492_PENDING_CI",
+  "status": "MERGED_ALL9_B_CI_PASS_AWAIT_FOREIGN_LEASE",
   "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
@@ -24,12 +24,20 @@
     "backend": "101 AI/actions/context tests passed in1.64s",
     "frontend": "CI pending",
     "current_source_ci": {
-      "head_sha": "97a5ed5cc428afd74046513cd59142d58a896910",
-      "state": "running",
-      "readiness_run": 40221904392
+      "head": "97a5ed5cc428afd74046513cd59142d58a896910",
+      "readiness": "passed",
+      "google": "passed",
+      "security": "passed",
+      "g47_and_stock": "cancelled on B trigger; exactB both passed"
     },
     "clone": "exit0 /tmp/google1485-release literalA",
-    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
+    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed",
+    "exact_intent_ci": {
+      "head": "5b2aac4cb3fee6d27bbd1663aa5a4a0b87a47bce",
+      "all9": "passed",
+      "readiness_run": 40222071784,
+      "independent_host20_rehearsal": "passed"
+    }
   },
   "user_autonomy_preferences": {
     "budget_mode": "preserve_current_approved_total_budget",
@@ -41,7 +49,7 @@
   "provider_writes": 0,
   "financial_writes": 0,
   "production_changed": false,
-  "next_safe_action": "Run exact-source CI and use reviewed candidate artifact for fresh intent-only B. Preserve frozen prior pairs. No shared /app changes while another lease active.",
+  "next_safe_action": "Actual /app guard must becomeinactive under foreign codex-snap1492. Then trackedclean original/app ff-only2a43e8cec998a6d5458174ce49fd610abf3a7a74, adapter, preparecodex-google1495/prepublish, oneauthorizedpublish, explicitfinish, verify3probes/statusinactive, reloadnativeGoogleAIanalysis. No repeatedpermission needed.",
   "concurrent_update": {
     "pr": 1482,
     "scope": "TikTok creator readiness",
@@ -102,5 +110,9 @@
     "ci": "all9 source and B passed",
     "reason": "production advanced with nonoverlapping Snapchat1492, release intent conflict"
   },
-  "source_sha": "97a5ed5cc428afd74046513cd59142d58a896910"
+  "source_sha": "97a5ed5cc428afd74046513cd59142d58a896910",
+  "intent_sha": "5b2aac4cb3fee6d27bbd1663aa5a4a0b87a47bce",
+  "intent_tree": "16a58381e2a6eb936d4f53c5c00eaa0251f3d254",
+  "merge_sha": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
+  "runtime_release_id": "rg5-1c435dfb2f335bb846ac315248b7d7bd4f500681c428fd88e235eb11c4a2b6d6"
 }
