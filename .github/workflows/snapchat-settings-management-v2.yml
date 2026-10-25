@@ -66,8 +66,17 @@ jobs:
             case "${changed_path}" in
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
+              backend/integrations_control_center/snapchat_media_upload.py|\
+              backend/integrations_control_center/__init__.py|\
+              backend/tests/test_snapchat_media_upload.py|\
+              frontend/src/components/marketing/SnapchatMediaUploadPanel.jsx|\
+              frontend/src/components/marketing/SnapchatMediaUploadPanel.test.jsx|\
+              frontend/src/services/snapchatMediaUpload.js|\
+              frontend/src/services/snapchatMediaUpload.test.js|\
+              docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_execution_hardening_v1.py|\
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
@@ -101,8 +110,17 @@ jobs:
             case "${changed_path}" in
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
+              backend/integrations_control_center/snapchat_media_upload.py|\
+              backend/integrations_control_center/__init__.py|\
+              backend/tests/test_snapchat_media_upload.py|\
+              frontend/src/components/marketing/SnapchatMediaUploadPanel.jsx|\
+              frontend/src/components/marketing/SnapchatMediaUploadPanel.test.jsx|\
+              frontend/src/services/snapchatMediaUpload.js|\
+              frontend/src/services/snapchatMediaUpload.test.js|\
+              docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_execution_hardening_v1.py|\
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
@@ -228,6 +246,8 @@ jobs:
           python -m py_compile \
             integrations_control_center/snapchat_entity_settings.py \
             integrations_control_center/snapchat_campaign_management.py \
+            integrations_control_center/snapchat_media_upload.py \
+            tests/test_snapchat_media_upload.py \
             tests/test_snapchat_entity_settings_v1.py \
             tests/test_snapchat_campaign_management_v1.py \
             tests/test_snapchat_management_safety_regressions_v1.py
@@ -236,6 +256,8 @@ jobs:
           python -m pytest
           tests/test_snapchat_entity_settings_v1.py
           tests/test_snapchat_campaign_management_v1.py
+          tests/test_snapchat_media_upload.py
+          tests/test_snapchat_management_execution_hardening_v1.py
           tests/test_snapchat_management_safety_regressions_v1.py
           -q
           --tb=short
@@ -263,6 +285,8 @@ jobs:
           --watchAll=false
           --runInBand
           src/services/snapchatCampaignManagement.test.js
+          src/services/snapchatMediaUpload.test.js
+          src/components/marketing/SnapchatMediaUploadPanel.test.jsx
           src/components/marketing/SnapchatEntitySettingsTable.test.jsx
           src/components/marketing/SnapchatInlineSettings.test.jsx
           src/components/marketing/UnifiedMarketingEntityTable.test.jsx

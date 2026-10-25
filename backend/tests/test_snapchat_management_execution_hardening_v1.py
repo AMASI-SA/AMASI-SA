@@ -613,7 +613,12 @@ async def test_create_objective_mismatch_cannot_be_marked_completed(monkeypatch)
     stored = db[management.PROPOSAL_COLLECTION].rows[0]
     assert stored["status"] == "failed"
     assert stored["provider_write_uncertain"] is True
-    assert stored.get("verification") is None
+    # Failed read-back evidence is retained for reconciliation; it must never
+    # be mistaken for successful verification or permit a blind retry.
+    assert stored["verification"]["verified"] is False
+    assert stored["verification"]["field_changes_verified"] is False
+    assert "objective_v2_properties" in stored["verification"]["mismatched_fields"]
+    assert stored["automatic_retry_allowed"] is False
     assert db[management.ENTITY_LEASE_COLLECTION].rows[0]["active"] is True
 
 

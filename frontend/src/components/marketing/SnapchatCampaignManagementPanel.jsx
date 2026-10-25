@@ -35,6 +35,7 @@ import {
 } from "../../services/snapchatCampaignManagement";
 import { listProductsV2 } from "../../services/mezanProductsV2";
 import { useOptionalAuth } from "../../context/AuthContext";
+import SnapchatMediaUploadPanel from "./SnapchatMediaUploadPanel";
 
 const ACTIONS = [
     ["campaign.create", "إنشاء حملة"],
@@ -869,6 +870,17 @@ export default function SnapchatCampaignManagementPanel({
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
     const operationBusyRef = useRef(false);
+    const mediaOwnerRef = useRef(ownerId);
+    mediaOwnerRef.current = ownerId;
+    const previousMediaScope = useRef(JSON.stringify([ownerId, form.accountId]));
+
+    useEffect(() => {
+        const nextScope = JSON.stringify([ownerId, form.accountId]);
+        if (previousMediaScope.current === nextScope) return;
+        previousMediaScope.current = nextScope;
+        setActiveProposal(null);
+        setForm((current) => ({ ...current, mediaId: "", profileId: "" }));
+    }, [ownerId, form.accountId]);
 
     function beginOperation() {
         operationBusyRef.current = true;
@@ -981,10 +993,13 @@ export default function SnapchatCampaignManagementPanel({
     }
 
     function changeAccount(nextAccountId) {
+        setActiveProposal(null);
         setForm((current) => ({
             ...current,
             accountId: nextAccountId,
             pixelId: solePixelId(readiness, nextAccountId),
+            mediaId: "",
+            profileId: "",
         }));
     }
 
@@ -1517,8 +1532,36 @@ export default function SnapchatCampaignManagementPanel({
                                             <option value="SWIPE_7DAY">سحب 7 أيام · SWIPE_7DAY</option>
                                         </SelectField>
                                     )}
-                                    {form.action === "creative.create" && <TextField label="Media ID" value={form.mediaId} onChange={(value) => field("mediaId", value)} required dir="ltr" />}
-                                    {form.action === "creative.create" && <TextField label="Public Profile ID" value={form.profileId} onChange={(value) => field("profileId", value)} required dir="ltr" />}
+                                    {form.action === "creative.create" && (
+                                        <SnapchatMediaUploadPanel
+                                            key={JSON.stringify([ownerId, form.accountId])}
+                                            ownerId={ownerId} accountId={form.accountId}
+                                            accountName={selectedAccount?.display_name || ""}
+                                            allowed={selectedAccount?.creative_allowed === true && readiness?.execution_enabled === true}
+                                            disabled={busy} profileId={form.profileId}
+                                            onProfileChange={(profileId, context) => {
+                                                if (context.ownerId !== mediaOwnerRef.current) return;
+                                                setActiveProposal(null);
+                                                setForm((current) => current.accountId === context.accountId
+                                                    ? { ...current, profileId } : current);
+                                            }}
+                                            onClear={(context) => {
+                                                if (context.ownerId !== mediaOwnerRef.current) return;
+                                                setActiveProposal(null);
+                                                setForm((current) => current.accountId === context.accountId
+                                                    ? { ...current, mediaId: "" } : current);
+                                            }}
+                                            onReady={(media, context) => {
+                                                if (context.ownerId !== mediaOwnerRef.current
+                                                    || media.account_id !== context.accountId
+                                                    || media.ready_for_creative !== true || media.status !== "ready"
+                                                    || media.provider_media_status !== "READY") return;
+                                                setActiveProposal(null);
+                                                setForm((current) => current.accountId === context.accountId
+                                                    ? { ...current, mediaId: media.provider_media_id } : current);
+                                            }}
+                                        />
+                                    )}
                                     {form.action === "creative.create" && <TextField label="العنوان · 34 حرفًا" value={form.headline} onChange={(value) => field("headline", value)} required />}
                                     {form.action === "creative.create" && <SelectField label="نوع الإبداع" value={form.creativeType} onChange={(value) => field("creativeType", value)}><option value="SNAP_AD">SNAP_AD</option><option value="WEB_VIEW">WEB_VIEW</option></SelectField>}
                                     {form.action === "creative.create" && form.creativeType === "WEB_VIEW" && <TextField label="رابط الوجهة" value={form.destinationUrl} onChange={(value) => field("destinationUrl", value)} required dir="ltr" />}
@@ -1621,7 +1664,7 @@ export default function SnapchatCampaignManagementPanel({
                                                 استئناف متابعة المعاينة
                                             </button>
                                         )}
-                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || pixelSelectionMissing || financialPreviewBlocked} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
+                                        <button type="submit" disabled={busy || previewPending || !form.accountId || !actionAllowed || (requiresProduct && !form.productId) || (form.action === "creative.create" && (!form.mediaId || !form.profileId)) || pixelSelectionMissing || financialPreviewBlocked} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400" data-testid="snapchat-management-create-preview">
                                             إنشاء معاينة آمنة
                                         </button>
                                     </div>
