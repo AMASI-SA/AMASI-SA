@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-publishing-settings-20261025",
   "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "state": "WIP_duration_contract_and_safe_field_diagnostics_local_verification",
+  "state": "frozen_v5_all_source_and_intent_ci_pass_host_rehearsal_in_progress",
   "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
   "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
   "behavior": [
@@ -20,13 +20,31 @@
     "routes": "27 passed,exit0,1.28s; includes rejected metadata and safe diagnostic fields.",
     "integrated_backend": "105 passed,exit0,10.69s with isolated real Mongo; publishing,creator routes/accounts,comments and replies.",
     "ui_proof_base": "Follow-up sourcea01f34c593117baed22ab723d6915a32f6385e45 passed13 UI cases/one suite on pinned host toolchain; incorporated in this branch.",
-    "frontend": "Additional privacy-reset regression added; fresh exact-source CI pending.",
-    "note": "An initial proposed private-video regression expected409,but the existing typed DTO already rejects private direct video with422. Corrected the assertion to preserve that existing contract; removed an unreachable synthetic legacy-state test. No new privacy-status behavior or widened permission introduced."
+    "frontend": "Exact source native CI40216131427:128 tests in21 suites PASS; build and native isolation PASS.",
+    "note": "An initial proposed private-video regression expected409,but the existing typed DTO already rejects private direct video with422. Corrected the assertion to preserve that existing contract; removed an unreachable synthetic legacy-state test. No new privacy-status behavior or widened permission introduced.",
+    "ci": "All9 applicable workflows PASS on A and B; creator-candidate workflow skipped by its branch condition.",
+    "native_backend": "Exact source native CI407 cases PASS."
   },
   "production_changed_by_this_source": false,
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
-  "next": "Finish integrated native/backend/UI/source/release verification; freeze fresh A/B,original-host rehearsal,prepare/prepublish,publish once and verify three probes. Recheck both creators: a successful readiness result or safe exact field diagnosis determines the next correction; do not claim the high-duration hypothesis is the actual live cause until demonstrated.",
-  "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented."
+  "next": "Require host adapter exit0 and exact runtime, refresh production base and guard state, then normal-merge exact B only if tree remains equivalent; actual /app adapter,prepare/prepublish,publish once,three-probe verify and test both live creators.",
+  "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented.",
+  "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
+  "deployment_candidate_git_sha": "d6277f4c880f268dd214eb24fe2d972f69929fcc",
+  "runtime_release_id": "rg5-34d6e326fc15ee802d4be26820cd3492ebb99e85c8e7e794dfbf53839bfc47bb",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1487",
+  "release": {
+    "source_release_run": 40216131255,
+    "artifact_id": 12607462052,
+    "intent_sha256": "5ac916dc8d3b747ec0f07bf044edb69ab30b026325ccca4d4331cf805492f2d1",
+    "zip_sha256": "efe92ce2687ed028d9b1edf090448eb161525aa7dc144647d48a7dc884171420",
+    "host_rehearsal": "Fresh inactive guard permitted original-host clean clone /tmp/tiktok1487-release, checked out exact B; adapter running, no result yet.",
+    "prepare": "not started",
+    "publish": "not started",
+    "verify": "not started"
+  },
+  "evidence_branch": "codex/tiktok-publishing-settings-evidence-20261025",
+  "evidence_only_no_deploy": true
 }
