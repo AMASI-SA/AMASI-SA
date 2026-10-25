@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r4-20261026",
   "source_base": "d88877c8fe7d001448dd0fbe7f569ebb591e37a1",
-  "state": "R4_reviewed_B_CI_running_foreign_Google1520_lease_active",
+  "state": "R4_all_B_checks_success_ready_for_merge_after_foreign_Google1520_release",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Finish current B checks and exact manifest diff. After Google1520 closes lease,read freshactive:false;isolated /tmp/tiktok1523-release exactB20a8e60c... adapter0/exactA092ce.../runtime0f00 required;fresh ProductionJd888 and exacthead checks;normal merge;freshinactiveguardbefore/app fast-forward+actualadapter;ownprepare/prepublish;onePublish+explicitfinish+verify3;ownerUI nativefile readiness/private officialfixture/CORS/native status;captionproductsearch(no liveAIbudget). Preserve frozen1523pair if Productionadvances.",
+  "next": "After Google1520 explicitfinish/ownverificationcloseslease,fresh/appguardactivefalse;isolated/tmp/tiktok1523-release exactB20a8... adapter0/exactA092ce.../runtime0f00;normalmerge onlyifJd888 and exactB/allgreen;freshinactivebefore/app fastforward preservinguntrackedfiles;actualadapter;ownprepare/prepublish;onePublish+explicitfinish+verify3 activefalse;ownerUI newFILEreadiness and PRIVATE officialfixturetransfer/nativecompletion;captioncatalogsmoke(no liveAIbudget).",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -27,7 +27,8 @@
     "WIP_current_head": "100fd4954f7d6cd4df0b1bde8a4086047018be67 native backend552 PASS35.48s;frontend156 PASS27suites/build6.00s;Security Gate frontend/backend PASS;release readiness,stock,balance,Qoyod,G47,Snap,legal PASS;CodeQL Python still running at last observation.",
     "live_attempt": "Read-only native readiness from isolated /tmp clone100fd on original host used the project development database. It returned no connected creator records;this is not evidence about the connected Production account and no native OpenAPI call occurred. No DB write,init,media transfer or model request. Production UI readiness must be tested after deployment.",
     "preview_fix": "Central local-video URL constructor wraps bytes with an allowlisted video MIME and accepts only canonical same-origin blob UUID capabilities;explicit HTML/entity metacharacters rejected and invalid object URL revoked. Both metadata reader and visible preview use this guard. Node independent acceptance8 PASS;Jest adds9 cases. Fresh full CodeQL/native/frontend CI required.",
-    "original_host_superseded": "1516 isolated original-host adapter exit0 exact old A/runtime;not valid evidence for changedR2source. R2 must repeat fresh adapter after reviewed intent B."
+    "original_host_superseded": "1516 isolated original-host adapter exit0 exact old A/runtime;not valid evidence for changedR2source. R2 must repeat fresh adapter after reviewed intent B.",
+    "R4": "B20a8e60c0b81d05af433bcf23ba44cec4e37efbb fresh current-head27 checks:21SUCCESS6nonapplicableSKIP,0pending/failure. CodeQLbothlanguages+aggregateSUCCESS0alerts. Native552backend/165frontend,security,release/HostNode20,G47,stock,balance,Qoyod,Snap/legal pass. PR1523 ready for review. Production remainsJd888."
   },
   "user_added_requirement": "Generate a viewer-facing Saudi-market video caption from the selected product: engaging opening,product value,natural interaction CTA,relevant hashtags and organic/promoted variants;owner reviews before posting,no guaranteed reach or fabricated current-trend claims.",
   "frontend": "Default local-file source,local blob preview,4MiB bounded fingerprint blocks,sequential native PUTs with no Mezan auth/cookies,progress,explicit status check and original-session resume. Existing URL/photo source preserved. Added helper/component tests;not yet executed.",
@@ -72,6 +73,7 @@
   "intent_B": "20a8e60c0b81d05af433bcf23ba44cec4e37efbb",
   "runtime": "rg5-0f00f6363313152f0eb7e4578a043dcad879a26db32a19d690b28fbd97231891",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1523",
-  "observed_at": "2026-10-25T23:01:40.280Z",
-  "original_host": "Code-server lost connection during obsolete R3 isolated build. Reload Window restored editor;new container session has new Terminal2 owned by this task and /tmp prior task clones absent. No completed R3 result can be used;R4 fresh clone/adapter required. /app tracked clean;preserved untracked .emergent/testing/ and deployer-agent-docs/."
+  "observed_at": "2026-10-25T23:07:26.503Z",
+  "original_host": "Code-server lost connection during obsolete R3 isolated build. Reload Window restored editor;new container session has new Terminal2 owned by this task and /tmp prior task clones absent. No completed R3 result can be used;R4 fresh clone/adapter required. /app tracked clean;preserved untracked .emergent/testing/ and deployer-agent-docs/.",
+  "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled."
 }
