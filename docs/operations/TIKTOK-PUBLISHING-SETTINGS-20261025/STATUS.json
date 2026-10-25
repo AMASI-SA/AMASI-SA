@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-publishing-settings-20261025",
   "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "state": "published_v5_verified_three_probes_live_creator_acceptance_pending",
+  "state": "published_verified_new_creator_ready_old_creator_missing_privacy",
   "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
   "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
   "behavior": [
@@ -29,7 +29,7 @@
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
-  "next": "Reload Mezan,load creators,test readiness once on each connected Amasi account. Record either ready:true or exact fixed-field diagnosis; no provider publishing write until exact approved media selection.",
+  "next": "Verify official media-property response contract and old-creator missing privacy boundary without exposing native credentials/values. Complete remaining creation/child/AI work on PR1490; no app writes under another actor lease.",
   "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented.",
   "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
   "deployment_candidate_git_sha": "d6277f4c880f268dd214eb24fe2d972f69929fcc",
@@ -73,5 +73,29 @@
   },
   "evidence_branch": "codex/tiktok-publishing-settings-evidence-20261025",
   "evidence_only_no_deploy": true,
-  "merge_git_sha": "b0144e288e852a0fa1aee026432f0073a0e8a3f7"
+  "merge_git_sha": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
+  "live_acceptance": {
+    "old_creator": {
+      "label": "متجر اماسي",
+      "ready": false,
+      "identity_proof": "passed",
+      "field": "privacy_level_options",
+      "issue": "missing",
+      "observed_type": "null",
+      "provider_business_writes": 0
+    },
+    "new_creator": {
+      "label": "متجر اماسي الجديد",
+      "ready": true,
+      "capabilities": "publish,draft_upload,comments_read",
+      "privacy_options": [
+        "MUTUAL_FOLLOW_FRIENDS",
+        "PUBLIC_TO_EVERYONE",
+        "SELF_ONLY"
+      ],
+      "verified_media_properties": 0,
+      "provider_business_writes": 0
+    },
+    "note": "Account-specific high-duration validator correction permits new creator readiness; exact old creator response schema/permission cause still unproven. No actual media publication submitted."
+  }
 }
