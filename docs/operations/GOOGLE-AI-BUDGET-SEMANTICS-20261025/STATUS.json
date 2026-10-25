@@ -1,0 +1,34 @@
+{
+  "task_id": "GOOGLE-AI-BUDGET-SEMANTICS-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-budget-semantics-r2-20261025",
+  "base": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+  "status": "FRESH_SOURCE_PRESERVES_TIKTOK1503_PENDING_CI",
+  "reproduction": "Fresh live PMax-only analysis after1498publication succeeded but called42.32SAR spend against40SAR average daily budget an overspend/targeting problem. No billed spending-limit/budget-history evidence was supplied.",
+  "fix": [
+    "Project existing reviewed DAILY_BUDGET_EXPLANATION into model request with separate DAILY and TOTAL semantics",
+    "Mark billing limits and budget history unverified; do not fabricate numerical spend caps from current budget",
+    "Explicitly prohibit daily-average or multi-day comparison from establishing a budget breach or reason to pause/reduce"
+  ],
+  "verification": {
+    "red": "4 regression cases failed KeyError budget_semantics before implementation",
+    "green": "110 AI/action/periodic tests passed,exit0,2.37s;2inheritedPydantic warnings",
+    "diffcheck": "passed",
+    "model_behavior": "Actual LLM compliance still needs post-deploy test; request-contract tests alone do not prove prose correctness"
+  },
+  "financial_authority": "unchanged; user selected currentbudgets/nativeROAS; no policy/ads/budgets changed",
+  "scope": "Google only; Snap owned by otherconversation; preserve TikTok and allcurrentprod",
+  "official_source": "https://support.google.com/google-ads/answer/1704443?hl=en",
+  "provider_writes": 0,
+  "production_changed": false,
+  "next": "ExactfreshsourceCI/candidateartifact, freshintentonlyB; retain all currentTikTok andGoogle source. Wait actualsharedguardinactive beforefinaloriginaladapter/prepare/publish. Snapownedbyotherconversation.",
+  "previous_frozen_pair": {
+    "pr": 1504,
+    "A": "11bf8b1e064cb5120242551f9964f3cdcdad248d",
+    "B": "11ec8e4d935a6c686abc825d2e4612932908280b",
+    "checks": "all21checkrecordscompletedwithoutfailure",
+    "superseded_before_merge_publish": true,
+    "reason": "Production advanced via nonoverlappingTikTok1503; must retain exactcurrentintent"
+  },
+  "runtime_state": "Google1495 delivered via1498;1500units included in current1503source. Original/app1500adapter passedexit0; no ownlease/publication."
+}
