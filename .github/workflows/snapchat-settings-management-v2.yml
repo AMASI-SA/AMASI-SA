@@ -179,6 +179,7 @@ jobs:
               frontend/src/services/snapchatAutonomy.js|\
               frontend/src/services/snapchatAutonomy.test.js|\
               frontend/src/pages/CampaignRecommendations.jsx|\
+              frontend/src/pages/CampaignRecommendations.test.jsx|\
               .github/workflows/snapchat-ai-autonomy-v1.yml|\
               docs/operations/SNAP-COMPLETION-20261025/AUTONOMY.md|\
               backend/campaign_ai_product_intelligence_v3.py|\
@@ -189,6 +190,10 @@ jobs:
               backend/decision_intelligence/phase5.py|\
               backend/decision_intelligence/routes.py|\
               backend/snapchat_v2/accounts.py|\
+              backend/snapchat_v2/client.py|\
+              backend/snapchat_v2/sync_pipeline.py|\
+              backend/tests/test_snapchat_reporting_v2_child_parent_scope.py|\
+              docs/operations/SNAP-COMPLETION-20261025/CHILD-PARENT-SCOPE.md|\
               backend/snapchat_v2/connection.py|\
               backend/snapchat_v2/routes.py|\
               backend/snapchat_v2/scheduler.py|\

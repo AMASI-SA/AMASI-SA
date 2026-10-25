@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import api from "../lib/api";
+import { googleEvidenceDisplay } from "../services/googleAdsEvidence";
 
 const LEGACY_ACTIONS = {
     pause: { label: "إيقاف مقترح", tone: "border-red-200 bg-red-50 text-red-700" },
@@ -151,6 +152,31 @@ const CONFIDENCE = { high: "عالية", medium: "متوسطة", low: "منخف�
 const PRIORITY = { critical: 4, high: 3, medium: 2, low: 1 };
 const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+function displayEvidenceFacts(value, provider) {
+    if (value == null) return [];
+    const currency = (code) => typeof code === "string" && /^[A-Z]{3}$/.test(code.trim().toUpperCase())
+        ? code.trim().toUpperCase() : undefined;
+    return (Array.isArray(value) ? value : [value]).map((fact) => {
+        if (typeof fact === "string") return fact;
+        if (typeof fact === "number" && Number.isFinite(fact)) {
+            return fact.toLocaleString("en-US", { maximumFractionDigits: 20 });
+        }
+        if (fact && typeof fact === "object" && !Array.isArray(fact)) {
+            if (typeof fact.text === "string") return fact.text;
+            if (provider === "google" && typeof fact.metric === "string"
+                && (typeof fact.value === "number" || typeof fact.value === "string" && fact.value.trim() !== "")
+                && Number.isFinite(Number(fact.value))) {
+                const formatted = googleEvidenceDisplay({
+                    metric: fact.metric, value: fact.value,
+                    currency: currency(fact.currency), currency_code: currency(fact.currency_code),
+                });
+                return `${formatted.label}: ${formatted.value}`;
+            }
+        }
+        return "تفاصيل الدليل غير متاحة";
+    });
+}
+
 function relativeTime(value) {
     const date = new Date(value || 0);
     const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
@@ -254,7 +280,7 @@ function AnalysisBlock({ title, value }) {
     </div>;
 }
 
-function HypothesisList({ primary, secondary }) {
+function HypothesisList({ primary, secondary, provider }) {
     const hypotheses = [primary, ...(secondary || [])].filter(Boolean);
     if (!hypotheses.length) return null;
     return <div>
@@ -262,8 +288,8 @@ function HypothesisList({ primary, secondary }) {
         <div className="mt-2 space-y-2">{hypotheses.map((hypothesis, index) => <div key={`${hypothesis.category}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-violet-50 px-2 py-1 text-[9px] font-black text-violet-700">{ROOT_CAUSES[hypothesis.category] || hypothesis.category}</span><span className="text-[9px] font-black text-slate-400">ثقة {CONFIDENCE[hypothesis.confidence] || hypothesis.confidence}</span></div>
             <p className="mt-1 text-[10px] font-bold leading-5 text-slate-700">{hypothesis.statement}</p>
-            {hypothesis.evidence_for?.length > 0 && <p className="mt-1 text-[9px] font-bold text-emerald-700">ما يدعم السبب: {hypothesis.evidence_for.slice(0, 3).join(" · ")}</p>}
-            {hypothesis.evidence_against?.length > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">ما يضعفه: {hypothesis.evidence_against.slice(0, 3).join(" · ")}</p>}
+            {hypothesis.evidence_for?.length > 0 && <p className="mt-1 text-[9px] font-bold text-emerald-700">ما يدعم السبب: {displayEvidenceFacts(hypothesis.evidence_for, provider).slice(0, 3).join(" · ")}</p>}
+            {hypothesis.evidence_against?.length > 0 && <p className="mt-1 text-[9px] font-bold text-amber-700">ما يضعفه: {displayEvidenceFacts(hypothesis.evidence_against, provider).slice(0, 3).join(" · ")}</p>}
         </div>)}</div>
     </div>;
 }
@@ -462,7 +488,10 @@ export default function CampaignRecommendations() {
                     const status = executionLabel(item.execution_status);
                     const canExecute = Boolean(["snapchat", "meta"].includes(item.provider) && item.executable && item.approval_available && item.action_type === "ads_write");
                     const isExpanded = expanded === item.recommendation_id;
-                    const quickFacts = (item.decision_facts || item.evidence || []).slice(0, 4);
+                    const quickFacts = displayEvidenceFacts(item.decision_facts || item.evidence, item.provider).slice(0, 4);
+                    const facts = displayEvidenceFacts(item.decision_facts || item.evidence || item.evidence_for, item.provider);
+                    const evidenceFor = displayEvidenceFacts(item.evidence_for, item.provider);
+                    const evidenceAgainst = displayEvidenceFacts(item.evidence_against, item.provider);
                     return <article key={item.recommendation_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-violet-300">
                         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-1.5"><p className="text-[10px] font-black text-slate-400">{item.provider === "google" ? "جوجل" : item.provider === "meta" ? "ميتا" : "سناب"} · {LEVELS[item.entity_level] || item.entity_level}</p>{index === 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[8px] font-black text-red-700">الأولوية الأولى</span>}</div>{item.account_name && <p className="mt-1 truncate text-[10px] font-extrabold text-slate-500">الحساب: {item.account_name}</p>}<Link to={item.provider === "google" ? `/ads-manager?provider=google&tab=ai&account=${encodeURIComponent(item.account_id)}` : `/ads-manager?provider=${item.provider}`} className="mt-1 block truncate text-sm font-black text-slate-900 hover:text-violet-700">{item.entity_name}</Link></div><span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-black ${actionTone(item)}`}>{displayAction}</span></div>
                         <CampaignResearchStatus research={item.external_research} />
@@ -470,14 +499,14 @@ export default function CampaignRecommendations() {
                         {item.provider === "google" && <p className="mt-1 text-[10px] text-slate-500">{item.campaign_name} · {item.period_native?.date_from} ← {item.period_native?.date_to} · {item.period_native?.currency_code}</p>}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] font-extrabold text-slate-400"><span>أُنشئت {relativeTime(item.generated_at || snapshot?.generated_at)}</span><span>•</span><span dir="ltr">{dateTime(item.generated_at || snapshot?.generated_at)}</span></div>
                         <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-[10px] font-black text-slate-500">ماذا نفعل الآن؟</p><p className="mt-1 text-sm font-black text-slate-900">{displayAction}</p><p className="mt-2 text-xs font-bold leading-6 text-slate-700">{item.why || item.diagnosis || item.rationale}</p></div>
-                        {quickFacts.length > 0 && <div className="mt-2 grid grid-cols-2 gap-1.5">{quickFacts.map((fact) => <div key={fact} className="rounded-lg border border-slate-100 bg-white px-2 py-1.5 text-[9px] font-extrabold leading-4 text-slate-600">{fact}</div>)}</div>}
+                        {quickFacts.length > 0 && <div className="mt-2 grid grid-cols-2 gap-1.5">{quickFacts.map((fact, factIndex) => <div key={factIndex} className="rounded-lg border border-slate-100 bg-white px-2 py-1.5 text-[9px] font-extrabold leading-4 text-slate-600">{fact}</div>)}</div>}
                         <button type="button" onClick={() => setExpanded(isExpanded ? null : item.recommendation_id)} aria-expanded={isExpanded} className="mt-3 w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-black text-violet-800 hover:bg-violet-100">{isExpanded ? "إخفاء التحليل المتقدم" : "عرض التحليل المتقدم"}</button>
 
                         {isExpanded && <div className="mt-3 space-y-3 rounded-2xl border border-violet-100 bg-violet-50/40 p-4" data-testid={`recommendation-explanation-${item.recommendation_id}`}>
-                            <div><h3 className="text-xs font-black text-slate-900">الأرقام التي بنى عليها القرار</h3><div className="mt-2 flex flex-wrap gap-1.5">{(item.decision_facts || item.evidence || item.evidence_for || []).map((fact) => <span key={fact} className="rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-slate-700 shadow-sm">{fact}</span>)}</div></div>
-                            {item.evidence_for?.length > 0 && <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-900">ما يدعم القرار</h3><p className="mt-1 text-[10px] font-bold leading-5 text-emerald-800">{item.evidence_for.slice(0, 5).join(" · ")}</p></div>}
-                            {item.evidence_against?.length > 0 && <div className="rounded-xl border border-amber-100 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">ما الذي يدعونا للحذر؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-amber-800">{item.evidence_against.slice(0, 5).join(" · ")}</p></div>}
-                            <HypothesisList primary={item.primary_hypothesis} secondary={item.secondary_hypotheses} />
+                            <div><h3 className="text-xs font-black text-slate-900">الأرقام التي بنى عليها القرار</h3><div className="mt-2 flex flex-wrap gap-1.5">{facts.map((fact, factIndex) => <span key={factIndex} className="rounded-lg bg-white px-2 py-1 text-[10px] font-extrabold text-slate-700 shadow-sm">{fact}</span>)}</div></div>
+                            {evidenceFor.length > 0 && <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3"><h3 className="text-xs font-black text-emerald-900">ما يدعم القرار</h3><p className="mt-1 text-[10px] font-bold leading-5 text-emerald-800">{evidenceFor.slice(0, 5).join(" · ")}</p></div>}
+                            {evidenceAgainst.length > 0 && <div className="rounded-xl border border-amber-100 bg-amber-50 p-3"><h3 className="text-xs font-black text-amber-900">ما الذي يدعونا للحذر؟</h3><p className="mt-1 text-[10px] font-bold leading-5 text-amber-800">{evidenceAgainst.slice(0, 5).join(" · ")}</p></div>}
+                            <HypothesisList primary={item.primary_hypothesis} secondary={item.secondary_hypotheses} provider={item.provider} />
                             <div><h3 className="text-xs font-black text-slate-900">تحليل الأيام</h3><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><AnalysisBlock title="اليوم" value={item.today_analysis} /><AnalysisBlock title="أمس" value={item.yesterday_analysis} /><AnalysisBlock title="قبل أمس" value={item.day_minus_2_analysis} /><AnalysisBlock title="خط الأساس 7 أيام" value={item.baseline_7d} /><AnalysisBlock title="خط الأساس 30 يومًا" value={item.baseline_30d} /></div></div>
                             <div><h3 className="text-xs font-black text-slate-900">مسار الشراء والمادة الإعلانية</h3><div className="mt-2 grid gap-2 sm:grid-cols-2"><AnalysisBlock title="مسار الشراء" value={item.funnel_analysis} /><AnalysisBlock title="أداء الفيديو" value={item.video_analysis} /><AnalysisBlock title="المادة الإعلانية" value={item.creative_analysis} /><AnalysisBlock title="المخزون" value={item.inventory_analysis} /><AnalysisBlock title="السلات المتروكة" value={item.abandoned_cart_analysis} /><AnalysisBlock title="المقارنة بين المنصات" value={item.cross_platform_analysis} /></div></div>
                             <ProductAnalysis item={item} />
