@@ -49,7 +49,7 @@ def public_instruction(row: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in row.items()
-        if key not in {"_id", "user_id"}
+        if key not in {"_id", "user_id", "edit_baseline", "edit_requested"}
     }
 
 
@@ -273,7 +273,7 @@ def enforce_instruction_rows(
             detail={
                 "code": "customer_service_instruction_action_required",
                 "stage": stage,
-                "message": "توجد تعليمات إلزامية من خدمة العملاء قبل إكمال هذه المرحلة.",
+                "message": f"هذا المنتج مجمّد بواسطة {text(blocking[0].get('created_by_name')) or 'خدمة العملاء'}؛ راجع الإشعارات لإكمال المعالجة.",
                 "instructions": [instruction_banner(row, piece_id=piece_id, order_item_id=order_item_id) for row in blocking],
             },
         )

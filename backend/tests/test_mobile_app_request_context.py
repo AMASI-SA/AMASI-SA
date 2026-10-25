@@ -184,3 +184,12 @@ def test_preparation_file_safety_accepts_my_products_as_existing_alternative():
         )
     )
     assert result["id"] == "owner-1"
+
+
+@pytest.mark.parametrize("action", ["stop-acknowledgment", "send-edit"])
+def test_staff_edit_flow_preserves_actor_and_is_not_a_driver_surface(action):
+    path = "/api/order-tracking-notes/instructions/n/" + action
+    result = asyncio.run(mobile_app_request_user(DB(), staff(), path=path, method="POST"))
+    assert result["id"] == "staff-1"
+    with pytest.raises(HTTPException):
+        asyncio.run(mobile_app_request_user(DB(), store_driver(), path=path, method="POST"))
