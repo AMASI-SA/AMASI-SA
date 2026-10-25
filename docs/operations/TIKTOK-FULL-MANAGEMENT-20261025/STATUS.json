@@ -47,14 +47,18 @@
       "source_build": "PASS 6.17s",
       "source_isolation": "PASS"
     },
-    "source_checks": "12 applicable workflows successful; CodeQL still running at capture; separate TikTok Creator Release Candidate skipped by its existing condition. Not a release acceptance verdict.",
+    "source_checks": "Fresh follow-up: all13 applicable workflows on source97fba1c5 successful, including CodeQL40207080709; separate TikTok Creator Release Candidate skipped by its existing condition. Not a release acceptance verdict.",
     "remote_recovery": "Fetched source97fba1c5 locally; zero file diff against local verified source; identical tree3bd0cd45ad729840b61bfeacd0c3e7cc5e7a4a54."
   },
   "live_readonly_evidence": [
     "2026-10-25: TikTok advertising connected; today's reporting visible",
     "Two creator connections listed connected",
     "Selected new Amasi creator readiness returned HTTP502 with generic frontend fallback; root cause remains unproven",
-    "Emergent hosting is signed out; no authenticated production logs available"
+    "User completed Emergent sign-in; refresh confirmed authenticated project management and existing-session code-server access",
+    "Read-only release-guard status reported active:true for separate Google1479 actor/source25076ac3 and deployment39a7dc82; no shared/app source or release-state writes performed",
+    "Separate Google publication subsequently showed Deployment finished October25 at18:42 UI time; this is not a TikTok release or this task's acceptance verdict",
+    "After the separate publication, refreshed Mezan, reloaded creator accounts and rechecked the same connected new Amasi account once: generic HTTP502 reproduced; no publication submitted",
+    "Authenticated View Logs inspected and reloaded after reproduction: displayed90 records oriented around startup through approximately15:43UTC, with no matching TikTok verify request/phase. Root cause still unproven; current UI log visibility does not provide the needed request trace"
   ],
   "invariants": [
     "No media bytes downloaded or stored on Mezan",
@@ -66,7 +70,7 @@
   "production_changed": false,
   "provider_business_writes": 0,
   "live_model_calls": 0,
-  "next_action": "Restore explicitly authorized hosting access when user requests it; inspect live readiness502 logs before root-cause patch. Complete child activation/editing, Spark linking and bounded autonomous financial Action Gateway with trustworthy financial coverage and owner limits. Then fresh integrated CI and protocol-v5 A/B/actual-host/deployment acceptance; never treat this default-off WIP as100% autonomy.",
+  "next_action": "Authentication is restored. Obtain actual production request-level diagnostics for the reproduced readiness502, or prepare a narrowly scoped safe diagnostic source change if the platform view cannot expose them; do not invent a provider failure cause. Preserve the separate Google lease and current production source. Complete child activation/editing, Spark linking and bounded autonomous financial Action Gateway with trustworthy financial coverage and owner limits. Then fresh integrated CI and protocol-v5 A/B/actual-host/deployment acceptance; never treat this default-off WIP as100% autonomy.",
   "completed_behavior": [
     "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
     "Safe fixed-stage AI failure diagnostics",
@@ -78,7 +82,7 @@
     "Optional three-campaign periodic observations in existing global five-hour cycle, replica claim before model work, rotated pages, shared recommendations; financial execution remains disabled"
   ],
   "remaining": [
-    "Publishing readiness502 root cause unresolved: authenticated hosting logs unavailable; secure login was declined, do not retry without user request",
+    "Publishing readiness502 reproduced after successful hosting sign-in and separate Google publication; available hosting log view does not contain the matching request trace, so root cause remains unresolved",
     "New code not deployed or enabled: TIKTOK_AD_BUILDER_ENABLED and MEZAN_TIKTOK_AI_PERIODIC_ENABLED defaultfalse",
     "Full Smart+ activation/child editing, Spark post-to-ad linking, bounded autonomous financial Action Gateway and measured outcomes remain incomplete",
     "Financial attribution/coverage must be proved before profit-based automatic scale decisions; never treat TikTok conversions as Salla financial orders",
@@ -86,5 +90,7 @@
   ],
   "remote_checkpoint_before_this_source": "632f0d66bcc1845b8c14a1bd0c0074456907c204; Draft PR1480",
   "reviewed_runtime_source": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
-  "authentication": "Secure Emergent method-selection request declined. Respect refusal; no automated credential retry or bypass."
+  "authentication": "User subsequently completed sign-in and explicitly requested refresh. Authenticated Emergent management and code-server verified with existing session; no credential retrieval or new authentication request.",
+  "followup_checkpoint_parent": "5cc245ed11fa752171e79ab3a0690543aaaa51ba",
+  "followup_scope": "Read-only authentication/hosting/runtime investigation and evidence-only documentation. No runtime source changes, live model calls, provider business writes, merge or publication by this task."
 }
