@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-25T22:28:17.242Z",
+  "updated_at": "2026-10-25T22:46:58.342Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -65,7 +65,7 @@
     "Verify average-budget wording in live AI prose",
     "Implement standing policy and full autonomous executor; full autonomy incomplete"
   ],
-  "next_safe_action": "Publishing slot RELEASED: actual guard activeFalse actorNone after verifiedTrue3probes for1515 A6f81bf28 M dede6648 runtime rg5-e1b18edbd0da3f01ff685462fe3ce315b0e842a91e0868e01c289f1dd2517838. User prioritized another conversation publishing next; no further source changes or publication here. Future Google continuation: fresh guard check, confirm live source includes1515, set Mezan period25Oct, ONE accountanalysis, safe native GET /api/integrations-v2/google_ads/ai/analysis-attempts?account_id=5052346701&date_from=2026-10-25&date_to=2026-10-25. Fullautonomy incomplete; testcampaign24390429267 remainsPAUSED15SARaveragezero spend. Googleonly.",
+  "next_safe_action": "1520: exactB CI andHost20, require latesttrunkstillJ e6694a, mergepreservingBtree. Original/App currentlyforeigncodex-snap1519lease lastobservedactive; neverclear. Onlyafterownercloses: actualguardinactive,ffM,hostadapter0,preparecodex-google1520/prepublish/ONEpublish/newexplicitfinish/verify3probes/statusinactive. ThenONEaccountanalysis25Octliveacceptance. FoundationWIP preserved separately; do not deploy it orclaimfullautomation.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -179,5 +179,36 @@
     },
     "screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/google1515-published.jpg",
     "live_failure_reproduction": "Deferred per user priority to release publishing slot for another conversation; diagnostics endpoint now deployed, rootcause not yet determined."
+  },
+  "evidence_binding": {
+    "pr": 1520,
+    "branch": "codex/google-ai-evidence-binding-20261026",
+    "base": "e6694a7198ab828996852cbf383149d0ab06364f",
+    "A": "2589081034abeda50d6151611f0ffc6fb0d350ed",
+    "B": "7aa4b1380dc681c69acded95c4e203064e1405c2",
+    "tree": "9d88703881f4a853032246643ccdea5f7618796d",
+    "runtime": "rg5-d5d75bda9223f6b82b825e56093d8517b4221ee426fae2fcc8238e127afb8788",
+    "source_readiness_run": 40241561068,
+    "artifact": 12617093443,
+    "intent_sha256": "f6e82106b26b6242d1c422a0a849ee0f2dfa69e9ac5ae8e2ecd061ad6230451f",
+    "state": "FROZEN B awaiting exact checks inclHost20; no1520merge/lease/publish",
+    "production_diagnosis": {
+      "analysis_id": "1067da3f4aae4693a13b969f873b1b93",
+      "code": "google_ai_recommendation_evidence_unknown",
+      "phase": "structured_analysis",
+      "duration_ms": 16885,
+      "http_status": 502,
+      "provider_writes": 0
+    },
+    "tests": "78AI;126focusedpassed27localMongo skips;2regressionsredthenpass;100nativefullcontextredthenpass",
+    "scope": "Per-campaign generationconstraints +scopedread-onlyUIattempts;independentpostvalidationunchanged;globalperiodprojection fulloutputevidencepreserved"
+  },
+  "autonomy_foundation": {
+    "branch": "codex/google-autonomy-foundation-20261026",
+    "checkpoint": "e0d6b3a615afb402f023934e9fd4efd72ef50886",
+    "state": "WIP ONLY; disabledpolicy/UI+pureplanner+realMongo tests; rootintegrationandreadonlynativeplanrouteinprogress; notproduction",
+    "tests": "policy46;planner44;combined131pass4Mongo skips;frontend11pendingCI",
+    "full_autonomy_complete": false,
+    "provider_writes": 0
   }
 }
