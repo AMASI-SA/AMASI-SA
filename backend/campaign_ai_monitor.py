@@ -228,6 +228,26 @@ async def run_campaign_ai_monitor(
                 {"$set": {"monthly_profit_goal": goal_context}},
             )
             result = {**result, "monthly_profit_goal": goal_context}
+        if snapshot_id:
+            from campaign_ai_snapchat_autonomy import dispatch_snapchat_autonomy
+            try:
+                dispatch_options = {"now": kwargs["now"]} if kwargs.get("now") else {}
+                autonomy = await dispatch_snapchat_autonomy(
+                    db, user_id, snapshot_id, **dispatch_options,
+                )
+            except Exception as exc:
+                # A control-plane outage must be visible without erasing a
+                # completed analysis or falling back to an ungoverned write.
+                autonomy = {"status": "blocked", "reason": type(exc).__name__, "accounts": []}
+                _legacy.logger.exception("Snapchat autonomy dispatch failed closed")
+            result = {**result, "snapchat_autonomy": autonomy}
+            try:
+                await db[RECOMMENDATION_COLLECTION].update_one(
+                    {"user_id": user_id, "snapshot_id": snapshot_id},
+                    {"$set": {"snapchat_autonomy": autonomy}},
+                )
+            except Exception:
+                _legacy.logger.exception("Could not persist Snapchat autonomy status")
         return result
     finally:
         _monthly_goal.clear_goal_context()

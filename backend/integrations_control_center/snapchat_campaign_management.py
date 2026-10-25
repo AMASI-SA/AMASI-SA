@@ -15,7 +15,7 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Awaitable, Callable, Literal
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -50,9 +50,16 @@ MAX_DAILY_BUDGET_ENV = "MEZAN_SNAPCHAT_MAX_DAILY_BUDGET_MICRO"
 DEFAULT_MAX_DAILY_BUDGET_MICRO = 5_000_000_000
 TRACKING_ASSET_COLLECTION = "mezan_snapchat_tracking_assets_v2"
 MANAGEMENT_SAFETY_PROTOCOL_VERSION = 2
+AUTONOMY_WRITE_FENCE_VERSION = "snapchat-autonomy-final-write-v1"
 MAX_MANAGEMENT_LIST_PAGES = 10
 MAX_MANAGEMENT_LIST_ROWS = 10_000
 CREATE_RECONCILIATION_GRACE = timedelta(minutes=5)
+
+
+class SnapchatFinalAuthorizationNotSent(HTTPException):
+    """A server authorization fence denied before the HTTP write was sent."""
+
+
 PIXEL_CONVERSION_WINDOWS = {"SWIPE_28DAY_VIEW_1DAY", "SWIPE_7DAY"}
 PIXEL_ELIGIBLE_STATUSES = {"ELIGIBLE", "ELIGIBLE_WARNING"}
 FINANCIAL_CONTROL_FIELDS = {
@@ -1554,6 +1561,7 @@ class SnapchatManagementProvider:
         body: Any = None,
         content_type: str = "application/json",
         params: dict[str, Any] | None = None,
+        final_authorizer: Callable[[], Awaitable[None]] | None = None,
     ) -> dict[str, Any]:
         try:
             token = await self.context.access_token()
@@ -1577,6 +1585,20 @@ class SnapchatManagementProvider:
             headers["Content-Type"] = content_type
         try:
             async with httpx.AsyncClient(timeout=35.0) as client:
+                # Credentials may require awaited refresh. Recheck the exact
+                # server-owned grant after that refresh and before transport.
+                if final_authorizer is not None:
+                    try:
+                        await final_authorizer()
+                    except HTTPException as exc:
+                        raise SnapchatFinalAuthorizationNotSent(
+                            status_code=exc.status_code, detail=exc.detail,
+                        ) from exc
+                    except Exception as exc:
+                        raise SnapchatFinalAuthorizationNotSent(
+                            status_code=503,
+                            detail={"code": "snapchat_autonomy_final_authorization_unavailable"},
+                        ) from exc
                 response = await client.request(
                     method,
                     f"{SNAPCHAT_API_BASE}{path}",
@@ -2077,7 +2099,10 @@ class SnapchatManagementProvider:
             entity, entity_id, phase="provider_get_response"
         )
 
-    async def execute(self, operation: dict[str, Any]) -> dict[str, Any]:
+    async def execute(
+        self, operation: dict[str, Any], *,
+        final_authorizer: Callable[[], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
         content_type = (
             "application/json-patch+json"
             if operation["method"] == "PATCH"
@@ -2088,6 +2113,7 @@ class SnapchatManagementProvider:
             operation["path"],
             body=operation["body"],
             content_type=content_type,
+            final_authorizer=final_authorizer,
         )
         return _extract_entity(payload, operation["plural"], operation["singular"])
 
@@ -5395,6 +5421,27 @@ async def _execute_snapchat_management_proposal_under_lease(
                 failure=(exc.detail if isinstance(exc.detail, dict) else None),
             )
             raise
+    async def authorize_provider_write() -> None:
+        from campaign_ai_snapchat_autonomy import require_snapchat_autonomy_write_authorization
+
+        await require_snapchat_autonomy_write_authorization(
+            db, user_id=user_id, proposal_id=proposal_id,
+            account_id=str(row.get("account_id") or ""),
+            target_id=_provider_target_id(row), action=str(row.get("action") or ""),
+            changes=_operation_expected_values(operation),
+        )
+        if final_settings_proof:
+            _settings_proof_at_provider_write(final_settings_proof)
+
+    try:
+        await authorize_provider_write()
+    except Exception as exc:
+        await _reset_execution_claim(
+            db, user_id=user_id, proposal_id=proposal_id,
+            failure=(exc.detail if isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                     else {"code": "snapchat_autonomy_final_authorization_unavailable"}),
+        )
+        raise
     provider_write_confirmed = False
     provider_entity_id = (
         _provider_target_id(row)
@@ -5405,7 +5452,13 @@ async def _execute_snapchat_management_proposal_under_lease(
     latest_provider_reread: dict[str, Any] | None = None
     provider_reread_failed = False
     try:
-        provider_entity = await client.execute(operation)
+        if type(client) is SnapchatManagementProvider:
+            provider_entity = await client.execute(
+                operation, final_authorizer=authorize_provider_write,
+            )
+        else:
+            # Test/provider adapters retain the same outer authorization fence.
+            provider_entity = await client.execute(operation)
         provider_write_confirmed = True
         response_entity_id = _provider_created_entity_id(
             provider_entity, phase="provider_write_response"
@@ -5471,6 +5524,13 @@ async def _execute_snapchat_management_proposal_under_lease(
             verified=verified,
             event="executed_and_verified",
         )
+    except SnapchatFinalAuthorizationNotSent as exc:
+        await _reset_execution_claim(
+            db, user_id=user_id, proposal_id=proposal_id,
+            failure=(exc.detail if isinstance(exc.detail, dict)
+                     else {"code": "snapchat_autonomy_final_guard_failed"}),
+        )
+        raise
     except Exception as exc:
         detail = (
             exc.detail
