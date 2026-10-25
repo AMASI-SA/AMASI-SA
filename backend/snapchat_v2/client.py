@@ -1162,6 +1162,21 @@ class SnapchatV2Client:
                 swipe_attribution_window=swipe_attribution_window,
                 view_attribution_window=view_attribution_window,
             )
+        if date_values and not campaign_values:
+            # No request was sent, so no provider response proves an empty
+            # child hierarchy. Preserve this as unknown/incomplete evidence.
+            raise SnapchatClientError(
+                f"snapchat_{entity_type}_campaign_scope_unproven",
+                "Snapchat child reporting has no proven parent campaign scope.",
+                coverage=_coverage(
+                    status="incomplete",
+                    data_state="unknown_incomplete",
+                    expected_requests=0,
+                    completed_requests=0,
+                    rows_received=0,
+                    reason="campaign_scope_unproven",
+                ),
+            )
         # Child levels require one Campaign Stats request per parent campaign
         # and account-local day according to Snapchat's reporting contract.
         expected_requests = len(campaign_values) * len(date_values)
