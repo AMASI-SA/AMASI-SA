@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r5-20261026",
   "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_merged_app_fastforwarded_adapter_retry_after_generated_bytecode_cleanup",
+  "state": "R5_release_fully_prepared_waiting_Emergent_UI_recovery_no_publish",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Read actual /app retry result;assert exact M/source A/runtime and trackedclean. Resolve Emergent management UI before own prepare/prepublish. If unavailable,retain no lease and request user to open Manage in shared browser;do not ask user to publish outside guard. After usable UI:prepare codex-tiktok1524,prepublish immediatelybeforeone finalPublish,explicitfinish,verify3/activefalse. Then PRIVATE nativefile test and captioncatalogsmoke without model call.",
+  "next": "User handoff requested only to recover/open Emergent Manage in sharedbrowser;do NOT publish manually yet. Once UI usable re-read guard inactive,/app exactM+identity,Production exactM. Then own prepare --actor codex-tiktok1524,openRepublishdialog,prepublish immediatelybeforeone finalPublishchanges,observe NEWexplicitfinish,and verify --url https://mezansalla.com three probes/activefalse. No native public/sample post. After deployed:privateofficialfixture nativeFILE test and captioncatalogsmoke(no liveAIrequest budget remaining).",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -29,7 +29,8 @@
     "preview_fix": "Central local-video URL constructor wraps bytes with an allowlisted video MIME and accepts only canonical same-origin blob UUID capabilities;explicit HTML/entity metacharacters rejected and invalid object URL revoked. Both metadata reader and visible preview use this guard. Node independent acceptance8 PASS;Jest adds9 cases. Fresh full CodeQL/native/frontend CI required.",
     "original_host_superseded": "1516 isolated original-host adapter exit0 exact old A/runtime;not valid evidence for changedR2source. R2 must repeat fresh adapter after reviewed intent B.",
     "R4": "B20a8e60c0b81d05af433bcf23ba44cec4e37efbb fresh current-head27 checks:21SUCCESS6nonapplicableSKIP,0pending/failure. CodeQLbothlanguages+aggregateSUCCESS0alerts. Native552backend/165frontend,security,release/HostNode20,G47,stock,balance,Qoyod,Snap/legal pass. PR1523 ready for review. Production remainsJd888.",
-    "R5": "All27 B checks completed:21SUCCESS6nonapplicableSKIP;CodeQLbothlanguages+aggregateSUCCESS0annotations. Original-host isolated adapter EXIT0;asserted exactB/sourceA/runtime. Normal merge M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318 tree88270dba341b98a32e1b540daadec3cc327df0c6 exactlyequals B."
+    "R5": "All27 B checks completed:21SUCCESS6nonapplicableSKIP;CodeQLbothlanguages+aggregateSUCCESS0annotations. Original-host isolated adapter EXIT0;asserted exactB/sourceA/runtime. Normal merge M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318 tree88270dba341b98a32e1b540daadec3cc327df0c6 exactlyequals B.",
+    "R5_actual_app": "TIKTOK1524_APP_ADAPTER_RETRY_EXIT=0;TIKTOK1524_APP_IDENTITY_MATCH exactM/A/runtime;TIKTOK1524_GUARD active:false."
   },
   "user_added_requirement": "Generate a viewer-facing Saudi-market video caption from the selected product: engaging opening,product value,natural interaction CTA,relevant hashtags and organic/promoted variants;owner reviews before posting,no guaranteed reach or fabricated current-trend claims.",
   "frontend": "Default local-file source,local blob preview,4MiB bounded fingerprint blocks,sequential native PUTs with no Mezan auth/cookies,progress,explicit status check and original-session resume. Existing URL/photo source preserved. Added helper/component tests;not yet executed.",
@@ -42,7 +43,7 @@
   "release_hold": {
     "guard_active": false,
     "actor": null,
-    "ui_blocker": "Emergent project view repeatedly times out in current cloud browser. Home and CodeServer work. Fresh tab/reload/closing internal project tab then reopen did not resolve. Console shows unhandled Redux Toolkit #38 refreshCredits rejection. No bot/sign-in block observed. No Publish click."
+    "ui_blocker": "Emergent project view repeatedly times out in current cloud browser. Home and CodeServer work. Fresh tab/reload/closing internal project tab then reopen did not resolve. Console shows unhandled Redux Toolkit #38 refreshCredits rejection. No bot/sign-in block observed. No Publish click. Isolated and actual host adapters now complete;only UI prevents final publishing. Manual handoff may recover Manage. This is not a permission/approval request."
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -67,8 +68,8 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:29:28.526Z",
-  "original_host": "Fresh inactive guard and tracked-clean check preceded /app ff-only to exact M219c4db. Untracked .emergent/testing and deployer-agent-docs preserved. Actual adapter EXIT2: runtime source rejected generated backend __pycache__. Targeted generated-bytecode-only cleanup and adapter retry launched under fresh inactive guard;result pending. No own prepare/lease/publish.",
+  "observed_at": "2026-10-25T23:30:59.141Z",
+  "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
   "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
   "superseded_R4": {
     "pr": 1523,
@@ -83,5 +84,6 @@
   "intent_B": "6d8d1a39a074d2d17161a55b16d3a0389abeef9d",
   "runtime": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1524",
-  "merge_M": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318"
+  "merge_M": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+  "repository_production_branch_changed": true
 }
