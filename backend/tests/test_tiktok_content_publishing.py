@@ -316,6 +316,14 @@ async def test_photo_privacy_and_delayed_public_post_ids_are_not_fabricated(work
 
 
 @pytest.mark.asyncio
+async def test_direct_video_cannot_promise_private_visibility_on_public_business_endpoint(workflow):
+    _, provider, ref, client, _ = workflow
+    response = await client.post(BASE + "/proposals", json=content(ref, privacy_level="SELF_ONLY"))
+    assert response.status_code == 422
+    assert provider.publish_calls == []
+
+
+@pytest.mark.asyncio
 async def test_owner_key_is_immutable_and_failed_provider_status_releases_only_own_fence(workflow):
     db, provider, ref, client, _ = workflow
     value = content(ref)

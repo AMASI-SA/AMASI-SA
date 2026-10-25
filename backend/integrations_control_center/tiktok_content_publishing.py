@@ -151,14 +151,48 @@ async def ensure_indexes(db):
     # Execution fences and submitted/uncertain records deliberately have no TTL.
 
 
+_SETTINGS_FIELDS = {
+    "privacy_level_options": "خيارات الخصوصية",
+    "max_video_post_duration_sec": "مدة الفيديو القصوى",
+    "comment_disabled": "إعداد التعليقات",
+    "duet_disabled": "إعداد الدويتو",
+    "stitch_disabled": "إعداد دمج الفيديو",
+}
+_SETTINGS_ISSUES = {"missing": "حقل غير موجود", "invalid_type": "نوع بيانات غير متوقع",
+                    "invalid_value": "قيمة غير صالحة", "no_options": "لا توجد خيارات متاحة",
+                    "unsupported_value": "خيار غير مدعوم", "duplicate_options": "خيارات مكررة"}
+_SETTINGS_TYPES = {str: "str", int: "int", float: "float", bool: "bool", list: "list", dict: "dict", type(None): "null"}
+
+
+def _settings_problem(data, field, issue):
+    error = problem("tiktok_creator_settings_unproven", "تعذر التحقق من إعدادات نشر الحساب.", 502)
+    error.detail.update({"settings_field": field, "settings_issue": issue,
+                         "observed_type": _SETTINGS_TYPES.get(type(data.get(field)), "other")})
+    return error
+
+
 def settings_proof(data):
+    # Business API documents an account-specific maximum, not a 600-second
+    # maximum for this response. Preserve Mezan's own 600-second content cap.
+    # https://business-api.tiktok.com/portal/docs/get-the-post-privacy-settings-of-a-tiktok-account/v1.3
     options = data.get("privacy_level_options")
     duration = data.get("max_video_post_duration_sec")
-    if not isinstance(options, list) or not 1 <= len(options) <= 4 or any(not isinstance(v, str) or v not in PRIVACY for v in options) or len(set(options)) != len(options) or type(duration) not in (int, float) or not math.isfinite(duration) or not 3 <= duration <= 600:
-        raise problem("tiktok_creator_settings_unproven", "تعذر التحقق من إعدادات النشر للحساب.", 502)
-    if any(type(data.get(k)) is not bool for k in ("comment_disabled", "duet_disabled", "stitch_disabled")):
-        raise problem("tiktok_creator_settings_unproven", "تعذر التحقق من إعدادات التفاعل للحساب.", 502)
-    return {"privacy_level_options": sorted(options), "max_video_post_duration_sec": duration, **{k: data[k] for k in ("comment_disabled", "duet_disabled", "stitch_disabled")}}
+    if not isinstance(options, list):
+        raise _settings_problem(data, "privacy_level_options", "missing" if "privacy_level_options" not in data else "invalid_type")
+    if not options:
+        raise _settings_problem(data, "privacy_level_options", "no_options")
+    if len(options) > 4 or any(not isinstance(v, str) or v not in PRIVACY for v in options):
+        raise _settings_problem(data, "privacy_level_options", "unsupported_value")
+    if len(set(options)) != len(options):
+        raise _settings_problem(data, "privacy_level_options", "duplicate_options")
+    if type(duration) not in (int, float):
+        raise _settings_problem(data, "max_video_post_duration_sec", "missing" if "max_video_post_duration_sec" not in data else "invalid_type")
+    if (type(duration) is float and not math.isfinite(duration)) or duration < 3:
+        raise _settings_problem(data, "max_video_post_duration_sec", "invalid_value")
+    for field in ("comment_disabled", "duet_disabled", "stitch_disabled"):
+        if type(data.get(field)) is not bool:
+            raise _settings_problem(data, field, "missing" if field not in data else "invalid_type")
+    return {"privacy_level_options": sorted(options), "max_video_post_duration_sec": min(duration, 600), **{k: data[k] for k in ("comment_disabled", "duet_disabled", "stitch_disabled")}}
 
 
 def property_proof(data):
@@ -276,6 +310,13 @@ async def readiness_report(db, user_id, creator_ref):
         code = raw_code if isinstance(raw_code, str) and raw_code in _READINESS_CODES else "tiktok_readiness_unavailable"
         diagnostic = {"code": code, "phase": phase, "status": error.status_code,
                       "message": "تعذر التحقق من " + _READINESS_PHASES[phase] + ". لم تُرسل أي عملية نشر."}
+        field, issue, observed = detail.get("settings_field"), detail.get("settings_issue"), detail.get("observed_type")
+        if code == "tiktok_creator_settings_unproven" and isinstance(field, str) and field in _SETTINGS_FIELDS and isinstance(issue, str) and issue in _SETTINGS_ISSUES:
+            diagnostic.update({"field": field, "issue": issue})
+            diagnostic["message"] += " " + _SETTINGS_FIELDS[field] + ": " + _SETTINGS_ISSUES[issue] + "."
+            if isinstance(observed, str) and observed in {*_SETTINGS_TYPES.values(), "other"}:
+                diagnostic["observed_type"] = observed
+                diagnostic["message"] += " (" + field + "; " + issue + "; " + observed + ")"
         provider_code = detail.get("provider_code")
         if type(provider_code) is int and 0 < provider_code <= 999999:
             diagnostic["provider_code"] = provider_code
