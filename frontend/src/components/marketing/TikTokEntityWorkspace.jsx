@@ -5,6 +5,7 @@ import TikTokCampaignAnalysis from "./TikTokCampaignAnalysis";
 import TikTokCampaignControls from "./TikTokCampaignControls";
 import TikTokAdBuilder from "./TikTokAdBuilder";
 import TikTokChildControls from "./TikTokChildControls";
+import TikTokSpendGuard from "./TikTokSpendGuard";
 
 const LEVELS = [["campaign", "الحملات"], ["adgroup", "المجموعات الإعلانية"], ["ad", "الإعلانات"]];
 function number(value, digits = 0) {
@@ -28,11 +29,14 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
     const [management, setManagement] = useState(null);
     const [builder, setBuilder] = useState(null);
     const [child, setChild] = useState(null);
+    const [spendGuard, setSpendGuard] = useState(null);
     const analysisKey = JSON.stringify([dateFrom, dateTo, query, kind, page, accountId, revision]);
     useEffect(() => { setAnalysis(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision]);
     useEffect(() => { setManagement(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision]);
     useEffect(() => { setBuilder(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision]);
     useEffect(() => { setChild(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision, parent]);
+    useEffect(() => { setSpendGuard(null); }, [dateFrom, dateTo, query, kind, page, accountId, revision, parent]);
+    useEffect(() => { if (analysis || management || builder || child) setSpendGuard(null); }, [analysis, management, builder, child]);
     const sequence = useRef(0);
     const onSyncedRef = useRef(onSynced);
     useEffect(() => { onSyncedRef.current = onSynced; }, [onSynced]);
@@ -107,6 +111,7 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
         {selectedAccount && <button type="button" className="rounded-xl border bg-white px-4 py-3 text-sm font-bold" disabled={loading || syncing} onClick={() => setBuilder({ kind: "video_asset", accountId, accountName: selectedAccount.account_name, selectionKey: analysisKey })}>استيراد فيديو إلى مكتبة تيك توك</button>}
         {builder?.selectionKey === analysisKey && <TikTokAdBuilder key={`${builder.kind}:${builder.campaignId || ""}:${builder.adgroupId || ""}`} selection={builder} onClose={() => setBuilder(null)} />}
         {child?.selectionKey === analysisKey && <TikTokChildControls key={`${child.kind}:${child.adId || child.adgroupId}`} selection={child} onClose={() => setChild(null)} />}
+        {spendGuard?.selectionKey === analysisKey && <TikTokSpendGuard key={`${spendGuard.accountId}:${spendGuard.campaignId}`} selection={spendGuard} onClose={() => setSpendGuard(null)} />}
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <table className="w-full min-w-[950px] text-right text-sm" data-testid="tiktok-native-entities-table"><thead className="bg-slate-50"><tr>{["الاسم والحساب", "الحالة", "الصرف · ر.س", "تحويلات TikTok", "الظهور", "النقرات", "CTR", "التفاصيل"].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead>
                 <tbody>{(report?.entities || []).map((row) => <tr key={`${row.account_id}:${row.entity_id}`} className="border-t border-slate-100">
@@ -120,6 +125,7 @@ export default function TikTokEntityWorkspace({ dateFrom, dateTo, query = "", on
                     <td className="p-3"><div className="flex flex-wrap gap-2">{kind !== "ad" && <button type="button" className="rounded-lg bg-violet-50 px-3 py-2 font-bold text-violet-700" onClick={() => { setAccountId(row.account_id); setParent({ campaign_id: row.campaign_id, adgroup_id: kind === "adgroup" ? row.entity_id : undefined, name: row.entity_name }); setKind(kind === "campaign" ? "adgroup" : "ad"); setPage(1); }}>{kind === "campaign" ? "عرض المجموعات" : "عرض الإعلانات"}</button>}
                         {kind !== "ad" && <button type="button" disabled={loading || syncing || row.status !== "DISABLE"} onClick={() => { setManagement(null); setAnalysis(null); setBuilder({ kind: kind === "campaign" ? "adgroup" : "ad", accountId: row.account_id, accountName: row.account_name, campaignId: row.campaign_id, campaignName: row.entity_name, adgroupId: kind === "adgroup" ? row.entity_id : undefined, selectionKey: analysisKey }); }} className="rounded-lg bg-violet-50 px-3 py-2 font-bold text-violet-800 disabled:opacity-40">{kind === "campaign" ? "تجهيز مجموعة موقوفة" : "تجهيز إعلان فيديو موقوف"}</button>}
                         {(kind === "adgroup" || kind === "ad" && row.identity_level === "creative" && /^[0-9]{1,30}$/.test(row.platform_ad_id || "")) && <button type="button" disabled={loading || syncing || !["ENABLE", "DISABLE"].includes(row.status) || String(row.delivery_status || "").includes("DELETE")} onClick={() => { setManagement(null); setAnalysis(null); setBuilder(null); setChild({ kind, accountId: row.account_id, accountName: row.account_name, campaignId: row.campaign_id, adgroupId: kind === "adgroup" ? row.entity_id : row.adgroup_id, adId: kind === "ad" ? row.platform_ad_id : undefined, name: row.entity_name, selectionKey: analysisKey }); }} className="rounded-lg bg-emerald-50 px-3 py-2 font-bold text-emerald-800 disabled:opacity-40">إدارة {kind === "adgroup" ? "المجموعة" : "إعلان Smart+"}</button>}
+                        {kind === "campaign" && /^[0-9]{1,30}$/.test(row.entity_id) && <button type="button" disabled={loading || syncing || !["ENABLE", "DISABLE"].includes(row.status) || String(row.delivery_status || "").includes("DELETE")} onClick={() => { setManagement(null); setAnalysis(null); setBuilder(null); setChild(null); setSpendGuard({ accountId: row.account_id, accountName: row.account_name, campaignId: row.entity_id, name: row.entity_name, currency: row.currency, selectionKey: analysisKey }); }} className="rounded-lg bg-amber-50 px-3 py-2 font-bold text-amber-800 disabled:opacity-40">حماية صرف الحملة</button>}
                         {kind === "campaign" && <><button type="button" aria-controls="tiktok-native-ai-panel" disabled={!row.data_complete || loading || syncing} onClick={() => { setManagement(null); setAnalysis({ accountId: row.account_id, campaignId: row.entity_id, name: row.entity_name, selectionKey: analysisKey }); }} className="rounded-lg bg-violet-700 px-3 py-2 font-bold text-white disabled:opacity-40">تحليل بالذكاء</button><button type="button" aria-controls="tiktok-native-management-panel" disabled={loading || syncing || String(row.delivery_status || "").includes("DELETE") || row.status === "DELETE"} onClick={() => { setAnalysis(null); setManagement({ mode: "edit", accountId: row.account_id, campaignId: row.entity_id, name: row.entity_name, accountName: row.account_name, currency: row.currency, selectionKey: analysisKey }); }} className="rounded-lg bg-emerald-50 px-3 py-2 font-bold text-emerald-800 disabled:opacity-40">إدارة الحملة</button></>}</div></td>
                 </tr>)}</tbody></table>
             {loading && <div role="status" className="p-8 text-center">جاري تحميل البيانات…</div>}

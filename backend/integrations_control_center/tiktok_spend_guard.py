@@ -162,15 +162,16 @@ async def run_spend_guard(db, user, snapshot, *, current=None, api_factory=TikTo
         return snapshot
     from campaign_ai_monitor_legacy import RECOMMENDATION_COLLECTION
     scope = {"user_id": user, "snapshot_id": snapshot["snapshot_id"]}
-    if not await mongo(db[RECOMMENDATION_COLLECTION].find_one(scope, {"snapshot_id": 1}, max_time_ms=1500)):
-        return snapshot
     async with _slot:
+        if not await mongo(db[RECOMMENDATION_COLLECTION].find_one(scope, {"snapshot_id": 1}, max_time_ms=1500)):
+            return snapshot
         await indexes(db)
         try:
             await mongo(db[CYCLES].insert_one({**scope, "status": "running", "created_at": now()}))
         except DuplicateKeyError:
             return snapshot
         actions, candidates, selected = [], [], []
+        inventory_known = False
         try:
             async with asyncio.timeout(120):
                 pointers = await mongo(db[POLICIES].find({"user_id": user, "enabled": True}).sort("account_id", 1).limit(MAX_POLICIES + 1).max_time_ms(1500).to_list(MAX_POLICIES + 1))
@@ -183,6 +184,7 @@ async def run_spend_guard(db, user, snapshot, *, current=None, api_factory=TikTo
                     if not version or version.get("revision") != pointer["revision"] or version.get("account_id") != pointer["account_id"] or version.get("enabled") is not True:
                         raise problem("tiktok_guard_policy_unproven", "نسخة سياسة الحماية غير مثبتة.")
                     candidates.extend((pointer, version, rule) for rule in version["rules"])
+                inventory_known = True
                 cursor = await mongo(db[CURSORS].find_one({"_id": user, "user_id": user}, max_time_ms=1500)) or {}
                 offset = cursor.get("offset", 0)
                 offset = offset if type(offset) is int and offset >= 0 else 0
@@ -194,11 +196,23 @@ async def run_spend_guard(db, user, snapshot, *, current=None, api_factory=TikTo
         except Exception:
             actions.append({"status": "guard_unavailable", "provider_write_reached": None})
         summary = {"status": "complete" if not any(a["status"] == "guard_unavailable" for a in actions) else "partial", "checks": actions, "interval_hours": 5,
-            "scope": "selected_rules_only", "configured_rules": len(candidates), "checked_rules": len(actions), "coverage_exhaustive": len(selected) == len(candidates), "maximum_checks": MAX_CHECKS, "profit_sar": None, "financial_orders": None,
+            "scope": "selected_rules_only", "configured_rules": len(candidates) if inventory_known else None,
+            "checked_rules": sum("campaign_id" in action for action in actions),
+            "coverage_exhaustive": inventory_known and len(selected) == len(candidates) and not any(action["status"] == "guard_unavailable" for action in actions),
+            "maximum_checks": MAX_CHECKS, "profit_sar": None, "financial_orders": None,
             "budget_increases_allowed": False, "instantaneous_spend_guarantee": False}
+        confirmed = any(action["status"] == "paused_verified" for action in actions)
+        uncertain = any(action.get("provider_write_reached") is True or action["status"] == "guard_unavailable" for action in actions)
+        if snapshot.get("writes_performed") is True or confirmed:
+            writes_performed = True
+        elif uncertain:
+            writes_performed = None
+        else:
+            writes_performed = snapshot.get("writes_performed", False)
+        summary.update({"mode": "owner_configured_defensive_pause", "confirmed_pauses": sum(action["status"] == "paused_verified" for action in actions), "writes_performed": writes_performed})
         await mongo(db[CYCLES].update_one(scope, {"$set": {"status": summary["status"], "summary": summary, "finished_at": now()}}))
-        await mongo(db[RECOMMENDATION_COLLECTION].update_one(scope, {"$set": {"tiktok_spend_guard": summary}}))
-        return {**snapshot, "tiktok_spend_guard": summary}
+        await mongo(db[RECOMMENDATION_COLLECTION].update_one(scope, {"$set": {"tiktok_spend_guard": summary, "writes_performed": writes_performed}}))
+        return {**snapshot, "tiktok_spend_guard": summary, "writes_performed": writes_performed}
 
 
 async def _check_rule(db, user, snapshot_id, pointer, version, rule, *, current, api_factory, provider_factory):
@@ -264,9 +278,15 @@ def attach_spend_guard_routes(router, db, current_user, require_owner):
         return await save_policy(db, str(require_owner(user)["id"]), value)
 
     @routes.get("/actions")
-    async def history(limit: int = Query(default=12, ge=1, le=25), user: dict = Depends(current_user)):
+    async def history(limit: int = Query(default=12, ge=1, le=25), account_id: str | None = Query(default=None, pattern=r"^[0-9]{1,30}$"), campaign_id: str | None = Query(default=None, pattern=r"^[0-9]{1,30}$"), user: dict = Depends(current_user)):
         owner = str(require_owner(user)["id"])
-        rows = await mongo(db[ACTIONS].find({"user_id": owner}, {"user_id": 0}).sort("created_at", -1).limit(limit).max_time_ms(1500).to_list(limit))
+        query = {"user_id": owner}
+        if account_id: query["account_id"] = account_id
+        if campaign_id:
+            if not account_id:
+                raise problem("tiktok_guard_account_required", "اختر الحساب مع الحملة لقراءة سجل الحماية.", 422)
+            query["campaign_id"] = campaign_id
+        rows = await mongo(db[ACTIONS].find(query, {"user_id": 0}).sort("created_at", -1).limit(limit).max_time_ms(1500).to_list(limit))
         return {"items": rows, "budget_increases_allowed": False, "profit_sar": None}
 
     router.include_router(routes)

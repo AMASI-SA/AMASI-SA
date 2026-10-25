@@ -22,6 +22,16 @@ test("offers paused campaign creation and owner management from the native works
     expect(buttons).toContain("إدارة الحملة");
 });
 
+test("owner spend monitoring opens for the exact campaign without enabling policy", async () => {
+    const data = report("1111");
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/policy") ? { account_id: "70001", revision: 0, enabled: false, rules: [] } : data }));
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    await act(async () => [...container.querySelectorAll("button")].find((node) => node.textContent === "حماية صرف الحملة").click());
+    expect(container.querySelector('[data-testid="tiktok-spend-guard"]')).not.toBeNull();
+    expect(api.get).toHaveBeenLastCalledWith("/integrations-v2/tiktok_ads/spend-guard/policy", expect.objectContaining({ params: { account_id: "70001" } }));
+    expect(api.post).not.toHaveBeenCalled();
+});
+
 let container, root;
 beforeEach(() => {
     api.get.mockReset();
