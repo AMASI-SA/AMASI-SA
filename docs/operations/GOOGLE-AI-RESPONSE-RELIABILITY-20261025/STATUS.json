@@ -1,10 +1,10 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-ai-response-reliability-r2-20261025",
-  "base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "status": "CURRENT_SOURCE_ALL_CI_PASS_WAITING_FOR_FOREIGN_RELEASE",
-  "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
+  "branch": "codex/google-ai-response-reliability-r3-20261025",
+  "base": "5065c605004595e06606e2bfc99454ec629c733e",
+  "status": "EXACT_SOURCE_ALL9_PASS_CI_INTENT_B_PUSHED_CHECKS_RUNNING",
+  "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
     "google_account_analysis": "still timed out",
@@ -24,14 +24,20 @@
     "backend": "101 AI/actions/context tests passed in1.64s",
     "frontend": "CI pending",
     "current_source_ci": {
-      "head_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
-      "all_9_workflows": "success",
-      "google_run": 40214882914,
-      "backend_job": 121233748852,
-      "backend": "379passed realMongo/officialv25 10.64s",
-      "frontend_job": 121233748638,
-      "frontend": "96tests/12suites/build3.53s"
-    }
+      "head_sha": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
+      "all9": "success",
+      "readiness_run": 40219578294,
+      "independent_node20_clean_clone_rehearsal": "success",
+      "candidate_artifact": {
+        "id": 12609421317,
+        "zip_sha256": "87485f5dc2dc70f173c7fd868538902d099eb6351ecd365b4456d26029150259",
+        "json_sha256": "bd6948dbc56ea916d772444f5b0b5fcf298b97418f25d3b5442ec8fb98f597d8",
+        "json_bytes": 898831,
+        "source_and_base_validated": true
+      }
+    },
+    "clone": "exit0 /tmp/google1485-release literalA",
+    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
   },
   "user_autonomy_preferences": {
     "budget_mode": "preserve_current_approved_total_budget",
@@ -43,7 +49,7 @@
   "provider_writes": 0,
   "financial_writes": 0,
   "production_changed": false,
-  "next_safe_action": "Actual /app guard (cd /app) must become active:false when codex-snap1483 closes its lease. Confirm production remains442bdd..., then create fresh independent clone for A1a34..., governed install/build/bootstrap/freeze against442bdd...; verify downloaded JSON source/base before any B upload. Do not deploy oldA2 intent.",
+  "next_safe_action": "Wait B checks and actual /app foreign lease inactive. Confirm production still5065..., exactBtree/ancestry then merge preservingBtree. Original /app fast-forward/adapter/prepare/prepublish and one authorized publish; 3publicprobes and live analysis. Do not rebase frozen A/B.",
   "concurrent_update": {
     "pr": 1482,
     "scope": "TikTok creator readiness",
@@ -63,21 +69,44 @@
       "pr": 1483,
       "scope": "Snapchat",
       "preserved": true
+    },
+    {
+      "pr": 1487,
+      "scope": "TikTok publishing settings",
+      "preserved": true
+    },
+    {
+      "pr": 1488,
+      "scope": "Snapchat budget direction",
+      "preserved": true
     }
   ],
-  "source_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1485",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1493",
   "shared_release_guard": {
     "active": true,
-    "actor": "codex-snap1483",
-    "source_git_sha": "0477d67281e8dd170220a1d12e7388a332c805c6",
-    "deployment_git_sha": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-    "release_id": "rg5-ce92c2291c610ca725e9ab5dc0ca1597fec9ea1ce2174e2d509b73bd7ea87c35"
+    "actor": "codex-snap1488",
+    "source_git_sha": "0aaac598d41851359dd61df92ae8994ad27f4060",
+    "deployment_git_sha": "5065c605004595e06606e2bfc99454ec629c733e",
+    "release_id": "rg5-4a0d28846078c5e719e3cd76cb928966cf899efcf7bdb87a60ab405912efe4cb"
   },
   "previous_pr": {
     "number": 1484,
     "state": "closed_unmerged_superseded_before_B",
     "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
   },
-  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload."
+  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload.",
+  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc",
+  "ci_queue_fix": {
+    "from": "one repository-wide mezan-release-readiness group",
+    "to": "one group per PR/ref",
+    "cancel_in_progress": false,
+    "jobs_permissions_and_production_guard": "unchanged",
+    "yaml_parse": "pass; semantic comparison only concurrency group changed; all4jobs and contents:read retained",
+    "source": "official GitHub concurrency docs and observed cancelled-before-jobs run"
+  },
+  "prior_source": "d11c2598c37f94858c62adfb15d3c6a76223be70",
+  "source_sha": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
+  "intent_sha": "0ca21a2a85c004d0f1e6af0cfb4b9e5dc2c0cc9a",
+  "intent_tree": "cf332134148262cdcb5a020bcf5f1b8b3de92e07",
+  "runtime_release_id": "rg5-e1dad5087ed0c25d3c091025e36d0d41a8f234be99d51e1fb430af1ffa40bb7c"
 }
