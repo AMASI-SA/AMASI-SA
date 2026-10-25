@@ -25,7 +25,8 @@
       "source_build": "PASS"
     },
     "source_ci": "All9 applicable A workflows PASS; one branch-specific creator candidate skipped.",
-    "intent_ci": "All9 applicable B workflows PASS; release3454/40211064094 original clean-clone adapter PASS."
+    "intent_ci": "All9 applicable B workflows PASS; release3454/40211064094 original clean-clone adapter PASS.",
+    "merge_push_ci": "All3 applicable M workflows PASS:release40211937915,security40211937949,CodeQL40211938792."
   },
   "production_changed_by_this_task": false,
   "provider_business_writes": 0,
@@ -38,8 +39,8 @@
   "runtime_id": "rg5-31755644fc66a0266667b12432a4c9df16182f2b3e5d5b1d68dc805f58e3e494",
   "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
   "pr": 1482,
-  "actual_host": "Independent clean clone governed B adapter exit0. First /app adapter refused prepackaged __pycache__; generated caches being reversibly preserved outside governed roots before fresh adapter. Do not bypass source manifests.",
+  "actual_host": "Independent clean clone B adapter exit0. First original/app adapter rejected generated __pycache__; one untracked generated directory reversibly preserved at/tmp/tiktok1482-bytecode-preserved-20261025. Second original/app adapter completed with exact intended identity; host_build_exit=0. Original source M retained, unrelated .emergent/testing and deployer-agent-docs preserved.",
   "lease": "Foreign Google1481 publication completed and guard subsequently active:false. No TikTok lease yet.",
   "public_identity_before_tiktok": "Read-only /api/health shows Google8cce9baf source and verified v5 identity; not TikTok acceptance.",
-  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025 preserves clearing old proof before a recheck; focused UI acceptance pending. Not part of frozen1482."
+  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482."
 }
