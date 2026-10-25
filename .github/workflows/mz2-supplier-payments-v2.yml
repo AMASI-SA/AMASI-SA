@@ -11,6 +11,11 @@ on:
       - backend/tests/test_accounting_opening_categories.py
       - backend/tests/test_accounting_onboarding.py
       - backend/mezan_supplier_management_routes.py
+      - backend/supplier_mobile_routes.py
+      - backend/supplier_category_service_policy.py
+      - backend/preparation_supplier_dispatch.py
+      - backend/tests/test_supplier_category_contract.py
+      - backend/tests/test_mezan_supplier_management.py
       - backend/tests/test_mz2_supplier*.py
       - frontend/src/components/suppliers/**
       - frontend/src/pages/MezanSuppliersV2*
@@ -60,5 +65,8 @@ jobs:
           backend/tests/test_mz2_supplier_financial_port_integration.py
           backend/tests/test_mz2_supplier_identity.py backend/tests/test_accounting_ledger_v2.py
           backend/tests/test_mezan_supplier_management.py
+          backend/tests/test_supplier_category_contract.py
+          backend/tests/test_preparation_supplier_dispatch.py
+          backend/tests/test_supplier_display_financial_boundary.py
           backend/tests/test_accounting_opening_categories.py
           backend/tests/test_accounting_onboarding.py
