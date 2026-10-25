@@ -136,15 +136,23 @@ def plan_google_autonomy(*, user_id, account_id, policy, analysis, workspace, hi
         if row.get("status") in _PENDING:
             return blocked("account_execution_pending")
         if row.get("status") == "completed" or row.get("submission_started") is True:
+            if row.get("status") == "completed" and row.get("verified") is not True:
+                return blocked("history_unproved")
             stamp = _instant(row.get("executed_at") or row.get("submitted_at") or row.get("created_at"))
-            cid = row.get("campaign_id")
-            if (stamp is None or stamp > current or not isinstance(cid, str)
-                or not re.fullmatch(r"[0-9]{1,30}", cid)):
+            action = row.get("action")
+            # Creation and duplication mutate a new campaign, not the source
+            # campaign (which is None for create and the old id for duplicate).
+            cid = row.get("created_campaign_id") if action in ("create_campaign", "duplicate") else row.get("campaign_id")
+            account_asset = action in ("upload_image", "attach_video", "upload_html5") and cid in (None, "")
+            if (stamp is None or stamp > current or (not account_asset and
+                (not isinstance(cid, str) or not re.fullmatch(r"[0-9]{1,30}", cid)))):
                 return blocked("history_unproved")
             if stamp.astimezone(zone).date() == today:
                 action_count += 1
-            cid = row["campaign_id"]
-            last_action[cid] = max(last_action.get(cid, stamp), stamp)
+            # Verified account-level asset writes consume a daily action slot,
+            # but have no campaign for a campaign cooldown to attach to.
+            if not account_asset:
+                last_action[cid] = max(last_action.get(cid, stamp), stamp)
     if action_count >= daily_limit:
         return blocked("daily_action_limit")
     recommendations = native.get("recommendations")

@@ -86,7 +86,7 @@ def test_unsafe_recommendation_is_reported_as_blocked(change, code):
 
 
 def history_row(**changes):
-    return {"user_id":"owner","account_id":"123","campaign_id":"456","status":"completed",
+    return {"user_id":"owner","account_id":"123","campaign_id":"456","status":"completed","verified":True,"action":"pause",
                 "executed_at":(NOW-timedelta(minutes=30)).isoformat(), **changes}
 
 
@@ -193,4 +193,40 @@ def test_unknown_campaign_status_prevents_account_budget_proof(status):
 @pytest.mark.parametrize("campaign_id", [["456"], 456, "٤٥٦", "9"*31])
 def test_malformed_completed_history_campaign_identity_fails_closed(campaign_id):
     data=inputs();data["history"]["items"]=[history_row(campaign_id=campaign_id)]
+    assert plan_google_autonomy(**data)["blockers"] == ["history_unproved"]
+
+
+@pytest.mark.parametrize("action", ["create_campaign", "duplicate"])
+def test_verified_campaign_creation_cools_down_created_id_not_original(action):
+    data=inputs()
+    add_candidate(data,"789","PAUSE_CAMPAIGN")
+    data["history"]["items"]=[history_row(action=action, verified=True,
+        campaign_id="456" if action == "duplicate" else None, created_campaign_id="789")]
+    candidates=plan_google_autonomy(**data)["candidates"]
+    assert candidates[0]["decision"] == "eligible_for_preview"
+    assert candidates[1]["blockers"] == ["campaign_cooldown"]
+
+
+@pytest.mark.parametrize("action", ["upload_image", "attach_video", "upload_html5"])
+def test_verified_account_asset_action_without_campaign_counts_day_only(action):
+    data=inputs();data["history"]["items"]=[history_row(action=action,verified=True,campaign_id=None)]
+    assert plan_google_autonomy(**data)["candidates"][0]["decision"] == "eligible_for_preview"
+    data["policy"]["max_actions_per_day"]=1
+    assert plan_google_autonomy(**data)["blockers"] == ["daily_action_limit"]
+
+
+def test_real_creation_record_shape_is_counted_and_unknown_missing_identity_stays_blocked():
+    data=inputs();data["history"]["items"]=[history_row(action="create_campaign", verified=True,
+        campaign_id=None, created_campaign_id="24390429267", submission_started=True)]
+    assert plan_google_autonomy(**data)["candidates"][0]["decision"] == "eligible_for_preview"
+    data["policy"]["max_actions_per_day"]=1
+    assert plan_google_autonomy(**data)["blockers"] == ["daily_action_limit"]
+    data["policy"]["max_actions_per_day"]=3
+    data["history"]["items"][0].update(action="unknown",created_campaign_id=None)
+    assert plan_google_autonomy(**data)["blockers"] == ["history_unproved"]
+
+
+@pytest.mark.parametrize("verified", [False, None])
+def test_completed_but_unverified_history_is_never_accepted_as_a_success(verified):
+    data=inputs();data["history"]["items"]=[history_row(verified=verified)]
     assert plan_google_autonomy(**data)["blockers"] == ["history_unproved"]

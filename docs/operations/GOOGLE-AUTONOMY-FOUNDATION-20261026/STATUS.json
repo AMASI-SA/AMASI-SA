@@ -1,12 +1,15 @@
 {
-  "scope": "Google only; standing policy and pure planner prerequisites",
-  "state": "WIP checkpoint; not routed, no worker or provider execution, not deployable",
+  "scope": "Google only; disabled standing policy UI and owner readonly native dryrun",
+  "state": "INTEGRATED WIP; not deployable; must rebase by freshsourceonlatestM after1520 published",
   "base": "e6694a7198ab828996852cbf383149d0ab06364f",
-  "tests": {
-    "policy": "43passed",
-    "planner": "37passed"
-  },
   "provider_writes": 0,
   "full_autonomy_complete": false,
-  "next": "Root review, integrate routes/CI/status with latest production after evidence-binding release; no synthetic owner principal."
+  "tests": {
+    "policy": "46passed inclrevisionoverflow red",
+    "planner": "52passed inclnativecreate/assetshistory",
+    "plan": "23passed inclunsegmentednativeinventory",
+    "integrated": "247passed31Mongo skips2inheritedwarnings4.16s; UI11pendingCI",
+    "mongo": "4realconcurrency scenarios written awaitingCI"
+  },
+  "next": "After1520Mverified publish, buildfreshfoundationAonlatesttrunk with13reviewedsourcefiles;exactCIwithrealMongoandfrontend;freezeBHost20andpublish. WIPalsoincludes3initialattemptUIdependencies for coherentcheckout; preserve1520corefixfromlatesttrunk. No AI worker/executionauthorization installed."
 }
