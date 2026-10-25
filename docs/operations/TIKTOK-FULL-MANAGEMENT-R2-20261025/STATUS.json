@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-owner-tools-release-r2-20261025",
   "base": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
-  "state": "frozen_B_source_all_CI_pass_original_host_adapter_in_progress",
+  "state": "frozen_A_B_all_applicable_CI_and_original_host_rehearsal_pass_ready_for_exact_merge",
   "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
   "source_recovery": "Latest reviewed Google1495 production2a43e8ce introduced seven files,none overlapping the28 TikTok source paths except the old intent,which is retained exactly from J. Fresh candidate parent is J; no previous frozen handoff rewritten.",
   "behavior": [
@@ -40,7 +40,17 @@
       "build": "PASS4.50s"
     },
     "latest_full_native_local": "468passed,exit0,26.30s on full workflow backend matrix with real disposable Mongo,after reviewed5065c605 merge and central feature authority; includes owner access checks and explicit feature-disable/default tests.",
-    "release_queue": "Source947f9b2a Release40220983028 cancelled while pending in the repository-wide release group; no build or source failure established. Final integrated source must get a fresh successful release artifact; do not reuse older source artifacts."
+    "release_queue": "Source947f9b2a Release40220983028 cancelled while pending in the repository-wide release group; no build or source failure established. Final integrated source must get a fresh successful release artifact; do not reuse older source artifacts.",
+    "current_exact_ci": {
+      "source_a": "fe7a1ca85ef67300b7f4bf5872999ed51349c9e7",
+      "intent_b": "6d3614ac0a416b70aa2d20d62c04d7d0e51a859a",
+      "B_native_run": 40223873147,
+      "backend": "468passed,1warning,29.36s",
+      "frontend": "135passed,23suites",
+      "frontend_build": "PASS4.94s",
+      "source_isolation": "PASS",
+      "all_applicable_workflows": "13/13 A and B PASS; creator-candidate condition skipped"
+    }
   },
   "invariants": [
     "No media bytes fetched or stored on Mezan",
@@ -60,7 +70,7 @@
     "No actual selected approved public video/caption or live paid activation performed",
     "Fresh exact final-source CI and v5 A/B/host acceptance; manual owner tools now defaulton but not deployed from this branch. Periodic observations remain opt-in and automatic financial action gateway remains incomplete."
   ],
-  "next": "Recover existing host terminal/log and require adapter exit0/exact source/runtime; all B CI pass; fresh production must still2a43e8ce,then normal exact-tree merge. Actual /app changes only after fresh inactive guard. Never use failed/unknown rehearsal as acceptance.",
+  "next": "Fresh production must remain J2a43e8ce; mark1498 ready and normal-merge exact B. Compare merge tree to B. Fresh inactive guard before /app fastforward,adapter then own prepare/prepublish/publish/verify3.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -103,8 +113,8 @@
     },
     "intent_blob": "2a75f9f8d1fd134de0200a20a66469632933b506",
     "intent_matches_local_blob": true,
-    "B_ci": "Native,Release,Security and other11 applicable checks PASS; CodeQL40223873194 still in progress at last read.",
-    "host_rehearsal": "Guard-gated original-host clone /tmp/tiktok1498-release checked out exact frozen B6d3614ac. Terminal2 Python adapter running; code-server WebSocket disconnected. No exit result yet; restoring UI only. No /app source write or own prepare.",
+    "B_ci": "All13 applicable workflows PASS including CodeQL40223873194.",
+    "host_rehearsal": "First /tmp/tiktok1498-release log lost after code-server reconnection; no acceptance inferred. Fresh inactive guard then clean /tmp/tiktok1498-r2-release at exact B6d3614ac: adapter exit0, backend identity exact Afe7a1ca8 and runtime9d7b9464. No /app source changes or own lease.",
     "prepare": "not started",
     "publish": "not started",
     "verify": "not started"
