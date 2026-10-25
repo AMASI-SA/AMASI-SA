@@ -1,0 +1,17 @@
+{
+  "task_id": "GOOGLE-AI-BUDGET-SEMANTICS-20261025",
+  "scope": "Google AI budget interpretation only",
+  "base": "2c991bddf04cd09fe22367fe65c1b9a73f3c2537",
+  "previous_pr": 1507,
+  "previous_pair": {
+    "A": "8aaab7127c875700735b87b38092162c1227e30f",
+    "B": "12b0a991b7813980321335d4684f7b4de1c0ec81",
+    "all_checks": "success or expected skips",
+    "superseded_reason": "Snapchat1506 advanced Production; preserve frozen pair unmerged"
+  },
+  "change": "Provide canonical DAILY average vs TOTAL semantics and unverified billing/history flags; prohibit inferring budget breach or pause/reduction from spend vs daily average alone",
+  "verification": "110 local Google AI/action/periodic tests passed; four regression cases red before fix; exact previous pair CI and independent Host20 passed",
+  "live_acceptance": "paused Search created once, independently read-back verified, 15 SAR average daily, zero spend, no activation; saved analyses read successfully after reload",
+  "next": "Fresh source CI, freeze intent B, exact-B CI, merge exact tree, inactive guard, host adapter, publish and verify three probes",
+  "full_autonomy_complete": false
+}
