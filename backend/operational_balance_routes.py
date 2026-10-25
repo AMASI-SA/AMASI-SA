@@ -497,6 +497,8 @@ def make_operational_balance_router(db, current_user):
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
+                "openings": [{k: row.get(k) for k in ("id", "party_type", "party_id", "name", "currency", "amount", "direction")}
+                             for row in state["openings"].values()] if permissions["manage"] else [],
                 "issues": state.get("engine", {}).get("issues", []) if permissions["reports"] else []}
 
     @router.get("/entities/{kind}")

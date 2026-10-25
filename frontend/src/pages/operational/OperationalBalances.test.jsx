@@ -112,7 +112,7 @@ test('successful opening clears form and increments counter', async () => {
   }));
   expect(host.textContent).toContain('الأرصدة المدخلة: 3');
   expect(host.querySelector('input').value).toBe('');
-  expect(host.querySelector('select').value).toBe('');
+  expect(host.querySelector('select').value).toBe('supplier');
 });
 
 test('terminal is an independent bank-like opening without driver setup', async () => {
@@ -552,4 +552,34 @@ test('wallet-first account sends debt-first payment without invoice allocation',
  const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
  await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'80');await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_id:'operational-ad:one',direction:'outgoing',kind:'payment',amount:'80',allocations:[]}));
+});
+
+
+test('saved openings remain visible after reload and mark the matching entity', async () => {
+ const row={id:'saved-1',party_type:'supplier',party_id:'supplier1',name:'خالد',amount:'125.00',currency:'SAR',direction:'for_party'};
+ await render(<OpeningBalances context={{opening_count:1,openings:[row]}}/>);
+ expect(host.querySelector('tbody').textContent).toContain('خالد');
+ expect(host.querySelector('tbody').textContent).toContain('125.00');
+ await input(host.querySelector('select'),'supplier');
+ expect(host.querySelector('option[value="supplier1"]').textContent).toContain('رصيد محفوظ');
+ expect(api.opening).not.toHaveBeenCalled();
+});
+test('save displays server confirmed details and keeps the selected type', async () => {
+ const row={id:'saved-1',party_type:'supplier',party_id:'supplier1',name:'خالد',amount:'100.00',currency:'SAR',direction:'for_party'};
+ api.opening.mockResolvedValue({opening_count:1,saved_opening:row});
+ await render(<OpeningBalances context={{opening_count:0,openings:[]}}/>);
+ await fillOpening();await click('حفظ');
+ expect(host.querySelector('tbody').textContent).toContain('خالد');
+ expect(host.textContent).toContain('تم حفظ رصيد خالد: 100.00 SAR');
+ expect(host.querySelector('select').value).toBe('supplier');
+ expect(host.querySelector('input').value).toBe('');
+ expect(host.querySelector('option[value="supplier1"]').textContent).toContain('رصيد محفوظ');
+});
+test('failed save never marks an opening as saved', async () => {
+ api.opening.mockRejectedValue(new Error('failed'));
+ await render(<OpeningBalances context={{opening_count:0,openings:[]}}/>);
+ await fillOpening();await click('حفظ');
+ expect(host.querySelector('tbody')).toBeNull();
+ expect(host.querySelector('input').value).toBe('100.00');
+ expect(host.querySelector('option[value="supplier1"]').textContent).not.toContain('رصيد محفوظ');
 });

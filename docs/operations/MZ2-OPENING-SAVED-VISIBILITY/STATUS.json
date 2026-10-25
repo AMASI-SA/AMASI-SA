@@ -1,0 +1,19 @@
+{
+  "status": "IMPLEMENTED_LOCALLY_NOT_DEPLOYED",
+  "preview_source": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
+  "scope": "Saved opening visibility and server-confirmed acknowledgement; no financial behavior changes",
+  "checks": {
+    "frontend": "62 passed",
+    "backend": "2 passed"
+  },
+  "changes": [
+    "Manage-only whitelist of saved opening rows in context",
+    "Confirmed saved row and authoritative count in save response",
+    "Saved rows table with party, kind, direction, amount, currency, status",
+    "Saved marker in entity picker without blocking hybrid wallet/debt",
+    "Retain selected kind after success",
+    "Remount opening view on session scope change"
+  ],
+  "deployment": "Pending integration against latest production branch and isolated Preview validation. Browser control unavailable this turn.",
+  "business_writes": false
+}

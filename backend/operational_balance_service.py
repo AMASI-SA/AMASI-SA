@@ -135,6 +135,8 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
             audit(state, actor, "system_started", "draft", "active", "حفظ وإنهاء", "opening", stamp)
         result = {"status": state["status"], "opening_count": len(state["openings"]),
                   "started_at": state["started_at"]}
+        if opening:
+            result["saved_opening"] = {k: item.get(k) for k in ("id", "party_type", "party_id", "name", "currency", "amount", "direction")}
         remember(state, action, payload, result)
         return result
     return await mutate(db, owner, apply)
