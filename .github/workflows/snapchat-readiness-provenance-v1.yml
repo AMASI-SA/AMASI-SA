@@ -1,0 +1,49 @@
+name: Snapchat Readiness Provenance V1
+
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/integrations_control_center/snapchat_readiness_provenance.py"
+      - "backend/integrations_control_center/__init__.py"
+      - "backend/tests/test_snapchat_readiness_provenance.py"
+      - ".github/workflows/snapchat-readiness-provenance-v1.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  provenance:
+    name: Bounded owner diagnostics and real Mongo projection
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      SNAPCHAT_PROVENANCE_TEST_MONGO_URL: mongodb://127.0.0.1:27017
+      REQUIRE_SNAPCHAT_PROVENANCE_MONGO: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install isolated test dependencies
+        run: >-
+          python -m pip install -q fastapi==0.110.1 pydantic==2.13.4
+          pymongo==4.6.3 motor==3.3.1 httpx==0.28.1 openai==1.99.9
+          pytest==9.0.3 pytest-asyncio openpyxl cryptography bcrypt PyJWT reportlab
+          python-multipart python-dotenv email-validator pymupdf pillow qrcode arabic-reshaper python-bidi
+      - name: Verify bounded queries, route isolation and actual committed projection
+        run: >-
+          python -m pytest -q -p snapchat_v2_test_bootstrap
+          tests/test_snapchat_readiness_provenance.py --tb=short

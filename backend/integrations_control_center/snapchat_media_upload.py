@@ -11,7 +11,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterable, Callable
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,6 +33,9 @@ RETRYABLE_FILE_STATES = {"previewed", "awaiting_file"}
 INFLIGHT_STATES = {"receiving", "creating", "media_created", "uploading"}
 VIDEO_TYPES = {"video/mp4": ".mp4", "video/quicktime": ".mov"}
 BUSINESS_API_BASE = "https://businessapi.snapchat.com/v1"
+MEDIA_RECOVERY_MAX_PAGES = 10
+MEDIA_RECOVERY_MAX_ROWS = 10_000
+MEDIA_RECOVERY_TIMEOUT_SECONDS = 30  # Bounds the complete catalog plus exact-ID read.
 # One byte-holding lifecycle per application worker; durable CAS separately
 # prevents a second write for the same source across workers/replicas.
 _UPLOAD_SLOTS = asyncio.BoundedSemaphore(1)
@@ -154,7 +157,7 @@ def _checked_media(
                 duration = float(duration)
             except (TypeError, ValueError) as exc:
                 raise _failure(409, "snapchat_media_video_specs_conflict") from exc
-            if not math.isfinite(duration) or not 3 <= duration <= 180:
+            if not math.isfinite(duration) or not 3 <= duration <= 1800:
                 raise _failure(409, "snapchat_media_video_specs_conflict")
         metadata = entity.get("video_metadata")
         if isinstance(metadata, dict):
@@ -188,7 +191,16 @@ async def available_public_profile_ids(provider: Any, account_id: str) -> set[st
                 seen.add(url)
                 response = await client.get(url, headers=headers, params=params)
                 if response.status_code in {401, 403}:
-                    raise _failure(409, "snapchat_media_needs_reauth_or_role")
+                    # This capability belongs to the Business API. Do not
+                    # confuse its denial with the separately verified Ads
+                    # account role or trigger the application's login retry.
+                    raise HTTPException(status_code=409, detail={
+                        "code": ("snapchat_media_profile_permission_required"
+                                 if response.status_code == 403
+                                 else "snapchat_media_profile_authorization_required"),
+                        "provider_http_status": response.status_code,
+                        "required_capability": "public_profile_sharing_read",
+                    })
                 if response.status_code != 200:
                     raise _failure(502, "snapchat_media_profile_catalog_unavailable")
                 try:
@@ -282,6 +294,70 @@ class SnapchatMediaProvider(SnapchatManagementProvider):
     async def read_media(self, media_id: str) -> dict[str, Any]:
         media_id = _identifier(media_id, field="media_id")
         return _media_object(await self._request("GET", f"/media/{media_id}"))
+
+    async def list_account_media_for_recovery(self, account_id: str) -> list[dict[str, Any]]:
+        """Fetch a complete bounded catalogue, pinning every page to this account."""
+        account_id = _identifier(account_id, field="account_id")
+        path = f"/adaccounts/{account_id}/media"
+        next_path = path
+        params: dict[str, Any] | None = {"limit": 1000}
+        pages: set[str] = set()
+        rows: list[dict[str, Any]] = []
+        for _ in range(MEDIA_RECOVERY_MAX_PAGES):
+            page_key = next_path + json.dumps(params, sort_keys=True)
+            if page_key in pages:
+                raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+            pages.add(page_key)
+            payload = await self._request("GET", next_path, params=params)
+            if (not isinstance(payload, dict)
+                    or str(payload.get("request_status") or "").upper() not in {"SUCCESS", "OK"}
+                    or not isinstance(payload.get("media"), list)):
+                raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+            for wrapper in payload["media"]:
+                if (not isinstance(wrapper, dict)
+                        or str(wrapper.get("sub_request_status") or "").upper() not in {"SUCCESS", "OK"}
+                        or not isinstance(wrapper.get("media"), dict)):
+                    raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+                rows.append(wrapper["media"])
+                if len(rows) > MEDIA_RECOVERY_MAX_ROWS:
+                    raise _failure(409, "snapchat_media_recovery_catalog_limit")
+            paging = payload.get("paging")
+            if paging is None:
+                paging = {}
+            if not isinstance(paging, dict):
+                raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+            link = paging.get("next_link")
+            if link is None or link == "":
+                if paging.get("next_page_id") not in (None, "") or paging.get("has_more") not in (None, False):
+                    raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+                return _checked_recovery_catalog(rows, account_id)
+            if not isinstance(link, str) or len(link) > 16_384:
+                raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+            try:
+                parsed = urlsplit(link)
+                base = urlsplit(SNAPCHAT_API_BASE)
+                query_items = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+                query = dict(query_items)
+                trusted = (
+                    parsed.scheme == base.scheme == "https"
+                    and parsed.netloc == base.netloc
+                    and parsed.path == base.path.rstrip("/") + path
+                    and not parsed.fragment
+                    and len(query) == len(query_items)
+                    and set(query).issubset({"cursor", "limit"})
+                    and bool(query.get("cursor"))
+                    and len(query["cursor"]) <= 8192
+                    and ("limit" not in query or (
+                        query["limit"].isdigit() and 50 <= int(query["limit"]) <= 1000
+                    ))
+                )
+            except ValueError:
+                trusted = False
+            if not trusted:
+                raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+            next_path = path + "?" + parsed.query
+            params = None
+        raise _failure(409, "snapchat_media_recovery_catalog_limit")
 
     async def upload_media(self, media_id: str, data: bytes, content_type: str) -> dict[str, Any]:
         media_id = _identifier(media_id, field="media_id")
@@ -435,6 +511,130 @@ def _ready_values(row: dict[str, Any], entity: dict[str, Any]) -> dict[str, Any]
     return {"status": "processing", "provider_media_status": "PENDING_UPLOAD", "provider_readback_verified": False}
 
 
+def _checked_recovery_catalog(rows: Any, account_id: str) -> list[dict[str, Any]]:
+    if not isinstance(rows, list) or len(rows) > MEDIA_RECOVERY_MAX_ROWS:
+        raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+    seen: set[str] = set()
+    for entity in rows:
+        if not isinstance(entity, dict):
+            raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+        try:
+            entity_id = _identifier(entity.get("id"), field="media_id")
+        except ValueError as exc:
+            raise _failure(502, "snapchat_media_recovery_catalog_incomplete") from exc
+        if entity_id in seen:
+            raise _failure(502, "snapchat_media_recovery_catalog_duplicate")
+        seen.add(entity_id)
+        if str(entity.get("ad_account_id") or "") != account_id:
+            raise _failure(409, "snapchat_media_recovery_catalog_scope_conflict")
+        if (not isinstance(entity.get("name"), str) or not entity["name"]
+                or len(entity["name"]) > 375
+                or entity.get("type") not in {"VIDEO", "IMAGE", "LENS_PACKAGE", "PLAYABLE"}
+                or entity.get("media_status") not in {"PENDING_UPLOAD", "READY"}):
+            raise _failure(502, "snapchat_media_recovery_catalog_incomplete")
+    return rows
+
+
+def _verified_recovery_intent(row: dict[str, Any]) -> None:
+    """Never use a mutable or incomplete stored name as the recovery identity."""
+    try:
+        metadata = {key: row[key] for key in (
+            "account_id", "name", "file_name", "size_bytes", "sha256", "content_type", "ai_generated",
+        )}
+        canonical = SnapchatMediaPreviewInput.model_validate(metadata).model_dump(mode="json")
+        fingerprint = hashlib.sha256(json.dumps(
+            canonical, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+        ).encode()).hexdigest()
+        upload_id = hashlib.sha256(json.dumps(
+            [row["user_id"], canonical["account_id"], canonical["sha256"]], separators=(",", ":"),
+        ).encode()).hexdigest()
+        valid = (
+            metadata == canonical and row["_id"] == row["upload_id"] == upload_id
+            and row.get("request_fingerprint") == fingerprint
+            and row.get("provider_name") == f"MZVideo-{upload_id[:24]}-{canonical['sha256'][:16]}"
+            and row.get("source_verified") is True
+            and row.get("provider_upload_attempted") is False
+            and row.get("provider_media_id") is None
+        )
+    except (KeyError, TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise _failure(409, "snapchat_media_recovery_intent_unverified")
+
+
+def _pending_recovery_candidate(
+    entity: dict[str, Any], row: dict[str, Any], *, media_id: str | None = None,
+) -> dict[str, Any]:
+    entity = _checked_media(entity, row, media_id=media_id)
+    if (entity.get("name") != row["provider_name"] or entity.get("media_status") != "PENDING_UPLOAD"
+            or entity.get("visibility") not in (None, "", "VISIBLE")):
+        raise _failure(409, "snapchat_media_create_candidate_unavailable")
+    # PENDING_UPLOAD alone cannot prove that an earlier binary upload was
+    # never accepted. Any acknowledged file content blocks adoption/re-upload.
+    if any(entity.get(key) not in (None, "") for key in ("file_name", "download_link", "hash")):
+        raise _failure(409, "snapchat_media_create_candidate_uploaded")
+    size = entity.get("file_size_in_bytes")
+    if isinstance(size, bool) or size not in (None, 0, "0"):
+        raise _failure(409, "snapchat_media_create_candidate_uploaded")
+    if entity.get("duration_in_seconds") is not None or entity.get("video_metadata") not in (None, {}):
+        raise _failure(409, "snapchat_media_create_candidate_uploaded")
+    ai_source = entity.get("ai_content_source")
+    if ((row["ai_generated"] is True and ai_source != "USER_AI_GEN")
+            or (row["ai_generated"] is False and ai_source not in (None, ""))):
+        raise _failure(409, "snapchat_media_create_candidate_unavailable")
+    original_attempt = (row.get("create_reconciliation") or {}).get("create_attempt_started_at")
+    started = _date(original_attempt or row.get("attempt_started_at"))
+    created = _date(entity.get("created_at"))
+    if (started is None or created is None
+            or created < started - timedelta(minutes=5)
+            or created > _now() + timedelta(minutes=5)):
+        raise _failure(409, "snapchat_media_create_candidate_time_unverified")
+    return entity
+
+
+async def _recover_unknown_media_create(
+    db: Any, user_id: str, row: dict[str, Any], provider: Any,
+) -> dict[str, Any]:
+    _verified_recovery_intent(row)
+    try:
+        async with asyncio.timeout(MEDIA_RECOVERY_TIMEOUT_SECONDS):
+            reader = getattr(provider, "list_account_media_for_recovery", None)
+            if not callable(reader):
+                raise _failure(409, "snapchat_media_recovery_catalog_unavailable")
+            rows = _checked_recovery_catalog(await reader(row["account_id"]), row["account_id"])
+            matches = [entity for entity in rows if entity["name"] == row["provider_name"]]
+            if len(matches) != 1:
+                code = "snapchat_media_create_ambiguous" if matches else "snapchat_media_create_unresolved"
+                return _public(await _state(db, row, {"error_code": code}))
+            try:
+                candidate = _pending_recovery_candidate(matches[0], row)
+                await _guard(db, user_id, row["account_id"], provider, writes=False)
+                fresh = _pending_recovery_candidate(
+                    await provider.read_media(candidate["id"]), row, media_id=candidate["id"],
+                )
+            except HTTPException as exc:
+                code = exc.detail.get("code") if isinstance(exc.detail, dict) else None
+                if code and code.startswith("snapchat_media_create_candidate"):
+                    return _public(await _state(db, row, {"error_code": code}))
+                raise
+            await _guard(db, user_id, row["account_id"], provider, writes=False)
+            return _public(await _state(db, row, {
+                "status": "awaiting_file", "claim_id": None,
+                "provider_media_id": fresh["id"], "provider_media_status": "PENDING_UPLOAD",
+                "provider_upload_attempted": False, "provider_readback_verified": False,
+                "confirm_token_hash": None, "expires_at": None, "error_code": None,
+                "create_reconciliation": {
+                    "source": "snapchat_account_media_catalog_v1", "catalog_complete": True,
+                    "catalog_rows": len(rows), "account_id": row["account_id"],
+                    "provider_name": row["provider_name"], "media_id": fresh["id"],
+                    "create_attempt_started_at": row.get("attempt_started_at"),
+                    "verified_at": _iso(),
+                },
+            }))
+    except TimeoutError as exc:
+        raise _failure(504, "snapchat_media_recovery_read_timeout") from exc
+
+
 async def _upload_media_body_claimed(
     db: Any, user_id: str, upload_id: str, confirm_token: str,
     source: AsyncIterable[bytes], content_type: str, *, provider: Any = None,
@@ -472,6 +672,8 @@ async def _upload_media_body_claimed(
             row = await _state(db, row, {"status": "media_created", "provider_media_id": media_id, "provider_media_status": "PENDING_UPLOAD"})
         else:
             entity = _checked_media(await provider.read_media(media_id), row, media_id=media_id)
+            if row.get("create_reconciliation"):
+                _pending_recovery_candidate(entity, row, media_id=media_id)
             if entity["media_status"] != "PENDING_UPLOAD":
                 raise _failure(409, "snapchat_media_unexpected_ready")
             row = await _state(db, row, {"status": "media_created", "source_verified": True})
@@ -530,7 +732,7 @@ async def reconcile_media_upload(db: Any, user_id: str, upload_id: str, *, provi
     media_id = row.get("provider_media_id")
     if not media_id:
         if row["status"] == "create_unknown":
-            row = await _state(db, row, {"error_code": "snapchat_media_create_unresolved"})
+            return await _recover_unknown_media_create(db, user_id, row, provider)
         return _public(row)
     entity = _checked_media(await provider.read_media(media_id), row, media_id=media_id)
     if row.get("provider_upload_attempted") is not True:
