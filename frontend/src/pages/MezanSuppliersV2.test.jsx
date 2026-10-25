@@ -158,3 +158,25 @@ test("financial reload failure clears stale balances and blocks an existing paym
         container.remove();
     }
 });
+
+test("supplier creation dialog opens even when financial data is unavailable", async () => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    loadMezanSuppliersWorkspace.mockResolvedValue({
+        suppliers: [], services: [{ id: "engrave", name: "Engraving" }],
+        summary: {}, permissions: { can_manage: true },
+    });
+    loadMezanSupplierFinancials.mockResolvedValue({ financial_status: "not_ready", summary: {} });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(<MezanSuppliersV2 />));
+        await act(async () => container.querySelector('[data-testid="mezan-supplier-add-button"]').click());
+        expect(container.querySelector('[data-testid="mezan-supplier-editor"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="mezan-supplier-name-input"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="mezan-supplier-save-button"]').disabled).toBe(true);
+    } finally {
+        await act(async () => root.unmount());
+        container.remove();
+    }
+});

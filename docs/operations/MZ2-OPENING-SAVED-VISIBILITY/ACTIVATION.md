@@ -23,3 +23,5 @@ Final verification:
 - Remote evidence: /app/.worktrees/mz2-opening-saved-visibility-20261025/activation-evidence.json (activated=true, post_activation_data_unchanged=true, HTTP observations and digests).
 - Rollback inputs preserved: supervisor.before and original /app/.worktrees/mz2-training-persistent-20261025 runtime. Before any rollback, confirm no production lease and current config still matches supervisor.after; restore only the saved supervisor configuration and update backend/frontend. Do not replace or restore the database.
 - Disk free after activation: 528400384 bytes. No dependency install or source build in /app.
+
+Supplier editor follow-up (2026-10-25): opening the create dialog reproduced ReferenceError: financialData is not defined. Removed the unrelated financial notice from SupplierEditor (financialData belongs to parent scope). Regression opens dialog with financial status not_ready and asserts required fields/save validation remain present. Before: 5 pass/1 fail; after: supplier and opening balance suites 68 pass. Runtime activation pending; no supplier or financial records created.

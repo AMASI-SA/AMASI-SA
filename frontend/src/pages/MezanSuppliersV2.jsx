@@ -186,7 +186,6 @@ function SupplierEditor({ supplier, services, busy, onClose, onSaved }) {
                 </header>
 
                 <div className="space-y-5 p-5 sm:p-6">
-                    {financialData.financial_status !== "available" && <p role="status" className="rounded-xl bg-amber-50 p-4 font-bold">البيانات المالية غير جاهزة. الأرصدة غير المتاحة لا تعني صفرًا.</p>}
             {error && <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-black text-rose-900"><WarningCircle size={20} className="mt-0.5 shrink-0" />{error}</div>}
                     <section className="grid gap-4 md:grid-cols-2">
                         <label className="block"><span className="mb-2 block text-xs font-black text-slate-700">اسم المورد *</span><input value={form.company_name} onChange={(event) => change("company_name", event.target.value)} className="min-h-12 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-emerald-500" data-testid="mezan-supplier-name-input" /></label>
