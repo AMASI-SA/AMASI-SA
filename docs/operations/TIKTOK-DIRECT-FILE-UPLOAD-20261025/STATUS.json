@@ -1,0 +1,60 @@
+{
+  "task_id": "TIKTOK-DIRECT-FILE-UPLOAD-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-file-caption-r3-20261026",
+  "source_base": "e6694a7198ab828996852cbf383149d0ab06364f",
+  "state": "fresh_R3_source_on_reviewed_Snap1519_pending_CI",
+  "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
+  "acceptance": [
+    "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
+    "Mezan accepts bounded JSON metadata only. Native TikTok FILE_UPLOAD capability goes only to the exact owner; encrypted at rest,no logs,never proxied by Mezan.",
+    "Fresh existing creator token proof plus native OpenAPI identity/settings proof before preview and final one-shot initialization. Existing Business credentials are never assumed compatible without that native proof.",
+    "Immutable encrypted proposals,digest approval,owner isolation,permanent uncertain-initialization fence,read-only native reconciliation. Native status alone establishes published/draft completion.",
+    "No automatic retry after uncertain initialization or chunk transmission. No automatic public privacy choice or permission expansion.",
+    "Existing URL/photo publishing remains accessible. Default video workflow becomes file selection.",
+    "Fresh backend/frontend/contract tests and actual browser-to-TikTok CORS/native acceptance required before claiming end-to-end success."
+  ],
+  "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
+  "production_changed": false,
+  "provider_writes": 0,
+  "next": "Fresh A CI/reviewed intentB/B CI/original-host inactiveguard+adapter;normal exact-tree merge;fresh inactiveguardbefore/app update/actualadapter;ownprepare+prepublish;onePublish+explicitfinish+verify3;ownerUI nativefile readiness/privatefiletest+captioncatalogsmoke. No media throughMezan,no new liveAIbudget.",
+  "verification": {
+    "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
+    "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
+    "root_fixes": "Real Mongo roundtrip caught sub-millisecond expiry digest mismatch;expiry normalized to BSON millisecond precision. Owner history auth moved ahead of DB access. Test-only unmocked business client initially hit unavailable SOCKS dependency;fixed tests to use explicit native-boundary transport.",
+    "remaining": "Frontend composer/apply/error tests and full current-head CI;live token/CORS/native file proof;release v5 protocol.",
+    "previous_CI": "At a1bf: native backend PASS; frontend152/153 passed with one deep-link failure caused by the content workspace test marker being on the old URL component only. Moved marker to source wrapper and retained URL marker separately; current-head CI pending.",
+    "WIP_current_head": "100fd4954f7d6cd4df0b1bde8a4086047018be67 native backend552 PASS35.48s;frontend156 PASS27suites/build6.00s;Security Gate frontend/backend PASS;release readiness,stock,balance,Qoyod,G47,Snap,legal PASS;CodeQL Python still running at last observation.",
+    "live_attempt": "Read-only native readiness from isolated /tmp clone100fd on original host used the project development database. It returned no connected creator records;this is not evidence about the connected Production account and no native OpenAPI call occurred. No DB write,init,media transfer or model request. Production UI readiness must be tested after deployment.",
+    "preview_fix": "Central local-video URL constructor wraps bytes with an allowlisted video MIME and accepts only canonical same-origin blob UUID capabilities;explicit HTML/entity metacharacters rejected and invalid object URL revoked. Both metadata reader and visible preview use this guard. Node independent acceptance8 PASS;Jest adds9 cases. Fresh full CodeQL/native/frontend CI required.",
+    "original_host_superseded": "1516 isolated original-host adapter exit0 exact old A/runtime;not valid evidence for changedR2source. R2 must repeat fresh adapter after reviewed intent B."
+  },
+  "user_added_requirement": "Generate a viewer-facing Saudi-market video caption from the selected product: engaging opening,product value,natural interaction CTA,relevant hashtags and organic/promoted variants;owner reviews before posting,no guaranteed reach or fabricated current-trend claims.",
+  "frontend": "Default local-file source,local blob preview,4MiB bounded fingerprint blocks,sequential native PUTs with no Mezan auth/cookies,progress,explicit status check and original-session resume. Existing URL/photo source preserved. Added helper/component tests;not yet executed.",
+  "invariants": "No media bytes or frames sent to Mezan or the AI service. Existing configured OpenAI gateway/key reused under earlier owner authorization;no new credentials or live model test yet.",
+  "checkpoint_parent": "a1bf467dfebbd59c717c12e250f45bdf5f37e52d",
+  "ledger": "Issue1006 has reached its comment limit; task STATUS and DraftPR1513 are the recoverable handoff.",
+  "caption": "Implemented real configured ResponsesAPI proposal using existing gateway,key and model;fixed fake-model tests only,no live AI calls. Selected current ProductV2 facts and optional video brief -> organic/promoted Saudi captions with hook,value,CTA,3–5 relevant hashtags. Explicit owner use/review;no automatic publish,video-AI flag change,media sent to AI,or claimed trend verification.",
+  "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
+  "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
+  "release_hold": {
+    "state": "Fresh original-host guard read required before rehearsal or /app changes",
+    "previous_actor": "codex-google1515"
+  },
+  "superseded_frozen_pair": {
+    "pr": 1516,
+    "A": "ec3dab4c60ed7e0e1ecc0ae1cbb5e565a5dae772",
+    "B": "8afa85ed341e66b0c13067ac387f39377834bfa9",
+    "not_deployed": true,
+    "reason": "CodeQL produced2 high DOM-text-to-HTML alerts at local video.src assignments. Preserve pair;do not dismiss/suppress or deploy it."
+  },
+  "preserved": "Google1512/1515 and Snap1519 inherited unchanged;no source path overlap with this18-path task.",
+  "superseded_R2": {
+    "pr": 1518,
+    "A": "7e9dcd52c4c80dc84a3f9e1e2472edb0fce6acbe",
+    "B": "4d921b5a2a17b2e79580673182be09800ca283e4",
+    "checks": "20SUCCESS4nonapplicableSKIP;CodeQLbothlanguagesandaggregateSUCCESS0alerts",
+    "not_deployed": true,
+    "reason": "Production advanced with reviewed Snap1519 while waiting for foreign lease. Frozen pair retained;fresh A directly on newest J required."
+  }
+}
