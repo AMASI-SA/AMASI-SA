@@ -91,6 +91,24 @@ test("Smart Plus rows label the reporting creative ID separately from the Ads Ma
     expect(table.textContent).toContain("معرّف الإعلان: ad-v2-1");
 });
 
+test("Smart Plus child controls use the proven parent ad ID rather than the reporting creative", async () => {
+    Object.defineProperty(window, "crypto", { configurable: true, value: { randomUUID: () => "00000000-0000-4000-8000-000000000001" } });
+    const data = report("4444", "ad");
+    data.entities[0] = { ...data.entities[0], campaign_id: "1111", adgroup_id: "2222", identity_level: "creative", platform_ad_id: "3333" };
+    api.get.mockResolvedValue({ data });
+    await act(async () => root.render(<TikTokEntityWorkspace dateFrom="2026-10-03" dateTo="2026-10-09" />));
+    await act(async () => [...container.querySelectorAll("button")].find((node) => node.textContent === "الإعلانات").click());
+    await act(async () => [...container.querySelectorAll("button")].find((node) => node.textContent === "إدارة إعلان Smart+").click());
+    const panel = container.querySelector('[data-testid="tiktok-child-controls"]');
+    expect(panel).not.toBeNull();
+    expect(panel.textContent).toContain("3333");
+    const reason = panel.querySelector('[aria-label="سبب إدارة عنصر TikTok"]');
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(reason, "Owner pauses native parent ad"); reason.dispatchEvent(new Event("input", { bubbles: true })); });
+    api.post.mockResolvedValueOnce({ data: { proposal_id: "child1", status: "previewed", changes: {} } });
+    await act(async () => panel.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(api.post.mock.calls[0][1]).toMatchObject({ ad_id: "3333", adgroup_id: "2222", campaign_id: "1111" });
+});
+
 
 test("one-campaign AI uses verified row and current dates without loading media", async () => {
     const data = report("campaign-1"); data.entities[0].data_complete = true;
