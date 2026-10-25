@@ -1,0 +1,40 @@
+{
+  "task_id": "GOOGLE-AI-EVIDENCE-UNITS-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-evidence-units-20261025",
+  "base": "f72a350e13e896cc384313a450365ad27abeec61",
+  "status": "SOURCE_CANDIDATE_PENDING_CI",
+  "scope": "Correct native evidence labels and units in Google analysis only",
+  "reproduction": "Live account analysis on5052346701 displayed impressions2298SAR/clicks101SAR/conversions4SAR. Native registry metric identity was correct; renderer appended accountcurrency to every metric and used a generic label.",
+  "change": [
+    "Explicit native and verified-commerce metric dimensions",
+    "Counts have no currency,ROAS multiplier,CTR fraction converted once topercent; legacyctr_pct not rescaled",
+    "Currency only for known monetary evidence; zero retained and invalid/missing values shown as dash",
+    "Existing recommendation review,permissions,provider requests and budget authority unchanged"
+  ],
+  "verification": {
+    "local": "25 direct Node assertions passed against actual formatting module; git diff --check passed",
+    "ui_regression": "Added native analysis pane rendering case, exact units and one analysis POST/no PUT assertions; fresh CI pending",
+    "base_file_hashes": "Workspace d2847198433197b2a770b2830c942739cd7c1c2e and test9d37683e8ace8deab8573f14e577add4c14a3a5d matched latest Production before edits",
+    "local_environment": "No React/Jest dependencies in primary worktree. Unsupported default-type Node flag failed before checks; normal ESM invocation passed. Integrated React test delegated to exact-source CI, not claimed local."
+  },
+  "publication": {
+    "previous_google_fix_pr": 1495,
+    "contains_merged_google_source": true,
+    "current_shared_lease_actor": "codex-tiktok1498",
+    "current_shared_deployment": "f72a350e13e896cc384313a450365ad27abeec61",
+    "platform": "Deploymentstarted22:23Riyadh; includesGoogle1495; not yet finished/verified",
+    "own_publish": false,
+    "production_changed_by_this_candidate": false
+  },
+  "user_preferences": {
+    "provider": "google_ads",
+    "account_id": "5052346701",
+    "budget": "preserve_current_approved_budgets",
+    "objective": "google_native_roas",
+    "snapchat": "owned by other conversation; do not work Snap"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "next_safe_action": "ExactA Google/frontend/security/readiness CI; freeze that source artifact to intent-onlyB, all final checks then exacttree merge. Wait any foreign sharedlease inactive before own hostadapter/prepare/publish. Live-test currently publishing Google1495 fix separately and continue fullcreation/management gaps without claiming100%."
+}

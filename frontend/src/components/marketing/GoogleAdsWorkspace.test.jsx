@@ -126,6 +126,32 @@ test("native AI advice reaches frozen review and executes only after explicit ap
     expect(container.textContent).toContain("تأكدت الإعدادات بقراءة مستقلة من جوجل");
 });
 
+test("native AI evidence keeps counts and ratios separate from account-currency money", async () => {
+    const evidence = [
+        ["impressions", "2298"], ["clicks", 101], ["conversions", "4.5"],
+        ["spend_native", "41.834257"], ["conversion_value_native", "1471.18"],
+        ["cpc_native", "0.4142"], ["roas", "3.5"], ["ctr", "0.042"],
+        ["ctr_pct", "4.2"], ["orders", 0], ["units", 6],
+        ["net_profit_native", "-8"], ["future_metric", "12"],
+        ["spend_native", null], ["ctr", ""],
+    ].map(([metric, value]) => ({ metric, value, source: "google_ads_api", currency_code: "SAR" }));
+    api.post.mockResolvedValue({ data: { summary: "تحليل الوحدات", recommendations: [{
+        campaign_id: "456", account_id: "123", title: "أدلة الأداء", action: "MONITOR", evidence,
+    }] } });
+    await render(); await act(async () => button("تحليل الحساب بالذكاء").click());
+    const region = container.querySelector('[aria-label="تحليل جوجل بذكاء ميزان"]');
+    const lines = [...region.querySelectorAll("p")].map((item) => item.textContent);
+    for (const expected of ["الظهور: 2,298", "النقرات: 101", "التحويلات: 4.5", "الطلبات: 0", "الوحدات: 6",
+        "الصرف: 41.83 SAR", "قيمة التحويلات: 1,471.18 SAR", "تكلفة النقرة: 0.41 SAR",
+        "العائد على الإنفاق: 3.5×", "نسبة النقر: 4.2%", "صافي الربح: -8 SAR", "القيمة: 12", "الصرف: —", "نسبة النقر: —"]) {
+        expect(lines).toContain(`google_ads_api · ${expected}`);
+    }
+    expect(region.textContent).not.toMatch(/(?:2,298|101|4\.5|3\.5×|4\.2%) SAR/);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).toContain("/ai/analyze");
+    expect(api.put).not.toHaveBeenCalled();
+});
+
 test("owner selects an existing employee and saves a per-account delegation", async () => {
     const ownerReadiness = { ...readiness, permissions: { ...readiness.permissions, owner: true } };
     api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/readiness") ? ownerReadiness : url.endsWith("/workspace") ? { accounts: [account], items: [] } : url.endsWith("/subjects") ? { items: [{ subject_id: "staff_1", name: "المسوّق" }] } : url.endsWith("/policies/123/staff_1") ? { enabled: false, allowed_actions: [], max_daily_budget_native: "100", max_total_budget_native: "1000" } : { items: [] } }));
