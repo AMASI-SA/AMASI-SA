@@ -1,6 +1,6 @@
 {
   "backend_runtime_source": {
-    "added_count": 1,
+    "added_count": 0,
     "deleted_count": 0,
     "file_count": 988,
     "files": [
@@ -3176,11 +3176,11 @@
         "sha256": "9b701e8163c9032ada7c897e43660253521b5237f3127b7411a2a8dbe2417950"
       },
       {
-        "bytes": 54172,
-        "git_blob": "71f96545760eafad7681a4c5ec81e8da3d93f99e",
+        "bytes": 55139,
+        "git_blob": "cfc4eb6579b7ce0c24e468e3427225a75089ee8c",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_ai.py",
-        "sha256": "72acd61082e2363ce863499016a178c3a2720fdb9703a0412f64b1d48b59a14d"
+        "sha256": "f59bf47f888dc9fca520f9f1c981e62d3d594738680fb1c46ffa8c92826c2f87"
       },
       {
         "bytes": 6370,
@@ -6921,20 +6921,20 @@
         "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
       }
     ],
-    "manifest_sha256": "d0ff415372492fc1424ab7fe9a92afa47bb55eb944a360b6fd0d4e6997d6c1b0",
-    "modified_count": 7,
-    "projection_tree_oid": "6275f3fe7e332dc2a7f2d8e6f8cd06b6651d224c",
+    "manifest_sha256": "32bff2d69befc5264d37a7170da1b30f7491b3586d9ec656b6e5208ad03209c9",
+    "modified_count": 1,
+    "projection_tree_oid": "66a44f58f90090926c5e2ada4754152c7bce3f1c",
     "scope": "backend_runtime_package_v1",
-    "scope_tree_oid": "438a7babfeb16e73f0f384d23c2e4b9ba4db4c25",
-    "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-    "source_base_root_tree_oid": "0a5121a45250eaf7cdf7e9b3d4fa7b893c013984",
-    "source_base_scope_tree_oid": "a943d99cf12d3c0cdf28e96a12c2c6226305c052",
-    "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
-    "source_root_tree_oid": "585fee0ab15b3146470738c7b98dd549a632102a",
+    "scope_tree_oid": "8f3d3ed65e40966f924eabfec1471c6c60958975",
+    "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+    "source_base_root_tree_oid": "8440b1e9994df0f29125fc4d432335c5532e9c58",
+    "source_base_scope_tree_oid": "438a7babfeb16e73f0f384d23c2e4b9ba4db4c25",
+    "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
+    "source_root_tree_oid": "5ad53e5a443e4b5e2e8dd73b4e78ec65c6d860f3",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "e6af1e584d0c3e93ea7a7c6bb398c5f0100b32b700d67f1e4a29a8a8a61292fd"
+    "tree_sha256": "1f1d79e898563f2be7c1de197ad12defe9651a56f90369d3d8b7bcaf83c8a9b8"
   },
   "branch": "hotfix/prod-snap-meta-final",
   "client_environment": {
@@ -7008,7 +7008,7 @@
     "build_meta": {
       "bytes": 278145,
       "path": "build-meta.json",
-      "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+      "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
     },
     "entrypoints": [
       {
@@ -7039,7 +7039,7 @@
         }
       }
     },
-    "git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+    "git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
     "index": {
       "bytes": 3335,
       "path": "index.html",
@@ -7163,7 +7163,7 @@
         }
       }
     },
-    "git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+    "git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
@@ -7171,7 +7171,7 @@
         "build_meta": {
           "bytes": 278145,
           "path": "build-meta.json",
-          "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+          "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
         },
         "ordinal": 1
       },
@@ -7180,7 +7180,7 @@
         "build_meta": {
           "bytes": 278145,
           "path": "build-meta.json",
-          "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+          "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
         },
         "ordinal": 2
       }
@@ -7188,7 +7188,7 @@
     "proof_file": {
       "bytes": 1520,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "1ada58937d60f2bc8eed587593ec9866a7e29a294589ca1233df61483f9fd781"
+      "sha256": "ba82fb8039c217b0985df858937d5091fd52eebeb3b8c496cf908dfca2f2d8f5"
     },
     "retained_pass": 2,
     "schema_version": 1,
@@ -15711,16 +15711,16 @@
         "sha256": "723c124a8a8351bc81a95c62507ad6bd0e26c8e39170e91c5891f0c693dc547f"
       }
     ],
-    "manifest_sha256": "ab3f513dfed4518d8ac4ffac36489cf7191908868ea3b4c01b0e76c3f59d797c",
-    "modified_count": 1,
+    "manifest_sha256": "8f1eafee048b96e01ceb938854637e5b541042dd99d4660b415391d14c7dbc30",
+    "modified_count": 0,
     "projection_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
     "scope": "release_control_source_v1",
     "scope_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
-    "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-    "source_base_root_tree_oid": "0a5121a45250eaf7cdf7e9b3d4fa7b893c013984",
-    "source_base_scope_tree_oid": "5ab5e21a0981c5e86fdbb868075e827d3559bec6",
-    "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
-    "source_root_tree_oid": "585fee0ab15b3146470738c7b98dd549a632102a",
+    "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+    "source_base_root_tree_oid": "8440b1e9994df0f29125fc4d432335c5532e9c58",
+    "source_base_scope_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
+    "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
+    "source_root_tree_oid": "5ad53e5a443e4b5e2e8dd73b4e78ec65c6d860f3",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -15728,7 +15728,7 @@
   },
   "runtime_identity": {
     "backend_runtime_source": {
-      "added_count": 1,
+      "added_count": 0,
       "deleted_count": 0,
       "file_count": 988,
       "files": [
@@ -18904,11 +18904,11 @@
           "sha256": "9b701e8163c9032ada7c897e43660253521b5237f3127b7411a2a8dbe2417950"
         },
         {
-          "bytes": 54172,
-          "git_blob": "71f96545760eafad7681a4c5ec81e8da3d93f99e",
+          "bytes": 55139,
+          "git_blob": "cfc4eb6579b7ce0c24e468e3427225a75089ee8c",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_ai.py",
-          "sha256": "72acd61082e2363ce863499016a178c3a2720fdb9703a0412f64b1d48b59a14d"
+          "sha256": "f59bf47f888dc9fca520f9f1c981e62d3d594738680fb1c46ffa8c92826c2f87"
         },
         {
           "bytes": 6370,
@@ -22649,20 +22649,20 @@
           "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
         }
       ],
-      "manifest_sha256": "d0ff415372492fc1424ab7fe9a92afa47bb55eb944a360b6fd0d4e6997d6c1b0",
-      "modified_count": 7,
-      "projection_tree_oid": "6275f3fe7e332dc2a7f2d8e6f8cd06b6651d224c",
+      "manifest_sha256": "32bff2d69befc5264d37a7170da1b30f7491b3586d9ec656b6e5208ad03209c9",
+      "modified_count": 1,
+      "projection_tree_oid": "66a44f58f90090926c5e2ada4754152c7bce3f1c",
       "scope": "backend_runtime_package_v1",
-      "scope_tree_oid": "438a7babfeb16e73f0f384d23c2e4b9ba4db4c25",
-      "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-      "source_base_root_tree_oid": "0a5121a45250eaf7cdf7e9b3d4fa7b893c013984",
-      "source_base_scope_tree_oid": "a943d99cf12d3c0cdf28e96a12c2c6226305c052",
-      "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
-      "source_root_tree_oid": "585fee0ab15b3146470738c7b98dd549a632102a",
+      "scope_tree_oid": "8f3d3ed65e40966f924eabfec1471c6c60958975",
+      "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+      "source_base_root_tree_oid": "8440b1e9994df0f29125fc4d432335c5532e9c58",
+      "source_base_scope_tree_oid": "438a7babfeb16e73f0f384d23c2e4b9ba4db4c25",
+      "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
+      "source_root_tree_oid": "5ad53e5a443e4b5e2e8dd73b4e78ec65c6d860f3",
       "tombstone_count": 0,
       "tombstones": [],
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "e6af1e584d0c3e93ea7a7c6bb398c5f0100b32b700d67f1e4a29a8a8a61292fd"
+      "tree_sha256": "1f1d79e898563f2be7c1de197ad12defe9651a56f90369d3d8b7bcaf83c8a9b8"
     },
     "branch": "hotfix/prod-snap-meta-final",
     "critical_file_hashes": {
@@ -22730,7 +22730,7 @@
       "build_meta": {
         "bytes": 278145,
         "path": "build-meta.json",
-        "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+        "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
       },
       "entrypoints": [
         {
@@ -22761,7 +22761,7 @@
           }
         }
       },
-      "git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+      "git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
       "index": {
         "bytes": 3335,
         "path": "index.html",
@@ -22885,7 +22885,7 @@
           }
         }
       },
-      "git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+      "git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
       "kind": "frontend_two_clean_builds_v1",
       "passes": [
         {
@@ -22893,7 +22893,7 @@
           "build_meta": {
             "bytes": 278145,
             "path": "build-meta.json",
-            "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+            "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
           },
           "ordinal": 1
         },
@@ -22902,7 +22902,7 @@
           "build_meta": {
             "bytes": 278145,
             "path": "build-meta.json",
-            "sha256": "3b33048fabb56a09ea89d88f04fa6034d1c85132df48ef0082f5add247696a0b"
+            "sha256": "36570170123f753abbddf531efa5704debe24b969559cac835b57ed40c13da0d"
           },
           "ordinal": 2
         }
@@ -22910,7 +22910,7 @@
       "proof_file": {
         "bytes": 1520,
         "path": "frontend/.release/reproducible-build.json",
-        "sha256": "1ada58937d60f2bc8eed587593ec9866a7e29a294589ca1233df61483f9fd781"
+        "sha256": "ba82fb8039c217b0985df858937d5091fd52eebeb3b8c496cf908dfca2f2d8f5"
       },
       "retained_pass": 2,
       "schema_version": 1,
@@ -22932,26 +22932,26 @@
       "added_count": 0,
       "deleted_count": 0,
       "file_count": 236,
-      "manifest_sha256": "ab3f513dfed4518d8ac4ffac36489cf7191908868ea3b4c01b0e76c3f59d797c",
-      "modified_count": 1,
+      "manifest_sha256": "8f1eafee048b96e01ceb938854637e5b541042dd99d4660b415391d14c7dbc30",
+      "modified_count": 0,
       "projection_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
       "scope": "release_control_source_v1",
       "scope_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
-      "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-      "source_base_root_tree_oid": "0a5121a45250eaf7cdf7e9b3d4fa7b893c013984",
-      "source_base_scope_tree_oid": "5ab5e21a0981c5e86fdbb868075e827d3559bec6",
-      "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
-      "source_root_tree_oid": "585fee0ab15b3146470738c7b98dd549a632102a",
+      "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+      "source_base_root_tree_oid": "8440b1e9994df0f29125fc4d432335c5532e9c58",
+      "source_base_scope_tree_oid": "52cabae33c52c634b354e9f55d94fe60ae056a7f",
+      "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f",
+      "source_root_tree_oid": "5ad53e5a443e4b5e2e8dd73b4e78ec65c6d860f3",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "tree_sha256": "051528ecb0bdd81a8f69f1b6b117df3a4ebe282f83117019e6028ec347f08fac"
     },
-    "release_id": "rg5-862a0d22e689bded488595433e6b81feddb90de3b546cfba473ea9529d146c00",
+    "release_id": "rg5-66379ec7a0744834c2f4f9f3d8a8f1e55f13490d6f920ca913a9e5f0c5ecfc6d",
     "schema_version": 2,
-    "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-    "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4"
+    "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+    "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f"
   },
   "schema_version": 2,
-  "source_base_git_sha": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-  "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4"
+  "source_base_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+  "source_git_sha": "8aaab7127c875700735b87b38092162c1227e30f"
 }
