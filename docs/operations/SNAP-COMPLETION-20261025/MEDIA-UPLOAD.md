@@ -45,9 +45,17 @@ merely to fetch optional names.
 
 ## Acceptance and checks
 
-The root reported a first focused run of the new backend suite: 25 passed,
-0.70 seconds. This authoring agent executed no local commands or tests.
-Fresh root verification is required on the final complete source.
+Root verification: the final integrated backend selection passed 172 tests in
+2.72 seconds, including 27 media tests. Frontend CI on the first immutable
+snapshot passed 127 tests across 8 suites and its build. Independent static
+review of 74ce1e6 found no confirmed blocking defect. Fresh CI remains required
+after source integration and before publication.
+
+An older campaign-create assertion also failed on unchanged Production
+b0144e2. The test now checks retained failed-readback evidence explicitly:
+verified=false, field_changes_verified=false, the exact objective mismatch,
+and automatic_retry_allowed=false. Campaign-create runtime behavior was not
+changed to address this pre-existing assertion failure.
 
 Mandatory new CI selections include the new backend suite and both frontend
 suites. Existing settings, campaign-management, safety and execution-hardening

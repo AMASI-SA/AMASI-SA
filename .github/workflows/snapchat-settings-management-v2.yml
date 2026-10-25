@@ -76,6 +76,7 @@ jobs:
               docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_execution_hardening_v1.py|\
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
@@ -119,6 +120,7 @@ jobs:
               docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
+              backend/tests/test_snapchat_management_execution_hardening_v1.py|\
               backend/tests/test_snapchat_management_safety_regressions_v1.py|\
               frontend/src/pages/SnapchatV2Page.jsx|\
               frontend/src/pages/SnapchatV2Page.test.jsx|\
