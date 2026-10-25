@@ -1,9 +1,9 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-ai-response-reliability-r3-20261025",
-  "base": "5065c605004595e06606e2bfc99454ec629c733e",
-  "status": "EXACT_SOURCE_ALL9_PASS_CI_INTENT_B_PUSHED_CHECKS_RUNNING",
+  "branch": "codex/google-ai-response-reliability-r4-20261025",
+  "base": "a35b5e4ede35b00cdd9599ceb878c07593627221",
+  "status": "SOURCE_REFRESH_AFTER_SNAP1492_PENDING_CI",
   "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
@@ -24,17 +24,9 @@
     "backend": "101 AI/actions/context tests passed in1.64s",
     "frontend": "CI pending",
     "current_source_ci": {
-      "head_sha": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
-      "all9": "success",
-      "readiness_run": 40219578294,
-      "independent_node20_clean_clone_rehearsal": "success",
-      "candidate_artifact": {
-        "id": 12609421317,
-        "zip_sha256": "87485f5dc2dc70f173c7fd868538902d099eb6351ecd365b4456d26029150259",
-        "json_sha256": "bd6948dbc56ea916d772444f5b0b5fcf298b97418f25d3b5442ec8fb98f597d8",
-        "json_bytes": 898831,
-        "source_and_base_validated": true
-      }
+      "head_sha": "97a5ed5cc428afd74046513cd59142d58a896910",
+      "state": "running",
+      "readiness_run": 40221904392
     },
     "clone": "exit0 /tmp/google1485-release literalA",
     "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
@@ -49,7 +41,7 @@
   "provider_writes": 0,
   "financial_writes": 0,
   "production_changed": false,
-  "next_safe_action": "Wait B checks and actual /app foreign lease inactive. Confirm production still5065..., exactBtree/ancestry then merge preservingBtree. Original /app fast-forward/adapter/prepare/prepublish and one authorized publish; 3publicprobes and live analysis. Do not rebase frozen A/B.",
+  "next_safe_action": "Run exact-source CI and use reviewed candidate artifact for fresh intent-only B. Preserve frozen prior pairs. No shared /app changes while another lease active.",
   "concurrent_update": {
     "pr": 1482,
     "scope": "TikTok creator readiness",
@@ -81,13 +73,11 @@
       "preserved": true
     }
   ],
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1493",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1495",
   "shared_release_guard": {
     "active": true,
-    "actor": "codex-snap1488",
-    "source_git_sha": "0aaac598d41851359dd61df92ae8994ad27f4060",
-    "deployment_git_sha": "5065c605004595e06606e2bfc99454ec629c733e",
-    "release_id": "rg5-4a0d28846078c5e719e3cd76cb928966cf899efcf7bdb87a60ab405912efe4cb"
+    "actor": "codex-snap1492",
+    "deployment_git_sha": "a35b5e4ede35b00cdd9599ceb878c07593627221"
   },
   "previous_pr": {
     "number": 1484,
@@ -105,8 +95,12 @@
     "source": "official GitHub concurrency docs and observed cancelled-before-jobs run"
   },
   "prior_source": "d11c2598c37f94858c62adfb15d3c6a76223be70",
-  "source_sha": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
-  "intent_sha": "0ca21a2a85c004d0f1e6af0cfb4b9e5dc2c0cc9a",
-  "intent_tree": "cf332134148262cdcb5a020bcf5f1b8b3de92e07",
-  "runtime_release_id": "rg5-e1dad5087ed0c25d3c091025e36d0d41a8f234be99d51e1fb430af1ffa40bb7c"
+  "previous_frozen_pair": {
+    "A": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
+    "B": "0ca21a2a85c004d0f1e6af0cfb4b9e5dc2c0cc9a",
+    "pr": 1493,
+    "ci": "all9 source and B passed",
+    "reason": "production advanced with nonoverlapping Snapchat1492, release intent conflict"
+  },
+  "source_sha": "97a5ed5cc428afd74046513cd59142d58a896910"
 }
