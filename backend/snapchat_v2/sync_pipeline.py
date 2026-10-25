@@ -282,6 +282,7 @@ class SnapchatV2SyncPipeline:
         end_utc: datetime,
         action_report_time: str,
         report_dates: list[date] | None = None,
+        report_campaign_ids: list[str] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         campaign_ids = sorted(
             {
@@ -301,6 +302,14 @@ class SnapchatV2SyncPipeline:
                 )
             }
         )
+        # HOUR activity is not the campaign DAY report's scope. The provider
+        # can return historical/zero-spend DAY parents while HOUR is zero.
+        # Carry only successfully published DAY identities, never infer child
+        # facts from catalog membership or a campaign's configured status.
+        campaign_ids = sorted(set(campaign_ids) | {
+            str(value).strip() for value in (report_campaign_ids or [])
+            if str(value).strip()
+        })
         parent_lookup: dict[str, str] = {}
         if entity_type == "ad":
             identities = await list_entities(
@@ -349,6 +358,18 @@ class SnapchatV2SyncPipeline:
                 action_report_time=action_report_time,
                 ad_squad_by_ad_id=parent_lookup,
             )
+            report_coverage = performance.get("coverage") or {}
+            expected = report_coverage.get("expected_requests")
+            completed = report_coverage.get("completed_requests")
+            if (report_coverage.get("status") != "complete"
+                    or (entity_type == "campaign" and performance["rows"] and not (
+                        type(expected) is int and expected > 0
+                        and type(completed) is int and completed >= expected))):
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_report_coverage_incomplete",
+                    "Snapchat report coverage does not prove the returned fact scope.",
+                    coverage=report_coverage,
+                )
             write = await upsert_total_facts(
                 self.db,
                 performance["rows"],
@@ -367,10 +388,17 @@ class SnapchatV2SyncPipeline:
                 coverage=coverage,
                 now=self.now,
             )
-            return {
+            result = {
                 **write,
                 "coverage": coverage,
-            }, None
+            }
+            if entity_type == "campaign":
+                result["report_campaign_ids"] = sorted({
+                    str(row.get("campaign_id") or row.get("external_id") or "").strip()
+                    for row in performance["rows"]
+                    if str(row.get("campaign_id") or row.get("external_id") or "").strip()
+                })
+            return result, None
         except Exception as exc:  # noqa: BLE001
             code = str(getattr(exc, "code", type(exc).__name__))[:96]
             coverage = {
@@ -636,6 +664,9 @@ class SnapchatV2SyncPipeline:
                 action_report_time=action_report_time,
                 report_dates=total_report_dates,
             )
+            # Scope is handed off only after the DAY response and its fact
+            # publication succeed. Keep the ID list out of persisted summaries.
+            report_campaign_ids = campaign_summary.pop("report_campaign_ids", [])
             breakdown_summary["campaign"] = campaign_summary
             if campaign_error:
                 warnings.append(campaign_error)
@@ -667,6 +698,7 @@ class SnapchatV2SyncPipeline:
                     end_utc=end_utc,
                     action_report_time=action_report_time,
                     report_dates=total_report_dates,
+                    report_campaign_ids=report_campaign_ids,
                 )
                 breakdown_summary[entity_type] = level_summary
                 if level_error:

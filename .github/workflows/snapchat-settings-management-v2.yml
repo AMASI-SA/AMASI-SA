@@ -66,6 +66,15 @@ jobs:
             case "${changed_path}" in
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
+              backend/integrations_control_center/snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication_mongo.py|\
+              frontend/src/components/marketing/SnapchatCampaignPublicationPanel.jsx|\
+              frontend/src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx|\
+              frontend/src/services/snapchatCampaignPublication.js|\
+              frontend/src/services/snapchatCampaignPublication.test.js|\
+              .github/workflows/snapchat-campaign-publication.yml|\
+              docs/operations/SNAP-COMPLETION-20261025/PUBLICATION.md|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\
@@ -115,6 +124,15 @@ jobs:
             case "${changed_path}" in
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
+              backend/integrations_control_center/snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication_mongo.py|\
+              frontend/src/components/marketing/SnapchatCampaignPublicationPanel.jsx|\
+              frontend/src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx|\
+              frontend/src/services/snapchatCampaignPublication.js|\
+              frontend/src/services/snapchatCampaignPublication.test.js|\
+              .github/workflows/snapchat-campaign-publication.yml|\
+              docs/operations/SNAP-COMPLETION-20261025/PUBLICATION.md|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\
@@ -161,6 +179,7 @@ jobs:
               frontend/src/services/snapchatAutonomy.js|\
               frontend/src/services/snapchatAutonomy.test.js|\
               frontend/src/pages/CampaignRecommendations.jsx|\
+              frontend/src/pages/CampaignRecommendations.test.jsx|\
               .github/workflows/snapchat-ai-autonomy-v1.yml|\
               docs/operations/SNAP-COMPLETION-20261025/AUTONOMY.md|\
               backend/campaign_ai_product_intelligence_v3.py|\
@@ -171,6 +190,10 @@ jobs:
               backend/decision_intelligence/phase5.py|\
               backend/decision_intelligence/routes.py|\
               backend/snapchat_v2/accounts.py|\
+              backend/snapchat_v2/client.py|\
+              backend/snapchat_v2/sync_pipeline.py|\
+              backend/tests/test_snapchat_reporting_v2_child_parent_scope.py|\
+              docs/operations/SNAP-COMPLETION-20261025/CHILD-PARENT-SCOPE.md|\
               backend/snapchat_v2/connection.py|\
               backend/snapchat_v2/routes.py|\
               backend/snapchat_v2/scheduler.py|\
@@ -271,6 +294,8 @@ jobs:
           python -m py_compile \
             integrations_control_center/snapchat_entity_settings.py \
             integrations_control_center/snapchat_campaign_management.py \
+            integrations_control_center/snapchat_campaign_publication.py \
+            tests/test_snapchat_campaign_publication.py \
             integrations_control_center/snapchat_media_upload.py \
             tests/test_snapchat_media_upload.py \
             tests/test_snapchat_entity_settings_v1.py \
@@ -281,6 +306,7 @@ jobs:
           python -m pytest
           tests/test_snapchat_entity_settings_v1.py
           tests/test_snapchat_campaign_management_v1.py
+          tests/test_snapchat_campaign_publication.py
           tests/test_snapchat_media_upload.py
           tests/test_snapchat_management_execution_hardening_v1.py
           tests/test_snapchat_management_safety_regressions_v1.py
@@ -310,6 +336,8 @@ jobs:
           --watchAll=false
           --runInBand
           src/services/snapchatCampaignManagement.test.js
+          src/services/snapchatCampaignPublication.test.js
+          src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx
           src/services/snapchatMediaUpload.test.js
           src/components/marketing/SnapchatMediaUploadPanel.test.jsx
           src/components/marketing/SnapchatEntitySettingsTable.test.jsx

@@ -51,6 +51,16 @@ jest.mock("../../context/AuthContext", () => ({
     useOptionalAuth: () => ({ user: { id: "owner-1" } }),
 }));
 
+// The publication flow has its own service/component suite. Keep this suite
+// focused on the existing form and explicitly verify the owner/account seam.
+jest.mock("./SnapchatCampaignPublicationPanel", () => function PublicationMount(props) {
+    return require("react").createElement("div", {
+        "data-testid": "snapchat-publication-mount",
+        "data-owner": props.ownerId,
+        "data-account": props.accountId,
+    });
+});
+
 jest.mock("../../services/mezanProductsV2", () => ({
     listProductsV2: jest.fn(),
 }));
@@ -210,6 +220,20 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
     afterEach(async () => {
         await act(async () => root.unmount());
         container.remove();
+    });
+
+    test("mounts full publication with the authenticated owner and chosen native account", async () => {
+        await act(async () => {
+            root.render(<SnapchatCampaignManagementPanel accountId="account-1" />);
+        });
+        await act(async () => {
+            container.querySelector('[data-testid="snapchat-campaign-management-panel"] > button').click();
+        });
+        const mounted = container.querySelector('[data-testid="snapchat-publication-mount"]');
+        expect(mounted.getAttribute("data-owner")).toBe("owner-1");
+        expect(mounted.getAttribute("data-account")).toBe("account-1");
+        expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
+        expect(executeSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 
     test("requires a catalog product for delivery creation and submits measurable non-authoritative context", async () => {
