@@ -2233,7 +2233,21 @@ async def _execute_snapchat_approval(
         direction = -1 if requested == "reduce" else 1
         percent = min(30, max(5, int(recommendation.get("change_percent") or 15)))
         ratio = 1 + direction * percent / 100
-        payload = {"daily_budget_micro": max(5_000_000, int(round(current_budget * ratio * 1_000_000)))}
+        next_budget_micro = max(5_000_000, int(round(current_budget * ratio * 1_000_000)))
+        current_budget_micro = int(round(current_budget * 1_000_000))
+        if (
+            requested == "reduce" and next_budget_micro >= current_budget_micro
+        ) or (
+            requested == "scale" and next_budget_micro <= current_budget_micro
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "recommendation_budget_change_not_effective",
+                    "message": "الميزانية المقترحة لا تحقق اتجاه التوصية ضمن حد Snapchat؛ أنشئ توصية جديدة.",
+                },
+            )
+        payload = {"daily_budget_micro": next_budget_micro}
     proposal = await create_snapchat_management_proposal(
         db,
         user_id,
