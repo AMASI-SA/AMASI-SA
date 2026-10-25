@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r5-20261026",
   "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_merged_exact_B_tree_all_checks_pass_original_host_adapter0",
+  "state": "R5_merged_app_fastforwarded_adapter_retry_after_generated_bytecode_cleanup",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Fresh /app guard inactive and trackedclean;fetch/ff-only reviewed Production M219c4db;actual adapter0/exactA/runtime;restore Emergent management UI which currently freezes opening project;ownprepare/prepublish only when final publishing UI usable;onePublish,explicitfinish,verify3 closes ownlease;nativePRIVATEfile test and catalogsmoke.",
+  "next": "Read actual /app retry result;assert exact M/source A/runtime and trackedclean. Resolve Emergent management UI before own prepare/prepublish. If unavailable,retain no lease and request user to open Manage in shared browser;do not ask user to publish outside guard. After usable UI:prepare codex-tiktok1524,prepublish immediatelybeforeone finalPublish,explicitfinish,verify3/activefalse. Then PRIVATE nativefile test and captioncatalogsmoke without model call.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -41,7 +41,8 @@
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
     "guard_active": false,
-    "observed": "Fresh original-host guard reports active:false. /app remains untouched by this task."
+    "actor": null,
+    "ui_blocker": "Emergent project view repeatedly times out in current cloud browser. Home and CodeServer work. Fresh tab/reload/closing internal project tab then reopen did not resolve. Console shows unhandled Redux Toolkit #38 refreshCredits rejection. No bot/sign-in block observed. No Publish click."
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -66,8 +67,8 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:27:12.023Z",
-  "original_host": "Fresh guard active:false before isolated R5 clone/rehearsal. EXIT0 observed. /app unchanged and no lease from this task.",
+  "observed_at": "2026-10-25T23:29:28.526Z",
+  "original_host": "Fresh inactive guard and tracked-clean check preceded /app ff-only to exact M219c4db. Untracked .emergent/testing and deployer-agent-docs preserved. Actual adapter EXIT2: runtime source rejected generated backend __pycache__. Targeted generated-bytecode-only cleanup and adapter retry launched under fresh inactive guard;result pending. No own prepare/lease/publish.",
   "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
   "superseded_R4": {
     "pr": 1523,
