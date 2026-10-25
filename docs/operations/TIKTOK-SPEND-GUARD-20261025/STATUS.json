@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-spend-guard-release-r2-20261025",
   "source_base": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-  "state": "actual_app_adapter_pass_own_lease_prepared",
+  "state": "publishing_after_matching_prepublish",
   "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
   "contract": [
     "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
@@ -41,7 +41,7 @@
   "manual_release": "PR1498 published Oct25 22:32Riyadh,verified:true checks3 exact Afe7a1ca8/Mf72a350e/runtime9d7b,active:false. Evidence f699864a53f4491ac6613d36e9cabaa146ece7ec.",
   "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
   "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
-  "next": "Matching prepublish immediately before one final Publish changes; newer explicit finish then exact verify3/activefalse. Do not reuse/clear another lease.",
+  "next": "Await newer explicit Deployment finished after1498 22:32 Riyadh. Then own guard verify:url must return verifiedtrue checks3 exact A/M/runtime and statusactivefalse. Only then owner UI policy/history read-only smoke. Never reclick Publish.",
   "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory.",
   "recovered_wip": {
     "branch": "codex/tiktok-spend-guard-20261025",
@@ -76,7 +76,7 @@
       "deployment_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
       "release_id": "rg5-862a0d22e689bded488595433e6b81feddb90de3b546cfba473ea9529d146c00"
     },
-    "publish": "not started",
+    "publish": "One final Publish changes clicked; UI Publishing…; no success or verification yet.",
     "B_release_run": 40227725269,
     "B_native_run": 40227725187,
     "source_ancillary_ci": "G47 source run40227393038 cancelled after newer intent-only B; native and Release pass. Require current B G47 and all applicable current-head checks to pass; no source failure inferred from cancellation.",
@@ -86,7 +86,8 @@
       "tree": "8440b1e9994df0f29125fc4d432335c5532e9c58",
       "exact_frozen_B_tree": true
     },
-    "app_adapter": "exit0 at/app HEAD04db2224; identity exact Aec33d33f/runtime862a0d22. Fresh inactive guard and clean tracked worktree before ff. Unrelated emergent untracked docs preserved."
+    "app_adapter": "exit0 at/app HEAD04db2224; identity exact Aec33d33f/runtime862a0d22. Fresh inactive guard and clean tracked worktree before ff. Unrelated emergent untracked docs preserved.",
+    "prepublish": "exit0 matching exact sourceAec33d33f/deploymentM04db2224/runtime862a0d22,immediately before one final Publish changes"
   },
   "production_ui_smoke": {
     "release": 1498,
