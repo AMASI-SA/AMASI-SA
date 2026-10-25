@@ -1,0 +1,39 @@
+{
+  "task_id": "GOOGLE-AI-ACTION-LOOP-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-action-loop-20261025",
+  "source_base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
+  "status": "WIP_SAVED_RECOMMENDATION_APPROVAL_BRIDGE_BACKEND_VERIFIED_FRONTEND_AND_REAL_MONGO_PENDING",
+  "scope": "Continue Google AI creation/management toward bounded autonomy; first prove saved advice through the existing native approval, single dispatch, readback and audit workflow.",
+  "implemented": [
+    "Persisted native analysis identity returned to the UI; saved recommendation preview recovers action and decimal amount server-side.",
+    "Pause, resume and complete budget recommendations map to native typed actions. Diagnostic/incomplete suggestions remain review-only.",
+    "Tenant, account, campaign, currency, timezone, evidence window and five-hour freshness binding; deterministic per-actor recommendation idempotency.",
+    "AI source is bound to immutable proposal digest and evidence-limited expiry; old manual proposal digest behavior preserved.",
+    "Native provider metadata drift blocks preparation; GOOGLE_ADS_AI_ACTIONS_ENABLED disables preparation and new AI dispatch.",
+    "Fresh/saved recommendation buttons open existing frozen proposal review; approval remains unchecked. Cancellation isolates late prior-analysis responses.",
+    "Staff recommendations use existing allowed delegation actions; categorical confidence labels display correctly."
+  ],
+  "verification": {
+    "baseline_reproduction": "New HTTP route regression failed 404 before implementation after dependencies were available.",
+    "offline_backend": "PYTHONPATH=backend /workspace/scratch/e8188781af1a/google-test-venv/bin/python -m pytest --noconftest -q backend/tests/test_google_ads_ai_actions.py backend/tests/test_google_ads_ai.py backend/tests/test_google_ads_ai_route_context.py backend/tests/test_google_ads_campaign_builder.py backend/tests/test_google_ads_client.py backend/tests/test_google_ads_verification.py backend/tests/test_google_ads_workspace.py backend/tests/test_google_ads_overview.py",
+    "offline_backend_result": "exit0;338 passed in3.40s",
+    "whitespace": "git diff --check PASS",
+    "real_mongo": "PENDING; new saved-advice HTTP approval/single-dispatch, source-tampering, disable-switch and provider-metadata-drift cases added to existing real-Mongo gateway suite.",
+    "frontend": "PENDING; native uppercase advice through explicit approval, request cancellation, duplicate clicks, diagnostic suppression and identity-only request regressions added.",
+    "ci": "PENDING; focused Google workflow includes the new backend/frontend suites."
+  },
+  "production_changed": false,
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "merge": false,
+  "deployment": false,
+  "remaining": [
+    "Finish frontend and real-Mongo gateway verification; inspect final diff and CI.",
+    "Owner-defined autonomous Google policy and measured rollout gates; no autonomous spending enabled by this checkpoint.",
+    "Full live paused campaign creation and supported-family acceptance; conversion/profit evidence completeness and post-action outcome learning remain unproven."
+  ],
+  "next_safe_action": "Run governed frontend and real-Mongo/SDK verification from the saved WIP patch. Complete local checks before requesting the narrowly scoped GitHub branch upload that automatic review rejected.",
+  "code_checkpoint": "ec559575c8b30bd8cbd943439900b54bc4534390",
+  "remote_checkpoint": "BLOCKED_AUTOMATIC_APPROVAL_REVIEW: git push rejected; no API or indirect publication attempted."
+}

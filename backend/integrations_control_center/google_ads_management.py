@@ -29,7 +29,7 @@ AUDIT = "mezan_google_ads_action_audit_v1"
 ANALYSES = "mezan_google_ads_ai_analyses_v1"
 MAX_PLAN_BYTES = 9 * 1024 * 1024
 PROPOSAL_TTL = timedelta(minutes=30)
-PUBLIC_FIELDS = ("proposal_id", "provider", "action", "account_id", "account_name", "currency", "time_zone", "campaign_id", "draft_id", "draft_revision", "reason", "before", "planned", "financial_bound", "confirmation_digest", "status", "created_at", "expires_at", "submitted_at", "executed_at", "verified", "provider_write_reached", "submission_started", "resource_names", "created_campaign_id", "safe_error", "after", "verification", "reconcile_after", "events", "actor_id", "local_finalization_pending")
+PUBLIC_FIELDS = ("proposal_id", "provider", "action", "account_id", "account_name", "currency", "time_zone", "campaign_id", "draft_id", "draft_revision", "reason", "before", "planned", "financial_bound", "confirmation_digest", "status", "created_at", "expires_at", "submitted_at", "executed_at", "verified", "provider_write_reached", "submission_started", "resource_names", "created_campaign_id", "safe_error", "after", "verification", "reconcile_after", "events", "actor_id", "local_finalization_pending", "ai_source")
 
 
 def now():
@@ -141,7 +141,8 @@ def human_snapshot(snapshot):
 
 def immutable(row):
     keys = ("proposal_id", "provider", "user_id", "actor_id", "action", "account_id", "currency", "time_zone", "auth_epoch", "before_digest", "draft_id", "draft_revision", "operations", "reason", "planned", "financial_bound", "expires_at", "correlation_label")
-    return {key: row.get(key) for key in keys}
+    # Preserve approval digests for existing manual proposals.
+    return {**{key: row.get(key) for key in keys}, **({"ai_source": row["ai_source"]} if "ai_source" in row else {})}
 
 
 async def record_event(db, row, status, *, expected_status=None, audit=True, **updates):
@@ -175,7 +176,7 @@ async def _release_fence(db, row):
     await db[FENCES].update_one(scope, {"$set": {"status": "released", "released_at": now().isoformat()}})
 
 
-async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None):
+async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None, ai_source=None):
     from .google_ads_campaign_builder import GoogleCampaignBuildError, build_campaign_operations, build_update_operations
     from .google_ads_campaign_contract import GoogleCampaignDraft
     await ensure_google_management_indexes(db)
@@ -183,7 +184,7 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
     action = payload["action"]
     action = "create_campaign" if action == "create" else action
     account_id = identifier(payload["account_id"])
-    request_hash = digest({**payload, "prepared_asset": prepared_asset})
+    request_hash = digest({**payload, "prepared_asset": prepared_asset, **({"ai_source": ai_source} if ai_source else {})})
     prior = await db[PROPOSALS].find_one({"user_id": actor["user_id"], "idempotency_key": payload["idempotency_key"]}, {"_id": 0})
     if prior:
         if prior.get("input_digest") != request_hash:
@@ -194,6 +195,9 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
     snapshot, draft_row, correlation = {}, None, None
     try:
         metadata = await client.account_metadata()
+        if ai_source and (ai_source["account_id"] != account_id or ai_source["campaign_id"] != payload.get("campaign_id")
+            or ai_source["currency"] != metadata["currency_code"] or ai_source["time_zone"] != metadata["time_zone"]):
+            raise problem("google_ai_recommendation_account_changed", "تغيرت عملة الحساب أو توقيته؛ أعد تحليل الحملة.")
         if prepared_asset:
             operations = prepared_asset["operations"]
             planned = prepared_asset["summary"]
@@ -276,6 +280,11 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
             "before_digest": digest(snapshot) if snapshot else None, "planned": planned, "financial_bound": financial, "operations": operations, "correlation_label": correlation,
             "created_at": instant.isoformat(), "expires_at": (instant + PROPOSAL_TTL).isoformat(), "status": "previewed", "verified": False, "provider_write_reached": False,
             "submission_started": False, "input_digest": request_hash, "idempotency_key": payload["idempotency_key"], "events": []}
+        if ai_source:
+            row["ai_source"] = ai_source
+            row["expires_at"] = min(row["expires_at"], ai_source["expires_at"])
+            if row["expires_at"] <= instant.isoformat():
+                raise problem("google_ai_analysis_expired", "انتهت صلاحية أدلة التوصية؛ أعد تحليل الحملة.")
         row["confirmation_digest"] = digest(immutable(row))
         try:
             await db[PROPOSALS].insert_one(row)
@@ -311,6 +320,10 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
     if row["status"] == "completed" and row.get("verified"):
         await _release_fence(db, row)
         return public_proposal(row)
+    if row.get("ai_source"):
+        from .google_ads_ai_actions import ai_action_review_enabled
+        if not ai_action_review_enabled():
+            raise problem("google_ai_action_review_disabled", "تنفيذ توصيات جوجل موقوف مؤقتًا.", 503)
     if row["status"] != "previewed" or row.get("submission_started"):
         raise problem("google_ads_execution_already_started", "العملية بدأت سابقًا؛ اقرأ نتيجتها أو اطلب التحقق دون إعادة الإرسال.")
     if row["expires_at"] <= now().isoformat():

@@ -36,7 +36,7 @@ test("the standalone Google card belongs to Google workspace and the dashboard u
     const source = require("fs").readFileSync(require("path").join(__dirname, "../../pages/AdvancedDashboard.jsx"), "utf8");
     const workspace = require("fs").readFileSync(require("path").join(__dirname, "GoogleAdsWorkspace.jsx"), "utf8");
     expect(source).toContain("<CampaignAdvisorCard />"); expect(source).not.toContain("<GoogleAdsIntelligenceCard");
-    expect(workspace).toContain("<GoogleAdsIntelligenceCard accountId={accountId} dateFrom={dateFrom} dateTo={dateTo} />");
+    expect(workspace).toContain("<GoogleAdsIntelligenceCard accountId={accountId} dateFrom={dateFrom} dateTo={dateTo} onPreview={openRecommendationProposal} />");
     expect(source).toContain('["snapchat", "meta"].includes(item.provider) && item.action_type');
 });
 
