@@ -247,3 +247,15 @@ async def test_compressed_metadata_is_rejected_before_read_or_inflation():
         async with transport.TikTokCreatorAPI(transport=httpx.MockTransport(response)) as api:
             await api.call("GET", "/business/publish/status/")
     assert caught.value.detail["code"] == "tiktok_creator_compressed_response_denied"
+
+
+@pytest.mark.asyncio
+async def test_creator_failure_keeps_only_bounded_numeric_provider_code():
+    async def response(request):
+        return httpx.Response(200, json={"code": 40100, "message": "private-token-and-provider-url", "request_id": "private", "data": {}})
+
+    with pytest.raises(HTTPException) as caught:
+        async with transport.TikTokCreatorAPI(transport=httpx.MockTransport(response)) as api:
+            await api.call("GET", "/business/video/settings/", token="private", params={"business_id": "private"})
+    assert caught.value.detail["provider_code"] == 40100
+    assert "private" not in str(caught.value.detail)

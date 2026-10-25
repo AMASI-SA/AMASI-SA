@@ -51,7 +51,7 @@ test("StrictMode mount performs no content request and renders no media uploader
 test("owner explicitly verifies a creator, previews only metadata and separately approves", async () => {
     await ready(); api.post.mockResolvedValueOnce({ data: proposal }); await prepare();
     expect(api.post).toHaveBeenCalledTimes(2);
-    expect(api.post.mock.calls[0][0]).toBe(`/integrations-v2/tiktok/content/creators/${ref}/verify`);
+    expect(api.post.mock.calls[0][0]).toBe(`/integrations-v2/tiktok/content/creators/${ref}/readiness`);
     expect(api.post.mock.calls[0][1]).toEqual({});
     expect(api.post.mock.calls[1][1]).toMatchObject({ creator_ref: ref, kind: "video", delivery: "draft", video_duration_seconds: 10, is_brand_organic: true, media_requirements_confirmed: true });
     expect(testId("publish").disabled).toBe(true);
@@ -115,6 +115,19 @@ test("connection exposes an exact TikTok consent link without navigating or crea
     api.post.mockResolvedValueOnce({ data: { authorization_url: "https://www.tiktok.com/v2/auth/authorize?state=fixture", requested_scopes: ["video.publish"] } });
     await act(async () => testId("connect").click());
     expect(container.querySelector("a").href).toBe("https://www.tiktok.com/v2/auth/authorize?state=fixture");
+    expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test("blocked readiness report cannot unlock publishing and gives the safe diagnostic once", async () => {
+    api.get.mockResolvedValueOnce({ data: { items: [creator] } });
+    api.post.mockResolvedValueOnce({ data: { ready: false, diagnostic: { code: "tiktok_creator_provider_error", phase: "identity", provider_code: 40100, message: "تعذر التحقق من هوية الحساب وصلاحياته." } } });
+    await act(async () => root.render(<TikTokContentWorkspace />));
+    await act(async () => testId("load-accounts").click());
+    await fill(testId("creator"), ref);
+    await act(async () => testId("verify").click());
+    expect(container.querySelector('[role="alert"]').textContent).toContain("tiktok_creator_provider_error · TikTok 40100");
+    expect(testId("readiness")).toBeNull();
+    expect(testId("preview").disabled).toBe(true);
     expect(api.post).toHaveBeenCalledTimes(1);
 });
 
