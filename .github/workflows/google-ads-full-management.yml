@@ -14,6 +14,7 @@ on:
       - "frontend/src/pages/AdvancedDashboard*"
       - "frontend/src/services/googleAds*"
       - "frontend/src/services/googleAnalysisAttempts*"
+      - "frontend/src/services/googleAutomationPolicy*"
       - "frontend/src/services/marketingPerformance*"
       - "frontend/src/services/adsManager*"
       - ".github/workflows/google-ads-full-management.yml"
@@ -55,6 +56,10 @@ jobs:
           backend/tests/test_google_ads_ai.py
           backend/tests/test_google_ads_ai_actions.py
           backend/tests/test_google_ads_ai_route_context.py
+          backend/tests/test_google_ads_automation_policy.py
+          backend/tests/test_google_ads_automation_policy_mongo.py
+          backend/tests/test_google_ads_autonomy_planner.py
+          backend/tests/test_google_ads_automation_plan.py
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py
@@ -85,6 +90,7 @@ jobs:
           src/services/adsManager.test.js
           src/components/marketing/GoogleAdsWorkspace.test.jsx
           src/components/marketing/GoogleAnalysisAttempts.test.jsx
+          src/components/marketing/GoogleAutomationPolicy.test.jsx
           src/components/marketing/GoogleRecommendationAction.test.jsx
           src/components/marketing/GoogleCampaignComposer.test.jsx
           src/components/marketing/GoogleAdsIntelligenceCard.test.jsx
