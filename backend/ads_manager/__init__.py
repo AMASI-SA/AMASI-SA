@@ -26,6 +26,7 @@ def make_ads_manager_router(db: Any, current_user: Callable):
         attach_advertising_product_watch_scheduler,
     )
     from campaign_ai_monitor import attach_campaign_ai_routes
+    from campaign_ai_snapchat_autonomy import attach_snapchat_autonomy_routes
     from campaign_ai_unified_shadow_routes import (
         attach_campaign_ai_unified_shadow_routes,
     )
@@ -55,6 +56,7 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     )
     attach_campaign_ai_public_guard(router, db, current_user)
     attach_campaign_ai_routes(router, db, current_user, _require_owner)
+    attach_snapchat_autonomy_routes(router, db, current_user, _require_owner)
     attach_campaign_ai_unified_shadow_routes(
         router,
         db,
