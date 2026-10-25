@@ -1,5 +1,5 @@
 {
-  "status": "IMPLEMENTED_LOCALLY_NOT_DEPLOYED",
+  "status": "PREVIEW_BUNDLE_BUILD_RUNNING_ACTIVATION_BLOCKED",
   "preview_source": "fda6ab558023d2c29bb200951ec47fb7a87f1c90",
   "scope": "Saved opening visibility and server-confirmed acknowledgement; no financial behavior changes",
   "checks": {
@@ -14,6 +14,9 @@
     "Retain selected kind after success",
     "Remount opening view on session scope change"
   ],
-  "deployment": "Pending integration against latest production branch and isolated Preview validation. Browser control unavailable this turn.",
-  "business_writes": false
+  "deployment": "Not deployed. Integrated browser control is not available in this turn. Before activation inspect fresh remote Release Guard, current Supervisor and persistent Preview runtime. Preserve existing DB/key and unrelated files; do not switch to production Mongo or activate writers.",
+  "business_writes": false,
+  "source_sha": "1f61d4d416d9f47858e4e7cfab54fd572a702e6d",
+  "workflow_run": 40199686191,
+  "workflow_url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/40199686191"
 }
