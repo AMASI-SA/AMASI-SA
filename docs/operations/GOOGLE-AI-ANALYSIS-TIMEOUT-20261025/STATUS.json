@@ -1,0 +1,27 @@
+{
+  "task_id": "GOOGLE-AI-ANALYSIS-TIMEOUT-20261025",
+  "scope": "Fix live Google native analysis 504 without provider writes",
+  "base": "39a7dc82f0ef606cbdd54a1b6a9941514ba02f94",
+  "branch": "codex/google-ai-analysis-timeout-20261025",
+  "status": "SOURCE_REVIEW_PENDING",
+  "reproduction": "Live account and campaign UI AI requests returned504; native Google reads returned200; previous release guard accepted3probes and active:false",
+  "change": "Structured analysis low reasoning effort with bounded40s default (existing shared override remains respected); browser deadline90s; specific analysis timeout message",
+  "verification": {
+    "backend": "66 passed in1.11s",
+    "red": "new deadline regression failed on old default20s",
+    "frontend": "CI pending",
+    "live": "not yet verified"
+  },
+  "provider_writes": 0,
+  "production_changed": false,
+  "previous_release_live_verified": true,
+  "remaining": [
+    "live analysis success",
+    "fresh source and intent CI",
+    "adapter rehearsal",
+    "governed merge and authorized publication",
+    "3 public probes",
+    "full autonomy and attribution remain separate incomplete scope"
+  ],
+  "next_safe_action": "Open PR, run exact-source CI, independently build A and freeze intent-only B"
+}

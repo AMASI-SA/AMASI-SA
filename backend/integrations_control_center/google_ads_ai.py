@@ -794,7 +794,11 @@ async def analyze_google_campaigns(
                         payload={"period": period, "campaigns": list(campaigns.values()), "evidence": registry,
                                  "limitations": list(dict.fromkeys(limitations))},
                         schema=_AnalysisOutput.model_json_schema(), schema_name="mezan_google_readonly_analysis",
-                        client_factory=client_factory, tokens=6000)
+                        # Native account reads precede structured reasoning.
+                        # Keep the model within the interactive 90s deadline,
+                        # with the same bounded low-effort budget as drafts.
+                        client_factory=client_factory, tokens=6000,
+                        default_timeout=40.0, reasoning_effort="low")
     try:
         output = _AnalysisOutput.model_validate(raw)
     except Exception:
