@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 1f61d4d416d9f47858e4e7cfab54fd572a702e6d
+          ref: a3520ad0cb0ddaa39678068f12ef50c3a822d476
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.2'
@@ -31,7 +31,7 @@ jobs:
           python - <<'PY'
           import hashlib,json,pathlib
           root=pathlib.Path('bundle')
-          meta={'environment':'preview','api_origin':'https://salla-analytics.preview.emergentagent.com','source_git_sha':'1f61d4d416d9f47858e4e7cfab54fd572a702e6d','external_network':'denied','automatic_workers':'disabled','contains_production_release_identity':False}
+          meta={'environment':'preview','api_origin':'https://salla-analytics.preview.emergentagent.com','source_git_sha':'a3520ad0cb0ddaa39678068f12ef50c3a822d476','external_network':'denied','automatic_workers':'disabled','contains_production_release_identity':False}
           assert not (root/'frontend/build/build-meta.json').exists()
           meta['index_sha256']=hashlib.sha256((root/'frontend/build/index.html').read_bytes()).hexdigest()
           (root/'frontend/build/preview-meta.json').write_text(json.dumps(meta))
