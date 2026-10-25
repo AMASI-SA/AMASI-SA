@@ -214,6 +214,12 @@ async def run_campaign_ai_monitor(
             # TikTok availability never discards the other platforms' snapshot.
             import logging
             logging.getLogger(__name__).warning("tiktok_periodic_snapshot_unavailable")
+        from integrations_control_center.tiktok_spend_guard import run_spend_guard
+        try:
+            result = await run_spend_guard(db, user_id, result, current=kwargs.get("now"))
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("tiktok_spend_guard_unavailable")
         goal_context = _monthly_goal.current_goal_context()
         snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
         if goal_context and snapshot_id:

@@ -6,6 +6,7 @@ _FEATURES = {
     "ad_builder": ("TIKTOK_AD_BUILDER_ENABLED", "true"),
     "child_management": ("TIKTOK_CHILD_MANAGEMENT_ENABLED", "true"),
     "periodic_observations": ("MEZAN_TIKTOK_AI_PERIODIC_ENABLED", "false"),
+    "spend_guard": ("TIKTOK_SPEND_GUARD_ENABLED", "true"),
 }
 
 

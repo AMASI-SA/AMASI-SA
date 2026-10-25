@@ -1,0 +1,52 @@
+{
+  "task_id": "TIKTOK-SPEND-GUARD-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-spend-guard-release-r2-20261025",
+  "source_base": "0d8f4524a26978471a72662cb56bc5e3a4584530",
+  "state": "fresh_production_parent_source_exact_CI_pending",
+  "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
+  "contract": [
+    "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
+    "Immutable policy versions with revision compare-and-swap activation; owner/tenant isolation and current native account,currency,timezone proof.",
+    "Existing five-hour Campaign AI cycle only,no new background scheduler; at most3 rotating configured rules per cycle.",
+    "Provider report identity/day/pagination/numeric amount must be proven; unavailable facts never become zero.",
+    "Native existing preview/execute/fence gateway reused; exact policy rechecked at its final write boundary.",
+    "No repeat of uncertain transmitted native operations; cycle/action audit claims durable. No instantaneous spend guarantee."
+  ],
+  "verification": {
+    "route_baseline": "New owner policy route returned404 before attachment; now typed422,one focused case PASS1.11s.",
+    "focused": "68 PASS in5.39s: real Mongo policies/CAS/concurrent cycles,final-boundary revocation,native day rollover,report validation,uncertain-write fencing,owner isolation,history filters and unknown coverage.",
+    "full_native_backend": "495 PASS in30.09s before last unknown-inventory coverage regression; latest focused68 covers that subsequent change. Native transport is fixed in tests; no live provider writes or model calls.",
+    "frontend": "Owner policy form and scoped action history implemented; four component tests plus workspace entry regression added. Frontend CI pending.",
+    "remaining": "Fresh release A CI/reviewed intent B/original-host rehearsal/merge/actual-host publication/verify3 required. WIP release-history guard failure is intentionally not deployment acceptance.",
+    "exact_wip_ci": {
+      "run": 40225332118,
+      "backend": "496passed,1warning,17.60s",
+      "frontend": "140passed,24suites",
+      "build": "PASS6.42s",
+      "source_isolation": "PASS"
+    }
+  },
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "production_changed": false,
+  "manual_release": "PR1498 published Oct25 22:32Riyadh,verified:true checks3 exact Afe7a1ca8/Mf72a350e/runtime9d7b,active:false. Evidence f699864a53f4491ac6613d36e9cabaa146ece7ec.",
+  "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
+  "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
+  "next": "Fresh source on latest Google1500 J with14 financial source paths,no overlap. Fresh A CI/freezeB/rehearsal; fresh inactive guard before host work.",
+  "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory.",
+  "recovered_wip": {
+    "branch": "codex/tiktok-spend-guard-20261025",
+    "head": "8fef5ebfc572d6662d0e78b4238b569d66da71b6",
+    "preserved": true
+  },
+  "evidence_branch": "codex/tiktok-spend-guard-r2-evidence-20261025",
+  "previous_frozen_handoff": {
+    "pr": 1501,
+    "A": "08856cb36eb89a2865b133777d81411ca89a0726",
+    "B": "45c5165b6a0ce14cfb749b35768c41a3062fadc5",
+    "runtime": "rg5-c49090720de7f7375313a96f69b9ad710e53bd666b413d636fffea2673b16a3a",
+    "preserved": true,
+    "not_deployed": true
+  }
+}

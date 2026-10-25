@@ -74,6 +74,7 @@ jobs:
           tests/test_tiktok_ad_builder.py
           tests/test_tiktok_child_management.py
           tests/test_tiktok_features.py
+          tests/test_tiktok_spend_guard.py
           tests/test_campaign_ai_tiktok_periodic.py
           tests/test_tiktok_campaign_management.py
           tests/test_tiktok_creator_accounts.py
@@ -117,7 +118,7 @@ jobs:
           CI: "true"
         run: >-
           yarn test --watchAll=false --runInBand
-          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokAdBuilder|TikTokChildControls|TikTokCampaignAnalysis|TikTokCampaignProducts|CampaignResearchStatus|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|TikTokReplyDelivery|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
+          '--testPathPattern=tiktokIntegrationsV2|TikTokEntityWorkspace|TikTokAdBuilder|TikTokChildControls|TikTokSpendGuard|TikTokCampaignAnalysis|TikTokCampaignProducts|CampaignResearchStatus|TikTokCampaignControls|TikTokContentWorkspace|TikTokCommentsWorkspace|TikTokReplyDelivery|customerIntelligence.test|CustomerIntelligenceCenter|marketingAdsLiveWorkspaceEnhancer|AdsPerformanceExplorer|marketingPerformance|MarketingPlatformWorkspace|IntegrationCardV2.tiktok'
       - name: Build source under review
         env:
           REACT_APP_BACKEND_URL: "https://mezansalla.com"
