@@ -539,11 +539,58 @@ async def test_foreign_or_wrong_period_analysis_is_rejected_before_model(key, va
 @pytest.mark.asyncio
 async def test_interactive_analysis_has_a_bounded_budget_for_structured_reasoning(monkeypatch):
     monkeypatch.delenv("MEZAN_OPENAI_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("MEZAN_CAMPAIGN_AI_MODEL", raising=False)
+    monkeypatch.delenv("MEZAN_OPENAI_MODEL", raising=False)
     client = ModelClient(analysis_output())
     await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: client)
     assert client.calls[0]["timeout"] == 40.0
-    assert client.calls[0]["reasoning"] == {"effort": "low"}
+    assert client.calls[0]["reasoning"] == {"effort": "minimal"}
     assert client.calls[0]["tools"] == []
+    assert client.calls[0]["max_output_tokens"] == 8000
+
+
+@pytest.mark.asyncio
+async def test_analysis_rejects_an_unbounded_recommendation_list():
+    output = analysis_output()
+    output["recommendations"] *= 7
+    with pytest.raises(HTTPException) as error:
+        await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: ModelClient(output))
+    assert error.value.detail["code"] == "google_ai_analysis_contract_invalid"
+
+
+@pytest.mark.asyncio
+async def test_analysis_respects_configured_models_without_minimal_effort(monkeypatch):
+    monkeypatch.setenv("MEZAN_CAMPAIGN_AI_MODEL", "gpt-5.1")
+    client = ModelClient(analysis_output())
+    await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: client)
+    assert client.calls[0]["reasoning"] == {"effort": "low"}
+
+
+@pytest.mark.asyncio
+async def test_incomplete_response_logs_only_safe_failure_metadata(caplog):
+    class Incomplete(ModelClient):
+        async def create(self, **kwargs):
+            return SimpleNamespace(status="incomplete", output_text="private-model-text", incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+                usage=SimpleNamespace(output_tokens=6000, output_tokens_details=SimpleNamespace(reasoning_tokens=5900)))
+    with pytest.raises(HTTPException) as error:
+        await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: Incomplete({}))
+    assert error.value.detail["code"] == "google_ai_response_incomplete"
+    assert "max_output_tokens" in caplog.text and "5900" in caplog.text
+    assert "google_ai_response_incomplete" in caplog.text
+    assert "private-model-text" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_metadata_cannot_log_untrusted_provider_strings(caplog):
+    class Malformed(ModelClient):
+        async def create(self, **kwargs):
+            return SimpleNamespace(status="private-provider-status", output_text="private-model-text",
+                incomplete_details=SimpleNamespace(reason="private-provider-reason"),
+                usage=SimpleNamespace(output_tokens="private-usage", output_tokens_details=SimpleNamespace(reasoning_tokens="private-reasoning")))
+    with pytest.raises(HTTPException):
+        await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: Malformed({}))
+    assert "reason=unknown" in caplog.text
+    assert "private-" not in caplog.text
 
 
 @pytest.mark.asyncio

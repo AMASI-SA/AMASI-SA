@@ -1,0 +1,88 @@
+{
+  "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-response-reliability-r2-20261025",
+  "base": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
+  "status": "UNFROZEN_SOURCE_REFRESHED_ON_THIRD_CONCURRENT_PRODUCTION_ADVANCE",
+  "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
+  "evidence": {
+    "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
+    "google_account_analysis": "still timed out",
+    "single_campaign": "generic failure",
+    "core_assistant": "neutral technical request returned invalid result after ~16s; no raw response available",
+    "credential_safety": "no credentials read, copied, provisioned or changed; existing Mezan AI integration only"
+  },
+  "hypothesis": "Reasoning/output budget and response contract may cause failures; exact production code not yet logged. Do not claim root cause proven.",
+  "implemented": [
+    "At most6concise recommendations from all supplied campaign evidence",
+    "GPT5 family minimal reasoning with low fallback for configured later models;8000 total output token budget; bounded40s retained",
+    "Safe constant error codes, allowlisted incomplete reason/numeric token counts, allowlisted exception class only; no model output or exception text",
+    "Distinct safe UI explanations for incomplete or unverified results"
+  ],
+  "verification": {
+    "red": "3focused regressions failed; compatible-model case passed",
+    "backend": "101 AI/actions/context tests passed in1.64s",
+    "frontend": "CI pending",
+    "current_source_ci": {
+      "head_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
+      "all_9_workflows": "success",
+      "google_run": 40214882914,
+      "backend_job": 121233748852,
+      "backend": "379passed realMongo/officialv25 10.64s",
+      "frontend_job": 121233748638,
+      "frontend": "96tests/12suites/build3.53s"
+    },
+    "clone": "exit0 /tmp/google1485-release literalA",
+    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
+  },
+  "user_autonomy_preferences": {
+    "budget_mode": "preserve_current_approved_total_budget",
+    "objective": "google_native_roas",
+    "source": "user answered structured questions",
+    "provider": "google_ads",
+    "financial_attribution": "native conversion_value/spend only; not net profit"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "production_changed": false,
+  "next_safe_action": "Wait for actual /app foreign lease inactive. After IDE refresh, rehearse in a TASK-OWNED clone under /app/.git to survive /tmp recycle, then fresh build/freeze on current base. No current B exists.",
+  "concurrent_update": {
+    "pr": 1482,
+    "scope": "TikTok creator readiness",
+    "files_overlap": false,
+    "preserved": true
+  },
+  "prior_frozen_source": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
+  "prior_source_ci": "all9pass/379backend/96frontend",
+  "prior_freeze": "exit0 against73901...; superseded before B/merge/publish; immutable prior source retained",
+  "concurrent_updates": [
+    {
+      "pr": 1482,
+      "scope": "TikTok",
+      "preserved": true
+    },
+    {
+      "pr": 1483,
+      "scope": "Snapchat",
+      "preserved": true
+    },
+    {
+      "pr": 1487,
+      "scope": "TikTok publishing settings",
+      "preserved": true
+    }
+  ],
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1485",
+  "shared_release_guard": {
+    "active": false,
+    "last_foreign_owner_closed": "codex-snap1483",
+    "checked_in": "actual /app"
+  },
+  "previous_pr": {
+    "number": 1484,
+    "state": "closed_unmerged_superseded_before_B",
+    "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
+  },
+  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload.",
+  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc"
+}
