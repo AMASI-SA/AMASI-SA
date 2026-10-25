@@ -1,0 +1,86 @@
+{
+  "task_id": "SNAP-LIVE-ACCEPTANCE-20261025",
+  "scope": "Independent live UI acceptance for Snapchat continuation; preserve concurrent source implementation",
+  "repository": "AMASI-SA/AMASI-SA",
+  "evidence_branch": "codex/snap-live-acceptance-20261025-1907",
+  "baseline_git_sha": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
+  "runtime_media_release": {
+    "deployment_git_sha": "a35b5e4ede35b00cdd9599ceb878c07593627221",
+    "source_git_sha": "738e2cffa32166c024eb1521bf90ce7e3121b064",
+    "release_id": "rg5-d03ae026d977873e39fb4d6d95a733029dfc9e97ff7e9cccfbd9bef410860b85",
+    "platform_finish_riyadh": "2026-10-25 21:45",
+    "guard_subsequently_inactive": true,
+    "foreign_lease_mutated_by_this_task": false
+  },
+  "acceptance": {
+    "ui": "Fresh reload shows File chooser, AI declaration, upload button and account-scoped Public Profile selector",
+    "self_service": {
+      "account_id": "efcdd251-9a4f-4dc0-8358-6a1a91f8892a",
+      "currency": "USD",
+      "timezone": "America/Los_Angeles",
+      "closed_day": "2026-10-24",
+      "readiness": "passed all listed data, hierarchy, cost and attribution gates; no automation activation"
+    },
+    "saudi": {
+      "account_id": "cf8ea7c9-36e2-41a4-841c-48369e22789b",
+      "currency": "SAR",
+      "timezone": "Asia/Riyadh",
+      "closed_day": "2026-10-24",
+      "readiness": "incomplete before and after one manual sync",
+      "passed": [
+        "account",
+        "campaign",
+        "closed day",
+        "reconciliation",
+        "freshness",
+        "orders attribution",
+        "cost/profit"
+      ],
+      "incomplete": [
+        "ad-group hierarchy",
+        "ad hierarchy"
+      ],
+      "manual_sync": "one native UI V2 analytics request for2026-10-24; busy state ended; post-sync Readiness completed and remained incomplete"
+    },
+    "public_profiles": {
+      "accounts": "both selected accounts",
+      "ui_error": "راجع اتصال سناب وصلاحية الحساب.",
+      "backend_mapping": "snapchat_media_needs_reauth_or_role maps upstream401/403; local creative-role refusal is a different code",
+      "exact_upstream_code": "not observed",
+      "cause": "permission/authentication boundary not yet distinguished; do not claim missing allowlist proven",
+      "current_integration_scopes": [
+        "snapchat-marketing-api",
+        "snapchat-offline-conversions-api"
+      ],
+      "official_docs": [
+        "https://developers.snap.com/marketing-api/Public-Profile-API/ProfileAssetManagement",
+        "https://developers.snap.com/marketing-api/Public-Profile-API/GetStarted"
+      ],
+      "provider_upload_or_creative_acceptance": "not performed; profile prerequisite blocked"
+    }
+  },
+  "concurrent_autonomy": {
+    "pr": 1494,
+    "latest_observed_head": "3d1388c84497b6154973a623a831ffc25ab8b05a",
+    "state": "owner actively advancing cancellation recovery; no overlapping source edits made by this task",
+    "base_refresh": "preserve newer Google1495 in any future source/intent freeze",
+    "activation": "no policy enabled"
+  },
+  "actions": {
+    "source_code_changes": 0,
+    "new_publications": 0,
+    "media_upload_writes": 0,
+    "ad_or_budget_writes": 0,
+    "account_selection_persistence_changes": 0,
+    "analytics_sync_requests": 1
+  },
+  "status": "PARTIAL_LIVE_ACCEPTANCE_WITH_CONFIRMED_BLOCKERS",
+  "next_safe_actions": [
+    "Diagnose upstream Public Profile401vs403 and required app/account authorization; do not bypass or infer missing allowlist without evidence",
+    "Resolve Saudi per-level producing-run coverage using provider-confirmed facts, never infer missing data as zero",
+    "Continue separately-owned autonomyPR1494 on current Production with freshv5freeze, exactCI/rehearsal/guard/publication/probes",
+    "Perform real authorized video→READY→creative→ad acceptance once profile access is verified; no arbitrary test spend"
+  ],
+  "screenshot": "docs/operations/SNAP-LIVE-ACCEPTANCE-20261025/saudi-readiness.jpg",
+  "do_not_deploy_evidence_branch": true
+}
