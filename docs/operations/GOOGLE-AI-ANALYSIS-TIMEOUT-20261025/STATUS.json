@@ -3,7 +3,7 @@
   "scope": "Fix live Google native analysis 504 without provider writes",
   "base": "39a7dc82f0ef606cbdd54a1b6a9941514ba02f94",
   "branch": "codex/google-ai-analysis-timeout-20261025",
-  "status": "MERGED_ORIGINAL_ADAPTER_PASS_PUBLICATION_STARTED_VERIFY_PENDING",
+  "status": "DEPLOYED_PUBLIC_VERIFIED_LIVE_ANALYSIS_STILL_FAILS",
   "reproduction": "Live account and campaign UI AI requests returned504; native Google reads returned200; previous release guard accepted3probes and active:false",
   "change": "Structured analysis low reasoning effort with bounded40s default (existing shared override remains respected); browser deadline90s; specific analysis timeout message",
   "verification": {
@@ -19,10 +19,23 @@
     "intent_ci": "all applicable B workflows success; branch-restricted TikTok skipped",
     "original_adapter": "retry exit0; preserved two ignored pyc in .git/google1481-bytecode-quarantine; initial refusal retained",
     "prepare": "exit0",
-    "prepublish": "exit0 ready_to_publish:true exact A/M/runtime"
+    "prepublish": "exit0 ready_to_publish:true exact A/M/runtime",
+    "public": {
+      "exit_status": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "8cce9baf1b630b63d761eaa45566b7981b987015",
+      "deployment_git_sha": "c410cab8c6835e6575fdd3e792a983767182f966",
+      "release_id": "rg5-7efc5707996a84812dc213af3c6374aa94c217d5c9ecc03530bbaa4a4e5f4437"
+    },
+    "native_ui": {
+      "account_analysis": "still timed out; new safe timeout message visible",
+      "single_campaign_analysis": "generic failure after low effort40s; root cause not yet established",
+      "provider_writes": 0
+    }
   },
   "provider_writes": 0,
-  "production_changed": false,
+  "production_changed": true,
   "previous_release_live_verified": true,
   "remaining": [
     "live analysis success",
@@ -32,7 +45,7 @@
     "3 public probes",
     "full autonomy and attribution remain separate incomplete scope"
   ],
-  "next_safe_action": "Wait for explicit Deployment finished newer than Oct25 07:15PM, then original owned guard verify3probes/status inactive, then real UI analysis. Do not republish or change /app.",
+  "next_safe_action": "Diagnose actual AI service/model failure safely; do not claim #1481 fixes live analysis or 100% autonomy. Public release identity is accepted and lease closed. Existing current-budget/nativeROAS choices persist. No autonomy implementation changes yet; clean separate worktree exists at M.",
   "source_sha": "8cce9baf1b630b63d761eaa45566b7981b987015",
   "intent_sha": "41ec514af690bca31e97f77fab3e83b4623951b7",
   "runtime_release_id": "rg5-7efc5707996a84812dc213af3c6374aa94c217d5c9ecc03530bbaa4a4e5f4437",
@@ -46,17 +59,18 @@
     "financial_attribution": "native conversion_value/spend only; not net profit"
   },
   "production_git_changed": true,
-  "production_live_verified": false,
+  "production_live_verified": true,
   "owned_lease": {
     "actor": "codex-google1481",
-    "active": true,
-    "source_sha": "8cce9baf1b630b63d761eaa45566b7981b987015",
-    "deployment_sha": "c410cab8c6835e6575fdd3e792a983767182f966",
-    "runtime_release_id": "rg5-7efc5707996a84812dc213af3c6374aa94c217d5c9ecc03530bbaa4a4e5f4437"
+    "active": false,
+    "closed_by": "three-probe public verification",
+    "status_command_exit": 0
   },
   "publication": {
     "started": "Oct25 07:15PM",
-    "state": "Publishing...",
-    "publish_count": 1
+    "finished": "Oct25 07:24PM",
+    "state": "Deployment finished",
+    "publish_count": 1,
+    "platform_version": "810aaea"
   }
 }
