@@ -205,6 +205,15 @@ async def run_campaign_ai_monitor(
         result = await append_google_periodic_recommendations(
             db, user_id, result, now=kwargs.get("now"),
         )
+        from campaign_ai_tiktok_periodic import append_tiktok_periodic_recommendations
+        try:
+            result = await append_tiktok_periodic_recommendations(
+                db, user_id, result, current=(kwargs["now"]() if kwargs.get("now") else None),
+            )
+        except Exception:
+            # TikTok availability never discards the other platforms' snapshot.
+            import logging
+            logging.getLogger(__name__).warning("tiktok_periodic_snapshot_unavailable")
         goal_context = _monthly_goal.current_goal_context()
         snapshot_id = result.get("snapshot_id") if isinstance(result, dict) else None
         if goal_context and snapshot_id:

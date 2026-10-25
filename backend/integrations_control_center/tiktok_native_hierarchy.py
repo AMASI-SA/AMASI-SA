@@ -5,6 +5,8 @@ remain independent of campaign/adgroup/ad breakdowns (which may omit formats).
 """
 from __future__ import annotations
 
+from .tiktok_features import enabled as feature_enabled
+
 import asyncio
 import json
 import math
@@ -433,7 +435,12 @@ async def _tiktok_workspace(db, user_id: str, *, from_date=None, to_date=None,
                              "campaign_identity_ready": identity_ready, "orders_ready": False,
                              "sales_ready": False, "ratios_ready": False,
                              "ai_analysis_ready": complete and identity_ready and bool(os.environ.get("OPENAI_API_KEY", "").strip()),
-                             "campaign_creation_enabled": False, "campaign_management_enabled": False},
+                             "campaign_creation_enabled": feature_enabled("campaign_management"),
+                             "campaign_management_enabled": feature_enabled("campaign_management"),
+                             "ad_builder_enabled": feature_enabled("ad_builder"),
+                             "child_management_enabled": feature_enabled("child_management"),
+                             "periodic_observations_enabled": feature_enabled("periodic_observations"),
+                             "autonomous_financial_execution_enabled": False},
             "insights": [{"code": "tiktok_conversions_are_not_orders", "severity": "info",
                           "title": "تحويلات TikTok", "detail": "التحويلات أحداث تبلغ عنها المنصة؛ مبيعات وطلبات سلة تحتاج ربطًا مستقلًا."}],
             "policy": {"mode": "observe_only", "mutations_allowed": False}}

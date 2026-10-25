@@ -24,6 +24,7 @@ from integrations_control_center.campaign_product_associations import (
     list_effective_campaign_products,
 )
 from product_v2_routes import PRODUCTS as PRODUCT_V2_COLLECTION
+from campaign_product_catalog import current_catalog_product
 from unified_marketing.gateway import load_unified_marketing_entity_metadata
 
 
@@ -404,7 +405,8 @@ async def build_product_intelligence(
                 {"user_id": user_id, "product_id": product_id},
                 {"_id": 0},
             ) or {}
-            canonical_url = _text(cache.get("url"), 2000) or None
+            current_catalog = await current_catalog_product(db, user_id, product_id)
+            canonical_url = _text((current_catalog or {}).get("url"), 2000) or None
             destination = advertised_destination or canonical_url
             velocity = _campaign_velocity(row, product_id)
             inventory = _inventory(product, velocity)
@@ -473,7 +475,7 @@ async def build_product_intelligence(
             "source_contract": {
                 "product_identity": "verified_campaign_product_association_when_available",
                 "product_catalog": "mezan_products_v2_from_salla",
-                "canonical_page_url": "salla_products_cache",
+                "canonical_page_url": "mezan_products_v2_current_salla_snapshot",
                 "page_probe": "public_get_same_canonical_host_only",
                 "inventory_is_evidence_not_rule": True,
             },
