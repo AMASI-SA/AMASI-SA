@@ -40,6 +40,14 @@ test("AI timeout has an actionable safe explanation without echoing private erro
     expect(message).not.toContain("secret-provider-body");
 });
 
+test("incomplete and unverified AI results have distinct safe explanations", () => {
+    const incomplete = googleErrorMessage({ response: { data: { detail: { code: "google_ai_response_incomplete", raw: "private-model-text" } } } });
+    expect(incomplete).toContain("لم تكتمل نتيجة");
+    const invalid = googleErrorMessage({ response: { data: { detail: { code: "google_ai_recommendation_evidence_unknown", raw: "private-model-text" } } } });
+    expect(invalid).toContain("بيانات جوجل المثبتة");
+    for (const message of [incomplete, invalid]) expect(message).not.toContain("private-model-text");
+});
+
 test("analysis transport timeout explains the failed analysis and never claims a draft or write", () => {
     for (const error of [
         { code: "ECONNABORTED", config: { url: `${GOOGLE_ADS_ROOT}/ai/analyze` } },
