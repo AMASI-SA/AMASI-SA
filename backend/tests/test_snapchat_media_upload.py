@@ -56,6 +56,9 @@ class Provider:
         self.create_timeout = self.upload_timeout = False
         self.medium = self.sent = None
         self.role_hook = None
+        self.catalog = []
+        self.catalog_reads = 0
+        self.catalog_hook = None
 
     async def management_role(self, account, action):
         assert action == "creative.create"
@@ -67,7 +70,8 @@ class Provider:
     async def create_media(self, row):
         self.creates += 1
         self.medium = {"id": "media-test", "ad_account_id": row["account_id"],
-            "type": "VIDEO", "name": row["provider_name"], "media_status": "PENDING_UPLOAD"}
+            "type": "VIDEO", "name": row["provider_name"], "media_status": "PENDING_UPLOAD",
+            "created_at": module._iso()}
         if self.create_timeout:
             raise module._failure(502, "simulated_create_timeout")
         return deepcopy(self.medium)
@@ -87,6 +91,13 @@ class Provider:
         self.reads += 1
         assert media_id == self.medium["id"]
         return deepcopy(self.medium)
+
+    async def list_account_media_for_recovery(self, account_id):
+        assert account_id == "account-test"
+        self.catalog_reads += 1
+        if self.catalog_hook:
+            await self.catalog_hook(self.catalog_reads)
+        return deepcopy(self.catalog)
 
 
 @pytest.fixture(autouse=True)
@@ -134,6 +145,45 @@ async def test_ready_requires_provider_readback_and_replay_has_no_new_write():
     assert again["status"] == "ready"
     assert (provider.creates, provider.uploads) == (1, 1)
     assert "confirm_token_hash" not in result and "user_id" not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duration", [180, 181, 1800])
+async def test_top_snap_duration_metadata_accepts_up_to_1800_seconds(duration):
+    db, provider = DB(), Provider()
+    preview = await prepared(db, provider)
+    original = provider.upload_media
+
+    async def upload_with_duration(media_id, data, content_type):
+        await original(media_id, data, content_type)
+        provider.medium["duration_in_seconds"] = duration
+        return deepcopy(provider.medium)
+
+    provider.upload_media = upload_with_duration
+    result = await upload(db, provider, preview)
+    assert result["status"] == "ready" and result["ready_for_creative"] is True
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 1, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duration", [1801, float("nan"), float("inf"), float("-inf")])
+async def test_top_snap_duration_metadata_rejects_over_limit_and_nonfinite_values(duration):
+    db, provider = DB(), Provider()
+    preview = await prepared(db, provider)
+    original = provider.upload_media
+
+    async def upload_with_duration(media_id, data, content_type):
+        await original(media_id, data, content_type)
+        provider.medium["duration_in_seconds"] = duration
+        return deepcopy(provider.medium)
+
+    provider.upload_media = upload_with_duration
+    with pytest.raises(HTTPException) as raised:
+        await upload(db, provider, preview)
+    assert raised.value.detail["code"] == "snapchat_media_video_specs_conflict"
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["status"] == "upload_unknown" and row["provider_readback_verified"] is False
+    assert (provider.creates, provider.uploads) == (1, 1)
 
 
 @pytest.mark.asyncio
@@ -432,3 +482,365 @@ async def test_profile_catalog_uses_fixed_business_host_and_rejects_paging_escap
     with pytest.raises(HTTPException):
         await module.available_public_profile_ids(provider, "account-test")
     assert urls == ["https://businessapi.snapchat.com/v1/adaccounts/account-test/sharing_policies"]
+
+
+async def lost_create(db, provider):
+    """The provider accepted create, but its response never reached our caller."""
+    provider.create_timeout = True
+    preview = await prepared(db, provider)
+    with pytest.raises(HTTPException):
+        await upload(db, provider, preview)
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["status"] == "create_unknown" and row["source_verified"] is True
+    provider.catalog = [deepcopy(provider.medium)]
+    return preview
+
+
+@pytest.mark.asyncio
+async def test_single_pending_create_recovery_requires_new_confirmation_and_one_source_upload():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    recovered = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert recovered["status"] == "awaiting_file" and recovered["can_upload"] is True
+    assert recovered["provider_media_id"] == "media-test"
+    assert recovered["ready_for_creative"] is False
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["confirm_token_hash"] is None and row["expires_at"] is None
+    assert row["provider_upload_attempted"] is False
+    assert row["create_reconciliation"]["catalog_complete"] is True
+    assert (provider.creates, provider.uploads, provider.catalog_reads) == (1, 0, 1)
+    with pytest.raises(HTTPException):
+        await upload(db, provider, preview)
+    confirmed = await prepared(db, provider)
+    assert confirmed["upload_id"] == preview["upload_id"] and confirmed["confirm_token"] != preview["confirm_token"]
+    result = await upload(db, provider, confirmed)
+    assert result["ready_for_creative"] is True and provider.sent == DATA
+    assert (provider.creates, provider.uploads) == (1, 1)
+    assert (await upload(db, provider, confirmed))["status"] == "ready"
+    assert (provider.creates, provider.uploads) == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_recovered_media_rechecks_actual_digest_before_any_file_post():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    confirmed = await prepared(db, provider)
+    with pytest.raises(HTTPException) as raised:
+        await upload(db, provider, confirmed, DATA[:-1] + b"x")
+    assert raised.value.detail["code"] == "snapchat_media_file_digest_mismatch"
+    assert (provider.creates, provider.uploads) == (1, 0)
+    renewed = await prepared(db, provider)
+    assert (await upload(db, provider, renewed))["ready_for_creative"] is True
+    assert (provider.creates, provider.uploads) == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_exact_provider_names_are_ambiguous_even_if_one_is_newer():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    duplicate = {**provider.medium, "id": "media-other", "created_at": module._iso()}
+    provider.catalog.append(duplicate)
+    result = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert result["status"] == "create_unknown"
+    assert result["error_code"] == "snapchat_media_create_ambiguous"
+    assert result["provider_media_id"] is None and result["can_upload"] is False
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [
+    {"media_status": "READY"}, {"file_name": "previous.mp4"}, {"hash": "provider-hash"},
+    {"download_link": "https://storage.example/previous.mp4"}, {"file_size_in_bytes": 1},
+    {"duration_in_seconds": 5}, {"video_metadata": {"width_px": 1080}},
+    {"visibility": "HIDDEN"}, {"ai_content_source": "SNAP_AI_GENERATED"},
+    {"created_at": None}, {"created_at": "2000-01-01T00:00:00+00:00"},
+])
+async def test_unknown_create_refuses_ready_uploaded_hidden_or_unverifiable_candidates(change):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    provider.catalog[0].update(change)
+    result = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert result["status"] == "create_unknown" and result["provider_media_id"] is None
+    assert result["can_upload"] is False and result["ready_for_creative"] is False
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [
+    {"ad_account_id": "foreign-account"}, {"type": "IMAGE"}, {"deleted": True},
+])
+async def test_unknown_create_refuses_conflicting_candidate_identity(change):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    provider.catalog[0].update(change)
+    with pytest.raises(HTTPException):
+        await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["status"] == "create_unknown" and row["provider_media_id"] is None
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [
+    {"media_status": "READY"}, {"name": "someone-elses-video"}, {"file_name": "already.mp4"},
+])
+async def test_fresh_exact_media_get_must_still_match_pending_catalog_candidate(change):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    provider.medium.update(change)
+    result = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert result["status"] == "create_unknown" and result["provider_media_id"] is None
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 1)
+
+
+@pytest.mark.asyncio
+async def test_fresh_exact_media_get_cannot_change_the_account():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    provider.medium["ad_account_id"] = "foreign-account"
+    with pytest.raises(HTTPException):
+        await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert (await module._load(db, "owner", preview["upload_id"]))["provider_media_id"] is None
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [
+    ("provider_name", "manual-name"), ("request_fingerprint", "invalid"),
+    ("source_verified", False), ("provider_upload_attempted", True),
+])
+async def test_recovery_requires_immutable_server_create_intent(field, value):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    module._jobs(db).rows[preview["upload_id"]][field] = value
+    with pytest.raises(HTTPException) as raised:
+        await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert raised.value.detail["code"] == "snapchat_media_recovery_intent_unverified"
+    assert (provider.creates, provider.uploads, provider.catalog_reads) == (1, 0, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["catalog", "exact_get"])
+@pytest.mark.parametrize("change", ["role", "account"])
+async def test_recovery_rechecks_role_and_selected_account_before_adoption(monkeypatch, boundary, change):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    account_selected = True
+
+    async def selected(db, user_id, account_id):
+        if not account_selected:
+            raise HTTPException(409, detail={"code": "account_not_selected"})
+        return {"ad_account_id": account_id}
+
+    def revoke():
+        nonlocal account_selected
+        if change == "role":
+            provider.allowed = False
+        else:
+            account_selected = False
+
+    async def after_catalog(count):
+        revoke()
+
+    original = provider.read_media
+
+    async def after_get(media_id):
+        entity = await original(media_id)
+        revoke()
+        return entity
+
+    monkeypatch.setattr(module, "_selected_account", selected)
+    if boundary == "catalog":
+        provider.catalog_hook = after_catalog
+    else:
+        provider.read_media = after_get
+    with pytest.raises(HTTPException):
+        await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["status"] == "create_unknown" and row["provider_media_id"] is None
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+@pytest.mark.asyncio
+async def test_recovery_reads_remain_available_with_kill_switch_but_file_post_is_blocked(monkeypatch):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    monkeypatch.setattr(module, "snapchat_campaign_mutations_enabled", lambda: False)
+    result = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert result["status"] == "awaiting_file" and result["ready_for_creative"] is False
+    confirmed = await prepared(db, provider)
+    with pytest.raises(HTTPException) as raised:
+        await upload(db, provider, confirmed)
+    assert raised.value.detail["code"] == "snapchat_campaign_mutations_disabled"
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+@pytest.mark.asyncio
+async def test_foreign_owner_cannot_reconcile_or_scan_account_catalog():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    with pytest.raises(HTTPException) as raised:
+        await module.reconcile_media_upload(db, "foreign-owner", preview["upload_id"], provider=provider)
+    assert raised.value.status_code == 404 and provider.catalog_reads == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_catalog_recovery_has_one_cas_winner_and_fences_old_worker():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    old = await module._load(db, "owner", preview["upload_id"])
+    both_reading = asyncio.Event()
+
+    async def barrier(count):
+        if count == 2:
+            both_reading.set()
+        await both_reading.wait()
+
+    provider.catalog_hook = barrier
+    results = await asyncio.wait_for(asyncio.gather(
+        module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider),
+        module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider),
+        return_exceptions=True), timeout=1)
+    assert sum(isinstance(item, dict) and item["status"] == "awaiting_file" for item in results) == 1
+    assert sum(isinstance(item, HTTPException) and item.detail["code"] == "snapchat_media_upload_state_changed"
+        for item in results) == 1
+    with pytest.raises(HTTPException):
+        await module._state(db, old, {"status": "creating", "provider_media_id": None})
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+@pytest.mark.asyncio
+async def test_stale_creating_claim_can_recover_pending_media_and_old_claim_cannot_resume():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    row = await module._load(db, "owner", preview["upload_id"])
+    stale = await module._state(db, row, {"status": "creating", "claim_id": "stale-worker",
+        "attempt_started_at": (module._now() - timedelta(seconds=181)).isoformat()})
+    result = await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    assert result["status"] == "awaiting_file" and result["provider_media_id"] == "media-test"
+    with pytest.raises(HTTPException):
+        await module._state(db, stale, {"status": "media_created"})
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", [{"media_status": "READY"}, {"file_name": "other.mp4"}, {"name": "renamed"}])
+async def test_recovered_media_is_freshly_rechecked_before_explicit_binary_upload(change):
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    confirmed = await prepared(db, provider)
+    provider.medium.update(change)
+    with pytest.raises(HTTPException):
+        await upload(db, provider, confirmed)
+    assert (provider.creates, provider.uploads) == (1, 0)
+
+
+def catalog_entity(media_id="media-1"):
+    return {"id": media_id, "name": "Unrelated media", "ad_account_id": "account-test",
+        "type": "VIDEO", "media_status": "PENDING_UPLOAD", "created_at": module._iso()}
+
+
+def catalog_page(*entities, next_link=None):
+    page = {"request_status": "SUCCESS", "media": [
+        {"sub_request_status": "SUCCESS", "media": entity} for entity in entities]}
+    if next_link is not None:
+        page["paging"] = {"next_link": next_link}
+    return page
+
+
+@pytest.mark.asyncio
+async def test_real_catalog_reader_consumes_all_pages_using_only_fixed_account_gets():
+    provider = module.SnapchatMediaProvider(DB(), "owner")
+    next_link = module.SNAPCHAT_API_BASE + "/adaccounts/account-test/media?cursor=page-2&limit=1000"
+    provider._request = AsyncMock(side_effect=[
+        catalog_page(catalog_entity(), next_link=next_link), catalog_page(catalog_entity("media-2"))])
+    rows = await provider.list_account_media_for_recovery("account-test")
+    assert {row["id"] for row in rows} == {"media-1", "media-2"}
+    assert provider._request.await_count == 2
+    assert provider._request.await_args_list[0].args == ("GET", "/adaccounts/account-test/media")
+    assert provider._request.await_args_list[0].kwargs == {"params": {"limit": 1000}}
+    assert provider._request.await_args_list[1].args == ("GET", "/adaccounts/account-test/media?cursor=page-2&limit=1000")
+    assert provider._request.await_args_list[1].kwargs == {"params": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("next_link", [
+    "https://foreign.example/v1/adaccounts/account-test/media?cursor=x",
+    "https://adsapi.snapchat.com/v1/adaccounts/foreign/media?cursor=x",
+    "/v1/adaccounts/account-test/media?cursor=x",
+    "https://adsapi.snapchat.com/v1/adaccounts/account-test/media?cursor=x#fragment",
+    "https://adsapi.snapchat.com/v1/adaccounts/account-test/media?cursor=x&type=VIDEO",
+    "https://adsapi.snapchat.com/v1/adaccounts/account-test/media?limit=1000",
+    "https://adsapi.snapchat.com/v1/adaccounts/account-test/media?cursor=x&cursor=y",
+    "https://adsapi.snapchat.com/v1/adaccounts/account-test/media?cursor=x&limit=1001",
+    "https://[malformed",
+])
+async def test_catalog_pagination_cannot_escape_or_silently_filter_the_account(next_link):
+    provider = module.SnapchatMediaProvider(DB(), "owner")
+    provider._request = AsyncMock(return_value=catalog_page(catalog_entity(), next_link=next_link))
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+    assert provider._request.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("page", [
+    {"request_status": "PARTIAL", "media": []},
+    {"request_status": "SUCCESS", "media": [{"sub_request_status": "ERROR"}]},
+    {"request_status": "SUCCESS", "media": [{}]},
+    {"request_status": "SUCCESS", "media": None},
+    {"request_status": "SUCCESS", "media": [], "paging": {"has_more": True}},
+    {"request_status": "SUCCESS", "media": [], "paging": {"next_page_id": "unread-page"}},
+])
+async def test_partial_or_unread_catalog_is_not_complete(page):
+    provider = module.SnapchatMediaProvider(DB(), "owner")
+    provider._request = AsyncMock(return_value=page)
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+    assert provider._request.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_catalog_page_and_row_bounds_refuse_incomplete_results(monkeypatch):
+    provider = module.SnapchatMediaProvider(DB(), "owner")
+    monkeypatch.setattr(module, "MEDIA_RECOVERY_MAX_PAGES", 2)
+    provider._request = AsyncMock(side_effect=[
+        catalog_page(catalog_entity(), next_link=module.SNAPCHAT_API_BASE + "/adaccounts/account-test/media?cursor=2"),
+        catalog_page(catalog_entity("media-2"), next_link=module.SNAPCHAT_API_BASE + "/adaccounts/account-test/media?cursor=3"),
+    ])
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+    assert provider._request.await_count == 2
+    monkeypatch.setattr(module, "MEDIA_RECOVERY_MAX_ROWS", 2)
+    provider._request = AsyncMock(return_value=catalog_page(
+        catalog_entity(), catalog_entity("media-2"), catalog_entity("media-3")))
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+    assert provider._request.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_repeated_page_or_media_id_never_proves_catalog_uniqueness():
+    provider = module.SnapchatMediaProvider(DB(), "owner")
+    next_link = module.SNAPCHAT_API_BASE + "/adaccounts/account-test/media?cursor=loop"
+    provider._request = AsyncMock(return_value=catalog_page(catalog_entity(), next_link=next_link))
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+    assert provider._request.await_count == 2
+    provider._request = AsyncMock(return_value=catalog_page(catalog_entity(), catalog_entity()))
+    with pytest.raises(HTTPException):
+        await provider.list_account_media_for_recovery("account-test")
+
+
+@pytest.mark.asyncio
+async def test_incomplete_catalog_exception_cannot_adopt_an_earlier_candidate():
+    db, provider = DB(), Provider()
+    preview = await lost_create(db, provider)
+    provider.list_account_media_for_recovery = AsyncMock(side_effect=module._failure(409, "snapchat_media_catalog_limit"))
+    with pytest.raises(HTTPException):
+        await module.reconcile_media_upload(db, "owner", preview["upload_id"], provider=provider)
+    row = await module._load(db, "owner", preview["upload_id"])
+    assert row["status"] == "create_unknown" and row["provider_media_id"] is None
+    assert (provider.creates, provider.uploads, provider.reads) == (1, 0, 0)
