@@ -56,6 +56,18 @@ export function isGoogleRequestCancelled(error) {
     return error?.name === "AbortError" || error?.name === "CanceledError" || error?.code === "ERR_CANCELED";
 }
 
+export function googleRecommendationAction(item = {}) {
+    return ({ PAUSE_CAMPAIGN: "pause", RESUME_CAMPAIGN: "enable", CHANGE_BUDGET: "set_budget" })[item.action] || null;
+}
+
+export function googleConfidenceLabel(value) {
+    const label = ({ high: "مرتفعة", medium: "متوسطة", low: "منخفضة" })[value];
+    if (label) return label;
+    if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "غير متاحة";
+    const number = Number(value);
+    return `${number <= 1 ? number * 100 : number}%`;
+}
+
 // Each read has one owner; an older response cannot repopulate a newer account,
 // date range, campaign, draft or language lookup.
 export function createLatestGoogleResponseGuard() {
@@ -138,6 +150,7 @@ export const getGoogleDraft = (id, { signal } = {}) => api.get(`${GOOGLE_ADS_ROO
 export const createGoogleDraft = (draft, idempotencyKey, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/drafts`, { draft, idempotency_key: idempotencyKey }, options(signal)).then(data);
 export const updateGoogleDraft = (id, draft, expectedRevision, { signal } = {}) => api.put(`${GOOGLE_ADS_ROOT}/management/drafts/${encoded(id)}`, { draft, expected_revision: expectedRevision }, options(signal)).then(data);
 export const createGoogleProposal = (payload, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/proposals`, payload, options(signal)).then(data);
+export const previewGoogleRecommendation = (analysisId, recommendationId, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/ai/recommendations/preview`, { analysis_id: analysisId, recommendation_id: recommendationId }, options(signal)).then(data);
 export const getGoogleProposals = ({ accountId, campaignId, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/proposals`, options(signal, { account_id: accountId || undefined, campaign_id: campaignId || undefined, limit: 25 })).then(data);
 export const getGoogleProposal = (id, { signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}`, options(signal)).then(data);
 export const executeGoogleProposal = (id, digest, { signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/management/proposals/${encoded(id)}/approve-and-execute`, { confirmation_digest: digest }, { ...options(signal), timeout: 60000 }).then(data);

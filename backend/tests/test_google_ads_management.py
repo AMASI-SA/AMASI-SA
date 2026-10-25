@@ -24,6 +24,21 @@ ACCOUNT = "1234567890"
 OWNER = {"user_id": "owner-a", "actor_id": "owner-a", "owner": True, "can_read": True, "can_draft": True}
 
 
+def saved_native_advice():
+    instant = gateway.now().isoformat()
+    period = {"account_id": ACCOUNT, "currency_code": "USD", "time_zone": "America/New_York",
+              "date_from": "2026-10-23", "date_to": "2026-10-25"}
+    item = {"recommendation_id": f"google_ads:campaign:{ACCOUNT}:100:RESUME_CAMPAIGN",
+            "provider": "google_ads", "account_id": ACCOUNT, "campaign_id": "100", "action": "RESUME_CAMPAIGN",
+            "rationale": "اختبار اعتماد توصية محفوظة", "evidence": [{
+                "evidence_id": f"google:campaign:{ACCOUNT}:100:spend_native", "campaign_id": "100",
+                "metric": "spend_native", "value": "20", "source": "google_ads_api", "observed_at": instant,
+                **{key: value for key, value in period.items() if key != "account_id"}}]}
+    return {"analysis_id": uuid.uuid4().hex, "user_id": OWNER["user_id"], "account_id": ACCOUNT,
+            "created_at": instant, "date_from": period["date_from"], "date_to": period["date_to"],
+            "result": {"provider": "google_ads", "account_id": ACCOUNT, "period": period, "recommendations": [item]}}
+
+
 @pytest.fixture(scope="session")
 def mongo_uri():
     uri = os.getenv("GOOGLE_ADS_TEST_MONGO_URI")
@@ -389,3 +404,74 @@ async def test_delivery_expansion_respects_staff_budget_ceiling_without_budget_e
         await gateway.execute_google_proposal(db, staff, proposal["proposal_id"], proposal["confirmation_digest"])
     assert provider.writes == 0
 
+
+@pytest.mark.asyncio
+async def test_saved_ai_advice_uses_real_gateway_storage_and_one_approved_dispatch(db, provider):
+    row = saved_native_advice()
+    await db[gateway.ANALYSES].insert_one(copy.deepcopy(row))
+    app, router = FastAPI(), APIRouter()
+
+    async def current_user():
+        return {"id": "owner-a", "role": "owner"}
+
+    attach_google_ads_management_routes(router, db, current_user)
+    app.include_router(router)
+    payload = {"analysis_id": row["analysis_id"], "recommendation_id": row["result"]["recommendations"][0]["recommendation_id"]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as http:
+        first = await http.post("/google_ads/ai/recommendations/preview", json=payload)
+        assert first.status_code == 200, first.text
+        proposal = first.json()
+        repeated = await http.post("/google_ads/ai/recommendations/preview", json=payload)
+        assert repeated.status_code == 200 and repeated.json()["proposal_id"] == proposal["proposal_id"]
+        assert provider.preflights == 1 and provider.writes == 0
+        assert proposal["action"] == "enable" and proposal["status"] == "previewed"
+        assert proposal["ai_source"]["analysis_id"] == row["analysis_id"]
+        assert await db[gateway.PROPOSALS].count_documents({"user_id": "owner-a"}) == 1
+        endpoint = f"/google_ads/management/proposals/{proposal['proposal_id']}/approve-and-execute"
+        approved = {"confirmation_digest": proposal["confirmation_digest"]}
+        done = await http.post(endpoint, json=approved)
+        assert done.status_code == 200 and done.json()["verified"] is True, done.text
+        assert provider.writes == 1
+        replay = await http.post(endpoint, json=approved)
+        assert replay.status_code == 200 and provider.writes == 1
+    audit = await db[gateway.AUDIT].find({"proposal_id": proposal["proposal_id"]}).to_list(length=30)
+    assert any(event["status"] == "completed" for event in audit)
+
+
+@pytest.mark.asyncio
+async def test_ai_source_tampering_cannot_reuse_approval_digest(db, provider):
+    from integrations_control_center.google_ads_ai_actions import recommendation_action
+    row = saved_native_advice()
+    action, source = recommendation_action(row, OWNER, row["result"]["recommendations"][0]["recommendation_id"], current=gateway.now())
+    proposal = await gateway.preview_google_action(db, OWNER, action, ai_source=source)
+    await db[gateway.PROPOSALS].update_one({"proposal_id": proposal["proposal_id"]}, {"$set": {"ai_source.analysis_id": "different-analysis"}})
+    with pytest.raises(HTTPException) as error:
+        await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert error.value.detail["code"] == "google_ads_approval_changed" and provider.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_ai_disable_switch_blocks_new_dispatch_but_preserves_manual_proposals(db, provider, monkeypatch):
+    from integrations_control_center.google_ads_ai_actions import recommendation_action
+    row = saved_native_advice()
+    action, source = recommendation_action(row, OWNER, row["result"]["recommendations"][0]["recommendation_id"], current=gateway.now())
+    proposal = await gateway.preview_google_action(db, OWNER, action, ai_source=source)
+    monkeypatch.setenv("GOOGLE_ADS_AI_ACTIONS_ENABLED", "false")
+    with pytest.raises(HTTPException) as error:
+        await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert error.value.detail["code"] == "google_ai_action_review_disabled" and provider.writes == 0
+    manual = await preview(db)
+    result = await gateway.execute_google_proposal(db, OWNER, manual["proposal_id"], manual["confirmation_digest"])
+    assert result["verified"] is True and provider.writes == 1
+
+
+@pytest.mark.asyncio
+async def test_provider_account_metadata_drift_rejects_ai_preview_before_validation_or_write(db, provider):
+    from integrations_control_center.google_ads_ai_actions import recommendation_action
+    row = saved_native_advice()
+    action, source = recommendation_action(row, OWNER, row["result"]["recommendations"][0]["recommendation_id"], current=gateway.now())
+    source["currency"] = "SAR"
+    with pytest.raises(HTTPException) as error:
+        await gateway.preview_google_action(db, OWNER, action, ai_source=source)
+    assert error.value.detail["code"] == "google_ai_recommendation_account_changed"
+    assert provider.preflights == provider.writes == 0

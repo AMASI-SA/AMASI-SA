@@ -3,7 +3,7 @@ import {
     GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
     getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate, googleIdempotencyKey,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
-    googleErrorMessage,
+    googleErrorMessage, googleConfidenceLabel, googleRecommendationAction, previewGoogleRecommendation,
 } from "./googleAds";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
@@ -11,6 +11,28 @@ const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
 beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });
 afterAll(() => { if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 beforeEach(() => { api.get.mockReset(); api.post.mockReset(); api.put.mockReset(); });
+
+test("saved AI review sends only server analysis and recommendation identities", async () => {
+    api.post.mockResolvedValue({ data: { proposal_id: "p1", status: "previewed" } });
+    const controller = new AbortController();
+    await previewGoogleRecommendation("saved-analysis", "google_ads:campaign:123:456:PAUSE_CAMPAIGN", { signal: controller.signal });
+    expect(api.post).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/ai/recommendations/preview`, {
+        analysis_id: "saved-analysis", recommendation_id: "google_ads:campaign:123:456:PAUSE_CAMPAIGN",
+    }, { timeout: 30000, signal: controller.signal });
+    expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test("native uppercase actions and confidence use the backend contract", () => {
+    expect(googleRecommendationAction({ action: "PAUSE_CAMPAIGN" })).toBe("pause");
+    expect(googleRecommendationAction({ action: "RESUME_CAMPAIGN" })).toBe("enable");
+    expect(googleRecommendationAction({ action: "CHANGE_BUDGET" })).toBe("set_budget");
+    for (const action of ["MONITOR", "REVIEW_TRACKING", "CHANGE_BIDDING", "CREATE_TEST_DRAFT"]) expect(googleRecommendationAction({ action })).toBeNull();
+    expect(googleConfidenceLabel("high")).toBe("مرتفعة");
+    expect(googleConfidenceLabel("medium")).toBe("متوسطة");
+    expect(googleConfidenceLabel("low")).toBe("منخفضة");
+    expect(googleConfidenceLabel(0.8)).toBe("80%");
+    expect(googleConfidenceLabel("unknown")).toBe("غير متاحة");
+});
 
 test("AI timeout has an actionable safe explanation without echoing private error data", () => {
     const message = googleErrorMessage({ response: { status: 504, data: { detail: { code: "google_ai_timeout", provider_writes: 0, private_data: "secret-provider-body" } } } });

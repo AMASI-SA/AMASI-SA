@@ -100,6 +100,32 @@ test("Google AI recommendation opens the governed budget editor with the exact n
     expect(api.post).toHaveBeenCalledTimes(1); expect(api.post.mock.calls[0][0]).toContain("/ai/analyze");
 });
 
+test("native AI advice reaches frozen review and executes only after explicit approval", async () => {
+    const advice = { analysis_id: "saved-analysis", summary: "تحليل الفترة", recommendations: [{
+        recommendation_id: "google_ads:campaign:123:456:PAUSE_CAMPAIGN", campaign_id: "456", account_id: "123",
+        campaign_name: campaign.name, action: "PAUSE_CAMPAIGN", title: "مراجعة إيقاف الحملة", confidence: "high",
+        rationale: "اختبار قرار مسنود بأدلة جوجل",
+    }] };
+    const proposal = { proposal_id: "frozen-ai-proposal", action: "pause", account_id: "123", campaign_id: "456",
+        currency: "SAR", status: "previewed", confirmation_digest: "a".repeat(64),
+        before: { name: campaign.name, campaign_type: "PERFORMANCE_MAX", status: "ENABLED" },
+        ai_source: { analysis_id: "saved-analysis", date_from: "2026-10-01", date_to: "2026-10-13" } };
+    api.post.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/ai/analyze") ? advice
+        : url.endsWith("/recommendations/preview") ? proposal : { ...proposal, status: "completed", verified: true } }));
+    await render(); await act(async () => button("تحليل الحساب بالذكاء").click());
+    expect(container.textContent).toContain("درجة الثقة: مرتفعة"); expect(container.textContent).not.toContain("NaN");
+    await act(async () => button("مراجعة تنفيذ التوصية").click());
+    expect(container.querySelector('[data-testid="google-proposal-review"]')).not.toBeNull();
+    expect(api.post.mock.calls[1][1]).toEqual({ analysis_id: "saved-analysis", recommendation_id: advice.recommendations[0].recommendation_id });
+    const approval = container.querySelector('[aria-label="اعتماد معاينة جوجل المحددة"]');
+    expect(approval.checked).toBe(false); expect(button("اعتماد وتنفيذ في جوجل").disabled).toBe(true);
+    expect(api.post).toHaveBeenCalledTimes(2);
+    await act(async () => approval.click()); await act(async () => button("اعتماد وتنفيذ في جوجل").click());
+    expect(api.post.mock.calls[2][0]).toContain("/frozen-ai-proposal/approve-and-execute");
+    expect(api.post.mock.calls[2][1]).toEqual({ confirmation_digest: proposal.confirmation_digest });
+    expect(container.textContent).toContain("تأكدت الإعدادات بقراءة مستقلة من جوجل");
+});
+
 test("owner selects an existing employee and saves a per-account delegation", async () => {
     const ownerReadiness = { ...readiness, permissions: { ...readiness.permissions, owner: true } };
     api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/readiness") ? ownerReadiness : url.endsWith("/workspace") ? { accounts: [account], items: [] } : url.endsWith("/subjects") ? { items: [{ subject_id: "staff_1", name: "المسوّق" }] } : url.endsWith("/policies/123/staff_1") ? { enabled: false, allowed_actions: [], max_daily_budget_native: "100", max_total_budget_native: "1000" } : { items: [] } }));

@@ -1,4 +1,5 @@
 import DashboardPanel from "../DashboardPanel";
+import GoogleRecommendationAction from "./GoogleRecommendationAction";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getGoogleAnalyses, googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
 
@@ -14,7 +15,7 @@ function samePeriod(record, dateFrom, dateTo) {
     return (!dateFrom || start === dateFrom) && (!dateTo || end === dateTo);
 }
 
-export default function GoogleAdsIntelligenceCard({ accountId, dateFrom, dateTo, collapsible = false }) {
+export default function GoogleAdsIntelligenceCard({ accountId, dateFrom, dateTo, collapsible = false, onPreview }) {
     const [items, setItems] = useState([]), [loading, setLoading] = useState(true), [error, setError] = useState("");
     const [revision, setRevision] = useState(0);
     const sequence = useRef(0);
@@ -40,7 +41,7 @@ export default function GoogleAdsIntelligenceCard({ accountId, dateFrom, dateTo,
             const result = record.result || record;
             const period = result.period || {};
             const currentAccount = String(record.account_id || result.account_id || "");
-            return <article key={record.analysis_id || `${currentAccount}:${record.created_at}`} className="space-y-3 rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-black">{text(result.account_name || record.account_name, "حساب جوجل")}</h3><p className="text-[11px] leading-5 text-slate-500">{period.date_from || record.date_from} ← {period.date_to || record.date_to} · {period.currency_code || period.currency || "عملة الحساب"} · {period.time_zone || period.timezone || "توقيت الحساب"}</p><p className="text-sm leading-6">{text(result.summary, "راجع توصيات التحليل وأدلته في مساحة جوجل.")}</p>{(result.recommendations || []).slice(0, 3).map((item, index) => <div key={item.recommendation_id || index} className="rounded-xl bg-slate-50 p-3"><h4 className="text-sm font-bold">{text(item.title, "توصية للحملة")}</h4>{item.campaign_name && <p className="mt-1 text-xs text-slate-500">{text(item.campaign_name)}</p>}<p className="mt-1 text-xs leading-6 text-slate-600">{text(item.rationale || item.explanation || item.detail)}</p><a href={googleWorkspaceHref(currentAccount)} className="mt-2 inline-block text-xs font-bold text-emerald-700">مراجعة التوصية في مساحة جوجل</a></div>)}{(result.limitations || []).slice(0, 2).map((item, index) => <p key={index} className="text-xs leading-6 text-amber-900">{typeof item === "string" ? item : text(item.message || item.detail)}</p>)}<p className="text-[10px] text-slate-400">{record.created_at ? `وقت التحليل: ${new Date(record.created_at).toLocaleString("ar-SA")}` : ""}</p></article>;
+            return <article key={record.analysis_id || `${currentAccount}:${record.created_at}`} className="space-y-3 rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-black">{text(result.account_name || record.account_name, "حساب جوجل")}</h3><p className="text-[11px] leading-5 text-slate-500">{period.date_from || record.date_from} ← {period.date_to || record.date_to} · {period.currency_code || period.currency || "عملة الحساب"} · {period.time_zone || period.timezone || "توقيت الحساب"}</p><p className="text-sm leading-6">{text(result.summary, "راجع توصيات التحليل وأدلته في مساحة جوجل.")}</p>{(result.recommendations || []).slice(0, 3).map((item, index) => <div key={item.recommendation_id || index} className="rounded-xl bg-slate-50 p-3"><h4 className="text-sm font-bold">{text(item.title, "توصية للحملة")}</h4>{item.campaign_name && <p className="mt-1 text-xs text-slate-500">{text(item.campaign_name)}</p>}<p className="mt-1 text-xs leading-6 text-slate-600">{text(item.rationale || item.explanation || item.detail)}</p><GoogleRecommendationAction analysisId={record.analysis_id} recommendation={item} onPreview={onPreview} /><a href={googleWorkspaceHref(currentAccount)} className="mt-2 inline-block text-xs font-bold text-emerald-700">مراجعة التوصية في مساحة جوجل</a></div>)}{(result.limitations || []).slice(0, 2).map((item, index) => <p key={index} className="text-xs leading-6 text-amber-900">{typeof item === "string" ? item : text(item.message || item.detail)}</p>)}<p className="text-[10px] text-slate-400">{record.created_at ? `وقت التحليل: ${new Date(record.created_at).toLocaleString("ar-SA")}` : ""}</p></article>;
         })}</div>
         <p className="border-t border-slate-100 px-4 py-3 text-xs leading-6 text-slate-500">تُراجع التوصيات وتُعتمد من مساحة جوجل عبر نفس بوابة المسوّق. بيانات الأداء المالية في لوحة التحكم تبقى من تقريرها المعتمد.</p>
     </DashboardPanel>;

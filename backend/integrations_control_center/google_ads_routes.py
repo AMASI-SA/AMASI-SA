@@ -43,6 +43,11 @@ class Approval(Strict):
     confirmation_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class RecommendationPreview(Strict):
+    analysis_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    recommendation_id: str = Field(min_length=1, max_length=256, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+
 class VideoAsset(Strict):
     account_id: str = Field(pattern=r"^[0-9]{1,30}$")
     youtube_video_id: str = Field(pattern=r"^[A-Za-z0-9_-]{11}$")
@@ -390,11 +395,27 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
             raise problem("google_ai_input_invalid", "راجع الحساب والفترة المطلوب تحليلها.", 422) from None
         workspace_result = await read_google_workspace(db, actor, from_date=request.date_from, to_date=request.date_to, account_id=request.account_id, campaign_id=request.campaign_id, client_factory=client_factory)
         policy = await db[POLICIES].find_one({"user_id": actor["user_id"], "account_id": request.account_id, "subject_id": actor["actor_id"], "enabled": True}, {"_id": 0}) or {}
+        if policy.get("expires_at") and policy["expires_at"] <= now().isoformat():
+            policy = {}
+        from .google_ads_ai_actions import REVIEWABLE_ACTIONS
+        permitted = [key for key, action in REVIEWABLE_ACTIONS.items() if
+            (actor["owner"] and action in {"pause", "enable"}) or action in policy.get("allowed_actions", [])]
         facts = {**workspace_result, "date_from": request.date_from, "date_to": request.date_to, "campaigns": workspace_result["campaigns"] if workspace_result["complete"] else [],
-            "permitted_actions": ["PAUSE_CAMPAIGN", "RESUME_CAMPAIGN"] if actor["owner"] else [], "limits": policy}
+            "permitted_actions": permitted, "limits": policy}
         result = await analyze_google_campaigns(db, actor["user_id"], request, facts=facts, client_factory=ai_client_factory)
-        await db[ANALYSES].insert_one({"analysis_id": uuid.uuid4().hex, "user_id": actor["user_id"], "actor_id": actor["actor_id"], "account_id": request.account_id, "date_from": request.date_from, "date_to": request.date_to, "created_at": now().isoformat(), "result": result})
-        return result
+        analysis_id = uuid.uuid4().hex
+        created_at = now().isoformat()
+        await db[ANALYSES].insert_one({"analysis_id": analysis_id, "user_id": actor["user_id"], "actor_id": actor["actor_id"], "account_id": request.account_id, "date_from": request.date_from, "date_to": request.date_to, "created_at": created_at, "result": result})
+        return {**result, "analysis_id": analysis_id, "created_at": created_at}
+
+    @router.post(root + "/ai/recommendations/preview")
+    async def recommendation_preview(body: RecommendationPreview, actor=Depends(actor_write)):
+        from .google_ads_ai_actions import recommendation_action
+        row = await db[ANALYSES].find_one({"user_id": actor["user_id"], "analysis_id": body.analysis_id}, {"_id": 0})
+        if not row:
+            raise problem("google_ai_analysis_not_found", "التحليل غير متاح في متجرك؛ حدّث توصيات جوجل.", 404)
+        action, source = recommendation_action(row, actor, body.recommendation_id, current=now())
+        return await preview_google_action(db, actor, action, client_factory=client_factory, ai_source=source)
 
     @router.get(root + "/ai/analyses")
     async def analyses(account_id: str | None = None, date_from: str | None = None, date_to: str | None = None, actor=Depends(actor_read)):
