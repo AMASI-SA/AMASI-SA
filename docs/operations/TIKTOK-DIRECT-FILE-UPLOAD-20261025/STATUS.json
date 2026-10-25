@@ -72,7 +72,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:56:34.021Z",
+  "observed_at": "2026-10-25T23:57:52.925Z",
   "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -126,5 +126,7 @@
     "cause": "LiveHTTP CSP200 lacked media-src and default-src 'self' denied blob video;HTML meta already allowed it but cannot relax HTTP CSP. Both MP4 andWebM localmetadata failed before nativeinit.",
     "changed": "Add media-src 'self' blob: to frontend/public/_headers,_headers.json,vite.config.js;match governed CIexpectedheader and add4surface localpreviewcontract check. No script/object/framing/connect authority change.",
     "regression": "Independent edge policy assertion EXIT1 before fix,EXIT0 after fix;4surfacesPASS and script-src self/object-src none/frame-ancestors none preserved."
-  }
+  },
+  "source_A": "b7962f8fc212d8a7f18695bf7dce816797dbff95",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1530"
 }
