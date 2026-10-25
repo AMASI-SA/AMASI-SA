@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-direct-file-upload-20261025",
   "source_base": "81e8dc1eb808d6b3fb0306d07b8e7c0a6d8f880a",
-  "state": "WIP_contract_and_public_route_baseline",
+  "state": "WIP_backend_metadata_slice_30_pass_frontend_pending",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,8 +17,11 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Demonstrate typed route missing404,then implement a fixed-origin OpenAPI metadata transport and a thin owner file-upload slice. Preserve latest Google/Snap changes. Follow fresh production-parent v5 A/B release protocol before publication.",
+  "next": "Implement file-picker,streamed content fingerprint and sequential fetch PUT directly to exact TikTok upload URL;never use Mezan api client for bytes. Then backend/frontend verification and live compatibility proof.",
   "verification": {
-    "baseline": "Focused pytest exit1,one expected failure: public metadata route404 instead of required422,in1.09s. No implementation yet."
+    "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
+    "backend": "30 PASS1.96s on isolated real Mongo and fixed native HTTP transport. Includes immutable encrypted plan,owner scope,fresh identity/settings/epoch,one-shot init,uncertain cross-key fence,native completion,chunk arithmetic,upload host bounds,staff denial and binary/oversize refusal.",
+    "root_fixes": "Real Mongo roundtrip caught sub-millisecond expiry digest mismatch;expiry normalized to BSON millisecond precision. Owner history auth moved ahead of DB access. Test-only unmocked business client initially hit unavailable SOCKS dependency;fixed tests to use explicit native-boundary transport.",
+    "remaining": "Transfer-resume/native transport negative cases,frontend implementation/tests,exact integrated CI and live token/CORS acceptance remain pending."
   }
 }
