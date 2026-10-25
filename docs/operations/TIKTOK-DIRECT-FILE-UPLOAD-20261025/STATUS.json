@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-caption-r5-20261026",
   "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_deployment_started_0238_waiting_finish_UI_slow",
+  "state": "R5_website_built_installing_on_cloud_servers",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -72,7 +72,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:41:50.334Z",
+  "observed_at": "2026-10-25T23:47:33.138Z",
   "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
   "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
   "superseded_R4": {
@@ -93,7 +93,7 @@
   "publish": {
     "click_count": 1,
     "prepublish": "ready_to_publish:true exact sourceA/M/runtime protocol5",
-    "ui_after_click": "Deployment Started;Building your website...24s. Later project DOM timed out again;one reload performed. Do not click Publish again.",
+    "ui_after_click": "Publishing your website to cloud...8m28s;Workspace ready,Changes packaged,Website built,Database ready,Keys & settings applied. Still no newer explicitfinish.",
     "previous_explicit_finish": "Oct26 02:09AM Asia/Riyadh",
     "new_finish_observed": false,
     "started": "Oct26 02:38AM Asia/Riyadh"
