@@ -63,6 +63,13 @@ inline-fallback suites:7 passes,0.78s. Two inherited Pydantic deprecation
 warnings. Frontend tests are selected explicitly by reporting CI; final exact
 source CI and live acceptance are still required.
 
+The first exact-source CI run exposed one stale placement assertion shared by
+five frontend workflows: it required `const response` after the loader gained
+its bounded canonical recomputation and now uses `let response`. The existing
+assertion was aligned with that declaration; the date/race/source guards and
+runtime loader regressions remain intact. A new source checkpoint and fresh
+CI/artifact are required; no intent from the prior source is reusable.
+
 ## Release and live acceptance still required
 
 Fresh full affected checks and independent review, current Production overlap
