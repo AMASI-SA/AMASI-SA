@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-publishing-settings-20261025",
   "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
-  "state": "merged_exact_frozen_tree_host_rehearsal_pass",
+  "state": "actual_production_adapter_pass_prepare_pending",
   "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
   "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
   "behavior": [
@@ -29,7 +29,7 @@
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
-  "next": "Fresh guard inactive, verify clean tracked /app, fast-forward production to exact M, run actual-host adapter, then own prepare/prepublish and one publish.",
+  "next": "Read/validate own prepare result, require final merge CodeQL success, then immediate prepublish,one publish,new Deployment finished,matching verify3 and inactive guard; test both creators.",
   "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented.",
   "source_git_sha": "24cb523c05e015165342acbe78af1522fa4f0ab1",
   "deployment_candidate_git_sha": "d6277f4c880f268dd214eb24fe2d972f69929fcc",
@@ -44,7 +44,28 @@
     "prepare": "not started",
     "publish": "not started",
     "verify": "not started",
-    "merge_tree": "git --no-pager diff --quiet B..M exit0"
+    "merge_tree": "git --no-pager diff --quiet B..M exit0",
+    "actual_host_adapter": "exit0 /tmp/tiktok1487-host-adapter.log on /app fast-forwarded to exact M; no generated cache relocation needed in this build.",
+    "merge_ci": [
+      {
+        "name": "CodeQL",
+        "id": 40217314689,
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "name": "Security Gate",
+        "id": 40217314694,
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Mezan Release Readiness",
+        "id": 40217314595,
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
   },
   "evidence_branch": "codex/tiktok-publishing-settings-evidence-20261025",
   "evidence_only_no_deploy": true,
