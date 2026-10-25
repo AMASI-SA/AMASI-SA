@@ -1,4 +1,4 @@
-"""Source parity guards for the approved reducer transplant (no DB/network)."""
+"""Source parity guards and exact reviewed semantic variants (no DB/network)."""
 import ast
 import asyncio
 import copy
@@ -64,7 +64,19 @@ class SourceContract(unittest.TestCase):
                 baseline = subprocess.check_output(['git', 'show', BASE + ':backend/' + file], cwd=ROOT, text=True, encoding='utf8')
                 current = (ROOT/'backend'/file).read_text(encoding='utf8')
                 before = function(baseline, name)
-                self.assertEqual(ast.dump(before), ast.dump(function(current, name)))
+                current_function = function(current, name)
+                if name == 'build_salla_ads_executive_breakdown' and ast.dump(before) != ast.dump(current_function):
+                    # PR1527 intentionally keeps unobserved Snapchat platform
+                    # conversions unknown, including operational zero spend.
+                    # Permit only this exact reviewed function; all other
+                    # reducers/oracles/read limits/budgets remain frozen.
+                    # Source-segment bytes avoid Python AST-version hash drift.
+                    reviewed = ast.get_source_segment(current, current_function)
+                    self.assertEqual(hashlib.sha256(reviewed.encode('utf8')).hexdigest(),
+                        'f5cee5a805a89be37057afd1f573b62b7500c884e73f1fa11123dfbcfe1302e3')
+                    before = current_function
+                else:
+                    self.assertEqual(ast.dump(before), ast.dump(current_function))
                 adopted = RemoveCheckpoints().visit(copy.deepcopy(function(current, name+'_cooperative')))
                 adopted.name = name
                 if name == 'summarize_orders_sar':

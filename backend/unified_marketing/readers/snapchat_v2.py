@@ -1,7 +1,7 @@
 """Read Snapchat V2 through the provider-neutral marketing contract."""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -20,6 +20,7 @@ from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
 from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION, load_total_facts
 from snapchat_v2.period_evidence import total_period_complete
+from snapchat_v2.operational_hours import current_operational_overlay
 from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
 from unified_marketing.commerce_carts import load_abandoned_cart_outcomes
@@ -45,6 +46,10 @@ FLOAT_FIELDS = (
 
 def _today_in_timezone(timezone_name: str) -> date:
     return datetime.now(ZoneInfo(timezone_name)).date()
+
+
+def _operational_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _open_day_has_source_evidence(projection: dict[str, Any]) -> bool:
@@ -1016,6 +1021,18 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         if range_ends_on_open_day
         else reconciliation_status
     )
+    operational_overlay = None
+    if (timezone_name == RIYADH_TIMEZONE and date_from == date_to == today
+            and len(projections) == 1 and isinstance(open_day_projection, dict)
+            and not open_day_projection.get("source_fact_count")):
+        operational_overlay = await current_operational_overlay(
+            db, user_id=str(user_id), account=account, projection=open_day_projection,
+            reconciliations=reconciliations, now=_operational_now())
+    # Only this dashboard presentation copy receives spend-only observations.
+    # Native facts, closed readers, conversion metrics and close proof stay intact.
+    if operational_overlay:
+        projections = [{**projections[0], "base_spend_native": operational_overlay["spend_native"],
+            "hours": operational_overlay["hours"]}]
     total_native = _sum(projections, "base_spend_native")
     try:
         cost = await calculate_cost_components(
@@ -1029,13 +1046,15 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         cost = {}
         exchange_rate = None
     amount_complete = bool(
-        projection_complete
+        not operational_overlay
+        and projection_complete
         and financial_status == "complete"
         and reconciliation_status == "reconciled"
         and exchange_rate is not None
     )
     provisional_amount_available = bool(
-        not amount_complete
+        (operational_overlay and exchange_rate is not None)
+        or (not amount_complete
         and range_ends_on_open_day
         and projection_complete
         and financial_status == "complete"
@@ -1043,7 +1062,7 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         in {"reconciled", "not_required_open_day"}
         and exchange_rate is not None
         and isinstance(open_day_projection, dict)
-        and _open_day_has_source_evidence(open_day_projection)
+        and _open_day_has_source_evidence(open_day_projection))
     )
     amount_available = amount_complete or provisional_amount_available
 
@@ -1055,7 +1074,7 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         day = str(projection.get("report_date") or "")
         spend_native = float(projection.get("base_spend_native") or 0)
         day_known = (
-            projection.get("amount_complete") is True
+            (operational_overlay is not None or projection.get("amount_complete") is True)
             and exchange_rate is not None
         )
         spend_sar = round(spend_native * exchange_rate, 2) if day_known else None
@@ -1098,16 +1117,16 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
             "effective_exchange_rate_to_sar": exchange_rate,
             "effective_native_currency": account.get("currency"),
             "effective_spend_source": "native_spend_x_account_rate",
-            "impressions": int(projection.get("impressions") or 0),
-            "clicks": int(projection.get("swipes") or 0),
-            "purchases": int(projection.get("purchases") or 0),
+            "impressions": None if operational_overlay else int(projection.get("impressions") or 0),
+            "clicks": None if operational_overlay else int(projection.get("swipes") or 0),
+            "purchases": None if operational_overlay else int(projection.get("purchases") or 0),
             "purchase_value_sar": (
                 round(
                     float(projection.get("purchase_value_native") or 0)
                     * exchange_rate,
                     2,
                 )
-                if exchange_rate is not None
+                if exchange_rate is not None and not operational_overlay
                 else None
             ),
             "updated_at": projection.get("updated_at")
@@ -1137,6 +1156,10 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         if provisional_amount_available
         else ["unified_projection_financial_reconciliation_or_fx_incomplete"]
     )
+    if operational_overlay and provisional_amount_available:
+        reasons.append("snapchat_operational_no_activity_observed"
+            if operational_overlay["data_state"] == "observed_no_activity"
+            else "snapchat_operational_hour_observation")
     return {
         "rows": rows if amount_available else [],
         "daily_sar": daily_sar,
@@ -1177,6 +1200,8 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
             "reconciliation_status": reconciliation_status,
             "closed_reconciliation_status": closed_reconciliation_status,
             "financial_status": financial_status,
+            "operational_observation": ({key: operational_overlay[key] for key in
+                ("data_state", "source_mode", "observed_at", "sync_run_id")} if operational_overlay else None),
             "source_sync_run_ids": sorted({
                 str(run_id)
                 for projection in projections

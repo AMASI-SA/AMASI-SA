@@ -375,3 +375,33 @@ test("known other-platform spend never supplies a missing Snapchat known amount"
     expect(host.querySelector('[data-testid="dashboard-ads-spend-total"]').textContent)
         .toBe("إجمالي المنصات: غير مكتمل، المتاح 32.50 ر.س");
 });
+
+
+test("available provisional Snapchat shows the no-activity origin and reporting-lag hint", () => {
+    const data = midnightSpend({ amount: 307.11, available: true, provisional: true });
+    data.providers.snapchat.reason_codes = ["snapchat_operational_no_activity_observed"];
+    const host = midnightMarkup(data);
+    const hint = host.querySelector('[data-testid="dashboard-snapchat-no-activity-hint"]');
+    expect(hint.textContent).toBe("لم يُرصد نشاط في أحد الحسابات حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.");
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]').textContent)
+        .toContain("307.11 ر.س · أولي");
+    expect(data.hourly_spend[0].snapchat).toBeNull();
+    expect(host.textContent).not.toContain("line:سناب شات");
+});
+
+
+test.each(["unavailable", "missing_amount", "confirmed", "hour_only", "absent"])(
+    "no-activity hint cannot supply proof for %s spend", (scenario) => {
+        const data = midnightSpend({ amount: scenario === "missing_amount" ? null : 307.11,
+            available: scenario !== "unavailable", provisional: scenario !== "confirmed", knownTotal: 307.11 });
+        data.providers.snapchat.reason_codes = scenario === "hour_only"
+            ? ["snapchat_operational_hour_observation"] : scenario === "absent" ? []
+            : ["snapchat_operational_no_activity_observed"];
+        const before = { total: data.total_sar, amountAvailable: data.providers.snapchat.amount_available,
+            hour: data.hourly_spend[0].snapchat };
+        const host = midnightMarkup(data);
+        expect(host.querySelector('[data-testid="dashboard-snapchat-no-activity-hint"]')).toBeNull();
+        expect({ total: data.total_sar, amountAvailable: data.providers.snapchat.amount_available,
+            hour: data.hourly_spend[0].snapchat }).toEqual(before);
+    },
+);

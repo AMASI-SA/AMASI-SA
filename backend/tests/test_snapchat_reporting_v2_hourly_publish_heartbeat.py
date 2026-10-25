@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import mongomock
 
 from resource_governor import CooperativeCancellation
 from snapchat_v2 import sync_pipeline as pipeline_module
@@ -15,6 +16,7 @@ from snapchat_v2.facts import (
     SNAPCHAT_HOURLY_FACTS_COLLECTION,
 )
 from snapchat_v2.lease import heartbeat_lease
+from snapchat_v2.projections import SNAPCHAT_DAILY_PROJECTIONS_COLLECTION
 from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
 from snapchat_v2.sync_runs import heartbeat_sync_run
 
@@ -108,6 +110,18 @@ class ConnectionCollection:
         return SimpleNamespace(matched_count=1, modified_count=1)
 
 
+class ProjectionCollection:
+    """Keep real query/update semantics for optional projection reset CAS."""
+    def __init__(self):
+        self.raw = mongomock.MongoClient(tz_aware=True).db.projections
+
+    async def find_one(self, query, projection=None):
+        return self.raw.find_one(query, projection)
+
+    async def update_one(self, query, update, **kwargs):
+        return self.raw.update_one(query, update, **kwargs)
+
+
 class FakeDB:
     def __init__(self, state: dict[str, Any], *, fail_on_batch: int | None = None):
         self.publish_active = False
@@ -115,6 +129,7 @@ class FakeDB:
         self.facts = HourlyFactCollection(self, fail_on_batch=fail_on_batch)
         self.sync_runs = SyncRunCollection(state)
         self.connections = ConnectionCollection()
+        self.projections = ProjectionCollection()
 
     def __getitem__(self, name):
         if name == SNAPCHAT_HOURLY_FACTS_COLLECTION:
@@ -123,6 +138,8 @@ class FakeDB:
             return self.sync_runs
         if name == "mezan_snapchat_connections_v2":
             return self.connections
+        if name == SNAPCHAT_DAILY_PROJECTIONS_COLLECTION:
+            return self.projections
         raise AssertionError(f"unexpected collection: {name}")
 
 
