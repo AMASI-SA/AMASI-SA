@@ -1,0 +1,27 @@
+{
+  "task_id": "TIKTOK-SPEND-GUARD-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-spend-guard-20261025",
+  "source_base": "04b8778d7afd727fba3970054ffa3c0531de6455",
+  "state": "WIP_defensive_owner_policy_and_cycle_gateway_implementation_not_runtime_verified",
+  "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
+  "contract": [
+    "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
+    "Immutable policy versions with revision compare-and-swap activation; owner/tenant isolation and current native account,currency,timezone proof.",
+    "Existing five-hour Campaign AI cycle only,no new background scheduler; at most3 rotating configured rules per cycle.",
+    "Provider report identity/day/pagination/numeric amount must be proven; unavailable facts never become zero.",
+    "Native existing preview/execute/fence gateway reused; exact policy rechecked at its final write boundary.",
+    "No repeat of uncertain transmitted native operations; cycle/action audit claims durable. No instantaneous spend guarantee."
+  ],
+  "verification": {
+    "route_baseline": "New owner policy route returned404 before attachment; now typed422,one focused case PASS1.11s.",
+    "remaining": "Policy/CAS/native report/rotation/revocation/cancellation/uncertain-outcome integration tests pending. UI not implemented. This WIP is not approved for merge or deployment."
+  },
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "production_changed": false,
+  "manual_release": "Separate PR1496 source04b8778d7afd727fba3970054ffa3c0531de6455 all13applicable CI PASS; artifact12608839386 from Release40222010352 ready to freeze. Do not modify its source after intent freeze.",
+  "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
+  "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
+  "next": "Preserve WIP,add meaningful real-Mongo/fixed-native-transport tests,fix findings,add owner UI and native source isolation/workflow checks. Continue separate1496 A/B/host publication acceptance."
+}
