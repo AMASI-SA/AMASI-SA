@@ -1,5 +1,14 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+## New-day spend incident — verified diagnosis, 2026-10-26
+
+Owner screenshot and fresh live reads at00:43–00:46Riyadh show Snapchat unavailable while USD has81.32SAR provisional spend. SAR is connected and its exact rolling financial run completed, but it has no hourly rows/source run IDs. Portfolio requires every account amountavailable, so it hides the full total. UI additionally drops quality metadata, says no-data and coerces the unknown grand total to0.
+
+Further independent source review rejected an attempted empty-zero dashboard rescue BEFORE tests/deployment: provider_total HOUR fallback counts payloads and writes normalized rows_received1/confirmed_zero even when no explicit metric row exists. Stored normalized zero is not proof of explicit spend0. No new zero/financial/AI acceptance is authorized or claimed. The bounded fix instead exposes a separately labeled known subtotal ONLY from authorized amountavailable accounts, preserving unknown full totals, native hourly gaps, profitability completeness and AI gates. Source owners are authoring portfolio/route+regression and four UI files; root owns integration, tests, Git and deployment.
+
+Production advanced through Google1515 to dede6648da7306adb8d0f26a5093f1e7bcb0348d (Google diagnostics only). Fresh guardstatusactivefalse. No own lease, rehearsal, app mutation, publish or ad write. Frozen1514 is now stale and MUST NOT deploy its old intent. Root isolated worktree/branch codex/snap-midnight-spend-20261026 at Jdede retains exact20 frozen source paths plus bounded incident edits; no source SHA/checks claimed until final authors freeze and root verifies. Next: finish bounded source, demonstrate baseline-red/fixed-green, remote checkpoint/PR, fresh integrated source CI and v5intent, all final gates and actualrehearsal, governed publish/verify and live partial-spend acceptance. Documentation branch is NEVER a deployment candidate.
+
+
 ## Final active-task boundary — external lease block
 
 1514 code/tests are complete and remotely recoverable; it is NOT deployed. Repeated freshguard checks after GoogleUIcompletionOct26 00:14Riyadh still report active=true/actorcodex-google1512. Inactive assertions stop beforeclone/build/appmutation. Root did not clear/reuse/close anotherconversation’s lease and holds no ownlease. All63Bchecks and exactGitintent verification passed. CurrentProductionref at handoff: f01beac1e04055694f02110d69020ce691bb0ad9. Google1512owner must complete its officialverification/close before Snapchat may rehearse or mutate/app. This is an explicitrepositoryAGENTS constraint, not an automaticapprovalrejection.
