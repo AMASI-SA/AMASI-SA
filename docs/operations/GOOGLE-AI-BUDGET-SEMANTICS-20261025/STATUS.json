@@ -1,0 +1,25 @@
+{
+  "task_id": "GOOGLE-AI-BUDGET-SEMANTICS-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-budget-semantics-20261025",
+  "base": "0d8f4524a26978471a72662cb56bc5e3a4584530",
+  "status": "SOURCE_TESTED_PENDING_CI",
+  "reproduction": "Fresh live PMax-only analysis after1498publication succeeded but called42.32SAR spend against40SAR average daily budget an overspend/targeting problem. No billed spending-limit/budget-history evidence was supplied.",
+  "fix": [
+    "Project existing reviewed DAILY_BUDGET_EXPLANATION into model request with separate DAILY and TOTAL semantics",
+    "Mark billing limits and budget history unverified; do not fabricate numerical spend caps from current budget",
+    "Explicitly prohibit daily-average or multi-day comparison from establishing a budget breach or reason to pause/reduce"
+  ],
+  "verification": {
+    "red": "4 regression cases failed KeyError budget_semantics before implementation",
+    "green": "110 AI/action/periodic tests passed,exit0,2.37s;2inheritedPydantic warnings",
+    "diffcheck": "passed",
+    "model_behavior": "Actual LLM compliance still needs post-deploy test; request-contract tests alone do not prove prose correctness"
+  },
+  "financial_authority": "unchanged; user selected currentbudgets/nativeROAS; no policy/ads/budgets changed",
+  "scope": "Google only; Snap owned by otherconversation; preserve TikTok and allcurrentprod",
+  "official_source": "https://support.google.com/google-ads/answer/1704443?hl=en",
+  "provider_writes": 0,
+  "production_changed": false,
+  "next": "Exact-source CI and freshv5A/B after current1500publication; never alter frozen1500pair. One integration/publication at a time; native live regression on42vs40 afterverifiedrelease."
+}

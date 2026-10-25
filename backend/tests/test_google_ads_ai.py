@@ -439,6 +439,34 @@ def analysis_output(action="MONITOR", budget=None):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["DAILY", "TOTAL"])
+@pytest.mark.parametrize("start", ["2026-10-12", "2026-10-13"])
+async def test_analysis_supplies_budget_semantics_without_inventing_verified_billing_limits(mode, start):
+    facts = campaign_facts()
+    facts["date_from"] = start
+    facts["campaigns"][0].update(budget_mode=mode, budget_native="40")
+    facts["campaigns"][0]["metrics"]["spend_native"] = "42.32"
+    client = ModelClient(analysis_output())
+    body = GoogleAIAnalysisInput(account_id=ACCOUNT, date_from=start, date_to="2026-10-13")
+    result = await analyze_google_campaigns(NoDB(), OWNER, body, facts=facts, client_factory=lambda: client)
+    payload = json.loads(client.calls[0]["input"])
+    semantics = payload["budget_semantics"]
+    assert semantics["DAILY"]["kind"] == "average_daily_budget"
+    assert semantics["DAILY"]["hard_daily_spend_cap"] is False
+    assert semantics["TOTAL"]["kind"] == "campaign_total_budget"
+    assert semantics["billing_limits_verified"] is False
+    assert semantics["budget_history_verified"] is False
+    assert "daily_spending_limit_native" not in semantics
+    assert "monthly_spending_limit_native" not in semantics
+    assert payload["period"]["date_from"] == start
+    assert payload["period"]["date_to"] == "2026-10-13"
+    assert payload["campaigns"][0]["budget_mode"] == mode
+    assert payload["campaigns"][0]["budget_native"] == "40"
+    assert payload["campaigns"][0]["metrics"]["spend_native"] == "42.32"
+    assert result["provider_writes"] == 0
+
+
+@pytest.mark.asyncio
 async def test_analysis_binds_exact_native_evidence_and_never_queries_orders_or_executes():
     client = ModelClient(analysis_output("CHANGE_BUDGET", "100"))
     result = await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: client)
