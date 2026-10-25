@@ -2649,7 +2649,16 @@ async def claim_campaign_recommendation_execution(
     recommendation, target = checked["recommendation"], checked["target"]
     if authorization is not None:
         from campaign_ai_snapchat_autonomy import validate_autonomous_claim
-        await validate_autonomous_claim(db, user_id, checked, authorization)
+        policy = await validate_autonomous_claim(db, user_id, checked, authorization)
+        # Immutable server-derived limits remain inspectable after the owner
+        # revises or revokes the live policy. Never authorize from this copy.
+        authorization = {**authorization, "policy_snapshot": {
+            key: policy.get(key) for key in (
+                "allowed_actions", "max_entity_daily_budget_micro", "max_daily_budget_increase_micro",
+                "max_change_percent", "min_interval_minutes", "max_actions_per_cycle", "expires_at",
+                "currency", "timezone", "granted_at", "granted_by",
+            )
+        }}
     execution_id = hashlib.sha256(f"{user_id}:{snapshot_id}:{recommendation_id}".encode()).hexdigest()
     automatic = authorization is not None
     actor = str(authorization["actor_id"]) if automatic else user_id

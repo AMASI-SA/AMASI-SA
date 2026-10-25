@@ -41,5 +41,8 @@ export function microToNativeAmount(value) {
 }
 
 export function autonomyError(error) {
+    if (Array.isArray(error?.response?.data?.detail)) {
+        return "راجع الإجراءات والحدود والمدة، وأكّد الموافقة عند تفعيل التنفيذ التلقائي.";
+    }
     return error?.response?.data?.detail?.message || error?.message || "تعذر حفظ التفويض؛ حدّث الصفحة وحاول مرة أخرى.";
 }

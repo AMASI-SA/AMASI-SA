@@ -211,7 +211,10 @@ async def save_snapchat_autonomy_policy(db, user_id, actor_id, account_id, paylo
         "expires_at_utc": _instant(payload.expires_at),
     })
     audit = {"event": "policy_saved", "actor_id": actor_id, "occurred_at": timestamp,
-             "mode": payload.mode, "revision": payload.expected_revision + 1}
+             "mode": payload.mode, "revision": payload.expected_revision + 1,
+             "limits": {key: getattr(payload, key) for key in POLICY_FIELDS},
+             "currency": binding["currency"], "timezone": binding["timezone"],
+             "grant_id": values["grant_id"]}
     if existing is None:
         if payload.expected_revision != 0:
             raise _problem("snapchat_autonomy_revision_conflict", "تغيرت الإعدادات؛ حدّث الصفحة قبل الحفظ.")
@@ -378,11 +381,13 @@ async def prepare_autonomous_execution(db, user_id, execution, checked, *, now=_
             raise _problem("snapchat_autonomy_daily_increase_allowance_exceeded")
     # Reservation is deliberately not refunded after an ambiguous provider
     # outcome. It cannot be consumed a second time by a retry.
-    await db[EXECUTION_COLLECTION].update_one(
+    stored = await db[EXECUTION_COLLECTION].update_one(
         {"execution_id": execution["execution_id"], "user_id": user_id, "status": "executing"},
         {"$set": {"autonomy_reserved": {"date": day, "increase_micro": increase,
                                              "expected_changes": payload}}},
     )
+    if not stored.matched_count:
+        raise _problem("snapchat_autonomy_execution_not_active")
     return payload
 
 
@@ -442,6 +447,17 @@ async def require_snapchat_autonomy_write_authorization(
         raise _problem("snapchat_autonomy_action_outside_policy")
     if changes.get("daily_budget_micro", 0) > policy["max_entity_daily_budget_micro"]:
         raise _problem("snapchat_autonomy_budget_limit_exceeded")
+    reserved = execution.get("autonomy_reserved") or {}
+    day = now().astimezone(ZoneInfo(policy["timezone"])).date().isoformat()
+    if reserved.get("date") != day or reserved.get("expected_changes") != changes:
+        raise _problem("snapchat_autonomy_allowance_day_or_operation_changed")
+    allowance = await db[ALLOWANCE_COLLECTION].find_one({
+        "_id": _key("allowance", user_id, account_id, day), "user_id": user_id,
+        "execution_ids": execution["execution_id"],
+    })
+    if (not allowance
+            or int(allowance.get("reserved_increase_micro") or 0) > policy["max_daily_budget_increase_micro"]):
+        raise _problem("snapchat_autonomy_daily_increase_allowance_unproven")
     lease = await db[LEASE_COLLECTION].find_one_and_update(
         {"_id": _key("account", user_id, account_id), "user_id": user_id,
          "owner": execution["authorization"]["lease_owner"], "lease_until": {"$gt": now()}},
@@ -503,6 +519,13 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
                              "actor_id": f"snapchat-policy:{policy['_id']}:{policy['revision']}",
                              "granted_by": policy.get("granted_by"), "version": FENCE_VERSION}
             attempted = 0
+            shadow_reserved = 0
+            if policy["mode"] == "shadow":
+                day = now().astimezone(ZoneInfo(policy["timezone"])).date().isoformat()
+                allowance = await db[ALLOWANCE_COLLECTION].find_one({
+                    "_id": _key("allowance", user_id, account_id, day), "user_id": user_id,
+                }) or {}
+                shadow_reserved = int(allowance.get("reserved_increase_micro") or 0)
             for recommendation in snapshot.get("recommendations") or []:
                 if attempted >= policy["max_actions_per_cycle"]:
                     break
@@ -515,8 +538,10 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
                 if recommendation.get("approval_available") is not True:
                     continue
                 try:
-                    _validate_change(policy, recommendation, target)
+                    _, increase = _validate_change(policy, recommendation, target)
                     if policy["mode"] == "shadow":
+                        if shadow_reserved + increase > policy["max_daily_budget_increase_micro"]:
+                            raise _problem("snapchat_autonomy_daily_increase_allowance_exceeded")
                         from campaign_ai_execution_quality_gate import preflight_approved_execution
                         await preflight_approved_execution(
                             db, recommendation_collection=RECOMMENDATION_COLLECTION,
@@ -524,6 +549,7 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
                             recommendation_id=recommendation_id, now=now,
                         )
                         outcome["actions"].append({"recommendation_id": recommendation_id, "status": "shadow_eligible"})
+                        shadow_reserved += increase
                         attempted += 1
                         continue
                     claim = await claim_campaign_recommendation_execution(
@@ -547,10 +573,13 @@ async def dispatch_snapchat_autonomy(db, user_id, snapshot_id, *, now=_utcnow):
             outcome["blockers"] = [str(code or "autonomy_account_failed")[:100]]
         finally:
             if token:
-                await db[LEASE_COLLECTION].update_one(
-                    {"_id": _key("account", user_id, account_id), "owner": token},
-                    {"$set": {"owner": None, "lease_until": now(), "last_cycle_at": now()}},
-                )
+                try:
+                    await db[LEASE_COLLECTION].update_one(
+                        {"_id": _key("account", user_id, account_id), "owner": token},
+                        {"$set": {"owner": None, "lease_until": now(), "last_cycle_at": now()}},
+                    )
+                except Exception:
+                    outcome["blockers"].append("account_lease_release_failed")
             outcomes.append(outcome)
     summary = {"status": "complete", "snapshot_id": snapshot_id, "accounts": outcomes, "finished_at": now().isoformat()}
     await db[RUN_COLLECTION].update_one(
