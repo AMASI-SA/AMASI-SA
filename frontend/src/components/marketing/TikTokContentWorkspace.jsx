@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowClockwise, CheckCircle, Link, ShieldCheck, WarningCircle } from "@phosphor-icons/react";
 import api from "../../lib/api";
 import TikTokCommentsWorkspace from "./TikTokCommentsWorkspace";
+import TikTokFilePublishing from "./TikTokFilePublishing";
 
 const ROOT = "/integrations-v2/tiktok/content";
 const STATUS = {
@@ -43,7 +44,7 @@ function key() {
     return window.crypto.randomUUID().replaceAll("-", "");
 }
 
-export default function TikTokContentWorkspace() {
+export function TikTokURLContentWorkspace({ onBusyChange }) {
     const [accounts, setAccounts] = useState([]);
     const [creator, setCreator] = useState("");
     const [label, setLabel] = useState("");
@@ -60,6 +61,7 @@ export default function TikTokContentWorkspace() {
     const sequence = useRef(0);
     const abort = useRef(null);
     const hasUnresolvedWrite = useRef(false);
+    useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
 
     useEffect(() => {
         mounted.current = true;
@@ -163,7 +165,7 @@ export default function TikTokContentWorkspace() {
     const canPreview = proof && (form.delivery === "draft" ? proof.capabilities?.draft_upload : proof.capabilities?.publish);
     const canCheck = proposal && proposal.status !== "previewed";
 
-    return <section className="space-y-4" dir="rtl" data-testid="tiktok-content-workspace">
+    return <section className="space-y-4" dir="rtl" data-testid="tiktok-url-content-workspace">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3"><ShieldCheck size={26} className="text-emerald-700" /><div><h2 className="text-xl font-black text-slate-900">منشورات TikTok</h2><p className="mt-1 text-sm font-semibold leading-6 text-slate-500">اربط حساب النشر، عاين المحتوى، ثم اعتمد إرساله. يسحب TikTok الوسائط مباشرة من روابطك الموثقة.</p></div></div>
             <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">المعاينة صالحة 10 دقائق. حد ميزان: 10 صور للمنشور، و15 عملية إرسال للحساب خلال 24 ساعة. التحقق من الحالة يدوي، ولا تُحمّل ملفات الفيديو إلى خادم ميزان.</p>
@@ -198,4 +200,12 @@ export default function TikTokContentWorkspace() {
         {proposal && <div className="space-y-3 rounded-2xl border border-violet-200 bg-white p-5" data-testid="tiktok-content-proposal"><h3 className="text-lg font-black">{STATUS[proposal.status] || "راجع حالة العملية"}</h3><p className="text-sm font-bold text-slate-600">الحساب: {proposal.account_label} · {proposal.kind === "video" ? "فيديو" : "صور"} · {proposal.delivery === "draft" ? "مسودة" : "نشر مباشر"}</p>{input && <><p className="whitespace-pre-wrap break-words text-sm leading-6">{input.title && <strong>{input.title}<br /></strong>}{input.caption || "دون نص"}</p><ul dir="ltr" className="space-y-1 break-all rounded-xl bg-slate-50 p-3 text-xs">{(input.kind === "video" ? [input.video_url] : input.photo_urls).map((url) => <li key={url}>{url}</li>)}</ul><p className="text-sm font-bold">الخصوصية: {PRIVACY[input.privacy_level]} · الإفصاح: {input.is_branded_content ? "شراكة مدفوعة" : input.is_brand_organic ? "محتوى ترويجي" : "دون ترويج تجاري"}</p></>}{proposal.delivery === "publish" && proposal.effective_post_info && <p className="text-sm leading-6">التعليقات: {proposal.effective_post_info.disable_comment ? "موقوفة" : "مسموحة"}{proposal.kind === "video" && <> · الدويتو: {proposal.effective_post_info.disable_duet ? "موقوف" : "مسموح"} · الدمج: {proposal.effective_post_info.disable_stitch ? "موقوف" : "مسموح"} · وسم الذكاء الاصطناعي: {proposal.effective_post_info.is_ai_generated ? "مفعّل" : "غير مفعّل"}</>}</p>}{proposal.draft_notice && <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold leading-6 text-amber-900">{proposal.draft_notice}</p>}{proposal.publish_task_id && <p className="break-all text-xs font-semibold">معرّف مهمة النشر: <span dir="ltr">{proposal.publish_task_id}</span></p>}{proposal.post_ids?.length > 0 && <p className="text-sm font-bold text-emerald-700">معرّفات المنشور المؤكدة: <span dir="ltr">{proposal.post_ids.join("، ")}</span></p>}{proposal.status === "previewed" && <><Tick label="أعتمد إرسال المحتوى والروابط والإعدادات المعروضة إلى TikTok مرة واحدة" value={approved} onChange={setApproved} disabled={busy} testId="tiktok-content-approval" /><button type="button" disabled={busy || !approved} onClick={publish} className={`${buttonClass} bg-violet-700 text-white`} data-testid="tiktok-content-publish">{proposal.delivery === "draft" ? "اعتماد إرسال المسودة" : "اعتماد ونشر المنشور"}</button></>}{canCheck && <button type="button" disabled={busy} onClick={checkStatus} className={buttonClass} data-testid="tiktok-content-check-status"><ArrowClockwise size={18} />التحقق من حالة العملية</button>}</div>}
         {history.length > 0 && <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-5" data-testid="tiktok-content-history-list"><h3 className="font-black">آخر 12 عملية نشر</h3>{history.map((item) => <button type="button" key={item.proposal_id} disabled={busy} className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 text-right text-sm font-bold" onClick={() => request((options) => api.get(`${ROOT}/proposals/${item.proposal_id}`, options), (result) => { setProposal(result); setApproved(false); hasUnresolvedWrite.current = ["validating", "submitted", "accepted", "processing", "uncertain"].includes(result.status); })}><span>{item.account_label} · {item.kind === "video" ? "فيديو" : "صور"}</span><span className="text-xs text-slate-500">{STATUS[item.status] || item.status}</span></button>)}</div>}
     </section>;
+}
+
+export default function TikTokContentWorkspace() {
+    const [source, setSource] = useState("file"), [busy, setBusy] = useState(false);
+    return <div className="space-y-4" dir="rtl" data-testid="tiktok-content-workspace"><div role="tablist" aria-label="مصدر فيديو TikTok" className="flex gap-3">
+        <button type="button" role="tab" aria-selected={source === "file"} disabled={busy} className={buttonClass} onClick={() => setSource("file")}>ملف من الجهاز</button>
+        <button type="button" role="tab" aria-selected={source === "url"} disabled={busy} className={buttonClass} onClick={() => setSource("url")}>رابط خارجي</button>
+    </div>{source === "file" ? <TikTokFilePublishing onBusyChange={setBusy} /> : <TikTokURLContentWorkspace onBusyChange={setBusy} />}</div>;
 }
