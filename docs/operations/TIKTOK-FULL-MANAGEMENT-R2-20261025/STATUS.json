@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-full-management-r2-20261025",
   "base": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
-  "state": "WIP_child_controls_backend_verified_UI_tests_added",
+  "state": "WIP_Spark_post_linking_backend_verified_native_child_CI_pass",
   "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
   "source_recovery": "Preserved runtime source97fba1c5dee818ee1cd9e1b19115f39f4aa52342 from PR1480; applied only source/test/workflow diff with three-way merge. No old intent or unrelated operations docs copied. Production1482/1483/1487 preserved.",
   "behavior": [
@@ -11,7 +11,8 @@
     "Owner-approved encrypted immutable Smart+ paused adgroup/video-ad creation and text-only direct TikTok URL asset import",
     "Permanent creation fences,owner isolation,readonly reconciliation and bounded proposal history",
     "Optional rotating three-campaign periodic recommendations in shared cycle; financial execution disabled",
-    "Smart+ owner-only adgroup/ad pause,enable,rename and adgroup budget/conversion-bid edits; encrypted immutable proposals,fresh native preflight,125-percent dynamic-budget bounds,one-shot writes and readonly reconciliation"
+    "Smart+ owner-only adgroup/ad pause,enable,rename and adgroup budget/conversion-bid edits; encrypted immutable proposals,fresh native preflight,125-percent dynamic-budget bounds,one-shot writes and readonly reconciliation",
+    "Paused Spark video ad creation binds an existing public post to a verified TT_USER or AUTH_CODE identity; retains original post caption,checks authorization window,freshly rechecks at approval,and never fetches provider media preview URLs."
   ],
   "verification": {
     "integrated_backend": "155 passed,exit0,9.37s on isolated real disposable Mongo: builder,periodic,products,insights,campaign management,content routes and publishing.",
@@ -19,7 +20,17 @@
     "frontend_and_native_ci": "Fresh exact integrated-source CI pending. Earlier source97fba1c5 CI is historical evidence only.",
     "child_route_baseline": "Public owner route404 before attachment,422 after typed route attachment.",
     "child_integrated_backend": "99passed,exit0,5.57s on real disposable Mongo; includes22 child cases plus builder,campaign management and content routes. Unknown transmission fenced across keys; readonly reconciliation; owner/digest/parent/budget changes blocked; dynamic125-percent headroom and native auto-adjust proof.",
-    "child_frontend": "Added exact-ID,approval,uncertain retry and history identity regressions; fresh CI pending."
+    "child_frontend": "Added exact-ID,approval,uncertain retry and history identity regressions; fresh CI pending.",
+    "child_exact_ci": {
+      "source": "e3d441cf3a34496774bd841d07aebc81501f98c9",
+      "native_run": 40219115980,
+      "backend": "452passed,1warning,27.46s",
+      "frontend": "134passed,23suites",
+      "build": "PASS6.20s",
+      "source_isolation": "PASS"
+    },
+    "spark_backend": "39passed,exit0,2.99s across builder and child suites; initial missing-post DTO regression failed for extra_forbidden before implementation. Corrected a test-only serialization assertion for direct-service datetime values; no provider data policy weakened.",
+    "spark_frontend": "Added original-caption,no-media-import,exact-post-ID and approval regression; exact current CI pending."
   },
   "invariants": [
     "No media bytes fetched or stored on Mezan",
@@ -34,10 +45,15 @@
   "current_settings_release": "PR1487 successfully published20:53 Riyadh; verified:true,checks:3,exact source24cb523c/runtime34d6,then active:false. New Amasi creator readiness succeeds; old Amasi privacy_level_options missing/null. New creator verified media properties empty; actual post not submitted. Evidence branch codex/tiktok-publishing-settings-evidence-20261025 atb204664763629ee5378a19d6d4b164a691c87079.",
   "remaining": [
     "Old Amasi creator missing privacy field and media-property verification acceptance; new creator identity/settings/capabilities pass",
-    "Fresh child frontend/native CI and remaining broader child editing,Spark organic-post linking",
+    "Fresh Spark frontend/native CI; BC_AUTH_TT and photo Spark are not supported in this video scope",
     "Owner financial policy/budgets/loss limits,trustworthy financial coverage and bounded AI action execution/outcome measurements",
     "No actual selected approved public video/caption or live paid activation performed",
     "Builder and periodic features remain default off; new source requires fresh CI and separate v5 A/B release acceptance"
   ],
-  "next": "Upload checkpoint/run exact integrated CI;inspect official property/old creator contract using bounded safe diagnostics. Never fabricate privacy or media ownership. Complete Spark and owner financial policy/action gateway before claiming full automation."
+  "next": "Preserve Spark WIP/run exact CI; merge newest reviewed production source before freezing v5 A/B. Diagnose pending media ownership without logging signature/app secret. Finish owner policy,financial evidence and AI action gateway; no claim of full automation.",
+  "official_spark_contracts": [
+    "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
+    "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
+  ],
+  "media_property_contract": "Official business/property/list has property_type integer1/2 and property_status integer0/1/2; current strict parser agrees. Empty verified-property projection does not yet distinguish missing from pending/failed properties."
 }

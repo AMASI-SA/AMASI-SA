@@ -42,6 +42,7 @@ _ENDPOINTS = {
     ("GET", "/file/video/ad/info/"),
     ("POST", "/file/video/ad/upload/"),
     ("GET", "/identity/get/"),
+    ("GET", "/identity/video/info/"),
 }
 
 

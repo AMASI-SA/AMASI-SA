@@ -44,3 +44,21 @@ test("uncertain submission never automatically retries or re-enables execution",
     expect(button("اعتماد الإنشاء")).toBeUndefined();
     expect(button("تحديث حالة العملية").disabled).toBe(false);
 });
+
+test("Spark preview links the existing post and retains its original caption without importing video", async () => {
+    api.post.mockResolvedValueOnce({ data: { ...preview, kind: "ad", plan: { input: { name: "Spark winter", reason: "Owner selected original post", tiktok_item_id: "1234567891234567891", identity_id: "identity1", identity_type: "TT_USER", landing_page_url: "https://amasi-sa.com/ar/p123" }, proof: { currency: "SAR", spark_post: { item_id: "1234567891234567891", caption: "نص المنشور الأصلي" } }, body: { call_to_action: "SHOP_NOW" } } } });
+    await act(async () => root.render(<TikTokAdBuilder selection={{ kind: "ad", accountId: "70001", campaignId: "1111", adgroupId: "2222" }} onClose={jest.fn()} />));
+    const source = container.querySelector('[aria-label="مصدر إعلان TikTok"]');
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(source, "spark"); source.dispatchEvent(new Event("change", { bubbles: true })); });
+    for (const [label, value] of [["الاسم", "Spark winter"], ["سبب الإنشاء", "Owner selected original post"], ["معرّف منشور TikTok العام", "1234567891234567891"], ["معرّف هوية الإعلان", "identity1"], ["رابط المنتج", "https://amasi-sa.com/ar/p123"]]) {
+        const field = container.querySelector(`[aria-label="${label}"]`);
+        await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value); field.dispatchEvent(new Event("input", { bubbles: true })); });
+    }
+    await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][1]).toMatchObject({ kind: "ad", tiktok_item_id: "1234567891234567891", identity_type: "TT_USER" });
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty("video_id");
+    expect(api.post.mock.calls[0][1]).not.toHaveProperty("ad_text");
+    expect(container.textContent).toContain("نص المنشور الأصلي");
+    expect(button("اعتماد الإنشاء").disabled).toBe(true);
+});

@@ -27,6 +27,11 @@ def payload(kind="adgroup", **changes):
     return builder.AdBuilderInput(**{**value, **changes})
 
 
+def test_existing_public_post_can_be_selected_without_importing_media_or_replacing_caption():
+    value = payload("ad", video_id=None, ad_text=None, tiktok_item_id="1234567891234567891")
+    assert value.tiktok_item_id == "1234567891234567891" and value.video_id is None
+
+
 class State:
     def __init__(self):
         self.calls, self.writes = [], []
@@ -34,6 +39,11 @@ class State:
         self.timeout = False
         self.bad_verification = False
         self.rows = {}
+        self.post_status = "ITEM_STATUS_HESITATE_RECOMMEND"
+        self.post_id = "1234567891234567891"
+        self.post_text = "نص المنشور الأصلي"
+        self.auth_start = (builder.now() - timedelta(days=1)).isoformat()
+        self.auth_end = (builder.now() + timedelta(days=2)).isoformat()
 
     async def handle(self, request):
         assert request.url.host == "business-api.tiktok.com"
@@ -43,7 +53,11 @@ class State:
         if path.endswith("/advertiser/info/"):
             data = {"list": [{"advertiser_id": "70001", "currency": "SAR", "timezone": "Asia/Riyadh"}]}
         elif path.endswith("/identity/get/"):
-            data = {"identity_list": [{"identity_id": "identity1", "identity_type": "TT_USER"}]}
+            data = {"identity_list": [{"identity_id": "identity1", "identity_type": request.url.params["identity_type"]}]}
+        elif path.endswith("/identity/video/info/"):
+            data = {"video_detail": {"item_id": self.post_id, "item_type": "VIDEO", "status": self.post_status,
+                "text": self.post_text, "auth_info": {"ad_auth_status": "AUTHORIZED", "auth_start_time": self.auth_start, "auth_end_time": self.auth_end},
+                "video_info": {"url": "https://private-preview.example.test/never-fetch.mp4", "poster_url": "https://private-preview.example.test/never-fetch.jpg"}}}
         elif path.endswith("/file/video/ad/info/"):
             data = {"list": [{"video_id": "video_1"}]}
         elif path.endswith("/file/video/ad/upload/"):
@@ -120,6 +134,37 @@ async def test_active_or_changed_parent_never_reaches_provider_write(workflow):
     db, state = workflow
     preview = await builder.preview_builder(db, "owner", payload())
     state.status = "ENABLE"
+    with pytest.raises(HTTPException):
+        await builder.execute_builder(db, "owner", preview["proposal_id"], preview["confirmation_digest"])
+    assert not state.writes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("identity", ["TT_USER", "AUTH_CODE"])
+async def test_existing_public_spark_post_is_bound_to_identity_and_created_paused(workflow, identity):
+    db, state = workflow
+    value = payload("ad", video_id=None, ad_text=None, tiktok_item_id=state.post_id, identity_type=identity)
+    preview = await builder.preview_builder(db, "owner", value)
+    assert not state.writes and preview["plan"]["proof"]["spark_post"]["caption"] == state.post_text
+    assert "private-preview.example" not in json.dumps(preview, default=str)
+    body = preview["plan"]["body"]
+    assert "ad_text_list" not in body and "video_info" not in body["creative_list"][0]["creative_info"]
+    assert body["creative_list"][0]["creative_info"]["tiktok_item_id"] == state.post_id
+    result = await builder.execute_builder(db, "owner", preview["proposal_id"], preview["confirmation_digest"])
+    assert result["verified"] is True and len(state.writes) == 1
+    assert ("GET", "/open_api/v1.3/file/video/ad/info/") not in state.calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["status", "id", "expiry", "caption"])
+async def test_spark_post_changes_or_expired_permission_block_approval(workflow, change):
+    db, state = workflow
+    value = payload("ad", video_id=None, ad_text=None, tiktok_item_id=state.post_id, identity_type="AUTH_CODE")
+    preview = await builder.preview_builder(db, "owner", value)
+    if change == "status": state.post_status = "ITEM_STATUS_ONLY_AUTHOR_SEE"
+    if change == "id": state.post_id = "9999999999999999999"
+    if change == "expiry": state.auth_end = (builder.now() - timedelta(seconds=1)).isoformat()
+    if change == "caption": state.post_text = "Changed caption after approval"
     with pytest.raises(HTTPException):
         await builder.execute_builder(db, "owner", preview["proposal_id"], preview["confirmation_digest"])
     assert not state.writes

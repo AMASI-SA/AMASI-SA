@@ -45,6 +45,7 @@ class AdBuilderInput(BaseModel):
     adgroup_id: str | None = Field(default=None, pattern=ID_PATTERN)
     video_url: str | None = Field(default=None, max_length=2048)
     video_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    tiktok_item_id: str | None = Field(default=None, pattern=ID_PATTERN)
     identity_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
     identity_type: Literal["CUSTOMIZED_USER", "AUTH_CODE", "TT_USER", "BC_AUTH_TT"] | None = None
     landing_page_url: str | None = Field(default=None, max_length=2048)
@@ -83,7 +84,7 @@ class AdBuilderInput(BaseModel):
     @model_validator(mode="after")
     def fields_for_kind(self):
         groups = {"video_asset": {"video_url"}, "adgroup": {"campaign_id", "pixel_id", "location_ids", "budget_native", "spend_ceiling_native", "schedule_start", "schedule_end"},
-                  "ad": {"campaign_id", "adgroup_id", "video_id", "identity_id", "identity_type", "landing_page_url", "ad_text"}}
+                  "ad": {"campaign_id", "adgroup_id", "identity_id", "identity_type", "landing_page_url"}}
         for field in groups[self.kind]:
             if not getattr(self, field):
                 raise ValueError(field + " required")
@@ -92,6 +93,16 @@ class AdBuilderInput(BaseModel):
                  "ad": {"video_url", "pixel_id", "location_ids", "budget_native", "spend_ceiling_native", "bid_price_native", "schedule_start", "schedule_end"}}
         if any(getattr(self, f) not in (None, []) for f in extra[self.kind]):
             raise ValueError("fields do not match requested operation")
+        if self.kind != "ad" and self.tiktok_item_id is not None:
+            raise ValueError("post linking only applies to ads")
+        if self.kind == "ad":
+            if (self.video_id is None) == (self.tiktok_item_id is None):
+                raise ValueError("select exactly one native video or TikTok post")
+            if self.tiktok_item_id is not None:
+                if self.identity_type not in {"TT_USER", "AUTH_CODE"} or self.ad_text is not None:
+                    raise ValueError("Spark requires an owned/authorized identity and retains the post caption")
+            elif self.ad_text is None:
+                raise ValueError("non-Spark ads require text")
         if self.kind == "adgroup":
             if self.schedule_start.tzinfo is None or self.schedule_end and self.schedule_end.tzinfo is None:
                 raise ValueError("schedule requires explicit timezone")
@@ -171,10 +182,11 @@ async def preflight(db, user, value, api):
         if str(group.get("campaign_id")) != value.campaign_id or group.get("operation_status") != "DISABLE":
             raise problem("tiktok_builder_adgroup_unproven", "اختر مجموعة موقوفة تتبع الحملة المحددة.")
         proof["adgroup"] = group
-        videos = await api.call("GET", "/file/video/ad/info/", token=token, params={"advertiser_id": value.account_id, "video_ids": json.dumps([value.video_id])})
-        rows = videos.get("list")
-        if not isinstance(rows, list) or len(rows) != 1 or str(rows[0].get("video_id")) != value.video_id:
-            raise problem("tiktok_builder_video_unproven", "الفيديو غير مثبت داخل مكتبة الحساب المحدد.")
+        if value.video_id is not None:
+            videos = await api.call("GET", "/file/video/ad/info/", token=token, params={"advertiser_id": value.account_id, "video_ids": json.dumps([value.video_id])})
+            rows = videos.get("list")
+            if not isinstance(rows, list) or len(rows) != 1 or str(rows[0].get("video_id")) != value.video_id:
+                raise problem("tiktok_builder_video_unproven", "الفيديو غير مثبت داخل مكتبة الحساب المحدد.")
         if value.identity_type == "BC_AUTH_TT":
             raise problem("tiktok_builder_identity_bc_not_supported", "هذه الهوية تحتاج ربط Business Center؛ اختر هوية TikTok مباشرة في هذه المرحلة.")
         identities = await api.call("GET", "/identity/get/", token=token, params={"advertiser_id": value.account_id, "identity_type": value.identity_type, "page": 1, "page_size": 50})
@@ -182,11 +194,51 @@ async def preflight(db, user, value, api):
         rows = [r for r in items if isinstance(r, dict) and str(r.get("identity_id")) == value.identity_id and r.get("identity_type") == value.identity_type] if isinstance(items, list) and len(items) <= 50 else []
         if len(rows) != 1:
             raise problem("tiktok_builder_ad_identity_unproven", "هوية الإعلان غير مثبتة داخل الحساب.")
+        creative = {"ad_format": "SINGLE_VIDEO", "identity_id": value.identity_id, "identity_type": value.identity_type}
+        if value.tiktok_item_id is not None:
+            proof["spark_post"] = await spark_post_proof(api, token, value)
+            creative["tiktok_item_id"] = value.tiktok_item_id
+        else:
+            creative["video_info"] = {"video_id": value.video_id}
         body.update({"adgroup_id": value.adgroup_id, "ad_name": value.name, "operation_status": "DISABLE",
-            "creative_list": [{"creative_info": {"ad_format": "SINGLE_VIDEO", "identity_id": value.identity_id, "identity_type": value.identity_type, "video_info": {"video_id": value.video_id}}}],
-            "ad_text_list": [{"ad_text": value.ad_text}], "landing_page_url_list": [{"landing_page_url": value.landing_page_url}],
+            "creative_list": [{"creative_info": creative}],
+            "landing_page_url_list": [{"landing_page_url": value.landing_page_url}],
             "call_to_action_list": [{"call_to_action": value.call_to_action}]})
+        if value.ad_text is not None:
+            body["ad_text_list"] = [{"ad_text": value.ad_text}]
     return token, proof, body
+
+
+async def spark_post_proof(api, token, value):
+    # Official Business API /identity/video/info/ binds the requested post to
+    # the selected advertiser and identity. Never fetch its media preview URLs.
+    data = await api.call("GET", "/identity/video/info/", token=token, params={"advertiser_id": value.account_id,
+        "identity_type": value.identity_type, "identity_id": value.identity_id, "item_id": value.tiktok_item_id})
+    row = data.get("video_detail")
+    if not isinstance(row, dict) or str(row.get("item_id")) != value.tiktok_item_id or row.get("status") != "ITEM_STATUS_HESITATE_RECOMMEND" or row.get("item_type") not in (None, "VIDEO") or not isinstance(row.get("video_info"), dict):
+        raise problem("tiktok_spark_post_unproven", "المنشور العام غير مثبت ضمن هوية الإعلان المحددة.")
+    text = row.get("text")
+    if not isinstance(text, str) or len(text.encode("utf-8")) > 16000:
+        raise problem("tiktok_spark_caption_unproven", "نص المنشور غير مثبت ضمن حدود المعاينة.")
+    auth = row.get("auth_info")
+    if value.identity_type == "AUTH_CODE":
+        if not isinstance(auth, dict) or auth.get("ad_auth_status") != "AUTHORIZED":
+            raise problem("tiktok_spark_authorization_unproven", "تفويض الإعلان لهذا المنشور غير مثبت.")
+        try:
+            dates = []
+            for key in ("auth_start_time", "auth_end_time"):
+                parsed = datetime.fromisoformat(auth[key].replace("Z", "+00:00"))
+                dates.append(parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc))
+            start, end = dates
+        except (KeyError, TypeError, ValueError, AttributeError):
+            raise problem("tiktok_spark_authorization_unproven", "مدة تفويض المنشور غير مثبتة.") from None
+        if not start <= now() < end:
+            raise problem("tiktok_spark_authorization_expired", "تفويض هذا المنشور منتهٍ أو لم يبدأ بعد.")
+        auth = {"ad_auth_status": "AUTHORIZED", "auth_start_time": start.isoformat(), "auth_end_time": end.isoformat()}
+    else:
+        auth = None
+    return {"item_id": value.tiktok_item_id, "identity_id": value.identity_id, "identity_type": value.identity_type,
+            "status": row["status"], "caption": text, "auth_info": auth}
 
 
 async def owned(db, user, identifier):
