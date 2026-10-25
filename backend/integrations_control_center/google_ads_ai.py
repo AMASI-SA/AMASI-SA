@@ -714,6 +714,8 @@ Return at most SIX concise, prioritized recommendations. Do not generate one
 recommendation per campaign. Prefer a small actionable set; zero is valid when
 the available evidence does not support a useful recommendation.
 Use only the supplied evidence and exact currency/account timezone/window.
+Every evidence entry inherits date_from, date_to, currency_code and time_zone
+from the shared period object; its source and metric remain entry-specific.
 Every recommendation must target a supplied campaign_id and cite its exact
 evidence_ids. Do not invent any metric, evidence ID, order result, price,
 attribute, attribution, profit or causal certainty. Google platform conversions
@@ -735,6 +737,51 @@ limits and budget-change history are unverified: do not derive or claim a
 verified billing-limit violation from the current budget and reported spend.
 You have no tools or write authority.
 """
+
+
+def _analysis_reasoning_schema(campaigns: dict[str, dict[str, Any]],
+                               registry: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Constrain generation to exact per-campaign citations, before validation.
+
+    A free string list let the model invent references or mix two campaigns in
+    an account analysis. Keep the independent post-response checks as well.
+    """
+    schema = _AnalysisOutput.model_json_schema()
+    template = schema["$defs"].pop("_Recommendation")
+    # Share every invariant property, not just enums. Repeating full text and
+    # nullable schemas in 100 branches would consume the existing input budget.
+    # Campaign, action and evidence remain constrained independently per branch.
+    for field in tuple(template["properties"]):
+        if field in {"campaign_id", "action", "evidence_ids"}:
+            continue
+        name = "A" + field.title().replace("_", "")
+        schema["$defs"][name] = template["properties"][field]
+        template["properties"][field] = {"$ref": f"#/$defs/{name}"}
+    action_definitions: dict[tuple[str, ...], str] = {}
+    branches = []
+    for campaign_id, campaign in campaigns.items():
+        evidence_ids = sorted(key for key, value in registry.items()
+                              if value["campaign_id"] == campaign_id)
+        if not evidence_ids:
+            continue
+        branch = copy.deepcopy(template)
+        properties = branch["properties"]
+        properties["campaign_id"] = {"type": "string", "enum": [campaign_id]}
+        actions = tuple(campaign["allowed_actions"])
+        if actions not in action_definitions:
+            name = f"AnalysisActions{len(action_definitions)}"
+            action_definitions[actions] = name
+            schema["$defs"][name] = {"type": "string", "enum": list(actions)}
+        properties["action"] = {"$ref": f"#/$defs/{action_definitions[actions]}"}
+        # An anchored exact-choice pattern avoids the global enum-value limit
+        # even when all 100 campaigns have commerce and platform evidence.
+        properties["evidence_ids"]["items"] = {"type": "string", "pattern":
+            "^(?:" + "|".join(re.escape(key) for key in evidence_ids) + ")$"}
+        branches.append(branch)
+    schema["properties"]["recommendations"]["items"] = {"anyOf": branches}
+    if not schema["$defs"]:
+        schema.pop("$defs")
+    return schema
 
 
 async def analyze_google_campaigns(
@@ -819,8 +866,14 @@ async def analyze_google_campaigns(
         limitations.append("salla_attribution_unverified")
     if not any(item.get("kind") == "profitability" for item in registry.values()):
         limitations.append("profitability_unverified")
+    # These four fields are identical to the shared period for every accepted
+    # evidence row. Send them once; retain the full registry for independent
+    # validation and the returned audit evidence.
+    reasoning_evidence = {key: {field: value for field, value in evidence.items()
+                                if field not in {"date_from", "date_to", "currency_code", "time_zone"}}
+                          for key, evidence in registry.items()}
     raw = await _reason(instructions=_ANALYSIS_INSTRUCTIONS,
-                        payload={"period": period, "campaigns": list(campaigns.values()), "evidence": registry,
+                        payload={"period": period, "campaigns": list(campaigns.values()), "evidence": reasoning_evidence,
                                  "budget_semantics": {
                                      "DAILY": {"kind": "average_daily_budget", "hard_daily_spend_cap": False,
                                                "explanation": DAILY_BUDGET_EXPLANATION},
@@ -828,7 +881,7 @@ async def analyze_google_campaigns(
                                      "billing_limits_verified": False, "budget_history_verified": False,
                                  },
                                  "limitations": list(dict.fromkeys(limitations))},
-                        schema=_AnalysisOutput.model_json_schema(), schema_name="mezan_google_readonly_analysis",
+                        schema=_analysis_reasoning_schema(campaigns, registry), schema_name="mezan_google_readonly_analysis",
                         # Native account reads precede structured reasoning.
                         # Keep the model within the interactive 90s deadline,
                         # while limiting the generated recommendation set.

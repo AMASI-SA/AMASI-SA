@@ -439,6 +439,86 @@ def analysis_output(action="MONITOR", budget=None):
 
 
 @pytest.mark.asyncio
+async def test_analysis_generation_schema_binds_each_campaign_to_its_own_evidence_and_actions():
+    facts = campaign_facts()
+    second = {**facts["campaigns"][0], "campaign_id": "22", "status": "PAUSED",
+              "metrics": {"spend_native": "0"}}
+    facts["campaigns"].append(second)
+    client = ModelClient(analysis_output())
+    await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=facts, client_factory=lambda: client)
+    schema = client.calls[0]["text"]["format"]["schema"]
+    item = schema["properties"]["recommendations"]["items"]
+    branches = item["anyOf"]
+    scopes = {b["properties"]["campaign_id"]["enum"][0]: b["properties"] for b in branches}
+    assert set(scopes) == {"11", "22"}
+    import re
+    for campaign_id, props in scopes.items():
+        pattern = props["evidence_ids"]["items"]["pattern"]
+        assert re.fullmatch(pattern, f"google:campaign:{ACCOUNT}:{campaign_id}:spend_native")
+        other_id = "22" if campaign_id == "11" else "11"
+        assert not re.fullmatch(pattern, f"google:campaign:{ACCOUNT}:{other_id}:spend_native")
+        assert not re.fullmatch(pattern, f"google:campaign:{ACCOUNT}:{campaign_id}:invented_metric")
+    assert re.fullmatch(scopes["11"]["evidence_ids"]["items"]["pattern"], f"google:campaign:{ACCOUNT}:11:conversions")
+    assert not re.fullmatch(scopes["22"]["evidence_ids"]["items"]["pattern"], f"google:campaign:{ACCOUNT}:22:conversions")
+    actions = lambda props: schema["$defs"][props["action"]["$ref"].rsplit("/", 1)[-1]]["enum"]
+    assert "PAUSE_CAMPAIGN" in actions(scopes["11"])
+    assert "PAUSE_CAMPAIGN" not in actions(scopes["22"])
+
+
+@pytest.mark.asyncio
+async def test_analysis_generation_schema_excludes_campaigns_without_any_verified_evidence():
+    facts = campaign_facts()
+    facts["campaigns"].append({**facts["campaigns"][0], "campaign_id": "22", "metrics": {}})
+    client = ModelClient(analysis_output())
+    await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=facts, client_factory=lambda: client)
+    schema = client.calls[0]["text"]["format"]["schema"]
+    branches = schema["properties"]["recommendations"]["items"]["anyOf"]
+    assert [b["properties"]["campaign_id"]["enum"] for b in branches] == [["11"]]
+
+
+@pytest.mark.asyncio
+async def test_analysis_accepts_100_native_campaigns_within_existing_context_budget():
+    import copy
+    facts = campaign_facts()
+    original = facts["campaigns"][0]
+    facts["campaigns"] = [{**copy.deepcopy(original), "campaign_id": str(11 + index)}
+                          for index in range(100)]
+    client = ModelClient(analysis_output())
+    result = await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=facts,
+                                           client_factory=lambda: client)
+    assert len(client.calls) == 1
+    assert result["recommendations"][0]["campaign_id"] == "11"
+    assert result["provider_writes"] == 0
+    payload = json.loads(client.calls[0]["input"])
+    assert payload["period"]["currency_code"] == "USD"
+    assert payload["period"]["time_zone"] == "America/New_York"
+    assert payload["period"]["date_from"] == "2026-10-12"
+    assert payload["period"]["date_to"] == "2026-10-13"
+    assert "date_from" not in next(iter(payload["evidence"].values()))
+    evidence = result["recommendations"][0]["evidence"][0]
+    assert {key: evidence[key] for key in ("currency_code", "time_zone", "date_from", "date_to")} == {
+        "currency_code": "USD", "time_zone": "America/New_York",
+        "date_from": "2026-10-12", "date_to": "2026-10-13"}
+
+
+def test_analysis_generation_schema_supports_full_100_campaign_scope_within_service_limits():
+    from integrations_control_center.google_ads_ai import _analysis_reasoning_schema, _strict_schema
+    actions = ["MONITOR", "REVIEW_TRACKING", "PAUSE_CAMPAIGN", "CHANGE_BUDGET"]
+    campaigns = {str(index): {"allowed_actions": actions} for index in range(100)}
+    registry = {f"{source}:campaign:{ACCOUNT}:{index}:{metric}": {"campaign_id": str(index)}
+                for index in range(100) for source in ("google", "salla", "profitability")
+                for metric in ("spend_native", "conversions", "roas", "value_native")}
+    schema = _strict_schema(_analysis_reasoning_schema(campaigns, registry))
+    def enums(value):
+        if isinstance(value, dict):
+            return len(value.get("enum", [])) + sum(enums(child) for key, child in value.items() if key != "enum")
+        return sum(map(enums, value)) if isinstance(value, list) else 0
+    assert len(schema["properties"]["recommendations"]["items"]["anyOf"]) == 100
+    assert enums(schema) <= 1000
+    assert len(json.dumps(schema).encode()) < 200_000
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["DAILY", "TOTAL"])
 @pytest.mark.parametrize("start", ["2026-10-12", "2026-10-13"])
 async def test_analysis_supplies_budget_semantics_without_inventing_verified_billing_limits(mode, start):
