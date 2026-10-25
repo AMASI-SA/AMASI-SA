@@ -1,0 +1,39 @@
+{
+  "task_id": "TIKTOK-FULL-MANAGEMENT-R2-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-full-management-r2-20261025",
+  "base": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
+  "state": "WIP_previous_verified_builder_and_periodic_source_integrated_on_latest_production",
+  "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
+  "source_recovery": "Preserved runtime source97fba1c5dee818ee1cd9e1b19115f39f4aa52342 from PR1480; applied only source/test/workflow diff with three-way merge. No old intent or unrelated operations docs copied. Production1482/1483/1487 preserved.",
+  "behavior": [
+    "Current canonical ProductV2 catalog and bounded campaign AI response schema/diagnostics",
+    "Owner-approved encrypted immutable Smart+ paused adgroup/video-ad creation and text-only direct TikTok URL asset import",
+    "Permanent creation fences,owner isolation,readonly reconciliation and bounded proposal history",
+    "Optional rotating three-campaign periodic recommendations in shared cycle; financial execution disabled"
+  ],
+  "verification": {
+    "integrated_backend": "155 passed,exit0,9.37s on isolated real disposable Mongo: builder,periodic,products,insights,campaign management,content routes and publishing.",
+    "patch": "git diff --cached --check exit0; creator transport preserves current safe numeric-provider diagnostic.",
+    "frontend_and_native_ci": "Fresh exact integrated-source CI pending. Earlier source97fba1c5 CI is historical evidence only."
+  },
+  "invariants": [
+    "No media bytes fetched or stored on Mezan",
+    "No fabricated order/revenue/profit attribution",
+    "No automatic repeat of uncertain transmitted provider writes",
+    "Existing privacy validation and fresh readiness proof preserved",
+    "Other providers and unrelated work preserved"
+  ],
+  "production_changed_by_this_branch": false,
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "current_settings_release": "PR1487 M b0144e288e852a0fa1aee026432f0073a0e8a3f7 published once at20:43 Riyadh; host still building. Own codex-tiktok1487 lease remains active pending explicit new completion and three-probe verify. Do not change /app or repeat publish.",
+  "remaining": [
+    "Accept live creator settings readiness after1487; fix any exact-field contract still rejected",
+    "Smart+ child activation/editing and bids,organic Spark post linking",
+    "Owner financial policy/budgets/loss limits,trustworthy financial coverage and bounded AI action execution/outcome measurements",
+    "No actual selected approved public video/caption or live paid activation performed",
+    "Builder and periodic features remain default off; new source requires fresh CI and separate v5 A/B release acceptance"
+  ],
+  "next": "Preserve remote WIP and run exact integrated-source CI. Continue child control contracts and tests while1487 builds. After explicit1487 completion verify exact source/runtime three times,then test both connected creators. Do not claim all TikTok management complete."
+}
