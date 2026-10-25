@@ -74,6 +74,34 @@ def campaign_row(metrics=None):
     return row
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strategy,field,target", [
+    ("MAXIMIZE_CONVERSIONS", "maximizeConversions", "target_cpa_micros"),
+    ("MAXIMIZE_CONVERSION_VALUE", "maximizeConversionValue", "target_roas"),
+])
+async def test_snapshot_preserves_targetless_smart_bidding_when_selected_optional_child_is_omitted(strategy, field, target):
+    row = campaign_row()
+    row["campaign"].pop("maximizeConversions")
+    row["campaign"]["biddingStrategyType"] = strategy
+    parent = "campaign.maximize_conversions" if field == "maximizeConversions" else "campaign.maximize_conversion_value"
+    instance = ReadClient({"campaign": [row]}, unavailable_fields={parent})
+    result = await google_ads_snapshot.snapshot(instance, "900")
+    assert result["campaign"][field] == {}
+    # An unavailable optional child is not evidence of an absent target.
+    unavailable = ReadClient({"campaign": [row]}, unavailable_fields={parent, parent + "." + target})
+    unknown = await google_ads_snapshot.snapshot(unavailable, "900")
+    assert field not in unknown["campaign"]
+    # Portfolio targets must be read from their own resource, never fabricated.
+    row["campaign"]["biddingStrategy"] = f"customers/{CUSTOMER}/biddingStrategies/909"
+    portfolio = await google_ads_snapshot.snapshot(ReadClient({"campaign": [row]}), "900")
+    assert field not in portfolio["campaign"]
+    row["campaign"].pop("biddingStrategy")
+    target_key = "targetCpaMicros" if field == "maximizeConversions" else "targetRoas"
+    row["campaign"][field] = {target_key: "2500000" if field == "maximizeConversions" else 2.5}
+    targeted = await google_ads_snapshot.snapshot(ReadClient({"campaign": [row]}), "900")
+    assert targeted["campaign"][field] == row["campaign"][field]
+
+
 def linked(monkeypatch, instance, *, accounts=None):
     calls = []
     async def available_accounts(db, user_id):

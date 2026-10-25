@@ -56,6 +56,38 @@ test("saves and reopens a real editable campaign draft with all creative text", 
     expect(api.put.mock.calls[0][1]).toMatchObject({ expected_revision: 1, draft: { budget_native: "149.50" } });
 });
 
+test("every additional ad is visible in the frozen approval preview", async () => {
+    const extra = { ad_format: "RSA", name: "النسخة الثانية", status: "PAUSED", headlines: ["عنوان النسخة الثانية"], descriptions: ["وصف مستقل للنسخة الثانية"], final_urls: ["https://mezansalla.com/second"] };
+    await act(async () => root.render(<GoogleProposalReview proposal={{ ...preview, planned: { groups: [{ ...draft.groups[0], ads: [extra] }] } }} />));
+    const second = container.querySelector('[aria-label="إعلان إضافي 1 للمجموعة 1 · المحتوى المعتمد"]');
+    expect(second).not.toBeNull();
+    expect(second.textContent).toContain(extra.headlines[0]);
+    expect(second.textContent).toContain(extra.descriptions[0]);
+    expect(second.textContent).toContain(extra.final_urls[0]);
+    expect(second.textContent).toContain("موقوفة");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("additional draft ad copy is editable and saved separately from primary creative", async () => {
+    const extra = { ad_format: "RSA", status: "PAUSED", headlines: ["نسخة إضافية قديمة"], descriptions: ["وصف النسخة الإضافية"], final_urls: ["https://mezansalla.com/extra"] };
+    const multi = { ...draft, groups: [{ ...draft.groups[0], ads: [extra] }] };
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "multi", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: multi } });
+    await change("عناوين إعلان إضافي 1 للمجموعة 1", "عنوان إضافي مُراجع");
+    await act(async () => button("حفظ المسودة").click());
+    const saved = api.post.mock.calls[0][1].draft.groups[0];
+    expect(saved.headlines).toEqual(draft.groups[0].headlines);
+    expect(saved.ads[0]).toEqual({ ...extra, headlines: ["عنوان إضافي مُراجع"] });
+});
+
+test("removing an additional draft ad excludes it from the saved operation", async () => {
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "single", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: { ...draft, groups: [{ ...draft.groups[0], ads: [{ ad_format: "RSA", headlines: ["إعلان محذوف من المسودة"] }] }] } } });
+    await act(async () => container.querySelector('[aria-label="إزالة إعلان إضافي 1 للمجموعة 1"]').click());
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft.groups[0].ads).toEqual([]);
+});
+
 test("unsupported type is visible, disabled and cannot prepare a creation", async () => {
     await render(); const video = [...container.querySelector('[aria-label="نوع حملة جوجل"]').options].find((option) => option.value === "VIDEO");
     expect(video.disabled).toBe(true); expect(video.textContent).toContain("غير متاح"); expect(api.post).not.toHaveBeenCalled();
