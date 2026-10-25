@@ -131,6 +131,20 @@ test("blocked readiness report cannot unlock publishing and gives the safe diagn
     expect(api.post).toHaveBeenCalledTimes(1);
 });
 
+test("rechecking a creator retires the old proof before the request and keeps it retired on transport failure", async () => {
+    await ready();
+    expect(testId("readiness")).not.toBeNull();
+    let fail;
+    api.post.mockImplementationOnce(() => new Promise((resolve, reject) => { fail = reject; }));
+    await act(async () => testId("verify").click());
+    expect(testId("readiness")).toBeNull();
+    expect(testId("preview").disabled).toBe(true);
+    await act(async () => fail({ response: { status: 502, data: {} } }));
+    expect(testId("readiness")).toBeNull();
+    expect(testId("preview").disabled).toBe(true);
+    expect(api.post).toHaveBeenCalledTimes(2);
+});
+
 
 test.each([
     [{ response: { status: 502, data: { detail: "private-provider-url-and-token" } } }, "رمز المتابعة: 502"],
