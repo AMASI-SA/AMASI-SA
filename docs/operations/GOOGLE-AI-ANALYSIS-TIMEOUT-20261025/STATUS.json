@@ -1,0 +1,36 @@
+{
+  "task_id": "GOOGLE-AI-ANALYSIS-TIMEOUT-20261025",
+  "scope": "Fix live Google native analysis 504 without provider writes",
+  "base": "39a7dc82f0ef606cbdd54a1b6a9941514ba02f94",
+  "branch": "codex/google-ai-analysis-timeout-20261025",
+  "status": "SOURCE_CI_PASS_INTENT_B_CI_AND_ADAPTER_RUNNING",
+  "reproduction": "Live account and campaign UI AI requests returned504; native Google reads returned200; previous release guard accepted3probes and active:false",
+  "change": "Structured analysis low reasoning effort with bounded40s default (existing shared override remains respected); browser deadline90s; specific analysis timeout message",
+  "verification": {
+    "backend": "375passed realMongo officialv25",
+    "red": "new deadline regression failed on old default20s",
+    "frontend": "95tests/12suites/build3.74s",
+    "live": "not yet verified",
+    "source_ci": "all9success",
+    "build": "two clean builds bootstrap sourceA exit0",
+    "freeze": "exit0; external SHA2568c6aabbef927c5c8781964b88c2337c1d14733cd93013f978f927ad30a4caeaf",
+    "adapter": "independent running",
+    "original_guard": "active:false"
+  },
+  "provider_writes": 0,
+  "production_changed": false,
+  "previous_release_live_verified": true,
+  "remaining": [
+    "live analysis success",
+    "fresh source and intent CI",
+    "adapter rehearsal",
+    "governed merge and authorized publication",
+    "3 public probes",
+    "full autonomy and attribution remain separate incomplete scope"
+  ],
+  "next_safe_action": "Finish B CI and independent adapter, exact-tree merge then original adapter/prepare/prepublish/publish/3 public probes.",
+  "source_sha": "8cce9baf1b630b63d761eaa45566b7981b987015",
+  "intent_sha": "41ec514af690bca31e97f77fab3e83b4623951b7",
+  "runtime_release_id": "rg5-7efc5707996a84812dc213af3c6374aa94c217d5c9ecc03530bbaa4a4e5f4437",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1481"
+}
