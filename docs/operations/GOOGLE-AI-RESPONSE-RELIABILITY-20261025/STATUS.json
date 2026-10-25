@@ -3,8 +3,8 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-ai-response-reliability-r2-20261025",
   "base": "b0144e288e852a0fa1aee026432f0073a0e8a3f7",
-  "status": "UNFROZEN_SOURCE_REFRESHED_ON_THIRD_CONCURRENT_PRODUCTION_ADVANCE",
-  "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
+  "status": "SOURCE_UPDATED_TO_FIX_OBSERVED_CI_PENDING_CANCELLATION",
+  "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
   "evidence": {
     "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
     "google_account_analysis": "still timed out",
@@ -24,13 +24,10 @@
     "backend": "101 AI/actions/context tests passed in1.64s",
     "frontend": "CI pending",
     "current_source_ci": {
-      "head_sha": "1a34f9d1bd444c49d674e5fea4657a7a8c063742",
-      "all_9_workflows": "success",
-      "google_run": 40214882914,
-      "backend_job": 121233748852,
-      "backend": "379passed realMongo/officialv25 10.64s",
-      "frontend_job": 121233748638,
-      "frontend": "96tests/12suites/build3.53s"
+      "previous_sha": "92c174be2297d1b9b0eb27b3bb1f45d46bcb2b60",
+      "success": 8,
+      "cancelled_readiness": 40217891164,
+      "readiness_jobs_created": 0
     },
     "clone": "exit0 /tmp/google1485-release literalA",
     "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed"
@@ -84,5 +81,13 @@
     "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
   },
   "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload.",
-  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc"
+  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc",
+  "ci_queue_fix": {
+    "from": "one repository-wide mezan-release-readiness group",
+    "to": "one group per PR/ref",
+    "cancel_in_progress": false,
+    "jobs_permissions_and_production_guard": "unchanged",
+    "yaml_parse": "pass; semantic comparison only concurrency group changed; all4jobs and contents:read retained",
+    "source": "official GitHub concurrency docs and observed cancelled-before-jobs run"
+  }
 }
