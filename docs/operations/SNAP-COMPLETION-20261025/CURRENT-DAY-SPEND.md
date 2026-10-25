@@ -92,10 +92,31 @@ Issue1006 has reached its comment limit; the task PR and committed task records
 carry continuation evidence.
 
 Production advanced to the reviewed TikTok1524 merge while source CI was running.
-Its19 changed paths do not overlap this17-path Snapchat increment. The source integration in PR1525 was rejected by the existing full-history
+Its19 changed paths do not overlap this18-path Snapchat increment. The source integration in PR1525 was rejected by the existing full-history
 intent guard: its merge commit changed intent relative to the former task
 head. That candidate is not releasable. This fresh source is created directly
-from current Production J, with only the17 reviewed Snapchat paths and no
+from current Production J, with only the18 reviewed Snapchat paths and no
 historical task/intent commits between J and A. Its intent remains
 byte-identical to J; no protocol guard was weakened. Fresh exact-source CI/artifact is required again; prior-source artifacts
 are not deployment inputs.
+
+The fresh exact-source d1a6d865 run completed44 checks:37success,
+six conditional skips, one source-contract failure. Its three historical
+reference/read/runtime stages succeeded, but the frozen reducer AST assertion
+rejects this intentionally changed Snapchat metric-absence behavior. The
+source contract now permits only the exact reviewed executive function
+source-segment SHA256
+`f5cee5a805a89be37057afd1f573b62b7500c884e73f1fa11123dfbcfe1302e3`,
+then requires the cooperative reducer AST to match that pinned function.
+Other four reducers, protected files, budgets, reference commits, JSON and
+Mongo-read oracles remain unchanged. Existing real stored-observation tests
+exercise both executive builders and zero/positive spend. Local execution
+passed54 tests and five reducer subtests; one unrelated unchanged protected
+file check could not read its historic Git path in this workspace. Full
+reference/read/runtime and source-contract CI remain mandatory on the new
+exact source. The prior d1a6d865 intent/artifact is superseded and cannot deploy.
+Focused rerun of the changed reducer contract, scheduling/cancellation,
+existing executive and actual operational snapshot tests:52passed and five
+reducer subtests passed in1.38s. Independent review verified the exact pinned
+source hash and preservation of every other guard. Final exact CI remains
+required for all historical/reference/read evidence.
