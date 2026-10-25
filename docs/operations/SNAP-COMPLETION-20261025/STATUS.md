@@ -1,5 +1,12 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+## Owner clarification — zero spend must never block the dashboard
+
+Saudi CAMPAIGNS are temporarily paused and may be started at any time; the account stays enabled/included in normal sync. A valid observed0 is a numeric value and must not block loading, reading, or the other accounts. No account exclusion/disable is requested. Root freshpublic combine_dashboard_spend contract check on exactfrozenB used USD81.32SAR+Saudi0SAR: fullportfolio81.32, known81.32, amountavailabletrue, completetrue and hourly81.32. Exit0; no source/DB/provider mutation. Unknown evidence remains distinct from observed0; the known-subtotal repair does not relabel it as0.
+
+FreshProduction stillJdede6648da7306adb8d0f26a5093f1e7bcb0348d; resumeguard /tmp/snap1519-resume-gate.json stillactive=true/actorcodex-google1515. All68checks remain the latest verified finalB evidence; no ownrehearsal/merge/publish. Continue only after freshinactiveguard/currentref per the frozen1519 handoff below.
+
+
 ## Final1519 checkpoint — all checks green, foreign1515 lease still active
 
 FinalB68checkruns=66success+2explicitconditional skips;all39workflows completed38success/1conditional skip. BothCodeQLlanguages+Securitysuccess; interimaggregateCodeQLneutral resolved. ActualHostNode20cleanclonejob121305886359 passed withisolatedruntimeartifactverified/evidenceartifact12616730005. Bactualreporting362pass7.52s(job121305479059), dashboardUI63tests5suites5.047s(job121305479255), Mongo publication254pass6.76s(job121305633358). ExactGitintent/manifests verification passed; ownmezan-snap-midnight is clean at B38eee3ed8f2dc40a854cfd595bbb3de3872de3c3. SourceA/tree/runtime/artifact/intent details are immediately below.
