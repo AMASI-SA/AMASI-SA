@@ -537,6 +537,16 @@ async def test_foreign_or_wrong_period_analysis_is_rejected_before_model(key, va
 
 
 @pytest.mark.asyncio
+async def test_interactive_analysis_has_a_bounded_budget_for_structured_reasoning(monkeypatch):
+    monkeypatch.delenv("MEZAN_OPENAI_TIMEOUT_SECONDS", raising=False)
+    client = ModelClient(analysis_output())
+    await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=campaign_facts(), client_factory=lambda: client)
+    assert client.calls[0]["timeout"] == 40.0
+    assert client.calls[0]["reasoning"] == {"effort": "low"}
+    assert client.calls[0]["tools"] == []
+
+
+@pytest.mark.asyncio
 async def test_model_timeout_is_bounded_and_errors_do_not_echo_secrets(monkeypatch):
     monkeypatch.setenv("MEZAN_OPENAI_TIMEOUT_SECONDS", "0.05")
     client = ModelClient(analysis_output())

@@ -3,7 +3,7 @@ import {
     GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
     getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate, googleIdempotencyKey,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
-    googleErrorMessage, googleConfidenceLabel, googleRecommendationAction, previewGoogleRecommendation,
+    googleErrorMessage, googleConfidenceLabel, googleRecommendationAction, previewGoogleRecommendation, analyzeGoogleCampaign,
 } from "./googleAds";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
@@ -38,6 +38,25 @@ test("AI timeout has an actionable safe explanation without echoing private erro
     const message = googleErrorMessage({ response: { status: 504, data: { detail: { code: "google_ai_timeout", provider_writes: 0, private_data: "secret-provider-body" } } } });
     expect(message).toContain("مهلة");
     expect(message).not.toContain("secret-provider-body");
+});
+
+test("analysis transport timeout explains the failed analysis and never claims a draft or write", () => {
+    for (const error of [
+        { code: "ECONNABORTED", config: { url: `${GOOGLE_ADS_ROOT}/ai/analyze` } },
+        { response: { status: 504, data: { detail: { code: "google_ai_timeout" } } }, config: { url: `${GOOGLE_ADS_ROOT}/ai/analyze` } },
+    ]) {
+        const message = googleErrorMessage(error);
+        expect(message).toContain("مهلة تحليل");
+        expect(message).not.toContain("مسودة");
+    }
+});
+
+test("analysis waits for native reads and reasoning and retains caller cancellation", async () => {
+    api.post.mockResolvedValue({ data: { analysis_id: "saved", recommendations: [] } });
+    const controller = new AbortController();
+    const payload = { account_id: "123", from_date: "2026-10-25", to_date: "2026-10-25" };
+    expect(await analyzeGoogleCampaign(payload, { signal: controller.signal })).toEqual({ analysis_id: "saved", recommendations: [] });
+    expect(api.post).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/ai/analyze`, payload, { timeout: 90000, signal: controller.signal });
 });
 
 test("workspace scopes every read to the selected range, account and hierarchy", async () => {
