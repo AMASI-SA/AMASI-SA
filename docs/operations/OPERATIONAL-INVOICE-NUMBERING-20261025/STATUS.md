@@ -21,3 +21,7 @@ Verification:
 Release state: NOT merged or deployed. No financial/material writers enabled. No actual business records written. Production changed: no. No shared /app changes, no release lease acquired or cleared, no release intent modified.
 
 Next: inspect Draft PR/CI, review new API and native counterpart, then follow v5 source A/build/intent B release protocol with fresh guard/publishing checks. Publish compatible backend before building/releasing new native version. Current archived APK1.0.12/code15 has picker changes only, not automatic numbering. Do not claim APK numbering ready until replacement package is built, signed and device-verified.
+
+Remote checkpoint: ac53114cfcacf999616fe9fc40335a248e936bac.
+Native counterpart checkpoint: fd36d0cbfa844be2b95dc9eb3f7345da2594f351, verified against remote.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1508. CI pending on creation; no pass inferred. Numbering tests renamed to match existing operational-balance CI discovery glob. Both source worktrees were clean after checkpoint pushes.
