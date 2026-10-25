@@ -150,7 +150,7 @@ function CalendarMonth({ monthDate, from, to, onSelect }) {
     );
 }
 
-export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
+export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply, emitAppliedEvent = true }) {
     const rootRef = useRef(null);
     const nativeFromRef = useRef(null);
     const nativeToRef = useRef(null);
@@ -234,7 +234,7 @@ export default function ArabicDateRangePicker({ valueFrom, valueTo, onApply }) {
             ? { dateFrom: draftFrom, dateTo: draftTo }
             : { dateFrom: draftTo, dateTo: draftFrom };
         onApply?.(normalized);
-        if (typeof window !== "undefined") {
+        if (emitAppliedEvent && typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent(ADS_DATE_RANGE_APPLIED_EVENT, {
                 detail: { ...normalized, source: "arabic_date_range_picker" },
             }));

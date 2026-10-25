@@ -58,7 +58,7 @@ async def test_search_combines_filters_deduplicates_and_uses_created_at():
         "created_from": "2026-08-30T00:00:00+03:00", "created_to": "2026-08-31T00:00:00+03:00",
         "baseline_cutoff_at": FIXTURE["baseline_cutoff_at"],
     })
-    assert [order.order_number for order in result.items] == ["281358491", "281358507", "281367168"]
+    assert [order.order_number for order in result.items] == ["281367168", "281358507", "281358491"]
     assert result.summary["orders"] == 3
     assert result.summary["paid_orders"] == 3
     assert result.summary["paid_sales"] == 562.97

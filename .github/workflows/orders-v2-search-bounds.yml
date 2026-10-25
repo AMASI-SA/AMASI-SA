@@ -1,0 +1,70 @@
+name: Orders V2 Search Bounds
+on:
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - 'backend/order_engine/**'
+      - 'backend/tests/test_order_engine_search*'
+      - 'frontend/src/hooks/useOrders*'
+      - 'frontend/src/pages/OrdersV2*'
+      - 'frontend/src/components/marketing/ArabicDateRangePicker*'
+      - '.github/workflows/orders-v2-search-bounds.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  search-contract:
+    runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install focused test dependencies
+        run: >-
+          python -m pip install
+          fastapi==0.110.1 pydantic==2.13.4 pymongo==4.5.0 motor==3.3.2 'httpx<0.28'
+          cryptography bcrypt PyJWT pytest pytest-asyncio openpyxl python-dotenv
+          requests pytz python-multipart email-validator reportlab svglib pillow pypdf qrcode
+      - name: Test search correctness, budgets and real Mongo execution plan
+        working-directory: backend
+        env:
+          ORDER_SEARCH_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+        run: >-
+          python -m pytest -q -s
+          tests/test_order_engine_search_bounds.py
+          tests/test_order_engine_search_route.py
+          tests/test_order_engine_search_mongo.py
+          tests/test_order_engine_operational_attribution.py
+          tests/test_order_engine_repository.py
+  search-interface:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - run: yarn install --frozen-lockfile --non-interactive
+      - name: Verify explicit submit, date range, pagination and background refresh
+        env:
+          CI: 'true'
+        run: >-
+          yarn test --watchAll=false --runInBand --runTestsByPath
+          src/pages/OrdersV2.search.test.jsx
+          src/hooks/useOrders.shippingRefresh.test.jsx
+          src/components/marketing/ArabicDateRangePicker.test.jsx
