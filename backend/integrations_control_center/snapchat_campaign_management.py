@@ -2,8 +2,8 @@
 
 The reporting plane remains read-only.  This module owns a separate owner-only
 control plane with a strict proposal -> preview -> approval -> execution ->
-verification -> audit -> rollback lifecycle.  New delivery entities are always
-created PAUSED; activation has an independent runtime kill switch.
+verification -> audit -> rollback lifecycle. General creates remain PAUSED;
+server-authorized publication plans can create ACTIVE directly under both flags.
 """
 
 from __future__ import annotations
@@ -286,9 +286,14 @@ def snapchat_management_request_fingerprint(
     payload: "SnapchatManagementProposalInput",
 ) -> str:
     """Return the canonical fingerprint shared by sync and async previews."""
+    canonical = payload.model_dump(mode="json")
+    # Keep pre-publication idempotency digests byte-for-byte compatible.
+    # A nonempty reference remains part of the exact request identity.
+    if canonical.get("publication_id") is None:
+        canonical.pop("publication_id", None)
     return hashlib.sha256(
         json.dumps(
-            payload.model_dump(mode="json"),
+            canonical,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -373,6 +378,8 @@ class SnapchatManagementProposalInput(BaseModel):
     parent_id: str | None = Field(default=None, max_length=160)
     provider_target_id: str | None = Field(default=None, max_length=160)
     provider_parent_id: str | None = Field(default=None, max_length=160)
+    # An untrusted reference; only a fresh same-owner server plan grants scope.
+    publication_id: str | None = Field(default=None, max_length=160)
     payload: dict[str, Any] = Field(default_factory=dict)
     reason: str = Field(min_length=5, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=128)
@@ -400,6 +407,7 @@ class SnapchatManagementProposalInput(BaseModel):
         "parent_id",
         "provider_target_id",
         "provider_parent_id",
+        "publication_id",
     )
     @classmethod
     def normalize_identifiers(cls, value: str | None, info: Any) -> str | None:
@@ -440,6 +448,8 @@ class SnapchatManagementProposalInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_relationships(self) -> "SnapchatManagementProposalInput":
+        if self.publication_id and self.action not in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS:
+            raise ValueError("publication_id is restricted to new create actions")
         if self.action in UPDATE_ACTIONS and not self.target_id:
             raise ValueError("target_id is required for update actions")
         if (
@@ -451,6 +461,7 @@ class SnapchatManagementProposalInput(BaseModel):
         if (
             self.action in DELIVERY_CREATE_ACTIONS
             and str(self.payload.get("status") or "PAUSED").upper() == "ACTIVE"
+            and not self.publication_id
         ):
             raise ValueError("new delivery entities must be created PAUSED")
         if (
@@ -985,6 +996,7 @@ def _budget_guard(entity: dict[str, Any]) -> None:
 
 def build_snapchat_operation(
     payload: SnapchatManagementProposalInput,
+    *, publication_active: bool = False,
 ) -> dict[str, Any]:
     """Build one fixed provider request without accepting a caller URL/method."""
     action = payload.action
@@ -992,6 +1004,11 @@ def build_snapchat_operation(
     account_id = payload.account_id
     target_id = payload.target_id
     parent_id = payload.parent_id
+    # This keyword is server-only. The API creator supplies it only after a
+    # fresh exact parent-plan proof; a client reference alone never sets it.
+    if publication_active and not payload.publication_id:
+        raise ValueError("publication active build requires a parent reference")
+    create_status = "ACTIVE" if publication_active and payload.activation_acknowledged else "PAUSED"
     operation: dict[str, Any]
 
     if action == "campaign.create":
@@ -1001,7 +1018,9 @@ def build_snapchat_operation(
             entity.get("start_time"), field="start_time", maximum=80
         )
         entity["ad_account_id"] = account_id
-        entity["status"] = "PAUSED"
+        entity["status"] = create_status
+        if publication_active:
+            entity["creation_state"] = "PUBLISHED"
         entity.setdefault("buy_model", "AUCTION")
         objective = entity.get("objective_v2_properties")
         if not isinstance(objective, dict) or not objective.get("objective_v2_type"):
@@ -1065,7 +1084,7 @@ def build_snapchat_operation(
             else "LIFETIME_BUDGET"
         )
         entity["campaign_id"] = parent_id
-        entity["status"] = "PAUSED"
+        entity["status"] = create_status
         operation = {
             "method": "POST",
             "path": f"/campaigns/{parent_id}/adsquads",
@@ -1091,7 +1110,7 @@ def build_snapchat_operation(
         )
         entity["type"] = _text(entity.get("type"), field="type", maximum=80).upper()
         entity["ad_squad_id"] = parent_id
-        entity["status"] = "PAUSED"
+        entity["status"] = create_status
         operation = {
             "method": "POST",
             "path": f"/adsquads/{parent_id}/ads",
@@ -1236,6 +1255,16 @@ def snapchat_management_intent_fingerprint(operation: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def _publication_direct_active_create(row: dict[str, Any]) -> bool:
+    proof = row.get("publication_creation_proof") or {}
+    return bool(row.get("publication_id")
+        and proof.get("contract") == "snapchat_active_publication_v1"
+        and proof.get("publication_id") == row.get("publication_id")
+        and proof.get("account_id") == row.get("account_id")
+        and proof.get("action") == row.get("action")
+        and proof.get("active_delivery") is True and proof.get("delivery_status") == "ACTIVE")
+
+
 def _assert_stored_operation_integrity(
     row: dict[str, Any], operation: dict[str, Any]
 ) -> None:
@@ -1328,9 +1357,10 @@ def _assert_stored_operation_integrity(
         entity = rows[0]
         if (
             action in DELIVERY_CREATE_ACTIONS
-            and str(entity.get("status") or "").upper() != "PAUSED"
+            and str(entity.get("status") or "").upper()
+            != ("ACTIVE" if _publication_direct_active_create(row) else "PAUSED")
         ):
-            raise ValueError("stored create operation is not PAUSED")
+            raise ValueError("stored create status does not match its server authorization")
         if (
             action in {"campaign.create", "creative.create"}
             and str(entity.get("ad_account_id") or "") != account_id
@@ -2357,6 +2387,8 @@ PROPOSAL_LIST_PROJECTION = {
     "status": 1,
     "revision": 1,
     "action": 1,
+    "publication_id": 1,
+    "publication_creation_proof": 1,
     "account_id": 1,
     "target_id": 1,
     "parent_id": 1,
@@ -2573,6 +2605,9 @@ def _public_proposal(
         "status": row.get("status"),
         "revision": int(row.get("revision") or 1),
         "action": row.get("action"),
+        **({"publication_id": row["publication_id"],
+            "publication_creation_proof": _safe_provider_value(row.get("publication_creation_proof") or {})}
+           if row.get("publication_id") else {}),
         "account_id": row.get("account_id"),
         "target_id": row.get("target_id"),
         "parent_id": row.get("parent_id"),
@@ -2600,7 +2635,10 @@ def _public_proposal(
         "executed_by": row.get("executed_by"),
         "reason": row.get("reason"),
         "preview": operation.get("summary") or {},
-        "creates_paused": row.get("action") in DELIVERY_CREATE_ACTIONS,
+        "creates_paused": row.get("action") in DELIVERY_CREATE_ACTIONS
+            and _operation_create_entity(operation).get("status") == "PAUSED",
+        "creates_active": row.get("action") in DELIVERY_CREATE_ACTIONS
+            and _publication_direct_active_create(row),
         "activates_delivery": operation.get("activates_delivery") is True,
         "expires_at": row.get("expires_at"),
         "created_at": row.get("created_at"),
@@ -3036,8 +3074,16 @@ async def create_snapchat_management_proposal(
         )
     if native_currency_proof and settings_proof and settings_proof.get("currency") != native_currency_proof["currency"]:
         raise HTTPException(status_code=409, detail={"code": "snapchat_management_native_currency_unverified"})
+    publication_creation_proof: dict[str, Any] = {}
+    if payload.publication_id:
+        from .snapchat_campaign_publication import validate_publication_creation_proof
+
+        publication_creation_proof = await validate_publication_creation_proof(
+            db, user_id, payload
+        )
     try:
-        operation = build_snapchat_operation(effective_payload)
+        operation = build_snapchat_operation(effective_payload,
+            publication_active=bool(publication_creation_proof))
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
@@ -3248,6 +3294,7 @@ async def create_snapchat_management_proposal(
         operation.get("entity_type") in {"campaign", "ad_squad", "ad"}
         and not baseline.get("windows")
         and provider is None
+        and not publication_creation_proof
     ):
         raise HTTPException(
             status_code=409,
@@ -3367,6 +3414,9 @@ async def create_snapchat_management_proposal(
         "reason": payload.reason,
         "idempotency_key": payload.idempotency_key,
         "request_fingerprint": request_fingerprint,
+        **({"publication_id": payload.publication_id,
+            "publication_creation_proof": publication_creation_proof}
+           if payload.publication_id else {}),
         "status": "previewed_v2" if protocol_version == 2 else "previewed",
         "revision": 1,
         "operation": operation,
@@ -3980,6 +4030,7 @@ async def execute_snapchat_management_proposal(
     proposal_id: str,
     *,
     provider: SnapchatManagementProvider | None = None,
+    publication_worker_claim: str | None = None,
 ) -> dict[str, Any]:
     row = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
@@ -4011,6 +4062,7 @@ async def execute_snapchat_management_proposal(
             actor_id,
             proposal_id,
             provider=provider,
+            publication_worker_claim=publication_worker_claim,
         )
         return result
     except asyncio.CancelledError:
@@ -4128,7 +4180,8 @@ def _create_candidate_matches(
         return False
     expected = _operation_expected_values(operation)
     exact, _ = _changed_values_match(expected, candidate)
-    if not exact or str(candidate.get("status") or "").upper() != "PAUSED":
+    expected_status = "ACTIVE" if _publication_direct_active_create(row) else "PAUSED"
+    if not exact or str(candidate.get("status") or "").upper() != expected_status:
         return False
     action = str(row.get("action") or "")
     if action == "campaign.create" and str(candidate.get("ad_account_id") or "") != str(
@@ -4939,6 +4992,7 @@ async def _execute_snapchat_management_proposal_under_lease(
     proposal_id: str,
     *,
     provider: SnapchatManagementProvider | None = None,
+    publication_worker_claim: str | None = None,
 ) -> dict[str, Any]:
     if not snapchat_campaign_mutations_enabled():
         raise HTTPException(
@@ -5422,14 +5476,21 @@ async def _execute_snapchat_management_proposal_under_lease(
             )
             raise
     async def authorize_provider_write() -> None:
-        from campaign_ai_snapchat_autonomy import require_snapchat_autonomy_write_authorization
+        if (row.get("publication_id")
+                and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS):
+            from .snapchat_campaign_publication import assert_publication_write_fence
 
-        await require_snapchat_autonomy_write_authorization(
-            db, user_id=user_id, proposal_id=proposal_id,
-            account_id=str(row.get("account_id") or ""),
-            target_id=_provider_target_id(row), action=str(row.get("action") or ""),
-            changes=_operation_expected_values(operation),
-        )
+            await assert_publication_write_fence(db, user_id, row, operation,
+                expected_worker_claim=publication_worker_claim)
+        else:
+            from campaign_ai_snapchat_autonomy import require_snapchat_autonomy_write_authorization
+
+            await require_snapchat_autonomy_write_authorization(
+                db, user_id=user_id, proposal_id=proposal_id,
+                account_id=str(row.get("account_id") or ""),
+                target_id=_provider_target_id(row), action=str(row.get("action") or ""),
+                changes=_operation_expected_values(operation),
+            )
         if final_settings_proof:
             _settings_proof_at_provider_write(final_settings_proof)
 
