@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-owner-tools-release-r2-20261025",
   "base": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
-  "state": "fresh_source_on_latest_Google_production_after_foreign_lease_delay",
+  "state": "frozen_B_source_all_CI_pass_original_host_adapter_in_progress",
   "owner_authorization": "Continue upload,publication and tests until all remaining TikTok tasks succeed.",
   "source_recovery": "Latest reviewed Google1495 production2a43e8ce introduced seven files,none overlapping the28 TikTok source paths except the old intent,which is retained exactly from J. Fresh candidate parent is J; no previous frozen handoff rewritten.",
   "behavior": [
@@ -60,7 +60,7 @@
     "No actual selected approved public video/caption or live paid activation performed",
     "Fresh exact final-source CI and v5 A/B/host acceptance; manual owner tools now defaulton but not deployed from this branch. Periodic observations remain opt-in and automatic financial action gateway remains incomplete."
   ],
-  "next": "Fresh exact CI and v5 A/B; original-host rehearsal only after foreign Snap1492 owner closes its lease. Preserve new Google source/workflow and all Snapshot media source. No incomplete financial gateway in this manual release.",
+  "next": "Recover existing host terminal/log and require adapter exit0/exact source/runtime; all B CI pass; fresh production must still2a43e8ce,then normal exact-tree merge. Actual /app changes only after fresh inactive guard. Never use failed/unknown rehearsal as acceptance.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -82,5 +82,31 @@
     "pr": 1496,
     "not_deployed": true,
     "preserved": true
+  },
+  "source_git_sha": "fe7a1ca85ef67300b7f4bf5872999ed51349c9e7",
+  "intent_git_sha": "6d3614ac0a416b70aa2d20d62c04d7d0e51a859a",
+  "runtime_release_id": "rg5-9d7b946497765f235853ea22224a2bbc86e2fd8e512b60bfe31535fbd8144878",
+  "evidence_only_no_deploy": true,
+  "evidence_branch": "codex/tiktok-owner-tools-r2-evidence-20261025",
+  "release": {
+    "source_ci": "All13 applicable workflows PASS; creator-candidate skipped by its condition.",
+    "source_release_run": 40223525608,
+    "source_native_run": 40223525607,
+    "artifact": {
+      "bytes": 904518,
+      "sha256": "dc100d85d35cd4c974e076d6d3be6ac17940e5fcee5e33e46fbbc5b02f5fa0f7",
+      "runtime": "rg5-9d7b946497765f235853ea22224a2bbc86e2fd8e512b60bfe31535fbd8144878",
+      "zip_sha256": "42fa968dff0e6d8a7c6440263eba9d20fe294874a908ac936d26cbc5850273ac",
+      "artifact": 12609938747,
+      "source": "fe7a1ca85ef67300b7f4bf5872999ed51349c9e7",
+      "base": "2a43e8cec998a6d5458174ce49fd610abf3a7a74"
+    },
+    "intent_blob": "2a75f9f8d1fd134de0200a20a66469632933b506",
+    "intent_matches_local_blob": true,
+    "B_ci": "Native,Release,Security and other11 applicable checks PASS; CodeQL40223873194 still in progress at last read.",
+    "host_rehearsal": "Guard-gated original-host clone /tmp/tiktok1498-release checked out exact frozen B6d3614ac. Terminal2 Python adapter running; code-server WebSocket disconnected. No exit result yet; restoring UI only. No /app source write or own prepare.",
+    "prepare": "not started",
+    "publish": "not started",
+    "verify": "not started"
   }
 }
