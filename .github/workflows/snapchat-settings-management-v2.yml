@@ -67,6 +67,9 @@ jobs:
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
+              backend/integrations_control_center/snapchat_readiness_provenance.py|\
+              backend/tests/test_snapchat_readiness_provenance.py|\
+              .github/workflows/snapchat-readiness-provenance-v1.yml|\
               backend/integrations_control_center/__init__.py|\
               backend/tests/test_snapchat_media_upload.py|\
               frontend/src/components/marketing/SnapchatMediaUploadPanel.jsx|\
@@ -74,6 +77,8 @@ jobs:
               frontend/src/services/snapchatMediaUpload.js|\
               frontend/src/services/snapchatMediaUpload.test.js|\
               docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
+              docs/operations/SNAP-COMPLETION-20261025/MEDIA-RECOVERY.md|\
+              docs/operations/SNAP-COMPLETION-20261025/PROVENANCE.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
               backend/tests/test_snapchat_management_execution_hardening_v1.py|\
@@ -111,6 +116,9 @@ jobs:
               backend/integrations_control_center/snapchat_entity_settings.py|\
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
+              backend/integrations_control_center/snapchat_readiness_provenance.py|\
+              backend/tests/test_snapchat_readiness_provenance.py|\
+              .github/workflows/snapchat-readiness-provenance-v1.yml|\
               backend/integrations_control_center/__init__.py|\
               backend/tests/test_snapchat_media_upload.py|\
               frontend/src/components/marketing/SnapchatMediaUploadPanel.jsx|\
@@ -118,6 +126,8 @@ jobs:
               frontend/src/services/snapchatMediaUpload.js|\
               frontend/src/services/snapchatMediaUpload.test.js|\
               docs/operations/SNAP-COMPLETION-20261025/MEDIA-UPLOAD.md|\
+              docs/operations/SNAP-COMPLETION-20261025/MEDIA-RECOVERY.md|\
+              docs/operations/SNAP-COMPLETION-20261025/PROVENANCE.md|\
               backend/tests/test_snapchat_entity_settings_v1.py|\
               backend/tests/test_snapchat_campaign_management_v1.py|\
               backend/tests/test_snapchat_management_execution_hardening_v1.py|\
@@ -138,6 +148,21 @@ jobs:
               frontend/src/services/snapchatCampaignManagement.js|\
               frontend/src/services/snapchatCampaignManagement.test.js|\
               backend/campaign_ai_funnel_evidence_v3.py|\
+              backend/campaign_ai_snapchat_autonomy.py|\
+              backend/campaign_ai_monitor.py|\
+              backend/campaign_ai_monitor_legacy.py|\
+              backend/ads_manager/__init__.py|\
+              backend/tests/test_campaign_ai_snapchat_autonomy.py|\
+              backend/tests/test_campaign_ai_snapchat_autonomy_mongo.py|\
+              backend/tests/test_campaign_ai_snapchat_autonomy_transport.py|\
+              backend/tests/test_campaign_ai_snap_budget_drift_p0_5.py|\
+              frontend/src/components/marketing/SnapchatAutonomyPanel.jsx|\
+              frontend/src/components/marketing/SnapchatAutonomyPanel.test.jsx|\
+              frontend/src/services/snapchatAutonomy.js|\
+              frontend/src/services/snapchatAutonomy.test.js|\
+              frontend/src/pages/CampaignRecommendations.jsx|\
+              .github/workflows/snapchat-ai-autonomy-v1.yml|\
+              docs/operations/SNAP-COMPLETION-20261025/AUTONOMY.md|\
               backend/campaign_ai_product_intelligence_v3.py|\
               backend/campaign_ai_temporal_evidence_v3.py|\
               backend/campaign_ai_unified_execution_evidence.py|\

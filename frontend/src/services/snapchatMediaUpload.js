@@ -209,5 +209,7 @@ export function snapchatMediaUploadError(error, fallback = "تعذّر إكما�
         snapchat_media_reconciliation_required: "افحص حالة الفيديو قبل أي محاولة أخرى.",
         snapchat_media_profile_catalog_incomplete: "تعذّر إكمال جلب ملفات سناب المتاحة لهذا الحساب.",
         snapchat_media_profile_catalog_unavailable: "تعذّر جلب ملفات سناب؛ راجع اتصال الحساب.",
+        snapchat_media_profile_permission_required: "سناب لم يسمح بقراءة الملفات العامة. راجع صلاحية Public Profile لتطبيق ميزان ثم أعد الفحص.",
+        snapchat_media_profile_authorization_required: "تعذّر تفويض قراءة ملفات سناب العامة. راجع اتصال Public Profile ثم أعد الفحص.",
     })[code] || fallback;
 }
