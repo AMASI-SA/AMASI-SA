@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
 import { describeFile, uploadVideoFile } from "./tiktokFileTransfer";
+import TikTokCaptionComposer from "./TikTokCaptionComposer";
 
 const ROOT = "/integrations-v2/tiktok/content/files";
 const ACCOUNTS = "/integrations-v2/tiktok/content/creators";
@@ -19,10 +20,11 @@ export default function TikTokFilePublishing({ onBusyChange }) {
     const [file, setFile] = useState(null), [descriptor, setDescriptor] = useState(null), [localURL, setLocalURL] = useState("");
     const [form, setForm] = useState({ ...START }), [proposal, setProposal] = useState(null), [approved, setApproved] = useState(false);
     const [busy, setBusy] = useState(false), [error, setError] = useState(""), [phase, setPhase] = useState(""), [progress, setProgress] = useState(0), [history, setHistory] = useState([]);
+    const [copyBusy, setCopyBusy] = useState(false);
     const running = useRef(false), mounted = useRef(true), controller = useRef(null), requestKey = useRef(null);
     const selected = useRef(null), metadata = useRef(null), initialized = useRef(false);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; controller.current?.abort(); }; }, []);
-    useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+    useEffect(() => { onBusyChange?.(busy || copyBusy); }, [busy, copyBusy, onBusyChange]);
     useEffect(() => { if (!file) { setLocalURL(""); return undefined; } const url = URL.createObjectURL(file); setLocalURL(url); return () => URL.revokeObjectURL(url); }, [file]);
     async function work(action) {
         if (running.current) return;
@@ -91,8 +93,9 @@ export default function TikTokFilePublishing({ onBusyChange }) {
         <label className="block space-y-2 font-bold">اختيار فيديو من الجهاز<input aria-label="اختيار فيديو من الجهاز" className={FIELD} type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" disabled={busy || !proof} onChange={(e) => chooseFile(e.target.files?.[0])} /></label>
         {localURL && <video src={localURL} controls preload="metadata" aria-label="معاينة الفيديو المحلي" className="max-h-80 w-full rounded-xl bg-black" />}
         {descriptor && <p className="text-sm">{descriptor.file_name} · {(descriptor.file_size / 1048576).toFixed(1)} MB · {descriptor.duration_seconds} ثانية · {descriptor.width}×{descriptor.height}</p>}
+        {!proposal && form.delivery === "direct" && <TikTokCaptionComposer disabled={busy} onBusyChange={setCopyBusy} onApply={(caption) => { if (busy || copyBusy) return; change("caption", caption); setForm((old) => ({ ...old, disclosure: "own_business" })); }} />}
         {phase && <div role="status" className="text-sm"><p>{phase}</p>{busy && <progress aria-label="تقدم فحص أو رفع الفيديو" className="w-full" max="100" value={progress} />}</div>}
-        {!proposal && <form onSubmit={prepare}><fieldset disabled={busy || !proof || !descriptor} className="space-y-3">
+        {!proposal && <form onSubmit={prepare}><fieldset disabled={busy || copyBusy || !proof || !descriptor} className="space-y-3">
             <label className="block font-bold">طريقة النشر<select className={FIELD} aria-label="طريقة نشر ملف TikTok" value={form.delivery} onChange={(e) => change("delivery", e.target.value)}><option value="direct">نشر على الحساب بعد المعاينة والاعتماد</option><option value="draft">مسودة لاستكمالها داخل TikTok</option></select></label>
             {form.delivery === "direct" ? <><label className="block font-bold">نص المنشور<textarea aria-label="نص منشور ملف TikTok" className={FIELD} maxLength={2200} value={form.caption} onChange={(e) => change("caption", e.target.value)} /></label>
                 <label className="block font-bold">الخصوصية<select className={FIELD} aria-label="خصوصية ملف TikTok" required value={form.privacy_level} onChange={(e) => change("privacy_level", e.target.value)}><option value="">اختر الخصوصية</option>{proof?.settings.privacy_level_options.map((value) => <option key={value} value={value}>{PRIVACY[value]}</option>)}</select></label>
@@ -104,12 +107,12 @@ export default function TikTokFilePublishing({ onBusyChange }) {
         {proposal && <div className="space-y-3 rounded-xl bg-slate-50 p-4"><p role="status" className="font-bold">{STATUS[proposal.status] || "حدّث حالة العملية"}</p><p>{frozen.file_name} · {frozen.delivery === "direct" ? PRIVACY[frozen.privacy_level] : "مسودة"}</p>{frozen.caption && <p className="whitespace-pre-wrap">{frozen.caption}</p>}
             <p className="text-sm">الإفصاح: {({ none: "غير تجاري", own_business: "نشاطي التجاري", paid_partnership: "شراكة مدفوعة" })[frozen.disclosure]} · فيديو بالذكاء الاصطناعي: {frozen.is_aigc ? "نعم" : "لا"}</p>
             {proposal.status === "previewed" && !initialized.current && <><label className="flex gap-2 text-sm"><input aria-label="اعتماد رفع ملف TikTok" type="checkbox" disabled={busy} checked={approved} onChange={(e) => setApproved(e.target.checked)} />أعتمد إرسال هذا الفيديو بإعداداته المعروضة إلى TikTok مرة واحدة.</label><button type="button" className={BUTTON} disabled={busy || !approved} onClick={execute}>اعتماد رفع الملف ونشره</button></>}
-            <button type="button" className={BUTTON} disabled={busy} onClick={() => work(async (options) => { const { data } = await api.post(`${ROOT}/proposals/${proposal.proposal_id}/status`, {}, options); receive(data); })}>تحديث حالة رفع الملف</button>
+            <button type="button" className={BUTTON} disabled={busy} onClick={() => work(async (options) => { const { data } = await api.post(`${ROOT}/proposals/${proposal.proposal_id}/status`, {}, options); initialized.current = data.status !== "previewed"; receive(data); })}>تحديث حالة رفع الملف</button>
             {proposal.status === "awaiting_upload" && <button type="button" className={BUTTON} disabled={busy || !descriptor || descriptor.file_manifest_sha256 !== frozen.file_manifest_sha256} onClick={resume}>استكمال نفس عملية الرفع</button>}
-            {['failed','blocked','published_public','published_private','draft_delivered'].includes(proposal.status) && <button type="button" className={BUTTON} disabled={busy} onClick={() => { setProposal(null); initialized.current = false; requestKey.current = null; setApproved(false); }}>تجهيز عملية جديدة</button>}
+            {(['failed','blocked','published_public','published_private','draft_delivered'].includes(proposal.status) || (proposal.status === 'previewed' && !initialized.current)) && <button type="button" className={BUTTON} disabled={busy} onClick={() => { setProposal(null); initialized.current = false; requestKey.current = null; setApproved(false); }}>تجهيز معاينة جديدة</button>}
             {proposal.uploaded_bytes != null && <p className="text-sm">استلم TikTok {proposal.uploaded_bytes} من {frozen.file_size} بايت.</p>}{proposal.public_post_ids?.length > 0 && <p className="break-all text-sm">معرّف المنشور العام: {proposal.public_post_ids.join('، ')}</p>}
         </div>}
-        {busy && <button type="button" className={BUTTON} onClick={() => controller.current?.abort()}>إيقاف النقل والتحقق من الحالة</button>}
+        {busy && <button type="button" className={BUTTON} onClick={() => controller.current?.abort()}>إيقاف النقل؛ ثم حدّث حالة العملية</button>}
         <button type="button" className={BUTTON} disabled={busy} onClick={() => work(async (options) => { const { data } = await api.get(`${ROOT}/proposals`, options); if (mounted.current) setHistory(data.items || []); })}>سجل رفع الملفات</button>
         {history.map((row) => <button key={row.proposal_id} className={`${BUTTON} block w-full text-right`} type="button" disabled={busy} onClick={() => work(async (options) => { const { data } = await api.get(`${ROOT}/proposals/${row.proposal_id}`, options); initialized.current = data.status !== "previewed"; receive(data); })}>{row.input.file_name} · {STATUS[row.status] || "راجع الحالة"} · {new Date(row.created_at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" })}</button>)}
     </section>;

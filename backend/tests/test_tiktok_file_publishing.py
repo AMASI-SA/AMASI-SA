@@ -158,6 +158,50 @@ async def test_uncertain_init_is_fenced_across_new_idempotency_keys(fileflow):
 
 
 @pytest.mark.asyncio
+async def test_resume_reconciles_native_offset_and_returns_same_capability_without_another_init(fileflow):
+    db, state = fileflow
+    preview = await prepare(db, state, value(file_size=25 * 1024 * 1024))
+    await initialize(db, state, preview)
+    state.status["uploaded_bytes"] = 10 * 1024 * 1024
+    result = await publishing.transfer(db, "owner", preview["proposal_id"], "b" * 64, business_factory=state.factory, api_factory=state.factory)
+    assert result["transfer"]["offset"] == 10485760 and result["transfer"]["url"] == state.destination
+    assert len(state.initializations) == 1 and state.calls[-1][1].endswith("/status/fetch/")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("condition", ["different_file", "partial_chunk", "expired", "fully_uploaded"])
+async def test_resume_refuses_unproven_file_offset_or_expired_capability(fileflow, condition):
+    from datetime import timedelta
+    db, state = fileflow
+    preview = await prepare(db, state, value(file_size=25 * 1024 * 1024))
+    await initialize(db, state, preview)
+    if condition == "partial_chunk": state.status["uploaded_bytes"] = 123
+    if condition == "fully_uploaded": state.status["uploaded_bytes"] = 25 * 1024 * 1024
+    if condition == "expired":
+        await db[publishing.PROPOSALS].update_one({"_id": preview["proposal_id"]}, {"$set": {"upload_expires_at": publishing.now() - timedelta(seconds=1)}})
+    with pytest.raises(HTTPException):
+        await publishing.transfer(db, "owner", preview["proposal_id"], ("c" if condition == "different_file" else "b") * 64, business_factory=state.factory, api_factory=state.factory)
+    assert len(state.initializations) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("condition", ["redirect", "compressed", "oversized", "malformed", "unknown_error"])
+async def test_native_transport_rejects_unproven_responses_without_logging_capabilities(condition, caplog):
+    def handle(request):
+        secret = "fixture-private-upload-capability"
+        if condition == "redirect": return httpx.Response(302, headers={"Location": "https://evil.test/" + secret})
+        if condition == "compressed": return httpx.Response(200, content=b"{}", headers={"Content-Type": "application/json", "Content-Encoding": "br"})
+        if condition == "oversized": return httpx.Response(200, content=b"{}", headers={"Content-Type": "application/json", "Content-Length": "999999"})
+        if condition == "malformed": return httpx.Response(200, content=secret.encode(), headers={"Content-Type": "application/json"})
+        return httpx.Response(400, json={"error": {"code": secret, "message": secret}})
+    async with transport.TikTokFileAPI(transport=httpx.MockTransport(handle)) as api:
+        with pytest.raises(HTTPException) as caught:
+            await api.call("POST", "/v2/post/publish/video/init/", token="fixture-access-secret", body={})
+    assert "fixture-private-upload-capability" not in str(caught.value.detail) + caplog.text
+    assert caught.value.detail.get("native_rejected") is not True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("status,ids,expected", [("PROCESSING_UPLOAD", [], "awaiting_upload"), ("PUBLISH_COMPLETE", [], "complete_pending_ids"),
     ("PUBLISH_COMPLETE", ["1234567891234567891"], "published_public"), ("FAILED", [], "failed")])
 async def test_native_status_not_browser_claim_establishes_completion(fileflow, status, ids, expected):

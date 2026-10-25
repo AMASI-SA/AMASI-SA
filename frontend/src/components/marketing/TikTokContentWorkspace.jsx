@@ -165,7 +165,7 @@ export function TikTokURLContentWorkspace({ onBusyChange }) {
     const canPreview = proof && (form.delivery === "draft" ? proof.capabilities?.draft_upload : proof.capabilities?.publish);
     const canCheck = proposal && proposal.status !== "previewed";
 
-    return <section className="space-y-4" dir="rtl" data-testid="tiktok-content-workspace">
+    return <section className="space-y-4" dir="rtl" data-testid="tiktok-url-content-workspace">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3"><ShieldCheck size={26} className="text-emerald-700" /><div><h2 className="text-xl font-black text-slate-900">منشورات TikTok</h2><p className="mt-1 text-sm font-semibold leading-6 text-slate-500">اربط حساب النشر، عاين المحتوى، ثم اعتمد إرساله. يسحب TikTok الوسائط مباشرة من روابطك الموثقة.</p></div></div>
             <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">المعاينة صالحة 10 دقائق. حد ميزان: 10 صور للمنشور، و15 عملية إرسال للحساب خلال 24 ساعة. التحقق من الحالة يدوي، ولا تُحمّل ملفات الفيديو إلى خادم ميزان.</p>
@@ -204,7 +204,7 @@ export function TikTokURLContentWorkspace({ onBusyChange }) {
 
 export default function TikTokContentWorkspace() {
     const [source, setSource] = useState("file"), [busy, setBusy] = useState(false);
-    return <div className="space-y-4" dir="rtl"><div role="tablist" aria-label="مصدر فيديو TikTok" className="flex gap-3">
+    return <div className="space-y-4" dir="rtl" data-testid="tiktok-content-workspace"><div role="tablist" aria-label="مصدر فيديو TikTok" className="flex gap-3">
         <button type="button" role="tab" aria-selected={source === "file"} disabled={busy} className={buttonClass} onClick={() => setSource("file")}>ملف من الجهاز</button>
         <button type="button" role="tab" aria-selected={source === "url"} disabled={busy} className={buttonClass} onClick={() => setSource("url")}>رابط خارجي</button>
     </div>{source === "file" ? <TikTokFilePublishing onBusyChange={setBusy} /> : <TikTokURLContentWorkspace onBusyChange={setBusy} />}</div>;
