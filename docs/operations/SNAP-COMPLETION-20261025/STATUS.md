@@ -1,5 +1,14 @@
 # Snapchat completion — verified checkpoint 2026-10-25
 
+## Frozen1519 A/B — final checks and foreign lease gate
+
+B38eee3ed8f2dc40a854cfd595bbb3de3872de3c3/tree7e417af49e4a3b3ff08ed4b85a9505aef6331226 changes ONLY trackedintent after Ab21814aaaf6314c5a723a4d858a768f8d3be5437 (Jdede6648da7306adb8d0f26a5093f1e7bcb0348d). Runtime rg5-f0ac0fa23585221808f842f34aef4f64b5e2bfa1cdc09cceb01c9496dc033c85. SourceReadiness40238354213/artifact12615838313,ZIP SHA0301cd4ee84173d78bced74c8f9513684c31eeb1570cec88bf03b3e01ce684a7. IntentSHAef712ad507bfcbb97223a2320f2427e7fec0525cc4c3623f88c32f8d2938680f/blob125d05a9fccc84252c924378ee6cca2072f0679a. Exact clean ownworktree Gitintent/manifests verification PASSED; A→Bintentonly. Initiallocalmanifestcheck rejected ownbackendpytestcache; onlythatderivednonsymlinkcache removed, then passed. No foreignfile/lease was altered.
+
+SourceA actualCI: reporting362passed10.33s, dashboard/attributionUI63tests5suites3.037s, publication254backendtests6.55s includingactualMongo, publicationUI61tests5suites/build5.05s. FinalB reporting362passed7.52s; remainingB HostNode20/CodeQL/G47 were stillrunning at this checkpoint. All finalchecks must be inspected before release.
+
+ActualEmergent1519rehearsal attempted under freshgate and STOPPED BEFORE clone/build/appmutation because guardreportsactive=true/actorcodex-google1515. Rootowns nolease. EmergentUI freshreload stilllatestexplicitDeploymentfinishedOct26 00:14Riyadh; no newer1515finishobserved. Do not clear/reuse/verify/close foreignlease. ProductionrefstillJdede. Next: finishfinalBchecks, thenfreshinactiveguard. Onlyinactive andsameJ permit actualrehearsal→normalmergeexactBtree→officialappbuild/ownprepare/prepublish→onepublish→newerfinish→verify3/inactive→livepartialcard/ACTIVEpublisher/recommendations acceptance. Otherwise refreshsourcebase/intent ifProductionadvanced. OwnerSaudiadsremainpaused; noadactivationwrite is authorized bythisincident.
+
+
 ## Current source checkpoint — 1519 replaces stale1514
 
 Owner confirms Saudi ads are paused. Preserve that status; no ad/campaign/budget activation is part of this incident or release acceptance. Source A b21814aaaf6314c5a723a4d858a768f8d3be5437/tree501711daa330650032a46bbf422941d68127f47f is remotely recoverable on codex/snap-midnight-spend-20261026, PR1519. Base Jdede6648da7306adb8d0f26a5093f1e7bcb0348d.29sourcepaths carry exact20oldcompletionpaths plus9boundedmidnightpaths;19of20oldpathsarebyteidentical, settingsCI gets exactnewallowlist. Own isolated mezan-snap-midnight now matches remoteA/tree and is clean. Other sharedcheckouts preserved.
