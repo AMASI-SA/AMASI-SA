@@ -600,6 +600,77 @@ async def cancelled_execution_outcome(db, user_id, execution, *, now=_utcnow):
                         if no_send else "campaign_execution_cancelled_outcome_unknown"}}
 
 
+async def _recover_stale_unstarted_execution(db, user_id, account_id, execution, *, now=_utcnow):
+    """Close only a proved no-send claim whose original account lease is gone."""
+    authorization = execution.get("authorization") or {}
+    lease_owner = authorization.get("lease_owner")
+    if (execution.get("user_id") != user_id or execution.get("account_id") != account_id
+            or execution.get("provider") != "snapchat"
+            or execution.get("authorization_kind") != "account_policy"
+            or execution.get("status") != "executing"
+            or execution.get("writes_performed") is not False
+            or execution.get("runner_started_at") is not None
+            or execution.get("runner_claim_token") is not None
+            or execution.get("provider_proposal_id") is not None
+            or authorization.get("kind") != "account_policy"
+            or authorization.get("version") != FENCE_VERSION
+            or authorization.get("account_id") != account_id
+            or not isinstance(lease_owner, str) or len(lease_owner) < 16):
+        return False
+    current = now()
+    lease = await db[LEASE_COLLECTION].find_one({
+        "_id": _key("account", user_id, account_id), "user_id": user_id, "account_id": account_id,
+    })
+    # Missing lease evidence is not proof of expiry. A replacement lease never
+    # reuses this server-generated token; leave every current lease untouched.
+    if lease is None:
+        return False
+    lease_value = lease.get("lease_until")
+    # BSON dates are UTC even when a worker's Mongo codec returns naive
+    # datetimes. This normalization is only for trusted server lease dates;
+    # owner-entered policy expiry must still carry an explicit timezone.
+    if isinstance(lease_value, datetime) and lease_value.tzinfo is None:
+        lease_value = lease_value.replace(tzinfo=timezone.utc)
+    lease_until = _instant(lease_value)
+    if lease.get("owner") == lease_owner and (lease_until is None or lease_until > current):
+        return False
+    if await db[BINDING_COLLECTION].find_one({
+        "user_id": user_id, "execution_id": execution["execution_id"],
+    }):
+        return False
+    if await db["mezan_snapchat_campaign_proposals_v1"].find_one({
+        "user_id": user_id, "idempotency_key": execution["execution_id"],
+    }):
+        return False
+    timestamp = current.isoformat()
+    changed = await db[EXECUTION_COLLECTION].update_one(
+        {"execution_id": execution["execution_id"], "user_id": user_id, "account_id": account_id,
+         "provider": "snapchat", "authorization_kind": "account_policy", "authorization": authorization,
+         "status": "executing", "writes_performed": False, "$and": [
+             {"$or": [{"runner_started_at": {"$exists": False}}, {"runner_started_at": None}]},
+             {"$or": [{"runner_claim_token": {"$exists": False}}, {"runner_claim_token": None}]},
+             {"$or": [{"provider_proposal_id": {"$exists": False}}, {"provider_proposal_id": None}]},
+         ]},
+        {"$set": {"status": "cancelled", "finished_at": timestamp, "cancelled_at": timestamp,
+                  "writes_performed": False, "provider_write_outcome_known": True,
+                  "failure": {"code": "campaign_execution_unstarted_lease_expired"},
+                  "reconciliation": {"source": "stale_unstarted_account_policy_claim",
+                      "outcome": "not_sent", "lease_owner": lease_owner, "proof_at": timestamp}},
+         "$push": {"audit": {"$each": [{
+             "event": "unstarted_execution_recovered", "actor_id": "snapchat-reconciliation-projection",
+             "occurred_at": timestamp, "outcome": "not_sent", "lease_owner": lease_owner,
+         }], "$slice": -50}}},
+    )
+    if not changed.matched_count:
+        return False
+    await db[RECOMMENDATION_COLLECTION].update_one(
+        {"user_id": user_id, "snapshot_id": execution["snapshot_id"]},
+        {"$set": {"recommendations.$[item].execution_status": "cancelled"}},
+        array_filters=[{"item.recommendation_id": execution["recommendation_id"]}],
+    )
+    return True
+
+
 async def refresh_linked_execution_outcomes(db, user_id, account_id, *, now=_utcnow):
     """Bounded projection of trusted read-only management reconciliation.
 
@@ -614,6 +685,9 @@ async def refresh_linked_execution_outcomes(db, user_id, account_id, *, now=_utc
         return {"refreshed": 0, "blocked": "pending_execution_limit"}
     refreshed = 0
     for execution in pending:
+        if await _recover_stale_unstarted_execution(db, user_id, account_id, execution, now=now):
+            refreshed += 1
+            continue
         linked = await trusted_execution_proposal(db, user_id, execution)
         if linked is None:
             continue

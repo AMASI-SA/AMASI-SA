@@ -482,3 +482,61 @@ async def test_cancellation_during_initial_read_cannot_cancel_concurrent_runner(
     assert "cancelled_at" not in after_cancel
     assert result["status"] == "completed"
     execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_initial_read_without_winner_is_known_no_send(db, monkeypatch):
+    _, authorization = await grant(db)
+    proof = checked()
+    await snapshot(db, [proof]); install_preflight(monkeypatch, proof)
+    claim = await legacy.claim_campaign_recommendation_execution(
+        db, "owner", snapshot_id="snapshot-a", recommendation_id="rec-a", authorization=authorization,
+    )
+    real_collection = db[autonomy.EXECUTION_COLLECTION]
+    read_entered, read_forever = asyncio.Event(), asyncio.Event()
+    read_once = False
+
+    class DelayedReadCollection:
+        def __getattr__(self, name):
+            return getattr(real_collection, name)
+        async def find_one(self, query, **options):
+            nonlocal read_once
+            result = await real_collection.find_one(query, **options)
+            if not read_once:
+                read_once = True
+                read_entered.set()
+                # The database has returned the row, but the caller has not
+                # received it. Cancellation therefore leaves runner row=None.
+                await read_forever.wait()
+            return result
+
+    wrapped_collection = DelayedReadCollection()
+    class WrappedDB:
+        def __getitem__(self, name):
+            return wrapped_collection if name == autonomy.EXECUTION_COLLECTION else db[name]
+
+    execute = AsyncMock()
+    monkeypatch.setattr(legacy, "_execute_approved_recommendation", execute)
+    task = asyncio.create_task(legacy.run_claimed_campaign_execution(WrappedDB(), "owner", claim["execution_id"]))
+    await asyncio.wait_for(read_entered.wait(), timeout=3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    cancelled = await real_collection.find_one({"execution_id": claim["execution_id"]})
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["provider_write_outcome_known"] is True
+    assert cancelled["writes_performed"] is False
+    assert cancelled["failure"]["code"] == "campaign_execution_cancelled_before_provider_write"
+    assert cancelled.get("runner_started_at") is None
+    assert cancelled.get("runner_claim_token") is None
+    stored_snapshot = await db[autonomy.RECOMMENDATION_COLLECTION].find_one({
+        "user_id": "owner", "snapshot_id": "snapshot-a",
+    })
+    stored_recommendation = next(
+        item for item in stored_snapshot["recommendations"] if item["recommendation_id"] == "rec-a"
+    )
+    assert stored_recommendation["execution_status"] == "cancelled"
+    assert await db[autonomy.BINDING_COLLECTION].count_documents({}) == 0
+    assert await db[management.PROPOSAL_COLLECTION].count_documents({}) == 0
+    await legacy.run_claimed_campaign_execution(db, "owner", claim["execution_id"])
+    execute.assert_not_awaited()

@@ -2747,9 +2747,9 @@ async def run_claimed_campaign_execution(db: Any, user_id: str, execution_id: st
         )
         if saved_cancel.matched_count:
             await db[RECOMMENDATION_COLLECTION].update_one(
-                {"user_id": user_id, "snapshot_id": row["snapshot_id"]},
+                {"user_id": user_id, "snapshot_id": refreshed["snapshot_id"]},
                 {"$set": {"recommendations.$[item].execution_status": cancelled["status"]}},
-                array_filters=[{"item.recommendation_id": row["recommendation_id"]}],
+                array_filters=[{"item.recommendation_id": refreshed["recommendation_id"]}],
             )
         # The existing worker/cadence owner must still observe cancellation.
         raise
