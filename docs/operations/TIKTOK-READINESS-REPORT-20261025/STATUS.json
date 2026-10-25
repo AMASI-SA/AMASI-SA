@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-readiness-report-20261025",
   "source_base": "c410cab8c6835e6575fdd3e792a983767182f966",
   "scope": "Narrow diagnostic release within the owner's explicitly authorized complete TikTok upload, publication and testing task.",
-  "state": "MERGED_FROZEN_B_HOST_REHEARSAL_BEFORE_PREPARE",
+  "state": "PUBLISHING_ONCE_AWAIT_NEW_COMPLETION_AND_IDENTITY_ACCEPTANCE",
   "behavior": [
     "Owner-only bounded readiness report returns explicit ready:false and a fixed local phase/code for blocked checks; the check runs once and performs no publishing action.",
     "The UI clears any prior readiness proof and cannot prepare content from a blocked report.",
@@ -32,7 +32,7 @@
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "PR1480 remains separate WIP; paused builder,periodic observations,child activation,Spark linking,financial policy and measured outcomes are not accepted by this diagnostic release.",
-  "next": "Finish actual/app adapter; prepare/prepublish with codex-tiktok1482; publish once; require newer Deployment finished and three guard verification probes. Then read creator readiness report and implement demonstrated provider fix. Never deploy this evidence-only branch.",
+  "next": "Wait for explicit newer deployment completion; run matching guard verify for three consecutive identity probes, then inspect creator readiness report. Continue full TikTok implementation and testing; do not call diagnostic publication full-management completion.",
   "source_a": "7e45de885ee0605f4f43ec1fb9983e679b633cae",
   "intent_b": "725877de47f49af27b7db257a623c7e2bfd87f14",
   "merge_m": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
@@ -40,7 +40,9 @@
   "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
   "pr": 1482,
   "actual_host": "Independent clean clone B adapter exit0. First original/app adapter rejected generated __pycache__; one untracked generated directory reversibly preserved at/tmp/tiktok1482-bytecode-preserved-20261025. Second original/app adapter completed with exact intended identity; host_build_exit=0. Original source M retained, unrelated .emergent/testing and deployer-agent-docs preserved.",
-  "lease": "Foreign Google1481 publication completed and guard subsequently active:false. No TikTok lease yet.",
+  "lease": "Own codex-tiktok1482 prepare JSON validated exact A/M/runtime; prepublish JSON validated exact runtime and deployment M. No foreign lease reused.",
   "public_identity_before_tiktok": "Read-only /api/health shows Google8cce9baf source and verified v5 identity; not TikTok acceptance.",
-  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482."
+  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482.",
+  "publish_attempts": 1,
+  "publish_ui": "Clicked final Publish changes once; Publishing... and Deployment Started October25,19:43 Riyadh observed. Do not resubmit while result is pending."
 }
