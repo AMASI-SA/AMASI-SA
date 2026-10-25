@@ -714,6 +714,8 @@ Return at most SIX concise, prioritized recommendations. Do not generate one
 recommendation per campaign. Prefer a small actionable set; zero is valid when
 the available evidence does not support a useful recommendation.
 Use only the supplied evidence and exact currency/account timezone/window.
+Every evidence entry inherits date_from, date_to, currency_code and time_zone
+from the shared period object; its source and metric remain entry-specific.
 Every recommendation must target a supplied campaign_id and cite its exact
 evidence_ids. Do not invent any metric, evidence ID, order result, price,
 attribute, attribution, profit or causal certainty. Google platform conversions
@@ -746,10 +748,13 @@ def _analysis_reasoning_schema(campaigns: dict[str, dict[str, Any]],
     """
     schema = _AnalysisOutput.model_json_schema()
     template = schema["$defs"].pop("_Recommendation")
-    # Reuse enum definitions: 100 campaigns must not duplicate thousands of
-    # enum values beyond the structured-output service's supported limit.
-    for field in ("priority", "confidence"):
-        name = "Analysis" + field.title()
+    # Share every invariant property, not just enums. Repeating full text and
+    # nullable schemas in 100 branches would consume the existing input budget.
+    # Campaign, action and evidence remain constrained independently per branch.
+    for field in tuple(template["properties"]):
+        if field in {"campaign_id", "action", "evidence_ids"}:
+            continue
+        name = "A" + field.title().replace("_", "")
         schema["$defs"][name] = template["properties"][field]
         template["properties"][field] = {"$ref": f"#/$defs/{name}"}
     action_definitions: dict[tuple[str, ...], str] = {}
@@ -861,8 +866,14 @@ async def analyze_google_campaigns(
         limitations.append("salla_attribution_unverified")
     if not any(item.get("kind") == "profitability" for item in registry.values()):
         limitations.append("profitability_unverified")
+    # These four fields are identical to the shared period for every accepted
+    # evidence row. Send them once; retain the full registry for independent
+    # validation and the returned audit evidence.
+    reasoning_evidence = {key: {field: value for field, value in evidence.items()
+                                if field not in {"date_from", "date_to", "currency_code", "time_zone"}}
+                          for key, evidence in registry.items()}
     raw = await _reason(instructions=_ANALYSIS_INSTRUCTIONS,
-                        payload={"period": period, "campaigns": list(campaigns.values()), "evidence": registry,
+                        payload={"period": period, "campaigns": list(campaigns.values()), "evidence": reasoning_evidence,
                                  "budget_semantics": {
                                      "DAILY": {"kind": "average_daily_budget", "hard_daily_spend_cap": False,
                                                "explanation": DAILY_BUDGET_EXPLANATION},

@@ -476,6 +476,31 @@ async def test_analysis_generation_schema_excludes_campaigns_without_any_verifie
     assert [b["properties"]["campaign_id"]["enum"] for b in branches] == [["11"]]
 
 
+@pytest.mark.asyncio
+async def test_analysis_accepts_100_native_campaigns_within_existing_context_budget():
+    import copy
+    facts = campaign_facts()
+    original = facts["campaigns"][0]
+    facts["campaigns"] = [{**copy.deepcopy(original), "campaign_id": str(11 + index)}
+                          for index in range(100)]
+    client = ModelClient(analysis_output())
+    result = await analyze_google_campaigns(NoDB(), OWNER, analysis_body(), facts=facts,
+                                           client_factory=lambda: client)
+    assert len(client.calls) == 1
+    assert result["recommendations"][0]["campaign_id"] == "11"
+    assert result["provider_writes"] == 0
+    payload = json.loads(client.calls[0]["input"])
+    assert payload["period"]["currency_code"] == "USD"
+    assert payload["period"]["time_zone"] == "America/New_York"
+    assert payload["period"]["date_from"] == "2026-10-12"
+    assert payload["period"]["date_to"] == "2026-10-13"
+    assert "date_from" not in next(iter(payload["evidence"].values()))
+    evidence = result["recommendations"][0]["evidence"][0]
+    assert {key: evidence[key] for key in ("currency_code", "time_zone", "date_from", "date_to")} == {
+        "currency_code": "USD", "time_zone": "America/New_York",
+        "date_from": "2026-10-12", "date_to": "2026-10-13"}
+
+
 def test_analysis_generation_schema_supports_full_100_campaign_scope_within_service_limits():
     from integrations_control_center.google_ads_ai import _analysis_reasoning_schema, _strict_schema
     actions = ["MONITOR", "REVIEW_TRACKING", "PAUSE_CAMPAIGN", "CHANGE_BUDGET"]
