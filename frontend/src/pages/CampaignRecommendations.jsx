@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CampaignResearchStatus from "../components/marketing/CampaignResearchStatus";
 import CampaignAccountAnalysis from "../components/marketing/CampaignAccountAnalysis";
+import SnapchatAutonomyPanel from "../components/marketing/SnapchatAutonomyPanel";
 import { Link } from "react-router-dom";
 import {
     AlertTriangle,
@@ -314,6 +315,8 @@ export default function CampaignRecommendations() {
     const [goal, setGoal] = useState(null);
     const [goalInput, setGoalInput] = useState("100000");
     const [savingGoal, setSavingGoal] = useState(false);
+    const [autonomyPolicies, setAutonomyPolicies] = useState([]);
+    const hasAutomaticSnapchat = autonomyPolicies.some((policy) => policy.execution_enabled === true);
 
     const load = useCallback(async () => {
         setError("");
@@ -411,12 +414,13 @@ export default function CampaignRecommendations() {
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                     <Link to="/dashboard-advanced" className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:text-violet-700" aria-label="العودة إلى لوحة التحكم"><ArrowRight className="h-5 w-5" /></Link>
-                    <div><h1 className="text-xl font-black text-slate-900">مدير الربح والحملات</h1><p className="mt-1 text-xs font-bold text-slate-500">الهدف الشهري أولًا · الذكاء يختار ما يخدم صافي الربح · أي تعديل إعلاني يحتاج موافقتك حاليًا</p></div>
+                    <div><h1 className="text-xl font-black text-slate-900">مدير الربح والحملات</h1><p className="mt-1 text-xs font-bold text-slate-500">الهدف الشهري أولًا · الذكاء يختار ما يخدم صافي الربح · {hasAutomaticSnapchat ? "سناب ينفذ ضمن تفويض كل حساب؛ بقية الإجراءات تحتاج موافقتك" : "أي تعديل إعلاني يحتاج موافقتك حاليًا"}</p></div>
                 </div>
                 <button type="button" onClick={load} disabled={loading} className="flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-xs font-extrabold text-white disabled:bg-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />تحديث</button>
             </div>
 
             <GoalCard goal={goal} goalInput={goalInput} setGoalInput={setGoalInput} saving={savingGoal} onSave={saveGoal} />
+            <SnapchatAutonomyPanel onPoliciesChange={setAutonomyPolicies} />
 
             <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-800 bg-violet-700 px-5 py-4 text-white">
@@ -492,7 +496,7 @@ export default function CampaignRecommendations() {
             </section>
 
             {!loading && !visible.length && <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400"><BarChart3 className="mx-auto mb-2 h-6 w-6" />لا توجد توصيات مطابقة للفلاتر الحالية.</div>}
-            <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-slate-400"><Clock3 className="h-3 w-3" /><span>قرار واحد لكل دورة تحليل</span><ShieldCheck className="h-3 w-3" /><span>لا تعديل على الإعلان بدون موافقتك حاليًا</span><ShoppingCart className="h-3 w-3" /><span>السلات دليل مساعد وليست ربحًا منسوبًا للحملة</span></div>
+            <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-slate-400"><Clock3 className="h-3 w-3" /><span>قرار واحد لكل دورة تحليل</span><ShieldCheck className="h-3 w-3" /><span>{hasAutomaticSnapchat ? "التنفيذ حسب تفويض الحساب أو موافقة المالك" : "لا تعديل على الإعلان بدون موافقتك حاليًا"}</span><ShoppingCart className="h-3 w-3" /><span>السلات دليل مساعد وليست ربحًا منسوبًا للحملة</span></div>
         </div>
     </main>;
 }
