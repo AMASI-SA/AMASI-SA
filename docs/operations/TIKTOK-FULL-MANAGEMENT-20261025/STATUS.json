@@ -58,7 +58,8 @@
     "Read-only release-guard status reported active:true for separate Google1479 actor/source25076ac3 and deployment39a7dc82; no shared/app source or release-state writes performed",
     "Separate Google publication subsequently showed Deployment finished October25 at18:42 UI time; this is not a TikTok release or this task's acceptance verdict",
     "After the separate publication, refreshed Mezan, reloaded creator accounts and rechecked the same connected new Amasi account once: generic HTTP502 reproduced; no publication submitted",
-    "Authenticated View Logs inspected and reloaded after reproduction: displayed90 records oriented around startup through approximately15:43UTC, with no matching TikTok verify request/phase. Root cause still unproven; current UI log visibility does not provide the needed request trace"
+    "Authenticated View Logs inspected and reloaded after reproduction: displayed90 records oriented around startup through approximately15:43UTC, with no matching TikTok verify request/phase. Root cause still unproven; current UI log visibility does not provide the needed request trace",
+    "Refreshed Mezan,selected same connected new Amasi creator,readiness once. Report ready:false at settings phase with fixed tiktok_creator_settings_unproven; identity proof passed. This local settings validation boundary is established; exact rejected provider field/schema remains unproven."
   ],
   "invariants": [
     "No media bytes downloaded or stored on Mezan",
@@ -67,10 +68,10 @@
     "Never repeat uncertain provider submissions",
     "Preserve other platforms and operational/accounting work"
   ],
-  "production_changed": false,
+  "production_changed": true,
   "provider_business_writes": 0,
   "live_model_calls": 0,
-  "next_action": "Authentication is restored. Obtain actual production request-level diagnostics for the reproduced readiness502, or prepare a narrowly scoped safe diagnostic source change if the platform view cannot expose them; do not invent a provider failure cause. Preserve the separate Google lease and current production source. Complete child activation/editing, Spark linking and bounded autonomous financial Action Gateway with trustworthy financial coverage and owner limits. Then fresh integrated CI and protocol-v5 A/B/actual-host/deployment acceptance; never treat this default-off WIP as100% autonomy.",
+  "next_action": "Inspect official Business API settings schema and obtain safe field-level evidence; implement a tested schema/validation correction,then fresh A/B release and live readiness acceptance. Continue full TikTok task; PR1480 builder/periodic/AI source remains WIP,not deployed.",
   "completed_behavior": [
     "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
     "Safe fixed-stage AI failure diagnostics",
@@ -82,7 +83,7 @@
     "Optional three-campaign periodic observations in existing global five-hour cycle, replica claim before model work, rotated pages, shared recommendations; financial execution remains disabled"
   ],
   "remaining": [
-    "Publishing readiness502 reproduced after successful hosting sign-in and separate Google publication; available hosting log view does not contain the matching request trace, so root cause remains unresolved",
+    "Live failure isolated to local TikTok settings validation (tiktok_creator_settings_unproven),after successful identity proof; exact rejected field/schema still to prove and correct.",
     "New code not deployed or enabled: TIKTOK_AD_BUILDER_ENABLED and MEZAN_TIKTOK_AI_PERIODIC_ENABLED defaultfalse",
     "Full Smart+ activation/child editing, Spark post-to-ad linking, bounded autonomous financial Action Gateway and measured outcomes remain incomplete",
     "Financial attribution/coverage must be proved before profit-based automatic scale decisions; never treat TikTok conversions as Salla financial orders",
@@ -92,5 +93,17 @@
   "reviewed_runtime_source": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
   "authentication": "User subsequently completed sign-in and explicitly requested refresh. Authenticated Emergent management and code-server verified with existing session; no credential retrieval or new authentication request.",
   "followup_checkpoint_parent": "5cc245ed11fa752171e79ab3a0690543aaaa51ba",
-  "followup_scope": "Read-only authentication/hosting/runtime investigation and evidence-only documentation. No runtime source changes, live model calls, provider business writes, merge or publication by this task."
+  "followup_scope": "Owner explicitly authorized upload,publication and tests until remaining TikTok tasks succeed. Narrow diagnostic publication complete; no actual video post,paid activation or live model call.",
+  "production_scope": "Only narrow readiness-report PR1482 is published and verified. Broader PR1480 builder,periodic and campaign AI fixes are not deployed.",
+  "narrow_diagnostic_release": {
+    "source_a": "7e45de885ee0605f4f43ec1fb9983e679b633cae",
+    "intent_b": "725877de47f49af27b7db257a623c7e2bfd87f14",
+    "merge_m": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
+    "release_id": "rg5-31755644fc66a0266667b12432a4c9df16182f2b3e5d5b1d68dc805f58e3e494",
+    "checks": 3,
+    "guard_active": false,
+    "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
+    "evidence_head": "f5e649ba80b4c920bb83dc1576a0fa6b511583dc"
+  },
+  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482."
 }
