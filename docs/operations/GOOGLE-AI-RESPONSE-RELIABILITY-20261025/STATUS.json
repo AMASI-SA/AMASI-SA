@@ -1,0 +1,51 @@
+{
+  "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-ai-response-reliability-20261025",
+  "base": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
+  "status": "WIP_SOURCE_REBASED_ON_CURRENT_PRODUCTION_CI_PENDING",
+  "scope": "Bound Google structured analysis output and add safe failure diagnostics; full autonomy remains incomplete",
+  "evidence": {
+    "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
+    "google_account_analysis": "still timed out",
+    "single_campaign": "generic failure",
+    "core_assistant": "neutral technical request returned invalid result after ~16s; no raw response available",
+    "credential_safety": "no credentials read, copied, provisioned or changed; existing Mezan AI integration only"
+  },
+  "hypothesis": "Reasoning/output budget and response contract may cause failures; exact production code not yet logged. Do not claim root cause proven.",
+  "implemented": [
+    "At most6concise recommendations from all supplied campaign evidence",
+    "GPT5 family minimal reasoning with low fallback for configured later models;8000 total output token budget; bounded40s retained",
+    "Safe constant error codes, allowlisted incomplete reason/numeric token counts, allowlisted exception class only; no model output or exception text",
+    "Distinct safe UI explanations for incomplete or unverified results"
+  ],
+  "verification": {
+    "red": "3focused regressions failed; compatible-model case passed",
+    "backend": "101 AI/actions/context tests passed in1.64s",
+    "frontend": "CI pending"
+  },
+  "user_autonomy_preferences": {
+    "budget_mode": "preserve_current_approved_total_budget",
+    "objective": "google_native_roas",
+    "source": "user answered structured questions",
+    "provider": "google_ads",
+    "financial_attribution": "native conversion_value/spend only; not net profit"
+  },
+  "provider_writes": 0,
+  "financial_writes": 0,
+  "production_changed": false,
+  "next_safe_action": "Run exact new-A CI; wait until OTHER release owner closes its active lease. Do not touch /app, publish or start host rehearsal. Then fresh status inactive, independent A build/freeze B.",
+  "concurrent_update": {
+    "pr": 1482,
+    "scope": "TikTok creator readiness",
+    "files_overlap": false,
+    "preserved": true
+  },
+  "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
+  "shared_release_guard": {
+    "active": true,
+    "actor": "codex-tiktok1482",
+    "deployment_git_sha": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
+    "source_git_sha": "7e45de885ee0605f4f43ec1fb9983e679b633cae"
+  }
+}
