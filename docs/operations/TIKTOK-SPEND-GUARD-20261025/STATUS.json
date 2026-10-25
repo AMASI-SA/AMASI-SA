@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-spend-guard-release-r2-20261025",
   "source_base": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-  "state": "explicit_publish_finished_exact_verify_in_progress",
+  "state": "published_verified3_lease_closed_owner_UI_smoke_pass_external_inputs_and_full_financial_scope_remain",
   "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
   "contract": [
     "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
@@ -37,11 +37,11 @@
   },
   "provider_business_writes": 1,
   "live_model_calls": null,
-  "production_changed": false,
+  "production_changed": true,
   "manual_release": "PR1498 published Oct25 22:32Riyadh,verified:true checks3 exact Afe7a1ca8/Mf72a350e/runtime9d7b,active:false. Evidence f699864a53f4491ac6613d36e9cabaa146ece7ec.",
   "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
   "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
-  "next": "Require guard verifiedtrue checks3 exact A/M/runtime and activefalse. Complete owner policy/history read-only smoke; no policy activation. Actual asset upload independently completed and journal read; no repeat.",
+  "next": "Collect selected actual video/caption/external owned host and owner campaign/budget/spend/loss policy; then finish scoped native acceptance and remaining financial gateway on a fresh reviewed production-parent branch. Preserve all frozen handoffs. Never repeat the completed test upload or reuse closed1503 lease.",
   "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory.",
   "recovered_wip": {
     "branch": "codex/tiktok-spend-guard-20261025",
@@ -89,7 +89,14 @@
     "app_adapter": "exit0 at/app HEAD04db2224; identity exact Aec33d33f/runtime862a0d22. Fresh inactive guard and clean tracked worktree before ff. Unrelated emergent untracked docs preserved.",
     "prepublish": "exit0 matching exact sourceAec33d33f/deploymentM04db2224/runtime862a0d22,immediately before one final Publish changes",
     "merge_push_CI": "Security,Release Readiness and CodeQL push workflows allPASS on M04db2224.",
-    "verify": "in progress in own Terminal6; do not send input while python running."
+    "verify": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+      "deployment_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+      "release_id": "rg5-862a0d22e689bded488595433e6b81feddb90de3b546cfba473ea9529d146c00",
+      "active_after": false
+    }
   },
   "production_ui_smoke": {
     "release": 1498,
@@ -106,7 +113,17 @@
       "source": "Official TikTok guide test-video URL; TikTok downloads directly",
       "media_bytes_on_Mezan": false,
       "public_post": false,
-      "retries": 0
+      "retries": 0,
+      "journal": "Independent history GET rendered exact test asset row with completed/native-match status"
+    },
+    "spend_policy": {
+      "account": "new Amasi",
+      "saved_rule_enabled": false,
+      "enable_checkbox_checked": false,
+      "delay_acknowledged": false,
+      "history": "read succeeded;no review for selected campaign yet",
+      "policy_writes": 0,
+      "activation_writes": 0
     }
   },
   "deployment_git_sha": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
@@ -115,5 +132,14 @@
     "public_posts": 0,
     "paid_activations": 0,
     "spend_guard_policy_writes": 0
-  }
+  },
+  "live_AI_test_budget": "One previously authorized remaining owner UI analysis request used; no more test requests made. Exact model invocation/cache count not independently measured.",
+  "remaining": [
+    "Actual public brand video/caption not selected. New creator ready but verified external media properties empty. Need owned hosting capable of TikTok URL-property verification; no media bytes on Mezan.",
+    "Owner must select campaigns and exact native-currency spend triggers to opt in to defensive PAUSE. No live policy enabled; periodic monitoring is delayed/rotating,not an instantaneous cap.",
+    "Full autonomous budget growth/reduction and measured outcomes remain unimplemented; require explicit owner budget/loss policy and trustworthy campaign-level financial attribution/product mapping. Unknown financial facts remain unknown.",
+    "Real campaign/adgroup/ad creation or paid activation not submitted: exact product,pixel,identity,budget and schedule need selection. Existing native-fixture tests and owner forms PASS.",
+    "Old creator settings proof still lacks privacy_level_options; new creator readiness passes. Messaging scope not granted; automatic replies not enabled."
+  ],
+  "production_evidence": "Explicit Deployment finished Oct25 23:11 Asia/Riyadh,exact guarded verify3 then activefalse;new health source/runtime/critical/frontend all match."
 }
