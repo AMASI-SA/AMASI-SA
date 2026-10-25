@@ -28,12 +28,14 @@ def test_mezan_supplier_directory_stays_legacy_free_and_supports_v2_accounting()
     assert '"accounting_linked": True' in source
 
 
-def test_supplier_requires_at_least_one_existing_service_identifier():
+def test_supplier_requires_categories_and_accepts_optional_deduplicated_services():
     valid = MezanSupplierWriteRequest(
         company_name="مورد أماسي",
+        category_ids=["clothes"],
         service_ids=["engrave", "engrave", "print"],
     )
     assert valid.service_ids == ["engrave", "print"]
+    assert MezanSupplierWriteRequest(company_name="Supplier", category_ids=["clothes"]).service_ids == []
 
     with pytest.raises(ValidationError):
         MezanSupplierWriteRequest(

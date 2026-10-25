@@ -2,8 +2,8 @@
 
 Mobile supplier identity is category-first: the merchant assigns one or more
 canonical product/resource categories (for example clothes or coatings).
-Services remain owned by those categories and are derived automatically; the
-mobile UI never asks the merchant to bind services directly.
+Services are optional, explicitly selected from those categories. The web and
+mobile writers share the same tenant-scoped validation policy.
 
 This router reads and writes ONLY ``mezan_suppliers_v2``. Legacy ``suppliers``
 and ``counterparties`` records are never consulted.
@@ -30,6 +30,7 @@ from mezan_supplier_management_routes import (
     ensure_mezan_supplier_indexes,
 )
 from product_option_cost_routes import RESOURCES
+from supplier_category_service_policy import supplier_category_selection
 
 
 def _now():
@@ -85,6 +86,7 @@ class MobileSupplierCreateIn(BaseModel):
     email: Optional[str] = Field(default=None, max_length=254)
     notes: Optional[str] = Field(default=None, max_length=1000)
     category_ids: list[str] = Field(min_length=1, max_length=50)
+    service_ids: list[str] = Field(default_factory=list, max_length=200)
 
     @field_validator("company_name")
     @classmethod
@@ -163,65 +165,11 @@ def _normalize_bank_accounts(rows: list[dict]) -> list[dict]:
     return result
 
 
-async def _category_selection(db, merchant_id: str, category_ids: list[str]):
+async def _category_selection(db, merchant_id: str, category_ids: list[str], service_ids: list[str] | None = None):
     category_ids = _unique_ids(category_ids)
-    categories = await db[COMPONENT_CATEGORIES].find(
-        {
-            "user_id": merchant_id,
-            "id": {"$in": category_ids},
-            "status": {"$ne": "inactive"},
-        },
-        {"_id": 0, "id": 1, "name": 1},
-    ).to_list(100)
-    by_id = {_text(row.get("id")): row for row in categories}
-    missing = [category_id for category_id in category_ids if category_id not in by_id]
-    if missing:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "code": "supplier_category_not_found",
-                "message": "أحد تصنيفات المورد لم يعد موجودًا في ميزان.",
-                "missing_category_ids": missing,
-            },
-        )
-
-    service_rows = await db[RESOURCES].find(
-        {
-            "user_id": merchant_id,
-            "kind": "service",
-            "track_inventory": {"$ne": True},
-            "status": {"$ne": "inactive"},
-            "category_ids": {"$in": category_ids},
-        },
-        {
-            "_id": 0,
-            "id": 1,
-            "name": 1,
-            "code": 1,
-            "unit": 1,
-            "unit_cost": 1,
-            "requires_preparation": 1,
-            "category_ids": 1,
-        },
-    ).sort("name", 1).to_list(2000)
-
-    category_links = [
-        {"category_id": category_id, "category_name": _text(by_id[category_id].get("name")) or category_id}
-        for category_id in category_ids
-    ]
-    service_links = [
-        {
-            "service_id": _text(row.get("id")),
-            "service_name": _text(row.get("name")) or "خدمة",
-            "service_code": _text(row.get("code")) or None,
-            "unit": _text(row.get("unit")) or "job",
-            "unit_cost": row.get("unit_cost"),
-            "requires_preparation": bool(row.get("requires_preparation")),
-            "category_ids": _unique_ids(row.get("category_ids")),
-        }
-        for row in service_rows
-        if _text(row.get("id"))
-    ]
+    category_links, service_links = await supplier_category_selection(
+        db, user_id=merchant_id, category_ids=category_ids, service_ids=service_ids or [],
+    )
     return category_ids, category_links, service_links
 
 
@@ -255,30 +203,11 @@ def make_supplier_mobile_router(db, current_user):
             {"user_id": merchant_id}, {"_id": 0, "user_id": 0, "_lc_company_name": 0}
         ).sort([("status", 1), ("company_name", 1)]).to_list(2000)
 
-        all_service_ids = {
-            service_id
-            for supplier in suppliers
-            for service_id in _unique_ids(supplier.get("service_ids"))
-        }
-        service_categories: dict[str, list[str]] = {}
-        if all_service_ids:
-            async for resource in db[RESOURCES].find(
-                {"user_id": merchant_id, "id": {"$in": list(all_service_ids)}},
-                {"_id": 0, "id": 1, "category_ids": 1},
-            ):
-                service_categories[_text(resource.get("id"))] = _unique_ids(resource.get("category_ids"))
-
         supplier_category_ids: dict[str, list[str]] = {}
         all_category_ids: set[str] = set()
         for supplier in suppliers:
             sid = _text(supplier.get("id"))
             category_ids = _unique_ids(supplier.get("category_ids"))
-            if not category_ids:
-                category_ids = _unique_ids([
-                    category_id
-                    for service_id in _unique_ids(supplier.get("service_ids"))
-                    for category_id in service_categories.get(service_id, [])
-                ])
             supplier_category_ids[sid] = category_ids
             all_category_ids.update(category_ids)
 
@@ -350,6 +279,7 @@ def make_supplier_mobile_router(db, current_user):
                 "contact_person": supplier.get("contact_person") or "",
                 "phone": supplier.get("phone") or "",
                 "email": supplier.get("email") or "",
+                "notes": supplier.get("notes") or "",
                 "status": supplier.get("status") or "active",
                 "category_ids": category_ids,
                 "category_links": [
@@ -392,7 +322,7 @@ def make_supplier_mobile_router(db, current_user):
         merchant_id = context["merchant_id"]
         await ensure_mezan_supplier_indexes(db)
         category_ids, category_links, service_links = await _category_selection(
-            db, merchant_id, payload.category_ids
+            db, merchant_id, payload.category_ids, payload.service_ids
         )
         now = _now()
         row = {
