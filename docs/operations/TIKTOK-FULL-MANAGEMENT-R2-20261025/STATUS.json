@@ -60,15 +60,15 @@
     "Other providers and unrelated work preserved"
   ],
   "production_changed_by_this_branch": true,
-  "provider_business_writes": 0,
-  "live_model_calls": 0,
+  "provider_business_writes": 1,
+  "live_model_calls": null,
   "current_settings_release": "PR1487 successfully published20:53 Riyadh; verified:true,checks:3,exact source24cb523c/runtime34d6,then active:false. New Amasi creator readiness succeeds; old Amasi privacy_level_options missing/null. New creator verified media properties empty; actual post not submitted. Evidence branch codex/tiktok-publishing-settings-evidence-20261025 atb204664763629ee5378a19d6d4b164a691c87079.",
   "remaining": [
     "Old Amasi creator missing privacy field and media-property verification acceptance; new creator identity/settings/capabilities pass",
     "Owner financial policy/budgets/loss limits,trustworthy financial coverage and bounded AI action execution/outcome measurements",
     "No actual selected approved public video/caption or live paid activation performed"
   ],
-  "next": "Production owner UI smoke checks; separate fresh financial release1501 CI/A-B/original-host protocol. No public video or paid activation submitted. Do not reuse closed1498 lease.",
+  "next": "Financial1503 publication in progress under owncodex-tiktok1503 lease. Require newer explicit finish then verify3/activefalse and owner policy/history read-only smoke. Public video still needs selected owned video and verified external hosting.",
   "official_spark_contracts": [
     "https://business-api.tiktok.com/portal/docs/get-info-about-tiktok-posts/v1.3",
     "https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/SmartPlusAdCreateBodyCreativeInfo.md"
@@ -137,5 +137,24 @@
     "app_adapter": "exit0 exact Afe7a1ca8/runtime9d7b9464 at/app HEADf72a350e; tracked clean before ff,unrelated untracked/emergent docs preserved.",
     "prepublish": "exit0 immediately before one final Publish changes"
   },
-  "deployment_git_sha": "f72a350e13e896cc384313a450365ad27abeec61"
+  "deployment_git_sha": "f72a350e13e896cc384313a450365ad27abeec61",
+  "post_release_owner_ui_smoke": {
+    "creator": "new Amasi settings,identity,publish,draft/comments-read readiness pass; media-property list empty",
+    "forms": "paused campaign,paused adgroup and URL-only asset import forms rendered",
+    "catalog": "canonical product search rendered results,no mapping changed",
+    "ai": "One owner UI analysis request produced a bounded recommendation; exact model invocation/cache count not independently measured",
+    "asset_upload": {
+      "kind": "video_asset",
+      "name": "MEZAN_TIKTOK_INTEGRATION_TEST_20261025.mp4",
+      "native_video_id": "v10033g50000dbf624nog65nta0k5gqg",
+      "status": "completed;native match verified",
+      "journal": "History row independently read and completed",
+      "source": "TikTok official test-video URL",
+      "submissions": 1,
+      "retries": 0,
+      "media_bytes_on_Mezan": false,
+      "public_post": false,
+      "paid_activation": false
+    }
+  }
 }
