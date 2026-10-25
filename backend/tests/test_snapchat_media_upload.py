@@ -405,7 +405,10 @@ async def test_ready_dependency_proof_uses_current_provider_state(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_profile_catalog_uses_fixed_business_host_and_rejects_paging_escape(monkeypatch):
+@pytest.mark.parametrize("next_link", [
+    "https://untrusted.example/steal", "https://[malformed", " ",
+])
+async def test_profile_catalog_uses_fixed_business_host_and_rejects_paging_escape(monkeypatch, next_link):
     urls = []
 
     class Client:
@@ -422,7 +425,7 @@ async def test_profile_catalog_uses_fixed_business_host_and_rejects_paging_escap
             urls.append(url)
             return httpx.Response(200, json={"request_status": "SUCCESS",
                 "sharing_policies": [{"source": {"resource_type": "public_profiles", "resource_id": "profile-1"}}],
-                "paging": {"next_link": "https://untrusted.example/steal"}})
+                "paging": {"next_link": next_link}})
 
     provider = SimpleNamespace(context=SimpleNamespace(access_token=AsyncMock(return_value="test-token")))
     monkeypatch.setattr(module.httpx, "AsyncClient", Client)

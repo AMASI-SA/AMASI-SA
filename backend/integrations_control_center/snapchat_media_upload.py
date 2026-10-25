@@ -226,8 +226,12 @@ async def available_public_profile_ids(provider: Any, account_id: str) -> set[st
                     return result
                 if not isinstance(next_link, str):
                     raise _failure(502, "snapchat_media_profile_catalog_incomplete")
-                parsed = urlsplit(next_link)
-                if (parsed.scheme != "https" or parsed.hostname != "businessapi.snapchat.com"
+                try:
+                    parsed = urlsplit(next_link)
+                    hostname = parsed.hostname
+                except ValueError as exc:
+                    raise _failure(502, "snapchat_media_profile_catalog_incomplete") from exc
+                if (parsed.scheme != "https" or hostname != "businessapi.snapchat.com"
                         or parsed.netloc != "businessapi.snapchat.com"
                         or parsed.path != f"/v1{path}" or parsed.fragment):
                     raise _failure(502, "snapchat_media_profile_catalog_incomplete")
