@@ -1,3 +1,7 @@
+# Source correction checkpoint — PR1525
+
+Current source A is `16213227efd54bb063a2733ea8672cd544113201`, tree `7060e81d140aa13eb2997d8e61e5bf01cad1bdb4`, superseding A00f828. J remains `cb08def11cdf5ef01ea28df253bd201891b91adc`. Source17 paths, release intent unchanged. Exact-A00 CI exposed one stale existing placement assertion shared by five frontend workflows (`const response` vs bounded recomputation's `let response`); all five logs inspected, other runtime tests passed. Existing assertion corrected only; no runtime/backend guard change. Fresh exact-A162 CI running; use no artifact from00f828. PR1525 comment6404878894 records evidence. No B, lease, merge, or publication. Next: fresh exact-A checks/logs/artifact, then new intent-only B/final checks/governed deployment/live native and complete graph/profit acceptance.
+
 # Snapchat current-day graph/profit — source checkpoint 2026-10-25 23:25 UTC
 
 PR1525: https://github.com/AMASI-SA/AMASI-SA/pull/1525. Branch `codex/snap-zero-source-20261026`. Exact source A `00f828994e86d80d6ad22601a6667efe0cd0ed8f`, tree `5569e59c8795c642960febf8b4acb3a6936db9fc`, reviewed Production J `cb08def11cdf5ef01ea28df253bd201891b91adc` (Google1522 retained). Initial remote WIP checkpoint `e1077221ac75071edb0ae56c19acf4f1c8ccd187`. Own local worktree `/workspace/scratch/2f1d2cc290e6/mezan-snap-zero` matches A exactly and is clean. J→A changes16 bounded paths and does not alter release intent. Detailed source record: `docs/operations/SNAP-COMPLETION-20261025/CURRENT-DAY-SPEND.md` on that branch.
