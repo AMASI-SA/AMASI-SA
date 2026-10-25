@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-25T21:32:16.019Z",
+  "updated_at": "2026-10-25T21:36:14.092Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -68,7 +68,7 @@
     "investigate saved-analysis list loading error",
     "standing policy and full autonomous executor remain incomplete"
   ],
-  "next_safe_action": "Finish additional-draft editor+frozenpreview read-only test in Mezan; do NOTexecutecreateagain. Finish1515exactB checks/Host20, checkcurrentHEAD and mergeexacttree; fresh actualinactiveguard,fforiginal/App,adapterexit0,preparecodex-google1515,prepublishONEpublish,explicitfinish3probesinactive. AfterdiagnosticpublishrunONEaccountanalysisandreadGET/ai/analysis-attemptsmetadata toidentifycause. Existing testcampaign remainsPAUSED,15SARaveragebudget,0spend; bothactivechildtextsarecorrected. Fullautonomy/standingpolicy/autoexecutor stillnotdone;Googleonly.",
+  "next_safe_action": "Finish1515exactB CI/Host20, checkcurrentHEAD and mergeexactBtree. Actual1512guardclosed verified3probes. Original/AppffnextM thenadapterexit0/preparecodex-google1515/prepublishONEpublish/newexplicitfinish/verify3probesinactive. After1515published reproduceONEaccountanalysis using26Oct or explicit25Oct failingperiod and read authenticated GET /api/integrations-v2/google_ads/ai/analysis-attempts withaccount5052346701. Do not use editorDB asproductionproof. ManualSearch create/read/edit/additional-draft review accepted; actualtestcampaign24390429267 PAUSED15SARaverage0spend, no secondcampaign. Fullautonomy standingpolicy/autoexecutor stillincomplete;Googleonly.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -102,7 +102,24 @@
       "parent_status": "PAUSED",
       "budget": "15SAR average daily",
       "spend": "0",
-      "additional_draft_review": "in progress, opened original saved draft revision2",
+      "additional_draft_review": {
+        "status": "PASS",
+        "saved_draft_name": "معاينة فقط | هودي بناتي | إعلانان 26 أكتوبر",
+        "draft_revision": 4,
+        "extra_headlines": [
+          "هودي شتوي بطباعة الاسم",
+          "هدية بنات بتصميم مخصص",
+          "اختاري الاسم والحرف"
+        ],
+        "extra_status": "PAUSED",
+        "primary_headlines_unchanged": true,
+        "preview": "Googlevalidate-only passed, frozen UI shows both creatives/statuses",
+        "approval_checked": false,
+        "executed": false,
+        "new_campaign_created": false,
+        "prior_rejected_preview": "Reusing old saved inputs rejected by Google; changed draft name and extra copy, so exact reject cause not isolated",
+        "screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/google1512-extra-ad-preview.jpg"
+      },
       "screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/google1512-ad-update-verified.jpg"
     }
   },
