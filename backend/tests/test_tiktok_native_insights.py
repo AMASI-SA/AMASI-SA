@@ -86,6 +86,18 @@ async def test_one_verified_campaign_with_limited_allowlisted_context(boundary):
 
 
 @pytest.mark.asyncio
+async def test_model_contract_enforces_the_same_text_limits_as_local_validation(boundary):
+    client = Client()
+    await analyze(client)
+    properties = client.calls[0]["text"]["format"]["schema"]["properties"]
+    assert properties["summary"]["minLength"] == 1
+    assert properties["summary"]["maxLength"] == 700
+    assert properties["next_step"]["minLength"] == 1
+    assert properties["next_step"]["maxLength"] == 400
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_cache_checks_current_authority_and_never_crosses_tenant(boundary):
     first = Client()
     result = await analyze(first)
@@ -239,3 +251,21 @@ async def test_amasi_evidence_enters_existing_analysis_without_extra_model_call(
     assert result['context']['storefront_observation']['tracking_delivery_checked'] is False
     assert (await analyze(Client()))['cached'] is True
     assert reads==['owner'] and len(client.calls)==1
+
+@pytest.mark.asyncio
+async def test_generation_failure_logs_only_fixed_validation_stage(boundary, caplog):
+    client = Client(output={**RECOMMENDATION, 'summary':'PRIVATE_RESPONSE_' * 100})
+    with pytest.raises(TikTokReportingError):
+        await analyze(client)
+    assert 'reason=invalid_model_text' in caplog.text
+    assert 'PRIVATE_RESPONSE' not in caplog.text
+    assert len(client.calls) == 1
+
+@pytest.mark.asyncio
+async def test_incomplete_response_reports_specific_safe_failure(boundary, caplog):
+    client = Client(status='incomplete')
+    with pytest.raises(TikTokReportingError) as error:
+        await analyze(client)
+    assert 'لم يكتمل' in error.value.message
+    assert 'reason=incomplete_model_response' in caplog.text
+    assert len(client.calls) == 1

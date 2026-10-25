@@ -1,0 +1,109 @@
+{
+  "task_id": "TIKTOK-FULL-MANAGEMENT-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-full-management-20261025",
+  "base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
+  "state": "WIP_paused_ad_builder_and_periodic_observations_verified_backend",
+  "scope": [
+    "current product catalog and campaign AI response repair",
+    "creator publishing readiness",
+    "complete campaign/adgroup/video-ad creation",
+    "periodic TikTok recommendations",
+    "bounded AI action gateway and outcome evidence"
+  ],
+  "preserved_checkpoints": [
+    "PR1364 source 0bacc010 and b7e99634 integrated without its obsolete release intent",
+    "Concurrent Google working tree untouched"
+  ],
+  "verification": {
+    "focused_backend": {
+      "passed": 56,
+      "exit": 0,
+      "command": "PYTHONPATH=backend python -B -m pytest -p no:cacheprovider -q backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_campaign_products.py backend/tests/test_amasi_storefront.py"
+    },
+    "response_schema_regression": "New model text-limit contract failed with KeyError before fix; now passes. Model schema and local 700/400-character validation agree. No increased token budget or retries.",
+    "expanded_backend": {
+      "passed": 182,
+      "warnings": 2,
+      "exit": 0,
+      "seconds": 12.01,
+      "environment": "isolated real Mongo plus fixed TikTok/model transports; includes existing Google periodic regression"
+    },
+    "builder_route_baseline": "Public route returned404 before attachment,422 after attachment; eight initial builder tests passed, then reconcile/feature-flag tests included in182-case run.",
+    "frontend": "127 tests in22suites and source build passed on exact remote runtime source97fba1c5; new UI tests are included.",
+    "native_ci": {
+      "run_id": 40207080665,
+      "head": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
+      "backend": {
+        "passed": 413,
+        "warnings": 1,
+        "seconds": 18.81
+      },
+      "frontend": {
+        "tests": 127,
+        "suites": 22,
+        "new_ad_builder_tests": "PASS"
+      },
+      "source_build": "PASS 6.17s",
+      "source_isolation": "PASS"
+    },
+    "source_checks": "Fresh follow-up: all13 applicable workflows on source97fba1c5 successful, including CodeQL40207080709; separate TikTok Creator Release Candidate skipped by its existing condition. Not a release acceptance verdict.",
+    "remote_recovery": "Fetched source97fba1c5 locally; zero file diff against local verified source; identical tree3bd0cd45ad729840b61bfeacd0c3e7cc5e7a4a54."
+  },
+  "live_readonly_evidence": [
+    "2026-10-25: TikTok advertising connected; today's reporting visible",
+    "Two creator connections listed connected",
+    "Selected new Amasi creator readiness returned HTTP502 with generic frontend fallback; root cause remains unproven",
+    "User completed Emergent sign-in; refresh confirmed authenticated project management and existing-session code-server access",
+    "Read-only release-guard status reported active:true for separate Google1479 actor/source25076ac3 and deployment39a7dc82; no shared/app source or release-state writes performed",
+    "Separate Google publication subsequently showed Deployment finished October25 at18:42 UI time; this is not a TikTok release or this task's acceptance verdict",
+    "After the separate publication, refreshed Mezan, reloaded creator accounts and rechecked the same connected new Amasi account once: generic HTTP502 reproduced; no publication submitted",
+    "Authenticated View Logs inspected and reloaded after reproduction: displayed90 records oriented around startup through approximately15:43UTC, with no matching TikTok verify request/phase. Root cause still unproven; current UI log visibility does not provide the needed request trace",
+    "Refreshed Mezan,selected same connected new Amasi creator,readiness once. Report ready:false at settings phase with fixed tiktok_creator_settings_unproven; identity proof passed. This local settings validation boundary is established; exact rejected provider field/schema remains unproven."
+  ],
+  "invariants": [
+    "No media bytes downloaded or stored on Mezan",
+    "No invented financial orders, revenue or profit",
+    "AI writes only through deterministic permission/approval/budget/audit boundaries",
+    "Never repeat uncertain provider submissions",
+    "Preserve other platforms and operational/accounting work"
+  ],
+  "production_changed": true,
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "next_action": "Inspect official Business API settings schema and obtain safe field-level evidence; implement a tested schema/validation correction,then fresh A/B release and live readiness acceptance. Continue full TikTok task; PR1480 builder/periodic/AI source remains WIP,not deployed.",
+  "completed_behavior": [
+    "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
+    "Safe fixed-stage AI failure diagnostics",
+    "Structured model response enforces local summary/next-step text length limits",
+    "Owner-only encrypted preview and one-shot paused Smart+ adgroup/video-ad creation, verified native account/parents/video/identity, fresh preflight, explicit group ceiling and timezone-aware schedule",
+    "TikTok imports video directly from URL using multipart text metadata; no video file part or Mezan media fetch/storage",
+    "Durable content fences across new idempotency keys, readonly reconciliation with confirmed created IDs, bounded history",
+    "Native workspace controls for asset import, paused adgroup/ad creation and exact owner approval",
+    "Optional three-campaign periodic observations in existing global five-hour cycle, replica claim before model work, rotated pages, shared recommendations; financial execution remains disabled"
+  ],
+  "remaining": [
+    "Live failure isolated to local TikTok settings validation (tiktok_creator_settings_unproven),after successful identity proof; exact rejected field/schema still to prove and correct.",
+    "New code not deployed or enabled: TIKTOK_AD_BUILDER_ENABLED and MEZAN_TIKTOK_AI_PERIODIC_ENABLED defaultfalse",
+    "Full Smart+ activation/child editing, Spark post-to-ad linking, bounded autonomous financial Action Gateway and measured outcomes remain incomplete",
+    "Financial attribution/coverage must be proved before profit-based automatic scale decisions; never treat TikTok conversions as Salla financial orders",
+    "No selected approved public media/caption or owner-configured autonomous spend/loss limits; no real post, paid activation or live model call performed"
+  ],
+  "remote_checkpoint_before_this_source": "632f0d66bcc1845b8c14a1bd0c0074456907c204; Draft PR1480",
+  "reviewed_runtime_source": "97fba1c5dee818ee1cd9e1b19115f39f4aa52342",
+  "authentication": "User subsequently completed sign-in and explicitly requested refresh. Authenticated Emergent management and code-server verified with existing session; no credential retrieval or new authentication request.",
+  "followup_checkpoint_parent": "5cc245ed11fa752171e79ab3a0690543aaaa51ba",
+  "followup_scope": "Owner explicitly authorized upload,publication and tests until remaining TikTok tasks succeed. Narrow diagnostic publication complete; no actual video post,paid activation or live model call.",
+  "production_scope": "Only narrow readiness-report PR1482 is published and verified. Broader PR1480 builder,periodic and campaign AI fixes are not deployed.",
+  "narrow_diagnostic_release": {
+    "source_a": "7e45de885ee0605f4f43ec1fb9983e679b633cae",
+    "intent_b": "725877de47f49af27b7db257a623c7e2bfd87f14",
+    "merge_m": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
+    "release_id": "rg5-31755644fc66a0266667b12432a4c9df16182f2b3e5d5b1d68dc805f58e3e494",
+    "checks": 3,
+    "guard_active": false,
+    "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
+    "evidence_head": "f5e649ba80b4c920bb83dc1576a0fa6b511583dc"
+  },
+  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025:13 focused UI tests/one suite PASS,exit0,2.647s. Not part of frozen1482."
+}
