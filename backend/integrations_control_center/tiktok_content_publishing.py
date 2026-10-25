@@ -14,7 +14,7 @@ import secrets
 from typing import Literal
 from urllib.parse import unquote, urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pymongo.errors import DuplicateKeyError
 
@@ -237,6 +237,50 @@ async def readiness(db, user_id, creator_ref):
     async with admission(), TikTokCreatorAPI() as api:
         row, _, _, settings, properties = await context(db, user_id, creator_ref, api)
         return {"creator_ref": creator_ref, "label": row["label"], "verified_at": now(), "expires_at": row["expires_at"], "scopes": row["scopes"], "capabilities": capability_projection(row["scopes"]), "settings": settings, "verified_properties": properties, "limits": {"photos": 10, "metadata_bytes": 32768, "provider_response_bytes": 131072, "publish_per_minute": 6, "publish_per_24_hours": 15}, "media_transfer_to_mezan": False, "ai_auto_reply_enabled": False}
+
+
+_READINESS_PHASES = {
+    "identity": "هوية الحساب وصلاحياته",
+    "settings": "إعدادات نشر الحساب",
+    "media_properties": "ملكية روابط الوسائط",
+    "request": "طلب التحقق",
+}
+_READINESS_CODES = frozenset({
+    "tiktok_creator_not_connected", "tiktok_creator_reauthorization_required",
+    "tiktok_creator_refresh_busy", "tiktok_creator_authorization_changed",
+    "tiktok_creator_missing_permission", "tiktok_creator_scope_unproven",
+    "tiktok_creator_token_identity_mismatch", "tiktok_creator_token_expiry_unproven",
+    "tiktok_creator_provider_http_error", "tiktok_creator_provider_not_json",
+    "tiktok_creator_compressed_response_denied", "tiktok_creator_response_too_large",
+    "tiktok_creator_invalid_response", "tiktok_creator_provider_error",
+    "tiktok_creator_transport_failed", "tiktok_creator_settings_unproven",
+    "tiktok_media_ownership_unproven", "tiktok_publishing_context_failed",
+    "tiktok_content_busy", "tiktok_content_timeout", "tiktok_creator_not_configured",
+})
+
+
+async def readiness_report(db, user_id, creator_ref):
+    """Report a blocked check as data, independent of gateway 5xx error pages.
+
+    The original verify/preview/execute contracts keep their failure status.
+    This endpoint performs exactly the same bounded check once; a failed
+    report never becomes a publishing proof. Only fixed local diagnostics and
+    an optional bounded numeric provider error code cross this boundary.
+    """
+    try:
+        return {**await readiness(db, user_id, creator_ref), "ready": True, "provider_write_reached": False}
+    except HTTPException as error:
+        detail = error.detail if isinstance(error.detail, dict) else {}
+        raw_phase, raw_code = detail.get("phase"), detail.get("code")
+        phase = raw_phase if isinstance(raw_phase, str) and raw_phase in _READINESS_PHASES else "request"
+        code = raw_code if isinstance(raw_code, str) and raw_code in _READINESS_CODES else "tiktok_readiness_unavailable"
+        diagnostic = {"code": code, "phase": phase, "status": error.status_code,
+                      "message": "تعذر التحقق من " + _READINESS_PHASES[phase] + ". لم تُرسل أي عملية نشر."}
+        provider_code = detail.get("provider_code")
+        if type(provider_code) is int and 0 < provider_code <= 999999:
+            diagnostic["provider_code"] = provider_code
+        logging.getLogger(__name__).warning("tiktok_readiness_blocked phase=%s code=%s status=%s", phase, code, error.status_code)
+        return {"ready": False, "provider_write_reached": False, "diagnostic": diagnostic}
 
 
 def planned_publish(payload, settings, properties):
@@ -467,6 +511,14 @@ async def content_history(db, user_id, creator_ref=None, limit=12):
 
 def attach_tiktok_content_routes(router, db, current_user, require_owner):
     content = APIRouter(prefix="/tiktok/content", route_class=BoundedCreatorJSONRoute)
+
+    @content.post("/creators/{creator_ref}/readiness")
+    async def report(creator_ref: str, response: Response, user: dict = Depends(current_user)):
+        owner = require_owner(user)
+        if not re.fullmatch(r"[a-f0-9]{64}", creator_ref):
+            raise problem("tiktok_creator_not_found", "لم نعثر على حساب النشر.", 404)
+        response.headers["Cache-Control"] = "no-store"
+        return await readiness_report(db, str(owner["id"]), creator_ref)
 
     @content.post("/creators/{creator_ref}/verify")
     async def verify(creator_ref: str, user: dict = Depends(current_user)):

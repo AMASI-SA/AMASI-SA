@@ -35,6 +35,7 @@ async def test_content_preview_is_a_real_typed_public_route():
 @pytest.mark.parametrize("method,path,body", [
     ("POST", "/creators/connect/start", None),
     ("GET", "/creators", None),
+    ("POST", "/creators/" + "a" * 64 + "/readiness", {}),
     ("POST", "/proposals/proposal-1/approve-and-publish", {"confirmation_digest": "a" * 64}),
 ])
 async def test_non_owner_cannot_reach_content_or_creator_authorization(method, path, body):
@@ -97,3 +98,54 @@ async def test_publishing_context_keeps_existing_timeout_boundary(monkeypatch):
     monkeypatch.setattr(publishing, "verified_creator", timeout)
     with pytest.raises(TimeoutError):
         await publishing.context(object(), "owner", "creator", object())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [
+    {"code": "tiktok_creator_provider_error", "phase": "identity"},
+    {"code": "private-token-and-provider-url", "phase": "private-token-and-provider-url"},
+    {"code": ["private-token-and-provider-url"], "phase": {"private-token-and-provider-url": True}},
+])
+async def test_readiness_report_preserves_blocked_state_through_gateway_errors(monkeypatch, failure):
+    from integrations_control_center import tiktok_content_publishing as publishing
+
+    calls = []
+
+    async def check(db, user_id, creator_ref):
+        calls.append((user_id, creator_ref))
+        raise HTTPException(502, detail={**failure, "message": "private-token-and-provider-url"})
+
+    monkeypatch.setattr(publishing, "readiness", check)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for({"id": "owner-1", "role": "owner"})), base_url="http://test") as client:
+        response = await client.post("/api/integrations-v2/tiktok/content/creators/" + "a" * 64 + "/readiness", json={})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["ready"] is False
+    assert result["provider_write_reached"] is False
+    assert result["diagnostic"]["status"] == 502
+    assert "private-token-and-provider-url" not in response.text
+    assert result["diagnostic"]["phase"] in {"identity", "request"}
+    assert calls == [("owner-1", "a" * 64)]
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.asyncio
+async def test_readiness_report_success_is_additive_and_old_verify_keeps_error_status(monkeypatch):
+    from integrations_control_center import tiktok_content_publishing as publishing
+
+    async def check(*args):
+        return {"creator_ref": "a" * 64, "settings": {"comment_disabled": True}}
+
+    monkeypatch.setattr(publishing, "readiness", check)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for({"id": "owner-1", "role": "owner"})), base_url="http://test") as client:
+        response = await client.post("/api/integrations-v2/tiktok/content/creators/" + "a" * 64 + "/readiness", json={})
+        assert response.status_code == 200
+        assert response.json()["ready"] is True
+        assert response.json()["settings"] == {"comment_disabled": True}
+
+        async def denied(*args):
+            raise HTTPException(502, detail={"code": "tiktok_creator_provider_error", "phase": "settings"})
+
+        monkeypatch.setattr(publishing, "readiness", denied)
+        previous = await client.post("/api/integrations-v2/tiktok/content/creators/" + "a" * 64 + "/verify", json={})
+        assert previous.status_code == 502

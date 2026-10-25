@@ -154,7 +154,11 @@ class TikTokCreatorAPI:
                 raise problem("tiktok_creator_invalid_response", "تعذر التحقق من استجابة TikTok.", 502) from None
             if not isinstance(payload, dict) or type(payload.get("code")) is not int or payload["code"] != 0 or not isinstance(payload.get("data"), dict):
                 # Never project a raw provider message or request URL.
-                raise problem("tiktok_creator_provider_error", "رفض TikTok العملية. راجع حالة الربط والصلاحيات.", 502)
+                failure = problem("tiktok_creator_provider_error", "رفض TikTok العملية. راجع حالة الربط والصلاحيات.", 502)
+                provider_code = payload.get("code") if isinstance(payload, dict) else None
+                if type(provider_code) is int and 0 < provider_code <= 999999:
+                    failure.detail["provider_code"] = provider_code
+                raise failure
             return payload["data"]
         except httpx.HTTPError:
             raise problem("tiktok_creator_transport_failed", "تعذر الاتصال بـ TikTok. راجع حالة العملية قبل إعادة النشر.", 502) from None

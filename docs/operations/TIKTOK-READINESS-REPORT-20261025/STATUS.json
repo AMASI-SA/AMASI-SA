@@ -1,0 +1,26 @@
+{
+  "task_id": "TIKTOK-READINESS-REPORT-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-readiness-report-20261025",
+  "source_base": "c410cab8c6835e6575fdd3e792a983767182f966",
+  "scope": "Narrow diagnostic release within the owner's explicitly authorized complete TikTok upload, publication and testing task.",
+  "state": "source_prepared_public_contract_verified_CI_and_release_pending",
+  "behavior": [
+    "Owner-only bounded readiness report returns explicit ready:false and a fixed local phase/code for blocked checks; the check runs once and performs no publishing action.",
+    "The UI clears any prior readiness proof and cannot prepare content from a blocked report.",
+    "Only a bounded numeric TikTok error code is retained, never provider messages, tokens, URLs or request IDs.",
+    "Existing verify, preview and publish failure contracts and approval/resource/storage boundaries are preserved."
+  ],
+  "verification": {
+    "baseline": "Four new public HTTP regressions failed404 before route implementation;12 existing cases passed.",
+    "focused": "16 passed15 deselected,exit0,1.45s; readiness,owner access,compression rejection and numeric provider-code boundaries.",
+    "integrated_backend": "93 passed,exit0,10.88s with disposable real Mongo; content routes,publishing,creator accounts,comment routes and replies. Non-scalar diagnostic regression added after this run and verified separately.",
+    "frontend": "New blocked-report regression added; fresh CI pending.",
+    "root_cause": "Generic live readiness502 reproduced; actual provider cause remains unproven until the report is published and read."
+  },
+  "production_changed_by_this_task": false,
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "full_management": "PR1480 remains separate WIP; paused builder,periodic observations,child activation,Spark linking,financial policy and measured outcomes are not accepted by this diagnostic release.",
+  "next": "Run fresh native/source/release CI,freeze protocol-v5 intent-only B,rehearse actual host,prepare/prepublish once,publish once,verify three identity probes,then recheck creator readiness and fix the demonstrated cause. Preserve unrelated Google source and any active foreign lease."
+}
