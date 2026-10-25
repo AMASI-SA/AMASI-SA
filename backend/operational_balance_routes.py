@@ -241,7 +241,8 @@ class InventoryLine(Input):
 class InventoryPurchase(Request):
     expected_session_scope: str = Field(min_length=64, max_length=64)
     supplier_id: str = Field(min_length=1, max_length=200)
-    invoice_number: str = Field(min_length=1, max_length=160)
+    invoice_number: str = Field(default='', max_length=160)
+    supplier_invoice_number: str | None = Field(default=None, max_length=160)
     invoice_date: str = Field(min_length=10, max_length=10)
     lines: list[InventoryLine] = Field(min_length=1, max_length=1000)
     note: str = Field(default='', max_length=1000)
@@ -424,7 +425,8 @@ def make_operational_balance_router(db, current_user):
         _, owner, _ = await scope(db,user,'move')
         from operational_balance_inventory import purchase_view
         state=await read(db,owner)
-        invoices=[p for p in state.get('inventory_purchases',[]) if p['supplier_id']==supplier_id and p['invoice_number']==invoice_number.strip()]
+        from operational_invoice_numbers import references
+        invoices=[p for p in state.get('inventory_purchases',[]) if p['supplier_id']==supplier_id and invoice_number.strip() in references(p)]
         if len(invoices)!=1:
             fail('inventory_invoice_missing','فاتورة الشراء غير موجودة',404)
         return purchase_view(state,invoices[0])
