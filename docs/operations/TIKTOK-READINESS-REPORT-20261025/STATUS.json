@@ -4,7 +4,7 @@
   "branch": "codex/tiktok-readiness-report-20261025",
   "source_base": "c410cab8c6835e6575fdd3e792a983767182f966",
   "scope": "Narrow diagnostic release within the owner's explicitly authorized complete TikTok upload, publication and testing task.",
-  "state": "source_prepared_public_contract_verified_CI_and_release_pending",
+  "state": "MERGED_FROZEN_B_HOST_REHEARSAL_BEFORE_PREPARE",
   "behavior": [
     "Owner-only bounded readiness report returns explicit ready:false and a fixed local phase/code for blocked checks; the check runs once and performs no publishing action.",
     "The UI clears any prior readiness proof and cannot prepare content from a blocked report.",
@@ -16,11 +16,30 @@
     "focused": "16 passed15 deselected,exit0,1.45s; readiness,owner access,compression rejection and numeric provider-code boundaries.",
     "integrated_backend": "93 passed,exit0,10.88s with disposable real Mongo; content routes,publishing,creator accounts,comment routes and replies. Non-scalar diagnostic regression added after this run and verified separately.",
     "frontend": "New blocked-report regression added; fresh CI pending.",
-    "root_cause": "Generic live readiness502 reproduced; actual provider cause remains unproven until the report is published and read."
+    "root_cause": "Generic live readiness502 reproduced; actual provider cause remains unproven until the report is published and read.",
+    "native_ci": {
+      "run": 40210706597,
+      "backend": 396,
+      "frontend_tests": 126,
+      "frontend_suites": 21,
+      "source_build": "PASS"
+    },
+    "source_ci": "All9 applicable A workflows PASS; one branch-specific creator candidate skipped.",
+    "intent_ci": "All9 applicable B workflows PASS; release3454/40211064094 original clean-clone adapter PASS."
   },
   "production_changed_by_this_task": false,
   "provider_business_writes": 0,
   "live_model_calls": 0,
   "full_management": "PR1480 remains separate WIP; paused builder,periodic observations,child activation,Spark linking,financial policy and measured outcomes are not accepted by this diagnostic release.",
-  "next": "Run fresh native/source/release CI,freeze protocol-v5 intent-only B,rehearse actual host,prepare/prepublish once,publish once,verify three identity probes,then recheck creator readiness and fix the demonstrated cause. Preserve unrelated Google source and any active foreign lease."
+  "next": "Finish actual/app adapter; prepare/prepublish with codex-tiktok1482; publish once; require newer Deployment finished and three guard verification probes. Then read creator readiness report and implement demonstrated provider fix. Never deploy this evidence-only branch.",
+  "source_a": "7e45de885ee0605f4f43ec1fb9983e679b633cae",
+  "intent_b": "725877de47f49af27b7db257a623c7e2bfd87f14",
+  "merge_m": "73901e0e5caa5d75ef9e97ccaa8a6336bc0a7af9",
+  "runtime_id": "rg5-31755644fc66a0266667b12432a4c9df16182f2b3e5d5b1d68dc805f58e3e494",
+  "evidence_branch": "codex/tiktok-readiness-report-evidence-20261025",
+  "pr": 1482,
+  "actual_host": "Independent clean clone governed B adapter exit0. First /app adapter refused prepackaged __pycache__; generated caches being reversibly preserved outside governed roots before fresh adapter. Do not bypass source manifests.",
+  "lease": "Foreign Google1481 publication completed and guard subsequently active:false. No TikTok lease yet.",
+  "public_identity_before_tiktok": "Read-only /api/health shows Google8cce9baf source and verified v5 identity; not TikTok acceptance.",
+  "ui_proof_followup": "WIP a01f34c593117baed22ab723d6915a32f6385e45 on codex/tiktok-readiness-proof-followup-20261025 preserves clearing old proof before a recheck; focused UI acceptance pending. Not part of frozen1482."
 }
