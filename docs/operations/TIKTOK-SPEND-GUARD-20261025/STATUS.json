@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-spend-guard-release-r2-20261025",
   "source_base": "0d8f4524a26978471a72662cb56bc5e3a4584530",
-  "state": "frozen_A_B_CI_in_progress",
+  "state": "frozen_B_native_pass_host_rehearsal_pass_other_CI_in_progress",
   "scope": "Owner-opt-in PAUSE on selected campaigns when a fresh native-day native-currency spend report reaches the exact owner threshold. No budget increase,activation,model-authorized write,profit estimate or public-content write.",
   "contract": [
     "Disabled owner policy by default; enabling requires exact campaign rules and acknowledgement of polling/report delay.",
@@ -25,6 +25,14 @@
       "frontend": "140passed,24suites",
       "build": "PASS6.42s",
       "source_isolation": "PASS"
+    },
+    "exact_current_source_ci": {
+      "source": "ec33d33f3db9436f385adc817bafd983b9268ff4",
+      "native_run": 40227392846,
+      "backend": "496passed,1warning,28.27s",
+      "frontend": "140passed,24suites",
+      "build": "PASS4.51s",
+      "source_isolation": "PASS"
     }
   },
   "provider_business_writes": 0,
@@ -33,7 +41,7 @@
   "manual_release": "PR1498 published Oct25 22:32Riyadh,verified:true checks3 exact Afe7a1ca8/Mf72a350e/runtime9d7b,active:false. Evidence f699864a53f4491ac6613d36e9cabaa146ece7ec.",
   "release_history_rule": "Before eventual deployment,make a fresh source directly on newest reviewed Production J and apply only this task's source delta. Do not carry prior intent-edit merge ancestry into J..A; never weaken v5 full-history checks.",
   "remaining_financial_scope": "Growth/reduction based on profit,owner loss limits and genuine campaign-level financial coverage remain incomplete. This defensive spend trigger is not full financial autonomy.",
-  "next": "Fresh guard before clean original-host1503 rehearsal. Require all applicable A/B CI and fresh J0d8f4524 before exact-tree merge. Preserve other leases and all frozen handoffs.",
+  "next": "Await all current frozen-B checks; fresh J must remain0d8f4524 then exact-tree normal merge1503 and actual/app build/own prepare/prepublish/one publish/verify3.",
   "completed_behavior": "Read-only opening grants no authority; saved and unsaved enable state are separate. Exact revision/campaign threshold required; other rules preserved,max3. Disable whole policy while global switch is off. Snapshot truth distinguishes confirmed writes,uncertain outcomes and unknown policy inventory.",
   "recovered_wip": {
     "branch": "codex/tiktok-spend-guard-20261025",
@@ -61,14 +69,18 @@
     "zip_sha256": "a15faac39dafe24e2a25108d4d9ba65e31a557465fb4fcc6bc4e3b7141d93cd6",
     "intent_sha256": "d48441971fe009280b72c94130e67b379ed0357dd0dd762e891cf24e523bf275",
     "intent_blob": "399d3e28434ae7990c0203dc2beb702a26ed79db",
-    "host_rehearsal": "not started",
+    "host_rehearsal": "Fresh inactive guard then clean/tmp/tiktok1503-release exactB c287fba7 adapterexit0; backend identity exact Aec33d33f/runtime862a0d22/protocol5.",
     "prepare": "not started",
-    "publish": "not started"
+    "publish": "not started",
+    "B_release_run": 40227725269,
+    "B_native_run": 40227725187,
+    "source_ancillary_ci": "G47 source run40227393038 cancelled after newer intent-only B; native and Release pass. Require current B G47 and all applicable current-head checks to pass; no source failure inferred from cancellation."
   },
   "production_ui_smoke": {
     "release": 1498,
     "creator": "new Amasi identity/settings/publish/draft/comments-read ready; verified media properties empty",
     "campaign_tools": "paused campaign/group and URL-only asset import forms render",
-    "analysis": "one live owner UI analysis request rendered a bounded recommendation without advertising writes; exact model invocation/cache not independently measured"
+    "analysis": "one live owner UI analysis request rendered a bounded recommendation without advertising writes; exact model invocation/cache not independently measured",
+    "catalog": "Canonical product search rendered results; no campaign-product mapping changed."
   }
 }
