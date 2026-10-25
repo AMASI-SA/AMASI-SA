@@ -52,6 +52,10 @@ async def setup(monkeypatch, request):
         assert owner == OWNER
         assert method == "GET", "printing must never mutate Salla"
         state["calls"].append(path)
+        if (path == "/orders/salla-order/shipments"
+                and state.get("initial_order_shipments_unsupported")
+                and state["calls"].count(path) == 1):
+            raise SallaError("synthetic unsupported direct surface", status_code=404)
         if path in state.get("denied", {}):
             raise SallaError("synthetic endpoint denial", status_code=state["denied"][path])
         if state["fail"] == path:
@@ -64,7 +68,7 @@ async def setup(monkeypatch, request):
             assert kwargs["params"]["order_id"] == "salla-order"
             return {"data": deepcopy(state["rows"])}
         if path == "/orders/salla-order/shipments":
-            return deepcopy(state.get("order_shipments", {"data": []}))
+            return deepcopy(state.get("order_shipments", {"data": state["rows"]}))
         if path.endswith("/tracking"):
             return {"data": deepcopy(state.get("tracking", {}))}
         if path.startswith("/shipments/"):
@@ -147,7 +151,7 @@ async def test_no_old_label_fallback_or_writes(setup, kind):
     elif kind in {"pending", "cancelled"}:
         state["rows"][0]["status"] = kind
     elif kind == "failure":
-        state["fail"] = "/shipments"
+        state["fail"] = "/orders/salla-order/shipments"
     before = await dump(db)
     if kind == "failure":
         with pytest.raises(shipping.ShippingLabelError) as caught:
@@ -253,12 +257,13 @@ async def test_print_does_not_keep_embedded_label_when_fresh_list_is_empty(setup
     state["rows"] = []
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
-    assert "/shipments" in state["calls"]
+    assert "/orders/salla-order/shipments" in state["calls"]
 
 
 @pytest.mark.asyncio
 async def test_print_detail_failure_never_uses_list_label(setup):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["fail"] = "/shipments/200"
     with pytest.raises(shipping.ShippingLabelError):
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
@@ -321,6 +326,7 @@ async def test_tracking_response_for_other_order_is_not_opened(setup):
 ])
 async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["detail"] = detail
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
@@ -334,6 +340,7 @@ async def test_detail_removes_ready_list_label_without_fallback(setup, detail):
 ])
 async def test_detail_identity_mismatch_cannot_open_another_order(setup, detail):
     db, state = setup
+    state["rows"][0]["label_url"] = None
     state["detail"] = detail
     with pytest.raises(shipping.ShippingLabelError):
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
@@ -397,7 +404,7 @@ async def test_completed_assembly_print_requires_live_completed_status(
     assert response.json()["label_url"] == CURRENT["label_url"]
     assert response.json()["shipment_id"] == "200"
     assert response.json()["tracking_number"] == "CURRENT-AWB"
-    assert "/shipments" in state["calls"]
+    assert "/orders/salla-order/shipments" in state["calls"]
     assert await dump(db) == before
 
 
@@ -494,6 +501,10 @@ async def test_completed_store_courier_reprint_uses_formatter_after_delivery(set
 @pytest.fixture
 async def scope_fallback(setup, monkeypatch):
     db, state = setup
+    # Exercise the retained compatibility path when the direct surface is
+    # initially unsupported. Direct ready responses are covered separately.
+    # Later scoped reads retain all existing identity/time/denial assertions.
+    state["initial_order_shipments_unsupported"] = True
     for name in ("inventory", "mezan_preparation_pieces_v1",
                  "mezan_fulfillment_events_v2", "shipments"):
         await db[name].insert_one({"sentinel": "print must not write"})
@@ -666,7 +677,7 @@ async def test_scope_compat_non_auth_failures_do_not_fallback(scope_fallback, ph
     with pytest.raises(shipping.ShippingLabelError) as caught:
         await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert caught.value.code == "salla_shipping_unavailable"
-    assert "/orders/salla-order/shipments" not in state["calls"]
+    assert state["calls"].count("/orders/salla-order/shipments") == 1
 
 
 @pytest.mark.asyncio
@@ -689,7 +700,7 @@ async def test_scope_compat_terminal_details_do_not_revive_fallback(scope_fallba
     state["denied"] = {"/shipments/200/tracking": 403}
     result = await shipping.refresh_shipping_label(db, OWNER, ORDER)
     assert not result["ready"]
-    assert "/orders/salla-order/shipments" not in state["calls"]
+    assert state["calls"].count("/orders/salla-order/shipments") == 1
 
 
 @pytest.mark.asyncio

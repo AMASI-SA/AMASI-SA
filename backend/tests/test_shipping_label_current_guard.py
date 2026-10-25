@@ -132,7 +132,7 @@ async def test_legacy_print_rejects_provider_label_after_local_identity_changes(
         }})
         return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": []}
 
-    async def rows(*_args):
+    async def rows(*_args, **_kwargs):
         return [{"id": "old-id", "status": "created", "courier_name": "iMile", "courier_id": "imile",
                  "tracking_number": "OLD-AWB", "label_url": "https://labels.test/old.pdf"}]
 
@@ -198,7 +198,7 @@ async def test_legacy_issue_reads_existing_label_without_unconditional_post(db, 
     async def resolve(*_args):
         return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": [source]}
 
-    async def rows(*_args):
+    async def rows(*_args, **_kwargs):
         return [source]
 
     async def post(_db, _owner, method, path, **_kwargs):
@@ -378,7 +378,7 @@ async def test_same_current_printed_label_remains_ready_on_repeated_refresh(db, 
     async def resolve(*_args):
         return "9001", {"id": "9001", "reference_id": ORDER, "status": "completed", "shipments": [provider]}
 
-    async def rows(*_args):
+    async def rows(*_args, **_kwargs):
         return [provider]
 
     async def no_resync(*_args):

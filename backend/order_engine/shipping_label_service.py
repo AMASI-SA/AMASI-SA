@@ -1439,7 +1439,7 @@ def _current_print_shipment(response: Any, internal_order_id: str) -> dict[str, 
 
 
 async def _print_shipment_rows(
-    db: Any, user_id: str, internal_order_id: str,
+    db: Any, user_id: str, internal_order_id: str, *, direct_print: bool = False,
 ) -> list[dict[str, Any]]:
     """Read current provider data, retaining the orders-scope compatibility path."""
     async def compatible_rows(
@@ -1462,16 +1462,31 @@ async def _print_shipment_rows(
                 return []
         return [current]
 
-    try:
-        response = await call_salla(
-            db, user_id, "GET", "/shipments",
-            params={"order_id": internal_order_id, "per_page": 50},
-        )
-    except SallaError as exc:
-        if exc.status_code not in {401, 403}:
-            raise
-        return await compatible_rows()
-    current = _current_print_shipment(response, internal_order_id)
+    current = None
+    if direct_print:
+        try:
+            rows = await compatible_rows()
+        except SallaError as exc:
+            if exc.status_code not in {401, 403, 404, 405}:
+                raise
+        else:
+            if not rows:
+                return []
+            current = rows[0]
+            # An order-scoped, current artifact needs no detail/tracking reread.
+            if _snapshot(current)["ready"] or _is_store_courier(current):
+                return rows
+    if current is None:
+        try:
+            response = await call_salla(
+                db, user_id, "GET", "/shipments",
+                params={"order_id": internal_order_id, "per_page": 50},
+            )
+        except SallaError as exc:
+            if exc.status_code not in {401, 403}:
+                raise
+            return await compatible_rows()
+        current = _current_print_shipment(response, internal_order_id)
     if not current:
         return []
     # Merchant couriers have no external AWB. The existing refresh formatter
@@ -1516,7 +1531,7 @@ async def _print_shipment_rows(
     return _active_outbound([details])
 
 
-async def _current_courier_source(db, user_id, internal_id, order):
+async def _current_courier_source(db, user_id, internal_id, order, *, direct_print=False):
     """One current-provider classification for issuance and print reads.
 
     Explicit order carrier wins over old shipments. Missing order fields may
@@ -1531,7 +1546,7 @@ async def _current_courier_source(db, user_id, internal_id, order):
     if _is_store_courier({"courier_name": carrier.get("company_name"),
                           "meta": {"app_id": carrier.get("company_code")}}):
         return {}, []
-    rows = await _print_shipment_rows(db, user_id, internal_id)
+    rows = await _print_shipment_rows(db, user_id, internal_id, direct_print=direct_print)
     active = _active_outbound(rows)
     if active and _is_store_courier(active[0]):
         if carrier.get("company_name") or carrier.get("company_code"):
@@ -1787,7 +1802,7 @@ async def _refresh_shipping_label(
             raise ShippingLabelError("salla_order_reference_mismatch", "أعادت سلة طلبًا مختلفًا؛ أوقفت الطباعة.")
         if not _order_is_completed(order):
             raise ShippingLabelError("order_status_not_completed", "لم تؤكد سلة تم التنفيذ؛ الطباعة متوقفة.", status_code=409)
-        source, rows = await _current_courier_source(db, user_id, internal_id, order)
+        source, rows = await _current_courier_source(db, user_id, internal_id, order, direct_print=True)
     except SallaError as exc:
         if exc.status_code == 403:
             raise ShippingLabelError(
@@ -1834,13 +1849,9 @@ async def _refresh_shipping_label(
     current = active[0] if active else {}
 
     snapshot = _snapshot(current)
-    # Order details may omit shipments. Re-read the actual current-shipment
-    # endpoint too, so an old detail response cannot authorize a replaced AWB.
-    latest_rows = await _print_shipment_rows(db, user_id, internal_id)
-    latest_active = _current_outbound(latest_rows, fence["shipping"])
-    if _snapshot(latest_active[0] if latest_active else {}) != snapshot:
-        raise _stale_label()
-    await _recheck_provider_completed(db, user_id, normalized, internal_id, order, fence)
+    # The current order-scoped shipment was just read once. Keep the local
+    # completion/ownership fence, without another full provider read cycle.
+    await _assert_current_print_status(db, user_id, normalized, expected=fence)
 
     return {
         "ok": True,
