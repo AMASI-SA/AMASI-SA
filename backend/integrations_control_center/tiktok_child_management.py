@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import secrets
 from datetime import timedelta, timezone
 from typing import Literal
@@ -22,6 +21,7 @@ from .tiktok_ad_builder import BuilderApproval, ID_PATTERN, now, single
 from .tiktok_campaign_management import _account, _digest, _money, _financial_bound
 from .tiktok_creator_api import BoundedCreatorJSONRoute, TikTokCreatorAPI, admission, mongo, problem
 from .tiktok_oauth_security import decrypt_tiktok_token, encrypt_tiktok_token
+from .tiktok_features import enabled as feature_enabled
 
 PROPOSALS = "mezan_tiktok_child_proposals_v1"
 FENCES = "mezan_tiktok_child_fences_v1"
@@ -63,7 +63,7 @@ class ChildInput(BaseModel):
 
 
 def enabled():
-    if os.environ.get("TIKTOK_CHILD_MANAGEMENT_ENABLED", "false").lower() not in {"1", "true", "yes", "on"}:
+    if not feature_enabled("child_management"):
         raise problem("tiktok_child_management_disabled", "إدارة مجموعات وإعلانات TikTok غير مفعّلة في هذه البيئة.", 503)
 
 

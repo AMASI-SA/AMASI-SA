@@ -29,6 +29,7 @@ from .tiktok_oauth_security import (
     decrypt_tiktok_token, tiktok_oauth_configured,
 )
 from .tiktok_native_hierarchy import ENTITY_COLLECTION, MAX_ENTITIES
+from .tiktok_features import enabled as feature_enabled
 
 COLLECTION = "mezan_tiktok_campaign_proposals_v1"
 FENCE_COLLECTION = "mezan_tiktok_campaign_fences_v1"
@@ -128,7 +129,7 @@ class TikTokCampaignApprovalInput(BaseModel):
 
 
 def _enabled():
-    return os.environ.get("TIKTOK_NATIVE_MANAGEMENT_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+    return feature_enabled("campaign_management")
 
 
 @asynccontextmanager

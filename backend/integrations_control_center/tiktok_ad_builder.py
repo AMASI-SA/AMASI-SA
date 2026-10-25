@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 import json
-import os
 import secrets
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -23,6 +22,7 @@ from .tiktok_campaign_management import _account, _digest, _money
 from .tiktok_creator_api import BoundedCreatorJSONRoute, TikTokCreatorAPI, admission, mongo, problem
 from .tiktok_content_publishing import public_url
 from .tiktok_oauth_security import decrypt_tiktok_token, encrypt_tiktok_token
+from .tiktok_features import enabled as feature_enabled
 
 PROPOSALS = "mezan_tiktok_ad_builder_proposals_v1"
 FENCES = "mezan_tiktok_ad_builder_fences_v1"
@@ -257,6 +257,8 @@ def public(row, *, preview=False):
 
 
 async def preview_builder(db, user, value):
+    if not feature_enabled("ad_builder"):
+        raise problem("tiktok_builder_disabled", "إنشاء مجموعات وإعلانات TikTok غير مفعّل في بيئة التشغيل.", 503)
     async with admission():
         await indexes(db)
         fingerprint = _digest(value.model_dump(mode="json"))
@@ -297,7 +299,7 @@ async def execute_builder(db, user, identifier, digest):
             return public(row)
         if row["status"] != "previewed" or row["expires_at"].replace(tzinfo=timezone.utc) <= now():
             raise problem("tiktok_builder_not_executable", "المعاينة منتهية أو بدأت عمليتها؛ راجع السجل قبل أي محاولة.")
-        if os.environ.get("TIKTOK_AD_BUILDER_ENABLED", "false").lower() not in {"true", "1", "yes", "on"}:
+        if not feature_enabled("ad_builder"):
             raise problem("tiktok_builder_disabled", "إنشاء مجموعات وإعلانات TikTok غير مفعّل في بيئة التشغيل.", 503)
         value = AdBuilderInput(**plan["input"])
         async with TikTokCreatorAPI() as api:

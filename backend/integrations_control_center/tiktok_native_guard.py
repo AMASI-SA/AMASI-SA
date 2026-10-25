@@ -24,6 +24,7 @@ def assert_tiktok_v2_is_legacy_independent(root: Path | None = None) -> None:
         base / "tiktok_campaign_management.py",
         base / "tiktok_ad_builder.py",
         base / "tiktok_child_management.py",
+        base / "tiktok_features.py",
         base / "tiktok_creator_api.py",
         base / "tiktok_creator_accounts.py",
         base / "tiktok_content_publishing.py",

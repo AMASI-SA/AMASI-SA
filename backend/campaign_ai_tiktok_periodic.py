@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 import hashlib
-import os
 from zoneinfo import ZoneInfo
 
 ANALYSES = "mezan_tiktok_campaign_analyses_v1"
@@ -65,7 +64,8 @@ def project(analysis, row, snapshot_id):
 
 
 async def append_tiktok_periodic_recommendations(db, user, snapshot, *, current=None, loader=None, analyzer=None, pause=None):
-    if os.environ.get("MEZAN_TIKTOK_AI_PERIODIC_ENABLED", "false").lower() not in {"1", "true", "yes", "on"} or not isinstance(snapshot, dict) or not snapshot.get("snapshot_id"):
+    from integrations_control_center.tiktok_features import enabled as feature_enabled
+    if not feature_enabled("periodic_observations") or not isinstance(snapshot, dict) or not snapshot.get("snapshot_id"):
         return snapshot
     from campaign_ai_monitor_legacy import RECOMMENDATION_COLLECTION
     source = db[RECOMMENDATION_COLLECTION]

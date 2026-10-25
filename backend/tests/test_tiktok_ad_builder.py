@@ -225,10 +225,10 @@ async def test_known_created_id_reconciles_readonly_without_second_creation(work
 
 
 @pytest.mark.asyncio
-async def test_default_disabled_gate_and_tampered_digest_prevent_write(workflow, monkeypatch):
+async def test_explicit_disabled_gate_and_tampered_digest_prevent_write(workflow, monkeypatch):
     db, state = workflow
     preview = await builder.preview_builder(db, "owner", payload())
-    monkeypatch.delenv("TIKTOK_AD_BUILDER_ENABLED")
+    monkeypatch.setenv("TIKTOK_AD_BUILDER_ENABLED", "false")
     with pytest.raises(HTTPException) as caught:
         await builder.execute_builder(db, "owner", preview["proposal_id"], preview["confirmation_digest"])
     assert caught.value.detail["code"] == "tiktok_builder_disabled"

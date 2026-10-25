@@ -18,6 +18,14 @@ async def test_child_controls_are_reachable_through_owner_workspace():
     assert response.status_code == 422
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,path,body", [("POST", "", {"kind": "adgroup", "action": "pause", "account_id": "70001", "campaign_id": "1111", "adgroup_id": "2222", "reason": "Owner-only change", "idempotency_key": "child_owner_guard"}), ("GET", "", None), ("GET", "/proposal1", None), ("POST", "/proposal1/approve-and-execute", {"confirmation_digest": "0" * 64}), ("POST", "/proposal1/reconcile", {})])
+async def test_non_owner_cannot_reach_child_data_or_controls(method, path, body):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for({"id": "staff", "role": "staff"})), base_url="http://test") as client:
+        result = await client.request(method, "/api/integrations-v2/tiktok_ads/child-management/proposals" + path, **({"json": body} if body is not None else {}))
+    assert result.status_code == 403
+
+
 def payload(kind="adgroup", action="pause", **changes):
     value = {"kind": kind, "action": action, "account_id": "70001", "campaign_id": "1111", "adgroup_id": "2222", "reason": "Owner selected control", "idempotency_key": "child_control_1"}
     if kind == "ad":
@@ -147,7 +155,7 @@ async def test_native_mismatch_stays_uncertain_and_cannot_repeat(workflow):
 
 @pytest.mark.asyncio
 async def test_feature_off_does_not_reach_db_or_provider(monkeypatch):
-    monkeypatch.delenv("TIKTOK_CHILD_MANAGEMENT_ENABLED", raising=False)
+    monkeypatch.setenv("TIKTOK_CHILD_MANAGEMENT_ENABLED", "false")
     with pytest.raises(HTTPException) as blocked:
         await controls.preview_child(object(), "owner", payload())
     assert blocked.value.status_code == 503

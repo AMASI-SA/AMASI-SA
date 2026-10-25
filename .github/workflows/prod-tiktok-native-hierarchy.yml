@@ -73,6 +73,7 @@ jobs:
           tests/test_tiktok_management_routes.py
           tests/test_tiktok_ad_builder.py
           tests/test_tiktok_child_management.py
+          tests/test_tiktok_features.py
           tests/test_campaign_ai_tiktok_periodic.py
           tests/test_tiktok_campaign_management.py
           tests/test_tiktok_creator_accounts.py
