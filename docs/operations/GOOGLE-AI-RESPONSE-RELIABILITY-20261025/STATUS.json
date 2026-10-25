@@ -1,123 +1,57 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
-  "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-ai-response-reliability-r4-20261025",
-  "base": "a35b5e4ede35b00cdd9599ceb878c07593627221",
-  "status": "MERGED_READY_BLOCKED_BY_FOREIGN_RELEASE_LEASE",
-  "scope": "Bound Google AI output and expose safe failures; unblock exact-source CI by isolating readiness per PR/ref",
-  "evidence": {
-    "previous_release": "PR1481 deployed Oct25 07:24PM; guard3probes verified and active:false",
-    "google_account_analysis": "still timed out",
-    "single_campaign": "generic failure",
-    "core_assistant": "neutral technical request returned invalid result after ~16s; no raw response available",
-    "credential_safety": "no credentials read, copied, provisioned or changed; existing Mezan AI integration only"
-  },
-  "hypothesis": "Reasoning/output budget and response contract may cause failures; exact production code not yet logged. Do not claim root cause proven.",
-  "implemented": [
-    "At most6concise recommendations from all supplied campaign evidence",
-    "GPT5 family minimal reasoning with low fallback for configured later models;8000 total output token budget; bounded40s retained",
-    "Safe constant error codes, allowlisted incomplete reason/numeric token counts, allowlisted exception class only; no model output or exception text",
-    "Distinct safe UI explanations for incomplete or unverified results"
-  ],
-  "verification": {
-    "red": "3focused regressions failed; compatible-model case passed",
-    "backend": "379 passed in10.59s; exactB job121255596863",
-    "frontend": "96 passed/12suites; exactB job121255597051",
-    "current_source_ci": {
-      "head": "97a5ed5cc428afd74046513cd59142d58a896910",
-      "readiness": "passed",
-      "google": "passed",
-      "security": "passed",
-      "g47_and_stock": "cancelled on B trigger; exactB both passed"
-    },
-    "clone": "exit0 /tmp/google1485-release literalA",
-    "exact_current_source_ci": "pending fresh source; previous source379backend/96frontend all9passed",
-    "exact_intent_ci": {
-      "head": "5b2aac4cb3fee6d27bbd1663aa5a4a0b87a47bce",
-      "all9": "passed",
-      "readiness_run": 40222071784,
-      "independent_host20_rehearsal": "passed"
+  "scope": "Google only; Snapchat owned by another conversation",
+  "updated_at": "2026-10-25T20:31:00Z",
+  "full_autonomy_complete": false,
+  "production": {
+    "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
+    "evidence_units_1500": {
+      "merge": "0d8f4524a26978471a72662cb56bc5e3a4584530",
+      "included_in_current_production_branch": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+      "own_publish": false
     }
   },
-  "user_autonomy_preferences": {
-    "budget_mode": "preserve_current_approved_total_budget",
-    "objective": "google_native_roas",
-    "source": "user answered structured questions",
-    "provider": "google_ads",
-    "financial_attribution": "native conversion_value/spend only; not net profit"
+  "budget_semantics": {
+    "pr": 1507,
+    "branch": "codex/google-ai-budget-semantics-r2-20261025",
+    "source_A": "8aaab7127c875700735b87b38092162c1227e30f",
+    "intent_B": "12b0a991b7813980321335d4684f7b4de1c0ec81",
+    "tree": "d344871c43cc6c5c9cd09ec7938b1d68082a9d93",
+    "base": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+    "state": "exact B CI running, not merged or published",
+    "source_candidate_artifact": 12612567510,
+    "local_tests": "110 passed; diff check passed",
+    "superseded_unmerged_pr": 1504
   },
-  "provider_writes": 0,
-  "financial_writes": 0,
-  "production_changed": false,
-  "next_safe_action": "Actual /app guard must becomeinactive under foreign codex-snap1492. Then trackedclean original/app ff-only2a43e8cec998a6d5458174ce49fd610abf3a7a74, adapter, preparecodex-google1495/prepublish, oneauthorizedpublish, explicitfinish, verify3probes/statusinactive, reloadnativeGoogleAIanalysis. No repeatedpermission needed.",
-  "concurrent_update": {
-    "pr": 1482,
-    "scope": "TikTok creator readiness",
-    "files_overlap": false,
-    "preserved": true
+  "live_acceptance": {
+    "account": "5052346701",
+    "campaign": "اختبار ميزان غير منشور | هودي بناتي | 15 SAR",
+    "type": "SEARCH",
+    "budget_native": 15,
+    "budget_type": "DAILY average",
+    "status": "PAUSED",
+    "provider_write": "one create submitted once through native approval gateway",
+    "result": "completed and independently read-back verified in native UI",
+    "spend_native": 0,
+    "activation": false,
+    "existing_campaign_budgets_changed": false,
+    "first_draft_generation": "generic failure, one retry succeeded"
   },
-  "prior_frozen_source": "ba0713f10e1619dba0fbb47b0de84e28d19a2034",
-  "prior_source_ci": "all9pass/379backend/96frontend",
-  "prior_freeze": "exit0 against73901...; superseded before B/merge/publish; immutable prior source retained",
-  "concurrent_updates": [
+  "blockers": [
     {
-      "pr": 1482,
-      "scope": "TikTok",
-      "preserved": true
-    },
-    {
-      "pr": 1483,
-      "scope": "Snapchat",
-      "preserved": true
-    },
-    {
-      "pr": 1487,
-      "scope": "TikTok publishing settings",
-      "preserved": true
-    },
-    {
-      "pr": 1488,
-      "scope": "Snapchat budget direction",
-      "preserved": true
+      "kind": "foreign release lease",
+      "actor": "codex-tiktok1503",
+      "deployment": "04db2224d68d6e5ed5629391355c4b45ab8b6d15",
+      "action": "do not modify original /app or start release rehearsal until actual guard active:false"
     }
   ],
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1495",
-  "shared_release_guard": {
-    "active": true,
-    "actor": "codex-snap1492",
-    "source_git_sha": "738e2cffa32166c024eb1521bf90ce7e3121b064",
-    "deployment_git_sha": "a35b5e4ede35b00cdd9599ceb878c07593627221",
-    "release_id": "rg5-d03ae026d977873e39fb4d6d95a733029dfc9e97ff7e9cccfbd9bef410860b85",
-    "platform": "explicit Deployment finished Oct25 09:45PM Riyadh observed",
-    "checked_at": "2026-10-25T18:47:44Z",
-    "restriction": "AGENTS prohibits clearing another conversation lease; no foreign verify/abort and no shared source changes"
-  },
-  "previous_pr": {
-    "number": 1484,
-    "state": "closed_unmerged_superseded_before_B",
-    "source_sha": "ba0713f10e1619dba0fbb47b0de84e28d19a2034"
-  },
-  "transfer_note": "An attempted native download of superseded A2 intent returned a clone log; JSON validation rejected it. No B was created. For next transfer select exact treeitem, verify aria-selected and editor tab filename before keyboard context Download, then validate JSON source/base/hash before upload.",
-  "prior_unfrozen_source": "c9aec6c23c84c5f23d65b2c86021d5f9b6d5cebc",
-  "ci_queue_fix": {
-    "from": "one repository-wide mezan-release-readiness group",
-    "to": "one group per PR/ref",
-    "cancel_in_progress": false,
-    "jobs_permissions_and_production_guard": "unchanged",
-    "yaml_parse": "pass; semantic comparison only concurrency group changed; all4jobs and contents:read retained",
-    "source": "official GitHub concurrency docs and observed cancelled-before-jobs run"
-  },
-  "prior_source": "d11c2598c37f94858c62adfb15d3c6a76223be70",
-  "previous_frozen_pair": {
-    "A": "152378a4d71a1b4e2b902c8df3d868f4c4095ed0",
-    "B": "0ca21a2a85c004d0f1e6af0cfb4b9e5dc2c0cc9a",
-    "pr": 1493,
-    "ci": "all9 source and B passed",
-    "reason": "production advanced with nonoverlapping Snapchat1492, release intent conflict"
-  },
-  "source_sha": "97a5ed5cc428afd74046513cd59142d58a896910",
-  "intent_sha": "5b2aac4cb3fee6d27bbd1663aa5a4a0b87a47bce",
-  "intent_tree": "16a58381e2a6eb936d4f53c5c00eaa0251f3d254",
-  "merge_sha": "2a43e8cec998a6d5458174ce49fd610abf3a7a74",
-  "runtime_release_id": "rg5-1c435dfb2f335bb846ac315248b7d7bd4f500681c428fd88e235eb11c4a2b6d6"
+  "remaining": [
+    "exact B CI and independent Host20 rehearsal",
+    "merge exact B tree while preserving concurrent work",
+    "original /app adapter then authorized v5 publish and three probes after foreign lease closes",
+    "live evidence-unit and average-budget AI prose acceptance",
+    "investigate saved-analysis list loading error",
+    "standing policy and full autonomous executor remain incomplete"
+  ],
+  "next_safe_action": "Continue exact-B CI evidence and read-only diagnosis; do not clear foreign lease or touch Snapchat. Issue1006 at 2500-comment limit; use this status and task PR comments."
 }
