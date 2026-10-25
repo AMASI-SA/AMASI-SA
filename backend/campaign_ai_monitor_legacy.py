@@ -2189,6 +2189,41 @@ def _require_snapchat_budget_basis_unchanged(
         )
 
 
+def _snapchat_recommendation_payload(
+    recommendation: dict[str, Any], target: dict[str, Any],
+) -> tuple[dict[str, Any], int | None]:
+    """One budget calculation for manual execution and delegated limits."""
+    requested = recommendation.get("action")
+    level = recommendation.get("entity_level")
+    if requested == "pause" and level in {"campaign", "ad_group", "ad"}:
+        return {"status": "PAUSED"}, None
+    if requested not in {"reduce", "scale"}:
+        raise HTTPException(status_code=409, detail={"code": "recommendation_action_not_available"})
+    current_budget = _number(target.get("current_daily_budget_native"))
+    if current_budget is None or current_budget <= 0 or level not in {"campaign", "ad_group"}:
+        raise HTTPException(status_code=409, detail={"code": "recommendation_budget_not_available"})
+    direction = -1 if requested == "reduce" else 1
+    percent = min(30, max(5, int(recommendation.get("change_percent") or 15)))
+    ratio = 1 + direction * percent / 100
+    next_budget_micro = max(5_000_000, int(round(current_budget * ratio * 1_000_000)))
+    current_budget_micro = int(round(current_budget * 1_000_000))
+    # Preserve PR1486: provider minimum/rounding cannot reverse a reduction
+    # or turn either action into a verified no-op.
+    if (
+        requested == "reduce" and next_budget_micro >= current_budget_micro
+    ) or (
+        requested == "scale" and next_budget_micro <= current_budget_micro
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "recommendation_budget_change_not_effective",
+                "message": "الميزانية المقترحة لا تحقق اتجاه التوصية ضمن حد Snapchat؛ أنشئ توصية جديدة.",
+            },
+        )
+    return {"daily_budget_micro": next_budget_micro}, percent
+
+
 async def _execute_snapchat_approval(
     db: Any,
     user_id: str,
@@ -2199,6 +2234,8 @@ async def _execute_snapchat_approval(
     snapshot_id: str,
     recommendation_id: str,
     snapshot_digest: str,
+    actor_id: str | None = None,
+    authorization: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     await _execution_quality.preflight_approved_execution(
         db,
@@ -2223,21 +2260,12 @@ async def _execute_snapchat_approval(
         require_profit_accounting_complete_for_scale,
     )
     await require_profit_accounting_complete_for_scale(db, user_id, requested)
-    payload: dict[str, Any]
-    if requested == "pause":
-        payload = {"status": "PAUSED"}
-    else:
-        current_budget = _number(target.get("current_daily_budget_native"))
-        if current_budget is None or current_budget <= 0 or level == "ad":
-            raise HTTPException(status_code=409, detail={"code": "recommendation_budget_not_available"})
-        direction = -1 if requested == "reduce" else 1
-        percent = min(30, max(5, int(recommendation.get("change_percent") or 15)))
-        ratio = 1 + direction * percent / 100
-        payload = {"daily_budget_micro": max(5_000_000, int(round(current_budget * ratio * 1_000_000)))}
+    payload, percent = _snapchat_recommendation_payload(recommendation, target)
+    executor_actor = actor_id or user_id
     proposal = await create_snapchat_management_proposal(
         db,
         user_id,
-        user_id,
+        executor_actor,
         SnapchatManagementProposalInput(
             action=action,
             account_id=str(target["account_id"]),
@@ -2270,6 +2298,12 @@ async def _execute_snapchat_approval(
         if proposal.get("status") == "completed":
             return proposal
         raise HTTPException(status_code=409, detail={"code": "recommendation_proposal_not_approvable"})
+    if authorization is not None:
+        from campaign_ai_snapchat_autonomy import bind_autonomous_proposal
+        await bind_autonomous_proposal(
+            db, user_id, idempotency_key, str(proposal["proposal_id"]),
+            recommendation, target, payload,
+        )
     proposal_row = await db["mezan_snapchat_campaign_proposals_v1"].find_one(
         {
             "user_id": user_id,
@@ -2289,7 +2323,7 @@ async def _execute_snapchat_approval(
     approved = await approve_snapchat_management_proposal(
         db,
         user_id,
-        user_id,
+        executor_actor,
         str(proposal["proposal_id"]),
         SnapchatManagementApprovalInput(
             confirm_token=str(token), expected_revision=int(proposal.get("revision") or 1)
@@ -2304,7 +2338,7 @@ async def _execute_snapchat_approval(
         expected_digest=snapshot_digest,
     )
     return await execute_snapchat_management_proposal(
-        db, user_id, user_id, str(approved["proposal_id"])
+        db, user_id, executor_actor, str(approved["proposal_id"])
     )
 
 
@@ -2546,6 +2580,8 @@ async def _execute_approved_recommendation(
     recommendation_id: str,
     expected_digest: str,
     idempotency_key: str,
+    actor_id: str | None = None,
+    authorization: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Shared fail-closed dispatch for both Campaign-AI providers."""
     if not expected_digest:
@@ -2573,6 +2609,8 @@ async def _execute_approved_recommendation(
             snapshot_id=snapshot_id,
             recommendation_id=recommendation_id,
             snapshot_digest=expected_digest,
+            actor_id=actor_id,
+            authorization=authorization,
         )
     if provider == "meta":
         return await _execute_meta_approval(
@@ -2588,6 +2626,122 @@ async def _execute_approved_recommendation(
         status_code=409,
         detail={"code": "recommendation_provider_unsupported"},
     )
+
+
+def _public_campaign_execution(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in row.items() if key not in {
+        "_id", "user_id", "authorization", "snapshot_digest", "execution_quality",
+    }}
+
+
+async def claim_campaign_recommendation_execution(
+    db: Any, user_id: str, *, snapshot_id: str, recommendation_id: str,
+    authorization: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """One atomic identity for manual approval and owner-policy dispatch."""
+    try:
+        checked = await _execution_quality.preflight_approved_execution(
+            db, recommendation_collection=RECOMMENDATION_COLLECTION,
+            user_id=user_id, snapshot_id=snapshot_id, recommendation_id=recommendation_id,
+        )
+    except _execution_quality.ExecutionQualityBlocked as exc:
+        raise _execution_quality_http_exception(exc) from exc
+    recommendation, target = checked["recommendation"], checked["target"]
+    if authorization is not None:
+        from campaign_ai_snapchat_autonomy import validate_autonomous_claim
+        await validate_autonomous_claim(db, user_id, checked, authorization)
+    execution_id = hashlib.sha256(f"{user_id}:{snapshot_id}:{recommendation_id}".encode()).hexdigest()
+    automatic = authorization is not None
+    actor = str(authorization["actor_id"]) if automatic else user_id
+    started = {
+        "_id": execution_id, "execution_id": execution_id, "user_id": user_id,
+        "snapshot_id": snapshot_id, "recommendation_id": recommendation_id,
+        "provider": recommendation.get("provider"), "account_id": target.get("account_id"),
+        "entity_id": _text(target.get("entity_id"), limit=120),
+        "entity_level": recommendation.get("entity_level"), "action": recommendation.get("action"),
+        "status": "executing", "authorization_kind": "account_policy" if automatic else "owner_approval",
+        "authorization": dict(authorization) if automatic else None,
+        "approved_by": None if automatic else user_id,
+        "approved_at": None if automatic else _iso(), "executed_by": actor,
+        "policy_authorized_by": authorization.get("granted_by") if automatic else None,
+        "authorized_at": _iso(), "writes_performed": False,
+        "snapshot_digest": checked["snapshot_digest"], "execution_quality": checked["execution_quality"],
+    }
+    try:
+        await db[EXECUTION_COLLECTION].insert_one(started)
+    except DuplicateKeyError:
+        existing = await db[EXECUTION_COLLECTION].find_one({"execution_id": execution_id, "user_id": user_id})
+        return {"claimed": False, "execution_id": execution_id,
+                "execution": _public_campaign_execution(existing or {"execution_id": execution_id, "status": "executing"})}
+    return {"claimed": True, "execution_id": execution_id, "execution": _public_campaign_execution(started)}
+
+
+async def run_claimed_campaign_execution(db: Any, user_id: str, execution_id: str) -> dict[str, Any]:
+    """Run a claimed operation once; uncertain outcomes stay blocked."""
+    collection = db[EXECUTION_COLLECTION]
+    row = await collection.find_one({"execution_id": execution_id, "user_id": user_id})
+    if not row:
+        raise HTTPException(status_code=404, detail={"code": "campaign_execution_not_found"})
+    started = await collection.update_one(
+        {"execution_id": execution_id, "user_id": user_id, "status": "executing",
+         "runner_started_at": {"$exists": False}}, {"$set": {"runner_started_at": _iso()}},
+    )
+    if not started.matched_count:
+        return _public_campaign_execution(row)
+    try:
+        authorization = row.get("authorization") if row.get("authorization_kind") == "account_policy" else None
+        if authorization is not None:
+            from campaign_ai_snapchat_autonomy import prepare_autonomous_execution
+            checked = await _execution_quality.preflight_approved_execution(
+                db, recommendation_collection=RECOMMENDATION_COLLECTION, user_id=user_id,
+                snapshot_id=row["snapshot_id"], recommendation_id=row["recommendation_id"],
+                expected_digest=row["snapshot_digest"],
+            )
+            await prepare_autonomous_execution(db, user_id, row, checked)
+        execution_options = {
+            "snapshot_id": row["snapshot_id"], "recommendation_id": row["recommendation_id"],
+            "expected_digest": row["snapshot_digest"], "idempotency_key": execution_id,
+        }
+        if authorization is not None:
+            execution_options.update(actor_id=row["executed_by"], authorization=authorization)
+        result = await _execute_approved_recommendation(db, user_id, **execution_options)
+        result_status = str(result.get("status") or "")
+        final_status = result_status if result_status in {"completed", "provider_state_uncertain", "verification_required"} else "verification_required"
+        finish = {"status": final_status, "finished_at": _iso(),
+                  "writes_performed": result.get("provider_write_reached") is True,
+                  "provider_write_outcome_known": result.get("provider_write_reached") is not None,
+                  "result": result}
+    except Exception as exc:
+        if isinstance(exc, _execution_quality.ExecutionQualityBlocked):
+            detail = _execution_quality_http_exception(exc).detail
+        else:
+            detail = exc.detail if isinstance(exc, HTTPException) else {"code": type(exc).__name__}
+        # An automatic operation may already have reached the provider. Never
+        # turn that uncertainty into a fresh retry merely because readback or
+        # the caller failed. Management owns reconciliation and rollback.
+        refreshed = await collection.find_one({"execution_id": execution_id, "user_id": user_id}) or row
+        proposal_id = refreshed.get("provider_proposal_id")
+        proposal = await db["mezan_snapchat_campaign_proposals_v1"].find_one(
+            {"user_id": user_id, "proposal_id": proposal_id}
+        ) if proposal_id else {}
+        uncertain = bool(proposal and (
+            proposal.get("provider_write_reached") is True
+            or proposal.get("provider_write_state") in {"attempting", "confirmed", "uncertain"}
+            or proposal.get("status") in {"provider_state_uncertain", "verification_required"}
+        ))
+        final_status = "provider_state_uncertain" if uncertain else "failed"
+        finish = {"status": final_status, "finished_at": _iso(), "failure": detail,
+                  "writes_performed": proposal.get("provider_write_reached") is True if proposal else False,
+                  "provider_write_outcome_known": not uncertain}
+        logger.exception("Governed campaign recommendation execution did not complete")
+    await collection.update_one({"execution_id": execution_id, "user_id": user_id}, {"$set": finish})
+    await db[RECOMMENDATION_COLLECTION].update_one(
+        {"user_id": user_id, "snapshot_id": row["snapshot_id"]},
+        {"$set": {"recommendations.$[item].execution_status": final_status,
+                  "recommendations.$[item].executed_at": _iso()}},
+        array_filters=[{"item.recommendation_id": row["recommendation_id"]}],
+    )
+    return _public_campaign_execution({**row, **finish})
 
 
 def attach_campaign_ai_routes(
@@ -2664,85 +2818,17 @@ def attach_campaign_ai_routes(
         recommendation = checked["recommendation"]
         target = checked["target"]
         snapshot_digest = checked["snapshot_digest"]
-        execution_id = hashlib.sha256(
-            f"{user_id}:{payload.snapshot_id}:{recommendation_id}".encode()
-        ).hexdigest()
-        started = {
-            "execution_id": execution_id,
-            "user_id": user_id,
-            "snapshot_id": payload.snapshot_id,
-            "recommendation_id": recommendation_id,
-            "provider": recommendation.get("provider"),
-            "entity_id": _text(target.get("entity_id"), limit=120),
-            "entity_level": recommendation.get("entity_level"),
-            "action": recommendation.get("action"),
-            "status": "executing",
-            "approved_by": user_id,
-            "approved_at": _iso(),
-            "writes_performed": False,
-            "snapshot_digest": snapshot_digest,
-            "execution_quality": checked["execution_quality"],
-        }
-        try:
-            await db[EXECUTION_COLLECTION].insert_one(started)
-        except DuplicateKeyError:
-            existing = await db[EXECUTION_COLLECTION].find_one(
-                {"execution_id": execution_id}, {"_id": 0, "user_id": 0}
-            )
-            return existing or {"execution_id": execution_id, "status": "executing"}
-        async def execute_in_background() -> None:
-            try:
-                result = await _execute_approved_recommendation(
-                    db,
-                    user_id,
-                    snapshot_id=payload.snapshot_id,
-                    recommendation_id=recommendation_id,
-                    expected_digest=snapshot_digest,
-                    idempotency_key=execution_id,
-                )
-                result_status = str(result.get("status") or "")
-                final_status = (
-                    result_status
-                    if result_status in {"completed", "provider_state_uncertain", "verification_required"}
-                    else "verification_required"
-                )
-                await db[EXECUTION_COLLECTION].update_one(
-                    {"execution_id": execution_id},
-                    {"$set": {
-                        "status": final_status,
-                        "finished_at": _iso(),
-                        "writes_performed": result.get("provider_write_reached") is True,
-                        "provider_write_outcome_known": result.get("provider_write_reached") is not None,
-                        "result": result,
-                    }},
-                )
-                await db[RECOMMENDATION_COLLECTION].update_one(
-                    {"user_id": user_id, "snapshot_id": payload.snapshot_id},
-                    {"$set": {
-                        "recommendations.$[item].execution_status": final_status,
-                        "recommendations.$[item].executed_at": _iso(),
-                    }},
-                    array_filters=[{"item.recommendation_id": recommendation_id}],
-                )
-            except Exception as exc:
-                if isinstance(exc, _execution_quality.ExecutionQualityBlocked):
-                    detail = _execution_quality_http_exception(exc).detail
-                else:
-                    detail = exc.detail if isinstance(exc, HTTPException) else {"code": type(exc).__name__}
-                await db[EXECUTION_COLLECTION].update_one(
-                    {"execution_id": execution_id},
-                    {"$set": {"status": "failed", "finished_at": _iso(), "failure": detail}},
-                )
-                await db[RECOMMENDATION_COLLECTION].update_one(
-                    {"user_id": user_id, "snapshot_id": payload.snapshot_id},
-                    {"$set": {"recommendations.$[item].execution_status": "failed"}},
-                    array_filters=[{"item.recommendation_id": recommendation_id}],
-                )
-                logger.exception("Approved campaign recommendation execution failed")
-
-        background_tasks.add_task(execute_in_background)
+        claim = await claim_campaign_recommendation_execution(
+            db, user_id, snapshot_id=payload.snapshot_id,
+            recommendation_id=recommendation_id,
+        )
+        if not claim["claimed"]:
+            return claim["execution"]
+        background_tasks.add_task(
+            run_claimed_campaign_execution, db, user_id, claim["execution_id"],
+        )
         return {
-            "execution_id": execution_id,
+            "execution_id": claim["execution_id"],
             "status": "executing",
             "provider": recommendation.get("provider"),
             "action": recommendation.get("action"),
