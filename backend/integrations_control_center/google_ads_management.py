@@ -29,7 +29,7 @@ AUDIT = "mezan_google_ads_action_audit_v1"
 ANALYSES = "mezan_google_ads_ai_analyses_v1"
 MAX_PLAN_BYTES = 9 * 1024 * 1024
 PROPOSAL_TTL = timedelta(minutes=30)
-PUBLIC_FIELDS = ("proposal_id", "provider", "action", "account_id", "account_name", "currency", "time_zone", "campaign_id", "draft_id", "draft_revision", "reason", "before", "planned", "financial_bound", "confirmation_digest", "status", "created_at", "expires_at", "submitted_at", "executed_at", "verified", "provider_write_reached", "submission_started", "resource_names", "created_campaign_id", "safe_error", "after", "verification", "reconcile_after", "events", "actor_id", "local_finalization_pending", "ai_source")
+PUBLIC_FIELDS = ("proposal_id", "provider", "action", "account_id", "account_name", "currency", "time_zone", "campaign_id", "draft_id", "draft_revision", "reason", "before", "planned", "financial_bound", "confirmation_digest", "status", "created_at", "expires_at", "submitted_at", "executed_at", "verified", "provider_write_reached", "submission_started", "resource_names", "created_campaign_id", "safe_error", "after", "verification", "reconcile_after", "events", "actor_id", "local_finalization_pending", "ai_source", "automation_source")
 
 
 def now():
@@ -142,14 +142,16 @@ def human_snapshot(snapshot):
 def immutable(row):
     keys = ("proposal_id", "provider", "user_id", "actor_id", "action", "account_id", "currency", "time_zone", "auth_epoch", "before_digest", "draft_id", "draft_revision", "operations", "reason", "planned", "financial_bound", "expires_at", "correlation_label")
     # Preserve approval digests for existing manual proposals.
-    return {**{key: row.get(key) for key in keys}, **({"ai_source": row["ai_source"]} if "ai_source" in row else {})}
+    return {**{key: row.get(key) for key in keys}, **({"ai_source": row["ai_source"]} if "ai_source" in row else {}), **({"automation_source": row["automation_source"]} if "automation_source" in row else {})}
 
 
-async def record_event(db, row, status, *, expected_status=None, audit=True, **updates):
+async def record_event(db, row, status, *, expected_status=None, expected_submission_started=False, audit=True, **updates):
     event = {"id": uuid.uuid4().hex, "user_id": row["user_id"], "proposal_id": row["proposal_id"], "actor_id": row["actor_id"], "action": row["action"], "status": status, "occurred_at": now().isoformat(), "account_id": row["account_id"]}
     scope = {"user_id": row["user_id"], "proposal_id": row["proposal_id"]}
+    if row.get("automation_source"):
+        scope["account_id"] = row["account_id"]
     if expected_status is not None:
-        scope.update(status=expected_status, submission_started=False)
+        scope.update(status=expected_status, submission_started=expected_submission_started)
         if row.get("execution_claim_id"):
             scope["execution_claim_id"] = row["execution_claim_id"]
     elif status != "completed":
@@ -177,6 +179,14 @@ async def _release_fence(db, row):
 
 
 async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None, ai_source=None):
+    if actor.get("actor_id") == "mezan_google_automation_v1":
+        raise problem("google_automation_gateway_required", "استخدم بوابة التفويض الآلي المستقلة.", 403)
+    return await _preview_google_action(db, actor, body, client_factory=client_factory, prepared_asset=prepared_asset, ai_source=ai_source)
+
+
+async def _preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None, ai_source=None, automation_source=None):
+    if (automation_source is not None) != (actor.get("actor_id") == "mezan_google_automation_v1"):
+        raise problem("google_automation_gateway_required", "مسار المعاينة غير مطابق للتفويض.", 403)
     from .google_ads_campaign_builder import GoogleCampaignBuildError, build_campaign_operations, build_update_operations
     from .google_ads_campaign_contract import GoogleCampaignDraft
     await ensure_google_management_indexes(db)
@@ -184,7 +194,7 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
     action = payload["action"]
     action = "create_campaign" if action == "create" else action
     account_id = identifier(payload["account_id"])
-    request_hash = digest({**payload, "prepared_asset": prepared_asset, **({"ai_source": ai_source} if ai_source else {})})
+    request_hash = digest({**payload, "prepared_asset": prepared_asset, **({"ai_source": ai_source} if ai_source else {}), **({"automation_source": automation_source} if automation_source is not None else {})})
     prior = await db[PROPOSALS].find_one({"user_id": actor["user_id"], "idempotency_key": payload["idempotency_key"]}, {"_id": 0})
     if prior:
         if prior.get("input_digest") != request_hash:
@@ -280,6 +290,8 @@ async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClie
             "before_digest": digest(snapshot) if snapshot else None, "planned": planned, "financial_bound": financial, "operations": operations, "correlation_label": correlation,
             "created_at": instant.isoformat(), "expires_at": (instant + PROPOSAL_TTL).isoformat(), "status": "previewed", "verified": False, "provider_write_reached": False,
             "submission_started": False, "input_digest": request_hash, "idempotency_key": payload["idempotency_key"], "events": []}
+        if automation_source is not None:
+            row["automation_source"] = automation_source
         if ai_source:
             row["ai_source"] = ai_source
             row["expires_at"] = min(row["expires_at"], ai_source["expires_at"])
@@ -314,11 +326,20 @@ async def _claim_fence(db, row):
 
 
 async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *, client_factory=GoogleAdsClient):
+    if actor.get("actor_id") == "mezan_google_automation_v1":
+        raise problem("google_automation_gateway_required", "استخدم بوابة التفويض الآلي المستقلة.", 403)
+    return await _execute_google_proposal(db, actor, proposal_id, confirmation_digest, client_factory=client_factory)
+
+
+async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, *, client_factory=GoogleAdsClient, automation=False):
     row = await get_proposal(db, actor["user_id"], proposal_id)
+    if bool(row.get("automation_source")) != automation or (automation and actor.get("actor_id") != "mezan_google_automation_v1"):
+        raise problem("google_automation_gateway_required", "مسار تفويض العملية غير مطابق.", 403)
     if row.get("confirmation_digest") != confirmation_digest or digest(immutable(row)) != confirmation_digest:
         raise problem("google_ads_approval_changed", "الإعدادات المعروضة تغيرت؛ أنشئ معاينة جديدة.")
     if row["status"] == "completed" and row.get("verified"):
-        await _release_fence(db, row)
+        if not automation:
+            await _release_fence(db, row)
         return public_proposal(row)
     if row.get("ai_source"):
         from .google_ads_ai_actions import ai_action_review_enabled
@@ -333,12 +354,17 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
         if not latest or latest["revision"] != row["draft_revision"]:
             raise problem("google_ads_draft_stale", "المسودة تغيرت منذ المعاينة.")
     bound = row.get("financial_bound") or {}
-    await execution_permission(db, actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
+    if automation:
+        from .google_ads_automation_gateway import _execution_preflight
+        await _execution_preflight(db, row)
+    else:
+        await execution_permission(db, actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
     client = None
     submitted = False
     provider_response_received = False
     fence_claimed = False
     proposal_claimed = False
+    automation_authority_entered = False
     row["execution_claim_id"] = uuid.uuid4().hex
     try:
         await _claim_fence(db, row)
@@ -356,32 +382,62 @@ async def execute_google_proposal(db, actor, proposal_id, confirmation_digest, *
             if digest(fresh) != row["before_digest"]:
                 raise problem("google_ads_provider_drift", "إعدادات جوجل تغيرت منذ المعاينة؛ راجع التغيير الجديد.")
         await record_event(db, row, "approved", expected_status="executing", approved_at=now().isoformat(), approved_by=actor["actor_id"])
-        persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
-        fresh_actor = await principal(db, persisted_actor, write=True)
-        if fresh_actor["user_id"] != row["user_id"]:
-            raise problem("google_ads_actor_scope_changed", "عضوية المنفّذ تغيرت منذ الموافقة.", 403)
-        await execution_permission(db, fresh_actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
+        if automation:
+            from .google_ads_automation_gateway import _authorize_dispatch
+            automation_authority_entered = True
+            await _authorize_dispatch(db, row, client, metadata, epoch, fresh)
+        else:
+            persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
+            fresh_actor = await principal(db, persisted_actor, write=True)
+            if fresh_actor["user_id"] != row["user_id"]:
+                raise problem("google_ads_actor_scope_changed", "عضوية المنفّذ تغيرت منذ الموافقة.", 403)
+            await execution_permission(db, fresh_actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
         submitted = True
         # The durable dispatch floor has no blocking audit call between its
         # acknowledgement and provider dispatch. Events remain in the proposal.
         await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
+        if automation:
+            # No await between this kill-switch observation and the HTTP call.
+            # The acknowledged floor remains durable when dispatch is stopped.
+            from .google_ads_automation_authority import execution_enabled
+            if not execution_enabled():
+                # This branch has an ACKED floor and has not invoked mutate.
+                # Preserve that floor and atomically record the precise proof;
+                # unknown acknowledgements never enter this branch.
+                await record_event(db, row, "failed", expected_status="submitted", expected_submission_started=True,
+                    audit=False, provider_write_reached=False, safe_error="automation_stopped_before_provider_dispatch",
+                    dispatch_cancelled_before_http=True,
+                    dispatch_cancelled_before_http_claim_id=row["execution_claim_id"],
+                    dispatch_cancelled_before_http_at=now().isoformat())
+                return public_proposal(row)
         response = await client.mutate(row["operations"])
         provider_response_received = True
         names = mutation_resource_names(response, row["operations"], row["account_id"])
-        await record_event(db, row, "verifying", provider_write_reached=True, resource_names=names, accepted_receipt=True, accepted_operations_digest=digest(row["operations"]), request_id=response.get("_request_id"))
+        await record_event(db, row, "verifying", **({"expected_status": "submitted", "expected_submission_started": True} if automation else {}), provider_write_reached=True, resource_names=names, accepted_receipt=True, accepted_operations_digest=digest(row["operations"]), request_id=response.get("_request_id"))
         verified, report = await client.verify_operations(row["operations"], names, accepted_receipt=True)
         if not verified:
-            await record_event(db, row, "uncertain", verification=report, safe_error="readback_not_confirmed")
+            await record_event(db, row, "uncertain", **({"expected_status": "verifying", "expected_submission_started": True} if automation else {}), verification=report, safe_error="readback_not_confirmed")
             return public_proposal(row)
         return await _complete_google_action(db, row, client, names, report)
     except BaseException as exc:
+        if automation_authority_entered and not submitted:
+            # An authorization CAS may have committed even if its acknowledgement
+            # was lost. Never take the human pre-submit reset/release path.
+            try:
+                await asyncio.shield(record_event(db, row, "uncertain", expected_status={"$in": ["executing", "approved", "uncertain"]}, expected_submission_started=False, safe_error="automation_authorization_unconfirmed"))
+            except BaseException:
+                pass
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            return public_proposal(await get_proposal(db, actor["user_id"], proposal_id))
         if submitted:
             if not provider_response_received and isinstance(exc, HTTPException) and isinstance(exc.detail, dict) and 400 <= (exc.detail.get("provider_status") or 0) < 500:
-                await record_event(db, row, "failed", verified=False, provider_write_reached=False, safe_error=exc.detail.get("code"), rejection={"provider_status": exc.detail["provider_status"], "provider_codes": exc.detail.get("provider_codes") or []})
-                await _release_fence(db, row)
+                await record_event(db, row, "failed", **({"expected_status": {"$in": ["submitted", "verifying", "uncertain"]}, "expected_submission_started": True} if automation else {}), verified=False, provider_write_reached=False, safe_error=exc.detail.get("code"), rejection={"provider_status": exc.detail["provider_status"], "provider_codes": exc.detail.get("provider_codes") or []})
+                if not automation:
+                    await _release_fence(db, row)
                 return public_proposal(row)
             try:
-                await asyncio.shield(record_event(db, row, "uncertain", safe_error="provider_result_unconfirmed", local_finalization_pending=row.get("verified") is True))
+                await asyncio.shield(record_event(db, row, "uncertain", **({"expected_status": {"$in": ["approved", "submitted", "verifying", "uncertain"]}, "expected_submission_started": {"$in": [False, True]}} if automation else {}), safe_error="provider_result_unconfirmed", local_finalization_pending=row.get("verified") is True))
             except BaseException:
                 pass  # Submitted state and account fence are the durable floor.
             if isinstance(exc, asyncio.CancelledError):
@@ -422,20 +478,30 @@ async def _complete_google_action(db, row, client, names, report):
         verified_at = association["product_association_verified_at"]
         await attach_products_to_management_proposal(db, row["user_id"], proposal_id=row["proposal_id"], provider="google_ads", account_id=row["account_id"], products=row["planned"]["product_ids"], actor_id=row.get("approved_by"), observed_at=row["created_at"], idempotency_prefix="google-intent:" + row["proposal_id"])
         await adopt_management_proposal_products(db, row["user_id"], proposal_id=row["proposal_id"], provider="google_ads", account_id=row["account_id"], campaign_id=created, actor_id=row.get("approved_by"), provider_verified_at=verified_at, provider_entity_verified=True, idempotency_prefix="google-campaign:" + row["proposal_id"])
-    await record_event(db, row, "completed", verified=True, verification=report, after=after, resource_names=names,
+    await record_event(db, row, "completed", **({"expected_status": {"$in": ["submitted", "verifying", "uncertain"]}, "expected_submission_started": True} if row.get("automation_source") else {}), verified=True, verification=report, after=after, resource_names=names,
         created_campaign_id=created, executed_at=now().isoformat(), safe_error=None, local_finalization_pending=False)
-    await _release_fence(db, row)
+    if not row.get("automation_source"):
+        await _release_fence(db, row)
     return public_proposal(row)
 
 
 async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=GoogleAdsClient):
+    if actor.get("actor_id") == "mezan_google_automation_v1":
+        raise problem("google_automation_gateway_required", "استخدم مسار التحقق الآلي المستقل.", 403)
+    return await _reconcile_google_proposal(db, actor, proposal_id, client_factory=client_factory)
+
+
+async def _reconcile_google_proposal(db, actor, proposal_id, *, client_factory=GoogleAdsClient, automation=False):
     row = await get_proposal(db, actor["user_id"], proposal_id)
+    if bool(row.get("automation_source")) != automation:
+        raise problem("google_automation_gateway_required", "مسار التحقق من العملية غير مطابق.", 403)
     if digest(immutable(row)) != row.get("confirmation_digest"):
         raise problem("google_ads_approval_changed", "تعذر إثبات نسخة الاقتراح الأصلية.")
     if row.get("reconcile_after") and row["reconcile_after"] > now().isoformat():
         raise problem("google_ads_reconcile_wait", "انتظر مهلة التحقق الظاهرة قبل قراءة نتيجة الإرسال.")
     if row["status"] == "completed" and row.get("verified"):
-        await _release_fence(db, row)
+        if not automation:
+            await _release_fence(db, row)
         return public_proposal(row)
     if actor.get("owner") and not row.get("submission_started"):
         fence = await db[FENCES].find_one({"user_id": row["user_id"], "account_id": row["account_id"], "proposal_id": row["proposal_id"], "status": "claimed"}, {"_id": 0})
@@ -475,7 +541,7 @@ async def reconcile_google_proposal(db, actor, proposal_id, *, client_factory=Go
         verified, report = await client.verify_operations(row["operations"], names, accepted_receipt=accepted)
         if verified:
             return await _complete_google_action(db, row, client, names, report)
-        await record_event(db, row, "uncertain", verification=report)
+        await record_event(db, row, "uncertain", **({"expected_status": {"$in": ["submitted", "verifying", "uncertain"]}, "expected_submission_started": True} if automation else {}), verification=report)
         return public_proposal(row)
     finally:
         await client.close()

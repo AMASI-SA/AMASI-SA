@@ -1,0 +1,42 @@
+{
+  "task_id": "GOOGLE-AUTONOMY-EXECUTION-20261026-R2",
+  "scope": "Google only; existingcampaign native autonomousmanagement defaultoff; explicitowneractivation; separatechildworker",
+  "base": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+  "state": "SOURCE checkpoint; Draft until exactCI+review+intentB; no liveactivation/providerwrites",
+  "source_files": [
+    "backend/integrations_control_center/google_ads_management.py",
+    "backend/integrations_control_center/google_ads_automation_authority.py",
+    "backend/integrations_control_center/google_ads_automation_gateway.py",
+    "backend/integrations_control_center/google_ads_automation_worker.py",
+    "backend/integrations_control_center/google_ads_automation_activation.py",
+    "backend/integrations_control_center/google_ads_automation_policy.py",
+    "backend/integrations_control_center/google_ads_routes.py",
+    "backend/google_ads_automation_scheduler.py",
+    "backend/google_ads_automation_runner.py",
+    "backend/ads_manager/__init__.py",
+    "backend/tests/test_google_ads_automation_authority.py",
+    "backend/tests/test_google_ads_automation_authority_mongo.py",
+    "backend/tests/test_google_ads_automation_gateway.py",
+    "backend/tests/test_google_ads_automation_gateway_mongo.py",
+    "backend/tests/test_google_ads_automation_worker.py",
+    "backend/tests/test_google_ads_automation_worker_mongo.py",
+    "backend/tests/test_google_ads_automation_activation.py",
+    "backend/tests/test_google_ads_automation_runtime.py",
+    "backend/tests/test_google_ads_automation_policy.py",
+    "frontend/src/components/marketing/GoogleAutomationPolicy.jsx",
+    "frontend/src/components/marketing/GoogleAutomationPolicy.test.jsx",
+    "frontend/src/services/googleAutomationPolicy.js",
+    ".github/workflows/google-ads-full-management.yml"
+  ],
+  "verification": {
+    "root": "451passed44Mongo skips5.16s; diffcheckpendingfinal",
+    "mongo": "6authority+8gateway+3worker storagecases mustpassCI; priorWIP6authoritySETUPFAIL dbname65fixed49; NOstoragepassclaimed",
+    "frontend": "17policycases(new6activation)+existing tests pendingexactCI"
+  },
+  "behavior": "Manualdigests/permissionspreserved; explicitautoservicewrappers; policyCASquota+fence; ackednativefloorbeforedispatch; synchronouspostfloorstopzeroHTTPproof; neverresurrectterminalcancel; policysettleACKbeforefenceunlock; allunknownsheld/noresend; staleunsubmittedandterminalclaimreadrecovery; exactactivationversion/revision/issuer/time; defaultoffsubprocesschildnoDBbydefault/spawnunknownhold.",
+  "production": "1520PUBLISHEDVERIFIED6reclive;1522foundationnotownpublishedcarriedunchangedinTikTok1524M219c; ownercodex-tiktok1524hasactivelease, rootnoAppmutations",
+  "supersedes": "Draft1526/de2 source ancestry wasnotdescendedprodcb08; preserveoldWIP9f6160/de2 asundeployedhistory; freshR2onlatestJ219 solvesreleaseancestry.",
+  "remaining": "ExactCIrealMongo/React andindependentreview; sourceA/intentB protocol; waitforeignpublicationverifyclosed beforemerge; thenpublishdefaultoffandtestread-onlyUI/runtime. Actualbudget/policyenable requiresconcreteownerlimits/activation; nocampaignchangeshere. AutomaticcreationseparatepurecontractWIPnotsupportedbythisexistingcampaignworker.",
+  "provider_writes": 0,
+  "full_autonomy_complete": false
+}

@@ -18,3 +18,10 @@ export async function saveGoogleAutomationPolicy(accountId, payload, { signal } 
 export async function revokeGoogleAutomationPolicy(accountId, expectedRevision, { signal } = {}) {
     return (await api.post(`${endpoint(accountId)}/revoke`, { expected_revision: expectedRevision }, { signal })).data;
 }
+
+export async function activateGoogleAutomationPolicy(accountId, expectedRevision, acknowledgement, { signal } = {}) {
+    if (acknowledgement !== true) throw new Error("راجع حدود السياسة واعتمدها صراحةً قبل التفعيل.");
+    return (await api.post(`${endpoint(accountId)}/activate`, {
+        expected_revision: expectedRevision, acknowledge_execution: true,
+    }, { signal })).data;
+}

@@ -6,6 +6,7 @@ on:
     paths:
       - "backend/integrations_control_center/google_ads*"
       - "backend/ads_manager/**"
+      - "backend/google_ads_automation_*.py"
       - "backend/tests/test_google_ads*"
       - "frontend/src/components/marketing/Google*"
       - "frontend/src/components/GoogleAdsAllPlatformsCard*"
@@ -60,6 +61,14 @@ jobs:
           backend/tests/test_google_ads_automation_policy_mongo.py
           backend/tests/test_google_ads_autonomy_planner.py
           backend/tests/test_google_ads_automation_plan.py
+          backend/tests/test_google_ads_automation_authority.py
+          backend/tests/test_google_ads_automation_authority_mongo.py
+          backend/tests/test_google_ads_automation_worker.py
+          backend/tests/test_google_ads_automation_worker_mongo.py
+          backend/tests/test_google_ads_automation_gateway.py
+          backend/tests/test_google_ads_automation_gateway_mongo.py
+          backend/tests/test_google_ads_automation_activation.py
+          backend/tests/test_google_ads_automation_runtime.py
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py

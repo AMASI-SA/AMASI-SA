@@ -21,7 +21,8 @@ from .google_ads_management import account_client, available_accounts, principal
 AUTOMATION_POLICIES = "mezan_google_ads_automation_policies_v1"
 PUBLIC_FIELDS = ("schema_version", "account_id", "revision", "enabled", "currency_code", "time_zone",
     "campaign_ids", "allowed_actions", "max_campaign_daily_budget_native", "max_account_daily_budget_native",
-    "max_budget_change_percent", "cooldown_seconds", "max_actions_per_day", "expires_at", "updated_by", "updated_at", "events")
+    "max_budget_change_percent", "cooldown_seconds", "max_actions_per_day", "expires_at", "updated_by", "updated_at", "events",
+    "activation_version", "activation_revision", "activated_by", "activated_at")
 AMOUNT_PATTERN = r"^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$"
 
 
@@ -81,6 +82,21 @@ def _expiry(value, current):
         raise problem("google_automation_expiry_invalid", "اختر انتهاءً خلال الثلاثين يومًا القادمة مع المنطقة الزمنية.", 422) from None
 
 
+def automation_runtime_available():
+    """Report installed dispatch capability and both default-off runtime gates.
+
+    This is availability, not a worker heartbeat or evidence of provider writes.
+    Imports stay lazy so older deployments without the gateway remain safe.
+    """
+    try:
+        from .google_ads_automation_authority import execution_enabled
+        from .google_ads_automation_worker import worker_enabled
+        from .google_ads_automation_gateway import execute_google_automation_proposal
+        return execution_enabled() and worker_enabled() and callable(execute_google_automation_proposal)
+    except ImportError:
+        return False
+
+
 def public_policy(row, *, account_id, current):
     result = {key: row[key] for key in PUBLIC_FIELDS if key in row} if row else {
         "schema_version": 1, "account_id": account_id, "revision": 0, "enabled": False,
@@ -93,9 +109,20 @@ def public_policy(row, *, account_id, current):
             expired = expiry.tzinfo is None or expiry <= current
         except (TypeError, ValueError):
             expired = True
+    available = automation_runtime_available()
+    try:
+        from .google_ads_automation_authority import activation_proof_valid
+        activated = activation_proof_valid(row, current)
+    except ImportError:
+        activated = False
+    effective = bool(row and row.get("enabled") is True and activated and not expired and available)
+    in_flight = bool(row and row.get("_dispatch_claim") is not None)
     return {**result, "configured": bool(row), "expired": expired,
-        "executor_available": False, "effective_enabled": False,
-        "status": "executor_not_installed" if row and row.get("enabled") and not expired else "expired" if expired else "disabled",
+        "executor_available": available, "effective_enabled": effective,
+        "activation_required": bool(row and row.get("enabled") is True and not activated),
+        "in_flight_authorized": in_flight,
+        "in_flight_notice": "قد تكتمل عملية مُنحت إذن الإرسال قبل الإلغاء؛ لن يبدأ تفويض جديد بعده." if in_flight else None,
+        "status": "active" if effective else "expired" if expired else "activation_required" if row and row.get("enabled") and available else "executor_not_installed" if row and row.get("enabled") else "disabled",
         "provider_writes": 0, "budget_semantics": "average_daily_not_hard_spend_cap"}
 
 
