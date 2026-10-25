@@ -23,8 +23,10 @@ From `D:/amasi-build/supplier-invoice-release-20261026`:
 
 ## Release state / next safe action
 
-Production changed: **no**. No release lease acquired, no shared `/app` changes, no publish attempt. No new frozen intent B yet. Official CI and deployment verification remain pending.
+Production changed: **no**. No release lease acquired, no shared `/app` changes, no publish attempt. No new frozen intent B yet. Source-candidate CI is allowed to review this branch; the Cloud adapter rehearsal remains gated on a fresh inactive shared lease. Deployment verification remains pending.
 
 Browser-control tools are unavailable in this session. User was asked to execute `cd /app` then `python scripts/production_release_guard.py status` and send the result. User asked for the command as a chat message; it was provided. Wait for actual lease result before release rehearsal or `/app` changes; never assume inactive from elapsed time. Also inspect live Manage Publishing before deployment. Keep Preview runtime, session keys, test data and untracked files intact.
 
 Once inactive is confirmed: create/review integration PR; run required CI; freeze exact reviewed source A and intent-only B using the governed toolchain; rerun reviewed-intent checks; merge without squash/rebase; fresh prepare/prepublish; publish; require newer visible Deployment Succeeded plus official three-probe exact-identity verify and inactive lease. If source/base changes, regenerate the intent. Record complete source/deployment SHA and release ID here or in the continuation ledger. Do not enable any financial/material writer. APK remains assigned elsewhere.
+
+Continuation ledger update was attempted using `gh issue comment 1006` with the full checkpoint. GitHub rejected it: `Commenting is disabled on issues with more than 2500 comments`. This status document, pushed integration branch and its Draft PR are the durable continuation record until the ledger is available. No existing ledger entry was overwritten.
