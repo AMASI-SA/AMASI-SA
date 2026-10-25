@@ -167,7 +167,8 @@ def _public(row: dict[str, Any], token: str | None = None) -> dict[str, Any]:
     )}
     result["provider"] = "snapchat_ads"
     result["requested_delivery_status"] = row.get("plan", {}).get("delivery_status")
-    result["delivery_status"] = "ACTIVE" if row.get("status") == "completed" else None
+    result["configured_delivery_status"] = "ACTIVE" if row.get("status") == "completed" else None
+    result["provider_delivery_status"] = deepcopy((row.get("review") or {}).get("ad_delivery_status"))
     result["activation_performed"] = any(step.get("configured_status") == "ACTIVE"
         for step in row.get("steps", []))
     result["delivery_outcome_unknown"] = bool(row.get("status") == "interrupted"
@@ -448,13 +449,15 @@ async def validate_publication_creation_proof(db: Any, user_id: str,
 
 
 async def assert_publication_write_fence(db: Any, user_id: str,
-        child: dict[str, Any], operation: dict[str, Any]) -> None:
+        child: dict[str, Any], operation: dict[str, Any], *, expected_worker_claim: str | None = None) -> None:
     """Final management callback after its write-token resolution, before POST."""
     publication_id = child.get("publication_id")
     if not publication_id:
         return
     row = await _load(db, user_id, publication_id)
     _assert_grant(row)
+    if not expected_worker_claim or row.get("lease_token") != expected_worker_claim:
+        raise _fail("worker_fence_lost")
     index = row["current_step"]
     if index not in range(4) or row["steps"][index].get("proposal_id") != child.get("proposal_id"):
         raise _fail("child_not_bound")
@@ -480,6 +483,10 @@ async def assert_publication_write_fence(db: Any, user_id: str,
     _assert_grant(fresh)
     if fresh["revision"] != row["revision"] or fresh.get("lease_token") != row.get("lease_token"):
         raise _fail("worker_fence_lost")
+    if not management.snapchat_campaign_mutations_enabled():
+        raise _fail("mutations_disabled")
+    if not management.snapchat_campaign_activation_enabled():
+        raise _fail("activation_disabled")
 
 
 def _child_id(child: dict[str, Any]) -> str:
@@ -787,7 +794,8 @@ async def run_publication(db: Any, user_id: str, publication_id: str) -> dict[st
                     steps[index]["execution_requested"] = True
                     row = await _save(db, row, {"steps": steps,
                         "last_event": {"event": "child_execution_requested", "step": index}})
-                    child = await management.execute_snapchat_management_proposal(db, user_id, user_id, child["proposal_id"])
+                    child = await management.execute_snapchat_management_proposal(db, user_id, user_id,
+                        child["proposal_id"], publication_worker_claim=row["lease_token"])
                 child = await _child(db, row, index)
                 if not child:
                     raise _fail("child_parent_binding_failed")

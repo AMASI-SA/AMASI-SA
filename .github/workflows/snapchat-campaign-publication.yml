@@ -35,6 +35,7 @@ jobs:
               "backend/integrations_control_center/snapchat_media_upload.py",
               "backend/integrations_control_center/__init__.py",
               "backend/tests/test_snapchat_campaign_publication.py",
+              "backend/tests/test_snapchat_campaign_publication_mongo.py",
               "frontend/src/components/marketing/SnapchatCampaignPublicationPanel.jsx",
               "frontend/src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx",
               "frontend/src/components/marketing/SnapchatCampaignManagementPanel.jsx",
@@ -57,12 +58,22 @@ jobs:
     needs: scope
     if: needs.scope.outputs.applicable == 'true'
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7.0
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: backend
     env:
       JWT_SECRET: snapchat-publication-ci-only-secret
       PYTHONDONTWRITEBYTECODE: "1"
+      MEZAN_ATTRIBUTION_SIGNING_SECRET: snapchat-publication-ci-only-signing-secret
+      SNAPCHAT_PUBLICATION_TEST_MONGO_URL: mongodb://127.0.0.1:27017
+      REQUIRE_SNAPCHAT_PUBLICATION_MONGO: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,11 +82,13 @@ jobs:
       - run: >-
           python -m pip install
           fastapi==0.110.1 httpx==0.28.1 pydantic==2.13.4
-          pytest==9.0.3 pytest-asyncio pymongo==4.6.3 bcrypt==4.1.3
+          pytest==9.0.3 pytest-asyncio pymongo==4.6.3 motor==3.3.1 bcrypt==4.1.3
           PyJWT==2.13.0 openai==1.99.9 cryptography==48.0.0 openpyxl==3.1.5
+          reportlab python-multipart python-dotenv email-validator pymupdf pillow qrcode arabic-reshaper python-bidi
       - run: >-
           python -m pytest -q --tb=short
           tests/test_snapchat_campaign_publication.py
+          tests/test_snapchat_campaign_publication_mongo.py
           tests/test_snapchat_media_upload.py
           tests/test_snapchat_campaign_management_v1.py
           tests/test_snapchat_management_execution_hardening_v1.py

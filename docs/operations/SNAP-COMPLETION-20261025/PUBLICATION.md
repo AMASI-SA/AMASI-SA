@@ -1,178 +1,201 @@
-# Paused Snapchat campaign publication
+# Direct ACTIVE Snapchat campaign publication
 
-Status: source and seven integration seams authored; tests pending with the coordinator.
+Status: source and integration authored; fresh verification is coordinator-owned.
 This slice creates one SALES campaign, one PIXEL_PURCHASE group, one WEB_VIEW
-creative and one REMOTE_WEBPAGE ad. Campaign, group and ad are forced PAUSED.
-Creative packaging and review are shown separately. No activation is performed.
+creative and one REMOTE_WEBPAGE ad. Campaign, group and ad are created ACTIVE
+directly. There is no create-PAUSED-then-activate sequence. General nonpublication
+creates retain their previous PAUSED behavior.
 
-## Scope and authority
+Configured ACTIVE is distinct from Snap's review, packaging and actual delivery
+states. The campaign request also uses creation_state=PUBLISHED, as documented
+for campaign creation. An ad may remain pending review after ACTIVE is saved.
+The UI reports those provider outcomes separately and never promises immediate
+delivery.
 
-The owner enters names, headline, HTTPS destination, native-currency daily group
-budget, timezone-aware start time, country, reason and conversion window.
-Account, product/variant, Pixel and Public Profile are selected from real scoped
-catalogs. The existing browser File upload panel supplies an owner/account-bound
-READY upload ID; neither manual media IDs nor arbitrary file-fetch URLs are used.
-The server verifies current account currency, roles, product/variant membership,
-Pixel membership/eligibility, media readiness and profile sharing. USD and SAR
-are supported; no exchange conversion or default spending amount is inferred.
+## Explicit owner authority
 
-The preview persists one immutable plan, owner/account/fingerprint and four
-fixed child idempotency keys. One explicit owner token/revision approval covers
-the entire displayed plan and the strictly bounded replacement of dependency
-references with verified provider IDs. Child approvals are derived server-side
-from that parent grant and audited with the actual owner. No client analytical
-claim or expected_outcome field supplies authorization.
+The owner enters account-native daily group budget, start time, country, names,
+headline, HTTPS destination and reason. There is no default spending amount or
+automatic currency conversion. Account, product/variant, Pixel and Public Profile
+come from real owner/account-scoped catalogs. The existing browser File uploader
+supplies a verified READY upload ID; manually invented media IDs and remote file
+fetch URLs are not accepted.
 
-Parent preview, approval, review, claim, checkpoint, completion, reconciliation
-and cancellation events append atomically with their CAS state change. The
-bounded history retains the latest 100 events with the actual actor and parent
-approval revision. Reviewing the plan preserves prior approval events. Nonces,
-confirmation hashes and worker lease tokens never enter the public audit.
+The immutable server plan includes the ACTIVE publication contract and requested
+status, exact account/currency, product/variant, media/profile, content, targeting,
+budget and schedule. One explicit token/revision approval covers that complete
+displayed plan and bounded substitution of verified dependency IDs. Older plans
+without this ACTIVE contract do not silently gain ACTIVE authority.
 
-## Applied integration seams
+A fresh server-owned proof checks current selected account/currency, roles,
+product/variant membership, media/profile dependencies, Pixel membership and
+eligibility, and the existing repository inventory predicate:
 
-The following bounded seams are now applied to the existing management input,
-fingerprint, baseline gate, final authorization, router, native panel and CI.
-All existing autonomy and media/provenance paths are preserved. The coordinator
-must review and test this integrated source before enabling publication:
+    inventory_verification_status == "verified"
+    inventory_delivery_blocked is not True
 
-1. In SnapchatManagementProposalInput add optional publication_id, normalize it
-   with the existing identifier validator, and reject it unless the action is
-   one of campaign.create, ad_squad.create, creative.create or ad.create.
-2. Preserve old request fingerprints: in
-   snapchat_management_request_fingerprint remove publication_id from the
-   canonical model dictionary only when its value is None. Nonempty references
-   must be included in the fingerprint.
-3. In create_snapchat_management_proposal, after build_snapchat_operation and
-   before the baseline-unavailable refusal, compute:
+The proof uses management._capture_proposal_baseline with the selected product
+and variant. Missing inventory proof blocks the launch. A brand-new campaign
+may lack historic performance windows; those windows and measured cost/profit
+coverage stay explicitly unavailable when absent. They are not replaced with
+invented history, zero cost or fabricated profitability. The owner's exact
+approved initial budget supplies launch authority. Ordinary financial updates,
+autonomy execution, drift checks and later delivery decisions keep their
+existing protections.
 
-       from .snapchat_campaign_publication import validate_publication_creation_proof
-       publication_creation_proof = await validate_publication_creation_proof(
-           db, user_id, payload, operation
-       )
+Both native mutation and activation flags must permit the write. The flags,
+inventory, dependencies and invoking worker claim are rechecked at the final
+boundary after awaited credential resolution.
 
-   Keep the existing unavailable baseline unchanged. Add only
-   "and not publication_creation_proof" to its no-windows/provider-is-None
-   refusal. The helper returns an exception for invalid references; it does
-   not return a permission bit supplied by the client. Persist publication_id
-   and publication_creation_proof in the child proposal row. Ordinary previews,
-   activation, budget changes and bid updates retain their existing gates.
-4. At the final management authorization callback after resolving the durable
-   provider-write token, route publication create requests through:
+## Native integration
 
-       from .snapchat_campaign_publication import assert_publication_write_fence
-       await assert_publication_write_fence(db, user_id, row, operation)
+The bounded integration surfaces are:
 
-   This callback compares the exact server-materialized request and operation,
-   including first-party tracking URL expansion, rechecks current dependencies
-   and PAUSED ancestry, then performs a last parent DB lease/revision fence.
-   Do not put an unrelated DB await after that final fence and before POST.
-   Nonpublication create paths keep their existing authorization; updates keep
-   their autonomy/profit/drift checks.
-5. Import attach_snapchat_campaign_publication_routes in
-   integrations_control_center/__init__.py and call it with the same router,
-   db, current_user and _require_owner used by the management/media routes.
-6. Mount the new SnapchatCampaignPublicationPanel from the existing owner panel:
+1. SnapchatManagementProposalInput accepts an identifier publication_id only
+   for create actions. It is an untrusted reference, not authorization.
+   ACTIVE input requires the reference and activation acknowledgement.
+2. The request fingerprint includes nonempty publication_id. A missing/None
+   value is omitted so legacy idempotency digests remain unchanged.
+3. create_snapchat_management_proposal calls
+   validate_publication_creation_proof before building a publication operation.
+   Only its successful server proof enables the server-only publication_active
+   builder keyword. The default native builder still creates PAUSED even when
+   a caller supplies a reference. The proof and reference are stored in the
+   child row; bounded safe proof is available to audit/read APIs.
+4. The ordinary missing-baseline refusal is bypassed only by that current
+   approved publication proof and its verified inventory. Existing baseline
+   content remains unchanged. Client expected_outcome data is never proof.
+5. execute_snapchat_management_proposal carries a server-only
+   publication_worker_claim from run_publication through the native executor
+   and its after-token callback. Native HTTP execute cannot accept or invent
+   this context. assert_publication_write_fence requires the exact invoking
+   claim, current approved plan, step, child and body; it rechecks dependencies
+   and inventory, then performs the last parent DB fence and both flag reads.
+   No unrelated DB await is interposed before provider transport.
+6. Stored operation integrity and unknown-create matching recognize ACTIVE
+   only for this exact server-proof contract. Existing nonpublication create,
+   update, autonomy and activation paths retain their original authorization.
+7. The router composes attach_snapchat_campaign_publication_routes with the
+   existing owner boundary. SnapchatCampaignManagementPanel mounts the actual
+   publication form using the authenticated owner ID and native selected account.
+   Existing settings CI allowlists the exact paths and runs focused regressions.
 
-       <SnapchatCampaignPublicationPanel
-           ownerId={ownerId}
-           accountId={form.accountId || accountId || ""}
-           onChanged={onChanged}
-       />
+All three delivery bodies contain ACTIVE directly; campaign creation also
+contains PUBLISHED. No automatic cleanup, delete, pause or follow-up activation
+write is implied by this feature.
 
-   Import it from ./SnapchatCampaignPublicationPanel. The component receives
-   the actual signed-in owner ID, never a display label.
-7. Add the new exact paths to existing scoped CI/release allowlists. Include
-   the new runtime module in the governed backend identity manifest where
-   required. The dedicated workflow adds real publication and existing guard
-   suites; it does not replace existing required checks.
+## Durable child identity and tracking
 
-The unavailable-baseline exception is server-owned proof for new, zero-delivery
-entities only. It does not mark decision data complete or relax later delivery,
-inventory, contribution-profit, financial-update or activation requirements.
+The parent persists four fixed child keys, child proposal IDs and verified
+provider IDs. Before any child adoption, refresh, reconciliation or use, the
+server verifies exact owner, account, publication ID, action, fixed key, request
+fingerprint, creation proof/step/plan and any already bound proposal ID. It
+compares the stored operation against parent-derived approved semantics, not
+against a child's self-reported intent. A pre-existing completed creative under
+a predictable key cannot supply different media or content.
 
-## Runtime and recovery
+Creative tracking URLs contain a signed token with an issuance timestamp.
+Re-minting this token during validation would reject a valid delayed operation.
+The validator instead verifies the existing signature and exact owner/account/
+product/proposal-link/host claims, then reconstructs every approved destination,
+query and Snap macro field. Every other creative field is derived from the
+parent. Final readback uses those same expected parent semantics.
 
-All publication endpoints are under
-/integrations-v2/snapchat_ads/management/publications and require the owner:
+The worker passes its immutable claim through executor context because merely
+loading whichever parent claim is active is insufficient. An old worker cannot
+gain authority from another worker's claim, even when the same plan is approved
+again. Parent claim/nonce material is never included in public proof or audit.
 
-- POST /preview: immutable plan and confirmation token; no provider write.
-- GET /: latest owner jobs; GET /current?idempotency_key=... recovers the same
-  preview; GET /{id} retrieves its state. These reads never start a worker.
-- POST /{id}/approve: one plan token/revision approval.
-- POST /{id}/execute: starts/resumes the same durable job.
-- POST /{id}/reconcile: provider GET-only recovery of the current child.
-- POST /{id}/review: explicit review of the same remaining plan, retaining all
-  completed IDs and unknown child states while clearing the previous approval.
+## Restart, expiry and audit
 
-A bounded detached worker has a unique server claim token and acknowledged
-revision fence before any child work starts. The timeout is ten minutes and
-the operational lease is fifteen minutes. A claimed-but-unstarted worker can
-be recovered after sixty seconds only by CAS of its exact revision/token.
-Cancellation or lost acknowledgement during the initial claim conditionally
-stabilizes only that worker's token; a cancelled loser cannot stop a winner.
-An expired running claim is not permission to retry an uncertain child write.
+The job is durable before a detached bounded worker starts. A unique claim and
+acknowledged CAS revision fence child work. Worker timeout is ten minutes;
+operational lease is fifteen minutes. A claimed-but-unstarted job may recover
+after sixty seconds only through an exact revision/token CAS. Cancellation or
+lost acknowledgement during the initial claim conditionally stabilizes that
+worker's token and cannot stop a different winner.
 
-Each child is looked up by its original fixed key. A completed child surviving
-a lost parent checkpoint is adopted through its exact confirmed verification
-ID. An approved never-sent child is executed once through existing management.
-Attempting/unknown children stop advancement and require reconciliation.
-Default Motor naive-UTC BSON timestamps are normalized only for trusted server
-fields; owner-entered start_time must retain an explicit timezone.
+Stable keys recover a preview created before its parent checkpoint. Completed
+children survive a lost checkpoint and are adopted only after strict binding
+and confirmed verification. Approved never-sent children execute through the
+same native proposal. Attempting/unknown children stop advancement; a lease
+expiry never permits blind replay.
 
-Parent expiry requires explicit review and approval of remaining work. An
-expired child may refresh the SAME proposal/token/revision only if its exact
-parent/key/body binding is proven, its status is previewed/approved, its write
-state is not_attempted, both reached/uncertain flags are false, and no active
-management entity lease exists. Its expiry is capped to the parent grant.
-Existing audits/write markers remain. A failed, attempted or uncertain child
-never receives a replacement key or a fresh create authorization.
+Parent expiry requires explicit review and reapproval of remaining work while
+preserving completed IDs and unknown markers. The SAME expired child proposal
+may refresh only when exact parent/body/key binding and trusted never-sent
+state are proven: previewed/approved, not_attempted, reached=false,
+uncertain=false, and no active native entity lease. Its new expiry is capped
+to the parent. A sent/uncertain child receives no replacement key.
 
-Campaign/group/ad unknown-create handling delegates to existing management
-reconciliation. For unknown creative creation without an ID, the new helper
-uses two complete fixed-account creative catalogs with a fresh exact-ID GET
-between them. It requires one exact server-generated name and all submitted
-controls, account/type/time-window identity, and a scan-token CAS. Zero,
-duplicates, drift or incomplete listings remain unresolved and never authorize
-another create. This identity recovery remains GET-only after approval expiry.
-Snap's creative catalog does not establish deleted-aware absence proof.
+Parent events append atomically with CAS changes, retaining the latest 100
+events with actual actor and approval revision. Review preserves earlier
+approval events. Confirmation values and worker claims do not enter public
+history. Default Motor naive-UTC BSON dates are normalized only for trusted
+server fields; owner-entered start_time still requires an explicit timezone.
 
-Final verification rereads the complete chain, proves all three delivery
-entities PAUSED with correct relationships, and reports creative/ad review
-state separately. A final verification interrupted after all four child IDs
-were saved can finish through read-only reconciliation after approval expiry.
+## Partial and unknown provider outcomes
 
-## Primary provider references
+Known created ACTIVE parents remain visible with their IDs and configured
+status. If ad creation was requested and the response is lost, the UI states
+that the ad may be active and spending may have begun. The orchestrator does
+not send another create, infer that nothing happened, or claim the chain is
+safely paused.
 
+Campaign/group/ad reconciliation reuses native complete bounded catalogs,
+expected ACTIVE status, exact submitted controls, relationship/time evidence,
+fresh readback and native fences. Creative no-ID recovery uses two complete
+fixed-account catalogs around a fresh exact-ID GET, exact approved fields and
+a scan-token CAS. Zero matches, duplicates, malformed/incomplete listings or
+drift stay blocked and never authorize another create. These identification
+reads can resolve proven results after owner approval expiry without granting
+new write authority.
+
+After all four IDs are confirmed, fresh readback validates ACTIVE configuration
+and relationships. The response uses configured_delivery_status separately from
+provider_delivery_status and creative/ad review and packaging fields. A final
+readback interrupted after all IDs were saved can finish through GET-only
+reconciliation without another provider write.
+
+## Routes and UI
+
+Owner-only routes are under
+/integrations-v2/snapchat_ads/management/publications:
+
+- POST /preview and POST /{id}/approve prepare and approve the exact plan.
+- POST /{id}/execute starts/resumes the existing job.
+- POST /{id}/review explicitly renews review of the remaining immutable plan.
+- POST /{id}/reconcile performs provider GET-only recovery.
+- GET /, GET /current?idempotency_key=... and GET /{id} read durable state and
+  never start a worker or automatically POST.
+
+The Arabic form states direct ACTIVE creation and possible spending, shows all
+names/content/budget/account/Pixel/profile/media fields, and has explicit review,
+approval and execution controls. Owner/account changes clear stale selection
+and upload state. An unresolved ad outcome disables execution and exposes
+read-only reconciliation.
+
+## Provider references and verification
+
+Primary API contracts checked on 2026-10-25:
+
+- https://developers.snap.com/marketing-api/Ads-API/quick-start
 - https://developers.snap.com/marketing-api/Ads-API/campaigns
 - https://developers.snap.com/marketing-api/Ads-API/ad-squads
 - https://developers.snap.com/marketing-api/Ads-API/creatives
 - https://developers.snap.com/marketing-api/Ads-API/ads
 - https://developers.snap.com/marketing-api/Ads-API/api-patterns
 
-The Ads mapping specifies WEB_VIEW creative with REMOTE_WEBPAGE ad. Creative
-catalogs are account-scoped, return creatives[].creative, and support bounded
-cursor pagination. Do not add an undocumented deleted-catalog option.
+Quick Start shows direct ACTIVE creation; campaign reference examples include
+PUBLISHED. WEB_VIEW maps to REMOTE_WEBPAGE. Snap review/delivery is not guaranteed
+by configured ACTIVE. Creative catalogs do not establish deleted-aware absence
+proof. The current Media specification table supports Top Snap 3..1800 seconds;
+this publication slice preserves that bound and existing raw upload controls.
 
-## Verification handoff
-
-The author performed source edits only: no processes, tests, Git operations,
-provider requests, database writes or deployment. All new checks are unexecuted.
-
-The backend integration test calls real management create/approve/execute with
-provider=None, monkeypatching actual provider class methods instead of passing
-the injectable provider seam. It forces unavailable baseline data and expects
-only the valid parent proof to permit the paused chain; an ordinary create
-must still fail. Additional cases cover parent approval/integrity, source and
-catalog guards, currency/kill switch, naive BSON dates, lost claim/insert
-acknowledgement, cancelled losers, stale unstarted claims, lost completed-child
-checkpoints, stable-key refresh, concurrent workers and positive-only creative
-reconciliation. Frontend checks cover no default spending, reads-only opening,
-explicit execution/review, account reset and reconciliation without new POSTs.
-
-Run the dedicated publication workflow and existing management/media checks
-against the seven integrated seams above. A green fake-backed suite alone does
-not prove production provider permissions, provider canonical field echo, or
-live campaign publication. A separately authorized paused provider rehearsal,
-readback and governed deployment verification remain coordinator-owned.
-
+The author used source editing only; no local process/test, Git operation,
+provider/database write or deployment was performed. Coordinator-run focused
+tests, actual HTTPX MockTransport token-after-await checks and isolated Mongo7
+approval/launch/lost-checkpoint tests are required before publication. The
+dedicated workflow requires the Mongo cases and includes existing native write
+guard regressions. All verification results must reference the exact integrated
+source checkpoint. No test is authorized to send live advertising/budget writes.

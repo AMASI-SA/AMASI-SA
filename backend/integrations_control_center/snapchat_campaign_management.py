@@ -4030,6 +4030,7 @@ async def execute_snapchat_management_proposal(
     proposal_id: str,
     *,
     provider: SnapchatManagementProvider | None = None,
+    publication_worker_claim: str | None = None,
 ) -> dict[str, Any]:
     row = await _collection(db, PROPOSAL_COLLECTION).find_one(
         {"user_id": user_id, "proposal_id": proposal_id}, {"_id": 0}
@@ -4061,6 +4062,7 @@ async def execute_snapchat_management_proposal(
             actor_id,
             proposal_id,
             provider=provider,
+            publication_worker_claim=publication_worker_claim,
         )
         return result
     except asyncio.CancelledError:
@@ -4990,6 +4992,7 @@ async def _execute_snapchat_management_proposal_under_lease(
     proposal_id: str,
     *,
     provider: SnapchatManagementProvider | None = None,
+    publication_worker_claim: str | None = None,
 ) -> dict[str, Any]:
     if not snapchat_campaign_mutations_enabled():
         raise HTTPException(
@@ -5477,7 +5480,8 @@ async def _execute_snapchat_management_proposal_under_lease(
                 and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS):
             from .snapchat_campaign_publication import assert_publication_write_fence
 
-            await assert_publication_write_fence(db, user_id, row, operation)
+            await assert_publication_write_fence(db, user_id, row, operation,
+                expected_worker_claim=publication_worker_claim)
         else:
             from campaign_ai_snapchat_autonomy import require_snapchat_autonomy_write_authorization
 

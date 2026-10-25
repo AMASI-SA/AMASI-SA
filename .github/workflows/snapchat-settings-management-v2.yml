@@ -68,6 +68,7 @@ jobs:
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/integrations_control_center/snapchat_campaign_publication.py|\
               backend/tests/test_snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication_mongo.py|\
               frontend/src/components/marketing/SnapchatCampaignPublicationPanel.jsx|\
               frontend/src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx|\
               frontend/src/services/snapchatCampaignPublication.js|\
@@ -125,6 +126,7 @@ jobs:
               backend/integrations_control_center/snapchat_campaign_management.py|\
               backend/integrations_control_center/snapchat_campaign_publication.py|\
               backend/tests/test_snapchat_campaign_publication.py|\
+              backend/tests/test_snapchat_campaign_publication_mongo.py|\
               frontend/src/components/marketing/SnapchatCampaignPublicationPanel.jsx|\
               frontend/src/components/marketing/SnapchatCampaignPublicationPanel.test.jsx|\
               frontend/src/services/snapchatCampaignPublication.js|\

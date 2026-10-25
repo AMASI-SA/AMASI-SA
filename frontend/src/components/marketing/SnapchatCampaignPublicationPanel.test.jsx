@@ -26,6 +26,7 @@ jest.mock("./SnapchatMediaUploadPanel", () => function FakeUpload(props) {
 });
 
 let root, container;
+const originalCrypto = Object.getOwnPropertyDescriptor(window, "crypto");
 const job = { publication_id: "job-1", account_id: "account-1", status: "approved", revision: 2,
     plan: { campaign_name: "Campaign", daily_budget_micro: 25000000, currency: "SAR", country: "sa" },
     steps: [{ action: "campaign.create", status: "pending", provider_entity_id: null }] };
@@ -44,11 +45,21 @@ beforeEach(() => {
     service.approveSnapchatPublication.mockResolvedValue(job);
     service.executeSnapchatPublication.mockResolvedValue(job);
     service.getSnapchatPublication.mockResolvedValue(job);
-    Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: () => "stable-browser-key" });
+    Object.defineProperty(window, "crypto", {
+        configurable: true,
+        value: { randomUUID: () => "stable-browser-key" },
+    });
     container = document.createElement("div"); document.body.appendChild(container);
     root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+afterEach(async () => {
+    if (root) await act(async () => root.unmount());
+    container?.remove();
+    root = undefined;
+    container = undefined;
+    if (originalCrypto) Object.defineProperty(window, "crypto", originalCrypto);
+    else delete window.crypto;
+});
 async function render(accountId = "account-1", ownerId = "owner") {
     await act(async () => root.render(<Panel ownerId={ownerId} accountId={accountId} />));
 }
@@ -68,6 +79,9 @@ test("opening the form performs reads only and supplies no spending/start/countr
     expect(service.previewSnapchatPublication).not.toHaveBeenCalled();
     expect(service.approveSnapchatPublication).not.toHaveBeenCalled();
     expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("نشطة مباشرةً");
+    expect(container.textContent).toContain("قد يبدأ الصرف");
+    expect(container.textContent).not.toContain("بحالة متوقفة");
 });
 
 test("a saved approved plan requires an explicit execution click", async () => {
@@ -115,6 +129,59 @@ test("reconciliation never starts another publication or executes a child", asyn
     await click('[data-testid="publication-reconcile"]');
     expect(service.reconcileSnapchatPublication).toHaveBeenCalledWith("job-1");
     expect(service.previewSnapchatPublication).not.toHaveBeenCalled();
+    expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
+});
+
+test("unknown active ad outcome blocks execution and shows created active levels", async () => {
+    const unknown = { ...job, status: "interrupted", delivery_outcome_unknown: true, current_step: 3,
+        steps: [{ action: "campaign.create", status: "completed", configured_status: "ACTIVE", provider_entity_id: "campaign-live" },
+            { action: "ad_squad.create", status: "completed", configured_status: "ACTIVE", provider_entity_id: "group-live" }] };
+    service.listSnapchatPublications.mockResolvedValue([unknown]);
+    await render();
+    const saved = [...container.querySelectorAll("button")].find((button) => button.textContent.includes("Campaign"));
+    await act(async () => saved.click());
+    expect(container.querySelector('[data-testid="publication-execute"]').disabled).toBe(true);
+    expect(container.textContent).toContain("قد يكون الإعلان نشطًا وبدأ الصرف");
+    expect(container.textContent).toContain("campaign-live");
+    expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="publication-reconcile"]').disabled).toBe(false);
+});
+
+test("completed configuration is ACTIVE while provider review and delivery remain pending", async () => {
+    const complete = { ...job, status: "completed", configured_delivery_status: "ACTIVE",
+        provider_delivery_status: ["PENDING_REVIEW"],
+        review: { creative_review_status: "PENDING_REVIEW", creative_packaging_status: "SUCCESS",
+            ad_review_status: "PENDING", ad_delivery_status: ["PENDING_REVIEW"] } };
+    service.listSnapchatPublications.mockResolvedValue([complete]);
+    await render();
+    const saved = [...container.querySelectorAll("button")].find((button) => button.textContent.includes("Campaign"));
+    await act(async () => saved.click());
+    expect(container.textContent).toContain("أُنشئت الحملة والمجموعة والإعلان نشطة مباشرةً");
+    expect(container.textContent).toContain("حالة التسليم لدى Snapchat");
+    expect(container.textContent).toContain("PENDING_REVIEW");
+    expect(container.querySelector('[data-testid="publication-execute"]')).toBeNull();
+    expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
+});
+
+test("an unavailable activation flag disables direct ACTIVE creation", async () => {
+    getSnapchatManagementReadiness.mockResolvedValue({ execution_enabled: true, activation_enabled: false,
+        accounts: [{ account_id: "account-1", display_name: "Account", currency: "SAR",
+            management_allowed: true, creative_allowed: true, pixels: [] }] });
+    service.listSnapchatPublications.mockResolvedValue([job]);
+    await render();
+    const saved = [...container.querySelectorAll("button")].find((button) => button.textContent.includes("Campaign"));
+    await act(async () => saved.click());
+    expect(container.querySelector('[data-testid="publication-execute"]').disabled).toBe(true);
+    expect(container.textContent).toContain("التشغيل المباشر غير متاح");
+    expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
+});
+
+test("owner change clears the previous owner's saved operations before new reads finish", async () => {
+    service.listSnapchatPublications.mockResolvedValueOnce([job]).mockReturnValueOnce(new Promise(() => {}));
+    await render();
+    expect(container.textContent).toContain("Campaign");
+    await render("account-1", "different-owner");
+    expect(container.textContent).not.toContain("Campaign");
     expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
 });
 

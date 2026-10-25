@@ -42,6 +42,8 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
     const [following, setFollowing] = useState(false);
     const scope = JSON.stringify([String(ownerId || ""), selectedAccount]);
     const currentScope = useRef(scope);
+    const displayedOwner = useRef(ownerId);
+    const displayedScope = useRef(scope);
     currentScope.current = scope;
     const pendingPreview = useRef(null);
     const busyRef = useRef(false);
@@ -54,6 +56,8 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
     useEffect(() => { setSelectedAccount(accountId); }, [accountId]);
     useEffect(() => {
         let live = true;
+        displayedOwner.current = ownerId;
+        setAccounts([]); setJobs([]); setExecutionEnabled(false); setActivationEnabled(false);
         if (!ownerId) return undefined;
         Promise.all([getSnapchatManagementReadiness(), listSnapchatPublications()])
             .then(([readiness, rows]) => {
@@ -65,6 +69,7 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
     }, [ownerId]);
     useEffect(() => {
         pendingPreview.current = null;
+        displayedScope.current = scope;
         setForm({ ...EMPTY }); setMedia(null); setProfile(""); setJob(null);
         setFollowing(false); setError(""); setNotice(""); setProducts([]);
         busyRef.current = false; setBusy(false);
@@ -158,6 +163,9 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
         setJob(value); setFollowing(false); setError(""); setNotice("");
     }
 
+    if (displayedOwner.current !== ownerId || displayedScope.current !== scope) {
+        return <section dir="rtl" role="status">جارٍ تحميل نطاق المالك الحالي…</section>;
+    }
     return <section dir="rtl" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4"
         data-testid="snapchat-publication-panel">
         <h3 className="text-base font-black">إنشاء حملة متكاملة نشطة مباشرةً</h3>

@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from datetime import timedelta
 import sys
+import httpx
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -16,6 +17,13 @@ from integrations_control_center import snapchat_campaign_management as manageme
 from integrations_control_center import snapchat_media_upload as media
 
 ACTUAL_PRODUCT_READER = module._product
+ACTUAL_PROVIDER_REQUEST = management.SnapchatManagementProvider._request
+ACTUAL_PROVIDER_EXECUTE = management.SnapchatManagementProvider.execute
+
+
+@pytest.fixture(autouse=True)
+def isolated_attribution_signing_key(monkeypatch):
+    monkeypatch.setenv("MEZAN_ATTRIBUTION_SIGNING_SECRET", "snapchat-publication-test-only-secret")
 
 
 def matches(row, query):
@@ -120,17 +128,15 @@ def payload():
 @pytest.fixture
 def environment(monkeypatch):
     db, entities, writes = DB(), {}, []
-    account = {"ad_account_id": "account-1", "currency": "SAR",
-        "connection_status": "connected", "connection_provenance": "api_connection"}
+    account = {"user_id": "owner", "provider": "snapchat_ads", "ad_account_id": "account-1",
+        "external_account_id": "account-1", "currency": "SAR", "mezan_selected": True,
+        "display_name": "Isolated selected account", "connection_status": "connected",
+        "connection_provenance": "api_connection"}
+    db["mezan_integration_accounts_v2"].rows.append(account)
     product = {"name": "منتج", "status": "active", "variants": [{"id": "variant-1"}]}
     db[media.MEDIA_UPLOAD_COLLECTION].rows.append({"_id": "a" * 64, "upload_id": "a" * 64,
         "user_id": "owner", "account_id": "account-1", "provider_media_id": "media-1",
         "status": "ready", "source_verified": True, "provider_readback_verified": True})
-
-    async def selected(*args):
-        if args[-1] != "account-1":
-            raise HTTPException(409)
-        return deepcopy(account)
 
     async def read_account(self, account_id):
         return {"id": account_id, "currency": "SAR"}
@@ -169,7 +175,6 @@ def environment(monkeypatch):
     async def retry(db, user_id, actor_id, row):
         return row
 
-    monkeypatch.setattr(management, "_selected_account", selected)
     monkeypatch.setattr(module, "_product", AsyncMock(return_value=product))
     monkeypatch.setattr(management.SnapchatManagementProvider, "read_account", read_account)
     monkeypatch.setattr(management.SnapchatManagementProvider, "management_role", role)
@@ -207,7 +212,7 @@ async def test_real_management_provider_none_all_four_stages_with_unavailable_ba
     result = await module.run_publication(env.db, "owner", job["publication_id"])
     assert result["status"] == "completed"
     assert env.writes == list(module.ACTIONS)
-    assert result["delivery_status"] == "ACTIVE"
+    assert result["configured_delivery_status"] == "ACTIVE"
     assert env.entities["provider-campaign-1"]["creation_state"] == "PUBLISHED"
     assert result["review"]["creative_review_status"] == "PENDING_REVIEW"
     children = env.db[management.PROPOSAL_COLLECTION].rows
@@ -747,7 +752,7 @@ async def test_unknown_active_ad_dispatch_never_repeats_and_reconciles_actual_ac
     recovered = await module.reconcile_publication(env.db, "owner", job["publication_id"])
     assert recovered["current_step"] == 4
     final = await module.reconcile_publication(env.db, "owner", job["publication_id"])
-    assert final["status"] == "completed" and final["delivery_status"] == "ACTIVE"
+    assert final["status"] == "completed" and final["configured_delivery_status"] == "ACTIVE"
     assert final["review"]["ad_review_status"] == "PENDING"
     assert final["review"]["ad_delivery_status"] == ["PENDING_REVIEW"]
     assert env.writes == list(module.ACTIONS)
@@ -811,4 +816,89 @@ def test_untrusted_reference_alone_does_not_change_the_default_native_builder():
             "objective_v2_properties": {"objective_v2_type": "SALES"}},
         reason="owner reference is not server authorization", idempotency_key="untrusted-active-key")
     assert management.build_snapchat_operation(request)["body"]["campaigns"][0]["status"] == "PAUSED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["none", "changed_claim", "same_plan_reapproved"])
+async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolution(environment, monkeypatch, change):
+    env = environment
+    job = await approved(env)
+    calls, token_awaits = [], []
+    altered = False
+    real_client = httpx.AsyncClient
+
+    async def token_for(method):
+        nonlocal altered
+        token_awaits.append(method)
+        await asyncio.sleep(0)
+        if method == "POST" and change != "none" and not altered:
+            altered = True
+            parent = env.db[module.PUBLICATION_COLLECTION].rows[0]
+            parent["lease_token"] = "different-server-worker-claim"
+            parent["revision"] += 1
+            if change == "same_plan_reapproved":
+                parent.update({"status": "running", "approved_by": "owner",
+                    "approved_plan_fingerprint": parent["plan_fingerprint"],
+                    "approved_at": media._iso(), "approval_revision": parent["revision"]})
+        return "isolated-provider-test-token"
+
+    async def actual_request(self, method, path, **kwargs):
+        # Exercise the real request's token await and after-token callback.
+        self.context.access_token = lambda: token_for(method)
+        return await ACTUAL_PROVIDER_REQUEST(self, method, path, **kwargs)
+
+    def transport(request):
+        assert request.url.host == "adsapi.snapchat.com"
+        calls.append((request.method, request.url.path))
+        if request.method == "GET" and request.url.path == "/v1/media/media-1":
+            return httpx.Response(200, json={"request_status": "SUCCESS", "media": [{
+                "sub_request_status": "SUCCESS", "media": {"id": "media-1", "ad_account_id": "account-1",
+                    "type": "VIDEO", "media_status": "READY"}}]})
+        assert request.method == "POST"
+        body = json.loads(request.content)
+        plural = next(iter(body))
+        kind, singular, action = {
+            "campaigns": ("campaign", "campaign", "campaign.create"),
+            "adsquads": ("ad_squad", "adsquad", "ad_squad.create"),
+            "creatives": ("creative", "creative", "creative.create"),
+            "ads": ("ad", "ad", "ad.create"),
+        }[plural]
+        entity = deepcopy(body[plural][0])
+        if kind != "creative":
+            assert entity["status"] == "ACTIVE"
+        if kind == "campaign":
+            assert entity["creation_state"] == "PUBLISHED"
+        if kind == "ad_squad":
+            assert entity["daily_budget_micro"] == 25_000_000
+        entity.update({"id": "provider-" + kind + "-1", "created_at": media._iso()})
+        if kind == "creative":
+            entity.update({"packaging_status": "SUCCESS", "review_status": "PENDING_REVIEW"})
+        if kind == "ad":
+            entity.update({"review_status": "PENDING", "delivery_status": ["PENDING_REVIEW"]})
+        env.entities[entity["id"]] = entity
+        env.writes.append(action)
+        return httpx.Response(200, json={"request_status": "SUCCESS", plural: [{
+            "sub_request_status": "SUCCESS", singular: entity}]})
+
+    def client(*args, **kwargs):
+        return real_client(*args, **kwargs, transport=httpx.MockTransport(transport))
+
+    monkeypatch.setattr(management.httpx, "AsyncClient", client)
+    monkeypatch.setattr(management.SnapchatManagementProvider, "_request", actual_request)
+    monkeypatch.setattr(management.SnapchatManagementProvider, "execute", ACTUAL_PROVIDER_EXECUTE)
+    if change == "none":
+        result = await module.run_publication(env.db, "owner", job["publication_id"])
+        assert result["configured_delivery_status"] == "ACTIVE"
+        assert result["provider_delivery_status"] == ["PENDING_REVIEW"]
+        assert env.writes == list(module.ACTIONS)
+        assert sum(method == "POST" for method, _ in calls) == 4
+    else:
+        with pytest.raises(HTTPException):
+            await module.run_publication(env.db, "owner", job["publication_id"])
+        assert "POST" in token_awaits  # Authorization changed inside credential resolution.
+        assert not any(method == "POST" for method, _ in calls)
+        assert env.writes == []
+        parent = await module._load(env.db, "owner", job["publication_id"])
+        assert parent["lease_token"] == "different-server-worker-claim"
+        assert parent["status"] == "running"  # Cancelled loser did not stop the new claimant.
 
