@@ -149,3 +149,55 @@ async def test_readiness_report_success_is_additive_and_old_verify_keeps_error_s
         monkeypatch.setattr(publishing, "readiness", denied)
         previous = await client.post("/api/integrations-v2/tiktok/content/creators/" + "a" * 64 + "/verify", json={})
         assert previous.status_code == 502
+
+
+@pytest.mark.parametrize("provider_limit", [900, 1800, 3600])
+def test_account_duration_privilege_is_capped_to_mezan_limit(provider_limit):
+    from integrations_control_center.tiktok_content_publishing import settings_proof
+
+    native = {"privacy_level_options": ["PUBLIC_TO_EVERYONE", "SELF_ONLY"],
+              "max_video_post_duration_sec": provider_limit,
+              "comment_disabled": False, "duet_disabled": True, "stitch_disabled": False}
+    result = settings_proof(native)
+    assert result["max_video_post_duration_sec"] == 600
+    assert native["max_video_post_duration_sec"] == provider_limit
+    assert result["duet_disabled"] is True
+
+
+@pytest.mark.parametrize("field,value,issue", [
+    ("privacy_level_options", [], "no_options"),
+    ("privacy_level_options", ["private-token-and-provider-url"], "unsupported_value"),
+    ("max_video_post_duration_sec", True, "invalid_type"),
+    ("max_video_post_duration_sec", "private-token-and-provider-url", "invalid_type"),
+    ("comment_disabled", 0, "invalid_type"),
+    ("duet_disabled", "private-token-and-provider-url", "invalid_type"),
+])
+def test_settings_still_require_proven_privacy_and_interaction_types(field, value, issue):
+    from integrations_control_center.tiktok_content_publishing import settings_proof
+
+    native = {"privacy_level_options": ["SELF_ONLY"], "max_video_post_duration_sec": 600,
+              "comment_disabled": False, "duet_disabled": False, "stitch_disabled": False}
+    native[field] = value
+    with pytest.raises(HTTPException) as caught:
+        settings_proof(native)
+    assert caught.value.detail["settings_field"] == field
+    assert caught.value.detail["settings_issue"] == issue
+    assert "private-token-and-provider-url" not in str(caught.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_readiness_field_diagnostics_are_fixed_metadata_and_never_native_values(monkeypatch):
+    from integrations_control_center import tiktok_content_publishing as publishing
+
+    async def check(*args):
+        raise HTTPException(502, detail={"code": "tiktok_creator_settings_unproven", "phase": "settings",
+            "settings_field": "comment_disabled", "settings_issue": "invalid_type", "observed_type": "int",
+            "message": "private-token-and-provider-url", "raw_value": "private-token-and-provider-url"})
+
+    monkeypatch.setattr(publishing, "readiness", check)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for({"id": "owner-1", "role": "owner"})), base_url="http://test") as client:
+        response = await client.post("/api/integrations-v2/tiktok/content/creators/" + "a" * 64 + "/readiness", json={})
+    assert response.status_code == 200 and response.json()["ready"] is False
+    diagnostic = response.json()["diagnostic"]
+    assert (diagnostic["field"], diagnostic["issue"], diagnostic["observed_type"]) == ("comment_disabled", "invalid_type", "int")
+    assert "private-token-and-provider-url" not in response.text

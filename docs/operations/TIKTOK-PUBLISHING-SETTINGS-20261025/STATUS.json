@@ -1,0 +1,32 @@
+{
+  "task_id": "TIKTOK-PUBLISHING-SETTINGS-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-publishing-settings-20261025",
+  "source_base": "442bddc40493a05945cd6dd17fb1fe1ef1ea5a20",
+  "state": "WIP_duration_contract_and_safe_field_diagnostics_local_verification",
+  "owner_authorization": "Continue upload,publication and testing until the remaining TikTok tasks succeed.",
+  "live_evidence": "PR1482 published source7e45de885ee0605f4f43ec1fb9983e679b633cae/runtime31755644; guard verified:true,checks:3,then active:false. Both connected Amasi creator accounts reach successful identity proof then fail local settings_proof with tiktok_creator_settings_unproven. Exact native rejected field/value not yet known.",
+  "behavior": [
+    "Cap a valid account-specific video duration privilege to Mezan's600-second content limit instead of rejecting accounts with longer privileges.",
+    "Continue to require proven privacy options and strict native interaction booleans; rejected settings identify only a fixed field,reason and JSON type,never native values or credentials.",
+    "Retire old readiness proof before a fresh check,including transport failure; clear privacy selection when media/delivery flow changes."
+  ],
+  "official_sources": [
+    "https://business-api.tiktok.com/portal/docs/get-the-post-privacy-settings-of-a-tiktok-account/v1.3",
+    "https://business-api.tiktok.com/portal/docs/publish-a-public-video-post-to-an-owned-account/v1.3"
+  ],
+  "verification": {
+    "duration_regression": "900,1800,3600-second valid account privilege cases all failed502 before the correction; now pass with local600-second cap.",
+    "routes": "27 passed,exit0,1.28s; includes rejected metadata and safe diagnostic fields.",
+    "integrated_backend": "105 passed,exit0,10.69s with isolated real Mongo; publishing,creator routes/accounts,comments and replies.",
+    "ui_proof_base": "Follow-up sourcea01f34c593117baed22ab723d6915a32f6385e45 passed13 UI cases/one suite on pinned host toolchain; incorporated in this branch.",
+    "frontend": "Additional privacy-reset regression added; fresh exact-source CI pending.",
+    "note": "An initial proposed private-video regression expected409,but the existing typed DTO already rejects private direct video with422. Corrected the assertion to preserve that existing contract; removed an unreachable synthetic legacy-state test. No new privacy-status behavior or widened permission introduced."
+  },
+  "production_changed_by_this_source": false,
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "full_management": "Broader PR1480 remains WIP and is not included in this settings correction.",
+  "next": "Finish integrated native/backend/UI/source/release verification; freeze fresh A/B,original-host rehearsal,prepare/prepublish,publish once and verify three probes. Recheck both creators: a successful readiness result or safe exact field diagnosis determines the next correction; do not claim the high-duration hypothesis is the actual live cause until demonstrated.",
+  "preserved_concurrent_source": "Reviewed Snapchat PR1483 source/intent on442bddc4 preserved; no TikTok path overlap. Current live diagnostic report remains separately verified as documented."
+}
