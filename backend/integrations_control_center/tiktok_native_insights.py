@@ -7,6 +7,7 @@ from copy import deepcopy
 from datetime import date, datetime, time as day_time, timedelta, timezone
 import hashlib
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -33,6 +34,7 @@ _ai_slot = asyncio.Semaphore(1)
 _cache: OrderedDict = OrderedDict()
 _recent: OrderedDict = OrderedDict()
 _clock = time.monotonic
+_logger = logging.getLogger(__name__)
 
 
 class TikTokCampaignAnalysisInput(BaseModel):
@@ -109,6 +111,7 @@ def _client():
 async def _generate(encoded, client_factory=None):
     model = os.environ.get("MEZAN_OPENAI_MODEL", "").strip() or "gpt-5-mini"
     client = (client_factory or _client)()
+    failure_stage = "provider_request"
     try:
         request = {"model": model, "store": False, "max_output_tokens": 1800,
             "instructions": (
@@ -120,26 +123,35 @@ async def _generate(encoded, client_factory=None):
                 "لا تقترح زيادة الميزانية أو تغيير عرض السعر ولا تعط ميزانية أو رقمًا ماليًا جديدًا. "
                 "اختر focus من monitor أو tracking أو creative فقط. لا توجد أدوات أو صلاحية تنفيذ."
                 + PRICE_RESEARCH_INSTRUCTIONS + PRODUCT_MARKET_RESEARCH_INSTRUCTIONS
+                + " أعد خلاصة مركزة فقط: summary بحد أقصى 700 حرف، وnext_step بحد أقصى 400 حرف. "
+                  "اختر أهم ملاحظة وخطوة واحدة تدعمها الأدلة، واذكر نقص الدليل المرتبط بها بإيجاز. "
             ), "input": encoded,
             "text": {"format": {"type": "json_schema", "name": "mezan_tiktok_campaign_observation",
                 "strict": True, "schema": {"type": "object", "additionalProperties": False,
                     "properties": {"focus": {"type": "string", "enum": ["monitor", "tracking", "creative"]},
-                                   "summary": {"type": "string"}, "next_step": {"type": "string"}},
+                                   "summary": {"type": "string", "minLength": 1, "maxLength": 700},
+                                   "next_step": {"type": "string", "minLength": 1, "maxLength": 400}},
                     "required": ["focus", "summary", "next_step"]}}}}
         if model.startswith("gpt-5"):
             request["reasoning"] = {"effort": "low"}
         async with asyncio.timeout(40):
             response = await client.responses.create(**request)
+        failure_stage = "incomplete_model_response"
         if getattr(response, "status", None) != "completed":
             raise ValueError("incomplete_model_response")
+        failure_stage = "oversized_model_response"
         raw = str(getattr(response, "output_text", ""))
         if len(raw.encode("utf-8")) > 5000:
             raise ValueError("oversized_model_response")
+        failure_stage = "invalid_model_json"
         value = json.loads(raw)
+        failure_stage = "invalid_model_shape"
         if not isinstance(value, dict) or set(value) != {"focus", "summary", "next_step"}:
             raise ValueError("invalid_model_shape")
+        failure_stage = "invalid_model_focus"
         if value["focus"] not in {"monitor", "tracking", "creative"}:
             raise ValueError("invalid_model_focus")
+        failure_stage = "invalid_model_text"
         for field, cap in (("summary", 700), ("next_step", 400)):
             if not isinstance(value[field], str) or not value[field].strip() or len(value[field]) > cap:
                 raise ValueError("invalid_model_text")
@@ -148,7 +160,15 @@ async def _generate(encoded, client_factory=None):
     except asyncio.CancelledError:
         raise
     except Exception:
-        raise _problem("tiktok_ai_generation_failed", "تعذر إكمال تحليل الذكاء؛ حاول لاحقًا.", 502) from None
+        # Fixed local stage only: no response text, input, identifiers, exception
+        # body or credentials in logs. Never retry a billable request implicitly.
+        _logger.warning("tiktok_campaign_analysis_failed reason=%s", failure_stage)
+        message = ("لم يكتمل رد الذكاء؛ لم تُعتمد نتيجة للتحليل."
+                   if failure_stage == "incomplete_model_response" else
+                   "رد الذكاء لم يجتز التحقق من صيغة النتيجة؛ لم تُعتمد توصية."
+                   if failure_stage != "provider_request" else
+                   "تعذر إكمال تحليل الذكاء؛ حاول لاحقًا.")
+        raise _problem("tiktok_ai_generation_failed", message, 502) from None
     finally:
         try:
             async with asyncio.timeout(2):

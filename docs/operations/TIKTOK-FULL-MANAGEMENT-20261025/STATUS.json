@@ -1,0 +1,54 @@
+{
+  "task_id": "TIKTOK-FULL-MANAGEMENT-20261025",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-full-management-20261025",
+  "base": "4006ebd7eaf66f0d11824a637a0bc1c8116b0d30",
+  "state": "implementation_in_progress_not_release_ready",
+  "scope": [
+    "current product catalog and campaign AI response repair",
+    "creator publishing readiness",
+    "complete campaign/adgroup/video-ad creation",
+    "periodic TikTok recommendations",
+    "bounded AI action gateway and outcome evidence"
+  ],
+  "preserved_checkpoints": [
+    "PR1364 source 0bacc010 and b7e99634 integrated without its obsolete release intent",
+    "Concurrent Google working tree untouched"
+  ],
+  "verification": {
+    "focused_backend": {
+      "passed": 56,
+      "exit": 0,
+      "command": "PYTHONPATH=backend python -B -m pytest -p no:cacheprovider -q backend/tests/test_tiktok_native_insights.py backend/tests/test_tiktok_campaign_products.py backend/tests/test_amasi_storefront.py"
+    },
+    "response_schema_regression": "New model text-limit contract failed with KeyError before fix; now passes. Model schema and local 700/400-character validation agree. No increased token budget or retries."
+  },
+  "live_readonly_evidence": [
+    "2026-10-25: TikTok advertising connected; today's reporting visible",
+    "Two creator connections listed connected",
+    "Selected new Amasi creator readiness returned HTTP502 with generic frontend fallback; root cause remains unproven",
+    "Emergent hosting is signed out; no authenticated production logs available"
+  ],
+  "invariants": [
+    "No media bytes downloaded or stored on Mezan",
+    "No invented financial orders, revenue or profit",
+    "AI writes only through deterministic permission/approval/budget/audit boundaries",
+    "Never repeat uncertain provider submissions",
+    "Preserve other platforms and operational/accounting work"
+  ],
+  "production_changed": false,
+  "provider_business_writes": 0,
+  "live_model_calls": 0,
+  "next_action": "Complete focused implementation and tests; obtain hosting sign-in for exact live502 diagnosis, then fresh source CI, reviewed v5 intent, rehearsal and authorized publication. Real media, budget limits and live acceptance remain separate concrete actions.",
+  "completed_behavior": [
+    "Current Product V2 identity and destination used for TikTok product linking and shared campaign research",
+    "Safe fixed-stage AI failure diagnostics",
+    "Structured model response enforces local summary/next-step text length limits"
+  ],
+  "remaining": [
+    "Authenticated hosting logs required before identifying readiness502 root cause",
+    "Exact live AI rejection cause and new runtime acceptance not verified",
+    "Adgroup/video-ad composer, periodic recommendation bridge and bounded autonomous gateway not implemented in this checkpoint",
+    "No live media publication, paid activation or measured outcome test"
+  ]
+}

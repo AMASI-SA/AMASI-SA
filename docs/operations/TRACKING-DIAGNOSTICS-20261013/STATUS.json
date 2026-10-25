@@ -1,8 +1,8 @@
 {
   "task_id": "TRACKING-DIAGNOSTICS-20261013",
-  "branch": "codex/tracking-diagnostics-release-20261014",
+  "branch": "codex/tiktok-live-analysis-fix-20261014",
   "base": "a27d1fb126de0991f3bb239f427764eba798a2af",
-  "state": "WIP_release_source_assembled_on_current_inventory_production",
+  "state": "candidate_catalog_fix_and_safe_ai_diagnostics",
   "production_changed": false,
   "merge_allowed_for_this_checkpoint": false,
   "deploy_allowed_for_this_checkpoint": false,
@@ -79,7 +79,7 @@
     "Variant selection/view/abandonment events unavailable; original ordered units are not net retained sales or variant conversion rates. TikTok/Meta/Google variant profitability not yet wired.",
     "Existing HTTP probe public DNS precheck is not a pinned egress guarantee; full DNS-rebinding protection remains required for generic collector. MIME validation cannot prove a hostile server truthfully labels bytes."
   ],
-  "next_action": "Review/integrate binding route/UI, current CI and build. Production remains older source: new endpoint is not live. Complete v5 source/intent rehearsal and deployment gates before live use; then preview and confirm owner-selected products through supported API/UI, configure scoped browser runtime and obtain specific live model test consent. Multi-worker analysis cache invalidation remains limited to TTL outside saving worker. One page per analysis budget unchanged.",
+  "next_action": "Run source CI and full v5 source/intent/rehearsal release gates. After deployed proof, preview and confirm selected product links; use one remaining approved model attempt. If it fails inspect fixed-stage diagnostics before any further model call.",
   "invariants": [
     "No media downloads/storage on Mezan server",
     "No pixel/source/campaign/budget modification",
@@ -352,5 +352,21 @@
       "Catalog base/additional prices are not selected checkout final prices or proof of price-related conversion loss. No model request/media download."
     ]
   },
-  "historical_pr": 1348
+  "historical_pr": 1348,
+  "live_acceptance_20261014": {
+    "base_production": "5516a450cc971654f7159616c11afccd50f571d8",
+    "openai_approved_attempts": 2,
+    "openai_attempts_used": 1,
+    "logs": "Emergent All Logs: OpenAI responses HTTP200 then native analyze-campaign HTTP502. Exact rejected response reason not recorded by current code.",
+    "binding": "Preview read stale legacy product name; no link confirmed. Regression reproduced old name, corrected binding and shared canonical URL resolution to current owner-scoped Product V2 raw_salla snapshot. No legacy URL fallback.",
+    "tests": "75 affected Python tests PASS; two new diagnostic tests failed before implementation then passed; git diff --check PASS",
+    "pending": [
+      "live current URL shape",
+      "precise AI rejection diagnosis",
+      "new release CI/rehearsal/merge/deploy",
+      "confirm selected product links",
+      "one remaining approved live model attempt"
+    ],
+    "response_diagnostics": "Fixed-stage-only sanitized warning; distinguish incomplete/invalid response without logging model text, input, credentials or identifiers. Explicit 700/400-character prompt matches retained output validation. No implicit retries or increased budget. Original live rejection reason remains unknown."
+  }
 }
