@@ -1,8 +1,8 @@
 {
   "branch": "codex/google-autonomy-launch-wip-20261026",
-  "checkpoint": "c7a872932e88ca843c9ce8050641e4e65354033e",
-  "state": "PURE PREVIEW WIP ONLY; runtime_supportedFalse/executableFalse; doNOTdeploy",
-  "root_tests": "183pass1.73s (85launch+98creation)",
+  "checkpoint": "d1b1c496ab8f559e9a8aa3c23a0a5ad4762c05da",
+  "state": "FUTUREWIP ONLY; savedseparately; notin1542; neverdeploy",
+  "root_tests": "183purepreviewpass1.73s plus31budgetguardpass8replicaMongo local-skips1.90s",
   "remaining": [
     "Sharedglobalaccountbudgetguard+MongoTXcapability",
     "Allcreation/standingpolicywriters andautomatedbudgetincreases mustparticipate",

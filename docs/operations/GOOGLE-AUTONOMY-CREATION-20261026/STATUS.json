@@ -1,7 +1,7 @@
 {
   "branch": "codex/google-autonomy-creation-r2-20261026",
   "checkpoint": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "state": "FROZEN currentbaseR2; all15sourceworkflowsSUCCESS inclactualMongo/UI/readiness. FinalB workflows running inclHost20 gate. No1542merge/Appbuild/lease/publish.",
+  "state": "MERGED exactBtree/parents afterall31Bchecks+Host20; originalAppffMcompleted; hostadapterretry1 running. NO ownlease/prepare/prepublish/publish yet.",
   "full_autonomy_complete": false,
   "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
   "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
@@ -47,5 +47,33 @@
     "active": false,
     "actor": null
   },
-  "root_App_state": "Editor17 Terminal2 readonly; AppHEAD058lastread, tracked diffempty; unrelateduntracked.emergent/testing/deployerfilespreserved; ownunsavedUntitled1preserved"
+  "root_App_state": "Editor17 Terminal2 readonly; AppHEAD058lastread, tracked diffempty; unrelateduntracked.emergent/testing/deployerfilespreserved; ownunsavedUntitled1preserved",
+  "merge": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+  "final_B_readiness_run": 40357048511,
+  "host20_job": 121692746358,
+  "host_adapter": {
+    "first": {
+      "exit": 1,
+      "underlying_adapter_exit": 2,
+      "reason": "prepackaged backend/__pycache__; missing release_identity consequence of clean materialization failure"
+    },
+    "quarantine": {
+      "preserved": true,
+      "files": [
+        "frontend_build_identity.cpython-311.pyc",
+        "release_protocol_v5.cpython-311.pyc"
+      ],
+      "count": 2,
+      "nonsymlink": true,
+      "tracked": 0,
+      "path": ".git/google1542-evidence/backend-pycache-quarantine"
+    },
+    "retry1": {
+      "log": ".git/google1542-evidence/build-retry1.log",
+      "exit_file": ".git/google1542-evidence/build-retry1.exit",
+      "status": "running"
+    }
+  },
+  "guard": "Inactive beforeAppff/quarantine; ownlease nevercreated",
+  "browser": "Publisher tab5 nowredirectedloginagain; IDE17 stillauthenticated; ownterminal2; preserveunsavedUntitled1."
 }
