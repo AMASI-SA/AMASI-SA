@@ -9,7 +9,15 @@
   ],
   "verification": {
     "red": "missing module exit2",
-    "local": "8 passed,2 skips locally; actual Mongo CI pending"
+    "local": "8 passed,2 skips locally; actual Mongo CI pending",
+    "replica_ci": {
+      "run": 40404465611,
+      "job": 121858519649,
+      "passed": 10,
+      "replica": 2,
+      "skips": 0,
+      "logs_verified": true
+    }
   },
   "contract": "Normalized YYYY-MM-DD order_date source timezone unproven; Riyadh is only closed-cutoff clock, not a claim about source timezone. Diagnostic documents only, never raw orders or sales.",
   "limitations": [
@@ -21,5 +29,6 @@
   ],
   "production_changed": false,
   "provider_writes": 0,
-  "next_safe_action": "Review source completeness watermarks and exact line/return/FX proof; run real Mongo and independent review before wiring"
+  "next_safe_action": "Independent audit of timezone boundary, query limits and completeness; prove index/production performance and source completeness before integration",
+  "code_sha": "28d9a0e2b3107981f619f8f987828b0b028898b6"
 }
