@@ -214,3 +214,94 @@ async def test_unproved_or_manual_results_stay_reserved_and_unowned(change):
 def test_worker_flag_uses_existing_authoritative_lexicon(monkeypatch):
     monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_WORKER_ENABLED','enabled')
     assert authority.creation_execution_enabled()
+
+
+@pytest.mark.asyncio
+async def test_foreign_or_stale_native_status_cannot_release_owned_paused_slot():
+    docs,native,intent=documents();db=DB(docs);await authorize(db,native);completed(db,intent);await settle(db)
+    # Top-level proof is fresh, but this campaign row belongs to another account.
+    native['native_context']['campaigns'].append({'campaign_id':'999','status':'ENABLED','account_id':'other'})
+    state=await authority.read_google_creation_state(db,user_id='owner',account_id='123',native_context=native['native_context'],current=NOW)
+    assert state['paused_created']==1 and state['reserved_creation_budget_native']=='15'
+
+
+@pytest.mark.asyncio
+async def test_final_owner_recheck_follows_last_fence_read():
+    docs,native,_=documents();db=DB(docs);reads=0
+    def revoke():
+        nonlocal reads
+        reads+=1
+        if reads>=2:db.users.rows[0]['role']='reviewer'
+    db[management.FENCES].after_read=revoke
+    with pytest.raises(HTTPException):await authorize(db,native)
+    assert not db[CREATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('age',['native','proposal','catalog'])
+async def test_final_cas_time_revalidates_earliest_proof_and_expiry(monkeypatch,age):
+    docs,native,_=documents();db=DB(docs);elapsed=91 if age=='native' else 61
+    if age=='proposal':
+        row=db[management.PROPOSALS].rows[0];row['expires_at']=(NOW+timedelta(seconds=60)).isoformat()
+        row['confirmation_digest']=management.digest(management.immutable(row))
+    if age=='catalog':db[CREATION_POLICIES].rows[0]['catalog_max_age_seconds']=60
+    # For catalog, make its policy binding correspond to the configured lifetime.
+    if age=='catalog':
+        values=prepared_case();values['policy']['catalog_max_age_seconds']=60
+        intent=contract.prepare_google_creation_intent(**values)
+        saved=db[authority.CREATION_INTENTS].rows[0];saved['intent']=intent
+        row=db[management.PROPOSALS].rows[0];row['automation_source']=authority.creation_source(intent)
+        row['confirmation_digest']=management.digest(management.immutable(row))
+    def advance():monkeypatch.setattr(authority,'now',lambda current=None:current or NOW+timedelta(seconds=elapsed))
+    db[management.FENCES].after_read=advance
+    with pytest.raises(HTTPException):await authorize(db,native)
+    assert not db[CREATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_default_off_with_existing_claim_never_allows_cleanup(monkeypatch):
+    docs,native,_=documents();db=DB(docs);await authorize(db,native)
+    monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','false')
+    with pytest.raises(HTTPException) as caught:await authorize(db,native)
+    assert caught.value.detail['preserve_execution_fence'] is True
+    assert db[CREATION_POLICIES].rows[0]['_creation_claim']
+
+
+def stop_row(row,*,stamp=NOW):
+    row.update(status='failed',submission_started=True,submitted_at=NOW.isoformat(),provider_write_reached=False,
+        safe_error='automation_stopped_before_provider_dispatch',dispatch_cancelled_before_http=True,
+        dispatch_cancelled_before_http_claim_id='claim123',dispatch_cancelled_before_http_at=stamp.isoformat())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case',['valid','before_claim','wrong_claim','uncertain','unknown_floor'])
+async def test_only_exact_known_no_http_marker_can_settle_without_resetting_floor(case):
+    docs,native,intent=documents();db=DB(docs);await authorize(db,native);row=db[management.PROPOSALS].rows[0];stop_row(row)
+    if case=='before_claim':
+        row['submitted_at']=(NOW-timedelta(seconds=1)).isoformat();row['dispatch_cancelled_before_http_at']=row['submitted_at']
+    elif case=='wrong_claim':row['dispatch_cancelled_before_http_claim_id']='wrong'
+    elif case=='uncertain':row['status']='uncertain'
+    elif case=='unknown_floor':row['dispatch_cancelled_before_http']=False
+    if case=='valid':
+        assert (await settle(db))['verified_ownership'] is False
+        policy=db[CREATION_POLICIES].rows[0]
+        assert policy['_creation_claim'] is None and len(policy['_creation_ledger'])==1
+        assert row['submission_started'] is True
+    else:
+        with pytest.raises(HTTPException):await settle(db)
+        assert db[CREATION_POLICIES].rows[0]['_creation_claim']
+
+
+@pytest.mark.asyncio
+async def test_quota_survives_cancellation_revision_and_local_midnight():
+    docs,native,intent=documents();db=DB(docs);await authorize(db,native)
+    row=db[management.PROPOSALS].rows[0];row.update(status='failed',safe_error='execution_cancelled_before_dispatch')
+    await settle(db)
+    policy=db[CREATION_POLICIES].rows[0];policy.update(revision=3,enabled=False,owner_generation=2)
+    before=await authority.read_google_creation_state(db,user_id='owner',account_id='123',native_context=native['native_context'],current=NOW)
+    assert before['created_today']==before['total_created']==1 and before['paused_created']==0
+    # Account-local day, not UTC date, controls rollover. Reserved identity remains consumed.
+    later=NOW.replace(hour=21,minute=0)
+    native['native_context']['observed_at']=later.isoformat()
+    after=await authority.read_google_creation_state(db,user_id='owner',account_id='123',native_context=native['native_context'],current=later)
+    assert later.date()==NOW.date() and after['created_today']==0 and after['total_created']==1

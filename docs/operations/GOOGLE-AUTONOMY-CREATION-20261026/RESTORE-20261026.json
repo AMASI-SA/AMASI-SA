@@ -1,11 +1,15 @@
 {
   "state": "WIP NOT DEPLOYABLE",
   "restored_head": "3cba125d4df8f837d0d5015f3d693351f38a4577",
-  "baseline": "Root144contract+policy passed1.94s in restored venv",
-  "gateway": "Initial reimplemented gateway+typedmanagement seam checkpoint08452fbe71616fcfc7da73b74f1ba5ce315b9bc9; compilation only, lifecycle pending",
-  "authority": "New implementation+unit tests; author26passed1.46s; independent review, negative cases and actualMongo pending",
-  "worker": "Reimplementation in progress; not saved here yet",
-  "publication": "1535 remains unmerged/unpublished; login required, actualguard state unknown",
-  "production_changed": false,
-  "next": "Do not deploy WIP. Complete integrated gateway/authority/worker and currentMongo/UI/CI; preserve milestones early."
+  "fresh_root_verification": "276passed27Mongo-local-skips3.84s; creation contract/policy/plan/authority/gateway/worker+oldstandinggateway/manualmanagement",
+  "snapshot_note": "Worker tests may include author39case milestone added after root276 run; root combined rerun pending. No actualGooglecalls.",
+  "completed": "New native PAUSED creation lifecycle through real core and fake Google transport, ownershipledger+settlement, fenced worker; unreviewed edges and runtimeintegration still pending",
+  "remaining": [
+    "Independent review",
+    "ActualMongo newcases and existing27, exactfrontend15 CI",
+    "Bounded shared child runtime composition not reimplemented yet",
+    "Fundedautomaticlaunch separate unsupported",
+    "Freshcurrentproduction-basedCI/intent beforeanymerge; Emergentlogin needed"
+  ],
+  "production_changed": false
 }

@@ -198,7 +198,11 @@ async def read_google_creation_state(db, *, user_id, account_id, native_context,
                     account_id=scope['account_id'], campaign_id=entry.get('created_campaign_id'), proposal=original):
                 _fail('google_creation_ownership_unproved')
             matching = [row for row in native_rows if isinstance(row, dict) and row.get('campaign_id') == entry['created_campaign_id']]
-            if len(matching) == 1 and matching[0].get('status') in {'ENABLED', 'REMOVED'}:
+            if (len(matching) == 1 and matching[0].get('status') in {'ENABLED', 'REMOVED'}
+                and matching[0].get('account_id') == scope['account_id']
+                and matching[0].get('source') == 'google_ads_api'
+                and all(matching[0].get(key) == getattr(typed, key) for key in ('currency_code', 'time_zone'))
+                and contract._fresh(matching[0].get('observed_at'), current, 90)):
                 remains_paused = False
         if remains_paused:
             paused += 1
