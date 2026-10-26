@@ -1,1 +1,21 @@
-{"task_id":"GOOGLE-CATALOG-READER-20261026","branch":"codex/google-catalog-evidence-wip-20261026","base":"87776582fe0fc4d0204c808d3fd7fe32d42bbfe9","state":"WIP read-only internal catalog reader; no runtime route or release","scope":["backend/integrations_control_center/google_product_catalog_reader.py","backend/tests/test_google_product_catalog_reader.py"],"verification":"8 unit tests passed; independent review and actual Mongo acceptance required","production_changed":false,"provider_writes":0,"limitations":["Pinned product IDs only; no category membership or variant availability proof; active products remain inventory unknown because light sync can omit variants and coerces unlimited flags","No pricing, profitability, product URL, sales or platform attribution proof","Fresh catalog row does not establish complete source catalog snapshot","No route, executor or authorization wired"],"next_safe_action":"Review source freshness/identity and add real Mongo replica tests before integration; coordinate PR1562 and latest production head"}
+{
+  "task_id": "GOOGLE-CATALOG-READER-20261026",
+  "branch": "codex/google-catalog-evidence-wip-20261026",
+  "base": "87776582fe0fc4d0204c808d3fd7fe32d42bbfe9",
+  "state": "WIP read-only internal catalog reader; no runtime route or release",
+  "scope": [
+    "backend/integrations_control_center/google_product_catalog_reader.py",
+    "backend/tests/test_google_product_catalog_reader.py"
+  ],
+  "verification": "8 unit tests pass locally; 3 real Mongo tests skipped locally, replica CI pending",
+  "production_changed": false,
+  "provider_writes": 0,
+  "limitations": [
+    "Pinned product IDs only; no category membership or variant availability proof; active products remain inventory unknown because light sync can omit variants and coerces unlimited flags",
+    "No pricing, profitability, product URL, sales or platform attribution proof",
+    "Fresh catalog row does not establish complete source catalog snapshot",
+    "No route, executor or authorization wired",
+    "Before wiring, derive owner from trusted session and as_of from server clock; reject client-supplied freshness authority"
+  ],
+  "next_safe_action": "Run replica CI for exact checkpoint and independently inspect logs; then review server-owned clock/session integration and fresh production base"
+}
