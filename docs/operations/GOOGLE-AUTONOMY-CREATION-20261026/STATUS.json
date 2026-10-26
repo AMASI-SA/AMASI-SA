@@ -1,79 +1,55 @@
 {
-  "branch": "codex/google-autonomy-creation-r2-20261026",
-  "checkpoint": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "state": "MERGED exactBtree/parents afterall31Bchecks+Host20; originalAppffMcompleted; hostadapterretry1 running. NO ownlease/prepare/prepublish/publish yet.",
-  "full_autonomy_complete": false,
-  "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
-  "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
-  "root_integration_state": "Remote exact1535baseline plus exactknown3-filepatch reconstituted afterenvloss; latestlocalbytecomparison unavailable; explicitlyUNVERIFIEDWIP. Previouslocalfocused179passed2.16s beforeenvloss.",
-  "author_local_only_progress": {
-    "authority": "29own tests reported, 6 red→green quota/time/role/catalog cases; finalflaghelper/Mongo work; no remote exactsnapshot yet",
-    "gateway": "35gateway tests reported;7Mongo skippedlocal; minimalmanagementblob a3938978ea059e0f081d1966eca3f3578a78de11; latestnewgatewayafterflagfix notrootcheckpointed",
-    "worker": "43hermetic cases reported; newcomposite+runner integration wasinprogresswhenenvlost",
-    "independent_review": "policy+purecontract272pass3Mongo skips; gateway+plan57pass; laterauthorityexpiry/catalogfixes+flagconsistency finalrecheck pending"
-  },
-  "recovery_branches_requested": [
-    "codex/google-creation-authority-recovery-20261026",
-    "codex/google-creation-gateway-recovery-20261026",
-    "codex/google-creation-runtime-recovery-20261026"
-  ],
-  "recovery_note": "Verified durable3cba125d4df8f837d0d5015f3d693351f38a4577 only. Restoring this branch to fresh checkout; do not call missing latermodules completed or tested in restoredsource.",
-  "lost_source": "Oldunsavedsourceunavailable; newlyreimplementedcode independentlytested, not claimedidentical.",
+  "task_id": "GOOGLE-AUTONOMY-CREATION-20261026",
   "pr": 1542,
-  "source_A": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "production_base": "56560cf68eb08fa8ef5de9780701722c283fbc95",
-  "source_google_run": 40356070027,
-  "backend_job": 121674780314,
-  "frontend_first_job": 121674780945,
-  "frontend_failure": "registry.yarnpkg.com package download502 beforetests; onejob rerunrequested",
-  "local": "1028passed70Mongo skipped13.64s",
-  "independent": "Remotefulltree47exactchanges,parent058; allothercurrentproductionpaths preserved; oldsourcekind+creation91sregressions remote present; scoped316pass",
+  "branch": "codex/google-autonomy-creation-r2-20261026",
+  "checkpoint": "e73a82d8962e48b7166db0bd51870a16044e7836",
+  "A": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
+  "source_A": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
   "B": "e73a82d8962e48b7166db0bd51870a16044e7836",
+  "merge": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+  "production_base": "56560cf68eb08fa8ef5de9780701722c283fbc95",
   "tree": "3b7042866d972cdeeaa03199e5c404d7cf0c5ec3",
   "runtime": "rg5-8ac6ac4076be56a33f951af8507fe326db6f0ca0a7ea0925a13abc04b774c753",
-  "artifact": 12666625010,
-  "intent_sha256": "da9162c37f449727e9e515d641fd378820af241869a4a59bfb322cf7852a789e",
+  "state": "MERGED + ORIGINAL HOST ADAPTER PASS; NOT PUBLISHED; NO ownlease/prepare/prepublish",
+  "source_CI": "1098backend27.83s inclall70actualMongo;153frontend15suites; all15sourceworkflowsSUCCESS",
+  "source_google_run": 40356070027,
   "source_readiness_run": 40356069694,
-  "frontend_retry_job": 121678570273,
-  "frontend_verification": "153passed15suites; first502packageinfra attempt superseded by successful retry unchangedsource",
-  "A": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
-  "previous_pair": {
-    "pr": 1541,
-    "A": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-    "B": "c3b8133a932344d671fc391824ceba97d957b7a8",
-    "state": "closedunmerged frozenunchanged afterProduct1539merged565base+intentconflict; noBchecks becausemergeconflict"
-  },
-  "foreign_lease_last_read": {
-    "active": false,
-    "actor": null
-  },
-  "root_App_state": "Editor17 Terminal2 readonly; AppHEAD058lastread, tracked diffempty; unrelateduntracked.emergent/testing/deployerfilespreserved; ownunsavedUntitled1preserved",
-  "merge": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+  "source_backend_job": 121688757180,
+  "source_frontend_job": 121688757011,
+  "final_B_checks": "all31 success/expectedskip/neutral",
   "final_B_readiness_run": 40357048511,
   "host20_job": 121692746358,
+  "artifact": 12666625010,
+  "artifact_zip_sha256": "4005dd047c20e11e4ff07c4bfe8e255b484eb894964cede1370195e7dacd3645",
+  "intent_bytes": 927898,
+  "intent_sha256": "da9162c37f449727e9e515d641fd378820af241869a4a59bfb322cf7852a789e",
   "host_adapter": {
-    "first": {
-      "exit": 1,
-      "underlying_adapter_exit": 2,
-      "reason": "prepackaged backend/__pycache__; missing release_identity consequence of clean materialization failure"
-    },
-    "quarantine": {
-      "preserved": true,
-      "files": [
-        "frontend_build_identity.cpython-311.pyc",
-        "release_protocol_v5.cpython-311.pyc"
-      ],
-      "count": 2,
-      "nonsymlink": true,
-      "tracked": 0,
-      "path": ".git/google1542-evidence/backend-pycache-quarantine"
-    },
-    "retry1": {
-      "log": ".git/google1542-evidence/build-retry1.log",
-      "exit_file": ".git/google1542-evidence/build-retry1.exit",
-      "status": "running"
-    }
+    "first_exit": 1,
+    "reason": "prepackaged backend/__pycache__;2untrackednonsymlink pycs preserved .git/google1542-evidence/backend-pycache-quarantine",
+    "retry1_exit": 0,
+    "retry1_seconds": 61.85,
+    "log": ".git/google1542-evidence/build-retry1.log",
+    "exit_file": ".git/google1542-evidence/build-retry1.exit",
+    "verified_source": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
+    "verified_runtime": "rg5-8ac6ac4076be56a33f951af8507fe326db6f0ca0a7ea0925a13abc04b774c753"
   },
-  "guard": "Inactive beforeAppff/quarantine; ownlease nevercreated",
-  "browser": "Publisher tab5 nowredirectedloginagain; IDE17 stillauthenticated; ownterminal2; preserveunsavedUntitled1."
+  "provider_writes": 0,
+  "live_policy_activation": false,
+  "live_flags_changed": false,
+  "full_autonomy_complete": false,
+  "limitations": [
+    "NewcampaignPAUSEDonly",
+    "Fundedautomaticlaunch separatefutureWIPruntimeunsupported"
+  ],
+  "browser": {
+    "publisher_tab": "5",
+    "publisher_state": "landing login wall after restored sessionexpired; newsecureloginneeded",
+    "editor_tab": "17",
+    "editor_state": "Authenticated originalApp, Terminal2bash prompt; unsavedUntitled1preserved"
+  },
+  "previous_pairs": {
+    "1535": "closedunmerged knownpostfloorfixsuperseded",
+    "1541": "closedunmerged frozenunchanged onold058base afterProduct1539advanced"
+  },
+  "production_changed": false
 }
