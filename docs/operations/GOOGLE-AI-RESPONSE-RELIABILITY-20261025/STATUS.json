@@ -692,11 +692,11 @@
     },
     "operation_wip": {
       "branch": "codex/google-oauth-operation-wip-20261026",
-      "source": "7527bfc0bce5647dd01886433690f5e13d681528",
-      "checkpoint": "4658f7db29ef9b961601e7e9dc062fe023a4ccae",
-      "ci": "9passed incl4realreplica",
+      "source": "024629e7c30ed10844cf36171af468f6dcdc0bf0",
+      "checkpoint": "f5488525e3e585ea72d0ab7f6f79138b6109f809",
+      "ci": "13passed incl6realreplica run40402364540",
       "runtime_wired": false,
-      "limitation": "trusted caller only; all HTTP/credential writers and durable operation identity integration incomplete"
+      "limitation": "scope unique lock prevents parallel refresh; integration with actual HTTP/writers, durable recovery and multi-doc atomic OAuth incomplete"
     }
   },
   "last_verified_production_head": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -749,7 +749,7 @@
     "pr": 1564,
     "source": "8f01a77314763eaae0131269b4c421cf19d34611",
     "production_base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
-    "state": "A/B frozen; B CI and host20 pending; foreign courier lease",
+    "state": "A/B frozen, all B checks passed (12 success + TikTok expected skip), host20 CI success, actual host isolated retry in progress",
     "root_backend_tests": "73passed2.04s",
     "real_mongo_source": {
       "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
@@ -760,7 +760,7 @@
     },
     "provider_writes": 0,
     "production_changed": false,
-    "next": "Await B CI incl host20 and all checks. Inspect foreign lease/status before /app; if current production changes do not reuse frozen pair.",
+    "next": "Read existing host retry exit and logs; fetch latest production and guard, then merge/prepare/prepublish once if all requirements hold. No foreign lease operations.",
     "A": "8f01a77314763eaae0131269b4c421cf19d34611",
     "B": "d7fd4608ed9e703aa1ddf1e84263f7e05b46e780",
     "runtime": "rg5-a8f6fe87faf3cfc48c53aad5bd570019e7c38ca6c90415bb798a40337f43042e",
@@ -774,7 +774,17 @@
       "replica": 21,
       "actual_replica": 5
     },
-    "candidate_validation": "root clean A/J complete backend/control manifest validation, source8f / base d398"
+    "candidate_validation": "root clean A/J complete backend/control manifest validation, source8f / base d398",
+    "B_readiness": {
+      "run": 40401827040,
+      "host_job": 121849848013,
+      "success": true,
+      "artifact_tree_sha256": "e55721075eb9403b71bdd28013fa84c1198fcb01407196f168bcaf25321eac64",
+      "root_logs_verified": true
+    },
+    "git_validation": "A/J and B intent validated via clean checkout; exact intent sha7e37ff17; B only intent",
+    "actual_guard": "observed inactive on /app, head d398, tracked clean, 466MB free",
+    "actual_host_rehearsal": "first exit128 due clone origin /app missing task ref; isolated retry with correct GitHub origin /tmp/google1564-host-retry.exit pending. Do not start another until outcome known."
   },
   "legacy_claim_gap": {
     "branch": "codex/google-legacy-claim-gap-wip-20261026",
