@@ -1,14 +1,15 @@
 {
   "task_id": "GOOGLE-OAUTH-STALE-REFRESH-20261027",
-  "state": "WIP acceptance reproduces known unsafe stale Ads refresh; no runtime fix",
+  "state": "WIP unwired shared refresh orchestration and acceptance; no runtime fix",
   "base": "f5488525e3e585ea72d0ab7f6f79138b6109f809",
   "branch": "codex/google-oauth-dispatch-followup-20261027",
   "verification": {
     "command": "PYTHONPATH=backend python -m pytest --noconftest -q -rx backend/tests/test_google_oauth_stale_refresh_wip.py",
-    "result": "1 strict xfail, expected: synthetic relink is overwritten by old Ads refresh; no provider calls or actual credentials"
+    "result": "1 strict xfail, expected: synthetic relink is overwritten by old Ads refresh; no provider calls or actual credentials",
+    "contract_suite": "41 passed, 1 strict xfail locally, including 19 synthetic shared-contract cases across Ads, GA4 and Merchant labels; no replica or actual writer integration"
   },
-  "scope": "A synthetic acceptance test, no runtime changes or deployment. Ads writer is keyed only by user_id; Merchant and GA4 also use user_id-only updates and require independently proved coverage.",
-  "limitations": ["Strict xfail documents an unresolved defect and is not a release acceptance pass", "No live OAuth state, credential, or database tested", "A journal alone does not fence relinks or coordinate the other writers", "A new CAS scheme must cover all refresh and relink writers including Ads, Merchant, GA4 and projection"],
+  "scope": "A synthetic acceptance test and unwired shared journal/claim/send/CAS orchestration; no runtime changes or deployment. Ads writer is keyed only by user_id; Merchant and GA4 also use user_id-only updates and require independently proved coverage.",
+  "limitations": ["Strict xfail documents an unresolved defect and is not a release acceptance pass", "No live OAuth state, credential, or database tested", "Label tests are not the actual Ads, Merchant, or GA4 adapters", "No guarantee that a provided HTTP send callback has retries disabled", "No owner, grant, scope, projection or account membership validation", "A journal alone does not fence relinks or coordinate the other writers", "A new CAS scheme must cover all refresh and relink writers including Ads, Merchant, GA4 and projection"],
   "next_safe_action": "Coordinate a shared generation schema and atomic grant projection, implement all writer fences, turn the xfail into a passing acceptance, and prove real replica races and ambiguous acknowledgements before runtime integration.",
   "production_changed": false,
   "provider_calls": 0,
