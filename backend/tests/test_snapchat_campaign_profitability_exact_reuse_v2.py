@@ -137,3 +137,95 @@ async def test_profitability_cache_is_invalidated_by_mezan_cost_revision(monkeyp
 def test_source_policy_is_exact_and_read_only():
     assert module.SOURCE_MODE == "snapchat_salla_visible_matches_profitability_v2"
     assert module.CACHE_TTL_SECONDS == 5 * 60
+
+
+@pytest.fixture
+def calculation(monkeypatch):
+    module._CACHE.clear()
+    loads = []
+
+    async def cost_revision(db, user_id):
+        return 7
+
+    async def cost_context(db, user_id):
+        loads.append(user_id)
+        return {}
+
+    def order_cost(order, context):
+        cost = sum(item["quantity"] * item["cost"] for item in order["products"])
+        sales = order["total_amount"]
+        return {"order_sales_sar": sales, "product_cost_sar": cost,
+                "allocated_product_sales_sar": sales, "unallocated_sales_sar": 0,
+                "missing_everywhere": False, "uses_salla_fallback": False,
+                "mezan_cost_complete": True, "no_products": False, "lines": []}
+
+    monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
+    monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
+    monkeypatch.setattr(module.profitability, "_order_cost_and_products", order_cost)
+    kwargs = {"date_from": "2026-10-25", "date_to": "2026-10-25",
+              "matched_orders": {("account-1", "campaign-1"): [
+                  {"id": "o1", "total_amount": 100, "products": [{"quantity": 1, "cost": 40}]},
+                  {"id": "o2", "total_amount": 50, "products": [{"quantity": 1, "cost": 20}]},
+              ]}, "campaign_spend": {("account-1", "campaign-1"): 30}}
+    return kwargs, loads
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("change", "expected_orders", "expected_sales", "expected_cost", "expected_spend", "expected_profit"), [
+    ("sales", 2, 170, 60, 30, 80),
+    ("line_quantity", 2, 150, 100, 30, 20),
+    ("added_order", 3, 200, 80, 30, 90),
+    ("removed_order", 1, 100, 40, 30, 30),
+    ("spend", 2, 150, 60, 50, 40),
+])
+async def test_changed_cohort_or_spend_cannot_reuse_old_economics(calculation, change, expected_orders, expected_sales, expected_cost, expected_spend, expected_profit):
+    kwargs, loads = calculation
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    orders = kwargs["matched_orders"][("account-1", "campaign-1")]
+    if change == "sales":
+        orders[0]["total_amount"] = 120
+    elif change == "line_quantity":
+        orders[0]["products"][0]["quantity"] = 2
+    elif change == "added_order":
+        orders.append({"id": "o3", "total_amount": 50, "products": [{"quantity": 1, "cost": 20}]})
+    elif change == "removed_order":
+        orders.pop()
+    else:
+        kwargs["campaign_spend"][("account-1", "campaign-1")] = 50
+    rows, totals = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    row = rows[("account-1", "campaign-1")]
+    assert (row["orders"], row["sales_sar"], row["product_cost_sar"], row["ad_spend_sar"], row["contribution_profit_sar"]) == (expected_orders, expected_sales, expected_cost, expected_spend, expected_profit)
+    assert totals["contribution_profit_sar"] == expected_profit
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_unchanged_reordered_inputs_reuse_cache_without_sharing_mutable_results(calculation):
+    kwargs, loads = calculation
+    first, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    first[("account-1", "campaign-1")]["sales_sar"] = 999
+    kwargs["matched_orders"][("account-1", "campaign-1")].reverse()
+    second, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert second[("account-1", "campaign-1")]["sales_sar"] == 150
+    assert loads == ["owner"]
+
+
+@pytest.mark.asyncio
+async def test_changed_campaign_account_binding_cannot_return_previous_scope(calculation):
+    kwargs, loads = calculation
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    kwargs["matched_orders"] = {("account-2", "campaign-2"): kwargs["matched_orders"][("account-1", "campaign-1")]}
+    kwargs["campaign_spend"] = {("account-2", "campaign-2"): 30}
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert set(rows) == {("account-2", "campaign-2")}
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_unserializable_input_bypasses_cache_instead_of_reusing_unknown_revision(calculation):
+    kwargs, loads = calculation
+    kwargs["matched_orders"][("account-1", "campaign-1")][0]["non_financial_metadata"] = float("nan")
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert loads == ["owner", "owner"]
+    assert module._CACHE == {}

@@ -12,6 +12,8 @@ from collections import defaultdict
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 from typing import Any
 
 from dashboard_v2_routes import _filtered_orders
@@ -26,9 +28,32 @@ _MATCHED_ORDERS: ContextVar[dict[tuple[str, str], list[dict[str, Any]]]] = (
     ContextVar("snapchat_campaign_matched_orders", default={})
 )
 _CACHE: dict[
-    tuple[str, str, str, int],
+    tuple[str, str, str, int, str],
     tuple[datetime, dict[tuple[str, str], dict[str, Any]], dict[str, Any]],
 ] = {}
+
+
+def _input_fingerprint(matched_orders, campaign_spend) -> str | None:
+    """Bind the cache to the actual local cohort and current selected spend.
+
+    Whole order documents are included because the existing cost/attribution
+    helpers consume several aliases and refund/status fields. Hashes remain
+    process-local; no customer fields or digests are logged or persisted.
+    An input which cannot be serialized safely simply bypasses this cache.
+    """
+    try:
+        campaigns = []
+        for key, orders in sorted(matched_orders.items()):
+            order_hashes = sorted(hashlib.sha256(json.dumps(
+                order, sort_keys=True, separators=(",", ":"), default=str,
+                allow_nan=False,
+            ).encode()).hexdigest() for order in orders)
+            campaigns.append([list(key), order_hashes])
+        spend = [[list(key), _float(value)] for key, value in sorted(campaign_spend.items())]
+        content = json.dumps([campaigns, spend], separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(content.encode()).hexdigest()
 
 
 def _text(value: Any) -> str:
@@ -85,9 +110,10 @@ async def calculate_profitability_from_exact_matches(
     campaign_spend: dict[tuple[str, str], float],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
     cost_revision = await get_product_cost_revision(db, user_id)
-    cache_key = (user_id, date_from, date_to, cost_revision)
+    input_fingerprint = _input_fingerprint(matched_orders, campaign_spend)
+    cache_key = (user_id, date_from, date_to, cost_revision, input_fingerprint)
     now = datetime.now(timezone.utc)
-    cached = _CACHE.get(cache_key)
+    cached = _CACHE.get(cache_key) if input_fingerprint is not None else None
     if cached and now - cached[0] < timedelta(seconds=CACHE_TTL_SECONDS):
         return deepcopy(cached[1]), deepcopy(cached[2])
 
@@ -133,7 +159,8 @@ async def calculate_profitability_from_exact_matches(
             for row in by_campaign.values()
         ),
     }
-    _CACHE[cache_key] = (now, deepcopy(by_campaign), deepcopy(totals))
+    if input_fingerprint is not None:
+        _CACHE[cache_key] = (now, deepcopy(by_campaign), deepcopy(totals))
     if len(_CACHE) > 32:
         oldest = min(_CACHE, key=lambda key: _CACHE[key][0])
         _CACHE.pop(oldest, None)
