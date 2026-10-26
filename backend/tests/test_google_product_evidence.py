@@ -194,3 +194,8 @@ def test_unknown_currency_code_rejected_using_existing_pinned_vocabulary():
     with pytest.raises(ValidationError): build(request(records=[fact(currency_code='ZZZ')]))
     payload = request(); payload['products'][0].update(cost_quality='complete', unit_cost_native='20', cost_currency_code='ZZZ', cost_evidence_ref='cost:1', cost_verification='verified')
     with pytest.raises(ValidationError): build(payload)
+
+
+def test_padded_order_proof_does_not_evade_unique_reference_contract():
+    with pytest.raises(ValidationError):
+        build(request(records=[fact(verified_orders=2, order_evidence_refs=['order-proof:a', ' order-proof:a '])]))

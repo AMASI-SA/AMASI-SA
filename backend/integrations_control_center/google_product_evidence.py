@@ -157,7 +157,7 @@ class ProductSourceRecord(Observed):
         if self.complete and self.observed_at.astimezone(ZoneInfo(self.timezone)).date() <= last:
             raise ValueError("a complete period must be observed after its last local day closes")
         refs = self.order_evidence_refs
-        if len(set(refs)) != len(refs) or any(not ref.strip() or len(ref) > 240 for ref in refs):
+        if len(set(refs)) != len(refs) or any(not ref.strip() or ref != ref.strip() or len(ref) > 240 for ref in refs):
             raise ValueError("order proofs must be unique bounded references")
         if self.verified_orders is not None and (self.provider != "store_orders" or self.verified_orders != len(refs) or self.verification != "verified" or not self.complete):
             raise ValueError("verified orders require exact complete store-order proofs")

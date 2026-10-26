@@ -33,7 +33,7 @@
     "latest": {
       "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py backend/tests/test_accounting_currency.py",
       "exit_code": 0,
-      "result": "69 passed, no skips,1.08s"
+      "result": "70 passed, no skips,1.16s"
     }
   },
   "source_investigation": {
@@ -69,9 +69,10 @@
     "latest_verification": {
       "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py backend/tests/test_accounting_currency.py",
       "exit_code": 0,
-      "result": "69 passed, no skips,1.08s"
+      "result": "70 passed, no skips,1.16s"
     },
     "production_changed": false,
-    "provider_writes": 0
+    "provider_writes": 0,
+    "padded_order_proofs": "One failing regression (38pass) demonstrated padded duplicate order evidence refs bypassing uniqueness; reject padding in order proof refs as well."
   }
 }
