@@ -5,9 +5,11 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - "backend/integrations_control_center/google_ads*"
+      - "backend/integrations_control_center/google_commercial_plan.py"
       - "backend/ads_manager/**"
       - "backend/google_ads_automation_*.py"
       - "backend/tests/test_google_ads*"
+      - "backend/tests/test_google_commercial_plan.py"
       - "frontend/src/components/marketing/Google*"
       - "frontend/src/components/GoogleAdsAllPlatformsCard*"
       - "frontend/src/pages/MarketingPlatformWorkspace*"
@@ -84,6 +86,8 @@ jobs:
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py
+          backend/tests/test_google_ads_reporting_v1.py
+          backend/tests/test_google_commercial_plan.py
           backend/tests/test_google_ads_workspace.py
           backend/tests/test_google_ads_overview.py
           backend/tests/test_google_ads_protobuf_contract.py

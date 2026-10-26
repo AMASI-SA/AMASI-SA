@@ -1,0 +1,34 @@
+{
+  "task_id": "GOOGLE-COMPLETION-20261026",
+  "branch": "codex/google-completion-20261026",
+  "base": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
+  "state": "WIP verified preventive reporting slice and saved seasonal context; not released",
+  "production_changed": false,
+  "provider_writes": 0,
+  "live_acceptance": {
+    "account": "5052346701",
+    "connection": "connected observed before our changes",
+    "campaigns": 22,
+    "paused_test_campaign_management_editor": "opened readonly; no mutation",
+    "restoration_by_this_change": false
+  },
+  "changes": [
+    "Reporting no longer owns connection status/provenance; no authority upsert",
+    "Owner-reviewed commercial plan GET/PUT with CAS/audit, explicit unknown economics and no advertising authorization",
+    "Budget extension separate untracked WIP, not included in milestone"
+  ],
+  "verification": {
+    "root_command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_ads_management.py backend/tests/test_google_ads_workspace.py",
+    "result": "70 passed, 27 Mongo skipped, 1.58 seconds",
+    "reporting_regression": "12 failures before fix;14pass after",
+    "commercial_plan": "18pass"
+  },
+  "remaining": [
+    "Finish owner plan UI and verify full integration",
+    "True generation-fenced OAuth/account atomic persistence remains",
+    "All shared budget writers and actual Mongo replica proof, activation and launch still incomplete",
+    "Natural-language extraction, evidence ranking, categories and cross-platform orchestration incomplete",
+    "Fresh CI/review, v5 A/B build, real guard and live publish acceptance required"
+  ],
+  "next_safe_action": "Finish UI and independently review; keep budget WIP disabled; do not publish current partial branch as autonomy completion"
+}
