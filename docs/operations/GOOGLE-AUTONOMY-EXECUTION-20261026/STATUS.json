@@ -3,7 +3,7 @@
   "branch": "codex/google-autonomy-execution-r3-20261026",
   "base": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "A": "b0740fcfe1ffe1efd5e7df20f56a8dff175b5c94",
-  "state": "SOURCE CI PENDING; no B/merge/lease/publish. Existing campaigns only, runtime defaults off.",
+  "state": "FROZEN intent-only B; finalB CI/independent Host20 pending; no merge/ownlease/publish",
   "previous_pair": {
     "pr": 1529,
     "A": "d5175bb5da5545ed82dd13a9e86164a1742db03f",
@@ -11,5 +11,18 @@
     "state": "closed unmerged production advanced; frozen unchanged",
     "sourceCI": "746backend tests10.61s actualMongo +132frontend14suites"
   },
-  "provider_writes": 0
+  "provider_writes": 0,
+  "B": "b9945ff265a6f20fe873474f970caca280bd7b2d",
+  "tree": "96a5c4e66592fcd5a2d1d8d26ec87ab7fdb874e2",
+  "runtime": "rg5-079c3d42ec9a74781eb477d4a2e184778b8b5bfc2eddad0e7e8f7e39837e94db",
+  "sourceCI": "746backend passed16.74s;138frontend14suites passed; sourceReadiness40248625497 success",
+  "source_other_checks": "Some superseded source checks cancelled by intent-only B update; finalB allrequiredchecks mandatory",
+  "artifact": 12619133340,
+  "intent_sha256": "ab33bd957e97b5664d1ec3944430839dc359e390f80cd076ad61430a9da0233a",
+  "foreign_lease": {
+    "actor": "codex-tiktok1533",
+    "active": true,
+    "deployment": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
+    "root_yielded": true
+  }
 }
