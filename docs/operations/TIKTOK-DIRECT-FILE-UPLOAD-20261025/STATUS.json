@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "PRODUCTION_MEDIA_POLICY_BLOCKED_SUPPORT_REQUEST_SENT",
+  "state": "PROVIDER_EDGE_POLICY_FIXED_LIVE_LOCAL_VIDEO_METADATA_PASS_PRIVATE_TEST_PREPARED",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "When provider response is available, read sent thread1a178f6e72915f93; inspect reported actual Production header source and narrow correction evidence. No duplicate email/re-publish or speculative patch. After actual Production CSP allows local blob media, retry real metadata then ONE PRIVATE official fixture native init/chunk/status test. No native init/media upload/model request occurred in this send-only turn; no live AI budget remains.",
+  "next": "Click bounded metadata-only معاينة رفع الملف, verify immutable samefixture/SELF_ONLY/technicalcaption summary, then approved once private test native init/upload/status. Stop automatic retry on uncertainty; reconcile sameproposal only. No public fixture, paid ad, model request, or new release.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T16:18:17.240Z",
+  "observed_at": "2026-10-26T17:23:16.632Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -150,7 +150,7 @@
   "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
   "merge_M": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "current_release_runtime_published": true,
-  "blocker": "Corrected reviewed Preview runtime policy did not propagate to Production even after successful fresh republish. Actual Production component emitting stale CSP remains unidentified; source/runtime patches should not be added speculatively. Provider must inspect Production origin vs ingress/CDN headers and effective config; UI exposes no header/runtime config control.",
+  "blocker": "Previous CSP blocker independently resolved. Actual browser-to-native TikTok transfer remains unproven; no media proxy permitted.",
   "independent_checks_after_environment_loss": "Localexec_command rejected:No usable execution environment. Publicweb opens/api/health and/_headers.json inaccessibleviawebtool. GitHub connector reads stillwork. Remotelyread start-governed-runtime.cjs and vite.config.js atM33c2 confirm preview.headers FRONTEND_SECURITY_HEADERS includesnewmedia-src. Actuallivehealthsource/runtime remains unknownbecausepriorvalues scrolledout andfollowupwasneverexecuted.",
   "production_verification": {
     "verified": true,
@@ -297,5 +297,48 @@
     "sent_message_id": "1a1790107d52800a",
     "thread_id": "1a178f6e72915f93",
     "send_verified": "Gmail send_draft returned SENT; existing exact draft sent once."
+  },
+  "support_response": {
+    "message_id": "1a17934f542bcc2c",
+    "sender": "Emergent Support",
+    "received_utc": "2026-10-26T17:14:34Z",
+    "provider_verified_utc": "2026-10-26T17:12:00Z",
+    "reported_component": "Production deployment response-header configuration at Emergent edge, independent of app build",
+    "reported_change": "Inserted only media-src self blob after img-src; other CSP/security headers/API unchanged; no other data/credential/resource/ad/lease/media-proxy change"
+  },
+  "independent_edge_verification": {
+    "root": true,
+    "ads_manager": true,
+    "cache_busted_build_meta": true,
+    "api_csp_default_none_preserved": true,
+    "source_git_sha": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
+    "release_id": "rg5-8ac6ac4076be56a33f951af8507fe326db6f0ca0a7ea0925a13abc04b774c753",
+    "guard_active_at_probe": false,
+    "new_publish_by_this_turn": false
+  },
+  "live_local_preview": {
+    "passed": true,
+    "file_bytes": 32440799,
+    "ui_size_mb": "30.9",
+    "duration_seconds": 180.483,
+    "width": 1920,
+    "height": 1080,
+    "ui": "الملف جاهز للمعاينة",
+    "native_readiness": "PASS max600s",
+    "private_test_form": {
+      "privacy": "SELF_ONLY",
+      "caption": "اختبار تقني خاص لرفع الفيديو من ميزان",
+      "disclosure": "none",
+      "is_aigc": false,
+      "disable_comment": true,
+      "disable_duet": true,
+      "disable_stitch": true,
+      "rights_confirmed": true
+    },
+    "counts_before_proposal": {
+      "native_init": 0,
+      "media_transfer": 0,
+      "new_model_request": 0
+    }
   }
 }
