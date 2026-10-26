@@ -795,11 +795,27 @@
       "aborted": true,
       "abort_reason": "publisher UI DOM and screenshot timeout",
       "active_after": false
-    }
+    },
+    "browser_retry": "independent browser also timed out loading project; no publish click; own guard aborted and inactive"
   },
   "legacy_claim_gap": {
     "branch": "codex/google-legacy-claim-gap-wip-20261026",
     "checkpoint": "cf225eab802a965baf6247baa705e7d2c0e3b814",
     "state": "2 synthetic tests retain claim/fence when common allocation missing, no production claim assessed"
+  },
+  "sales_coverage": {
+    "branch": "codex/google-sales-evidence-wip-20261026",
+    "source": "28d9a0e2b3107981f619f8f987828b0b028898b6",
+    "checkpoint": "02cdf74b34568a88df7e20d961f7e7d896418dc5",
+    "ci": {
+      "run": 40404465611,
+      "job": 121858519649,
+      "passed": 10,
+      "replica": 2,
+      "skips": 0,
+      "root_logs_verified": true
+    },
+    "state": "WIP only; timezone_unproven normalized date, no sales/profit inferred, owner scoped, bounded maxTimeMS, no runtime",
+    "remaining": "prove dates, refunds, FX, attribution, completeness, index and product identity before metrics"
   }
 }
