@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
@@ -302,6 +303,26 @@ async def build_created_and_financial_outcomes(
     return dict(by_campaign), dict(by_date), coverage, dict(financial_matched)
 
 
+@asynccontextmanager
+async def _profitability_admission():
+    token, _ = await governor.acquire("ads", task_name="snapchat_created_profitability")
+    try:
+        yield
+    finally:
+        # A further cancellation must not interrupt ResourceGovernor.release
+        # between releasing its per-kind and global permits.
+        release = asyncio.create_task(governor.release(token))
+        cancelled = False
+        while not release.done():
+            try:
+                await asyncio.shield(release)
+            except asyncio.CancelledError:
+                cancelled = True
+        release.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+
 async def calculate_financial_profitability(
     db: Any,
     user_id: str,
@@ -329,7 +350,7 @@ async def calculate_financial_profitability(
     # Hold admission until the CPU worker actually finishes, including after
     # cancellation. No database object is accessed from the worker thread.
     try:
-        async with governor.heavy("ads", task_name="snapchat_created_profitability"):
+        async with _profitability_admission():
             cost_context = await profitability._load_cost_context(db, user_id) if financial_matched else {}
             future = asyncio.get_running_loop().run_in_executor(
                 _PROFIT_WORKERS, _calculate_financial_profitability_sync,
