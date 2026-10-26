@@ -786,9 +786,9 @@ test("provisional operational Snapchat to complete spend uses one backend read w
 
 function accountProfitPayload(sarAvailable) {
     const accounts = [
-        { account_id: "usd", display_name: "USD account", currency: "USD", total_native: 21.685333, total_sar: 81.32,
+        { account_id: "usd", display_name: "USD account", currency: "USD", projection_timezone: "Asia/Riyadh", total_native: 21.685333, total_sar: 81.32,
             quality: { status: "provisional", amount_available: true, provisional: true } },
-        { account_id: "sar", display_name: "Saudi account", currency: "SAR", total_native: sarAvailable ? 0 : null,
+        { account_id: "sar", display_name: "Saudi account", currency: "SAR", projection_timezone: "Asia/Riyadh", total_native: sarAvailable ? 0 : null,
             total_sar: sarAvailable ? 0 : null,
             quality: { status: sarAvailable ? "provisional" : "incomplete", amount_available: sarAvailable, provisional: sarAvailable } },
     ];

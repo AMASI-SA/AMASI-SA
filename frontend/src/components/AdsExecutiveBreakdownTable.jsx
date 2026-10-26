@@ -133,7 +133,8 @@ function SnapchatAccountExpenses({ accounts }) {
                 <tbody>{entries.map((row) => {
                     const quality = row.quality || {};
                     const sar = accountAmount(row.total_sar);
-                    const available = quality.amount_available === true && sar !== null
+                    const available = row.projection_timezone === "Asia/Riyadh"
+                        && quality.amount_available === true && sar !== null
                         && quality.status !== "incomplete" && quality.data_state !== "unknown_incomplete";
                     const provisional = available && (quality.provisional === true || quality.status === "provisional");
                     const currency = typeof row.currency === "string" && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null;

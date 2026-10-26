@@ -123,9 +123,9 @@ function accountExpenseView(accounts, inspect) {
 }
 
 const accountExpenses = [
-    { account_id: "USD.A", display_name: "US storefront", currency: "USD", total_native: 21.685333, total_sar: 81.32,
+    { account_id: "USD.A", display_name: "US storefront", currency: "USD", projection_timezone: "Asia/Riyadh", total_native: 21.685333, total_sar: 81.32,
         quality: { amount_available: true, provisional: true, status: "provisional", observed_at: "2026-10-26T00:00:00Z" } },
-    { account_id: "__proto__", display_name: "Saudi storefront", currency: "SAR", total_native: null, total_sar: null,
+    { account_id: "__proto__", display_name: "Saudi storefront", currency: "SAR", projection_timezone: "Asia/Riyadh", total_native: null, total_sar: null,
         quality: { amount_available: false, status: "incomplete" } },
 ];
 
@@ -195,5 +195,15 @@ test("same-currency identities stay separate and repeated identities do not dupl
         expect(rows).toHaveLength(2);
         expect(rows[0].textContent).toContain("81.32");
         expect(rows[1].textContent).toContain("25.00");
+    });
+});
+
+
+test("mismatched projection timezone does not authorize account expense", () => {
+    accountExpenseView([{ ...accountExpenses[0], projection_timezone: "America/Los_Angeles" }], (container) => {
+        const row = container.querySelector('[data-testid="snapchat-expense-USD.A"]');
+        expect(row.textContent).toContain("غير مكتمل");
+        expect(row.textContent).not.toContain("81.32 ر.س");
+        expect(row.textContent).not.toContain("21.69");
     });
 });

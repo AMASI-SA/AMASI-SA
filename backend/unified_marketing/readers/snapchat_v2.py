@@ -934,6 +934,8 @@ def _account_display_summary(account: dict[str, Any], report: dict[str, Any]) ->
     quality = {key: source_quality[key] for key in keys if key in source_quality}
     available = source_quality.get("amount_available") is True and _account_display_amount(report.get("total_sar")) is not None
     quality["amount_available"] = available
+    codes = source_quality.get("reason_codes")
+    quality["reason_codes"] = [code for code in codes if isinstance(code, str)][:20] if isinstance(codes, list) else []
     quality["observed_at"] = report.get("display_observed_at")
     daily = {day: _account_display_amount(value) if available else None
         for day, value in (report.get("daily_sar") or {}).items()}
@@ -946,10 +948,11 @@ def _account_display_summary(account: dict[str, Any], report: dict[str, Any]) ->
             "spend_sar": _account_display_amount(point.get("spend_sar")) if available else None,
             "status": point.get("status") if available or point.get("status") == "future" else "unknown_incomplete"}
             for point in points if isinstance(point, dict)]
-    account_id = str(account.get("ad_account_id") or "")
+    account_id = account.get("ad_account_id") if isinstance(account.get("ad_account_id"), str) else ""
     name = account.get("display_name")
     return {"account_id": account_id, "display_name": name if isinstance(name, str) and name.strip() else account_id,
-        "currency": account.get("currency"), "timezone": account.get("timezone"),
+        "currency": account.get("currency") if isinstance(account.get("currency"), str) else None,
+        "timezone": account.get("timezone") if isinstance(account.get("timezone"), str) else None,
         "projection_timezone": RIYADH_TIMEZONE,
         "total_native": _account_display_amount(report.get("total_native")) if available else None,
         "total_sar": _account_display_amount(report.get("total_sar")) if available else None,

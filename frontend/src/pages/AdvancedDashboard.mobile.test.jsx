@@ -48,9 +48,9 @@ test.each([
         totals: { total_sales: 1000, total_orders: 4, total_ads_cost: 100, total_shipping_cost: 20, total_payment_fees: 10 },
         dashboard_platform_spend: { date_from: "2026-10-26", date_to: "2026-10-26",
             providers: { snapchat: { accounts: [
-                { account_id: "usd", display_name: "US account", currency: "USD", total_native: 21.685333, total_sar: 81.32,
+                { account_id: "usd", display_name: "US account", currency: "USD", projection_timezone: "Asia/Riyadh", total_native: 21.685333, total_sar: 81.32,
                     quality: { amount_available: true, status: "provisional", provisional: true } },
-                { account_id: "sar", display_name: "Saudi account", currency: "SAR", total_native: 0, total_sar: 0,
+                { account_id: "sar", display_name: "Saudi account", currency: "SAR", projection_timezone: "Asia/Riyadh", total_native: 0, total_sar: 0,
                     quality: { amount_available: true, status: "provisional", provisional: true } },
             ] } } },
         shipping_breakdown: [{ name: "شركة تجريبية", orders_count: 1, total_cost: 20 }],

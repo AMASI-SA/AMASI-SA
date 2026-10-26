@@ -153,3 +153,17 @@ async def test_platform_display_contract_and_canonical_financial_snapshot_stay_s
     report = original
     legacy = await canonical.build_mezan_v2_ads(operational, "owner", from_date=DAY.isoformat(), to_date=DAY.isoformat())
     assert full == legacy
+
+
+def test_display_metadata_is_scalar_and_does_not_expose_nested_account_material():
+    secret = {"access_token": "synthetic-must-not-leak"}
+    for reasons in ([secret, "expected_reason"], None):
+        display = reader._account_display_summary(
+            {"ad_account_id": secret, "display_name": secret, "currency": secret, "timezone": secret},
+            {"total_sar": 1, "total_native": 1, "quality": {"amount_available": True, "reason_codes": reasons}},
+        )
+        assert display["account_id"] == display["display_name"] == ""
+        assert display["currency"] is None and display["timezone"] is None
+        assert display["quality"]["reason_codes"] == (["expected_reason"] if reasons else [])
+        assert "synthetic-must-not-leak" not in str(display)
+    assert reader._account_display_amount(1 << 5000) is None
