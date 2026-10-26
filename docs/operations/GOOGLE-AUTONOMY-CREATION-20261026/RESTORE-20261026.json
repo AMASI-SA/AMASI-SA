@@ -1,0 +1,9 @@
+{
+  "state": "WIP NOT DEPLOYABLE",
+  "restored_head": "3cba125d4df8f837d0d5015f3d693351f38a4577",
+  "lost_local_source": "Previous unsaved authority/gateway/worker/composite source unavailable; reimplementation underway",
+  "preserved": "Early new creation_gateway.py and minimal management standing_creation seam; author syntax compilation/diff check pass only",
+  "functional_verification": "NOT YET RUN for this captured gateway; authority/worker dependencies unfinished",
+  "production_changed": false,
+  "publication": "1535 still unmerged/unpublished; Emergent login required; current actualguard unknown"
+}

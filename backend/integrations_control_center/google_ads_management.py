@@ -354,9 +354,16 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         if not latest or latest["revision"] != row["draft_revision"]:
             raise problem("google_ads_draft_stale", "المسودة تغيرت منذ المعاينة.")
     bound = row.get("financial_bound") or {}
+    automation_gateway = None
     if automation:
-        from .google_ads_automation_gateway import _execution_preflight
-        await _execution_preflight(db, row)
+        kind = (row.get("automation_source") or {}).get("kind")
+        if kind == "standing_policy":
+            from . import google_ads_automation_gateway as automation_gateway
+        elif kind == "standing_creation":
+            from . import google_ads_automation_creation_gateway as automation_gateway
+        else:
+            raise problem("google_automation_gateway_required", "نوع التفويض الآلي غير متاح.", 403)
+        await automation_gateway._execution_preflight(db, row)
     else:
         await execution_permission(db, actor, row["account_id"], row["action"], budget=bound.get("budget_native"), budget_mode=bound.get("budget_mode", "DAILY"))
     client = None
@@ -381,15 +388,15 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         metadata = await client.account_metadata()
         if epoch != row["auth_epoch"] or metadata["currency_code"] != row["currency"] or metadata["time_zone"] != row["time_zone"]:
             raise problem("google_ads_account_changed", "توثيق الحساب أو العملة أو التوقيت تغير بعد المعاينة.")
+        fresh = None
         if row["before_digest"]:
             fresh = await client.campaign_snapshot(row["campaign_id"], children=True, **({"duplicate_controls": True} if row["action"] == "duplicate" else {}))
             if digest(fresh) != row["before_digest"]:
                 raise problem("google_ads_provider_drift", "إعدادات جوجل تغيرت منذ المعاينة؛ راجع التغيير الجديد.")
         await record_event(db, row, "approved", expected_status="executing", approved_at=now().isoformat(), approved_by=actor["actor_id"])
         if automation:
-            from .google_ads_automation_gateway import _authorize_dispatch
             automation_authority_entered = True
-            await _authorize_dispatch(db, row, client, metadata, epoch, fresh,
+            await automation_gateway._authorize_dispatch(db, row, client, metadata, epoch, fresh,
                 read_started_at=native_read_started_at)
         else:
             persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
@@ -405,7 +412,7 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
             # No await between this kill-switch observation and the HTTP call.
             # The acknowledged floor remains durable when dispatch is stopped.
             from .google_ads_automation_authority import execution_enabled
-            if not execution_enabled():
+            if not execution_enabled() or (kind == "standing_creation" and not automation_gateway.creation_dispatch_enabled()):
                 # This branch has an ACKED floor and has not invoked mutate.
                 # Preserve that floor and atomically record the precise proof;
                 # unknown acknowledgements never enter this branch.
