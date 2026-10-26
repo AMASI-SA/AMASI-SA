@@ -159,3 +159,40 @@ async def test_same_proof_engine_accepts_usd_with_independent_native_settings():
     assert await publish_committed_totals(db, "closed") == 2
     assert await complete(db, account_id="dollar", currency="USD", timezone_name="America/Los_Angeles")
     assert not await complete(db)
+
+@pytest.mark.asyncio
+async def test_empty_nonempty_empty_transition_replaces_proof_and_failed_refresh_keeps_it():
+    db = Database()
+    db.raw.mezan_snapchat_sync_runs_v2.insert_one(run("first-empty"))
+    assert await publish_committed_totals(db, "first-empty") == 2
+    assert await complete(db)
+
+    populated = run("populated")
+    populated["summary"] = {}
+    db.raw.mezan_snapchat_sync_runs_v2.insert_one(populated)
+    for day in DAYS:
+        for level in ("campaign", "ad_squad", "ad"):
+            db.raw.mezan_snapchat_daily_total_facts_v2.insert_one({
+                "user_id": "owner", "provider": "snapchat_ads", "ad_account_id": "saudi",
+                "sync_run_id": "populated", "report_date": day.isoformat(),
+                "entity_type": level, "external_id": level + "-1", "currency": "SAR",
+                "account_timezone": "Asia/Riyadh", "action_report_time": "conversion",
+                "attribution_key": proof()["attribution_key"], "coverage": {"status": "complete"},
+            })
+    assert await publish_committed_totals(db, "populated") == 2
+    snapshots = list(db.raw[COLLECTION].find({}, {"_id": 0}))
+    assert all("empty_hierarchy_proof" not in row for row in snapshots)
+    assert all(row["rows"][level] for row in snapshots for level in ("campaign", "ad_squad", "ad"))
+    assert not await complete(db)
+
+    db.raw.mezan_snapchat_sync_runs_v2.insert_one(run("last-empty"))
+    assert await publish_committed_totals(db, "last-empty") == 2
+    assert await complete(db)
+    snapshots = list(db.raw[COLLECTION].find({}, {"_id": 0}))
+    assert all(row["empty_hierarchy_proof"] == proof() for row in snapshots)
+    assert all(row["rows"][level] == [] for row in snapshots for level in ("campaign", "ad_squad", "ad"))
+    for status in ("running", "partial", "failed"):
+        db.raw.mezan_snapchat_sync_runs_v2.insert_one(run("refresh-" + status, status))
+        assert await publish_committed_totals(db, "refresh-" + status) == 0
+        assert list(db.raw[COLLECTION].find({}, {"_id": 0})) == snapshots
+        assert await complete(db)

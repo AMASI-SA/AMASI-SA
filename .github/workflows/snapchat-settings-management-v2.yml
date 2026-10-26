@@ -83,6 +83,7 @@ jobs:
               backend/snapchat_v2/committed_totals.py|\
               backend/snapchat_v2/empty_hierarchy.py|\
               backend/tests/test_snapchat_reporting_v2_empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_commit_completion.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\
@@ -149,6 +150,7 @@ jobs:
               backend/snapchat_v2/committed_totals.py|\
               backend/snapchat_v2/empty_hierarchy.py|\
               backend/tests/test_snapchat_reporting_v2_empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_commit_completion.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\

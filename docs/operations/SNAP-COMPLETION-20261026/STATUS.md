@@ -38,3 +38,13 @@ Local Mongo7 binary starts fail with exit100 `open: Operation not permitted` in 
 Finish exact-head affected CI, including actual Mongo projection, inspect combined diff, then source A/fresh v5 intent-only B/isolated official rehearsal. Recheck current remote production and shared `/app` Release Guard status; preserve #1547 and any newer Google/TikTok changes. If another owner has an active lease, wait for that owner. Root alone prepares/prepublishes, publishes exactly once, waits for explicit newer Deployment Succeeded, verifies three probes, requires active=false, then tests actual UI/read behavior. Merge is not deployment.
 
 Live identity freshly observed via GET /api/health: source 07c90edafe14d1263844f9434bbf36d582b4913e; release rg5-dbcb4c97bba2f1eaeea4716ea2cacbf40eaf4f5d0df4fd7dde107a13b7d5d992; verified_identity_available=true. The dashboard visibly preserves independent USD/Saudi spend and reports Saudi hierarchy evidence incomplete. These are read observations, not evidence this task was published.
+
+## Additional integration evidence
+
+Remote checkpoint d916afd8e6266add41b291ecaade382455107b7e passed Reporting V2 (40380256119), actual Mongo provenance (40380256024), settings management (40380256218), autonomy (40380255996), and release readiness (40380256183). Later source follow-ups must pass their own exact-head checks before merge.
+
+Independent review found and corrected stale empty proof surviving populated refresh ($unset and transition regression), affected creative list truncation (explicit fail-closed 200 limit with exact count), and rollback token-await scope drift (final authorizer, confirmed no-send result, MockTransport zero-PATCH regression). Follow-up integrated focused check:269passed/3local-Mongo-skipped, exit0,3.38s. Separate execution/profit gate suite:110passed,exit0,1.40s.
+
+Broad local run:679passed/35skipped/3failed,8.92s. The three failures are hourly publication heartbeat cases refusing admission under host resource pressure (cgroup usage 7,798,558,720/8,589,934,592 bytes). Exact unchanged base3a23b587a reproduces the same3failed/2passed in0.59s. Do not hide this as a green local broad run, alter production governor, or relax thresholds. Reporting CI on d916 passed these cases under its own isolated environment.
+
+Post-completion producer demotion was investigated and rejected: real fail_sync_run filters status=running. New storage-boundary regressions prove mid-publication failure retains valid mixed old/new committed days and completed producers; bookkeeping failure does not invalidate them.

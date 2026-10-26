@@ -93,7 +93,12 @@ async def publish_committed_totals(db: Any, sync_run_id: str) -> int:
     for key, document in documents:
         # One atomic write switches all three levels of a day together. Failed
         # later refreshes never touch this document; the source run stays proven.
-        await collection.update_one(key, {"$set": document}, upsert=True)
+        update = {"$set": document}
+        if "empty_hierarchy_proof" not in document:
+            # A successful nonempty refresh replaces the earlier empty state,
+            # including its proof; stale proof must not poison diagnostics.
+            update["$unset"] = {"empty_hierarchy_proof": ""}
+        await collection.update_one(key, update, upsert=True)
     return len(documents)
 
 

@@ -2693,3 +2693,59 @@ def test_creative_update_stored_fingerprint_rejects_tampering():
     operation["body"][0]["value"] = "عنوان متغير"
     with pytest.raises(ValueError, match="fingerprint"):
         module._assert_stored_operation_integrity(row, operation)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [200, 201])
+async def test_creative_shared_impact_never_silently_truncates(count):
+    provider = CreativeUpdateProvider()
+    provider.ads = [{"id": f"ad-{index}", "creative_id": "creative-1"} for index in range(count)]
+    if count > 200:
+        with pytest.raises(HTTPException) as error:
+            await module._creative_update_impact(provider, "account-1", "creative-1")
+        assert error.value.detail["code"] == "snapchat_creative_shared_impact_too_large"
+        assert error.value.detail["ad_count"] == count
+    else:
+        impact = await module._creative_update_impact(provider, "account-1", "creative-1")
+        public = module._safe_provider_value(impact)
+        assert public["ad_count"] == len(public["ad_ids"]) == count
+
+
+@pytest.mark.asyncio
+async def test_creative_rollback_final_fence_blocks_scope_drift_during_token_refresh(monkeypatch):
+    import httpx
+    db, provider = DB(), CreativeUpdateProvider()
+    async def selected(*args, **kwargs):
+        return {"ad_account_id": "account-1", "display_name": "AMASI"}
+    async def upsert(*args, **kwargs):
+        return True
+    monkeypatch.setattr(module, "_selected_account", selected)
+    monkeypatch.setattr(module, "_upsert_entity", upsert)
+    monkeypatch.setenv(module.MUTATIONS_ENABLED_ENV, "true")
+    preview = await module.create_snapchat_management_proposal(db, "owner-1", "owner-1", creative_update(), provider=provider)
+    await module.approve_snapchat_management_proposal(db, "owner-1", "owner-1", preview["proposal_id"], module.SnapchatManagementApprovalInput(confirm_token=preview["confirm_token"], expected_revision=preview["revision"]))
+    completed = await module.execute_snapchat_management_proposal(db, "owner-1", "owner-1", preview["proposal_id"], provider=provider)
+    real = module.SnapchatManagementProvider(db, "owner-1")
+    monkeypatch.setattr(real, "read_entity", provider.read_entity)
+    monkeypatch.setattr(real, "_list_complete", provider._list_complete)
+    monkeypatch.setattr(real, "management_role", provider.management_role)
+    async def refresh():
+        # Happens inside _request, after the outer rollback preflight.
+        provider.ads.append({"id": "ad-added-during-refresh", "creative_id": "creative-1"})
+        return "test-token"
+    monkeypatch.setattr(real.context, "access_token", refresh)
+    requests = []
+    async def transport(request):
+        requests.append(request.method)
+        return httpx.Response(500, json={"request_status": "ERROR"})
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(transport), **kwargs))
+    with pytest.raises(module.SnapchatFinalAuthorizationNotSent) as error:
+        await module.rollback_snapchat_management_proposal(db, "owner-1", "owner-1", preview["proposal_id"], module.SnapchatManagementRollbackInput(confirmation_phrase=completed["confirmation_phrase"], reason="اختبار تغير القائمة أثناء تحديث التوكن"), provider=real)
+    assert error.value.detail["code"] == "snapchat_creative_shared_impact_changed"
+    assert requests == []
+    row = await db[module.PROPOSAL_COLLECTION].find_one({"proposal_id": preview["proposal_id"]})
+    assert row["status"] == "completed"
+    assert row["rollback_write_state"] == "not_attempted"
+    assert row["rollback_write_uncertain"] is False
+    assert provider.entities[("creative", "creative-1")]["headline"] == "هدية الشتاء"

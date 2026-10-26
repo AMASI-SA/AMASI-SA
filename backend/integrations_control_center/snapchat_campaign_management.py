@@ -3028,8 +3028,14 @@ async def _creative_update_impact(client: Any, account_id: str, creative_id: str
     rows = await client._list_complete(f"/adaccounts/{account_id}/ads", plural="ads", singular="ad")
     # Complete account catalog is mandatory; a partial result never proves an unused creative.
     ad_ids = sorted(str(ad["id"]) for ad in rows if ad.get("creative_id") == creative_id)
+    # Public snapshots and audit sanitization retain at most 200 list members.
+    # Never approve a larger implicit audience than the owner can review.
+    if len(ad_ids) > 200:
+        raise HTTPException(status_code=409, detail={
+            "code": "snapchat_creative_shared_impact_too_large",
+            "ad_count": len(ad_ids), "maximum_reviewable_ads": 200})
     return {"account_id": account_id, "creative_id": creative_id, "ad_ids": ad_ids,
-            "re_review_required": True, "observed_at": _iso()}
+            "ad_count": len(ad_ids), "re_review_required": True, "observed_at": _iso()}
 
 
 async def _assert_creative_update_impact(client: Any, row: dict[str, Any]) -> None:
@@ -3037,7 +3043,7 @@ async def _assert_creative_update_impact(client: Any, row: dict[str, Any]) -> No
     if row.get("creative_shared_impact_acknowledged") is not True:
         raise HTTPException(status_code=409, detail={"code": "snapchat_creative_shared_impact_unacknowledged"})
     current = await _creative_update_impact(client, str(row.get("account_id") or ""), _provider_target_id(row))
-    if any(current.get(key) != expected.get(key) for key in ("account_id", "creative_id", "ad_ids")):
+    if any(current.get(key) != expected.get(key) for key in ("account_id", "creative_id", "ad_ids", "ad_count")):
         raise HTTPException(status_code=409, detail={"code": "snapchat_creative_shared_impact_changed"})
 
 
@@ -6807,8 +6813,17 @@ async def _rollback_snapchat_management_proposal_under_lease(
                     status_code=409,
                     detail={"code": "snapchat_campaign_activation_disabled"},
                 )
+            async def authorize_rollback_write() -> None:
+                if row.get("action") == "creative.update":
+                    await _assert_creative_update_impact(client, row)
+                if not snapchat_campaign_mutations_enabled():
+                    raise HTTPException(status_code=409, detail={"code": "snapchat_campaign_mutations_disabled"})
+
             rollback_write_attempted = True
-            provider_response = await client.execute(rollback_operation)
+            if type(client) is SnapchatManagementProvider and row.get("action") == "creative.update":
+                provider_response = await client.execute(rollback_operation, final_authorizer=authorize_rollback_write)
+            else:
+                provider_response = await client.execute(rollback_operation)
             _assert_provider_entity_identity(
                 provider_response,
                 entity_id,
@@ -6861,6 +6876,19 @@ async def _rollback_snapchat_management_proposal_under_lease(
                 "rolled_back_at": _iso(),
                 "reason": payload.reason,
             }
+    except SnapchatFinalAuthorizationNotSent as exc:
+        # The transport fence proves no PATCH was sent. Do not reconcile a
+        # nonexistent write or accidentally mark the rollback as applied.
+        await _collection(db, PROPOSAL_COLLECTION).update_one(
+            {"user_id": user_id, "proposal_id": proposal_id, "status": "rolling_back"},
+            {"$set": {"status": rollback_from_status, "rollback_write_state": "not_attempted",
+                      "rollback_write_uncertain": False, "rollback_failure": _safe_provider_value(exc.detail),
+                      "rollback_failed_at": _iso(), "rollback_automatic_retry_allowed": False,
+                      "rollback_recovery_action": "review_and_retry_rollback"}},
+        )
+        await _audit(db, user_id=user_id, proposal_id=proposal_id, actor_id=actor_id,
+                     event="rollback_authorization_denied_before_transport", detail={"failure": exc.detail})
+        raise
     except Exception as exc:
         failure = (
             exc.detail
