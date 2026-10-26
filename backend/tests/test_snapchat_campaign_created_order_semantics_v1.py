@@ -225,3 +225,68 @@ def test_cancelled_status_detection_handles_arabic_and_english():
     assert module.is_cancelled_order({"order_status": "cancelled"}) is True
     assert module.is_cancelled_order({"order_status_native": "ملغي"}) is True
     assert module.is_cancelled_order({"order_status": "completed"}) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["cohort", "order_amount", "policy", "catalog_identity", "component_cost"])
+async def test_profitability_uses_current_inputs_even_when_cost_revision_is_unchanged(monkeypatch, change):
+    from dashboard_v2_routes import _index_products
+    state = {"sku": "old-sku", "component_cost": 10, "policy": {"custom": "confirmed"}, "loads": 0}
+
+    async def revision(*_args): return 1
+    async def context(*_args):
+        state["loads"] += 1
+        product = {"id": "p1", "salla_product_id": "p1", "sku": state["sku"],
+                   "name": "Item", "cost_price_from_salla": 50, "variants": []}
+        by_id, by_variant, by_sku = _index_products([product])
+        return {"products_by_id": by_id, "products_by_variant": by_variant, "products_by_sku": by_sku,
+                "profile_map": {}, "option_map": {}, "product_binding_map": {
+                    "p1": [{"id": "b1", "resource_id": "r1", "quantity": 1}]},
+                "resources": {"r1": {"id": "r1", "unit_cost": state["component_cost"]}},
+                "policy": dict(state["policy"])}
+    monkeypatch.setattr(module, "get_product_cost_revision", revision)
+    monkeypatch.setattr(profitability, "_load_cost_context", context)
+    order = {"total_amount": 150, "order_status": "custom", "products": [{"sku": "old-sku", "quantity": 1}]}
+    kwargs = {"account_id": "account-1", "date_from": "2026-10-25", "date_to": "2026-10-25",
+              "financial_matched": {("account-1", "campaign-1"): [order]},
+              "campaign_spend": {("account-1", "campaign-1"): 20}}
+    module._PROFIT_CACHE.clear()
+    initial, _ = await module.calculate_financial_profitability(object(), "owner", **kwargs)
+    assert initial[("account-1", "campaign-1")]["product_cost_sar"] == 60
+    if change == "cohort": kwargs["financial_matched"] = {}
+    elif change == "order_amount": order["total_amount"] = 200
+    elif change == "policy": state["policy"]["custom"] = "cancelled"
+    elif change == "catalog_identity": state["sku"] = "new-sku"
+    elif change == "component_cost": state["component_cost"] = 20
+    current, totals = await module.calculate_financial_profitability(object(), "owner", **kwargs)
+    if change == "cohort": assert current == {} and totals["orders"] == 0
+    elif change == "order_amount": assert current[("account-1", "campaign-1")]["sales_sar"] == 200
+    elif change == "policy": assert current[("account-1", "campaign-1")]["product_cost_sar"] == 0
+    elif change == "catalog_identity": assert current[("account-1", "campaign-1")]["product_cost_sar"] is None
+    elif change == "component_cost": assert current[("account-1", "campaign-1")]["product_cost_sar"] == 70
+    assert state["loads"] == (1 if change == "cohort" else 2)
+
+
+@pytest.mark.asyncio
+async def test_profitability_detaches_caller_cohort_and_spend_before_context_load(monkeypatch):
+    order = {"total_amount": 150.0, "product_cost": 60.0}
+    orders = {("account-1", "campaign-1"): [order]}
+    spend = {("account-1", "campaign-1"): 30.0}
+    async def cost_context(*_args):
+        order["total_amount"] = 999.0
+        order["product_cost"] = 1.0
+        spend[("account-1", "campaign-1")] = 999.0
+        return {}
+    def order_cost(order, _context):
+        return {"order_sales_sar": order["total_amount"], "product_cost_sar": order["product_cost"],
+                "allocated_product_sales_sar": order["total_amount"], "unallocated_sales_sar": 0.0,
+                "missing_everywhere": False, "uses_salla_fallback": False,
+                "mezan_cost_complete": True, "no_products": False, "lines": []}
+    monkeypatch.setattr(profitability, "_load_cost_context", cost_context)
+    monkeypatch.setattr(profitability, "_order_cost_and_products", order_cost)
+    rows, totals = await module.calculate_financial_profitability(object(), "owner",
+        account_id="account-1", date_from="2026-10-25", date_to="2026-10-25",
+        financial_matched=orders, campaign_spend=spend)
+    row = rows[("account-1", "campaign-1")]
+    assert row["sales_sar"] == 150 and row["product_cost_sar"] == 60
+    assert row["ad_spend_sar"] == totals["ad_spend_sar"] == 30
