@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "DIAGNOSED_PREVIEW_SUPERVISOR_LEGACY_WRAPPER_CONFIG_REPAIR_PLANNED",
+  "state": "R7_VERIFIED_LOCAL_PREVIEW_FAILS_FOREIGN_PRODUCTS1536_RELEASE_ACTIVE",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Freshguardinactive/currentknownM33/trackedclean before operationalfrontendconfigrepair. Back up fullsupervisorconfig privately(mode0600)outsideconf.d;alter ONLYfrontendcommand/directorytoreviewed/app/frontend start-governed-runtime.cjs withalreadyrunningapprovedNode22.23.2;preserveoldworktreesandbackendservice. supervisorctlreread/updatefrontendonly;testpreviewandpublicCSP. Do notassumePreviewrestartaffectsProduction. No newPublishuntileffect/rootcauseknown. Ifguardforeignactive stop. Sourceunchanged.",
+  "next": "Read-only observe products1536 publication/lease closure without clearing or verifying its lease. Compare eventual public frontend policy and native local metadata. Do not mutate shared supervisor or /app while foreign lease active. Preview wrapper is separate; no causal proof about Production. Diagnose runtime header application before choosing source fix. No native init/model generation yet.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -49,7 +49,7 @@
       "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
       "originalhost": "Fresh guard inactive before isolated /tmp/tiktok1533-release. Adapter EXIT0;asserted exactB559232996218ac4616554500c207d2406419e50e,A8e410287744a15bc682ee954bad46f00b0e64465/runtime46c158. Printed1533_REHEARSAL_IDENTITY_MATCH. No own1533lease/appmutation/publish.",
       "checks": "All31 currentBchecks complete:21SUCCESS10nonapplicableSKIP,0pending/failure;CodeQLbothlanguages+aggregateSUCCESS0annotations. NormalM33c2f1ca440954e4cce0c52e96a8f2c3e6673678 treeexactB401d5b1bacf5d9030b679cb6030a1cff525a8aee.",
-      "production": "Own1533verify script STOPPED before guardverify atHTTP-CSP assertion(line6):livecanonicalandcachebustedHTTP200CSPstillomitsmedia-src;no3-probeverification yet. Do NOT claim activefalse orfunctionalpreview success. Need compareLIVE_SOURCE/runtime toexpected8e410/46c158;the printed healthvalues scrolled out narrowterminal and final follow-up command was NOT executed because cua_repl became unavailable.",
+      "production": "Own codex-tiktok1533 guard verify completed true with 3 consecutive exact identity/frontend artifact probes; matching lease closed and status active:false. This verifies release identity, not functional media policy.",
       "live_header_probe": "ROOT_MEDIA false,ROOT_CSP_NONE false;API_MEDIA false,API_CSP_NONE true;Servercloudflare. Backend/liveartifactidentityexactR7;HTTPfrontendCSPstillold. GuardidentityverificationnowPASS3andclosedownlease. FunctionalFILEpreview/uploadstillunproven."
     }
   },
@@ -62,8 +62,10 @@
   "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
-    "guard_active": false,
-    "closed_by": "Own1533guard verify after fullidentity/frontend checks,notabort orforeignlease reuse."
+    "own_1533_closed": true,
+    "foreign_actor": "codex-products1536",
+    "foreign_active_last_observed": true,
+    "do_not_mutate": true
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -88,7 +90,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T15:14:24.296Z",
+  "observed_at": "2026-10-26T15:28:42.304Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -111,7 +113,7 @@
     "finished": "NEWexplicitDeploymentfinished Oct26 03:30AM Asia/Riyadh after03:20Start;Deployment successfultoast observed."
   },
   "runtime_probe": "Read-only /api/health during build still served prior Google1522 source2589081034abeda50d6151611f0ffc6fb0d350ed/runtime rg5-d5d75bda9223f6b82b825e56093d8517b4221ee426fae2fcc8238e127afb8788;not ownrelease yet. No guard verify attempted before explicitfinish.",
-  "live_file_test": "Official MP4 H264High/AAC fixture and 5s derived WebM VP8/Opus both fail local metadata with تعذر تشغيل هذا الفيديو على جهازك. Investigating actual cause;not claiming codec cause. No native proposal/init/upload. No byte proxy/storage substitution.",
+  "live_file_test": "2026-10-26 resumed Production native readiness PASS max600sec. Fresh official MP4 selected through device chooser; local metadata failed with unsupported playback message. No native proposal/init/chunk transfer. Route-specific HTTP /ads-manager CSP and /build-meta.json CSP both omit media-src; cache status/age absent. No live model request.",
   "live_caption": "Livecatalog search هودي returned10 products;selected بوكس الشتاء | هودي وسلسال. Generate button enabled. No model request,within prior consumed live-test budget.",
   "deployed_R5": {
     "A": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
@@ -149,7 +151,7 @@
   "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
   "merge_M": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "current_release_runtime_published": true,
-  "blocker": "Environmentrestored,newCloudBrowseronlyblanktab.NewownedCodeServerTerminal2created;oldterminalsnotreused. Originalhost/appHEADstillM33c2,livehealthsource8e410/runtime46c158. CurrentGitHubProductionadvanced058e49ca92275678a0c40f97fc09732875cee415(Product1536)butnotassumeddeployed.",
+  "blocker": "Public /ads-manager and /build-meta.json still return CSP without media-src. Actual resumed file chooser with fresh official TikTok MP4 failed local metadata before any native proposal/init/transfer. Other actor codex-products1536 controls active shared release; preserve it.",
   "independent_checks_after_environment_loss": "Localexec_command rejected:No usable execution environment. Publicweb opens/api/health and/_headers.json inaccessibleviawebtool. GitHub connector reads stillwork. Remotelyread start-governed-runtime.cjs and vite.config.js atM33c2 confirm preview.headers FRONTEND_SECURITY_HEADERS includesnewmedia-src. Actuallivehealthsource/runtime remains unknownbecausepriorvalues scrolledout andfollowupwasneverexecuted.",
   "production_verification": {
     "verified": true,
@@ -170,6 +172,7 @@
     "app_built_headers_media": true,
     "preview_http_media": false,
     "production_http_media": false,
-    "production_uses_same_override": "notyetproven;previewandproductionareseparateenvironments perofficialdocs"
+    "production_uses_same_override": "notyetproven;previewandproductionareseparateenvironments perofficialdocs",
+    "repair_attempt": "ABORTED before any config read/write or backup/restart because /app HEAD moved from M33 to reviewed Products1536 M058e49. No supervisor changes occurred. Separate Preview wrapper preserved; relation to Production unproven."
   }
 }
