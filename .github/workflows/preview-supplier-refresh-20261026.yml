@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      PREVIEW_SOURCE: b381a5929b6541ec8e243572700c9504290b7274
+      PREVIEW_SOURCE: d1976b99e35c684843c7a6e69d365dd2af0eb2e8
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: b381a5929b6541ec8e243572700c9504290b7274
+          ref: d1976b99e35c684843c7a6e69d365dd2af0eb2e8
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -58,13 +58,13 @@ jobs:
           print(json.dumps(dict(source=os.environ['PREVIEW_SOURCE'], files=len(manifest),
               unpacked_bytes=sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))))
           PY
-          tar -czf "$RUNNER_TEMP/preview-output/preview-supplier-b381a5929.tar.gz" -C "$RUNNER_TEMP/preview-package" .
+          tar -czf "$RUNNER_TEMP/preview-output/preview-supplier-d1976b99e.tar.gz" -C "$RUNNER_TEMP/preview-package" .
           cd "$RUNNER_TEMP/preview-output"
-          sha256sum preview-supplier-b381a5929.tar.gz > SHA256SUMS
+          sha256sum preview-supplier-d1976b99e.tar.gz > SHA256SUMS
           ls -lh
       - uses: actions/upload-artifact@v4
         with:
-          name: preview-supplier-b381a5929
+          name: preview-supplier-d1976b99e
           path: ${{ runner.temp }}/preview-output/
           retention-days: 14
 
