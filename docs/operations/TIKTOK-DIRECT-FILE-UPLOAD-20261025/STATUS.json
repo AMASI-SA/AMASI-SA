@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "OWN_RUNTIME_REPUBLISH_IN_PROGRESS",
+  "state": "RUNTIME_REPUBLISH_VERIFIED_MEDIA_POLICY_STILL_FAILS_SUPPORT_DRAFT_AWAITING_OWNER_SEND_APPROVAL",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Wait for NEW explicit Deployment finished/success after baseline18:29; do not repeat Publish. Then own actor guard verify3 andstatusinactive independently of functionalCSP. Preserve ownlease until verified or own failure path. Nativeinit/media/modelcounts still0thisfeature.",
+  "next": "Ask owner only for sending the already prepared and verified support draft. If explicitly approved, send exact draft via Gmail once; do not create duplicate, do not use paid Emergent agent chat. Await provider root-cause/config evidence. After approved narrow Production policy correction, verify actual HTTPpolicy and real filemetadata, then ONE PRIVATE official fixture native init/chunk/status test. No live AI test budget remains; no public fixture or paid ad writes. Release Guard currently inactive; always recheck before any shared mutation/new publish.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -62,9 +62,9 @@
   "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
-    "own_actor": "codex-tiktok-runtime-csp-20261026",
-    "own_active": true,
-    "foreign_active": false
+    "own_runtime_actor": "codex-tiktok-runtime-csp-20261026",
+    "own_runtime_lease_closed": true,
+    "current_guard_active": false
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T15:53:11.260Z",
+  "observed_at": "2026-10-26T16:10:04.581Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -150,7 +150,7 @@
   "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
   "merge_M": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "current_release_runtime_published": true,
-  "blocker": "Actual local video metadata fails before native init; current public frontend CSP still omits media-src after Products1536 publication. Emergent hosting session signed out and secure auth request declined. Do not infer Preview wrapper is Production; no source/config patch justified yet.",
+  "blocker": "Corrected reviewed Preview runtime policy did not propagate to Production even after successful fresh republish. Actual Production component emitting stale CSP remains unidentified; source/runtime patches should not be added speculatively. Provider must inspect Production origin vs ingress/CDN headers and effective config; UI exposes no header/runtime config control.",
   "independent_checks_after_environment_loss": "Localexec_command rejected:No usable execution environment. Publicweb opens/api/health and/_headers.json inaccessibleviawebtool. GitHub connector reads stillwork. Remotelyread start-governed-runtime.cjs and vite.config.js atM33c2 confirm preview.headers FRONTEND_SECURITY_HEADERS includesnewmedia-src. Actuallivehealthsource/runtime remains unknownbecausepriorvalues scrolledout andfollowupwasneverexecuted.",
   "production_verification": {
     "verified": true,
@@ -182,11 +182,10 @@
     "own_guard_verify_of_products1536": false
   },
   "hosting_access": {
-    "state": "restored_signed_in_verified",
-    "project": "salla-analytics",
-    "latest_explicit_finish": "Oct26 06:29PM Asia/Riyadh"
+    "state": "restored_again_and_verified_signed_in",
+    "recovery": "Secure email method and credential request, followed by completed OTP; final actualsignedinproject verified. Do not expose or reconstruct credentials."
   },
-  "production_changes_this_resume": "No new Production publish yet. Preview supervisor frontend command/directory corrected reversibly; public policy remains old.",
+  "production_changes_this_resume": "YES: exactly one authorized Publish changes after passing clean rehearsal and own prepublish; explicit finish18:57/newboot15:57:17UTC/guardverified3/leaseclosed. Same reviewed Product1536 source/intent/runtime, no new governed source. Preview supervisor frontend correction retained; legacy runtime and backend preserved.",
   "working_tree": "Clean independent resume clone at 058e49ca92275678a0c40f97fc09732875cee415; no code changes this resume.",
   "evidence_screenshot": "Scratch-only local browser proof tiktok-device-preview-status-20261026.png; UI displays native readiness max600sec and failed local preview. Not a public TikTok post.",
   "runtime_repair_plan": {
@@ -235,12 +234,27 @@
     "publish": {
       "final_publish_clicks": 1,
       "prepublish": "ready_to_publish:true exact source99610/M058e/runtimec13a before finalPublish changes",
-      "ui": "Publishing... disabled",
+      "ui": "Republish available; latest published version59feecb",
       "previous_finish": "Oct26 06:29PM Asia/Riyadh",
-      "new_finish_observed": false,
+      "new_finish_observed": true,
       "started": "Oct26 06:47PM Asia/Riyadh",
       "ui_event_container": "b302fa0e-b96a-5270-8448-32ee17c230a5",
-      "phase": "Building your website; Changes packaged; no failure observed"
+      "phase": "Building your website; Changes packaged; no failure observed",
+      "finished": "NEW explicit Deployment finished Oct26 06:57PM Asia/Riyadh",
+      "version_id": "59feecb3-99b6-430d-bbbe-2daffd09c5a9"
+    },
+    "verification": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "99610cfcc223d83c3990f80a2dc4a0024df976ad",
+      "deployment_git_sha": "058e49ca92275678a0c40f97fc09732875cee415",
+      "release_id": "rg5-c13a5be42076761d91ad1dbee32a2839052f891a92d611dcfd7b5a0a99b07060",
+      "boot_started_at": "2026-10-26T15:57:17.415217+00:00",
+      "frontend_checked_requests_per_probe": 42,
+      "verify_exit": 0,
+      "matching_own_lease_closed": true,
+      "subsequent_guard_active": false,
+      "proof_file_original_host": "/tmp/tiktok-runtime-csp-production-verify.json"
     }
   },
   "live_fixture_browser_decode": {
@@ -253,5 +267,31 @@
     "selected_file_bytes": 32440799,
     "no_native_upload_yet": true
   },
-  "support_context_readonly": "Read prior Emergent support replies: Preview disk/environment is separate from Production; historical Production linux/amd64. No support message sent. Current Preview supervisor uses existing approved arm64Node; Production propagation is an experiment, not assumed."
+  "support_context_readonly": "Read prior Emergent support replies: Preview disk/environment is separate from Production; historical Production linux/amd64. No support message sent. Current Preview supervisor uses existing approved arm64Node; Production propagation is an experiment, not assumed.",
+  "final_functional_test": {
+    "native_creator_readiness": "PASS max600 seconds, same approved linked creator",
+    "official_fixture_browser_decode": "PASS duration180.483333s 1920x1080 readyState4",
+    "production_file_selection": "FAIL local metadata unsupported-playback error before any proposal/init/media transfer",
+    "http_policy": "Production root,ads-manager,build-meta and actual versioned59feecbURL all omit media-src; Previewroot includes it",
+    "counts": {
+      "new_native_proposals": 0,
+      "native_init": 0,
+      "media_bytes_transferred": 0,
+      "new_live_model_requests": 0,
+      "public_fixture_posts": 0,
+      "paid_campaign_writes": 0
+    },
+    "screenshot_scratch": "tiktok-postpublish-preview-20261026-1793030939721.jpg"
+  },
+  "support_draft": {
+    "recipient": "support@emergent.sh",
+    "recipient_resolution": "Exact official correspondent in prior salla-analytics support replies and official provider docs",
+    "draft_id": "r4764761967644405198",
+    "message_id": "1a178f6e72915f93",
+    "subject": "Mezan salla-analytics — stale Production frontend CSP blocks local TikTok video preview",
+    "verified_readback": true,
+    "sent": false,
+    "requested_scope": "Inspect actual Production header source; if platform-managed, update frontend media-src to self blob only, preserve other CSP/API/auth/framing restrictions, no data/credential/database/spend/resource/lease changes",
+    "approval": "Await explicit owner instruction to SEND; no external support message sent this task."
+  }
 }
