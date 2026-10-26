@@ -96,7 +96,13 @@ def main():
         for path in (bundle / top).rglob("*"):
             require(not path.is_symlink(), "symlink in bundle")
             if path.is_file():
-                require(path.name not in {".env", "release_identity.json", "preview-session-signing.secret"},
+                is_empty_frontend_template = path.relative_to(bundle).as_posix() == "source/frontend/.env"
+                if is_empty_frontend_template:
+                    require(all(not line.strip() or line.lstrip().startswith("#")
+                                for line in path.read_text().splitlines()),
+                            "tracked frontend env template contains values")
+                require((path.name != ".env" or is_empty_frontend_template)
+                        and path.name not in {"release_identity.json", "preview-session-signing.secret"},
                         "unexpected runtime secret or Production identity in artifact")
                 actual.add(path.relative_to(bundle).as_posix())
     require(actual == set(manifest), "manifest membership differs from artifact")
