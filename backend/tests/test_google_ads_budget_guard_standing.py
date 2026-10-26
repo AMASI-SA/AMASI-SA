@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from integrations_control_center import google_ads_automation_budget_guard as guard
+from integrations_control_center.google_ads_automation_authority import policy_authorization_digest
 
 NOW = datetime(2026, 10, 26, 20, tzinfo=timezone.utc)
 
@@ -22,7 +23,7 @@ def case():
             for cid, status, amount in [(1, 'ENABLED', '60'), (2, 'PAUSED', '20'), (3, 'PAUSED', '10')]]}
     claim = {'claim_id': 'claim1', 'execution_claim_id': 'claim1', 'proposal_id': 'proposal1',
         'campaign_id': '2', 'action': 'enable', 'campaign_budget_before_native': '20',
-        'campaign_budget_target_native': '20'}
+        'campaign_budget_target_native': '20', 'policy_revision': 1, 'policy_digest': policy_authorization_digest(policy)}
     snapshot = guard.BudgetGuardSnapshot('owner', '123', {'allocations': {}, 'active_claim': None}, policy, None)
     return snapshot, guard.StandingBudgetReservation('allocation1', 1, claim, inventory)
 
@@ -61,6 +62,7 @@ def test_set_budget_counts_delta_not_full_target():
 def test_existing_overcommitment_does_not_prevent_authorized_pause():
     snapshot, command = case()
     snapshot.standing_policy['max_account_daily_budget_native'] = '50'
+    command.claim['policy_digest'] = policy_authorization_digest(snapshot.standing_policy)
     command.claim.update(campaign_id='1', action='pause', campaign_budget_before_native='60', campaign_budget_target_native='60')
     assert guard.standing_commitment(snapshot, command, NOW)['increase_native'] == '0'
 
@@ -125,7 +127,7 @@ async def test_transaction_reserves_quota_and_budget_then_settles_known_no_http(
     current = datetime.now(timezone.utc)
     snapshot.standing_policy.update(activated_at=current.isoformat(), expires_at=(current+timedelta(days=1)).isoformat(), max_actions_per_day=1)
     command.inventory['observed_at'] = current.isoformat()
-    command.claim.update(confirmation_digest='confirmation', operations_digest=digest([]), policy_revision=1, policy_digest='a'*64)
+    command.claim.update(confirmation_digest='confirmation', operations_digest=digest([]), policy_revision=1, policy_digest=policy_authorization_digest(snapshot.standing_policy))
     db = DB({guard.AUTOMATION_POLICIES: [snapshot.standing_policy]})
     capability = await guard.probe_google_budget_guard_transactions(db)
     args = dict(user_id='owner', account_id='123', capability=capability)
@@ -135,7 +137,7 @@ async def test_transaction_reserves_quota_and_budget_then_settles_known_no_http(
     db.rows[PROPOSALS] = [{'user_id':'owner', 'account_id':'123', 'proposal_id':'proposal1', 'execution_claim_id':'claim1',
         'confirmation_digest':'confirmation', 'operations':[], 'status':'failed', 'submission_started':False,
         'safe_error':'execution_cancelled_before_dispatch'}]
-    monkeypatch.setattr(authority, '_bound_proposal', lambda proposal: {'policy_revision':1, 'policy_digest':'a'*64})
+    monkeypatch.setattr(authority, '_bound_proposal', lambda proposal: {'policy_revision':1, 'policy_digest':command.claim['policy_digest']})
     settled = await guard.run_google_budget_guard_transaction(db, operation_id='settle',
         planner=lambda state: guard.BudgetReservationSettlement('allocation1','claim1'), **args)
     assert settled['committed'] and settled['quota_refunded'] is False

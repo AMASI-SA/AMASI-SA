@@ -32,6 +32,7 @@ from fastapi import HTTPException
 from pymongo import ReadPreference
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from .google_ads_automation_policy import AUTOMATION_POLICIES, PUBLIC_FIELDS as STANDING_FIELDS
 from .google_ads_automation_creation_policy import CREATION_POLICIES, PUBLIC_FIELDS as CREATION_FIELDS
@@ -290,13 +291,16 @@ def standing_commitment(snapshot, command, current):
     if (policy is None or policy.get('revision') != command.expected_revision
         or policy.get('enabled') is not True or policy.get('_dispatch_claim') is not None):
         _fail('google_budget_guard_policy_changed')
-    from .google_ads_automation_authority import activation_proof_valid
+    from .google_ads_automation_authority import activation_proof_valid, policy_authorization_digest
     if not activation_proof_valid(thaw_snapshot(policy), current):
         _fail('google_budget_guard_activation_unproved')
     expiry = _instant(policy.get('expires_at'))
     if expiry is None or expiry <= current:
         _fail('google_budget_guard_policy_changed')
     inventory, claim = command.inventory, command.claim
+    if (claim.get('policy_revision') != policy.get('revision')
+        or claim.get('policy_digest') != policy_authorization_digest(thaw_snapshot(policy))):
+        _fail('google_budget_guard_policy_changed')
     observed = _instant(inventory.get('observed_at'))
     if (inventory.get('complete') is not True or inventory.get('source') != 'google_ads_api'
         or inventory.get('account_id') != snapshot.account_id or observed is None
@@ -591,6 +595,11 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
         exc.automatic_retry_allowed = False
         raise
     except Exception as exc:
+        if (not phase['commit_attempted'] and (isinstance(exc, DuplicateKeyError)
+            or isinstance(exc, OperationFailure) and exc.code == 112)):
+            # A known-aborted precommit conflict asks the owner to refresh. It
+            # still grants no dispatch, retry, refund or fence-release evidence.
+            exc = problem('google_budget_guard_policy_changed', 'تغيرت سياسة جوجل أثناء المعاملة؛ أعد تحميلها.', 409)
         if not isinstance(exc, HTTPException):
             exc = problem('google_budget_guard_commit_unconfirmed' if phase['commit_attempted'] else 'google_budget_guard_transaction_unconfirmed',
                 'لم يتأكد حجز الميزانية؛ تحقق بالقراءة واحتفظ بالقفل دون إعادة إرسال.', 503)

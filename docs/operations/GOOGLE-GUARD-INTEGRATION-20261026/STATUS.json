@@ -1,0 +1,29 @@
+{
+  "task_id": "GOOGLE-GUARD-INTEGRATION-20261026",
+  "branch": "codex/google-guard-integration-wip-20261026",
+  "parent": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf",
+  "state": "WIP ONLY; mandatory writer migration implemented; legacy test fixtures not migrated; never deploy",
+  "runtime_enabled": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "verification": {
+    "focused": "64passed11actualMongo local skips1.85s",
+    "compile": "pass",
+    "diff_check": "pass",
+    "legacy_policy_activation_units": "37pass3fail before stop; nontransactional fakeDB now returns503; must upgrade collaborators, do not restore legacy bypass"
+  },
+  "changes": [
+    "Six mandatory same-db transaction policy writers; no optional None legacy path",
+    "Standing authority/settlement common guard, transaction policy digest and quota",
+    "Native budget resource/shared flags/referenceCount proof",
+    "Unknown outcomes retained; known precommit conflicts409; runtime literal false even if flags set"
+  ],
+  "remaining": [
+    "Independent full review",
+    "Upgrade legacy test DB fixtures to transaction contract",
+    "Actual replica acceptance including six route epoch and OAuth-loss revoke",
+    "Fresh complete Google gateway regression CI",
+    "Creation/funded first-launch migration still separate"
+  ],
+  "next_safe_action": "Review diff and fix test collaborators before any readiness claim; extend disposable replica CI; no live flags or provider writes"
+}
