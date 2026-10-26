@@ -34,9 +34,11 @@ async def read(rows, limit=10):
 @pytest.mark.asyncio
 async def test_bounded_discovery_uses_riyadh_instant_and_never_claims_complete():
     result, coll = await read([order(), order(owner='other')])
-    assert coll.query == {'user_id': 'owner', 'order_date': {'$gte': '2026-08-14', '$lte': '2026-08-16'}}
+    assert coll.query == {'user_id': 'owner', 'order_date': {'$gte': '2026-08-14', '$lte': '2026-08-16'},
+                          '$expr': {'$lte': [{'$bsonSize': '$$ROOT'}, 16384]}}
     assert result['observed_bound_inside'] == 1 and result['coverage_complete'] is False
     assert result['sales'] is None and result['snapshot_consistent'] is False
+    assert 'oversized_documents_excluded' in result['limitations']
     assert 'raw_by_source.salla_direct.created_at' in coll.projection and 'products' not in coll.projection
 
 
@@ -75,4 +77,16 @@ async def test_leaky_database_result_fails_closed():
         def find(self, query, projection): return Cursor([order(owner='other')])
     with pytest.raises(ValueError, match='scope'):
         await read_source_date_coverage({'unified_orders': Leaky([])}, owner_id='owner',
+            date_from='2026-08-15', date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc))
+
+
+@pytest.mark.asyncio
+async def test_database_timeout_does_not_become_empty_or_zero():
+    from pymongo.errors import ExecutionTimeout
+    class TimedOutCursor(Cursor):
+        async def to_list(self, length): raise ExecutionTimeout('diagnostic timed out')
+    class TimedOut(Collection):
+        def find(self, query, projection): return TimedOutCursor([])
+    with pytest.raises(ExecutionTimeout):
+        await read_source_date_coverage({'unified_orders': TimedOut([])}, owner_id='owner',
             date_from='2026-08-15', date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc))
