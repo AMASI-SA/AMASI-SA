@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from math import isfinite
 from zoneinfo import ZoneInfo
 
 from snapchat_v2.accounts import get_selected_account, resolve_account, list_enabled_accounts
@@ -899,6 +900,65 @@ def _dashboard_bank_commissions(
     }
 
 
+
+def _account_display_amount(value: Any) -> float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return number if isfinite(number) and number >= 0 else None
+
+
+def _account_display_observed_at(projections: list[dict[str, Any]]) -> datetime | None:
+    timestamps = []
+    for projection in projections:
+        value = projection.get("source_latest_updated_at")
+        try:
+            parsed = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00")) if isinstance(value, str) else None
+            if parsed is not None:
+                timestamps.append(parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc))
+        except (ValueError, TypeError, OverflowError):
+            continue
+    return max(timestamps) if timestamps else None
+
+
+def _account_display_summary(account: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
+    source_quality = report.get("quality") or {}
+    keys = ("status", "data_state", "complete", "coverage_complete", "amount_complete",
+        "amount_available", "provisional", "connected", "contains_open_day", "range_ends_on_open_day",
+        "reason_codes", "timezone", "source_collection", "amount_field", "fx_authority",
+        "reconciliation_status", "closed_reconciliation_status", "financial_status",
+        "source_sync_run_ids", "operational_observation")
+    quality = {key: source_quality[key] for key in keys if key in source_quality}
+    available = source_quality.get("amount_available") is True and _account_display_amount(report.get("total_sar")) is not None
+    quality["amount_available"] = available
+    codes = source_quality.get("reason_codes")
+    quality["reason_codes"] = [code for code in codes if isinstance(code, str)][:20] if isinstance(codes, list) else []
+    quality["observed_at"] = report.get("display_observed_at")
+    daily = {day: _account_display_amount(value) if available else None
+        for day, value in (report.get("daily_sar") or {}).items()}
+    daily_state = {day: state if available else "unknown_incomplete"
+        for day, state in (report.get("daily_state") or {}).items()}
+    hourly = {}
+    for day, points in (report.get("hourly_sar") or {}).items():
+        hourly[day] = [{"date": point.get("date"), "hour_index": point.get("hour_index"),
+            "hour": point.get("hour"),
+            "spend_sar": _account_display_amount(point.get("spend_sar")) if available else None,
+            "status": point.get("status") if available or point.get("status") == "future" else "unknown_incomplete"}
+            for point in points if isinstance(point, dict)]
+    account_id = account.get("ad_account_id") if isinstance(account.get("ad_account_id"), str) else ""
+    name = account.get("display_name")
+    return {"account_id": account_id, "display_name": name if isinstance(name, str) and name.strip() else account_id,
+        "currency": account.get("currency") if isinstance(account.get("currency"), str) else None,
+        "timezone": account.get("timezone") if isinstance(account.get("timezone"), str) else None,
+        "projection_timezone": RIYADH_TIMEZONE,
+        "total_native": _account_display_amount(report.get("total_native")) if available else None,
+        "total_sar": _account_display_amount(report.get("total_sar")) if available else None,
+        "daily_sar": daily, "daily_state": daily_state, "hourly_sar": hourly, "quality": quality}
+
+
 async def _load_snapchat_v2_single_account_dashboard_spend(
     db: Any,
     user_id: str,
@@ -1160,7 +1220,7 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         reasons.append("snapchat_operational_no_activity_observed"
             if operational_overlay["data_state"] == "observed_no_activity"
             else "snapchat_operational_hour_observation")
-    return {
+    result = {
         "rows": rows if amount_available else [],
         "daily_sar": daily_sar,
         "daily_state": daily_state,
@@ -1217,6 +1277,10 @@ async def _load_snapchat_v2_single_account_dashboard_spend(
         "accounting_write_reached": False,
         "qoyod_write_reached": False,
     }
+    result["total_native"] = total_native if amount_available else None
+    result["display_observed_at"] = operational_overlay["observed_at"] if operational_overlay else _account_display_observed_at(projections)
+    result["account_display"] = _account_display_summary(account, result)
+    return result
 
 
 __all__ = [
@@ -1233,9 +1297,11 @@ async def load_snapchat_v2_dashboard_spend(db, user_id, *, date_from, date_to,
     portfolio incomplete; it is never silently omitted or counted as zero.
     """
     if account_id is not None:
-        return await _load_snapchat_v2_single_account_dashboard_spend(
+        result = await _load_snapchat_v2_single_account_dashboard_spend(
             db, user_id, date_from=date_from, date_to=date_to,
             timezone_name=timezone_name, account_id=account_id)
+        display = result.get("account_display")
+        return {**result, "accounts": [display] if isinstance(display, dict) else []}
     accounts = await list_enabled_accounts(db, str(user_id))
     if not accounts:
         # Preserve the disconnected response, but do not expose a disabled
@@ -1248,6 +1314,9 @@ async def load_snapchat_v2_dashboard_spend(db, user_id, *, date_from, date_to,
             result["quality"].update(complete=False, amount_available=False,
                 amount_complete=False, coverage_complete=False, status="incomplete",
                 reason_codes=["no_enabled_accounts"])
+        result.pop("account_display", None)
+        result["total_native"] = None
+        result["display_observed_at"] = None
         return {**result, "accounts": []}
     reports = []
     summaries = []
@@ -1261,9 +1330,8 @@ async def load_snapchat_v2_dashboard_spend(db, user_id, *, date_from, date_to,
             report = {"total_sar": None, "quality": {"complete": False,
                 "amount_available": False, "reason_codes": ["account_evidence_unavailable"]}}
         reports.append(report)
-        summaries.append({"account_id": key, "display_name": account.get("display_name") or key,
-            "currency": account.get("currency"), "timezone": account.get("timezone"),
-            "total_sar": report.get("total_sar"), "quality": report.get("quality") or {}})
+        display = report.get("account_display")
+        summaries.append(display if isinstance(display, dict) else _account_display_summary(account, report))
     if len(reports) == 1:
         return {**reports[0], "accounts": summaries}
     from .dashboard_portfolio import combine_dashboard_spend
