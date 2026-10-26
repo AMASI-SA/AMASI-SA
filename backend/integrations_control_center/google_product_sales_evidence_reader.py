@@ -1,6 +1,6 @@
 """Bounded read-only order coverage diagnostic, not a sales aggregate.
 
-The unified_orders date is the repository's normalized date string. Source
+The unified_orders date is a normalized string with unproven source timezone. Source
 sync completeness, cancellation/refund allocation, exact line mapping and
 order-level FX are not established by this reader. No empty query becomes a
 zero-sales assertion. Caller must derive owner from the trusted session and
@@ -33,7 +33,8 @@ async def read_product_sales_evidence(db, *, owner_id, product_ids, date_from, d
     if start > end or end > last_closed or (end-start).days > 366:
         raise ValueError('period must be closed and bounded')
     query={'user_id':owner_id,'order_date':{'$gte':date_from,'$lte':date_to}}
-    rows=await db['unified_orders'].find(query,PROJECTION).to_list(length=limit+1)
+    cursor = db['unified_orders'].find(query,PROJECTION).limit(limit+1).max_time_ms(3000)
+    rows = await cursor.to_list(length=limit+1)
     for row in rows:
         if (not isinstance(row,dict) or row.get('user_id') != owner_id
             or not isinstance(row.get('order_date'),str) or not date_from <= row['order_date'] <= date_to):
@@ -44,11 +45,13 @@ async def read_product_sales_evidence(db, *, owner_id, product_ids, date_from, d
         except ValueError:
             raise ValueError('order date unproved') from None
     truncated=len(rows)>limit
-    return {'period':{'from':date_from,'to':date_to,'timezone':'Asia/Riyadh'},
+    return {'period':{'from':date_from,'to':date_to,'normalized_date_basis':'unified_orders.order_date',
+        'source_timezone':'unproven','closed_cutoff_timezone':'Asia/Riyadh'},
         'completeness':'unproven','observed_documents':None if truncated else len(rows),'truncated':truncated,
         'product_attribution_verified':False,'cancellation_refunds_reconciled':False,
         'source_writes':0,'provider_writes':0,'execution_authorized':False,
         'products':[{'product_id':p,'units_sold':None,'sales_native':None,'profitability':None} for p in product_ids],
         'limitations':['source_sync_completeness_unproven','product_line_identity_unproven',
             'cancellation_and_refunds_unreconciled','order_currency_and_fx_unverified',
-            'cost_and_customization_unverified']}
+            'cost_and_customization_unverified','source_timezone_unproven',
+            'query_index_unproven_may_scan_until_timeout']}

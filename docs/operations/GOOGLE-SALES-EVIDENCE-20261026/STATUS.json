@@ -9,14 +9,15 @@
   ],
   "verification": {
     "red": "missing module exit2",
-    "local": "7 passed no skips; diff check pass"
+    "local": "8 passed,2 skips locally; actual Mongo CI pending"
   },
-  "contract": "Owner/date-only projection with limit+1; observed document count is diagnostic only, not sales or order attribution; raw line data never read",
+  "contract": "Normalized YYYY-MM-DD order_date source timezone unproven; Riyadh is only closed-cutoff clock, not a claim about source timezone. Diagnostic documents only, never raw orders or sales.",
   "limitations": [
     "Completeness of upstream source, cancellation/refund treatment, actual FX and line-product mapping not proven; sales/units/profit remain null even with rows or no rows",
     "Normalized date query follows existing dashboard semantics; inferred dates are included but no coverage assertion made",
     "Owner and as_of must be derived from trusted session and server clock before any route integration",
-    "No route, provider execution, API, category, mutation or source writes"
+    "No route, provider execution, API, category, mutation or source writes",
+    "Mongo query bounded by limit+1 and maxTimeMS 3000 but index availability unproved; database scan cost is unknown"
   ],
   "production_changed": false,
   "provider_writes": 0,

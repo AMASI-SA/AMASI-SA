@@ -4,7 +4,9 @@ from integrations_control_center.google_product_sales_evidence_reader import rea
 NOW=datetime(2026,10,27,12,tzinfo=timezone.utc)
 class Cursor:
     def __init__(self,rows): self.rows=rows
-    async def to_list(self,length): return self.rows[:length]
+    def limit(self,length): self.limit_value=length; return self
+    def max_time_ms(self,value): self.max_time=value; return self
+    async def to_list(self,length): return self.rows[:min(length,self.limit_value)]
 class Collection:
     def __init__(self,rows):self.rows=rows;self.query=None;self.projection=None
     def find(self,query,projection):self.query=query;self.projection=projection;return Cursor([r for r in self.rows if r.get('user_id')==query['user_id'] and query['order_date']['$gte']<=r.get('order_date','')<=query['order_date']['$lte']])
@@ -43,3 +45,9 @@ async def test_duplicate_ids_and_foreign_identity_rejected():
         def find(self,query,projection):return Cursor([order(owner='other')])
     db=Db([]);db.c=Leaky([])
     with pytest.raises(ValueError):await read(db)
+
+@pytest.mark.asyncio
+async def test_normalized_date_timezone_not_inferred_from_riyadh_cutoff():
+    out=await read(Db([order()])); assert out['period']['source_timezone']=='unproven'
+    assert out['period']['normalized_date_basis']=='unified_orders.order_date'
+    assert 'timezone' not in out['period'] and 'query_index_unproven_may_scan_until_timeout' in out['limitations']
