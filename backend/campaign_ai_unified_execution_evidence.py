@@ -22,6 +22,82 @@ SOURCE_MODE = "unified_marketing_entity_report"
 SYNC_CONTRACT = "unified_marketing_execution_evidence_v1"
 
 
+def _snapchat_commercial_scale_proof(row, parent_campaign, target, current):
+    """Prove campaign economics; child delivery never acquires invented sales."""
+    from campaign_ai_execution_quality_gate import _number, _parse_datetime, _max_data_age_minutes
+
+    source = parent_campaign if target.get("entity_level") in {"ad_group", "ad"} else row
+    source = source if isinstance(source, dict) else {}
+    commerce = source.get("commerce_outcomes") or {}
+    profit = source.get("commerce_profitability") or {}
+    # The current unified commerce contract has no Salla synchronization
+    # watermark/coverage or cost-calculation revision timestamp. A freshly read
+    # local cohort, or a recent Snapchat sync, cannot prove missing upstream
+    # orders have arrived. Keep expansion blocked until that real provenance
+    # is exposed and independently validated; never mint it from this clock.
+    errors = ["campaign_commerce_freshness_unproven"]
+    campaign_id = target.get("campaign_id") or target.get("entity_id")
+    if ((source.get("entity") or {}).get("level") != "campaign"
+            or (source.get("entity") or {}).get("id") != campaign_id
+            or source.get("provider") != "snapchat_ads"
+            or (source.get("account") or {}).get("id") != target.get("account_id")
+            or (source.get("account") or {}).get("timezone") != target.get("account_timezone")
+            or (source.get("account") or {}).get("currency") != target.get("currency_native")
+            or (source.get("period") or {}) != (row.get("period") or {})):
+        errors.append("campaign_commerce_scope_mismatch")
+    if commerce.get("status") != "complete" or commerce.get("attribution_scope") != "exact_campaign_match":
+        errors.append("campaign_commerce_attribution_unproven")
+    if (profit.get("status") != "complete"
+            or profit.get("cost_status") not in {"complete", "salla_fallback"}
+            or type(profit.get("missing_cost_orders")) is not int
+            or profit.get("missing_cost_orders") != 0):
+        errors.append("campaign_product_cost_incomplete")
+    orders, profit_orders = commerce.get("orders"), profit.get("orders")
+    if (type(orders) is not int or orders < 0 or type(profit_orders) is not int
+            or orders != profit_orders):
+        errors.append("campaign_commerce_cohort_mismatch")
+    amounts = {}
+    for key in ("sales", "product_cost", "ad_spend", "contribution_profit"):
+        money = profit.get(key) or {}
+        amounts[key] = _number(money.get("amount"))
+        if money.get("currency") != "SAR" or amounts[key] is None:
+            errors.append("campaign_commerce_amount_unproven")
+    revenue = commerce.get("revenue") or {}
+    sales = _number(revenue.get("amount"))
+    spend = _number(((source.get("delivery") or {}).get("spend_sar") or {}).get("amount"))
+    if (revenue.get("currency") != "SAR" or sales is None or spend is None
+            or amounts["sales"] is None or amounts["ad_spend"] is None
+            or abs(sales - amounts["sales"]) > 0.05 or abs(spend - amounts["ad_spend"]) > 0.05):
+        errors.append("campaign_commerce_cohort_mismatch")
+    if all(value is not None for value in amounts.values()):
+        if (amounts["sales"] < 0 or amounts["product_cost"] < 0 or amounts["ad_spend"] < 0
+                or abs(amounts["sales"] - amounts["product_cost"] - amounts["ad_spend"]
+                       - amounts["contribution_profit"]) > 0.05):
+            errors.append("campaign_commerce_arithmetic_mismatch")
+    observed = _parse_datetime((source.get("account") or {}).get("last_sync_at"))
+    age = (current - observed).total_seconds() / 60 if observed is not None else None
+    if age is None or not 0 <= age <= _max_data_age_minutes():
+        errors.append("campaign_commerce_source_stale")
+    return {
+        "status": "complete" if not errors else "blocked",
+        "source": "unified_marketing_contract:mezan_exact_campaign_attribution",
+        "campaign_id": campaign_id,
+        "account_id": target.get("account_id"),
+        "period": source.get("period"),
+        "provider_observed_at": observed.isoformat() if observed else None,
+        "commerce_freshness": {
+            "status": "unproven",
+            "source": "upstream_provenance_not_exposed_by_unified_commerce_contract",
+            "observed_at": None,
+            "recovery_action": "expose_and_validate_salla_sync_coverage_and_cost_calculation_provenance",
+        },
+        "cost_status": profit.get("cost_status"),
+        "profit_metric": "contribution_profit",
+        "net_profit_available": False,
+        "errors": list(dict.fromkeys(errors)),
+    }
+
+
 async def collect_unified_execution_evidence(
     db: Any, user_id: str, target: dict[str, Any], *,
     snapshot_generated_at: Any, snapshot_range: dict[str, Any],
@@ -215,6 +291,8 @@ async def collect_unified_execution_evidence(
         "pagination": {"status": "complete" if complete else "incomplete", "truncated": not complete},
         "fx": {"status": "documented" if fx_ok else "unknown", "rate_to_sar": rate, "currency": currency},
         "attribution": {"status": "trusted" if complete else "unknown", "source_window_trusted": complete},
+        "commercial_scale": (_snapchat_commercial_scale_proof(row, parent_campaign, target, current)
+                             if target.get("provider") == "snapchat" else None),
         "entity_facts": {"status": "complete" if complete else "incomplete", "errors": errors, "fingerprint": fingerprint},
         "source_validation": {"status": "complete" if complete else "incomplete", "errors": errors},
         "source_revision": {"status": "unchanged" if unchanged else "changed", "snapshot_fingerprint": previous,

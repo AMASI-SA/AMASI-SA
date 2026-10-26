@@ -44,6 +44,7 @@ const ACTIONS = [
     ["ad_squad.create", "إنشاء مجموعة إعلانية"],
     ["ad_squad.update", "تعديل مجموعة إعلانية"],
     ["creative.create", "تجهيز المحتوى الإعلاني"],
+    ["creative.update", "تعديل محتوى إعلان مشترك"],
     ["ad.create", "إنشاء إعلان"],
     ["ad.update", "تعديل إعلان"],
 ];
@@ -106,6 +107,8 @@ export function initialForm({ action = "campaign.create", selectedCampaign, sele
         ? selectedCampaign?.campaign_id || ""
         : action === "ad_squad.update"
             ? selectedAdSquad?.ad_squad_id || ""
+            : action === "creative.update"
+                ? selectedAd?.creative_id || ""
             : action === "ad.update"
                 ? selectedAd?.ad_id || ""
                 : "";
@@ -143,6 +146,7 @@ export function initialForm({ action = "campaign.create", selectedCampaign, sele
         headline: "",
         creativeType: "SNAP_AD",
         callToAction: "SHOP_NOW",
+        creativeUpdateCta: "",
         destinationUrl: "",
         creativeId: "",
         adType: "SNAP_AD",
@@ -156,6 +160,7 @@ export function initialForm({ action = "campaign.create", selectedCampaign, sele
         reason: "إدارة معتمدة من مالك الحساب عبر ميزان",
         advancedJson: "{}",
         activationAcknowledged: false,
+        creativeSharedImpactAcknowledged: false,
     };
 }
 
@@ -510,6 +515,7 @@ function buildProposal(form) {
     }
     const common = {
         action: form.action,
+        ...(form.action === "creative.update" ? { creative_shared_impact_acknowledged: form.creativeSharedImpactAcknowledged === true } : {}),
         account_id: form.accountId,
         target_id: form.targetId || null,
         parent_id: form.parentId || null,
@@ -594,6 +600,11 @@ function buildProposal(form) {
         if (form.bidAmount) payload.bid_micro = nativeAmountToMicro(form.bidAmount);
         if (form.bidStrategy) payload.bid_strategy = form.bidStrategy;
         if (form.status) payload.status = form.status;
+    } else if (form.action === "creative.update") {
+        if (!form.creativeSharedImpactAcknowledged) throw new Error("يلزم الإقرار بتأثير التعديل على كل الإعلانات المشتركة وإعادة مراجعتها.");
+        if (form.name) payload.name = form.name;
+        if (form.headline) payload.headline = form.headline;
+        if (form.creativeUpdateCta) payload.call_to_action = form.creativeUpdateCta;
     } else if (form.action === "creative.create") {
         payload = {
             name: form.name,
@@ -698,6 +709,7 @@ function ProposalPreview({ proposal, readiness, busy, financialSettingsReady, on
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الميزانية اليومية</span><strong>{preview.daily_budget_micro !== null && preview.daily_budget_micro !== undefined ? `${Number(preview.daily_budget_micro).toLocaleString("en-US")} micro · ${microToNativeAmount(preview.daily_budget_micro).toLocaleString("en-US")} ${proposal.account_currency || "عملة الحساب"}` : "بدون تغيير"}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">الحقول</span><strong>{(preview.changed_fields || []).join("، ") || "—"}</strong></div>
             </div>
+            {proposal.creative_shared_impact && <div className="mt-3 rounded-xl border border-amber-400 p-3 text-xs" data-testid="snapchat-creative-shared-impact">سيُعاد مراجعة جميع الإعلانات المرتبطة بهذا المحتوى ({proposal.creative_shared_impact.ad_ids?.length || 0}): <span dir="ltr">{proposal.creative_shared_impact.ad_ids?.join("، ") || "لا توجد إعلانات مرتبطة وفق القراءة المكتملة"}</span></div>}
             <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4" data-testid="snapchat-management-audit-metadata">
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">وقت العملية</span><strong>{timestamp(proposal.field_changes_metadata?.occurred_at || proposal.executed_at || proposal.created_at)}</strong></div>
                 <div className="rounded-xl bg-white p-3"><span className="block text-slate-400">المنفذ</span><strong>{proposal.actor_name || proposal.actor_id || proposal.field_changes_metadata?.actor_id || "—"}</strong></div>
@@ -998,6 +1010,7 @@ export default function SnapchatCampaignManagementPanel({
         setForm((current) => ({
             ...current,
             accountId: nextAccountId,
+            ...(current.action === "creative.update" ? { targetId: "", creativeSharedImpactAcknowledged: false } : {}),
             pixelId: solePixelId(readiness, nextAccountId),
             mediaId: "",
             profileId: "",
@@ -1298,7 +1311,7 @@ export default function SnapchatCampaignManagementPanel({
     const isUpdate = form.action.endsWith(".update");
     const showsBudget = ["campaign.create", "campaign.update", "ad_squad.create", "ad_squad.update"].includes(form.action);
     const showsParent = form.action.startsWith("ad_squad.") || form.action.startsWith("ad.");
-    const showsStatus = isUpdate;
+    const showsStatus = isUpdate && form.action !== "creative.update";
     const activeRequested = form.status === "ACTIVE";
     const requiresProduct = DELIVERY_CREATE_ACTIONS.has(form.action);
     const selectedVariants = Array.isArray(selectedCatalogProduct?.variants)
@@ -1306,7 +1319,7 @@ export default function SnapchatCampaignManagementPanel({
         : [];
     const selectedProductIsOutsideResults = form.productId
         && !catalogProducts.some((product) => productIdentity(product) === form.productId);
-    const actionAllowed = form.action === "creative.create"
+    const actionAllowed = form.action.startsWith("creative.")
         ? selectedAccount?.creative_allowed
         : selectedAccount?.management_allowed;
     const pixelOptimization = form.action === "ad_squad.create"
@@ -1410,7 +1423,7 @@ export default function SnapchatCampaignManagementPanel({
 
                             <form onSubmit={preview} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4" data-testid="snapchat-management-form">
                                 <div className="grid gap-3 md:grid-cols-2">
-                                    <SelectField label="الحساب الإعلاني" value={form.accountId} onChange={changeAccount} disabled={isUpdate} testId="snapchat-management-account-select">
+                                    <SelectField label="الحساب الإعلاني" value={form.accountId} onChange={changeAccount} disabled={isUpdate && form.action !== "creative.update"} testId="snapchat-management-account-select">
                                         {!readiness?.accounts?.length && <option value="">لا يوجد حساب محدد</option>}
                                         {(readiness?.accounts || []).map((account) => <option key={account.account_id} value={account.account_id} label={`${account.display_name} · ${account.currency} · ${account.timezone || "التوقيت غير متاح"}`} />)}
                                     </SelectField>
@@ -1508,7 +1521,7 @@ export default function SnapchatCampaignManagementPanel({
                                 </section>
 
                                 <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                                    {isUpdate && <TextField label="Unified ID للكيان المطلوب تعديله" value={form.targetId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-unified-target-id" />}
+                                    {isUpdate && <TextField label={form.action === "creative.update" ? "معرّف المحتوى الإعلاني لدى Snapchat" : "Unified ID للكيان المطلوب تعديله"} value={form.targetId} onChange={(value) => field("targetId", value)} required readOnly={form.action !== "creative.update"} dir="ltr" testId="snapchat-management-unified-target-id" />}
                                     {isUpdate && ["campaign.update", "ad_squad.update"].includes(form.action) && <TextField label="Snapchat provider ID الموثق" value={form.providerTargetId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-provider-target-id" />}
                                     {showsParent && <TextField label={form.action.startsWith("ad_squad.") ? "Unified ID للحملة الأب" : "معرّف المجموعة الأب"} value={form.parentId} onChange={(value) => field("parentId", value)} required readOnly={isUpdate} dir="ltr" testId="snapchat-management-parent-id" />}
                                     {isUpdate && form.action === "ad_squad.update" && <TextField label="Snapchat provider ID للحملة الأب" value={form.providerParentId} onChange={() => {}} required readOnly dir="ltr" testId="snapchat-management-provider-parent-id" />}
@@ -1569,12 +1582,14 @@ export default function SnapchatCampaignManagementPanel({
                                             }}
                                         />
                                     )}
-                                    {form.action === "creative.create" && <TextField label="العنوان · 34 حرفًا" value={form.headline} onChange={(value) => field("headline", value)} required />}
+                                    {form.action.startsWith("creative.") && <TextField label="العنوان · 34 حرفًا" value={form.headline} onChange={(value) => field("headline", value)} required={form.action === "creative.create"} />}
                                     {form.action === "creative.create" && <SelectField label="نوع الإبداع" value={form.creativeType} onChange={(value) => field("creativeType", value)}><option value="SNAP_AD">SNAP_AD</option><option value="WEB_VIEW">WEB_VIEW</option></SelectField>}
                                     {form.action === "creative.create" && form.creativeType === "WEB_VIEW" && <TextField label="رابط الوجهة" value={form.destinationUrl} onChange={(value) => field("destinationUrl", value)} required dir="ltr" />}
                                     {form.action === "creative.create" && form.creativeType === "WEB_VIEW" && <SelectField label="زر الدعوة" value={form.callToAction} onChange={(value) => field("callToAction", value)}><option value="SHOP_NOW">SHOP_NOW</option><option value="ORDER_NOW">ORDER_NOW</option><option value="VIEW">VIEW</option><option value="MORE">MORE</option></SelectField>}
                                     {form.action === "ad.create" && <TextField label="Creative ID" value={form.creativeId} onChange={(value) => field("creativeId", value)} required dir="ltr" />}
                                     {form.action === "ad.create" && <SelectField label="نوع الإعلان" value={form.adType} onChange={(value) => field("adType", value)}><option value="SNAP_AD">SNAP_AD</option><option value="REMOTE_WEBPAGE">REMOTE_WEBPAGE</option><option value="STORY">STORY</option><option value="COLLECTION">COLLECTION</option></SelectField>}
+                                    {form.action === "creative.update" && <SelectField label="زر دعوة جديد · اختياري" value={form.creativeUpdateCta} onChange={(value) => field("creativeUpdateCta", value)}><option value="">بدون تغيير</option><option value="SHOP_NOW">تسوق الآن</option><option value="ORDER_NOW">اطلب الآن</option><option value="VIEW">عرض</option><option value="MORE">المزيد</option></SelectField>}
+                                    {form.action === "creative.update" && <label className="text-xs font-bold"><input type="checkbox" checked={form.creativeSharedImpactAcknowledged} onChange={(event) => field("creativeSharedImpactAcknowledged", event.target.checked)} required /> أفهم أن تغيير هذا المحتوى يؤثر على جميع الإعلانات المرتبطة ويعيد مراجعتها. ستُعرض القائمة قبل الاعتماد.</label>}
                                     {showsStatus && <SelectField label="الحالة" value={form.status} onChange={(value) => field("status", value)}><option value="">بدون تغيير</option><option value="PAUSED">إيقاف PAUSED</option><option value="ACTIVE" disabled={!readiness?.activation_enabled}>تشغيل ACTIVE</option></SelectField>}
                                 </div>
 

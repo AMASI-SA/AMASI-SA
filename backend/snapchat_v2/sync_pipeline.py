@@ -45,6 +45,7 @@ from .sync_runs import (
 )
 from .total_facts import upsert_total_facts
 from .committed_totals import publish_committed_totals
+from .empty_hierarchy import empty_hierarchy_proof
 
 MAX_SYNC_DAYS = 30
 HEARTBEAT_SECONDS = 20.0
@@ -718,12 +719,25 @@ class SnapchatV2SyncPipeline:
                 sync_run_id=sync_run_id,
             )
             warnings.extend(identity_errors)
+            empty_proof = empty_hierarchy_proof(
+                account, total_report_dates, action_report_time,
+                campaign_summary, identity_summary,
+            ) if not campaign_error and not hourly["campaign_rows"] else None
             # Exact account-day hierarchy facts are the intelligence/read surface,
             # not the financial source. Bound each rolling run to seven days
             # so large historical backfills cannot exhaust Snapchat's request
             # budget; older days retain their previously persisted TOTAL rows
             # and hourly facts remain available as the safe fallback.
             for entity_type in ("ad_squad", "ad"):
+                if empty_proof is not None:
+                    # No synthetic child facts or requests: all three complete
+                    # catalogs are empty and bounded DAY stats confirm no data.
+                    coverage = {"status": "complete", "data_state": "confirmed_no_data",
+                                "proof_source": "complete_empty_catalog_and_account_day"}
+                    await set_level_status(self.db, sync_run_id, entity_type, "complete",
+                                           coverage=coverage, now=self.now)
+                    breakdown_summary[entity_type] = {"rows_saved": 0, "coverage": coverage}
+                    continue
                 level_summary, level_error = await self._sync_breakdown_performance(
                     client,
                     user_id=str(user_id),
@@ -866,6 +880,7 @@ class SnapchatV2SyncPipeline:
                 "campaign_rows": len(hourly["campaign_rows"]),
                 "account_rows": len(hourly["account_rows"]),
                 "breakdown_performance": breakdown_summary,
+                "empty_hierarchy_proof": empty_proof,
                 "provider_calls": client.provider_calls,
                 "request_windows": hourly["request_windows"],
                 "identity": identity_summary,

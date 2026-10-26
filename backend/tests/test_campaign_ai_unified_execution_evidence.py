@@ -21,6 +21,15 @@ def evidence(monkeypatch):
         "entity": {"id": "c1", "level": "campaign"},
         "delivery": {"spend": {"amount": 100, "currency": "SAR"}, "spend_sar": {"amount": 100, "currency": "SAR"}, "impressions": 1000, "clicks": 25},
         "platform_outcomes": {"revenue": {"amount": 200, "currency": "SAR"}, "conversions": 2},
+        "commerce_outcomes": {"status": "complete", "orders": 2,
+                              "revenue": {"amount": 150, "currency": "SAR"},
+                              "attribution_scope": "exact_campaign_match"},
+        "commerce_profitability": {"status": "complete", "orders": 2, "cost_status": "complete",
+                                   "missing_cost_orders": 0,
+                                   "sales": {"amount": 150, "currency": "SAR"},
+                                   "product_cost": {"amount": 20, "currency": "SAR"},
+                                   "ad_spend": {"amount": 100, "currency": "SAR"},
+                                   "contribution_profit": {"amount": 30, "currency": "SAR"}},
         "quality": {"source_fact_count": 1, "sync_status": "complete", "coverage_status": "complete"},
         "lineage": {"source_collection": "facts", "adapter": "snapchat-v2", "source_version": "v2"},
     }
@@ -69,12 +78,113 @@ def collect(target, baseline=None):
     ))
 
 
+def test_scale_requires_commercial_evidence_beyond_provider_attribution(evidence):
+    target, _, row, _, management, _ = evidence
+    row.pop("commerce_profitability")
+    target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management)
+    result = collect(evidence[0])
+    assert result["attribution"]["status"] == "trusted"
+    assert gate.evaluate_execution_quality(result, action="scale")["allowed"] is False
+    assert gate.evaluate_execution_quality(result, action="pause")["allowed"] is True
+    assert gate.evaluate_execution_quality(result, action="reduce")["allowed"] is True
+
+
+def test_local_report_and_provider_timestamps_do_not_prove_upstream_commerce_freshness(evidence):
+    target, account, row, decision, management, _ = evidence
+    fresh = NOW.isoformat()
+    target["source_observed_at"] = fresh
+    account["last_sync_at"] = fresh
+    row["account"]["last_sync_at"] = fresh
+    decision["gates"]["freshness"]["last_sync_at"] = fresh
+    management["updated_at"] = fresh
+    # These ad-hoc timestamps do not come from a supported commerce contract
+    # and must not silently enable authority in a subsequent release.
+    row["commerce_profitability"]["generated_at"] = fresh
+    row["commerce_outcomes"]["updated_at"] = fresh
+    row["commerce_freshness"] = {"status": "fresh", "observed_at": fresh}
+    target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management)
+    result = collect(target)
+    assert result["freshness"]["status"] == "fresh"
+    assert result["commercial_scale"]["errors"] == ["campaign_commerce_freshness_unproven"]
+    assert result["commercial_scale"]["commerce_freshness"]["observed_at"] is None
+    assert not gate.evaluate_execution_quality(result, action="scale")["allowed"]
+    assert gate.evaluate_execution_quality(result, action="pause")["allowed"]
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda row: row["commerce_outcomes"].update(status="partial"),
+    lambda row: row["commerce_outcomes"].update(attribution_scope="campaign_only"),
+    lambda row: row["commerce_outcomes"].update(orders=3),
+    lambda row: row["commerce_profitability"].update(status="partial"),
+    lambda row: row["commerce_profitability"].update(cost_status="missing"),
+    lambda row: row["commerce_profitability"].update(missing_cost_orders=1),
+    lambda row: row["commerce_profitability"].pop("missing_cost_orders"),
+    lambda row: row["commerce_profitability"]["sales"].update(amount=180),
+    lambda row: row["commerce_profitability"]["product_cost"].update(amount=None),
+    lambda row: row["commerce_profitability"]["contribution_profit"].update(currency="USD"),
+    lambda row: row["commerce_profitability"]["contribution_profit"].update(amount=100),
+])
+def test_incomplete_or_unmatched_commerce_blocks_only_scale(evidence, mutation):
+    target, _, row, _, management, _ = evidence
+    mutation(row)
+    target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management)
+    result = collect(target)
+    assert not gate.evaluate_execution_quality(result, action="scale")["allowed"]
+    assert gate.evaluate_execution_quality(result, action="reduce")["allowed"]
+
+
+def test_scale_does_not_replace_marketing_judgment_with_profit_threshold(evidence):
+    target, _, row, _, management, _ = evidence
+    row["commerce_profitability"]["product_cost"]["amount"] = 60
+    row["commerce_profitability"]["contribution_profit"]["amount"] = -10
+    target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management)
+    # A negative, arithmetically complete contribution does not add a marketing
+    # threshold blocker. Upstream freshness remains independently unproven.
+    result = collect(target)
+    assert result["commercial_scale"]["errors"] == ["campaign_commerce_freshness_unproven"]
+    assert not gate.evaluate_execution_quality(result, action="scale")["allowed"]
+
+
+@pytest.mark.parametrize("level", ["ad_group", "ad"])
+def test_child_scale_requires_exact_fresh_parent_commerce(evidence, monkeypatch, level):
+    target, _, row, _, management, _ = evidence
+    parent = deepcopy(row)
+    row["entity"] = {"level": level, "id": "child1", "campaign_id": "c1", "ad_group_id": "g1" if level == "ad" else None}
+    # Children have no directly attributed store revenue. The campaign remains
+    # explicitly the source; its sales must not be assigned to this child.
+    row.pop("commerce_outcomes")
+    row.pop("commerce_profitability")
+    target.update(entity_level=level, entity_id="child1", ad_group_id="g1" if level == "ad" else "child1")
+
+    async def report(db, user_id, **kwargs):
+        return {"rows": [deepcopy(parent if kwargs["entity_level"] == "campaign" else row)],
+                "management_context": {"child1": deepcopy(management)}}
+
+    monkeypatch.setattr(unified.gateway, "load_unified_marketing_entity_report", report)
+    def capture():
+        target["source_evidence_fingerprint"] = source_evidence_fingerprint("owner-1", row, management, parent_campaign=parent)
+        return collect(target)
+
+    proof = capture()
+    assert proof["commercial_scale"]["errors"] == ["campaign_commerce_freshness_unproven"]
+    assert not gate.evaluate_execution_quality(proof, action="scale")["allowed"]
+    assert proof["commercial_scale"]["campaign_id"] == "c1"
+    parent["account"]["last_sync_at"] = "2026-10-16T09:00:00+00:00"
+    result = capture()
+    assert "campaign_commerce_source_stale" in result["commercial_scale"]["errors"]
+    assert not gate.evaluate_execution_quality(result, action="scale")["allowed"]
+    assert gate.evaluate_execution_quality(result, action="pause")["allowed"]
+
+
 def test_unified_quality_accepts_closed_complete_source_without_legacy_run(evidence):
     target, _, _, _, _, reads = evidence
     result = collect(target)
     assert result["blockers"] == []
     assert result["status"] == "complete"
-    assert gate.evaluate_execution_quality(result, action="scale")["allowed"]
+    assert not gate.evaluate_execution_quality(result, action="scale")["allowed"]
+    assert result["commercial_scale"]["commerce_freshness"]["status"] == "unproven"
+    assert result["commercial_scale"]["commerce_freshness"]["observed_at"] is None
+    assert result["commercial_scale"]["provider_observed_at"] == STAMP
     assert reads == ["owner-1"] * 3
     assert collect(target, result)["status"] == "complete"
 

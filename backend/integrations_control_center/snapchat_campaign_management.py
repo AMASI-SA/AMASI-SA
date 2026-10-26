@@ -88,6 +88,7 @@ Action = Literal[
     "ad.create",
     "ad.update",
     "creative.create",
+    "creative.update",
 ]
 EvidenceVerification = Literal["verified", "inferred", "user_suggestion"]
 
@@ -100,8 +101,10 @@ UPDATE_ACTIONS = {
     "campaign.update",
     "ad_squad.update",
     "ad.update",
+    "creative.update",
 }
 CREATIVE_ACTIONS = {"creative.create"}
+CREATIVE_UPDATE_FIELDS = {"name", "headline", "call_to_action", "shareable"}
 
 CAMPAIGN_CREATE_FIELDS = {
     "name",
@@ -287,6 +290,8 @@ def snapchat_management_request_fingerprint(
 ) -> str:
     """Return the canonical fingerprint shared by sync and async previews."""
     canonical = payload.model_dump(mode="json")
+    if canonical.get("creative_shared_impact_acknowledged") is False:
+        canonical.pop("creative_shared_impact_acknowledged", None)
     # Keep pre-publication idempotency digests byte-for-byte compatible.
     # A nonempty reference remains part of the exact request identity.
     if canonical.get("publication_id") is None:
@@ -384,6 +389,7 @@ class SnapchatManagementProposalInput(BaseModel):
     reason: str = Field(min_length=5, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=128)
     activation_acknowledged: bool = False
+    creative_shared_impact_acknowledged: bool = False
     # Client proof is accepted only as an idempotency/audit input.  Provider
     # paths and finance gates always use a fresh server-side resolver result.
     settings_proof: dict[str, Any] | None = None
@@ -448,6 +454,8 @@ class SnapchatManagementProposalInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_relationships(self) -> "SnapchatManagementProposalInput":
+        if self.action == "creative.update" and not self.creative_shared_impact_acknowledged:
+            raise ValueError("creative_shared_impact_acknowledged is required; all linked ads undergo re-review")
         if self.publication_id and self.action not in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS:
             raise ValueError("publication_id is restricted to new create actions")
         if self.action in UPDATE_ACTIONS and not self.target_id:
@@ -1128,6 +1136,19 @@ def build_snapchat_operation(
             entity_type="ad",
             changes=entity,
         )
+    elif action == "creative.update":
+        entity = _allow_only(entity, CREATIVE_UPDATE_FIELDS)
+        for field, maximum in (("name", 375), ("headline", 34)):
+            if field in entity:
+                entity[field] = _text(entity[field], field=field, maximum=maximum)
+        if "call_to_action" in entity:
+            entity["call_to_action"] = _text(entity["call_to_action"], field="call_to_action", maximum=80)
+            if entity["call_to_action"] not in {"SHOP_NOW", "ORDER_NOW", "VIEW", "MORE"}:
+                raise ValueError("unsupported creative update call_to_action")
+        if "shareable" in entity and type(entity["shareable"]) is not bool:
+            raise ValueError("shareable must be boolean")
+        operation = _patch_operation(path=f"/adaccounts/{account_id}/creatives/{target_id}",
+            plural="creatives", singular="creative", entity_type="creative", changes=entity)
     elif action == "creative.create":
         entity = _allow_only(entity, CREATIVE_CREATE_FIELDS)
         for required in ("name", "type", "headline", "top_snap_media_id"):
@@ -1230,6 +1251,8 @@ def snapchat_management_intent_fingerprint(operation: dict[str, Any]) -> str:
         if isinstance(rows, list) and rows and isinstance(rows[0], dict)
         else {}
     )
+    if operation.get("action") == "creative.update":
+        entity = {"target_id": operation.get("target_id"), "changes": dict(operation.get("changes") or {})}
     for provider_field in (
         "status",
         "ad_account_id",
@@ -1313,6 +1336,7 @@ def _assert_stored_operation_integrity(
             "ads",
             "ad",
         ),
+        "creative.update": ("PATCH", f"/adaccounts/{account_id}/creatives/{target_id}", "creative", "creatives", "creative"),
         "creative.create": (
             "POST",
             f"/adaccounts/{account_id}/creatives",
@@ -1374,6 +1398,11 @@ def _assert_stored_operation_integrity(
             parent_id or ""
         ):
             raise ValueError("stored entity parent does not match the proposal")
+    if action == "creative.update":
+        if row.get("creative_shared_impact_acknowledged") is not True or not set(entity).issubset(CREATIVE_UPDATE_FIELDS):
+            raise ValueError("stored creative shared impact authorization is invalid")
+        if row.get("intent_fingerprint") != snapchat_management_intent_fingerprint(operation):
+            raise ValueError("stored creative update fingerprint is invalid")
     _budget_guard(entity)
     activates_delivery = str(entity.get("status") or "").upper() == "ACTIVE"
     if operation.get("activates_delivery") is not activates_delivery:
@@ -2192,7 +2221,7 @@ class SnapchatManagementProvider:
         else:
             account_roles, organization_roles = cached
         allowed_roles = {"admin", "general"}
-        if action in CREATIVE_ACTIONS:
+        if action in CREATIVE_ACTIONS or action == "creative.update":
             allowed_roles.add("creative")
         allowed = bool(account_roles & allowed_roles or "admin" in organization_roles)
         visible_role = sorted(
@@ -2389,6 +2418,8 @@ PROPOSAL_LIST_PROJECTION = {
     "action": 1,
     "publication_id": 1,
     "publication_creation_proof": 1,
+    "creative_shared_impact": 1,
+    "creative_shared_impact_acknowledged": 1,
     "account_id": 1,
     "target_id": 1,
     "parent_id": 1,
@@ -2635,6 +2666,7 @@ def _public_proposal(
         "executed_by": row.get("executed_by"),
         "reason": row.get("reason"),
         "preview": operation.get("summary") or {},
+        "creative_shared_impact": _safe_provider_value(row.get("creative_shared_impact")),
         "creates_paused": row.get("action") in DELIVERY_CREATE_ACTIONS
             and _operation_create_entity(operation).get("status") == "PAUSED",
         "creates_active": row.get("action") in DELIVERY_CREATE_ACTIONS
@@ -2989,6 +3021,26 @@ async def _retry_terminal_product_adoption(
     return updated
 
 
+async def _creative_update_impact(client: Any, account_id: str, creative_id: str) -> dict[str, Any]:
+    creative = await _read_provider_entity(client, "creative", creative_id, phase="creative_impact_read")
+    if creative.get("ad_account_id") != account_id:
+        raise HTTPException(status_code=409, detail={"code": "snapchat_management_target_account_mismatch"})
+    rows = await client._list_complete(f"/adaccounts/{account_id}/ads", plural="ads", singular="ad")
+    # Complete account catalog is mandatory; a partial result never proves an unused creative.
+    ad_ids = sorted(str(ad["id"]) for ad in rows if ad.get("creative_id") == creative_id)
+    return {"account_id": account_id, "creative_id": creative_id, "ad_ids": ad_ids,
+            "re_review_required": True, "observed_at": _iso()}
+
+
+async def _assert_creative_update_impact(client: Any, row: dict[str, Any]) -> None:
+    expected = row.get("creative_shared_impact") or {}
+    if row.get("creative_shared_impact_acknowledged") is not True:
+        raise HTTPException(status_code=409, detail={"code": "snapchat_creative_shared_impact_unacknowledged"})
+    current = await _creative_update_impact(client, str(row.get("account_id") or ""), _provider_target_id(row))
+    if any(current.get(key) != expected.get(key) for key in ("account_id", "creative_id", "ad_ids")):
+        raise HTTPException(status_code=409, detail={"code": "snapchat_creative_shared_impact_changed"})
+
+
 async def create_snapchat_management_proposal(
     db: Any,
     user_id: str,
@@ -3090,6 +3142,7 @@ async def create_snapchat_management_proposal(
             detail={"code": "snapchat_management_payload_invalid", "message": str(exc)},
         ) from exc
 
+    creative_shared_impact: dict[str, Any] | None = None
     original: dict[str, Any] | None = None
     pixel_eligibility: dict[str, Any] | None = None
     creative_dependency_verification: dict[str, Any] | None = None
@@ -3106,7 +3159,9 @@ async def create_snapchat_management_proposal(
                 provider_snapshot=original,
                 settings_proof=settings_proof,
             )
-        if payload.action == "campaign.update":
+        if payload.action == "creative.update":
+            creative_shared_impact = await _creative_update_impact(client, payload.account_id, effective_payload.target_id or "")
+        elif payload.action == "campaign.update":
             if str(original.get("ad_account_id") or "") != payload.account_id:
                 raise HTTPException(
                     status_code=409,
@@ -3369,7 +3424,7 @@ async def create_snapchat_management_proposal(
             )
     intent_fingerprint = (
         snapchat_management_intent_fingerprint(operation)
-        if payload.action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS
+        if payload.action in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS | {"creative.update"}
         else None
     )
     requested_changes = dict(operation.get("changes") or {})
@@ -3414,6 +3469,8 @@ async def create_snapchat_management_proposal(
         "reason": payload.reason,
         "idempotency_key": payload.idempotency_key,
         "request_fingerprint": request_fingerprint,
+        **({"creative_shared_impact": creative_shared_impact, "creative_shared_impact_acknowledged": True}
+           if creative_shared_impact is not None else {}),
         **({"publication_id": payload.publication_id,
             "publication_creation_proof": publication_creation_proof}
            if payload.publication_id else {}),
@@ -3469,6 +3526,7 @@ async def create_snapchat_management_proposal(
         actor_id=actor_id,
         detail={
             "action": payload.action,
+            **({"creative_shared_impact": creative_shared_impact} if creative_shared_impact is not None else {}),
             "role": role.get("role"),
             "provider_entity_id": preview_provider_entity_id,
             "field_changes": field_changes,
@@ -3783,6 +3841,7 @@ async def _complete_verified_execution(
             "entity_id": provider_entity_id,
             "status": verified.get("status"),
             "field_changes": field_changes,
+            **({"creative_shared_impact": row["creative_shared_impact"]} if row.get("creative_shared_impact") else {}),
             "provider_reread": {
                 "verified": True,
                 "verified_at": now_iso,
@@ -3821,6 +3880,7 @@ def _provider_state_conflict_fields(
         "campaign": CAMPAIGN_UPDATE_FIELDS,
         "ad_squad": AD_SQUAD_UPDATE_FIELDS,
         "ad": AD_UPDATE_FIELDS,
+        "creative": CREATIVE_UPDATE_FIELDS,
     }
     controlled_fields = {
         field
@@ -5288,6 +5348,8 @@ async def _execute_snapchat_management_proposal_under_lease(
                 _provider_target_id(row),
                 phase="execution_final_prewrite_read",
             )
+            if row.get("action") == "creative.update":
+                await _assert_creative_update_impact(client, row)
         except Exception:
             # No provider write has been attempted yet.  Release the local
             # execution lock so a transient read failure cannot strand an
@@ -5476,6 +5538,8 @@ async def _execute_snapchat_management_proposal_under_lease(
             )
             raise
     async def authorize_provider_write() -> None:
+        if row.get("action") == "creative.update":
+            await _assert_creative_update_impact(client, row)
         if (row.get("publication_id")
                 and str(row.get("action") or "") in DELIVERY_CREATE_ACTIONS | CREATIVE_ACTIONS):
             from .snapchat_campaign_publication import assert_publication_write_fence
@@ -6701,6 +6765,8 @@ async def _rollback_snapchat_management_proposal_under_lease(
                 "rolled_back_at": _iso(),
             }
         else:
+            if row.get("action") == "creative.update":
+                await _assert_creative_update_impact(client, row)
             rollback_operation = _rollback_patch_operation(
                 path=_entity_patch_path(operation["entity_type"], row, entity_id),
                 plural=operation["plural"],
@@ -7002,6 +7068,7 @@ def _rollback_drift_fields(
         "campaign": CAMPAIGN_UPDATE_FIELDS,
         "ad_squad": AD_SQUAD_UPDATE_FIELDS,
         "ad": AD_UPDATE_FIELDS,
+        "creative": CREATIVE_UPDATE_FIELDS,
     }.get(str(operation.get("entity_type") or ""), set())
     controlled = {
         field for field in entity_fields if field in verified_after or field in current
@@ -7020,6 +7087,8 @@ def _entity_patch_path(entity_type: str, row: dict[str, Any], entity_id: str) ->
         return f"/campaigns/{_provider_parent_id(row)}/adsquads/{entity_id}"
     if entity_type == "ad":
         return f"/adsquads/{_provider_parent_id(row)}/ads/{entity_id}"
+    if entity_type == "creative":
+        return f"/adaccounts/{row.get('account_id')}/creatives/{entity_id}"
     raise HTTPException(
         status_code=409, detail={"code": "snapchat_management_rollback_neutralized"}
     )
@@ -7113,6 +7182,8 @@ async def snapchat_management_readiness(
             "rollback",
         ],
         "new_entities_status": "PAUSED",
+        "publication_delivery_statuses": ["PAUSED", "ACTIVE"] if snapchat_campaign_activation_enabled() else ["PAUSED"],
+        "direct_active_requires_publication_plan": True,
         "salla_permission_dependency": False,
         "safety_protocol_version": MANAGEMENT_SAFETY_PROTOCOL_VERSION,
         "mutation_rollout_requires_homogeneous_replicas": True,

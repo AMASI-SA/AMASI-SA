@@ -185,3 +185,20 @@ test("owner change clears the previous owner's saved operations before new reads
     expect(service.executeSnapchatPublication).not.toHaveBeenCalled();
 });
 
+
+test("publication offers the approved shopping CTA choices and defaults to shop now", async () => {
+    await render();
+    const select = container.querySelector('[data-testid="publication-cta"]');
+    expect(select.value).toBe("SHOP_NOW");
+    expect([...select.options].map((item) => [item.value, item.textContent])).toEqual([
+        ["SHOP_NOW", "تسوق الآن"], ["ORDER_NOW", "اطلب الآن"],
+    ]);
+    await input(select, "ORDER_NOW");
+    expect(select.value).toBe("ORDER_NOW");
+    await act(async () => [...container.querySelectorAll("button")].find((button) => button.textContent === "بحث").click());
+    await input(container.querySelector('[data-testid="publication-product"]'), "product-1");
+    await input(container.querySelector('[data-testid="publication-start"]'), "2027-01-01T12:00");
+    await click('[data-testid="choose-real-upload"]');
+    await act(async () => container.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(service.previewSnapchatPublication).toHaveBeenCalledWith(expect.objectContaining({ call_to_action: "ORDER_NOW" }));
+});
