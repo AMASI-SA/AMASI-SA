@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-26T17:44:42.229Z",
+  "updated_at": "2026-10-26T17:45:45.261Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -469,7 +469,14 @@
     "prior_source": "b172d81bab05120e59e4ac941a80a92d36b60b27",
     "prior_ci": "1123backend29.17s/165frontend15suites;12workflowsgreen butindependent2blockers found; neverdeploy",
     "new_fixes": "Strict rows before zero-fill; explicit read_verified IDs and connection_restored:false; remove allglobalhealthmutation",
-    "new_ci": "pending fresh exact-source CI + independentre-review",
-    "true_connection_recovery": "NOT complete; verifiedOAuthrelink or atomicallaccountwritercontract needed"
+    "new_ci": {
+      "source": "e1772c18a233d21e7a05a1c66b137f850c5515f1",
+      "run": 40371342449,
+      "frontend_job": 121742585963,
+      "backend_job": 121742586791,
+      "state": "in_progress at lastread; no fresh fullCI success claimed"
+    },
+    "true_connection_recovery": "NOT complete; verifiedOAuthrelink or atomicallaccountwritercontract needed",
+    "independent_review": "Accepted bounded diagnosticWIP only: both original repros fixed; full globaldoc unchanged; malformedrows rejected beforezeros;29localpass2Mongo skip"
   }
 }
