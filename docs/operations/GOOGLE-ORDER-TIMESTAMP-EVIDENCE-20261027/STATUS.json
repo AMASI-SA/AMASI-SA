@@ -1,0 +1,25 @@
+{
+  "task_id": "GOOGLE-ORDER-TIMESTAMP-EVIDENCE-20261027",
+  "branch": "codex/google-order-timestamp-evidence-wip-20261027",
+  "base_sha": "02cdf74b34568a88df7e20d961f7e7d896418dc5",
+  "code_sha": "5c4bd38168a6080b9a124d685a406382926667f8",
+  "state": "WIP UNWIRED STRICT SOURCE INSTANT HELPER; NOT RELEASE READY",
+  "files": [
+    "backend/integrations_control_center/google_order_timestamp_evidence.py",
+    "backend/tests/test_google_order_timestamp_evidence.py"
+  ],
+  "behavior": "Convert explicit offset-bearing timestamps into Riyadh business date. Reject date-only, naive, malformed and unknown offset; no order identity proof, source coverage, sales, or profitability claim.",
+  "verification": {
+    "command": "python -m pytest -q backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
+    "passed": 22,
+    "exit_code": 0,
+    "red": "Import failed for absent module; malformed offset test reproduced permissive Python parser before fix."
+  },
+  "limitations": [
+    "Not wired to route or readers; does not validate source identity or conflicting source timestamps.",
+    "Only explicit-offset instants accepted. Date objects, naive times, or precision beyond 6 fractional digits remain unknown.",
+    "Source completeness, exact product identity, cancellation/refunds, FX, historical costs and snapshot consistency remain unproven.",
+    "No production data read, no production change, no provider writes or ad execution."
+  ],
+  "next_safe_action": "Independent review; integrate only with owner/order-bound source evidence and per-row conflict handling, bounded query, and unproven coverage; run real replica and CI before release."
+}
