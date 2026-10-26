@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-COMPLETION-20261026",
   "branch": "codex/google-completion-20261026",
   "base": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
-  "state": "WIP verified preventive reporting slice and saved seasonal context; not released",
+  "state": "Reviewed bounded reporting prevention and owner seasonal context UI; CI verified; NOT merged or published",
   "production_changed": false,
   "provider_writes": 0,
   "live_acceptance": {
@@ -15,20 +15,54 @@
   "changes": [
     "Reporting no longer owns connection status/provenance; no authority upsert",
     "Owner-reviewed commercial plan GET/PUT with CAS/audit, explicit unknown economics and no advertising authorization",
-    "Budget extension separate untracked WIP, not included in milestone"
+    "Budget extension separate untracked WIP, not included in milestone",
+    "Owner-only Arabic seasonal context form mounted with revision conflicts, uncertain-save reload and explicit review; no default spend"
   ],
   "verification": {
     "root_command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_ads_management.py backend/tests/test_google_ads_workspace.py",
     "result": "70 passed, 27 Mongo skipped, 1.58 seconds",
     "reporting_regression": "12 failures before fix;14pass after",
-    "commercial_plan": "18pass"
+    "commercial_plan": "18pass",
+    "ci": {
+      "run": 40379860237,
+      "source": "ef9d01cf44b9f639b9fb9890909de27928d19c48",
+      "backend": {
+        "job": 121772850575,
+        "passed": 1130,
+        "seconds": 20.13
+      },
+      "frontend": {
+        "job": 121772851391,
+        "passed": 172,
+        "suites": 16,
+        "build": "success"
+      },
+      "root_logs_verified": true
+    }
   },
   "remaining": [
-    "Finish owner plan UI and verify full integration",
+    "Reopen actual Emergent project/editor, read real guard before /app changes; fresh source CI/production head before v5 A/B",
     "True generation-fenced OAuth/account atomic persistence remains",
     "All shared budget writers and actual Mongo replica proof, activation and launch still incomplete",
     "Natural-language extraction, evidence ranking, categories and cross-platform orchestration incomplete",
     "Fresh CI/review, v5 A/B build, real guard and live publish acceptance required"
   ],
-  "next_safe_action": "Finish UI and independently review; keep budget WIP disabled; do not publish current partial branch as autonomy completion"
+  "next_safe_action": "Recover publisher/editor access; do not reuse foreign lease. Independently verify exact source and current production; create new source A/intent B using reproducible release workflow, all required CI, host rehearsal then prepare/prepublish once; actual publish plus3live probes and behavioral acceptance. Guard WIP remains separate.",
+  "verified_code_checkpoint": "ef9d01cf44b9f639b9fb9890909de27928d19c48",
+  "pr": 1549,
+  "deployment": {
+    "changed": false,
+    "guard_status": "unknown; no /app access",
+    "lease_created": false,
+    "publish_clicked": false,
+    "blocker": "Emergent project tab app.emergent.sh/chat DOMSnapshot and screenshot timed out after home loaded; single reload recovered home, project again unresponsive; no paid chat used"
+  },
+  "budget_wip": {
+    "branch": "codex/google-budget-standing-wip-20261026",
+    "pr": 1550,
+    "checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+    "runtime_enabled": false,
+    "replica_ci": 40380341701,
+    "state": "pending"
+  }
 }
