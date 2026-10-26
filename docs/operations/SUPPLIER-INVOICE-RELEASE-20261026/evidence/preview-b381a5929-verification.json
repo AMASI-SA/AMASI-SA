@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "sha256": "464ebf2e377e8ad072f1c2b8733bef3a32ad978f174222dfd3905f5a73414453",
+  "compressed_bytes": 30297530,
+  "unpacked_bytes": 88815435,
+  "source_files": 4700,
+  "source_git_sha": "b381a5929b6541ec8e243572700c9504290b7274",
+  "metadata": {
+    "api_origin": "https://salla-analytics.preview.emergentagent.com",
+    "automatic_workers": "disabled",
+    "contains_production_release_identity": false,
+    "environment": "preview",
+    "external_network": "denied",
+    "index_sha256": "bc0d3347bd7acc7b3e509ba28c33f36ea56b8fab3c8a307b3a0fe8ad0b3c6ee5",
+    "source_git_sha": "b381a5929b6541ec8e243572700c9504290b7274"
+  }
+}
