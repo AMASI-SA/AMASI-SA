@@ -61,7 +61,8 @@ def invoice_view(state, kind, invoice):
 
 
 def lookup(state, supplier_id, number):
-    matches=[(k,i) for k,i in invoices(state) if i['supplier_id']==supplier_id and i['invoice_number']==number.strip()]
+    from operational_invoice_numbers import references
+    matches=[(k,i) for k,i in invoices(state) if i['supplier_id']==supplier_id and number.strip() in references(i)]
     if len(matches)!=1: fail('supplier_adjustment_invoice_missing','حدد فاتورة تشغيلية واحدة للمورد',404)
     return invoice_view(state,*matches[0])
 
