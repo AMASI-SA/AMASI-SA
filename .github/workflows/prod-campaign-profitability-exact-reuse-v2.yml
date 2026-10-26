@@ -7,6 +7,9 @@ on:
     paths:
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_campaign_profitability_exact_reuse.py"
+      - "backend/integrations_control_center/snapchat_campaign_profitability.py"
+      - "backend/integrations_control_center/snapchat_campaign_result_source_routes.py"
+      - "backend/integrations_control_center/snapchat_salla_campaign_outcomes.py"
       - "backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py"
       - ".github/workflows/prod-campaign-profitability-exact-reuse-v2.yml"
 

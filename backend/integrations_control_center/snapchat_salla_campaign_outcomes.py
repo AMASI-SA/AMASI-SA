@@ -8,6 +8,7 @@ invented campaign attribution.
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import wraps
 from typing import Any
 
 
@@ -38,6 +39,7 @@ async def salla_campaign_outcomes(
     date_from: str,
     date_to: str,
     identities: list[dict[str, Any]],
+    matched_orders_out: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
 ) -> tuple[
     dict[tuple[str, str], dict[str, Any]],
     dict[str, dict[str, Any]],
@@ -117,6 +119,8 @@ async def salla_campaign_outcomes(
                 unmatched_snapchat_sales_sar += amount
             continue
 
+        if matched_orders_out is not None:
+            matched_orders_out.setdefault(key, []).append(order)
         if match_kind == "campaign_id":
             matched_by_id += 1
         elif match_kind == "campaign_name":
@@ -183,6 +187,7 @@ def install_snapchat_salla_campaign_outcomes() -> None:
 
     routes._salla_outcomes = salla_campaign_outcomes
 
+    @wraps(current_build)
     async def wrapped_build_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
         result = await current_build(*args, **kwargs)
         result_source = str(

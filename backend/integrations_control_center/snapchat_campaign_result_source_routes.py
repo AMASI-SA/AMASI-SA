@@ -209,6 +209,7 @@ async def _salla_outcomes(
     date_from: str,
     date_to: str,
     identities: list[dict[str, Any]],
+    matched_orders_out: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
     from dashboard_v2_routes import _filtered_orders
 
@@ -253,6 +254,8 @@ async def _salla_outcomes(
         elif match_kind == "campaign_name":
             matched_by_name += 1
         amount = _number(order.get("total_amount") or order.get("total")) or 0.0
+        if matched_orders_out is not None:
+            matched_orders_out.setdefault(key, []).append(order)
         order_date = _text(order.get("order_date"))[:10]
         by_campaign[key]["orders"] += 1
         by_campaign[key]["sales_sar"] += amount

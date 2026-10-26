@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from typing import Any
 
 from dashboard_v2_routes import (
@@ -676,6 +677,7 @@ def install_snapchat_campaign_profitability() -> None:
     if getattr(current, "_mezan_campaign_profitability", False):
         return
 
+    @wraps(current)
     async def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         result = await current(*args, **kwargs)
         db = args[0] if args else kwargs.get("db")

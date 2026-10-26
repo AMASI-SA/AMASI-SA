@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import asyncio
+import threading
 from datetime import datetime, timezone
 from bson import ObjectId
 from bson.decimal128 import Decimal128
@@ -148,7 +150,7 @@ async def test_profitability_cache_is_invalidated_by_mezan_cost_revision(monkeyp
 
 def test_source_policy_is_exact_and_read_only():
     assert module.SOURCE_MODE == "snapchat_salla_visible_matches_profitability_v2"
-    assert module.CACHE_TTL_SECONDS == 5 * 60
+    assert module.CACHE_TTL_SECONDS == 0
 
 
 @pytest.fixture
@@ -212,14 +214,14 @@ async def test_changed_cohort_or_spend_cannot_reuse_old_economics(calculation, c
 
 
 @pytest.mark.asyncio
-async def test_unchanged_reordered_inputs_reuse_cache_without_sharing_mutable_results(calculation):
+async def test_unchanged_reordered_inputs_recompute_without_sharing_mutable_results(calculation):
     kwargs, loads = calculation
     first, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     first[("account-1", "campaign-1")]["sales_sar"] = 999
     kwargs["matched_orders"][("account-1", "campaign-1")].reverse()
     second, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     assert second[("account-1", "campaign-1")]["sales_sar"] == 150
-    assert loads == ["owner"]
+    assert loads == ["owner", "owner"]
 
 
 @pytest.mark.asyncio
@@ -255,14 +257,14 @@ async def test_bson_decimal_and_text_cannot_collide_in_cache(calculation):
 
 
 @pytest.mark.asyncio
-async def test_supported_object_id_and_datetime_preserve_safe_cache_hits(calculation):
+async def test_supported_object_id_and_datetime_recompute_without_cache(calculation):
     kwargs, loads = calculation
     orders = kwargs["matched_orders"][("account-1", "campaign-1")]
     orders[0]["_id"] = ObjectId()
     orders[0]["updated_at"] = datetime(2026, 10, 27, tzinfo=timezone.utc)
     await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
-    assert loads == ["owner"]
+    assert loads == ["owner", "owner"]
 
 
 @pytest.fixture
@@ -328,7 +330,7 @@ async def test_continuously_changing_policy_never_caches_mixed_snapshot(policy_c
 
 
 @pytest.mark.asyncio
-async def test_policy_change_during_cache_hit_cannot_return_stale_result(policy_calculation, monkeypatch):
+async def test_policy_change_between_reads_cannot_return_stale_result(policy_calculation, monkeypatch):
     kwargs, loads, state = policy_calculation
     await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     reads = 0
@@ -341,7 +343,7 @@ async def test_policy_change_during_cache_hit_cannot_return_stale_result(policy_
     monkeypatch.setattr(module, "get_policy_map", policy)
     rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 0
-    assert loads == ["owner", "owner"]
+    assert loads == ["owner", "owner", "owner"]
 
 
 @pytest.mark.asyncio
@@ -391,4 +393,251 @@ async def test_policy_change_during_calculation_is_not_cached(policy_calculation
     rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 0
     assert loads == ["owner", "owner"]
-    assert len(module._CACHE) == 1
+    assert module._CACHE == {}
+
+
+@pytest.mark.asyncio
+async def test_catalog_identity_change_without_cost_revision_uses_current_resolution(monkeypatch):
+    module._CACHE.clear()
+    state = {"sku": "old"}
+    async def revision(db, user_id):
+        return 1
+    async def context(db, user_id):
+        products = [{"id": "p", "salla_product_id": "p", "sku": state["sku"],
+                     "name": "item", "cost_price_from_salla": 50, "variants": []}]
+        by_id, by_variant, by_sku = module.profitability._index_products(products)
+        return {"products_by_id": by_id, "products_by_variant": by_variant,
+                "products_by_sku": by_sku, "profile_map": {}, "option_map": {},
+                "product_binding_map": {}, "resources": {}, "policy": {}}
+    monkeypatch.setattr(module, "get_product_cost_revision", revision)
+    monkeypatch.setattr(module.profitability, "_load_cost_context", context)
+    kwargs = {"date_from": "2026-10-25", "date_to": "2026-10-25",
+              "matched_orders": {("a", "c"): [{"total_amount": 150, "products": [{"sku": "old", "quantity": 1}]}]},
+              "campaign_spend": {("a", "c"): 10}}
+    first, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert first[("a", "c")]["product_cost_sar"] == 50
+    state["sku"] = "new"
+    second, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert second[("a", "c")]["product_cost_sar"] is None
+    assert second[("a", "c")]["cost_status"] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_component_cost_change_without_revision_recalculates_actual_cost(monkeypatch):
+    module._CACHE.clear()
+    state = {"unit_cost": 5}
+    async def revision(db, user_id):
+        return 1
+    async def context(db, user_id):
+        product = {"id": "p", "salla_product_id": "p", "sku": "old", "name": "item", "cost_price_from_salla": 50, "variants": []}
+        by_id, by_variant, by_sku = module.profitability._index_products([product])
+        return {"products_by_id": by_id, "products_by_variant": by_variant, "products_by_sku": by_sku,
+                "profile_map": {}, "option_map": {}, "product_binding_map": {"p": [{"resource_id": "r", "quantity": 1}]},
+                "resources": {"r": {"id": "r", "unit_cost": state["unit_cost"]}}, "policy": {}}
+    monkeypatch.setattr(module, "get_product_cost_revision", revision)
+    monkeypatch.setattr(module.profitability, "_load_cost_context", context)
+    kwargs = {"date_from": "2026-10-25", "date_to": "2026-10-25",
+              "matched_orders": {("a", "c"): [{"total_amount": 150, "products": [{"sku": "old", "quantity": 1}]}]},
+              "campaign_spend": {("a", "c"): 10}}
+    first, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    state["unit_cost"] = 15
+    second, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert first[("a", "c")]["product_cost_sar"] == 55
+    assert second[("a", "c")]["product_cost_sar"] == 65
+    assert module._CACHE == {}
+
+
+@pytest.mark.asyncio
+async def test_uncopyable_cohort_fails_with_controlled_snapshot_error(calculation):
+    kwargs, loads = calculation
+    class Unsafe:
+        def __deepcopy__(self, memo):
+            raise TypeError("private metadata must not escape")
+    kwargs["matched_orders"][("account-1", "campaign-1")][0]["metadata"] = Unsafe()
+    with pytest.raises(ValueError, match="^campaign_profitability_snapshot_unproven$"):
+        await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert module._CACHE == {}
+    assert loads == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("producer", ["base", "salla"])
+@pytest.mark.parametrize("empty", [False, True])
+async def test_report_uses_same_matched_snapshot_without_second_order_query(calculation, monkeypatch, producer, empty):
+    import dashboard_v2_routes
+    from integrations_control_center import snapchat_salla_campaign_outcomes as salla
+    kwargs, loads = calculation
+    first_order = {"id": "o1", "utm_campaign": "c", "source": "snapchat", "total_amount": 100,
+                   "products": [{"quantity": 1, "cost": 40}], "order_date": "2026-10-25"}
+    state = {"orders": [] if empty else [first_order], "reads": 0}
+    async def filtered(*args, **kwargs):
+        state["reads"] += 1
+        return deepcopy(state["orders"])
+    async def no_second_query(*args, **kwargs):
+        raise AssertionError("a second attribution query is not the same snapshot")
+    original_outcomes = module.routes._salla_outcomes if producer == "base" else salla.salla_campaign_outcomes
+    monkeypatch.setattr(module.routes, "_salla_outcomes", original_outcomes)
+    async def report(db, user_id, **kwargs):
+        campaigns, _, _, _ = await module.routes._salla_outcomes(
+            db, user_id, date_from="2026-10-25", date_to="2026-10-25",
+            identities=[{"account_id": "a", "campaign_id": "c", "campaign_name": "Campaign"}])
+        # A later DB query would return a different cohort, but this report
+        # must retain the exact row used above, even with equal order counts.
+        state["orders"] = [{**first_order, "id": "o2", "total_amount": 999}]
+        return {"date_from": "2026-10-25", "date_to": "2026-10-25",
+                "campaigns": [{"account_id": "a", "campaign_id": "c", "spend_sar": 10,
+                               "salla_results": campaigns.get(("a", "c"), {"orders": 0, "sales_sar": 0}),
+                               "profitability": {"sales_sar": 999, "product_cost_sar": 500}}]}
+    monkeypatch.setattr(dashboard_v2_routes, "_filtered_orders", filtered)
+    monkeypatch.setattr(module, "_filtered_orders", no_second_query)
+    monkeypatch.setattr(module.routes, "build_snapchat_result_source_report", report)
+    module.install_exact_salla_profitability_reuse()
+    result = await module.routes.build_snapchat_result_source_report(object(), "owner")
+    campaign = result["campaigns"][0]
+    assert state["reads"] == 1
+    assert campaign["salla_results"]["sales_sar"] == campaign["profitability"]["sales_sar"] == (0 if empty else 100)
+    assert campaign["profitability"]["product_cost_sar"] == (0 if empty else 40)
+    assert result["source"]["campaign_profitability"]["cache_reuse_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_missing_report_snapshot_cannot_retain_unproven_older_profit(monkeypatch):
+    async def no_outcomes(*args, **kwargs):
+        return {}, {}, {}, {}
+    async def report(*args, **kwargs):
+        return {"campaigns": [{"account_id": "a", "campaign_id": "c", "profitability": {"product_cost_sar": 50}}]}
+    monkeypatch.setattr(module.routes, "_salla_outcomes", no_outcomes)
+    monkeypatch.setattr(module.routes, "build_snapchat_result_source_report", report)
+    module.install_exact_salla_profitability_reuse()
+    with pytest.raises(ValueError, match="^campaign_profitability_snapshot_unproven$"):
+        await module.routes.build_snapchat_result_source_report(object(), "owner")
+
+
+@pytest.mark.asyncio
+async def test_repeated_runtime_composition_and_overlapping_reports_keep_context_isolated(calculation, monkeypatch):
+    import dashboard_v2_routes
+    from integrations_control_center import snapchat_salla_campaign_outcomes as salla
+    kwargs, loads = calculation
+    legacy_calls = []
+    async def legacy_profitability(db, user_id, **kwargs):
+        legacy_calls.append(user_id)
+        return {"by_campaign": {}, "totals": {}, "coverage": {}}
+    async def filtered(db, user_id, **kwargs):
+        await asyncio.sleep(0)
+        return [{"id": user_id, "utm_campaign": "c", "source": "snapchat",
+                 "total_amount": 100 if user_id == "first" else 200,
+                 "products": [{"quantity": 1, "cost": 40}], "order_date": "2026-10-25"}]
+    async def report(db, user_id, **kwargs):
+        campaigns, _, _, coverage = await module.routes._salla_outcomes(
+            db, user_id, date_from="2026-10-25", date_to="2026-10-25",
+            identities=[{"account_id": "a", "campaign_id": "c", "campaign_name": "Campaign"}])
+        await asyncio.sleep(0)
+        return {"date_from": "2026-10-25", "date_to": "2026-10-25", "result_source": "salla",
+                "source": {"salla_attribution": coverage}, "totals": {"spend_sar": 10},
+                "campaigns": [{"account_id": "a", "campaign_id": "c", "spend_sar": 10,
+                               "salla_results": campaigns[("a", "c")]}]}
+    monkeypatch.setattr(dashboard_v2_routes, "_filtered_orders", filtered)
+    monkeypatch.setattr(module.routes, "_salla_outcomes", salla.salla_campaign_outcomes)
+    monkeypatch.setattr(module.routes, "build_snapchat_result_source_report", report)
+    monkeypatch.setattr(module.routes, "_selected_metrics", module.routes._selected_metrics)
+    monkeypatch.setattr(module.profitability, "build_campaign_profitability", legacy_profitability)
+    salla.install_snapchat_salla_campaign_outcomes()
+    module.profitability.install_snapchat_campaign_profitability()
+    module.install_exact_salla_profitability_reuse()
+    installed = module.routes.build_snapchat_result_source_report
+    first = await installed(object(), "first", result_source="salla")
+    assert first["campaigns"][0]["profitability"]["sales_sar"] == 100
+    for _ in range(3):
+        salla.install_snapchat_salla_campaign_outcomes()
+        module.profitability.install_snapchat_campaign_profitability()
+        module.install_exact_salla_profitability_reuse()
+        assert module.routes.build_snapchat_result_source_report is installed
+    results = await asyncio.gather(
+        installed(object(), "first", result_source="salla"),
+        installed(object(), "second", result_source="salla"),
+    )
+    assert [result["campaigns"][0]["profitability"]["sales_sar"] for result in results] == [100, 200]
+    assert module._MATCHED_ORDERS.get() is None
+    assert sorted(legacy_calls) == ["first", "first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_large_calculations_do_not_block_loop_or_exceed_admission_on_cancel(calculation, monkeypatch):
+    kwargs, loads = calculation
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    all_copied = asyncio.Event()
+    release = threading.Event()
+    lock = threading.Lock()
+    active = peak = 0
+    original = module._calculate_current_cohort
+    loop_thread = threading.get_ident()
+    copies = 0
+    original_copy = module._copy_inputs
+    def snapshot_before_wait(*args):
+        nonlocal copies
+        assert threading.get_ident() == loop_thread
+        result = original_copy(*args)
+        copies += 1
+        if copies == 3:
+            all_copied.set()
+        return result
+    def blocking_calculation(*args):
+        nonlocal active, peak
+        assert threading.get_ident() != loop_thread
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 2:
+                loop.call_soon_threadsafe(started.set)
+        try:
+            if not release.wait(timeout=10):
+                raise TimeoutError("test worker was not released")
+            return original(*args)
+        finally:
+            with lock:
+                active -= 1
+    monkeypatch.setattr(module, "_calculate_current_cohort", blocking_calculation)
+    monkeypatch.setattr(module, "_copy_inputs", snapshot_before_wait)
+    tasks = [asyncio.create_task(module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)) for _ in range(3)]
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        await asyncio.wait_for(all_copied.wait(), timeout=5)
+        assert len(loads) == 2
+        # The third request is waiting for admission. Its exported mutable
+        # arguments were already captured and cannot be silently replaced.
+        kwargs["matched_orders"][("account-1", "campaign-1")][0]["total_amount"] = 999
+        kwargs["campaign_spend"][("account-1", "campaign-1")] = 999
+        # A loop heartbeat runs while both calculation threads are paused.
+        assert await asyncio.wait_for(asyncio.sleep(0, result="responsive"), timeout=1) == "responsive"
+        tasks[0].cancel()
+        await asyncio.sleep(0)
+        tasks[0].cancel()
+        await asyncio.sleep(0)
+        assert not tasks[0].done()
+        assert len(loads) == 2  # cancelled work still owns admission
+    finally:
+        release.set()
+    results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5)
+    assert isinstance(results[0], asyncio.CancelledError)
+    assert all(not isinstance(result, BaseException) for result in results[1:])
+    for result in results[1:]:
+        assert result[0][("account-1", "campaign-1")]["sales_sar"] == 150
+        assert result[0][("account-1", "campaign-1")]["ad_spend_sar"] == 30
+    assert peak == module.MAX_CALCULATION_WORKERS == 2
+    assert len(loads) == 3
+
+
+@pytest.mark.asyncio
+async def test_private_owned_capture_copies_outside_loop(calculation, monkeypatch):
+    kwargs, loads = calculation
+    loop_thread = threading.get_ident()
+    original = module._copy_inputs
+    copies = []
+    def copy(*args):
+        copies.append(threading.get_ident())
+        return original(*args)
+    monkeypatch.setattr(module, "_copy_inputs", copy)
+    result = await module._calculate_owned_profitability(object(), "owner", **kwargs)
+    assert result[0][("account-1", "campaign-1")]["sales_sar"] == 150
+    assert copies and all(thread != loop_thread for thread in copies)
