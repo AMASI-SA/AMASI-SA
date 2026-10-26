@@ -34,6 +34,11 @@ def test_v1_city_match_allows_assignment_and_ignores_optional_future_scope():
     assert_driver_can_take_shipment(driver=_driver(), shipping_city=" الرياض ")
 
 
+@pytest.mark.parametrize("driver_city,shipment_city", [("الرياض", "Riyadh"), ("RIYADH", "الرياض"), ("الرياض", "رياض")])
+def test_riyadh_english_and_arabic_names_match(driver_city, shipment_city):
+    assert_driver_can_take_shipment(driver=_driver(city=driver_city), shipping_city=shipment_city)
+
+
 def test_v1_city_mismatch_is_rejected_even_if_driver_is_active():
     with pytest.raises(StoreDeliveryRuleError, match="driver_city_mismatch"):
         assert_driver_can_take_shipment(driver=_driver(), shipping_city="جدة")
