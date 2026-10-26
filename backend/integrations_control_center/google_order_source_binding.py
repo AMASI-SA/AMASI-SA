@@ -7,7 +7,8 @@ from .google_order_timestamp_evidence import exact_source_instant
 def _id(value):
     if type(value) is int and value > 0:
         value = str(value)
-    if not isinstance(value, str) or not value.isascii() or not value.isdigit() or not 1 <= len(value) <= 30:
+    if (not isinstance(value, str) or not value.isascii() or not value.isdigit()
+            or not 1 <= len(value) <= 30 or not any(char != '0' for char in value)):
         return None
     return value
 
