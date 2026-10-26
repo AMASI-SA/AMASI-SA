@@ -1,0 +1,25 @@
+{
+  "task_id": "GOOGLE-BUDGET-STANDING-20261026",
+  "branch": "codex/google-budget-standing-wip-20261026",
+  "state": "WIP ONLY; disabled; no runtime migration; never publish as launch implementation",
+  "base": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
+  "source_baseline": "f2c4f740504d1df93c8d345ae88ed16705bf5e72",
+  "runtime_supported": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "verification": "48pass9Mongo skipped locally; new replica CI pending; workflow YAML/proof Python parse pass",
+  "changes": [
+    "Standing reservation and settlement under same account transaction",
+    "Quota history and private claim atomic with shared guard",
+    "Unknown outcomes retain reservations; successful outcomes require native reflection",
+    "Reflected allocations retire atomically permitting future operations; no double count",
+    "Pause/decrease allowed even above lowered cap"
+  ],
+  "remaining": [
+    "Independent final review and actual replica CI",
+    "Integrate six policy routes and all authority/settlement budget writers together",
+    "Gateway must prove budget_resource and shared_budget=false",
+    "All live launch/owner UI/fresh product eligibility remains incomplete"
+  ],
+  "next_safe_action": "Inspect exact head replica CI; fix failure without enabling runtime; then design integrated migration"
+}
