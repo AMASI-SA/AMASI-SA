@@ -497,6 +497,7 @@ async def build_dashboard_platform_spend(
                 "known_total_sar": _number(snapchat.get("known_total_sar")),
                 "known_account_count": snapchat.get("known_account_count"),
                 "incomplete_account_count": snapchat.get("incomplete_account_count"),
+                "accounts": list(snapchat.get("accounts") or []),
                 "data_quality": snap_quality.get("status"),
                 "data_state": snap_quality.get("data_state"),
                 "coverage_complete": snap_quality.get("coverage_complete") is True,
