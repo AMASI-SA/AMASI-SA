@@ -1,7 +1,7 @@
 {
   "branch": "codex/google-autonomy-creation-r1-20261026",
   "checkpoint": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "state": "EXACT SOURCE backend1098pass26.76s inclall70actualMongo; frontendnotyetexecuted transientYarn502 install, failedjobonly rerun. Readiness40352145438 success, no frozenB/merge/publish.",
+  "state": "FROZEN B; all15sourceworkflows success inclGoogle1098actualMongo+153frontend15suites. AwaitfinalBHost20/checks and foreignlease closure. No1541merge/build/lease/publish.",
   "full_autonomy_complete": false,
   "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
   "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
@@ -27,5 +27,13 @@
   "frontend_first_job": 121674780945,
   "frontend_failure": "registry.yarnpkg.com package download502 beforetests; onejob rerunrequested",
   "local": "1028passed70Mongo skipped13.64s",
-  "independent": "Remotefulltree47exactchanges,parent058; allothercurrentproductionpaths preserved; oldsourcekind+creation91sregressions remote present; scoped316pass"
+  "independent": "Remotefulltree47exactchanges,parent058; allothercurrentproductionpaths preserved; oldsourcekind+creation91sregressions remote present; scoped316pass",
+  "B": "c3b8133a932344d671fc391824ceba97d957b7a8",
+  "tree": "fba353e3283f9f4a65ec1438584a1e9b621ada3d",
+  "runtime": "rg5-cbe778beeb8f1a8b3aab064624b4be6775a1daf8edeaf025fa4ee5f41a006256",
+  "artifact": 12664056938,
+  "intent_sha256": "cb62138d44e411ba16f2767850b4a386b1c8fb7f646a32b94f411a04845bb657",
+  "source_readiness_run": 40352145438,
+  "frontend_retry_job": 121678570273,
+  "frontend_verification": "153passed15suites; first502packageinfra attempt superseded by successful retry unchangedsource"
 }
