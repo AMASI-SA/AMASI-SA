@@ -77,3 +77,15 @@ async def test_real_source_limit_plus_one_suppresses_all_partial_counts(replica_
         date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc), limit=2)
     assert out['truncated'] is True and out['observed_bound_inside'] is None and out['observed_unverified'] is None
     assert out['coverage_complete'] is False and out['sales'] is None
+
+
+@pytest.mark.asyncio
+async def test_real_source_oversized_document_excluded_without_completeness_claim(replica_db):
+    await replica_db.unified_orders.insert_one({
+        'user_id': 'owner', 'order_id': '42', 'order_number': '77', 'order_date': '2026-08-15',
+        'raw_by_source': {'salla_direct': {'id': 42, 'reference_id': 77, 'created_at': '2026-08-15T00:00:00Z',
+                                            'padding': 'x' * 20000}}})
+    out = await read_source_date_coverage(replica_db, owner_id='owner', date_from='2026-08-15',
+        date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc))
+    assert out['observed_bound_inside'] == 0 and out['coverage_complete'] is False and out['sales'] is None
+    assert 'oversized_documents_excluded' in out['limitations']
