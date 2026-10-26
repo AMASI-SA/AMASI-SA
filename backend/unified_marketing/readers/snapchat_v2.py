@@ -21,6 +21,7 @@ from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
 from snapchat_v2.sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
 from snapchat_v2.total_facts import SNAPCHAT_TOTAL_FACTS_COLLECTION, load_total_facts
 from snapchat_v2.period_evidence import total_period_complete
+from snapchat_v2.empty_hierarchy import empty_period_complete
 from snapchat_v2.operational_hours import current_operational_overlay
 from snapchat_v2.routes import _add_sar_spend, _entity_performance_report
 from unified_marketing.adapters.snapchat_v2 import build_snapchat_v2_unified_report
@@ -648,6 +649,7 @@ async def load_snapchat_v2_entity_report(
         orders=orders,
         order_summary=order_summary,
     )
+    report["empty_hierarchy_proven"] = performance.get("empty_hierarchy_proven") is True
     report["management_context"] = _management_context(identities)
     report["cost_coverage"] = cost_coverage
     report["decision_eligibility"] = {
@@ -705,9 +707,18 @@ async def load_snapchat_v2_entity_readiness_evidence(
         entity_type=provider_type, date_from=date_from, date_to=date_to,
         action_report_time="conversion", facts=facts,
     )
+    empty_proven = False
+    if not facts:
+        empty_proven = await empty_period_complete(
+            db, user_id=str(user_id), account_id=str(account["ad_account_id"]),
+            currency=str(account.get("currency") or ""), timezone_name=account_timezone,
+            date_from=date_from, date_to=date_to, action="conversion",
+        )
+        complete = empty_proven
     return {
         "contract_version": CONTRACT_VERSION,
         "provider": "snapchat_ads",
+        "empty_hierarchy_proven": empty_proven,
         "entity_level": normalized_level,
         "contract_valid": True,
         "complete": complete,

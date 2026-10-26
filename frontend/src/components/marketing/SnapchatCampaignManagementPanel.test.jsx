@@ -1560,3 +1560,12 @@ describe("SnapchatCampaignManagementPanel decision context", () => {
         expect(createSnapchatManagementProposal).not.toHaveBeenCalled();
     });
 });
+
+test("creative updates bind the selected creative and require fresh shared-impact acknowledgment", () => {
+    const form = initialForm({ action: "creative.update", selectedAd: { ad_id: "ad-1", creative_id: "creative-1" } });
+    expect(form.targetId).toBe("creative-1");
+    expect(form.creativeSharedImpactAcknowledged).toBe(false);
+    expect(form.creativeUpdateCta).toBe("");
+    expect(form.status).toBe("");
+    expect(form.activationAcknowledged).toBe(false);
+});

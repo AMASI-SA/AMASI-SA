@@ -468,3 +468,103 @@ async def test_same_engine_isolates_usd_and_sar_with_overlapping_entity_ids(isol
     assert results["SAR"]["levels"]["ad"]["fact_count"] == 6
     assert len(results["USD"]["producing_runs"]) == 1
     assert len(results["SAR"]["producing_runs"]) == 2
+
+
+def empty_snapshot_fixture(db):
+    from snapchat_v2.empty_hierarchy import empty_hierarchy_proof
+    empty = {"status": "complete", "data_state": "confirmed_no_data",
+             "expected_requests": 1, "completed_requests": 1, "rows_received": 0}
+    proof = empty_hierarchy_proof(
+        {"ad_account_id": "account-sar", "currency": "SAR", "timezone": "Asia/Riyadh"},
+        [date.fromisoformat(day) for day in DATES], "conversion", {"coverage": empty},
+        {level: {"coverage": empty} for level in diagnostic.LEVELS})
+    db.rows[diagnostic.SNAPCHAT_TOTAL_FACTS_COLLECTION] = []
+    db.rows[diagnostic.COMMITTED_COLLECTION] = [
+        {**SCOPE, **FILTER, "report_date": day, "sync_run_id": "empty-producing",
+         "rows": {level: [] for level in diagnostic.LEVELS}, "empty_hierarchy_proof": deepcopy(proof),
+         # The lightweight database does not interpret Mongo expressions.
+         # Real-Mongo tests below calculate these from actual stored bytes.
+         "empty_rows_explicit": True, "empty_proof_shape_valid": True}
+        for day in DATES]
+    db.rows[diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION] = [run(
+        "empty-producing", summary={"empty_hierarchy_proof": deepcopy(proof)}, empty_proof_shape_valid=True)]
+    return proof
+
+
+@pytest.mark.asyncio
+async def test_provider_proven_empty_is_complete_without_fake_facts_or_recent_run(db):
+    empty_snapshot_fixture(db)
+    db.rows[diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION].append(run("unrelated-newer"))
+    result = await diagnose(db)
+    assert result["status"] == "complete" and result["provider_calls"] == 0
+    assert result["writes_performed"] is False and result["decision_eligibility"]["eligible"] is False
+    assert [row["sync_run_id"] for row in result["producing_runs"]] == ["empty-producing"]
+    assert "campaign_response" not in str(result) and "catalog_responses" not in str(result)
+    for evidence in result["levels"].values():
+        assert evidence["period_complete"] is True and evidence["empty_hierarchy_proven"] is True
+        assert evidence["fact_count"] == evidence["observed_fact_count"] == evidence["entity_count"] == 0
+        assert evidence["missing_dates"] == [] and evidence["dates_without_observed_facts"] == DATES
+        assert evidence["empty_level_proof"] == "provider_confirmed_empty_hierarchy"
+        assert evidence["producing_run_evidence"] == [{"sync_run_id": "empty-producing", "fact_dates": [],
+            "empty_proof_dates": DATES, "proven": True, "blockers": []}]
+        assert all(day["source"] == "committed_empty" and day["row_count"] == 0 for day in evidence["days"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["run_missing", "run_foreign", "run_partial", "identity_partial", "run_proof_mismatch",
+    "currency", "timezone", "account", "date_missing", "snapshot_nonempty", "snapshot_rows_not_explicit",
+    "snapshot_shape_invalid", "run_shape_invalid", "catalog_nonempty", "catalog_403", "truncated"])
+async def test_empty_provenance_requires_same_exact_committed_proof_as_reader(db, monkeypatch, mutation):
+    empty_snapshot_fixture(db)
+    snapshot = db.rows[diagnostic.COMMITTED_COLLECTION][0]
+    source = db.rows[diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION][0]
+    if mutation == "run_missing": db.rows[diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION] = [run("other")]
+    if mutation == "run_foreign": source["ad_account_id"] = "other"
+    if mutation == "run_partial": source["ad_sync_status"] = "partial"
+    if mutation == "identity_partial": source["identity_sync_status"] = "partial"
+    if mutation == "run_proof_mismatch": source["summary"]["empty_hierarchy_proof"]["report_dates"] = DATES[:1]
+    if mutation == "currency": snapshot["empty_hierarchy_proof"]["currency"] = "USD"
+    if mutation == "timezone": snapshot["empty_hierarchy_proof"]["account_timezone"] = "UTC"
+    if mutation == "account": snapshot["empty_hierarchy_proof"]["ad_account_id"] = "other"
+    if mutation == "date_missing": db.rows[diagnostic.COMMITTED_COLLECTION].pop()
+    if mutation == "snapshot_nonempty": snapshot["rows"]["campaign"] = [fact("campaign", DATES[0], "empty-producing")]
+    if mutation == "snapshot_rows_not_explicit": snapshot["empty_rows_explicit"] = False
+    if mutation == "snapshot_shape_invalid": snapshot["empty_proof_shape_valid"] = False
+    if mutation == "run_shape_invalid": source["empty_proof_shape_valid"] = False
+    if mutation == "catalog_nonempty": snapshot["empty_hierarchy_proof"]["catalog_responses"]["ad"]["rows_received"] = 1
+    if mutation == "catalog_403": snapshot["empty_hierarchy_proof"]["catalog_responses"]["ad"]["status"] = "incomplete"
+    if mutation == "truncated": monkeypatch.setattr(diagnostic, "MAX_PRODUCING_RUNS", 0)
+    result = await diagnose(db)
+    assert result["status"] == "incomplete"
+    assert all(evidence["empty_hierarchy_proven"] is False for evidence in result["levels"].values())
+    assert not any(evidence["period_complete"] is True for evidence in result["levels"].values())
+
+
+@pytest.mark.asyncio
+async def test_actual_mongo_empty_projection_matches_shared_reader_and_hides_proof(isolated_mongo, db):
+    empty_snapshot_fixture(db)
+    for collection, rows in db.rows.items():
+        if rows:
+            clean_rows = deepcopy(rows)
+            # Markers must be computed by Mongo, never trusted as input data.
+            for row in clean_rows:
+                row["empty_proof_shape_valid"] = False
+                row["empty_rows_explicit"] = False
+            await isolated_mongo[collection].insert_many(clean_rows)
+    result = await diagnose(isolated_mongo)
+    assert result["status"] == "complete"
+    from snapchat_v2.empty_hierarchy import empty_period_complete
+    assert await empty_period_complete(isolated_mongo, user_id="owner", account_id="account-sar",
+        currency="SAR", timezone_name="Asia/Riyadh", date_from=START, date_to=END, action="conversion")
+    assert all(row["empty_hierarchy_proven"] is True and row["fact_count"] == 0 for row in result["levels"].values())
+    assert "campaign_response" not in str(result)
+    # Extra source keys must not disappear under an allowlist and make
+    # differently stored snapshot/run proofs compare equal.
+    await isolated_mongo[diagnostic.COMMITTED_COLLECTION].update_one(
+        {"report_date": DATES[0]}, {"$set": {"empty_hierarchy_proof.unknown_key": "private-proof-field"}})
+    invalid = await diagnose(isolated_mongo)
+    assert invalid["status"] == "incomplete" and "private-proof-field" not in str(invalid)
+    await isolated_mongo[diagnostic.COMMITTED_COLLECTION].update_one(
+        {"report_date": DATES[0]}, {"$unset": {"empty_hierarchy_proof.unknown_key": "", "rows.ad": ""}})
+    invalid = await diagnose(isolated_mongo)
+    assert invalid["status"] == "incomplete"

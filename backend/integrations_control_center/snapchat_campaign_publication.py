@@ -76,6 +76,7 @@ class PublicationInput(BaseModel):
     creative_name: str = Field(min_length=1, max_length=200)
     ad_name: str = Field(min_length=1, max_length=200)
     headline: str = Field(min_length=1, max_length=34)
+    call_to_action: str = Field(default="SHOP_NOW", pattern=r"^(SHOP_NOW|ORDER_NOW)$")
     destination_url: str = Field(min_length=8, max_length=2048)
     daily_budget_micro: StrictInt
     start_time: str
@@ -266,6 +267,10 @@ async def preview_publication(db: Any, user_id: str, payload: PublicationInput) 
     publication_id = _hash([user_id, payload.idempotency_key])
     existing = await _jobs(db).find_one({"_id": publication_id, "user_id": user_id})
     request = payload.model_dump(mode="json")
+    # Preserve legacy SHOP_NOW fingerprints and immutable saved plans. The
+    # nondefault CTA is explicit intent and cannot reuse their retry key.
+    if request["call_to_action"] == "SHOP_NOW":
+        request.pop("call_to_action")
     if existing:
         if existing.get("request_fingerprint") != _hash(request):
             raise _fail("idempotency_conflict")
@@ -282,7 +287,7 @@ async def preview_publication(db: Any, user_id: str, payload: PublicationInput) 
     if media._date(payload.start_time) <= media._now():
         raise _fail("start_time_must_be_future")
     source = await media._load(db, user_id, payload.media_upload_id)
-    plan = {**request, "media_id": source.get("provider_media_id"),
+    plan = {**request, "call_to_action": payload.call_to_action, "media_id": source.get("provider_media_id"),
         "publication_contract": PROOF_CONTRACT, "delivery_status": "ACTIVE"}
     product = await _product(db, user_id, plan)
     plan["product_name"] = str(product.get("name") or "")[:300]
@@ -380,7 +385,7 @@ def _request(row: dict[str, Any], index: int) -> dict[str, Any]:
             "daily_budget_micro": p["daily_budget_micro"], "pixel_id": p["pixel_id"], "status": "ACTIVE",
             "conversion_window": p["conversion_window"], "start_time": p["start_time"]}
     elif index == 2:
-        body = {"name": name, "type": "WEB_VIEW", "headline": p["headline"], "call_to_action": "SHOP_NOW",
+        body = {"name": name, "type": "WEB_VIEW", "headline": p["headline"], "call_to_action": p.get("call_to_action", "SHOP_NOW"),
             "top_snap_media_id": p["media_id"], "profile_properties": {"profile_id": p["profile_id"]},
             "web_view_properties": {"url": p["destination_url"]}}
     elif index == 3:

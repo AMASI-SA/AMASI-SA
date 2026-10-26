@@ -148,7 +148,8 @@ class Reports:
                     row["ad_squad_id"] = "group-" + campaign_id
                 entities.append({"sub_request_status": "SUCCESS", singular: row})
             return httpx.Response(200, json={"request_status": "SUCCESS", plural: entities})
-        assert pieces[0] == "campaigns" and pieces[1] in CAMPAIGNS and pieces[-1] == "stats"
+        allowed = (*CAMPAIGNS, "Catalog-Only-No-Report") if self.empty_day else CAMPAIGNS
+        assert pieces[0] == "campaigns" and pieces[1] in allowed and pieces[-1] == "stats"
         assert query["granularity"] == "TOTAL" and query["breakdown"] in {"adsquad", "ad"}
         # The exact request carries each account's local midnight boundaries;
         # both currency paths use this same handler and producer implementation.
@@ -157,7 +158,7 @@ class Reports:
         prefix = "group-" if query["breakdown"] == "adsquad" else "ad-"
         return httpx.Response(200, json={"request_status": "SUCCESS", "total_stats": [{
             "sub_request_status": "SUCCESS", "total_stat": {"granularity": "TOTAL",
-                "breakdown_stats": {query["breakdown"]: [{"id": prefix + pieces[1], "stats": {
+                "breakdown_stats": {query["breakdown"]: [] if self.empty_day else [{"id": prefix + pieces[1], "stats": {
                     "spend": 0, "impressions": 2, "swipes": 0, "uniques": 2, "frequency": 1,
                 }}]},
             },
@@ -281,12 +282,27 @@ async def test_unpublished_or_unproven_day_scope_does_not_become_complete_childr
         monkeypatch.setattr(pipeline_module, "upsert_total_facts", fail_campaign_publish)
     outcome = await run_account(db, reports, "sar-account")
     assert outcome["status"] == "partial"
-    assert not any(query.get("granularity") == "TOTAL" for _, query in reports.requests)
+    requests = [(path, query) for path, query in reports.requests if query.get("granularity") == "TOTAL"]
+    if failure == "empty":
+        # An actually complete catalog is an allowed *request* scope when DAY
+        # is empty. Send every parent/day/level; membership never manufactures
+        # facts or converts actual empty responses into committed completeness.
+        parents = {*CAMPAIGNS, "Catalog-Only-No-Report"}
+        assert len(requests) == len(parents) * len(DAYS) * 2
+        expected = {(parent, day.isoformat(), breakdown)
+                    for parent in parents for day in DAYS for breakdown in ("adsquad", "ad")}
+        assert {(path.split("/")[2], datetime.fromisoformat(query["start_time"]).date().isoformat(),
+                 query["breakdown"]) for path, query in requests} == expected
+        assert "_campaign_catalog_scope" not in outcome["summary"]["identity"]
+    else:
+        # Failed/unpublished DAY evidence still cannot seed the new fallback.
+        assert requests == []
     run = db.raw[SNAPCHAT_SYNC_RUNS_COLLECTION].find_one({"sync_run_id": outcome["sync_run_id"]})
     for level in ("ad_squad", "ad"):
         assert run[f"{level}_sync_status"] == "partial"
         assert run["coverage"][level]["data_state"] == "unknown_incomplete"
-        assert run["coverage"][level]["reason"] == f"snapchat_{level}_campaign_scope_unproven"
+        reason = "zero_performance_proof_unavailable" if failure == "empty" else "campaign_scope_unproven"
+        assert run["coverage"][level]["reason"] == f"snapchat_{level}_{reason}"
         assert db.raw[SNAPCHAT_TOTAL_FACTS_COLLECTION].count_documents({"entity_type": level}) == 0
     assert db.raw[COMMITTED].count_documents({}) == 0
 
