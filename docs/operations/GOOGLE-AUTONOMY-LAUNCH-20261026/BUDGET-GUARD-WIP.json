@@ -1,0 +1,14 @@
+{
+  "state": "FUTURE WIP STORAGE PRIMITIVE / NEVER DEPLOY",
+  "root_tests": "13passed6Mongo-skipped1.42s; transaction Mongo notprovenlocally",
+  "source_snapshot": "Initialexactguard/module/unit13cases+6optionalreplicaMongo scenarios; laterhardeningseparate",
+  "provider_dispatch_authorized": false,
+  "runtime_available": false,
+  "source_release": "1542alreadymerged3aaf8d20652a0b7aeb03473f23afe41714a242d6; NOTPUBLISHED; thesefuturefilesareNOTin1542",
+  "remaining": [
+    "Allpolicywriters/globalautomatedincreasesmigration",
+    "ActualreplicaMongoCI and capabilityproof",
+    "Owner/native/catalog authority+launchgateway+worker+explicitUI optin"
+  ],
+  "no_live_writes": true
+}
