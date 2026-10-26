@@ -133,18 +133,32 @@ def _coverage_complete(snapshot: Any, window: Any) -> bool:
 def _scope_complete(scope: Any, *, store: bool = False) -> bool:
     if not isinstance(scope, dict):
         return False
-    if scope.get("cost_complete") is False:
+    # Older/partial snapshots may omit this proof or retain null/string values.
+    # Unknown cost is never evidence of a complete, successful experiment.
+    if scope.get("cost_complete") is not True:
         return False
     required = (
-        ("orders", "sales_sar")
+        ("orders", "sales_sar", "product_cost_sar", "gross_profit_before_marketing_sar")
         if store
         else (
             "orders",
             "sales_sar",
             "spend_sar",
+            "product_cost_sar",
+            "contribution_profit_sar",
         )
     )
-    return all(_number(scope.get(key)) is not None for key in required)
+    values = {key: _number(scope.get(key)) for key in required}
+    if any(value is None for value in values.values()):
+        return False
+    # These are gross cohort totals, not signed refund/accounting movements.
+    # Refund policy reduces realized product cost to zero/proportionally; it
+    # does not produce negative cost. Contribution/gross profit may be negative.
+    orders = values["orders"]
+    if orders < 0 or not orders.is_integer():
+        return False
+    nonnegative = ("sales_sar", "product_cost_sar") if store else ("sales_sar", "spend_sar", "product_cost_sar")
+    return all(values[key] >= 0 for key in nonnegative)
 
 
 def _data_completeness(
