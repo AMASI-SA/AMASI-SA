@@ -40,6 +40,8 @@ on:
       - "frontend/src/pages/SnapchatV2Page*"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/components/AdsExecutiveBreakdownTable.jsx"
+      - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
       - "frontend/src/services/dashboardAdsSpend.js"
       - "frontend/src/services/dashboardAdsSpend.test.js"
       - "frontend/src/lib/dashboardPlatformSpendMerge.js"
@@ -146,6 +148,7 @@ jobs:
           src/components/marketing/SnapchatDecisionReadiness.test.jsx
           src/pages/SnapchatV2Page.test.jsx
           src/components/DashboardAdsSpendCard.test.jsx
+          src/components/ProfitSummaryCard.adsExecutive.test.jsx
           src/services/dashboardAdsSpend.test.js
           src/lib/dashboardPlatformSpendMerge.test.js
           src/pages/AdvancedDashboard.latestOrders.test.jsx
