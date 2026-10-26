@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
+from bson import ObjectId
+from bson.decimal128 import Decimal128
+from order_status_policy import effective_product_cost
 
 import pytest
 
 from integrations_control_center import (
     snapchat_campaign_profitability_exact_reuse as module,
 )
+
+
+@pytest.fixture(autouse=True)
+def stable_default_policy(monkeypatch):
+    async def policy(db, user_id):
+        return {}
+    monkeypatch.setattr(module, "get_policy_map", policy, raising=False)
 
 
 @pytest.mark.asyncio
@@ -60,7 +71,7 @@ async def test_profitability_uses_exact_orders_and_campaign_spend(monkeypatch):
         return 0
 
     async def cost_context(db, user_id):
-        return {"loaded": True}
+        return {"loaded": True, "policy": {}}
 
     def order_cost(order, context):
         return {
@@ -108,16 +119,16 @@ async def test_profitability_uses_exact_orders_and_campaign_spend(monkeypatch):
 @pytest.mark.asyncio
 async def test_profitability_cache_is_invalidated_by_mezan_cost_revision(monkeypatch):
     module._CACHE.clear()
-    revisions = iter((3, 4))
+    revision = 3
     loads = 0
 
     async def cost_revision(db, user_id):
-        return next(revisions)
+        return revision
 
     async def cost_context(db, user_id):
         nonlocal loads
         loads += 1
-        return {}
+        return {"policy": {}}
 
     monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
     monkeypatch.setattr(module.profitability, "_load_cost_context", cost_context)
@@ -129,6 +140,7 @@ async def test_profitability_cache_is_invalidated_by_mezan_cost_revision(monkeyp
         "campaign_spend": {},
     }
     await module.calculate_profitability_from_exact_matches(object(), "owner-1", **kwargs)
+    revision = 4
     await module.calculate_profitability_from_exact_matches(object(), "owner-1", **kwargs)
 
     assert loads == 2
@@ -149,7 +161,7 @@ def calculation(monkeypatch):
 
     async def cost_context(db, user_id):
         loads.append(user_id)
-        return {}
+        return {"policy": {}}
 
     def order_cost(order, context):
         cost = sum(item["quantity"] * item["cost"] for item in order["products"])
@@ -229,3 +241,154 @@ async def test_unserializable_input_bypasses_cache_instead_of_reusing_unknown_re
     await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
     assert loads == ["owner", "owner"]
     assert module._CACHE == {}
+
+
+@pytest.mark.asyncio
+async def test_bson_decimal_and_text_cannot_collide_in_cache(calculation):
+    kwargs, loads = calculation
+    orders = kwargs["matched_orders"][("account-1", "campaign-1")]
+    orders[0]["metadata"] = Decimal128("100")
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    orders[0]["metadata"] = "100"
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_supported_object_id_and_datetime_preserve_safe_cache_hits(calculation):
+    kwargs, loads = calculation
+    orders = kwargs["matched_orders"][("account-1", "campaign-1")]
+    orders[0]["_id"] = ObjectId()
+    orders[0]["updated_at"] = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert loads == ["owner"]
+
+
+@pytest.fixture
+def policy_calculation(calculation, monkeypatch):
+    kwargs, loads = calculation
+    state = {"policy": {"custom": "confirmed"}, "on_load": None}
+
+    async def policy(db, user_id):
+        return deepcopy(state["policy"])
+
+    async def context(db, user_id):
+        loads.append(user_id)
+        result = {"policy": deepcopy(state["policy"])}
+        if state["on_load"]:
+            state["on_load"]()
+        return result
+
+    original = module.profitability._order_cost_and_products
+    def order_cost(order, cost_context):
+        result = original(order, cost_context)
+        result["product_cost_sar"] = effective_product_cost(
+            {**order, "total_product_cost": result["product_cost_sar"]}, cost_context["policy"])
+        return result
+
+    monkeypatch.setattr(module, "get_policy_map", policy, raising=False)
+    monkeypatch.setattr(module.profitability, "_load_cost_context", context)
+    monkeypatch.setattr(module.profitability, "_order_cost_and_products", order_cost)
+    for order in kwargs["matched_orders"][("account-1", "campaign-1")]:
+        order["order_status"] = "custom"
+    return kwargs, loads, state
+
+
+@pytest.mark.asyncio
+async def test_policy_update_and_reset_invalidate_unchanged_cohort(policy_calculation):
+    kwargs, loads, state = policy_calculation
+    first, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    state["policy"] = {"custom": "cancelled"}
+    second, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    state["policy"] = {}
+    third, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert [rows[("account-1", "campaign-1")]["product_cost_sar"] for rows in (first, second, third)] == [60, 0, 60]
+
+
+@pytest.mark.asyncio
+async def test_policy_change_during_context_load_retries_current_policy(policy_calculation):
+    kwargs, loads, state = policy_calculation
+    def change():
+        state["policy"] = {"custom": "cancelled"}
+        state["on_load"] = None
+    state["on_load"] = change
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 0
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_continuously_changing_policy_never_caches_mixed_snapshot(policy_calculation):
+    kwargs, loads, state = policy_calculation
+    state["on_load"] = lambda: state["policy"].update(custom="cancelled" if state["policy"]["custom"] == "confirmed" else "confirmed")
+    with pytest.raises(ValueError, match="snapshot_unproven"):
+        await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert module._CACHE == {}
+
+
+@pytest.mark.asyncio
+async def test_policy_change_during_cache_hit_cannot_return_stale_result(policy_calculation, monkeypatch):
+    kwargs, loads, state = policy_calculation
+    await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    reads = 0
+    async def policy(db, user_id):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            state["policy"] = {"custom": "cancelled"}
+        return deepcopy(state["policy"])
+    monkeypatch.setattr(module, "get_policy_map", policy)
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 0
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_cost_revision_change_during_context_load_retries(policy_calculation, monkeypatch):
+    kwargs, loads, state = policy_calculation
+    revision = 7
+    async def cost_revision(db, user_id):
+        return revision
+    def change():
+        nonlocal revision
+        revision += 1
+        state["on_load"] = None
+    monkeypatch.setattr(module, "get_product_cost_revision", cost_revision)
+    state["on_load"] = change
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 60
+    assert loads == ["owner", "owner"]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_inputs_detach_from_caller_before_await(calculation, monkeypatch):
+    kwargs, loads = calculation
+    async def policy(db, user_id):
+        kwargs["matched_orders"][("account-1", "campaign-1")][0]["total_amount"] = 999
+        kwargs["campaign_spend"][("account-1", "campaign-1")] = 999
+        return {}
+    monkeypatch.setattr(module, "get_policy_map", policy)
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    row = rows[("account-1", "campaign-1")]
+    assert row["sales_sar"] == 150
+    assert row["ad_spend_sar"] == 30
+
+
+@pytest.mark.asyncio
+async def test_policy_change_during_calculation_is_not_cached(policy_calculation, monkeypatch):
+    kwargs, loads, state = policy_calculation
+    original = module.profitability._order_cost_and_products
+    changed = False
+    def calculate(order, context):
+        nonlocal changed
+        result = original(order, context)
+        if not changed:
+            state["policy"] = {"custom": "cancelled"}
+            changed = True
+        return result
+    monkeypatch.setattr(module.profitability, "_order_cost_and_products", calculate)
+    rows, _ = await module.calculate_profitability_from_exact_matches(object(), "owner", **kwargs)
+    assert rows[("account-1", "campaign-1")]["product_cost_sar"] == 0
+    assert loads == ["owner", "owner"]
+    assert len(module._CACHE) == 1

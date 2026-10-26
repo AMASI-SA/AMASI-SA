@@ -11,13 +11,18 @@ from __future__ import annotations
 from collections import defaultdict
 from contextvars import ContextVar
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 import hashlib
 import json
 from typing import Any
+from bson import ObjectId
+from bson.decimal128 import Decimal128
+from bson.int64 import Int64
 
 from dashboard_v2_routes import _filtered_orders
 from product_cost_revision import get_product_cost_revision
+from order_status_policy import DEFAULT_POLICY, VALID_CATEGORIES, get_policy_map
 
 from . import snapchat_campaign_profitability as profitability
 from . import snapchat_campaign_result_source_routes as routes
@@ -28,9 +33,48 @@ _MATCHED_ORDERS: ContextVar[dict[tuple[str, str], list[dict[str, Any]]]] = (
     ContextVar("snapchat_campaign_matched_orders", default={})
 )
 _CACHE: dict[
-    tuple[str, str, str, int, str],
+    tuple[str, str, str, int, str, str],
     tuple[datetime, dict[tuple[str, str], dict[str, Any]], dict[str, Any]],
 ] = {}
+
+
+class _CostStateChanged(Exception):
+    """An observed revision/policy race, never a permission to use stale data."""
+
+
+def _cache_value(value):
+    """Typed canonical values; unsupported BSON/Python values bypass caching."""
+    if value is None or type(value) in (str, bool, int, float):
+        return [type(value).__name__, value]
+    if type(value) is dict:
+        if any(type(key) is not str for key in value):
+            raise TypeError("unsupported cache document key")
+        return ["dict", [[key, _cache_value(item)] for key, item in sorted(value.items())]]
+    if type(value) in (list, tuple):
+        return [type(value).__name__, [_cache_value(item) for item in value]]
+    if type(value) in (datetime, date):
+        return [type(value).__name__, value.isoformat()]
+    if type(value) in (ObjectId, Decimal128, Decimal):
+        return [type(value).__name__, str(value)]
+    if type(value) is Int64:
+        return ["bson.Int64", int(value)]
+    raise TypeError("unsupported cache value")
+
+
+def _policy_fingerprint(policy):
+    if not isinstance(policy, dict) or any(type(key) is not str or type(value) is not str or value not in VALID_CATEGORIES for key, value in policy.items()):
+        raise ValueError("campaign_profitability_snapshot_unproven")
+    content = json.dumps(_cache_value({"defaults": DEFAULT_POLICY, "overrides": policy}), separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(content.encode()).hexdigest()
+
+
+async def _cost_state(db, user_id):
+    before = await get_product_cost_revision(db, user_id)
+    policy = await get_policy_map(db, user_id)
+    after = await get_product_cost_revision(db, user_id)
+    if before != after:
+        raise _CostStateChanged()
+    return after, _policy_fingerprint(policy)
 
 
 def _input_fingerprint(matched_orders, campaign_spend) -> str | None:
@@ -45,7 +89,7 @@ def _input_fingerprint(matched_orders, campaign_spend) -> str | None:
         campaigns = []
         for key, orders in sorted(matched_orders.items()):
             order_hashes = sorted(hashlib.sha256(json.dumps(
-                order, sort_keys=True, separators=(",", ":"), default=str,
+                _cache_value(order), separators=(",", ":"),
                 allow_nan=False,
             ).encode()).hexdigest() for order in orders)
             campaigns.append([list(key), order_hashes])
@@ -100,7 +144,7 @@ async def capture_exact_matched_orders(
     return dict(matched)
 
 
-async def calculate_profitability_from_exact_matches(
+async def _calculate_profitability_attempt(
     db: Any,
     user_id: str,
     *,
@@ -109,15 +153,20 @@ async def calculate_profitability_from_exact_matches(
     matched_orders: dict[tuple[str, str], list[dict[str, Any]]],
     campaign_spend: dict[tuple[str, str], float],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
-    cost_revision = await get_product_cost_revision(db, user_id)
+    cost_revision, policy_fingerprint = await _cost_state(db, user_id)
     input_fingerprint = _input_fingerprint(matched_orders, campaign_spend)
-    cache_key = (user_id, date_from, date_to, cost_revision, input_fingerprint)
+    cache_key = (user_id, date_from, date_to, cost_revision, policy_fingerprint, input_fingerprint)
     now = datetime.now(timezone.utc)
     cached = _CACHE.get(cache_key) if input_fingerprint is not None else None
     if cached and now - cached[0] < timedelta(seconds=CACHE_TTL_SECONDS):
+        if (cost_revision, policy_fingerprint) != await _cost_state(db, user_id):
+            raise _CostStateChanged()
         return deepcopy(cached[1]), deepcopy(cached[2])
 
     cost_context = await profitability._load_cost_context(db, user_id)
+    if (_policy_fingerprint(cost_context.get("policy")) != policy_fingerprint
+            or (cost_revision, policy_fingerprint) != await _cost_state(db, user_id)):
+        raise _CostStateChanged()
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
     for key, orders in matched_orders.items():
         bucket = profitability._new_campaign_bucket()
@@ -159,12 +208,43 @@ async def calculate_profitability_from_exact_matches(
             for row in by_campaign.values()
         ),
     }
+    if (cost_revision, policy_fingerprint) != await _cost_state(db, user_id):
+        raise _CostStateChanged()
     if input_fingerprint is not None:
         _CACHE[cache_key] = (now, deepcopy(by_campaign), deepcopy(totals))
     if len(_CACHE) > 32:
         oldest = min(_CACHE, key=lambda key: _CACHE[key][0])
         _CACHE.pop(oldest, None)
     return by_campaign, totals
+
+
+async def calculate_profitability_from_exact_matches(
+    db: Any,
+    user_id: str,
+    *,
+    date_from: str,
+    date_to: str,
+    matched_orders: dict[tuple[str, str], list[dict[str, Any]]],
+    campaign_spend: dict[tuple[str, str], float],
+) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
+    """Retry one observed local race; never return/cache a known mixed state.
+
+    Optimistic content/revision fences do not establish an atomic Mongo snapshot
+    or upstream Salla freshness. Existing scale guards remain authoritative.
+    """
+    # Detach caller-owned dictionaries before any await so the input digest and
+    # calculation use the same local cohort even if another task mutates them.
+    orders = deepcopy(matched_orders)
+    spend = deepcopy(campaign_spend)
+    for _ in range(2):
+        try:
+            return await _calculate_profitability_attempt(
+                db, user_id, date_from=date_from, date_to=date_to,
+                matched_orders=orders, campaign_spend=spend,
+            )
+        except _CostStateChanged:
+            continue
+    raise ValueError("campaign_profitability_snapshot_unproven")
 
 
 def install_exact_salla_profitability_reuse() -> None:
