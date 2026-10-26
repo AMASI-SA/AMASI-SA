@@ -123,10 +123,8 @@ async def test_dispatch_without_services_accepts_each_selected_category(catalog)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("product,expected", [
     ({"user_id": "owner", "id": "p1", "cost_category_id": "plated"}, "supplier_dispatch_category_mismatch"),
-    ({"user_id": "other", "id": "p1", "cost_category_id": "clothes"}, "supplier_dispatch_product_category_required"),
-    ({"user_id": "owner", "id": "p1"}, "supplier_dispatch_product_category_required"),
 ])
-async def test_dispatch_rejects_wrong_unknown_or_foreign_category(catalog, product, expected):
+async def test_dispatch_rejects_explicit_category_mismatch(catalog, product, expected):
     db, _, raw = catalog
     await db[PRODUCTS].insert_one(product)
     before = list(raw[MEZAN_SUPPLIERS_V2].find({}))
@@ -134,6 +132,27 @@ async def test_dispatch_rejects_wrong_unknown_or_foreign_category(catalog, produ
         await require_supplier_product_categories(db, user_id="owner", supplier={"category_ids": ["clothes"]}, pieces=[{"product_id": "p1"}])
     assert caught.value.detail["code"] == expected
     assert list(raw[MEZAN_SUPPLIERS_V2].find({})) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("products", [
+    [],
+    [{"user_id": "owner", "id": "p1"}],
+    [{"user_id": "owner", "id": "p1", "cost_category_id": ""}],
+    [{"user_id": "other", "id": "p1", "cost_category_id": "plated"}],
+    [{"user_id": "owner", "id": "p1", "cost_category_id": "clothes"},
+     {"user_id": "owner", "id": "duplicate", "salla_product_id": "p1", "cost_category_id": "plated"}],
+])
+async def test_dispatch_does_not_require_product_classification_or_mutate_catalog(catalog, products):
+    db, _, raw = catalog
+    if products:
+        await db[PRODUCTS].insert_many(products)
+    before = list(raw[PRODUCTS].find({}))
+    supplier = {"category_ids": ["clothes"], "service_ids": []}
+    await require_supplier_product_categories(
+        db, user_id="owner", supplier=supplier, pieces=[{"product_id": "p1"}])
+    assert list(raw[PRODUCTS].find({})) == before
+    assert supplier == {"category_ids": ["clothes"], "service_ids": []}
 
 
 @pytest.mark.asyncio
