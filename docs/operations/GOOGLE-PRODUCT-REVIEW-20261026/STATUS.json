@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-PRODUCT-REVIEW-20261026",
   "branch": "codex/google-product-review-release-20261026",
   "base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
-  "state": "WIP integration; owner read-only route attached locally; UI, independent integration review, CI and release pending",
+  "state": "WIP integrated owner catalog review UI and route; CI and final independent review pending",
   "provider_writes": 0,
   "production_changed": false,
   "tests": "root73passed2.04s; route source21passed5replica CI40400497783",
@@ -11,5 +11,5 @@
     "Light product sync does not prove variant inventory",
     "Foreign courier release lease in progress; no /app writes"
   ],
-  "next_safe_action": "Save remote WIP; integrate reviewed UI then test; inspect latest production and actual guard before release"
+  "next_safe_action": "Push complete reviewed slice; run integrated frontend/backend plus real Mongo CI; inspect production and guard before release"
 }
