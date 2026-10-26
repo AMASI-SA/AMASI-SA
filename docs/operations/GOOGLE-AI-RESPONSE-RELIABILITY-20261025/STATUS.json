@@ -749,7 +749,7 @@
     "pr": 1564,
     "source": "8f01a77314763eaae0131269b4c421cf19d34611",
     "production_base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
-    "state": "A/B frozen, all B checks passed (12 success + TikTok expected skip), host20 CI success, actual host isolated retry in progress",
+    "state": "MERGED, not yet published",
     "root_backend_tests": "73passed2.04s",
     "real_mongo_source": {
       "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
@@ -760,7 +760,7 @@
     },
     "provider_writes": 0,
     "production_changed": false,
-    "next": "Read existing host retry exit and logs; fetch latest production and guard, then merge/prepare/prepublish once if all requirements hold. No foreign lease operations.",
+    "next": "Fresh actualguard inactive + current production M and tracked clean then fast-forward /app. Materialize matched artifacts, prepare/prepublish, single publish, newer finish, 3verify, activefalse, behavior.",
     "A": "8f01a77314763eaae0131269b4c421cf19d34611",
     "B": "d7fd4608ed9e703aa1ddf1e84263f7e05b46e780",
     "runtime": "rg5-a8f6fe87faf3cfc48c53aad5bd570019e7c38ca6c90415bb798a40337f43042e",
@@ -784,7 +784,9 @@
     },
     "git_validation": "A/J and B intent validated via clean checkout; exact intent sha7e37ff17; B only intent",
     "actual_guard": "observed inactive on /app, head d398, tracked clean, 466MB free",
-    "actual_host_rehearsal": "first exit128 due clone origin /app missing task ref; isolated retry with correct GitHub origin /tmp/google1564-host-retry.exit pending. Do not start another until outcome known."
+    "actual_host_rehearsal": "retry exit0, exact source/runtime/artifact matched; /tmp/google1564-host-retry.log, .exit; first retry ref error preserved",
+    "merge": "72ab1aee0fa9520b3a5f91f924906a3be3337531",
+    "B_ci": "12success plus TikTok expected skip, logs verified"
   },
   "legacy_claim_gap": {
     "branch": "codex/google-legacy-claim-gap-wip-20261026",
