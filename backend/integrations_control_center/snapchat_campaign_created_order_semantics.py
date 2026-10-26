@@ -26,7 +26,9 @@ from product_cost_revision import get_product_cost_revision
 from . import snapchat_account_timezone_manager as manager
 
 SOURCE_MODE = "snapchat_salla_created_orders_fixed_v1"
-PROFIT_CACHE_TTL_SECONDS = 5 * 60
+# Keep the exported setting and empty container for existing callers; neither
+# can be used to reuse profitability until all input revisions are reliable.
+PROFIT_CACHE_TTL_SECONDS = 0
 
 _FINANCIAL_MATCHED: ContextVar[
     dict[tuple[str, str], list[dict[str, Any]]]
@@ -307,35 +309,19 @@ async def calculate_financial_profitability(
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
     from . import snapchat_campaign_profitability as profitability
 
-    cost_revision = await get_product_cost_revision(db, user_id)
-    spend_signature = tuple(sorted(
-        (
-            _text(key[0]),
-            _text(key[1]),
-            round(_float(value), 6),
-        )
-        for key, value in campaign_spend.items()
-    ))
+    # Freeze caller-owned data before loading cost context, so an await cannot
+    # silently mix an earlier cohort with later mutations to spend or orders.
+    financial_matched = deepcopy(financial_matched)
+    campaign_spend = deepcopy(campaign_spend)
     report_total_spend = (
         round(_float(total_spend_sar), 2)
         if total_spend_sar is not None
         else profitability._total_campaign_spend(campaign_spend)
     )
-    cache_key = (
-        user_id,
-        account_id,
-        date_from,
-        date_to,
-        cost_revision,
-        spend_signature,
-        report_total_spend,
-    )
-    now = datetime.now(timezone.utc)
-    cached = _PROFIT_CACHE.get(cache_key)
-    if cached and now - cached[0] < timedelta(seconds=PROFIT_CACHE_TTL_SECONDS):
-        return deepcopy(cached[1]), deepcopy(cached[2])
-
-    cost_context = await profitability._load_cost_context(db, user_id)
+    # Cost revision does not cover order membership, policy, catalog identity,
+    # or all component writes. Recalculate using this request's cohort and
+    # current context instead of serving an unverifiable five-minute snapshot.
+    cost_context = await profitability._load_cost_context(db, user_id) if financial_matched else {}
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
     for key, orders in financial_matched.items():
         bucket = profitability._new_campaign_bucket()
@@ -382,10 +368,6 @@ async def calculate_financial_profitability(
             for row in by_campaign.values()
         ),
     }
-    _PROFIT_CACHE[cache_key] = (now, deepcopy(by_campaign), deepcopy(totals))
-    if len(_PROFIT_CACHE) > 32:
-        oldest = min(_PROFIT_CACHE, key=lambda key: _PROFIT_CACHE[key][0])
-        _PROFIT_CACHE.pop(oldest, None)
     return by_campaign, totals
 
 
