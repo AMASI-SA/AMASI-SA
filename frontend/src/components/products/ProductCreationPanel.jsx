@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     CheckCircle, Eye, Package, Plus, RocketLaunch, X,
 } from "@phosphor-icons/react";
@@ -8,6 +9,7 @@ import {
     approveProductCreationDraft,
     createProductCreationDraft,
     listProductCreationDrafts,
+    getProductCreationDraft,
     previewProductCreationDraft,
     publishProductCreationDraft,
 } from "../../services/mezanProductsV2";
@@ -56,6 +58,14 @@ export default function ProductCreationPanel({ onCreated }) {
     const [activeDraft, setActiveDraft] = useState(null);
     const [preview, setPreview] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [publishError, setPublishError] = useState("");
+    const publishInFlight = useRef(false);
+
+    async function refreshDraft(draftId) {
+        const result = await getProductCreationDraft(draftId);
+        setActiveDraft((current) => current?.id === draftId ? result.draft : current);
+    }
 
     const loadDrafts = useCallback(async () => {
         try {
@@ -147,19 +157,10 @@ export default function ProductCreationPanel({ onCreated }) {
     }
 
     async function publishDraft() {
-        if (!activeDraft) return;
-        const inventoryNotice = activeDraft.inventory_policy === "branch_stock_required"
-            ? activeDraft.stockout_policy === "allow_preorder"
-                ? "سيُنشأ بحالة نفد المخزون، ويحفظ ميزان سياسة الحجز المسبق حتى تُدخل مخزون فرع. عرض الحجز للعميل في سلة ليس نشرًا تلقائيًا بعد."
-                : "سيُنشأ بحالة نفد المخزون حتى تُدخل كمية في أحد الفروع."
-            : "سيُنشأ دون تتبع مخزون للمنتج النهائي.";
-        const preparationNotice = activeDraft.fulfillment_type === "requires_preparation"
-            ? "مساره الافتراضي يحتاج تجهيزًا."
-            : "مساره الافتراضي مباشر، وأي خدمة مرتبطة به يمكن أن تدخله التجهيز.";
-        const confirmed = window.confirm(
-            `سيتم الآن إنشاء المنتج "${activeDraft.name}" في سلة. ${inventoryNotice} ${preparationNotice} هل تريد المتابعة؟`,
-        );
-        if (!confirmed) return;
+        if (!activeDraft || busy || publishInFlight.current) return;
+        publishInFlight.current = true;
+        setConfirmOpen(false);
+        setPublishError("");
         setBusy(true);
         try {
             const result = await publishProductCreationDraft(activeDraft.id);
@@ -172,22 +173,58 @@ export default function ProductCreationPanel({ onCreated }) {
             await loadDrafts();
             onCreated?.(result.product);
         } catch (error) {
-            toast.error(errorMessage(error));
+            const message = errorMessage(error);
+            setPublishError(message);
+            toast.error(message);
+            try {
+                await refreshDraft(activeDraft.id);
+            } catch {
+                setPublishError(`${message} تعذر تحديث حالة الطلب؛ تحقق من الحالة قبل إعادة المحاولة.`);
+            }
             await loadDrafts();
         } finally {
+            publishInFlight.current = false;
             setBusy(false);
         }
     }
 
+
     function startNew() {
+        setPublishError("");
         setForm(EMPTY_FORM);
         setActiveDraft(null);
         setPreview(null);
         setOpen(true);
     }
 
+    const inventoryNotice = activeDraft?.inventory_policy === "branch_stock_required"
+            ? activeDraft?.stockout_policy === "allow_preorder"
+                ? "سيُنشأ بحالة نفد المخزون، ويحفظ ميزان سياسة الحجز المسبق حتى تُدخل مخزون فرع. عرض الحجز للعميل في سلة ليس نشرًا تلقائيًا بعد."
+                : "سيُنشأ بحالة نفد المخزون حتى تُدخل كمية في أحد الفروع."
+            : "سيُنشأ دون تتبع مخزون للمنتج النهائي.";
+    const preparationNotice = activeDraft?.fulfillment_type === "requires_preparation"
+            ? "مساره الافتراضي يحتاج تجهيزًا."
+            : "مساره الافتراضي مباشر، وأي خدمة مرتبطة به يمكن أن تدخله التجهيز.";
+
     return (
         <section className="rounded-3xl border border-indigo-200 bg-white shadow-sm" data-testid="product-creation-panel">
+            <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <AlertDialog.Portal>
+                    <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+                    <AlertDialog.Content dir="rtl" className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-xl">
+                        <AlertDialog.Title className="text-lg font-black">تأكيد إنشاء المنتج في سلة</AlertDialog.Title>
+                        <AlertDialog.Description className="my-4 text-sm leading-7">
+                            سيتم إرسال طلب المنتج «{activeDraft?.name}» ({activeDraft?.sku}) بسعر {activeDraft?.price} ر.س.
+                            {" "}{inventoryNotice} {preparationNotice}
+                            {!activeDraft?.image_urls?.length && " سيبقى مخفيًا حتى تُضاف صورة."}
+                        </AlertDialog.Description>
+                        <div className="flex gap-3">
+                            <AlertDialog.Cancel className="rounded-xl border px-4 py-2">إلغاء</AlertDialog.Cancel>
+                            <AlertDialog.Action disabled={busy} onClick={publishDraft} className="rounded-xl bg-indigo-700 px-4 py-2 text-white">تأكيد ومتابعة</AlertDialog.Action>
+                        </div>
+                    </AlertDialog.Content>
+                </AlertDialog.Portal>
+            </AlertDialog.Root>
             <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div className="flex items-center gap-2 font-black text-indigo-950">
@@ -198,7 +235,7 @@ export default function ProductCreationPanel({ onCreated }) {
                         إنشاء فقط: مسودة ومعاينة واعتماد، ثم تأكيد صريح. لا نستورد منتجًا من سلة ولا نستخدم الاستيراد الجماعي.
                     </p>
                 </div>
-                <button type="button" onClick={startNew} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 font-black text-white hover:bg-indigo-800">
+                <button type="button" disabled={busy} onClick={startNew} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 font-black text-white hover:bg-indigo-800">
                     <Plus weight="bold" /> منتج جديد
                 </button>
             </div>
@@ -211,7 +248,7 @@ export default function ProductCreationPanel({ onCreated }) {
                             <button
                                 key={draft.id}
                                 type="button"
-                                onClick={() => { setActiveDraft(draft); setPreview(null); setOpen(true); }}
+                                onClick={() => { setPublishError(""); setActiveDraft(draft); setPreview(null); setOpen(true); }}
                                 className="rounded-xl border bg-white p-3 text-right hover:border-indigo-300"
                             >
                                 <div className="truncate font-black">{draft.name}</div>
@@ -231,7 +268,7 @@ export default function ProductCreationPanel({ onCreated }) {
                         <h3 className="font-black text-slate-900">
                             {activeDraft ? `طلب إنشاء: ${activeDraft.name}` : "بيانات المنتج الجديد"}
                         </h3>
-                        <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="إغلاق"><X /></button>
+                        <button type="button" disabled={busy} onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="إغلاق"><X /></button>
                     </div>
 
                     {!activeDraft && (
@@ -331,6 +368,9 @@ export default function ProductCreationPanel({ onCreated }) {
                                 </div>
                             )}
 
+                            {publishError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{publishError}</p>}
+                            {activeDraft.status === "publishing" && <p role="status">جارٍ معالجة الطلب. حدّث الحالة لمعرفة النتيجة.</p>}
+                            <button type="button" disabled={busy} onClick={() => refreshDraft(activeDraft.id).catch((error) => toast.error(errorMessage(error)))}>تحديث حالة الطلب</button>
                             <div className="flex flex-wrap gap-2">
                                 {activeDraft.status === "draft" && !preview && (
                                     <button type="button" disabled={busy} onClick={reviewDraft} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-black text-white disabled:opacity-50"><Eye /> معاينة وفحص</button>
@@ -339,7 +379,7 @@ export default function ProductCreationPanel({ onCreated }) {
                                     <button type="button" disabled={busy} onClick={approveDraft} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-black text-white disabled:opacity-50"><CheckCircle /> اعتماد المسودة</button>
                                 )}
                                 {["approved", "publish_unknown"].includes(activeDraft.status) && (
-                                    <button type="button" disabled={busy} onClick={publishDraft} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 font-black text-white disabled:opacity-50"><RocketLaunch /> إنشاء المنتج في سلة</button>
+                                    <button type="button" disabled={busy} onClick={() => { setPublishError(""); setConfirmOpen(true); }} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 font-black text-white disabled:opacity-50"><RocketLaunch /> {busy ? "جارٍ تنفيذ الطلب…" : activeDraft.status === "publish_unknown" ? "التحقق من نتيجة الإنشاء" : "إنشاء المنتج في سلة"}</button>
                                 )}
                             </div>
                         </div>
