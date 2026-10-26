@@ -3,7 +3,7 @@
   "checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
   "state": "WIP reviewedpolicy+plan saved e54a4a591d99d860b8035d170e4e68b6478ef8aa; root wiredroutes/UI/CI locally and179focusedpassed2.16s; gateway34tests/authority29/worker43 reported; reviewhardening+Mongotests+runtimecomposition ongoing. NeverdeployWIP.",
   "full_autonomy_complete": false,
-  "environment_blocker": "Root durablecreation checkpoint e54a4a591d99d860b8035d170e4e68b6478ef8aa contains reviewedcontract/policy/plan. Laterlocalauthority/gateway/worker/runtimeintegration not yet rootcheckpointed; authors checking exactcachedbytes for recoveryWIP branches. Do not claim those recoverable until remoteSHA recorded.",
+  "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
   "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
   "root_integration_state": "Remote exact1535baseline plus exactknown3-filepatch reconstituted afterenvloss; latestlocalbytecomparison unavailable; explicitlyUNVERIFIEDWIP. Previouslocalfocused179passed2.16s beforeenvloss.",
   "author_local_only_progress": {
@@ -17,5 +17,5 @@
     "codex/google-creation-gateway-recovery-20261026",
     "codex/google-creation-runtime-recovery-20261026"
   ],
-  "recovery_note": "Recovery not confirmed. Gateway/authority/audit agent turns failed after environment removal with unsupported-model error; no recovery branch SHA received. Exact latest authority/gateway/worker/runtime sources remain local-only pending environment restoration. Do not claim remote recovery. Durable root creation checkpoint3cba125d4df8f837d0d5015f3d693351f38a4577 and previous e54 preserve contract/policy/plan/rootwiring only."
+  "recovery_note": "Verified durable3cba125d4df8f837d0d5015f3d693351f38a4577 only. Restoring this branch to fresh checkout; do not call missing latermodules completed or tested in restoredsource."
 }
