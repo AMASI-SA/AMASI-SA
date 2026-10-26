@@ -538,7 +538,7 @@
     "A": "b381a5929b6541ec8e243572700c9504290b7274",
     "B": "753c1717ceaf44156358aa986a4d082b20d0fdc7",
     "runtime": "rg5-46dd02b93f65a1191512ef02714642673af599140f4a38efcd307fccfe81bdee",
-    "state": "MERGED; original host adapter retry running; no lease or publish",
+    "state": "MERGED; NO deployment; originalhostisolatedrehearsal outcomeUNKNOWN during Preview sleep/recovery",
     "source_ci": {
       "google": 40386587700,
       "backend": 1130,
@@ -569,11 +569,11 @@
       ],
       "source_updated": false
     },
-    "publisher": "Recovered home/project; Republish visible; newest prepublish finish Oct26 21:37Asia/Riyadh",
+    "publisher": "Available Republish, latestfinish21:37baseline; PreviewUnavailable explicitagentresting after editor disconnect. PreviewRefresh thenResumePreview clicked; Resuming... disabled observed",
     "superseded_pr": 1549,
     "production_changed": false,
     "provider_writes": 0,
-    "next_safe_action": "Read retry1 actual exit and identity; if0 plus reviewed identity matches freshremote/guard then prepare/prepublish/publish once; require newerfinish3liveprobes and guardclosed, owner form behavior. No foreign lease changes.",
+    "next_safe_action": "Once ResumePreview done, reopen sameEditorURL. Read exactsavedretry2exit/log/cloneHEAD first. No blindrerun. If0 then transfer only ignoredbuild+proof afterfreshinactiveguardcleanHEADMremoteM; actual/app adapter materializeidentity+verify_packages; prepare/prepublishsingleclickpublish; require newerfinish3liveprobesclosedlease and behavior.",
     "merge": "11a52dd933d7269cd80046219dcd93d5a6e62297",
     "B_checks": "13workflows:12success1expectedunrelatedTikTokskip",
     "B_host20": {
@@ -586,10 +586,18 @@
     "host_adapter": {
       "first_exit": 2,
       "reason": "prepackaged backend/__pycache__",
-      "quarantine": "2untracked nonsymlink derived pycs preserved .git/google1555-evidence/backend-pycache-quarantine",
-      "retry_log": ".git/google1555-evidence/build-retry1.log",
-      "retry_exit_file": ".git/google1555-evidence/build-retry1.exit",
-      "state": "running"
-    }
+      "quarantine": "exactly2untrackednonsymlinkpycspreserved .git/google1555-evidence/backend-pycache-quarantine",
+      "retry1_exit": 2,
+      "retry1_reason": "Yarn frozen install ENOSPC /app9.8Gfull",
+      "own_partial_install_cleanup": "only task-created interrupted frontend/node_modules415M removed",
+      "foreign_files_preserved": ".worktrees6.2G, .emergent/testing, deployer-agent-docs; no foreign cleanup",
+      "independent_volume": "/tmpoverlay179Gavailable",
+      "samehost_clean_clone": "/tmp/mezan-google1555-rehearsal",
+      "retry2_log": "/app/.git/google1555-evidence/build-retry2.log",
+      "retry2_exit_file": "/app/.git/google1555-evidence/build-retry2.exit",
+      "retry2_outcome": "UNKNOWN; not rerun"
+    },
+    "lease_created": false,
+    "publish_clicked": false
   }
 }
