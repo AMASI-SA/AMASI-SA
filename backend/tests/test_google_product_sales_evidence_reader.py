@@ -19,7 +19,7 @@ async def test_no_orders_is_unknown_not_zero():
 @pytest.mark.asyncio
 async def test_owner_and_period_scoped_without_financial_assumption():
     db=Db([order(currency='QAR',status='cancelled'),order(owner='other')]);out=await read(db)
-    assert db.c.query['user_id']=='owner' and 'raw_by_source' not in db.c.projection
+    assert db.c.query['user_id']=='owner' and 'raw_by_source' not in db.c.projection and 'products.product_id' not in db.c.projection
     assert out['products'][0]['units_sold'] is None and out['products'][0]['profitability'] is None
     assert out['observed_documents']==1 and out['cancellation_refunds_reconciled'] is False
 @pytest.mark.asyncio

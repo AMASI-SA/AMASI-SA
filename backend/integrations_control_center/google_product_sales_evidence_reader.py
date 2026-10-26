@@ -10,9 +10,7 @@ from datetime import date, datetime, timedelta
 import re
 from zoneinfo import ZoneInfo
 
-PROJECTION = {'_id': 0, 'user_id': 1, 'order_date': 1, 'order_date_inferred': 1,
-              'order_number': 1, 'status': 1, 'products.product_id': 1,
-              'products.parent_product_id': 1, 'products.quantity': 1}
+PROJECTION = {'_id': 0, 'user_id': 1, 'order_date': 1, 'order_date_inferred': 1}
 
 
 async def read_product_sales_evidence(db, *, owner_id, product_ids, date_from, date_to, as_of, limit=10000):

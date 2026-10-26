@@ -1,1 +1,24 @@
-{"task_id":"GOOGLE-SALES-EVIDENCE-20261026","branch":"codex/google-sales-evidence-wip-20261026","base":"d3988c0be954daecdc2335c8699d20926e1bd4a3","state":"WIP READ-ONLY COVERAGE DIAGNOSTIC; NOT WIRED","scope":["backend/integrations_control_center/google_product_sales_evidence_reader.py","backend/tests/test_google_product_sales_evidence_reader.py"],"verification":{"red":"missing module exit2","local":"7 passed no skips; diff check pass"},"contract":"Scoped query on unified_orders using owner and normalized YYYY-MM-DD order_date; exact date boundaries in Asia/Riyadh; limit+1 identifies truncation. It returns document coverage metadata only, never raw orders, quantities, sales, profit or matched-order attribution.","limitations":["Completeness of upstream source, cancellation/refund treatment, actual FX and line-product mapping not proven; sales/units/profit remain null even with rows or no rows","Normalized date query follows existing dashboard semantics; inferred dates are included but no coverage assertion made","Owner and as_of must be derived from trusted session and server clock before any route integration","No route, provider execution, API, category, mutation or source writes"],"production_changed":false,"provider_writes":0,"next_safe_action":"Review source completeness watermarks and exact line/return/FX proof; run real Mongo and independent review before wiring"}
+{
+  "task_id": "GOOGLE-SALES-EVIDENCE-20261026",
+  "branch": "codex/google-sales-evidence-wip-20261026",
+  "base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
+  "state": "WIP READ-ONLY COVERAGE DIAGNOSTIC; NOT WIRED",
+  "scope": [
+    "backend/integrations_control_center/google_product_sales_evidence_reader.py",
+    "backend/tests/test_google_product_sales_evidence_reader.py"
+  ],
+  "verification": {
+    "red": "missing module exit2",
+    "local": "7 passed no skips; diff check pass"
+  },
+  "contract": "Owner/date-only projection with limit+1; observed document count is diagnostic only, not sales or order attribution; raw line data never read",
+  "limitations": [
+    "Completeness of upstream source, cancellation/refund treatment, actual FX and line-product mapping not proven; sales/units/profit remain null even with rows or no rows",
+    "Normalized date query follows existing dashboard semantics; inferred dates are included but no coverage assertion made",
+    "Owner and as_of must be derived from trusted session and server clock before any route integration",
+    "No route, provider execution, API, category, mutation or source writes"
+  ],
+  "production_changed": false,
+  "provider_writes": 0,
+  "next_safe_action": "Review source completeness watermarks and exact line/return/FX proof; run real Mongo and independent review before wiring"
+}
