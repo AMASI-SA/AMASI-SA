@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "EDGE_CSP_AND_LOCAL_PREVIEW_CONFIRMED_PRIVATE_INITIALIZATION_BLOCKED_NO_MEDIA_TRANSFER",
+  "state": "REAL_MERCHANT_VIDEO_PRIVATE_PROPOSAL_PREVIEWED_ON_READY_LINKED_ACCOUNT",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Preserve this blocked sameproposal in owner FILE history. Inspect sanitized original initialization failure or add minimal owner-visible allowlisted rejection persistence/error mapping with fresh tests if original safe diagnostics cannot be recovered. First establish native rejection vs local pre-submit authorization block. No blind init retry; no new public fixture/model/spend/source release in this turn. Review and update current production source before any code change.",
+  "next": "Approve the current already-previewed SELF_ONLY real merchant video proposal exactly once, then verify same-session transfer and native status. Never retry old blocked fixture; never repeat uncertain init.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T17:28:43.565Z",
+  "observed_at": "2026-10-26T18:42:10.313Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -365,5 +365,27 @@
     "cause": "Unproven. UI exposes generic error and blocked status. No provider code available through current UI/console; do not assume scope/app audit/codec/CORS cause.",
     "screenshot": "tiktok-edge-fixed-native-test-1793035691941.jpg"
   },
-  "production_changes_this_turn": "No deploy/source/runtime change by this task. Provider independently confirmed edge response-header update; current live source fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85. Native technical test created one local proposal and attempted one approval/init only, then reconciled sameproposal blocked."
+  "production_changes_this_turn": "No deploy/source/runtime change by this task. Provider independently confirmed edge response-header update; current live source fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85. Native technical test created one local proposal and attempted one approval/init only, then reconciled sameproposal blocked.",
+  "merchant_shawl_upload": {
+    "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
+    "file_bytes": 5552622,
+    "duration_seconds": 23,
+    "width": 720,
+    "height": 1280,
+    "user_authorization": "Attached this exact merchant video and requested ads-only; subsequently explicitly allowed any publishing option. No campaign activation or spending authorized.",
+    "ads_only": "Official native option verified; not available in current Mezan FILE flow. TikTok Ads Manager secure login declined; no TikTok login/account/ad action completed.",
+    "new_account_readiness": "Current read-only readiness failed generically; no proposal/init for this real video on new account.",
+    "ready_account_label": "متجر اماسي",
+    "ready_account_readiness": "PASS max600s",
+    "privacy": "SELF_ONLY",
+    "disclosure": "own_business",
+    "is_aigc": true,
+    "caption": "هالشتاء، دلّعي أميرتك بشال باسمها 🤎\nشال شتوي بأكمام وتطريز اسم تختارينه، هدية تحمل لمستك.\nتسوّقيه من أماسي.\n#أماسي #شال_شتوي #هدية_بالاسم #هدايا #السعودية",
+    "preview": "One local immutable real-video proposal created and visibly reviewed; owner approval/init not yet sent.",
+    "initialize_ui_clicks": 0,
+    "media_bytes_transferred": 0,
+    "publish_completion_proven": false,
+    "new_live_model_requests": 0,
+    "paid_campaign_writes": 0
+  }
 }
