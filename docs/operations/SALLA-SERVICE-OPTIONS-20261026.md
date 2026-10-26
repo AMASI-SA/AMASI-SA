@@ -147,3 +147,32 @@ No own lease, no ownPublish, no ownerlease clear/reuse. Wait owner's explicit
 success and3probe verification/activefalse. Then refresh Mezan and visually
 verify optional extra-price input (required absent; blank→0; no save/create
 needed). Return actual existing productURL; do not claim our creation of it.
+
+## FINAL: deployed, optional-field live acceptance passed
+
+Carrier Snap1553 root reports new Emergent deployment9d9118d finished
+2026-10-26 23:10Asia/Riyadh (20:10UTC), official guard verify exit0, verifiedtrue,
+all3probes passed for sourceb381a5929b6541ec8e243572700c9504290b7274,
+deployment11a52dd933d7269cd80046219dcd93d5a6e62297, runtime
+rg5-46dd02b93f65a1191512ef02714642673af599140f4a38efcd307fccfe81bdee;
+guardstatusactivefalse. Production changedYES, includesSalla1552 unchanged.
+Own public-browser build-meta read independently confirms exact b381 source.
+Direct urllib probes from both local/host returned403; did not infer site/bot
+failure or bypass it. Browser and official owner guard supplied live evidence.
+
+Refreshed actual signed-in Mezan/products-v2?workspace=intake. Opened existing
+pending hoodie draft and its editor without saving. New per-value surcharge
+inputs appear. Cleared first price: actual DOM required=false, value='',
+validity.valid=true, saveEnabled=true. Screenshot saved as proof. Restored0
+and closed editor WITHOUT save/approval/publish; no new draft, provider create,
+option changes or duplicate product. User's existing30010520/AMS13254 with
+six correct fields, adult10/kids0 preserved. Original pending draft remains
+unpublished and must not be executed for that same product.
+
+Source and test branches recoverable; status-only branch NOT release input.
+No own deployment lease or Publish click; active carrier owner performed and
+closed its official release. No paid builder messages or ad/budget writes.
+No further deployment required for1552. New-provider creation after1552 was
+not executed because target already existed; do not claim a fresh create test.
+Optional-field behavior is confirmed live plus47focused backend tests and full
+source/B CI, and current runtime includes the exact reviewed implementation.
