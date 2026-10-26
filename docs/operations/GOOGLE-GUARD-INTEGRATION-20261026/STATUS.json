@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-GUARD-INTEGRATION-20261026",
   "branch": "codex/google-guard-integration-wip-20261026",
   "parent": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf",
-  "state": "WIP ONLY: mandatory writer migration and unit/Mongo fixture+replica CI wiring; actualCI pending, runtime disabled",
+  "state": "WIP mandatory writer migration verified with real replica CI; runtime disabled and unmerged",
   "runtime_enabled": false,
   "production_changed": false,
   "provider_writes": 0,
@@ -20,7 +20,27 @@
       "seconds": 15.45,
       "exit_code": 0,
       "limitation": "Mongo replica unavailable locally; actual CI required"
-    }
+    },
+    "actual_full_ci": {
+      "run": 40395280792,
+      "backend_job": 121826564686,
+      "passed": 1177,
+      "skipped": 0,
+      "seconds": 42.01,
+      "frontend": 162,
+      "build": "success",
+      "root_logs_read": true
+    },
+    "actual_guard_ci": {
+      "run": 40395280816,
+      "job": 121826564816,
+      "passed": 75,
+      "actual_replica": 11,
+      "failures_errors_skips": 0,
+      "seconds": 6.02,
+      "root_logs_read": true
+    },
+    "independent_review": "229pass2.92s; CI URI rejection reproduced then fixed using plainloopback against initiated verified replica. No transaction bypass found."
   },
   "changes": [
     "Six mandatory same-db transaction policy writers; no optional None legacy path",
@@ -29,11 +49,10 @@
     "Unknown outcomes retained; known precommit conflicts409; runtime literal false even if flags set"
   ],
   "remaining": [
-    "Exact source full and focused actual replica CI",
-    "Independent final review after fixture upgrades",
     "Native budget response proof; pre-migration privateclaim recovery/absence evidence before runtime enable",
     "Creation fundedfirstlaunch migration and allownerlaunch/catalognativeproofs remain"
   ],
-  "next_safe_action": "Push coherent WIP checkpoint and inspect actualreplica CI; never enableflags or deployasautonomycomplete",
-  "pr": 1560
+  "next_safe_action": "Review native provider budget proofs and legacyclaims migration before production integration; implement funded first launch separately; never enable runtime from flags alone",
+  "pr": 1560,
+  "source_sha": "371a1382cfa856cb841276027dfface241839caa"
 }
