@@ -10,7 +10,7 @@
     "backend/tests/test_google_budget_readiness_diagnostic_mongo.py",
     ".github/workflows/google-budget-readiness-diagnostic.yml"
   ],
-  "verification": "12 local tests passed; 2 real replica tests skipped locally; replica CI pending",
+  "verification": "12 local tests passed; exact source CI 14 passed including 2 real Mongo replica, no skips",
   "production_changed": false,
   "provider_writes": 0,
   "limitations": [
@@ -23,5 +23,15 @@
     "Reserved allocation record is presence-only, never proof of valid protected commitment",
     "inventory_exhausted only proves cursors exhausted; complete always false because structural authority validation is not implemented"
   ],
-  "next_safe_action": "Review and run real replica tests before any controlled read-only production invocation; do not expose identifiers or credentials"
+  "next_safe_action": "Review and run real replica tests before any controlled read-only production invocation; do not expose identifiers or credentials",
+  "source_sha": "0ef387c293fab7ed749c72d2bff6c50c05fe3a6d",
+  "ci": {
+    "run": 40400244526,
+    "job": 121843839117,
+    "passed": 14,
+    "real_replica": 2,
+    "skips": 0,
+    "seconds": 2.46,
+    "logs_verified": true
+  }
 }
