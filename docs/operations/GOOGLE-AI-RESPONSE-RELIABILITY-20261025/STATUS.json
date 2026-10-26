@@ -530,5 +530,49 @@
     "provider_writes": 0,
     "production_changed": false,
     "remaining": "Natural language extraction, sourced ranking/category membership, cross-platform attribution, atomic OAuth generation contract, all guarded writers and launch cycle incomplete. Do not claim100%."
+  },
+  "release_1555": {
+    "pr": 1555,
+    "branch": "codex/google-season-release-r2-20261026",
+    "J": "f37d4bebfb64e1e94b0aafd6cf3a52a700b1886f",
+    "A": "b381a5929b6541ec8e243572700c9504290b7274",
+    "B": "753c1717ceaf44156358aa986a4d082b20d0fdc7",
+    "runtime": "rg5-46dd02b93f65a1191512ef02714642673af599140f4a38efcd307fccfe81bdee",
+    "state": "Frozen source/intent pair; final B CI pending; no merge/publish",
+    "source_ci": {
+      "google": 40386587700,
+      "backend": 1130,
+      "frontend": 172,
+      "suites": 16,
+      "build": "success",
+      "readiness": 40386587169,
+      "root_logs_verified": true
+    },
+    "intent": {
+      "artifact": 12681711208,
+      "artifact_sha256": "7b368cc862f2192fd496611709e8f44b1ed008e5c591cd862d3aa3311380e2c5",
+      "sha256": "71cf4bd754cb72a28e57b27d7d3779f15b3f83e70ee0ced7567115697704a791",
+      "bytes": 930975,
+      "full_backend_control_manifests_verified": true,
+      "AB_ancestry_verified": true
+    },
+    "independent": "11-file source PASS; no Snap/Salla overlap;70pass27localMongo skip",
+    "B_readiness": 40387045130,
+    "editor": {
+      "origin": "https://vscode-f5e6b93a-68a2-4155-84ad-e55b4fa936d3.preview.emergentagent.com",
+      "authenticated": true,
+      "guard_active": false,
+      "tracked_head": "4ab6e8bc1d39d1a3df555c874ae1278d284529c1",
+      "preserved_untracked": [
+        ".emergent/testing/",
+        "deployer-agent-docs/"
+      ],
+      "source_updated": false
+    },
+    "publisher": "Emergent project app.emergent.sh/chat still DOM/targeted Runtime timeouts; no paid chat, lease or publish",
+    "superseded_pr": 1549,
+    "production_changed": false,
+    "provider_writes": 0,
+    "next_safe_action": "Inspect final exact B CI incl Host20 rehearsal. Before any app change/release fetch latest Production and actual guard. Never overwrite another lease. If base advanced freeze fresh A/B, never rebase frozen pair."
   }
 }
