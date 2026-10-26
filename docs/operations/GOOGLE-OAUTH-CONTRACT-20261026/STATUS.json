@@ -67,5 +67,14 @@
   "remote_checkpoint": {
     "state": "Parent coordinator to push the local commit and record exact full SHA; do not treat local-only docs as durable completion"
   },
-  "next_safe_action": "Checkpoint remote; independently review, integrate all shared writers and grant-generation creation before use; do not deploy as OAuth recovery"
+  "next_safe_action": "Run real Mongo CI, review operation identity and uniqueness, migrate all grant/refresh writers together before enabling",
+  "mongo_replica_followup": {
+    "state": "CI pending; 10 passed 3 Mongo skipped locally due to unavailable mongod/docker",
+    "tests": [
+      "relink wins before stale CAS",
+      "refresh precedes relink",
+      "lost ACK after actual write, no replay"
+    ],
+    "caveat": "No operation identity exists; observing revision+1 cannot attribute ambiguous ACK to this invocation. No recovery implementation. Unique user_id index required before integration."
+  }
 }
