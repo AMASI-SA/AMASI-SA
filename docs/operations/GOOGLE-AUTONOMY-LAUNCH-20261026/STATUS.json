@@ -1,18 +1,42 @@
 {
-  "state": "FUTURE WIP PURE PREVIEW ONLY / NEVER DEPLOY",
+  "state": "FUTURE WIP ONLY: pure launch preview + budgetguard + optional policy adapter; NEVER DEPLOY",
   "branch": "codex/google-autonomy-launch-wip-20261026",
   "parent_source": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
-  "verification": "Root183passed1.73s (85launch+98creation), no IO/provider/model/permissionwrites",
+  "verification": {
+    "pure_preview": "183 local passed",
+    "guard_replica": {
+      "source": "6407f1f66076ff1292b21af0ec3a372773f66783",
+      "run": 40366094882,
+      "job": 121724082771,
+      "passed": 39,
+      "real_replica": 8,
+      "skipped": 0
+    },
+    "adapter_replica": {
+      "source": "f2c4f740504d1df93c8d345ae88ed16705bf5e72",
+      "run": 40367169754,
+      "job": 121727887586,
+      "passed": 58,
+      "guard_real_replica": 8,
+      "adapter_real_replica": 5,
+      "skipped": 0,
+      "seconds": 4.85
+    },
+    "root_local": "45pass5localreplica skips; independent169regressionspass; root CIlogs verify13actualreplica",
+    "independent_review": "No material WIP adapter blocker; not launch approval"
+  },
   "semantics": "First launch only; prospective owner-generation approval; pre-existingownedPAUSED needs explicit scopedownerack; no manualcampaign adoption or implicitstandingallowlist",
   "funding": "Decimal active commitments+nonreflectedpendingallocations+targetbudget under minimumactiveownercaps; no budgetcuts/invention; PAUSEDlogicalreservation notlaunchfunding",
   "runtime_supported": false,
   "executable": false,
   "remaining": [
-    "Fresh catalog/nativeconfiguration adapter proofs",
-    "Shared permanentaccountbudgetguard and Mongo transaction capability",
-    "All creation/standing policy writers and automated budget increases mustparticipate in guard/cap protocol",
-    "Separate launchauthority/gateway/worker/UI explicit opt-in; no currentflag enableslaunch"
+    "Migrate all automatic budget increases and settlement to commonaccountguard atomically; current guard does not authorize dispatch",
+    "Wire every owner policy writer using proven capability only after all-budget-writers migration; optional DI seam is not runtime migration",
+    "Fresh native config/catalog/inventory/ownership launch authority/gateway/worker + explicit prospective owner opt-in",
+    "No implicit adoption of manualcampaigns or reenable of manuallypausedcampaigns"
   ],
   "production_changed": false,
-  "current_release_PR": 1542
+  "current_release_PR": 1542,
+  "verified_code_checkpoint": "f2c4f740504d1df93c8d345ae88ed16705bf5e72",
+  "optional_adapter": "All6policy mutation routes accept optional guardedwriter; None preserves legacy; bootstrap notwired; capability must be preproven; no fallback onguardfailure"
 }
