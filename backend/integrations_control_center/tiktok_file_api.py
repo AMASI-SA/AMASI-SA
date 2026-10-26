@@ -19,6 +19,17 @@ ENDPOINTS = {
 REJECTIONS = {"access_token_invalid", "scope_not_authorized", "invalid_param", "invalid_params",
     "unaudited_client_can_only_post_to_private_accounts", "spam_risk_user_banned_from_posting",
     "spam_risk_too_many_posts", "reached_active_user_cap", "rate_limit_exceeded"}
+REJECTION_MESSAGES = {
+    "access_token_invalid": "انتهى تفويض حساب TikTok أو لم يعد صالحًا. جدّد ربط الحساب قبل النشر.",
+    "scope_not_authorized": "حساب TikTok لم يمنح التطبيق صلاحية هذه العملية. أعد التفويض بالصلاحيات المطلوبة.",
+    "invalid_param": "رفض TikTok بيانات تهيئة الفيديو. راجع إعدادات الملف والنشر.",
+    "invalid_params": "رفض TikTok بيانات تهيئة الفيديو. راجع إعدادات الملف والنشر.",
+    "unaudited_client_can_only_post_to_private_accounts": "قيّد TikTok النشر لأن التطبيق غير مدقق لهذا المسار. راجع اعتماد التطبيق وخصوصية النشر للحساب.",
+    "spam_risk_user_banned_from_posting": "TikTok يمنع هذا الحساب من النشر حاليًا. راجع حالة الحساب لدى TikTok.",
+    "spam_risk_too_many_posts": "وصل حساب TikTok إلى حد النشر المتاح حاليًا. انتظر قبل إعداد محاولة جديدة.",
+    "reached_active_user_cap": "وصل تطبيق TikTok إلى حد حسابات النشر المتاح حاليًا.",
+    "rate_limit_exceeded": "وصل TikTok إلى حد الطلبات المتاح حاليًا. انتظر قبل إعداد محاولة جديدة.",
+}
 UPLOAD_HOSTS = {"open-upload.tiktokapis.com", "upload.us.tiktokapis.com", "upload.eu.tiktokapis.com"}
 CHUNK_BYTES = 10 * 1024 * 1024
 MAX_VIDEO_BYTES = 1024 * 1024 * 1024
@@ -75,9 +86,10 @@ class TikTokFileAPI(TikTokCreatorAPI):
                 raise problem("tiktok_file_response_unproven", "تعذر التحقق من استجابة TikTok.", 502) from None
             error = payload.get("error") if isinstance(payload, dict) else None
             if not isinstance(error, dict) or error.get("code") != "ok" or not isinstance(payload.get("data"), dict) or response.status_code >= 400:
-                failure = problem("tiktok_file_provider_rejected", "لم يقبل TikTok مسار رفع الملفات لهذا الحساب. راجع صلاحيات النشر وربط التطبيق.", 502)
                 code = error.get("code") if isinstance(error, dict) else None
-                if isinstance(code, str) and code in REJECTIONS:
+                rejected = isinstance(code, str) and code in REJECTIONS
+                failure = problem("tiktok_file_provider_rejected", REJECTION_MESSAGES[code] if rejected else "لم يقبل TikTok مسار رفع الملفات لهذا الحساب. راجع صلاحيات النشر وربط التطبيق.", 409 if rejected else 502)
+                if rejected:
                     failure.detail.update({"native_rejected": True, "provider_code": code})
                 raise failure
             return payload["data"]
