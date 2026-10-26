@@ -1,7 +1,7 @@
 {
-  "branch": "codex/google-autonomy-creation-r1-20261026",
+  "branch": "codex/google-autonomy-creation-r2-20261026",
   "checkpoint": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "state": "FROZEN B; all15sourceworkflows success inclGoogle1098actualMongo+153frontend15suites. AwaitfinalBHost20/checks and foreignlease closure. No1541merge/build/lease/publish.",
+  "state": "FROZEN currentbaseR2; all15sourceworkflowsSUCCESS inclactualMongo/UI/readiness. FinalB workflows running inclHost20 gate. No1542merge/Appbuild/lease/publish.",
   "full_autonomy_complete": false,
   "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
   "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
@@ -19,21 +19,33 @@
   ],
   "recovery_note": "Verified durable3cba125d4df8f837d0d5015f3d693351f38a4577 only. Restoring this branch to fresh checkout; do not call missing latermodules completed or tested in restoredsource.",
   "lost_source": "Oldunsavedsourceunavailable; newlyreimplementedcode independentlytested, not claimedidentical.",
-  "pr": 1541,
+  "pr": 1542,
   "source_A": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
-  "production_base": "058e49ca92275678a0c40f97fc09732875cee415",
-  "source_google_run": 40352145507,
+  "production_base": "56560cf68eb08fa8ef5de9780701722c283fbc95",
+  "source_google_run": 40356070027,
   "backend_job": 121674780314,
   "frontend_first_job": 121674780945,
   "frontend_failure": "registry.yarnpkg.com package download502 beforetests; onejob rerunrequested",
   "local": "1028passed70Mongo skipped13.64s",
   "independent": "Remotefulltree47exactchanges,parent058; allothercurrentproductionpaths preserved; oldsourcekind+creation91sregressions remote present; scoped316pass",
-  "B": "c3b8133a932344d671fc391824ceba97d957b7a8",
-  "tree": "fba353e3283f9f4a65ec1438584a1e9b621ada3d",
-  "runtime": "rg5-cbe778beeb8f1a8b3aab064624b4be6775a1daf8edeaf025fa4ee5f41a006256",
-  "artifact": 12664056938,
-  "intent_sha256": "cb62138d44e411ba16f2767850b4a386b1c8fb7f646a32b94f411a04845bb657",
-  "source_readiness_run": 40352145438,
+  "B": "e73a82d8962e48b7166db0bd51870a16044e7836",
+  "tree": "3b7042866d972cdeeaa03199e5c404d7cf0c5ec3",
+  "runtime": "rg5-8ac6ac4076be56a33f951af8507fe326db6f0ca0a7ea0925a13abc04b774c753",
+  "artifact": 12666625010,
+  "intent_sha256": "da9162c37f449727e9e515d641fd378820af241869a4a59bfb322cf7852a789e",
+  "source_readiness_run": 40356069694,
   "frontend_retry_job": 121678570273,
-  "frontend_verification": "153passed15suites; first502packageinfra attempt superseded by successful retry unchangedsource"
+  "frontend_verification": "153passed15suites; first502packageinfra attempt superseded by successful retry unchangedsource",
+  "A": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
+  "previous_pair": {
+    "pr": 1541,
+    "A": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
+    "B": "c3b8133a932344d671fc391824ceba97d957b7a8",
+    "state": "closedunmerged frozenunchanged afterProduct1539merged565base+intentconflict; noBchecks becausemergeconflict"
+  },
+  "foreign_lease_last_read": {
+    "active": false,
+    "actor": null
+  },
+  "root_App_state": "Editor17 Terminal2 readonly; AppHEAD058lastread, tracked diffempty; unrelateduntracked.emergent/testing/deployerfilespreserved; ownunsavedUntitled1preserved"
 }

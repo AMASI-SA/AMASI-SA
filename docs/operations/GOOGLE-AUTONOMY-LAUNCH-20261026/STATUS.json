@@ -1,0 +1,12 @@
+{
+  "branch": "codex/google-autonomy-launch-wip-20261026",
+  "checkpoint": "c7a872932e88ca843c9ce8050641e4e65354033e",
+  "state": "PURE PREVIEW WIP ONLY; runtime_supportedFalse/executableFalse; doNOTdeploy",
+  "root_tests": "183pass1.73s (85launch+98creation)",
+  "remaining": [
+    "Sharedglobalaccountbudgetguard+MongoTXcapability",
+    "Allcreation/standingpolicywriters andautomatedbudgetincreases mustparticipate",
+    "Freshproduct/nativeconfigserverproof, launchauthority/gateway/worker/UI optin"
+  ],
+  "decisions": "firstlaunchonly; noauto-reenablemanualpause; prospectivegeneration; oldownedneedsseparatescopedack; minglobalownercaps/noautomaticcuts"
+}
