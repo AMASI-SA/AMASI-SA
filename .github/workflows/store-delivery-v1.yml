@@ -52,6 +52,9 @@ jobs:
           PyJWT
           email-validator
           openpyxl==3.1.5
+          cryptography
+          reportlab
+          python-dotenv
       - name: Start disposable transaction-capable Mongo
         run: |
           docker run -d --name store-delivery-rs -p 127.0.0.1:27018:27018 mongo:8.0.12 --port 27018 --replSet mz2test --bind_ip_all
