@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R7_HOSTING_SUCCESS_HTTP_CSP_STILL_OLD_ENVIRONMENT_UNAVAILABLE_OWN_LEASE_ACTIVE",
+  "state": "HANDOFF_ENV_UNAVAILABLE_R7_CONTROL_PLANE_SUCCESS_LIVE_CSP_UNRESOLVED_OWN_LEASE_LAST_ACTIVE",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "When browserenvironment returns:readownlease,status/actor1533;readactualProductionhealthsource/runtime andpublic/_headers.json vsactualHTTP-CSP;determine oldroutingversusplatformheaderoverride. New reviewedCSPsource/artifactincludesmedia-srcselfblob,butliveheaderstillold. Do not republish blindly orweakenchecks. Ownguardverify3 onlywhenexpectedsource/frontendmatches;activefalseafterverified. Then localfilepreview andPRIVATE nativefileupload/status;noneinitialized/transferredyet. Keepotherpublishingpaused.",
+  "next": "Restore execution/browserenvironment first. NEVERclear/reuse/verify anotheractor'slease. Readown1533status andactualhealthsource/runtime;comparecanonical/cachebustedbuild-meta andHTTP-CSP. Source+reviewedartifact arecorrect/newCSP,liveheaderstillold:lastobserved. Investigate oldrouting,stale frontend preview process orplatformedge override (hypotheses only). Do not blindlyrepublish orrewrite frozenA/B. Completeownverify3 onlyonceexpectedidentitymatches;activefalseafterverified. Then freshaccountFILEproof/localpreview,PRIVATEofficialfixture initonce/nativePUT/status;AIcatalogsmoke alreadyPASS,no newliveAIbudget. Publicfixture prohibited. Keepotherpublishingpausedwhileleaseunverified.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -91,7 +91,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T00:34:31.470Z",
+  "observed_at": "2026-10-26T00:36:03.975Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -152,5 +152,6 @@
   "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
   "merge_M": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "current_release_runtime_published": "unverified_after_control_plane_success",
-  "blocker": "Developer removed mcp__cua_repl tools;userenvironment reports unavailable. Originalhost/browsercannotbeused. Do not assume another remote route/session orsendrawbrowsercommands. Lastattempted command tocomparehealthwasrejected beforeexecution."
+  "blocker": "Developer removed mcp__cua_repl tools;userenvironment reports unavailable. Originalhost/browsercannotbeused. Do not assume another remote route/session orsendrawbrowsercommands. Lastattempted command tocomparehealthwasrejected beforeexecution.",
+  "independent_checks_after_environment_loss": "Localexec_command rejected:No usable execution environment. Publicweb opens/api/health and/_headers.json inaccessibleviawebtool. GitHub connector reads stillwork. Remotelyread start-governed-runtime.cjs and vite.config.js atM33c2 confirm preview.headers FRONTEND_SECURITY_HEADERS includesnewmedia-src. Actuallivehealthsource/runtime remains unknownbecausepriorvalues scrolledout andfollowupwasneverexecuted."
 }
