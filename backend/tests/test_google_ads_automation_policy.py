@@ -238,6 +238,38 @@ def test_expired_or_malformed_policy_is_never_effectively_enabled():
         assert result["expired"] is True and result["effective_enabled"] is False
 
 
+def test_legacy_enabled_policy_never_becomes_active_just_because_runtime_is_installed(monkeypatch):
+    monkeypatch.setattr(policy, "automation_runtime_available", lambda: True, raising=False)
+    row = {"user_id": "owner", "account_id": "123", "revision": 2, "enabled": True,
+        "expires_at": (CURRENT + timedelta(days=1)).isoformat()}
+    result = policy.public_policy(row, account_id="123", current=CURRENT)
+    assert result["executor_available"] is True and result["effective_enabled"] is False
+    assert result["activation_required"] is True
+
+
+def test_only_current_versioned_owner_activation_is_effective(monkeypatch):
+    monkeypatch.setattr(policy, "automation_runtime_available", lambda: True, raising=False)
+    row = {"user_id": "owner", "account_id": "123", "revision": 2, "enabled": True,
+        "activation_version": 1, "activation_revision": 2, "activated_by": "owner", "activated_at": CURRENT.isoformat(),
+        "expires_at": (CURRENT + timedelta(days=1)).isoformat()}
+    assert policy.public_policy(row, account_id="123", current=CURRENT)["effective_enabled"] is True
+    row["revision"] = 3
+    assert policy.public_policy(row, account_id="123", current=CURRENT)["effective_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_revocation_preserves_private_authorized_claim_and_discloses_only_safe_boolean(monkeypatch):
+    instance, db, _ = app(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(instance), base_url="http://test") as client:
+        assert (await client.put("/google_ads/automation/policy/123", json=body())).status_code == 200
+        claim = {"claim_id": "private-claim", "confirmation_digest": "private-digest"}
+        db.collection.rows[0].update(_dispatch_claim=claim, _dispatch_generation=7, _dispatch_days=[{"private": "quota"}])
+        response = await client.post("/google_ads/automation/policy/123/revoke", json={"expected_revision": 1})
+    assert response.status_code == 200 and response.json()["in_flight_authorized"] is True
+    assert "private-claim" not in response.text and "private-digest" not in response.text
+    assert db.collection.rows[0]["_dispatch_claim"] == claim and db.collection.rows[0]["_dispatch_generation"] == 7
+
+
 @pytest.mark.asyncio
 async def test_policy_update_keeps_bounded_atomic_revocation_history(monkeypatch):
     instance, db, _ = app(monkeypatch)

@@ -2,7 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import GoogleAutomationPolicy from "./GoogleAutomationPolicy";
-import { saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
+import { activateGoogleAutomationPolicy, saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
 const saved = { account_id: "123", revision: 3, enabled: false, executor_available: false, effective_enabled: false,
@@ -133,4 +133,73 @@ test("late mutation result from previous account cannot replace new policy", asy
     await act(async () => finish({ data: { ...saved, revision: 4 } }));
     expect(container.textContent).toContain("النسخة المحفوظة: 9");
     expect(container.textContent).not.toContain("حُفظت الحدود");
+});
+
+test("activation is unavailable with runtime off and never happens during loading or saving", async () => {
+    await render();
+    expect(button("تفعيل الإدارة الآلية ضمن هذه الحدود").disabled).toBe(true);
+    expect(container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').disabled).toBe(true);
+    await save();
+    expect(api.put.mock.calls[0][1].enabled).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("owner reviews saved account limits then explicitly acknowledges one activation revision", async () => {
+    api.get.mockResolvedValue({ data: { ...saved, executor_available: true } });
+    api.post.mockResolvedValue({ data: { ...saved, revision: 4, enabled: true, executor_available: true, effective_enabled: true, activation_revision: 4 } });
+    await render();
+    const review = container.querySelector('[aria-label="مراجعة تفويض الإدارة الآلية"]');
+    expect(review.textContent).toContain("123"); expect(review.textContent).toContain("456");
+    expect(review.textContent).toContain("40"); expect(review.textContent).toContain("55");
+    expect(button("تفعيل الإدارة الآلية ضمن هذه الحدود").disabled).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    await act(async () => container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').click());
+    expect(button("تفعيل الإدارة الآلية ضمن هذه الحدود").disabled).toBe(false);
+    await act(async () => button("تفعيل الإدارة الآلية ضمن هذه الحدود").click());
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).toBe("/integrations-v2/google_ads/automation/policy/123/activate");
+    expect(api.post.mock.calls[0][1]).toEqual({ expected_revision: 3, acknowledge_execution: true });
+    expect(api.put).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("الإدارة الآلية مفعّلة ضمن الحدود المعتمدة");
+});
+
+test("unsaved edits reset acknowledgement and cannot activate old reviewed limits", async () => {
+    api.get.mockResolvedValue({ data: { ...saved, executor_available: true } });
+    await render();
+    await act(async () => container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').click());
+    await input("حد متوسط ميزانية الحملة", "39");
+    expect(container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').checked).toBe(false);
+    expect(button("تفعيل الإدارة الآلية ضمن هذه الحدود").disabled).toBe(true);
+    expect(container.textContent).toContain("لديك تعديلات غير محفوظة");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("activation service rejects implicit acknowledgement", async () => {
+    await expect(activateGoogleAutomationPolicy("123", 3, 1)).rejects.toThrow();
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("revocation reports a previously authorized operation may finish without disclosing claims", async () => {
+    api.post.mockResolvedValue({ data: { ...saved, revision: 4, in_flight_authorized: true } });
+    await render();
+    await act(async () => button("إلغاء التفويض المحفوظ").click());
+    expect(container.textContent).toContain("قد تكتمل عملية مُنحت إذن الإرسال قبل الإلغاء");
+    expect(api.post.mock.calls[0][1]).toEqual({ expected_revision: 3 });
+});
+
+test("late activation response cannot mark another account active", async () => {
+    let finish;
+    api.get.mockResolvedValue({ data: { ...saved, executor_available: true } });
+    api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await render();
+    await act(async () => container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').click());
+    await act(async () => button("تفعيل الإدارة الآلية ضمن هذه الحدود").click());
+    const oldSignal = api.post.mock.calls[0][2].signal;
+    api.get.mockResolvedValue({ data: { ...saved, account_id: "222", revision: 9, executor_available: true } });
+    await render({ accountId: "222" });
+    expect(oldSignal.aborted).toBe(true);
+    await act(async () => finish({ data: { ...saved, revision: 4, effective_enabled: true } }));
+    expect(container.textContent).toContain("النسخة المحفوظة: 9");
+    expect(container.textContent).not.toContain("اعتُمد التفويض لهذا الإصدار");
+    expect(container.textContent).not.toContain("الإدارة الآلية مفعّلة ضمن الحدود المعتمدة");
 });

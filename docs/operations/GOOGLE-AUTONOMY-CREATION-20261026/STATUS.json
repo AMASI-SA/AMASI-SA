@@ -1,0 +1,20 @@
+{
+  "task_id": "GOOGLE-AUTONOMY-CREATION-20261026",
+  "state": "SOURCE CANDIDATE / NOT RELEASE READY",
+  "branch": "codex/google-autonomy-creation-r1-20261026",
+  "production_base": "058e49ca92275678a0c40f97fc09732875cee415",
+  "scope": "Default-disabled existing-campaign management plus owner-approved template/catalog native PAUSED SEARCH/RSA creation and readonly recovery",
+  "standing_policy_correction": "Synchronous90sec earliest-proof check immediatelybeforeHTTP afterfloorACK; fixes unpublished1535",
+  "fresh_validation": "Root1028passed70Mongo skipped13.64s,33focusedbackendfiles; independent316pass scopedreview; all3freshreproductions fixed",
+  "pending": [
+    "Exact-sourceCI with actualMongo70cases, frontend15new cases, build/readiness",
+    "Freeze fresh v5intent-only B then independentHost20/finalchecks and freshbase",
+    "Authenticated actualApp guard/rehearsal/publication/finish/3probes"
+  ],
+  "limitations": [
+    "Automatic fundedlaunch unsupported; newcampaign alwaysPAUSED",
+    "No actualGoogle write or liveflag/ownerpolicyactivation"
+  ],
+  "preserved": "All current production product-creation1536/Snapchat/TikTok/security/CSP changes preserved; only explicit Google paths added",
+  "production_changed": false
+}
