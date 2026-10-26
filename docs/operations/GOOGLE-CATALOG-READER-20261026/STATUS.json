@@ -7,7 +7,16 @@
     "backend/integrations_control_center/google_product_catalog_reader.py",
     "backend/tests/test_google_product_catalog_reader.py"
   ],
-  "verification": "8 unit tests pass locally; 3 real Mongo tests skipped locally, replica CI pending",
+  "verification": {
+    "ci_run": 40399978594,
+    "job": 121842900125,
+    "total_passed": 11,
+    "real_replica": 3,
+    "skips": 0,
+    "seconds": 2.48,
+    "logs_verified": true,
+    "local": "8 passed 3 skips: Mongo unavailable locally"
+  },
   "production_changed": false,
   "provider_writes": 0,
   "limitations": [
@@ -17,5 +26,6 @@
     "No route, executor or authorization wired",
     "Before wiring, derive owner from trusted session and as_of from server clock; reject client-supplied freshness authority"
   ],
-  "next_safe_action": "Run replica CI for exact checkpoint and independently inspect logs; then review server-owned clock/session integration and fresh production base"
+  "next_safe_action": "Review independent acceptance; wire only server-derived session owner and server clock, after trusted variant/section proof and fresh production base; no runtime authorization",
+  "code_sha": "fe70743e329a57c45e36289a928e7f2ee7fda593"
 }
