@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-26T17:19:55.010Z",
+  "updated_at": "2026-10-26T17:44:42.229Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -68,8 +68,9 @@
     ]
   },
   "blockers": [
-    "Actual Google connectionerror predates1542; account_client refuses ownership until connected; account dropdown alone not sufficient readiness",
-    "Funded automatic launch remains unsupported; future transaction adapter not wired to runtime"
+    "Google native-account access still blocked by existing integrationerror; no proven actual connection restoration",
+    "Cloud Browser/CUA unavailable: navigation/documentation/reset eachtimedout; no further login/browser attempts",
+    "Fundedautomaticlaunch remains runtimeunsupported; allbudget-writer migration/settlement/authority/worker/owneropt-in incomplete"
   ],
   "remaining": [
     "Complete bounded Google-only reporting recovery and fresh actual-account readonly acceptance",
@@ -77,7 +78,7 @@
     "Implement first-launch authority/gateway/worker and explicit owner opt-in using fresh catalog/nativeconfig/inventory proofs",
     "No live automation activation or budget/campaign writes performed; full autonomy remains incomplete"
   ],
-  "next_safe_action": "DO NOT republish1542: already3probe verified and ownlease inactive. Preserve App17 unsavedbuffer/Terminal2. Current future launch sourcef2c4f740 has58CIpass incl13realreplicaMongo, optional adapter stillnotruntime. Google-native-gateway is implementing separate Google-only reporting recovery WIP; capture exact files/tests to dedicated branch based1542, no OAuth scope expansion or nativewrites. Before any later release inspect fresh production/foreignlease and freeze new v5 A/B pair.",
+  "next_safe_action": "Do NOT repeat1542 publication: own3probe verified andownleaseclosed. Otherconversations may have advanced/published Snapchat1545; before anyAppchange inspect fresh Productionbranch and actualguard, never foreignlease. Preserve code branches aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06(futureWIP, codef2c4 CI58pass/13replica) and e1772c18a233d21e7a05a1c66b137f850c5515f1(Draft1546diagnostic-only). Wait fresh1546CI +independent rereview; never describe diagnostic as restoredconnection. Whenbrowser works verifyactualGoogleUI; true recovery needs verifiedOAuthrelink or fullatomicaccountwriterdesign; no secrets/env inspection, nativewrites, flags or activation.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -377,10 +378,12 @@
       "Fundedautomaticlaunch separatefutureWIPruntimeunsupported"
     ],
     "browser": {
-      "publisher_tab": "5",
-      "publisher_state": "Fresh positive signed-in avatar/project after explicit canonical navigation; no new credentials requested",
-      "editor_tab": "17",
-      "editor_state": "Authenticated originalApp, Terminal2bash prompt; unsavedUntitled1preserved"
+      "publisher_tab_last_known": "5",
+      "publisher_state": "ExplicitDeploymentfinished26Oct20:14Asia/Riyadh captured; CUA subsequentlyunavailable",
+      "editor_tab_last_known": "17",
+      "editor_state": "Own verify0/3probes and fresh active:false observed before browser outage; unrelatedunsavedUntitled1 notedited",
+      "ui_acceptance": "Not completed: requested GoogleLive navigation hung; subsequent documentation and reset requests timedout300s; do not assume tab/auth/reset state",
+      "native_account_readiness": "Predeployment Googleintegrationstatuserror, linkedaccountdropdown butaccount_clientnotowned; no live recovery performed"
     },
     "previous_pairs": {
       "1535": "closedunmerged knownpostfloorfixsuperseded",
@@ -416,7 +419,7 @@
   },
   "launch_future": {
     "branch": "codex/google-autonomy-launch-wip-20261026",
-    "checkpoint": "f2c4f740504d1df93c8d345ae88ed16705bf5e72",
+    "checkpoint": "aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06",
     "state": "FUTUREWIP ONLY; savedseparately; notin1542; neverdeploy",
     "root_tests": "183purepreviewpass1.73s plus31budgetguardpass8replicaMongo local-skips1.90s",
     "remaining": [
@@ -453,5 +456,20 @@
         "root_logs_verified": true
       }
     }
+  },
+  "read_diagnostic": {
+    "task_id": "GOOGLE-REPORTING-RECOVERY-20261026",
+    "pr": 1546,
+    "branch": "codex/google-reporting-recovery-wip-20261026",
+    "checkpoint": "e1772c18a233d21e7a05a1c66b137f850c5515f1",
+    "state": "WIP diagnostic only; not nativeconnection recovery; not published",
+    "provider_writes": 0,
+    "global_connection_health_writes": 0,
+    "root_local": "29passed2actualMongo local-skips1.63s",
+    "prior_source": "b172d81bab05120e59e4ac941a80a92d36b60b27",
+    "prior_ci": "1123backend29.17s/165frontend15suites;12workflowsgreen butindependent2blockers found; neverdeploy",
+    "new_fixes": "Strict rows before zero-fill; explicit read_verified IDs and connection_restored:false; remove allglobalhealthmutation",
+    "new_ci": "pending fresh exact-source CI + independentre-review",
+    "true_connection_recovery": "NOT complete; verifiedOAuthrelink or atomicallaccountwritercontract needed"
   }
 }
