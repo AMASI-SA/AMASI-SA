@@ -22,7 +22,7 @@ async def credentials():
         or parsed.port is None or parsed.username or parsed.password or ',' in parsed.netloc
         or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
         raise ValueError('only disposable loopback Mongo is accepted')
-    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=2000)
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=2000, retryWrites=False)
     db = client['goauth_refresh_' + uuid.uuid4().hex]
     try:
         hello = await db.command('hello')
@@ -43,6 +43,7 @@ async def refresh(collection):
 async def test_relink_wins_before_old_refresh_cas(credentials):
     entered, release = asyncio.Event(), asyncio.Event()
     class Gate:
+        database = credentials.database
         def with_options(self, **kwargs):
             self.target = credentials.with_options(**kwargs)
             return self
@@ -68,6 +69,7 @@ async def test_old_refresh_then_relink_preserves_new_grant(credentials):
 @pytest.mark.asyncio
 async def test_lost_write_ack_propagates_and_does_not_replay(credentials):
     class LostAck:
+        database = credentials.database
         calls = 0
         def with_options(self, **kwargs):
             self.target = credentials.with_options(**kwargs)
@@ -105,6 +107,7 @@ async def test_concurrent_refresh_same_revision_only_winner_has_positive_proof(c
 async def test_read_only_resolution_of_lost_ack_and_later_relink(credentials):
     from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
     class LostAck:
+        database = credentials.database
         calls=0
         def with_options(self, **kwargs):
             self.target = credentials.with_options(**kwargs)

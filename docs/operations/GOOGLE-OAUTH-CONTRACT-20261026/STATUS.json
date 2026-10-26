@@ -69,7 +69,7 @@
   },
   "next_safe_action": "Run real Mongo CI, review operation identity and uniqueness, migrate all grant/refresh writers together before enabling",
   "mongo_replica_followup": {
-    "state": "WIP: majority write/read, 13 local pass, 5 replica skipped; latest CI pending",
+    "state": "WIP fail-closed retryWrites guard, local 15 passed 5 skipped; new replica CI pending",
     "tests": [
       "relink wins before CAS",
       "refresh precedes relink",
@@ -77,12 +77,18 @@
       "concurrent refresh same revision and unique IDs",
       "read-only resolution after lost ACK and relink"
     ],
-    "caveat": "Operation IDs must be durably persisted before send and unique, all writers must participate. Proof uses majority read/primary and majority journaled write; overwritten marker unknown. OAuth projection multi-document transactions not implemented.",
+    "caveat": "Must prove actual Motor client retryWrites=False before write; durable operation IDs, unique user index and all writers must participate. Majority/journaled write, majority primary read. Not production integrated.",
     "previous_ci": {
       "source": "f32e8abff46e61930302e2547d66df5be7f0c24e",
       "run": 40400170534,
       "job": 121843575630,
       "result": "success 17 tests including 5 real replica; previous version lacked majority write/read; superseded"
+    },
+    "previous_majority_ci": {
+      "source": "ca02143c313ba9d3f6d8825953e1d6749f8bc737",
+      "run": 40400441309,
+      "job": 121844551556,
+      "result": "18 passed including 5 replica, zero skips; root review subsequently found driver retry risk"
     }
   }
 }

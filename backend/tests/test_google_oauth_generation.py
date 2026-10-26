@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 
 import pytest
+from types import SimpleNamespace
 from integrations_control_center.google_oauth_generation import commit_refreshed_credential, RefreshConflict, InvalidGeneration
 
 NOW = datetime(2026, 10, 26, tzinfo=timezone.utc)
 
 class Collection:
+    database = SimpleNamespace(client=SimpleNamespace(options=SimpleNamespace(retry_writes=False)))
     def __init__(self, row): self.row = row
     def with_options(self, **kwargs): return self
     async def update_one(self, query, update, *, upsert):
@@ -38,6 +40,7 @@ async def test_missing_legacy_or_invalid_fences_fail_closed(gen, revision):
 @pytest.mark.asyncio
 async def test_ambiguous_commit_error_propagates_without_retry():
     class Ambiguous:
+        database = Collection.database
         calls=0
         def with_options(self, **kwargs): return self
         async def update_one(self,*args,**kwargs):
@@ -79,3 +82,15 @@ async def test_recovery_reads_majority_primary_and_write_requests_majority():
     assert c.seen[0]['write_concern'].document == {'w':'majority','j':True}
     assert await resolve_refreshed_credential(c,user_id='u',grant_generation='g',token_revision=0,operation_id='op_0123456789abcdef') == 'committed'
     assert c.seen[1]['read_concern'].document == {'level':'majority'} and c.seen[1]['read_preference'] == ReadPreference.PRIMARY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("setting", [True, None])
+async def test_write_refuses_unproved_or_enabled_driver_retry(setting):
+    from integrations_control_center.google_oauth_generation import RetryWritesNotDisabled
+    c = Collection({'user_id':'u','grant_generation':'g','token_revision':0})
+    c.database = SimpleNamespace(client=SimpleNamespace(options=SimpleNamespace(retry_writes=setting)))
+    with pytest.raises(RetryWritesNotDisabled):
+        await commit_refreshed_credential(c,user_id='u',grant_generation='g',token_revision=0,
+            ciphertext='encrypted',expires_at=NOW,updated_at=NOW,operation_id='op_0123456789abcdef')
+    assert c.row['token_revision'] == 0

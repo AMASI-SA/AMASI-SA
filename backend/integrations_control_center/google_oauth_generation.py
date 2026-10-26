@@ -21,6 +21,10 @@ class RefreshConflict(Exception):
     pass
 
 
+class RetryWritesNotDisabled(Exception):
+    pass
+
+
 async def commit_refreshed_credential(collection, *, user_id, grant_generation,
                                       token_revision, ciphertext, expires_at, updated_at, operation_id):
     if (not isinstance(user_id, str) or not user_id.strip() or user_id != user_id.strip()
@@ -32,6 +36,14 @@ async def commit_refreshed_credential(collection, *, user_id, grant_generation,
         or not isinstance(expires_at, datetime) or expires_at.utcoffset() is None
         or not isinstance(updated_at, datetime) or updated_at.utcoffset() is None):
         raise InvalidGeneration('invalid refresh generation or encrypted material')
+    # PyMongo/Motor may replay a retryable write after an uncertain ACK.
+    # Refuse the write unless the actual client is configured not to retry.
+    try:
+        retry_writes = collection.database.client.options.retry_writes
+    except (AttributeError, TypeError):
+        raise RetryWritesNotDisabled("cannot prove retryWrites is disabled") from None
+    if retry_writes is not False:
+        raise RetryWritesNotDisabled("retryWrites must be disabled")
     next_revision = token_revision + 1
     collection = collection.with_options(write_concern=WriteConcern(w="majority", j=True))
     result = await collection.update_one(
