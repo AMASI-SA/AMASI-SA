@@ -338,7 +338,7 @@
     "production_base": "56560cf68eb08fa8ef5de9780701722c283fbc95",
     "tree": "3b7042866d972cdeeaa03199e5c404d7cf0c5ec3",
     "runtime": "rg5-8ac6ac4076be56a33f951af8507fe326db6f0ca0a7ea0925a13abc04b774c753",
-    "state": "MERGED + ORIGINAL HOST ADAPTER PASS; NOT PUBLISHED; NO ownlease/prepare/prepublish",
+    "state": "PUBLISHING; prepare0/prepublish0; one normal Publish changes clicked; explicit newer finish and own3probe verification pending",
     "source_CI": "1098backend27.83s inclall70actualMongo;153frontend15suites; all15sourceworkflowsSUCCESS",
     "source_google_run": 40356070027,
     "source_readiness_run": 40356069694,
@@ -371,7 +371,7 @@
     ],
     "browser": {
       "publisher_tab": "5",
-      "publisher_state": "landing login wall after restored sessionexpired; newsecureloginneeded",
+      "publisher_state": "Fresh positive signed-in avatar/project after explicit canonical navigation; no new credentials requested",
       "editor_tab": "17",
       "editor_state": "Authenticated originalApp, Terminal2bash prompt; unsavedUntitled1preserved"
     },
@@ -379,7 +379,19 @@
       "1535": "closedunmerged knownpostfloorfixsuperseded",
       "1541": "closedunmerged frozenunchanged onold058base afterProduct1539advanced"
     },
-    "production_changed": false
+    "production_changed": "pending",
+    "actor": "codex-google1542",
+    "publish": {
+      "clicked_once": true,
+      "started_at": "2026-10-26",
+      "timezone": "Asia/Riyadh",
+      "prepare_exit": 0,
+      "prepublish_exit": 0,
+      "baseline_live_source": "2729e3c381fa1d5ffe0bd77ceef8d50ec705c848",
+      "baseline_live_runtime": "rg5-5add503b868b0d6a60afd4e8d70462f7c56a73c2aa85a5e4afa18f6ad7666f86",
+      "newer_finish_observed": false,
+      "verified": false
+    }
   },
   "launch_future": {
     "branch": "codex/google-autonomy-launch-wip-20261026",
