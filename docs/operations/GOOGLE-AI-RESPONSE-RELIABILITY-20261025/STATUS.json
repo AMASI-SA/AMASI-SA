@@ -670,7 +670,23 @@
     "branch": "codex/google-oauth-contract-wip-20261026",
     "checkpoint": "96b1d666e512ec3c926d3d927f109401c5a2380e",
     "docs_only": true,
-    "runtime_changed": false
+    "runtime_changed": false,
+    "runtime_checkpoint": "4f6550305e38ff4a73790070c74ce6634ad659a1",
+    "remaining": "real Mongo race tests, unique user identity migration, unknown ACK recovery, integrate all credential writers"
   },
-  "last_verified_production_head": "11a52dd933d7269cd80046219dcd93d5a6e62297"
+  "last_verified_production_head": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
+  "courier_release_coordination": {
+    "pr": 1559,
+    "production_merge": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
+    "state": "carrier owns lease; latest reported Packaging; Google yielded /app",
+    "observed_from": "PR1559 body; no own lease operations"
+  },
+  "catalog_reader": {
+    "branch": "codex/google-catalog-evidence-wip-20261026",
+    "pr": 1563,
+    "checkpoint": "ddcab2c335190b916e5fea10a03f2e543b796206",
+    "state": "WIP only; independent review 47pass, owner-scoped pure reader; active inventory unknown due light sync",
+    "runtime_wired": false,
+    "remaining": "real Mongo CI; prove product options/stock, category membership and owner session before runtime"
+  }
 }
