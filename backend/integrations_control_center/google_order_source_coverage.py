@@ -14,10 +14,10 @@ _PROJECTION = {"_id": 0, "user_id": 1, "order_id": 1, "order_number": 1, "order_
                "raw_by_source.salla_direct.date": 1, "raw_by_source.salla_direct.created_at": 1}
 
 
-async def read_source_date_coverage(db, *, owner_id, date_from, date_to, as_of, limit=5000):
-    if (not isinstance(owner_id, str) or not owner_id or owner_id.strip() != owner_id
+async def read_source_date_coverage(db, *, owner_id, date_from, date_to, as_of, limit=1000):
+    if (not isinstance(owner_id, str) or not 1 <= len(owner_id) <= 240 or owner_id.strip() != owner_id
             or not isinstance(as_of, datetime) or as_of.tzinfo is None or as_of.utcoffset() is None
-            or type(limit) is not int or not 1 <= limit <= 5000):
+            or type(limit) is not int or not 1 <= limit <= 1000):
         raise ValueError("invalid diagnostic boundary")
     try:
         if not isinstance(date_from, str) or not isinstance(date_to, str):
@@ -30,7 +30,11 @@ async def read_source_date_coverage(db, *, owner_id, date_from, date_to, as_of, 
         lower, upper = (start - timedelta(days=1)).isoformat(), (end + timedelta(days=1)).isoformat()
     except (ValueError, OverflowError):
         raise ValueError("invalid closed date period") from None
-    query = {"user_id": owner_id, "order_date": {"$gte": lower, "$lte": upper}}
+    # Cap each returned document on the server, before projection and transfer.
+    # Oversized orders are deliberately omitted; the result is a partial
+    # diagnostic subset and must never be interpreted as source coverage.
+    query = {"user_id": owner_id, "order_date": {"$gte": lower, "$lte": upper},
+             "$expr": {"$lte": [{"$bsonSize": "$$ROOT"}, 16384]}}
     cursor = db["unified_orders"].find(query, _PROJECTION).limit(limit + 1).max_time_ms(3000)
     rows = await cursor.to_list(length=limit + 1)
     if any(not isinstance(row, dict) or row.get("user_id") != owner_id
@@ -51,5 +55,5 @@ async def read_source_date_coverage(db, *, owner_id, date_from, date_to, as_of, 
             **{key: None if truncated else value for key, value in counts.items()},
             "truncated": truncated, "coverage_complete": False, "snapshot_consistent": False,
             "sales": None, "profitability": None, "source_writes": 0, "execution_authorized": False,
-            "limitations": ["candidate_query_does_not_prove_coverage", "source_snapshot_mutable",
+            "limitations": ["candidate_query_does_not_prove_coverage", "oversized_documents_excluded", "source_snapshot_mutable",
                             "product_mapping_unverified", "refunds_and_costs_unverified", "index_unverified"]}
