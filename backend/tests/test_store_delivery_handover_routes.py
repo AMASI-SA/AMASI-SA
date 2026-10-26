@@ -145,11 +145,8 @@ def test_delivery_duration_report_uses_assignment_to_delivered_timestamp():
 
 
 def test_build37_handover_scan_is_print_evidence_and_reassignment_is_explicit():
-    source = inspect.getsource(handover_routes.make_store_delivery_handover_router)
-    scan_block = source.split('@router.post("/sessions/{session_id}/scan")', 1)[1].split(
-        '@router.post("/sessions/{session_id}/confirm")', 1
-    )[0]
-    confirm_block = source.split('@router.post("/sessions/{session_id}/confirm")', 1)[1]
+    scan_block = inspect.getsource(handover_routes.scan_shipment_service)
+    confirm_block = inspect.getsource(handover_routes.confirm_session_service)
     assert '"can_reassign": bool(' in scan_block
     assert '"assignment_id": active.get("id")' in scan_block
     assert '"shipment_already_delivered"' in scan_block
