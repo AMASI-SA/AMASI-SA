@@ -615,7 +615,8 @@
       "account": "5052346701",
       "campaigns": 22,
       "plan_form": "revision0loaded,blanklimits,save disabled beforereview; no businessplan save",
-      "natural_language_extraction": false
+      "natural_language_extraction": false,
+      "management_modal": "opened successfully after live reload, no preview/save/execute"
     }
   },
   "guard_integration": {
@@ -645,13 +646,20 @@
   "product_evidence": {
     "branch": "codex/google-product-evidence-wip-20261026",
     "pr": 1562,
-    "source": "57e82a0a7229b998db4c46446278e8cd8e36ef1a",
+    "source": "9c72374418193edf12e88910eec4387383d2526e",
     "local_code": "7e66e43091094fc558bb88bab46da866eebcdedd",
     "root_test": "70passed1.35s0skip",
     "independent": "70passed1.26s; invalidcurrencies,proofrefs,closedperiod andnativeTZ regressions accepted",
     "runtime_wired": false,
     "provider_writes": 0,
-    "ci": "new isolated workflow running; not yet verified",
+    "ci": {
+      "push_run": 40397746971,
+      "pr_run": 40397754141,
+      "job": 121835182407,
+      "passed": 70,
+      "skips": 0,
+      "root_logs_verified": true
+    },
     "limitations": [
       "No trusted source adapters, category membership or Merchant mapping",
       "No ranking/profitability/globalROAS/success classification",
@@ -663,5 +671,6 @@
     "checkpoint": "96b1d666e512ec3c926d3d927f109401c5a2380e",
     "docs_only": true,
     "runtime_changed": false
-  }
+  },
+  "last_verified_production_head": "11a52dd933d7269cd80046219dcd93d5a6e62297"
 }
