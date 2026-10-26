@@ -2,6 +2,8 @@ name: Google OAuth refresh contract WIP
 on:
   push:
     branches: [codex/google-oauth-dispatch-followup-20261027]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
   workflow_dispatch:
 permissions:
   contents: read
