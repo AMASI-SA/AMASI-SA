@@ -1,0 +1,60 @@
+{
+  "task_id": "GOOGLE-PRODUCT-EVIDENCE-20261026",
+  "state": "WIP PURE CONTRACT ONLY; NOT WIRED; NO RELEASE INTENT",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-product-evidence-wip-20261026",
+  "base_sha": "11a52dd933d7269cd80046219dcd93d5a6e62297",
+  "scope": [
+    "backend/integrations_control_center/google_product_evidence.py",
+    "backend/tests/test_google_product_evidence.py"
+  ],
+  "completed": [
+    "Typed immutable-input validation for product identity, provider/account/currency/timezone/period/completeness/observations, cost provenance and campaign-product association references",
+    "Pure evidence availability for exact closed Riyadh 14/previous14/30/90-day periods; native platform/account/currency periods remain separate",
+    "Verified store-order counts require unique exact proof references; provider conversions never become store orders",
+    "Unknown/partial costs remain unknown; no product-wide profit/ROAS or success classification; separate native campaign reported ROAS only when source values exist",
+    "Hidden/out-of-stock catalog items excluded; stale/unverified catalog items need review; new suitable products may be proposed for a separately approved test",
+    "No source reader, API endpoint, model, executor, network client, database mutation or authorization activation wired"
+  ],
+  "verification": {
+    "initial_red": {
+      "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py",
+      "exit_code": 2,
+      "result": "Expected missing module before implementation"
+    },
+    "boundary_red_1": {
+      "exit_code": 1,
+      "result": "2 failed,20 passed: future/year-old campaign windows and malformed decimal exception"
+    },
+    "boundary_red_2": {
+      "exit_code": 1,
+      "result": "2 failed,22 passed: extreme decimal exponent and missing cost provenance in output"
+    },
+    "latest": {
+      "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py",
+      "exit_code": 0,
+      "result": "42 passed (24 evidence,18 commercial plan), no skips"
+    }
+  },
+  "source_investigation": {
+    "catalog": "product_v2_routes.py normalize_salla_product: mezan_products_v2 identity, categories, status, variants, source_revision,last_synced_at; category URL does not prove membership",
+    "store_sales": "unified_orders order_date/products/status; use projected bounded queries with limit+1; no source-completeness proof currently established by this pure module",
+    "currency": "order_currency.order_amount_to_sar uses exact stored order FX; foreign amounts without FX remain unknown; never infer market from currency",
+    "costs": "mezan_product_cost_profiles_v2 plus dashboard_v2_routes.calculate_mezan_v2_line_cost; sold_products_report_v2 base-only costs are not full profitability",
+    "associations": "campaign_product_associations.list_effective_campaign_products default verified, as-of append-only graph; association is not attribution",
+    "snapchat": "unified_marketing Snapchat readers retain period/run/financial coverage proofs; current registry supports only Snapchat",
+    "tiktok": "tiktok_native_hierarchy mezan_tiktok_entity_daily_v2 complete snapshots,120-day retention,spend/impressions/clicks/conversion; no conversion value for ROAS in this source",
+    "meta": "meta_campaign_reporting mezan_meta_campaign_performance_daily_v2 retains native money, attribution_mode,observed_at; delete-then-upserts is not atomic complete-set proof; absence is not zero",
+    "google": "google_ads_workspace mezan_google_ads_campaign_factsets_v1 complete atomic exact account/period sets; avoid summing overlapping factsets"
+  },
+  "limitations": [
+    "Caller verification flags are adapter preconditions, not fresh source verification performed by this pure builder",
+    "Trusted persisted-source adapters, read-only endpoint, owner UI evidence display and source freshness/coverage acquisition remain unimplemented",
+    "Market/category membership, seasonal fit, prior-year or Hijri alignment, catalog offer mappings, full economics/fees/refunds and preparation time remain unproven",
+    "No execution or launch authority; no budget/ROAS defaults; no claim of full campaign-type support",
+    "Local tests are not fresh Mongo/source/runtime acceptance; CI and independent review pending"
+  ],
+  "production_changed": false,
+  "provider_writes": 0,
+  "next_safe_action": "Root independently reviews pure contract+tests, preserves remote WIP checkpoint, then designs bounded trusted read adapters with explicit completeness before any endpoint/selection/runtime integration."
+}
