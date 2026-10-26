@@ -106,5 +106,10 @@
     "exceljs/uuid": "11.1.1",
     "postcss-selector-parser": "7.1.6",
     "source-map-js": "1.2.2"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^@radix-ui/primitive/is-development$": "<rootDir>/node_modules/@radix-ui/primitive/dist/internal/is-development.false.js"
+    }
   }
 }
