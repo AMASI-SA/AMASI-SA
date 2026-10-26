@@ -136,21 +136,21 @@ def window(days, *, multiplier=1, complete=True, products=None, partial=False):
             "status": "test_durable_campaign_performance_proof",
         },
         "campaign": metric(
-            orders=4 * days * multiplier,
+            orders=round(4 * days * multiplier),
             sales=200 * days * multiplier,
             spend=50 * days * multiplier,
             profit=100 * days * multiplier,
             complete=complete,
         ),
         "account": metric(
-            orders=5 * days * multiplier,
+            orders=round(5 * days * multiplier),
             sales=250 * days * multiplier,
             spend=60 * days * multiplier,
             profit=120 * days * multiplier,
             complete=complete,
         ),
         "store": store_metric(
-            orders=10 * days * multiplier,
+            orders=round(10 * days * multiplier),
             sales=500 * days * multiplier,
             profit=300 * days * multiplier,
             complete=complete,
@@ -610,6 +610,61 @@ async def test_complete_flag_without_financial_amounts_cannot_finalize_success(m
     assert evaluation["outcome_status"] == "inconclusive"
     assert f"post_{scope}_metrics_incomplete" in evaluation["caveats"]
     assert evaluation["appended"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["baseline", "post"])
+@pytest.mark.parametrize("scope", ["campaign", "account", "store"])
+@pytest.mark.parametrize(("field", "invalid"), [
+    ("orders", -1), ("orders", 1.5), ("orders", True),
+    ("product_cost_sar", -1), ("product_cost_sar", float("inf")),
+    ("product_cost_sar", float("nan")),
+    ("sales_sar", -1), ("spend_sar", -1),
+])
+async def test_invalid_cost_or_order_count_cannot_finalize_success(monkeypatch, phase, scope, field, invalid):
+    if scope == "store" and field == "spend_sar":
+        pytest.skip("whole-store outcome is before marketing spend")
+    db = DB()
+    baseline = snapshot()
+    post = snapshot(multiplier=1.2)
+    changed = baseline if phase == "baseline" else post
+    for item in changed["windows"]:
+        item[scope][field] = invalid
+    decision = await make_decision(db, expected={"sales_direction": "increase"}, baseline=baseline)
+
+    async def capture(*args, **kwargs):
+        return deepcopy(post)
+
+    monkeypatch.setattr(outcomes, "capture_decision_baseline", capture)
+    result = await outcomes.evaluate_ad_decision(db, "owner-1", decision, now=DECISION_AT + timedelta(hours=48))
+    evaluation = result["evaluations"][0]
+    assert evaluation["outcome_status"] == "inconclusive"
+    assert f"{phase}_{scope}_metrics_incomplete" in evaluation["caveats"]
+    assert evaluation["appended"] is False
+    assert evaluation["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_negative_profit_is_valid_financial_evidence(monkeypatch):
+    db = DB()
+    decision = await make_decision(db, expected={"sales_direction": "increase"})
+    post = snapshot(multiplier=1.2)
+    for item in post["windows"]:
+        for scope in ("campaign", "account", "store"):
+            item[scope]["product_cost_sar"] = item[scope]["sales_sar"] + 100
+            if scope == "store":
+                item[scope]["gross_profit_before_marketing_sar"] = -100
+            else:
+                item[scope]["contribution_profit_sar"] = -100 - item[scope]["spend_sar"]
+
+    async def capture(*args, **kwargs):
+        return deepcopy(post)
+
+    monkeypatch.setattr(outcomes, "capture_decision_baseline", capture)
+    result = await outcomes.evaluate_ad_decision(db, "owner-1", decision, now=DECISION_AT + timedelta(hours=48))
+    evaluation = result["evaluations"][0]
+    assert evaluation["data_completeness"]["complete"] is True
+    assert evaluation["appended"] is True
 
 
 @pytest.mark.asyncio
