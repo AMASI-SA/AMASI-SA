@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import socket
 from pathlib import Path
 import stat
 import subprocess
@@ -12,6 +13,7 @@ CONF = Path('/etc/supervisor/conf.d/supervisord.conf')
 EXPECTED_BEFORE = '2633d21f27509783d575c86827f5a0bff46a430ce65c29bba43cd0ca5642ac78'
 DEPLOYMENT = '11a52dd933d7269cd80046219dcd93d5a6e62297'
 SOURCE = 'b381a5929b6541ec8e243572700c9504290b7274'
+HOST = 'agent-env-f5e6b93a-68a2-4155-84ad-e55b4fa936d3'
 
 def require(value, message):
     if not value:
@@ -82,6 +84,7 @@ def main():
     action.add_argument('--apply', action='store_true')
     action.add_argument('--rollback', action='store_true')
     args = parser.parse_args()
+    require(socket.gethostname() == HOST, 'Unexpected Preview host')
     require(os.getuid() == 0 and not CONF.is_symlink(), 'Unsafe supervisor ownership/path')
     require(ROOT.is_dir() and not ROOT.is_symlink(), 'Prepared runtime missing')
     prepared = json.loads((ROOT / 'PREPARED.json').read_text())
@@ -99,6 +102,8 @@ def main():
     bundle = ROOT / 'bundle'
     manifest_bytes = (bundle / 'manifest.json').read_bytes()
     require(sha(manifest_bytes) == prepared['manifest_sha256'], 'Prepared manifest changed')
+    require(sha((ROOT / 'serve.py').read_bytes()) == prepared['serve_sha256'], 'Prepared launcher changed')
+    require(sha((bundle / 'preview_password_runtime.py').read_bytes()) == prepared['adapter_sha256'], 'Prepared adapter binding changed')
     for name, digest in json.loads(manifest_bytes).items():
         path = bundle / name
         require(path.is_file() and not path.is_symlink() and sha(path.read_bytes()) == digest, 'Prepared file changed')

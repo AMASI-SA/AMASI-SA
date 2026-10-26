@@ -193,6 +193,7 @@ def main():
     private_write(TARGET / "PREPARED.json", json.dumps({
         "source_git_sha": SOURCE, "deployment_git_sha": DEPLOYMENT,
         "manifest_sha256": args.manifest_sha256, "supervisor_before_sha256": CONF_SHA,
+        "serve_sha256": digest(new_serve.encode()), "adapter_sha256": digest(new_adapter.encode()),
         "services_changed": False, "database_accessed": False,
     }, indent=2).encode())
     print(json.dumps({"staged": str(TARGET), "services_changed": False, "database_accessed": False}))
