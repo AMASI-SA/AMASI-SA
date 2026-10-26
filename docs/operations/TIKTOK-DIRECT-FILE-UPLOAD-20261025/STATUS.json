@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R4_PR1566_18_SUCCESS_6_SKIP_ORIGINAL_HOST_502_UPLOAD_NOT_COMPLETED",
+  "state": "R5_SOURCE_PR1577_CURRENT_BASE2D275_CI_PENDING_HOST_AUTH_RESTORED",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Recover original-host UI; read existing /tmp/tiktok1566-release-9w27dn46/adapter.log and backend/release_identity.json before any repeatedbuild. Freshguardfalse/currentreviewedProductionbase mustbechecked. ExactR4adapterEXIT0 required before normalmergePR1566, actualadapter, ownlease, onePublishchanges, explicitnewfinish, verify3. Preserve existing0byte merchantdraftfence; no newnativeinit or failedresume repeat.",
+  "next": "Obtain R5 source CI candidateintent, freeze intent-onlyB/newfinalPR; freshguardinactive/originalcleanadapterexactB0 then normalmerge on unchangedcurrentbase. Existingmerchantdraft0fencepreserved.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -400,22 +400,22 @@
     "native_web_authentication": "Declined; latest owner explicitly requests Mezan only. No native web upload/post."
   },
   "diagnostic_fix": {
-    "branch": "codex/tiktok-file-recovery-r4-final-20261027",
-    "commit": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
-    "tree": "f4b1ed0bd70515fa73b2e4dff5ade2dabba77aec",
-    "pr": 1566,
+    "branch": "codex/tiktok-file-recovery-r5-20261027",
+    "commit": "e7fd8ca1aaa03d27557b75072512d366a0409acb",
+    "tree": "51ab2995a1198d02b2b492b7c245fd3cf4410b9c",
+    "pr": 1577,
     "files": 6,
-    "state": "Frozen B all24checks complete:18SUCCESS6nonapplicableSKIP; both CodeQL languages and aggregateSUCCESS. PR1566 ready for review; not merged/deployed.",
+    "state": "Samefive codeblobs asR4; current-source CI pending",
     "validation": "Current B native backend559PASS35.10s; frontend167PASS27suites11.398s; CI HostNode20 clean-clone adapter and exact governed JSON route all stepsSUCCESS. All current head checks complete. Original-host R4 result cannot yet be read.",
     "scope": "Safe fixed initialization failure persistence and owner UI; definite native rejection409; uncertain fence retained; stale preparing phase cleared. Does not yet establish actual production native rejection cause.",
-    "source_A": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
-    "source_base": "72ab1aee0fa9520b3a5f91f924906a3be3337531",
-    "intent_B": "aaed009f7817849ceb5919f16fc23cf304a7f1ef",
-    "intent_blob": "d44eeda886642849ce8fe0e82369950df1f3081a",
-    "runtime": "rg5-406452c4eee3b970ed6021da9144f10907c01300c9d067737ca9f12d453938a8",
+    "source_A": "e7fd8ca1aaa03d27557b75072512d366a0409acb",
+    "source_base": "2d275221ba351dd31fc6d8106cfad3db186f448b",
+    "intent_B": null,
+    "intent_blob": null,
+    "runtime": null,
     "source_readiness_run": 40404963853,
     "intent_artifact": 12689718462,
-    "original_host_rehearsal": "Fresh guardinactive before launch; /tmp/tiktok1566-release-9w27dn46/source at exactB, private adapter.log, caches external/tmp. EXIT/exactidentity NOT observed. CodeServer reload at21:47:20Z visibly502 Badgateway HostError. Existing process outcome unknown; read log before any repeatedbuild. No ownprepare/prepublish/publish.",
+    "original_host_rehearsal": "R5 notstarted. Freshguardinactive/currentAPP2d275/trackedclean verified. OldR4tmp rootgone. Appfree587MiB/tmp63729MiB; use cacheoutside/app. No ownlease.",
     "superseded_frozen_pair": {
       "pr": 1554,
       "A": "820ce2582715da52d300d7ba13925719f7c86c40",
@@ -442,8 +442,8 @@
       "proof_root": "/tmp/tiktok1557-reg-1793044641973",
       "scope": "Do not promote a nativePROCESSING_UPLOAD session ID to available upload when validated capability/expiry is absent or expired. Preservefence and originalsafeerror; show expiry for validsession."
     },
-    "source_branch": "codex/tiktok-file-recovery-r4-20261027",
-    "source_pr": 1565,
+    "source_branch": "codex/tiktok-file-recovery-r5-20261027",
+    "source_pr": 1577,
     "intent_validation": "Exact ZIP SHA256 and Git blob validated; local canonical load_candidate_release_intent EXIT0 on exactsource55f. B parent55f changes only intent. Final aliasbranch opened directly onB to trigger all head checks.",
     "CI_source_external_failure": "G47 frontend locked dependency download registry.yarnpkg.com/autoprefixer10.5.4 returned502, then tests/evidence missing. No product failure inferred. Attempted rerun blocked because enclosing workflow stillrunning; currentB fresh G47 willverify. No weakened checks/source workaround.",
     "superseded_R3": {
@@ -457,7 +457,16 @@
     },
     "coordination": "Sharedprimary/app markerabsent. NoCoordinatorboard/claims created;standardv5sourceprotocolapplies.",
     "intent_zip_sha256": "15943dec56641f65878a7ce76babd4e30da9f332b2331924773f2c175cde1301",
-    "hosting_state": "Emergent signed-in home64 recovered; SallaAnalytics project click led to /chat then Runtime.evaluate timeout. No Republish or Publish changes click. Original CodeServer remains502. Mezan live UI itself works."
+    "hosting_state": "CodeServer securebrowserAuthsubmitted; positive signed-inCodeServerUI79. NewownTerminal2. Terminal1foreign preserved.",
+    "superseded_R4": {
+      "pr": 1566,
+      "A": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
+      "B": "aaed009f7817849ceb5919f16fc23cf304a7f1ef",
+      "runtime": "rg5-406452c4eee3b970ed6021da9144f10907c01300c9d067737ca9f12d453938a8",
+      "not_deployed": true,
+      "CI": "18SUCCESS6SKIP; native559backend/167frontend; CIHostNode20cleanadapterPASS",
+      "reason": "Reviewed courier1570/Snap1572 advancedProduction2d275. No6pathoverlap. Oldown/tmp R4root absent afterenvironmentrecovery."
+    }
   },
   "merchant_shawl_draft_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
