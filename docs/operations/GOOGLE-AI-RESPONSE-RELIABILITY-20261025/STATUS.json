@@ -689,6 +689,14 @@
       "replica": 5,
       "skips": 0,
       "root_logs_verified": true
+    },
+    "operation_wip": {
+      "branch": "codex/google-oauth-operation-wip-20261026",
+      "source": "7527bfc0bce5647dd01886433690f5e13d681528",
+      "checkpoint": "4658f7db29ef9b961601e7e9dc062fe023a4ccae",
+      "ci": "9passed incl4realreplica",
+      "runtime_wired": false,
+      "limitation": "trusted caller only; all HTTP/credential writers and durable operation identity integration incomplete"
     }
   },
   "last_verified_production_head": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -741,7 +749,7 @@
     "pr": 1564,
     "source": "8f01a77314763eaae0131269b4c421cf19d34611",
     "production_base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
-    "state": "WIP UI+authenticated owner route integrated; exactsource CI inprogress, independent UIreview pending",
+    "state": "A/B frozen; B CI and host20 pending; foreign courier lease",
     "root_backend_tests": "73passed2.04s",
     "real_mongo_source": {
       "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
@@ -752,7 +760,21 @@
     },
     "provider_writes": 0,
     "production_changed": false,
-    "next": "Full sourceCI and independent UI review; create SourceA/intentB with latestproduction and respect foreigncourier lease"
+    "next": "Await B CI incl host20 and all checks. Inspect foreign lease/status before /app; if current production changes do not reuse frozen pair.",
+    "A": "8f01a77314763eaae0131269b4c421cf19d34611",
+    "B": "d7fd4608ed9e703aa1ddf1e84263f7e05b46e780",
+    "runtime": "rg5-a8f6fe87faf3cfc48c53aad5bd570019e7c38ca6c90415bb798a40337f43042e",
+    "intent_sha256": "7e37ff17174c4c5d271707852f8922d15c0fea5b415237275cc1f14463b208d7",
+    "artifact": 12687939059,
+    "source_ci": {
+      "backend": 1130,
+      "frontend": 189,
+      "suites": 17,
+      "build": "success",
+      "replica": 21,
+      "actual_replica": 5
+    },
+    "candidate_validation": "root clean A/J complete backend/control manifest validation, source8f / base d398"
   },
   "legacy_claim_gap": {
     "branch": "codex/google-legacy-claim-gap-wip-20261026",
