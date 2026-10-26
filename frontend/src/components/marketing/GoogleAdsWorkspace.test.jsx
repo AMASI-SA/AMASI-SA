@@ -198,3 +198,33 @@ test("typed campaign context normalizes the install alias and preserves Merchant
     expect(googleTypedCampaignContext({ app: { subtype: "ENGAGEMENT", app_id: "com.amasi.app" } }).app.subtype).toBe("ENGAGEMENT");
 });
 
+
+
+test("owner explicitly verifies Google reports without claiming management recovery", async () => {
+    api.get.mockImplementation((url) => url.endsWith("/workspace")
+        ? Promise.reject({ response: { data: { detail: { code: "google_ads_account_not_owned", message: "تعذر قراءة الربط" } } } })
+        : Promise.resolve({ data: url.endsWith("/readiness") ? { ...readiness, permissions: { ...readiness.permissions, owner: true } } : { items: [] } }));
+    let finish;
+    api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await render();
+    expect(api.post).not.toHaveBeenCalled();
+    const workspaceReads = api.get.mock.calls.filter(([url]) => url.endsWith("/workspace")).length;
+    const recover = button("تحقق من قراءة تقرير جوجل");
+    expect(recover).toBeDefined();
+    await act(async () => { recover.click(); recover.click(); });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).toBe("/integrations-v2/google_ads/reporting-read-verification");
+    expect(api.post.mock.calls[0][1]).toEqual({ account_id: "123", request_id: expect.any(String) });
+    await act(async () => finish({ data: { status: "read_verified", connection_restored: false, accounts_checked: 3 } }));
+    expect(container.textContent).toContain("اتصال إدارة الحملات لم يُستعد");
+    expect(api.get.mock.calls.filter(([url]) => url.endsWith("/workspace"))).toHaveLength(workspaceReads);
+});
+
+test("staff connection error never exposes the owner recovery action", async () => {
+    api.get.mockImplementation((url) => url.endsWith("/workspace")
+        ? Promise.reject({ response: { data: { detail: { code: "google_ads_account_not_owned" } } } })
+        : Promise.resolve({ data: url.endsWith("/readiness") ? readiness : { items: [] } }));
+    await render();
+    expect(button("تحقق من قراءة تقرير جوجل")).toBeUndefined();
+    expect(api.post).not.toHaveBeenCalled();
+});

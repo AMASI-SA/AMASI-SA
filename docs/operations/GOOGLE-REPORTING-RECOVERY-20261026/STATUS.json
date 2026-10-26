@@ -1,0 +1,36 @@
+{
+  "task_id": "GOOGLE-REPORTING-RECOVERY-20261026",
+  "state": "WIP DIAGNOSTIC ONLY; reviewed+GoogleCIpassed; NOT actual connection recovery; do notdeploy as recoveryfix",
+  "scope": "Explicit owner verification read of bounded API-proven Google accounts; strictday/hour/identity validation; provider campaignwrites0",
+  "public_result": "read_verified; connection_restored:false; explicit verified_account_ids",
+  "global_connection_writes": false,
+  "root_verification": {
+    "local": "29passed2actualMongo local-skips1.63s",
+    "independent": "Both originalrepros fixed under diagnosticcontract; globaldoc unchanged; malformedrejectbeforezeros",
+    "ci": {
+      "run": 40371342449,
+      "backend_job": 121742586791,
+      "backend": "1131passed30.95s inclactualMongo; noskips",
+      "frontend_job": 121742585963,
+      "frontend": "165passed15suites; buildpass",
+      "root_logs_verified": true
+    }
+  },
+  "previous_source": {
+    "sha": "b172d81bab05120e59e4ac941a80a92d36b60b27",
+    "ci": "1123backend incl72actualMongo;165frontend15suites; all12workflows success",
+    "rejected": "independent late accountgroup race and invalid date/hour zerooverwrite; neverdeploy"
+  },
+  "fixes": [
+    "No globalconnection/provenance/health/checked_at/generation writes; cannot claim native management restored",
+    "strict recovery-only row validation before zero-fill; invalid out-of-day/hour/metrics/duplicates fail closed"
+  ],
+  "remaining": [
+    "Actual connection restoration requires verifiedOAuthrelink or completeatomic accountwriter contract",
+    "Never describe diagnostic read_verified as restorednativepermissions or completedGoogleautonomy",
+    "Any later release requires freshcurrentproduction/guard and reviewedv5A/B; no current publish"
+  ],
+  "production_changed": false,
+  "full_autonomy_complete": false,
+  "verified_code_checkpoint": "e1772c18a233d21e7a05a1c66b137f850c5515f1"
+}
