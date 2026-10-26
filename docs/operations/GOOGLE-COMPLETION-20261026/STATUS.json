@@ -1,0 +1,84 @@
+{
+  "task_id": "GOOGLE-COMPLETION-20261026",
+  "branch": "codex/google-season-release-r2-20261026",
+  "base": "f37d4bebfb64e1e94b0aafd6cf3a52a700b1886f",
+  "state": "Current-base source candidate; no release intent frozen yet",
+  "production_changed": false,
+  "provider_writes": 0,
+  "live_acceptance": {
+    "account": "5052346701",
+    "connection": "connected observed before our changes",
+    "campaigns": 22,
+    "paused_test_campaign_management_editor": "opened readonly; no mutation",
+    "restoration_by_this_change": false
+  },
+  "changes": [
+    "Reporting no longer owns connection status/provenance; no authority upsert",
+    "Owner-reviewed commercial plan GET/PUT with CAS/audit, explicit unknown economics and no advertising authorization",
+    "Budget extension separate untracked WIP, not included in milestone",
+    "Owner-only Arabic seasonal context form mounted with revision conflicts, uncertain-save reload and explicit review; no default spend"
+  ],
+  "verification": {
+    "root_command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_ads_management.py backend/tests/test_google_ads_workspace.py",
+    "result": "70 passed, 27 Mongo skipped, 1.58 seconds",
+    "reporting_regression": "12 failures before fix;14pass after",
+    "commercial_plan": "18pass",
+    "ci": {
+      "run": 40379860237,
+      "source": "ef9d01cf44b9f639b9fb9890909de27928d19c48",
+      "backend": {
+        "job": 121772850575,
+        "passed": 1130,
+        "seconds": 20.13
+      },
+      "frontend": {
+        "job": 121772851391,
+        "passed": 172,
+        "suites": 16,
+        "build": "success"
+      },
+      "root_logs_verified": true
+    },
+    "current_base_root": "70pass27Mongo skips,2.53s"
+  },
+  "remaining": [
+    "Reopen actual Emergent project/editor, read real guard before /app changes; fresh source CI/production head before v5 A/B",
+    "True generation-fenced OAuth/account atomic persistence remains",
+    "All shared budget writers and actual Mongo replica proof, activation and launch still incomplete",
+    "Natural-language extraction, evidence ranking, categories and cross-platform orchestration incomplete",
+    "Fresh CI/review, v5 A/B build, real guard and live publish acceptance required"
+  ],
+  "next_safe_action": "Push current source A, fresh exact-head CI/review then freeze artifact as intent-only B. Do not touch /app before fresh guard; preserve foreign reservations. No budget WIP runtime activation.",
+  "verified_code_checkpoint": "ef9d01cf44b9f639b9fb9890909de27928d19c48",
+  "pr": null,
+  "deployment": {
+    "changed": false,
+    "guard_status": "actual /app active:false after secure editor login",
+    "lease_created": false,
+    "publish_clicked": false,
+    "tracked_editor_head": "4ab6e8bc1d39d1a3df555c874ae1278d284529c1",
+    "preserved_untracked": [
+      ".emergent/testing/",
+      "deployer-agent-docs/"
+    ]
+  },
+  "budget_wip": {
+    "branch": "codex/google-budget-standing-wip-20261026",
+    "pr": 1550,
+    "checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+    "runtime_enabled": false,
+    "replica_ci": {
+      "run": 40380341701,
+      "job": 121774558226,
+      "source": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+      "passed": 57,
+      "actual_replica": 9,
+      "failures_errors_skips": 0
+    },
+    "state": "pending",
+    "replica_state": "success;57passed including9actualMongo,0skip",
+    "status_checkpoint": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf"
+  },
+  "prior_pr": 1549,
+  "carried_changes": "Current production f37d4beb includes unpublished Snapchat1553; preserve it, do not modify Snap files"
+}
