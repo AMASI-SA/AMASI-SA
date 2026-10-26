@@ -152,7 +152,9 @@ def test_unknown_shipment_has_no_effect(monkeypatch):
 def test_missing_courier_label_snapshot_recovers_before_self_assignment(monkeypatch):
     import fulfillment_carrier_label as labels
     db, scan, calls = setup(monkeypatch)
-    asyncio.run(db[WORKFLOWS].update_one({}, {"$unset": {"carrier_label_type": "", "carrier_label_ready": ""}}))
+    async def remove_label_snapshot():
+        await db[WORKFLOWS].update_one({}, {"$unset": {"carrier_label_type": "", "carrier_label_ready": ""}})
+    asyncio.run(remove_label_snapshot())
     async def recover(db, *, user_id, order_number):
         await db[WORKFLOWS].update_one({"user_id": user_id, "order_number": order_number},
             {"$set": {"carrier_label_type": "store_courier", "carrier_label_ready": True}})
