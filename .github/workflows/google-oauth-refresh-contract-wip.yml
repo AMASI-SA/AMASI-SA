@@ -44,14 +44,14 @@ jobs:
         env:
           PYTHONPATH: backend
           GOOGLE_ADS_TEST_MONGO_URI: mongodb://127.0.0.1:27474/
-        run: python -m pytest --noconftest -q backend/tests/test_google_oauth_refresh_contract.py backend/tests/test_google_oauth_refresh_contract_mongo.py --junitxml=oauth-results.xml
+        run: python -m pytest --noconftest -q backend/tests/test_google_oauth_refresh_contract.py backend/tests/test_google_oauth_refresh_contract_mongo.py backend/tests/test_google_oauth_refresh_transport.py --junitxml=oauth-results.xml
       - name: Require all real Mongo tests
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse('oauth-results.xml').findall('.//testcase')
           replica = [c for c in cases if c.get('classname','').endswith('test_google_oauth_refresh_contract_mongo')]
-          assert len(cases) == 25 and len(replica) == 6
+          assert len(cases) == 27 and len(replica) == 6
           assert not [c for c in cases if any(c.find(x) is not None for x in ('failure','error','skipped'))]
           PY
       - name: Remove replica
