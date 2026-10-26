@@ -66,7 +66,7 @@ async def empty_period_complete(db: Any, *, user_id: str, account_id: str,
     from .sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
     days = {(date_from + timedelta(days=i)).isoformat()
             for i in range((date_to - date_from).days + 1)}
-    if not days or not currency or not timezone_name:
+    if db is None or not days or not currency or not timezone_name:
         return False
     scope = {"user_id": str(user_id), "provider": SNAPCHAT_PROVIDER,
              "ad_account_id": str(account_id)}
