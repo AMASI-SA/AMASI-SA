@@ -1,0 +1,13 @@
+{
+  "task_id": "GOOGLE-LEGACY-CLAIM-GAP-20261026",
+  "branch": "codex/google-legacy-claim-gap-wip-20261026",
+  "parent": "71b7b2a08d27860f5d52f114b01e752d6c049fb2",
+  "state": "GAP REPRODUCED; no recovery implementation and no provider or production access",
+  "scope": "standing automation private claim without corresponding shared allocation",
+  "verification": "2 local tests passed using transactional fake; cases synthetic cancelled-before-send and a proposal marked completed/verified; neither proves a real native outcome",
+  "finding": "Current common guard settlement requires its allocation and active claim; without them it refuses before terminal proposal verification, preserving private claim, account fence and quota. A proposal marked verified alone cannot reconstruct an authoritative shared allocation.",
+  "next_safe_action": "Determine whether a supported atomic migration can bind the original claim, exact account fence, immutable proposal and native readback with common budget epoch without inventing evidence. Unknown or incomplete evidence must retain claim and fence; prove atomic races and unknown ACK on real replica before any runtime use.",
+  "limitations": ["No recovery authorized or attempted", "No native provider state or production database read", "No proof that legacy claims exist in production", "Fake transactional test does not prove real Mongo behavior"],
+  "provider_writes": 0,
+  "production_changed": false
+}
