@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R7_VERIFIED_PRODUCTS1536_NOW_PUBLIC_MEDIA_POLICY_STILL_FAILS_HOSTING_AUTH_UNAVAILABLE",
+  "state": "HOSTING_RESTORED_SCOPED_PREVIEW_RUNTIME_REPAIR_PREPARED",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "When hosting access is authorized/restored, inspect actual Production frontend runtime/header selection. Fresh guard active:false is required before any shared runtime mutation. Diagnose header source, make minimal reviewed correction if needed, verify actual route permits local blob metadata, then perform one PRIVATE official fixture native init/chunk/status test. No live AI requests remaining.",
+  "next": "Apply scoped reversible Preview runtime correction only after same-command guard/HEAD/build checks; verify local blob policy and UI metadata. If Preview passes, fresh governed rehearsal of current reviewed A/B then authorized republish and functional checks.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -91,7 +91,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T15:32:46.563Z",
+  "observed_at": "2026-10-26T15:41:53.389Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -184,12 +184,23 @@
     "own_guard_verify_of_products1536": false
   },
   "hosting_access": {
-    "current_page": "https://app.emergent.sh/landing/",
-    "state": "signed_out",
-    "secure_auth_request": "declined",
-    "retry": false
+    "state": "restored_signed_in_verified",
+    "project": "salla-analytics",
+    "latest_explicit_finish": "Oct26 06:29PM Asia/Riyadh"
   },
   "production_changes_this_resume": "No new publish, source, shared supervisor, credential, or campaign changes by this task. Own1533 prior release verified3 and lease closed; other actor independently published Products1536.",
   "working_tree": "Clean independent resume clone at 058e49ca92275678a0c40f97fc09732875cee415; no code changes this resume.",
-  "evidence_screenshot": "Scratch-only local browser proof tiktok-device-preview-status-20261026.png; UI displays native readiness max600sec and failed local preview. Not a public TikTok post."
+  "evidence_screenshot": "Scratch-only local browser proof tiktok-device-preview-status-20261026.png; UI displays native readiness max600sec and failed local preview. Not a public TikTok post.",
+  "runtime_repair_plan": {
+    "target": "Preview frontend supervisor command and directory only; restore reviewed /app/frontend/scripts/start-governed-runtime.cjs with current approved Node22 binary",
+    "preconditions": [
+      "Fresh guard inactive",
+      "/app HEAD 058e49ca92275678a0c40f97fc09732875cee415 and tracked clean",
+      "Current build artifact validation passes",
+      "Exact prior frontend command/directory match"
+    ],
+    "backup": "Complete supervisor file private mode0600 outside conf.d before change; preserve all other program bytes and legacy worktrees",
+    "production_effect": "Unproven; Preview repair tested first. No new publish before fresh adapter rehearsal/prepare/prepublish.",
+    "rollback": "Restore exact private config backup and supervisor update frontend only if runtime fails; do not alter backend."
+  }
 }
