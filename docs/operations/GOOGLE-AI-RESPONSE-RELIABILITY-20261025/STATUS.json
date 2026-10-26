@@ -816,6 +816,14 @@
       "root_logs_verified": true
     },
     "state": "WIP only; timezone_unproven normalized date, no sales/profit inferred, owner scoped, bounded maxTimeMS, no runtime",
-    "remaining": "prove dates, refunds, FX, attribution, completeness, index and product identity before metrics"
+    "remaining": "prove dates, refunds, FX, attribution, completeness, index and product identity before metrics",
+    "independent_review": "8unit pass, timezone unproven and normalized date scope acknowledged; no financial metrics and no production DB read"
+  },
+  "order_evidence_research": {
+    "branch": "codex/google-order-evidence-research-20261026",
+    "checkpoint": "6c72e57d75bd61763f66dfd8e95a318169b64b8c",
+    "path": "docs/operations/GOOGLE-ORDER-EVIDENCE-RESEARCH-20261026/STATUS.json",
+    "findings": "Salla raw timestamps have potential timezone proof; normalized order_date drops offset; +/-1day candidate fetch is not completeness proof; 16 acceptance tests proposed, not executed",
+    "runtime_changed": false
   }
 }
