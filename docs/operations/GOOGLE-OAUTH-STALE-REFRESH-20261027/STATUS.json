@@ -5,9 +5,9 @@
   "branch": "codex/google-oauth-dispatch-followup-20261027",
   "verification": {
     "command": "PYTHONPATH=backend python -m pytest --noconftest -q -rx backend/tests/test_google_oauth_stale_refresh_wip.py",
-    "result": "1 strict xfail, expected: synthetic relink is overwritten by old Ads refresh; no provider calls or actual credentials",
+    "result": "3 strict xfails, expected: synthetic relink is overwritten by the existing Ads, GA4 and Merchant refresh writers; --runxfail independently confirmed all 3 fail at the stale-access assertion; no provider calls or actual credentials",
     "contract_suite": "41 passed, 1 strict xfail locally, including 19 synthetic shared-contract cases across Ads, GA4 and Merchant labels; no actual writer integration",
-    "replica_suite": "19 unit passed and 6 replica skipped locally without disposable replica; dedicated CI pending on exact source"
+    "replica_suite": "19 unit passed and 6 replica skipped locally without disposable replica; draft PR 1580 replica CI 40419934431 in progress on 54d4b3059ded8d4f5ab350413dd31a437df57b0b"
   },
   "scope": "A synthetic acceptance test and unwired shared journal/claim/send/CAS orchestration; no runtime changes or deployment. Ads writer is keyed only by user_id; Merchant and GA4 also use user_id-only updates and require independently proved coverage.",
   "limitations": ["Strict xfail documents an unresolved defect and is not a release acceptance pass", "No live OAuth state, credential, or database tested", "Label tests are not the actual Ads, Merchant, or GA4 adapters", "No guarantee that a provided HTTP send callback has retries disabled", "No owner, grant, scope, projection or account membership validation", "A journal alone does not fence relinks or coordinate the other writers", "A new CAS scheme must cover all refresh and relink writers including Ads, Merchant, GA4 and projection"],
