@@ -43,10 +43,13 @@ async def refresh(collection):
 async def test_relink_wins_before_old_refresh_cas(credentials):
     entered, release = asyncio.Event(), asyncio.Event()
     class Gate:
+        def with_options(self, **kwargs):
+            self.target = credentials.with_options(**kwargs)
+            return self
         async def update_one(self, *a, **kw):
             entered.set()
             await release.wait()
-            return await credentials.update_one(*a, **kw)
+            return await self.target.update_one(*a, **kw)
     task = asyncio.create_task(refresh(Gate()))
     await asyncio.wait_for(entered.wait(), 2)
     await credentials.update_one({'user_id':'owner','grant_generation':'old'}, {'$set':{'grant_generation':'new','token_revision':0,'access_token_ciphertext':'new-encrypted'}})
@@ -66,9 +69,12 @@ async def test_old_refresh_then_relink_preserves_new_grant(credentials):
 async def test_lost_write_ack_propagates_and_does_not_replay(credentials):
     class LostAck:
         calls = 0
+        def with_options(self, **kwargs):
+            self.target = credentials.with_options(**kwargs)
+            return self
         async def update_one(self, *a, **kw):
             self.calls += 1
-            await credentials.update_one(*a, **kw)
+            await self.target.update_one(*a, **kw)
             raise TimeoutError('simulated lost acknowledgment after Mongo write')
     wrapper = LostAck()
     with pytest.raises(TimeoutError): await refresh(wrapper)
@@ -100,9 +106,12 @@ async def test_read_only_resolution_of_lost_ack_and_later_relink(credentials):
     from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
     class LostAck:
         calls=0
+        def with_options(self, **kwargs):
+            self.target = credentials.with_options(**kwargs)
+            return self
         async def update_one(self,*a,**kw):
             self.calls+=1
-            await credentials.update_one(*a,**kw)
+            await self.target.update_one(*a,**kw)
             raise TimeoutError('lost acknowledgment')
     wrapper=LostAck()
     with pytest.raises(TimeoutError): await refresh(wrapper)

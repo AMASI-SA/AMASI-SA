@@ -6,6 +6,9 @@ Never retry an ambiguous database acknowledgement or return a stale token.
 """
 from datetime import datetime
 import re
+from pymongo import ReadPreference
+from pymongo.read_concern import ReadConcern
+from pymongo.write_concern import WriteConcern
 
 _OPERATION_ID = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 
@@ -30,6 +33,7 @@ async def commit_refreshed_credential(collection, *, user_id, grant_generation,
         or not isinstance(updated_at, datetime) or updated_at.utcoffset() is None):
         raise InvalidGeneration('invalid refresh generation or encrypted material')
     next_revision = token_revision + 1
+    collection = collection.with_options(write_concern=WriteConcern(w="majority", j=True))
     result = await collection.update_one(
         {'user_id': user_id, 'grant_generation': grant_generation, 'token_revision': token_revision},
         {'$set': {'access_token_ciphertext': ciphertext, 'expires_at': expires_at,
@@ -55,6 +59,7 @@ async def resolve_refreshed_credential(collection, *, user_id, grant_generation,
         or type(token_revision) is not int or not 0 <= token_revision < 2**63-1
         or not isinstance(operation_id, str) or not _OPERATION_ID.fullmatch(operation_id)):
         raise InvalidGeneration('invalid recovery identity')
+    collection = collection.with_options(read_concern=ReadConcern("majority"), read_preference=ReadPreference.PRIMARY)
     row = await collection.find_one(
         {'user_id': user_id, 'grant_generation': grant_generation,
          'token_revision': token_revision + 1, 'last_refresh_operation_id': operation_id},

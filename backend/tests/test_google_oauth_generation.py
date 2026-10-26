@@ -7,6 +7,7 @@ NOW = datetime(2026, 10, 26, tzinfo=timezone.utc)
 
 class Collection:
     def __init__(self, row): self.row = row
+    def with_options(self, **kwargs): return self
     async def update_one(self, query, update, *, upsert):
         assert upsert is False
         if not all(self.row.get(k) == v for k, v in query.items()):
@@ -38,6 +39,7 @@ async def test_missing_legacy_or_invalid_fences_fail_closed(gen, revision):
 async def test_ambiguous_commit_error_propagates_without_retry():
     class Ambiguous:
         calls=0
+        def with_options(self, **kwargs): return self
         async def update_one(self,*args,**kwargs):
             self.calls+=1
             raise TimeoutError('unknown')
@@ -56,5 +58,24 @@ async def test_missing_operation_identity_rejected():
 async def test_resolution_never_infers_failed_from_missing_marker():
     from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
     class Read:
+        def with_options(self, **kwargs): return self
         async def find_one(self, query, projection): return None
     assert await resolve_refreshed_credential(Read(), user_id='u', grant_generation='g', token_revision=0, operation_id='op_0123456789abcdef') == 'unknown'
+
+@pytest.mark.asyncio
+async def test_recovery_reads_majority_primary_and_write_requests_majority():
+    from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
+    from pymongo import ReadPreference
+    class Capture(Collection):
+        seen=[]
+        def with_options(self, **kwargs):
+            self.seen.append(kwargs)
+            return self
+        async def find_one(self, query, projection):
+            return {'last_refresh_operation_id': query['last_refresh_operation_id']}
+    c=Capture({'user_id':'u','grant_generation':'g','token_revision':0})
+    await commit_refreshed_credential(c,user_id='u',grant_generation='g',token_revision=0,
+        ciphertext='encrypted',expires_at=NOW,updated_at=NOW,operation_id='op_0123456789abcdef')
+    assert c.seen[0]['write_concern'].document == {'w':'majority','j':True}
+    assert await resolve_refreshed_credential(c,user_id='u',grant_generation='g',token_revision=0,operation_id='op_0123456789abcdef') == 'committed'
+    assert c.seen[1]['read_concern'].document == {'level':'majority'} and c.seen[1]['read_preference'] == ReadPreference.PRIMARY
