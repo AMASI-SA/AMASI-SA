@@ -671,13 +671,22 @@
     "checkpoint": "96b1d666e512ec3c926d3d927f109401c5a2380e",
     "docs_only": true,
     "runtime_changed": false,
-    "runtime_checkpoint": "ca02143c313ba9d3f6d8825953e1d6749f8bc737",
+    "runtime_checkpoint": "e377f6efc3733a059b9448daa9f98b5be4fd51c8",
     "remaining": "CI pending on majority version; driver retryWrites must be proven disabled, operation ID uniquely persisted, all shared writers and full atomic OAuth projection remain",
     "prior_ci": {
       "source": "707fdca3e933efb5a663257848c961a90340c695",
       "run": 40400010888,
       "passed": 13,
       "actual_mongo": 3,
+      "skips": 0,
+      "root_logs_verified": true
+    },
+    "latest_ci": {
+      "source": "d84dd57f2a12ed3d05d17c3619bd79b6fa05d05c",
+      "run": 40400687875,
+      "job": 121845407490,
+      "passed": 20,
+      "replica": 5,
       "skips": 0,
       "root_logs_verified": true
     }
@@ -726,5 +735,28 @@
     "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
     "state": "WIP owner read-only route unattached; 16 localpass +5 Mongo locallyskipped, real replica CI pending",
     "independent": "route earlier4e4b reviewed; no runtime execution"
+  },
+  "catalog_integration": {
+    "branch": "codex/google-product-review-release-20261026",
+    "pr": 1564,
+    "source": "8f01a77314763eaae0131269b4c421cf19d34611",
+    "production_base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
+    "state": "WIP UI+authenticated owner route integrated; exactsource CI inprogress, independent UIreview pending",
+    "root_backend_tests": "73passed2.04s",
+    "real_mongo_source": {
+      "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
+      "run": 40400497783,
+      "passed": 21,
+      "replica": 5,
+      "skips": 0
+    },
+    "provider_writes": 0,
+    "production_changed": false,
+    "next": "Full sourceCI and independent UI review; create SourceA/intentB with latestproduction and respect foreigncourier lease"
+  },
+  "legacy_claim_gap": {
+    "branch": "codex/google-legacy-claim-gap-wip-20261026",
+    "checkpoint": "cf225eab802a965baf6247baa705e7d2c0e3b814",
+    "state": "2 synthetic tests retain claim/fence when common allocation missing, no production claim assessed"
   }
 }
