@@ -4,6 +4,20 @@ import ProductCreationPanel from "./ProductCreationPanel";
 import { CHILD_SIZE_VALUES, creationOptionsError, removeCreationOption } from "./productCreationOptions";
 import * as api from "../../services/mezanProductsV2";
 
+// Jest 27 does not resolve Radix conditional exports. Load the package's
+// actual default CommonJS module locally, without replacing the real dialog
+// or changing module resolution for unrelated suites.
+jest.mock("@radix-ui/primitive/is-development", () => {
+    const path = require("path");
+    const packagePath = path.resolve(path.dirname(require.resolve("@radix-ui/primitive")), "../package.json");
+    let target = require(packagePath).exports["./is-development"];
+    while (target && typeof target === "object") {
+        target = target.require || target.node || target.default;
+    }
+    if (typeof target !== "string") throw new Error("Radix CommonJS export missing");
+    return jest.requireActual(path.resolve(path.dirname(packagePath), target));
+}, { virtual: true });
+
 jest.mock("../../services/mezanProductsV2", () => ({
     listProductCreationDrafts: jest.fn(), createProductCreationDraft: jest.fn(),
     updateProductCreationDraft: jest.fn(), previewProductCreationDraft: jest.fn(),
