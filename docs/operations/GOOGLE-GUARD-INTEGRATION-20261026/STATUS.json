@@ -54,5 +54,14 @@
   ],
   "next_safe_action": "Review native provider budget proofs and legacyclaims migration before production integration; implement funded first launch separately; never enable runtime from flags alone",
   "pr": 1560,
-  "source_sha": "371a1382cfa856cb841276027dfface241839caa"
+  "source_sha": "371a1382cfa856cb841276027dfface241839caa",
+  "latest_budget_identity_checkpoint": {
+    "base_sha": "71b7b2a08d27860f5d52f114b01e752d6c049fb2",
+    "state": "WIP default-off, not independently reviewed or deployed",
+    "change": "Require campaign snapshot and complete inventory to identify the same owner-account unshared budget and both prove reference count one before authorization. Same amount alone is insufficient.",
+    "tests": "94 passed authority and standing; 48 passed 16 skipped in gateway/replica modules; Mongo replica CI still required for new source; git diff --check passed",
+    "production_changed": false,
+    "remaining": "Provider receipt identity, legacy claims migration and absence evidence, actual production Mongo transactions, funded first launch and full integration remain required. Runtime stays disabled.",
+    "next_safe_action": "Independent review then run full and replica CI on this checkpoint; do not enable runtime or deploy."
+  }
 }
