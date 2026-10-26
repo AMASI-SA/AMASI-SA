@@ -2,24 +2,27 @@
   "task_id": "GOOGLE-ORDER-TIMESTAMP-EVIDENCE-20261027",
   "branch": "codex/google-order-timestamp-evidence-wip-20261027",
   "base_sha": "02cdf74b34568a88df7e20d961f7e7d896418dc5",
-  "code_sha": "5c4bd38168a6080b9a124d685a406382926667f8",
-  "state": "WIP UNWIRED STRICT SOURCE INSTANT HELPER; NOT RELEASE READY",
+  "code_sha": "7c75c0ca5584e55a3a04b742e8a884721d7db9b8",
+  "state": "WIP UNWIRED IDENTITY AND TIMESTAMP CONSISTENCY; COVERAGE UNPROVEN",
   "files": [
     "backend/integrations_control_center/google_order_timestamp_evidence.py",
-    "backend/tests/test_google_order_timestamp_evidence.py"
+    "backend/tests/test_google_order_timestamp_evidence.py",
+    "backend/integrations_control_center/google_order_source_binding.py",
+    "backend/tests/test_google_order_source_binding.py"
   ],
-  "behavior": "Convert explicit offset-bearing timestamps into Riyadh business date. Reject date-only, naive, malformed and unknown offset; no order identity proof, source coverage, sales, or profitability claim.",
+  "behavior": "Requires trusted owner, exact raw/canonical Salla internal ID and reference, matching explicit-offset instants when both present. Rejects unsupported timezone metadata. Observations are consistency only; no source authenticity, immutable snapshot or coverage proof.",
   "verification": {
-    "command": "python -m pytest -q backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
-    "passed": 22,
+    "command": "python -m pytest -q backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
+    "passed": 28,
     "exit_code": 0,
-    "red": "Import failed for absent module; malformed offset test reproduced permissive Python parser before fix."
+    "red": "Missing module and conflicting timezone metadata reproduced before fixes."
   },
   "limitations": [
-    "Not wired to route or readers; does not validate source identity or conflicting source timestamps.",
-    "Only explicit-offset instants accepted. Date objects, naive times, or precision beyond 6 fractional digits remain unknown.",
-    "Source completeness, exact product identity, cancellation/refunds, FX, historical costs and snapshot consistency remain unproven.",
+    "Unwired pure helper; no route or production reads.",
+    "Conservative numeric identities only; matching fields is consistency, not provider authenticity or immutable history.",
+    "Rejects source timezone metadata pending a correct verified interpretation; other non-offset dates unknown.",
+    "No coverage watermark, product mapping, sales, refunds, FX, historical costs, or global read consistency proved.",
     "No production data read, no production change, no provider writes or ad execution."
   ],
-  "next_safe_action": "Independent review; integrate only with owner/order-bound source evidence and per-row conflict handling, bounded query, and unproven coverage; run real replica and CI before release."
+  "next_safe_action": "Independent audit, then use in bounded owner-scoped diagnostic projection with unknown/truncated coverage; real Mongo replica tests and CI. Do not treat exhaustion as complete sales."
 }
