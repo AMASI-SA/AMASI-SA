@@ -50,7 +50,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('sales-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_product_sales_evidence_reader_mongo')]
-          assert len(cases) >= 39 and len(replica) == 4
+          assert len(cases) >= 41 and len(replica) == 5
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
           PY
