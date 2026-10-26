@@ -671,8 +671,8 @@
     "checkpoint": "96b1d666e512ec3c926d3d927f109401c5a2380e",
     "docs_only": true,
     "runtime_changed": false,
-    "runtime_checkpoint": "f32e8abff46e61930302e2547d66df5be7f0c24e",
-    "remaining": "f32 CI pending; durable operation identity before send, unique user identity migration, all shared refresh writers and multi-document OAuth transaction",
+    "runtime_checkpoint": "ca02143c313ba9d3f6d8825953e1d6749f8bc737",
+    "remaining": "CI pending on majority version; driver retryWrites must be proven disabled, operation ID uniquely persisted, all shared writers and full atomic OAuth projection remain",
     "prior_ci": {
       "source": "707fdca3e933efb5a663257848c961a90340c695",
       "run": 40400010888,
@@ -710,6 +710,21 @@
     "branch": "codex/google-budget-diagnostic-wip-20261026",
     "source": "0ef387c293fab7ed749c72d2bff6c50c05fe3a6d",
     "state": "WIP; limited structural inventory, complete=false/migration_safe=false always; CI pending",
-    "production_database_inspected": false
+    "production_database_inspected": false,
+    "checkpoint": "6bdfd94c0b93bddecbc974fdc77b68e88144195b",
+    "ci": {
+      "run": 40400244526,
+      "job": 121843839117,
+      "passed": 14,
+      "real_replica": 2,
+      "skips": 0,
+      "root_logs_verified": true
+    }
+  },
+  "catalog_review": {
+    "branch": "codex/google-catalog-review-wip-20261026",
+    "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
+    "state": "WIP owner read-only route unattached; 16 localpass +5 Mongo locallyskipped, real replica CI pending",
+    "independent": "route earlier4e4b reviewed; no runtime execution"
   }
 }
