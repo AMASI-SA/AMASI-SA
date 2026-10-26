@@ -26,5 +26,6 @@
     "root_yielded": true
   },
   "final_B_readiness_run": 40248986559,
-  "independent_host20_job": 121336917785
+  "independent_host20_job": 121336917785,
+  "environment_blocker": "Environment unavailable; exec_command reports no usable execution environment; CUA namespace removed. Cannot freshly verify foreignlease/App, merge or publish. Do NOT infer lease inactive from publichealth."
 }
