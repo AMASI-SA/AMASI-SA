@@ -1,0 +1,27 @@
+{
+  "task_id": "GOOGLE-AUTONOMY-EXECUTION-20261026",
+  "state": "SOURCE CANDIDATE / NOT RELEASE READY",
+  "branch": "codex/google-autonomy-creation-r2-20261026",
+  "production_base": "56560cf68eb08fa8ef5de9780701722c283fbc95",
+  "scope": "Default-disabled existing-campaign management plus owner-approved template/catalog native PAUSED SEARCH/RSA creation and readonly recovery",
+  "standing_policy_correction": "Synchronous90sec earliest-proof check immediatelybeforeHTTP afterfloorACK; fixes unpublished1535",
+  "fresh_validation": "Identical45reviewedcode/test blobs; two statusdocs updated; fresh current-baseCIrequired",
+  "pending": [
+    "New current-base sourceCI+readiness",
+    "New intentB/finalBHost20/checks",
+    "Actual foreignlease closure then exact-tree merge/Apprehearsal/publish/verify"
+  ],
+  "limitations": [
+    "Automatic fundedlaunch unsupported; newcampaign alwaysPAUSED",
+    "No actualGoogle write or liveflag/ownerpolicyactivation"
+  ],
+  "preserved": "All current production product-creation1536/Snapchat/TikTok/security/CSP changes preserved; only explicit Google paths added",
+  "production_changed": false,
+  "previous_source": {
+    "pr": 1541,
+    "A": "ffa6eb2772d1f773562cae3d3e1a439533975fcd",
+    "B": "c3b8133a932344d671fc391824ceba97d957b7a8",
+    "state": "frozen unchanged; superseded unmerged becauseprod1539advanced+intentconflict",
+    "exact_source_CI": "1098backend26.76sinclactualMongo;153frontend15suites; all15workflows success; independentfulltree/scopedreviews passed"
+  }
+}

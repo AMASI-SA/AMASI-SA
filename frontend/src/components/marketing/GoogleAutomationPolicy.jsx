@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
-import { getGoogleAutomationPolicy, revokeGoogleAutomationPolicy, saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
+import { activateGoogleAutomationPolicy, getGoogleAutomationPolicy, revokeGoogleAutomationPolicy, saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100";
 const BUTTON = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40";
@@ -26,6 +26,7 @@ function PolicyPanel({ accountId }) {
     const [policy, setPolicy] = useState(null), [form, setForm] = useState(null);
     const [busy, setBusy] = useState(true), [error, setError] = useState(""), [notice, setNotice] = useState("");
     const [conflict, setConflict] = useState(false), [reload, setReload] = useState(0);
+    const [dirty, setDirty] = useState(false), [acknowledged, setAcknowledged] = useState(false);
     const mounted = useRef(true), request = useRef(null), inflight = useRef(false);
     useEffect(() => {
         mounted.current = true;
@@ -37,21 +38,24 @@ function PolicyPanel({ accountId }) {
         let active = true;
         setBusy(true); setError(""); setNotice("");
         getGoogleAutomationPolicy(accountId, { signal: controller.signal }).then((result) => {
-            if (active) { setPolicy(result); setForm(formFrom(result)); setConflict(false); }
+            if (active) { setPolicy(result); setForm(formFrom(result)); setConflict(false); setDirty(false); setAcknowledged(false); }
         }).catch((failure) => {
             if (active && !isGoogleRequestCancelled(failure)) setError(googleErrorMessage(failure, "تعذر تحميل حدود الإدارة الآلية."));
         }).finally(() => { if (active) setBusy(false); });
         return () => { active = false; controller.abort(); };
     }, [accountId, reload]);
 
-    function edit(key, value) { setForm((previous) => ({ ...previous, [key]: value })); setNotice(""); }
+    function edit(key, value) { setForm((previous) => ({ ...previous, [key]: value })); setNotice(""); setDirty(true); setAcknowledged(false); }
     async function mutate(kind) {
         if (busy || inflight.current || !policy || conflict) return;
+        if (kind === "activate" && (dirty || !acknowledged || policy.executor_available !== true || policy.effective_enabled === true)) return;
         inflight.current = true; setBusy(true); setError(""); setNotice("");
         const controller = new AbortController(); request.current = controller;
         try {
             let result;
-            if (kind === "revoke") {
+            if (kind === "activate") {
+                result = await activateGoogleAutomationPolicy(accountId, policy.revision, acknowledged, { signal: controller.signal });
+            } else if (kind === "revoke") {
                 result = await revokeGoogleAutomationPolicy(accountId, policy.revision, { signal: controller.signal });
             } else {
                 const expires = form.expires_at ? new Date(form.expires_at) : null;
@@ -67,8 +71,8 @@ function PolicyPanel({ accountId }) {
                 }, { signal: controller.signal });
             }
             if (mounted.current) {
-                setPolicy(result); setForm(formFrom(result));
-                setNotice(kind === "revoke" ? "أُلغي التفويض المحفوظ. لم تتغير حملات جوجل." : "حُفظت الحدود والسياسة معطّلة. لم تتغير حملات جوجل.");
+                setPolicy(result); setForm(formFrom(result)); setDirty(false); setAcknowledged(false);
+                setNotice(kind === "activate" ? "اعتُمد التفويض لهذا الإصدار. تتقيد أي إجراءات لاحقة بالحملات والحدود المعروضة." : kind === "revoke" ? "أُلغي التفويض المحفوظ. لم يبدأ هذا الطلب أي تغيير في حملات جوجل." : "حُفظت الحدود والسياسة معطّلة. لم تتغير حملات جوجل.");
             }
         } catch (failure) {
             if (mounted.current && !isGoogleRequestCancelled(failure)) {
@@ -84,14 +88,15 @@ function PolicyPanel({ accountId }) {
 
     return <details className="rounded-2xl border border-slate-200 bg-white p-4" aria-label="حدود الإدارة الآلية لجوجل">
         <summary className="cursor-pointer font-black">حدود الإدارة الآلية لجوجل</summary>
-        <p className="mt-3 text-sm leading-7 text-slate-600">تجهيز الحدود فقط. التنفيذ الآلي غير متاح حاليًا؛ حفظ هذه الإعدادات لا يشغّل الحملات ولا يغيّر ميزانياتها.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">{policy?.executor_available === true ? "احفظ الحدود أولًا، ثم راجع التفويض واعتمده صراحةً. حفظ الإعدادات وحده يُبقي الإدارة الآلية معطّلة." : "تجهيز الحدود فقط. التنفيذ الآلي غير متاح حاليًا؛ حفظ هذه الإعدادات لا يشغّل الحملات ولا يغيّر ميزانياتها."}</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="text-sm"><input type="checkbox" checked={policy?.enabled === true} disabled readOnly /> {policy?.enabled ? "تفويض محفوظ؛ التنفيذ الآلي غير متاح" : "التشغيل الآلي معطّل"}</label>
+            <label className="text-sm"><input type="checkbox" checked={policy?.effective_enabled === true} disabled readOnly /> {policy?.effective_enabled ? "الإدارة الآلية مفعّلة ضمن الحدود المعتمدة" : policy?.activation_required && policy?.executor_available ? "يلزم اعتماد جديد من المالك" : policy?.enabled ? "تفويض محفوظ؛ التنفيذ الآلي غير متاح" : "التشغيل الآلي معطّل"}</label>
             <button type="button" className={BUTTON} disabled={busy} onClick={() => setReload((value) => value + 1)}>إعادة تحميل السياسة</button>
         </div>
         {busy && <p role="status" className="mt-3 text-sm">جارٍ قراءة أو حفظ سياسة جوجل…</p>}
         {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
         {notice && <p role="status" className="mt-3 text-sm text-emerald-800">{notice}</p>}
+        {policy?.in_flight_authorized && <p role="status" className="mt-3 text-sm text-amber-900">قد تكتمل عملية مُنحت إذن الإرسال قبل الإلغاء؛ إلغاء التفويض يمنع التفويضات الجديدة.</p>}
         {policy && <p className="mt-2 text-xs text-slate-500">النسخة المحفوظة: {policy.revision}{policy.currency_code ? ` · ${policy.currency_code} · ${policy.time_zone}` : " · تُثبت عملة الحساب وتوقيته من جوجل عند الحفظ"}{policy.expired && " · انتهى التفويض المحفوظ"}</p>}
         {form && <form className="mt-4 space-y-4" onSubmit={(event) => { event.preventDefault(); mutate("save"); }}>
             <fieldset disabled={busy || conflict} className="space-y-4">
@@ -110,6 +115,20 @@ function PolicyPanel({ accountId }) {
                 <button type="submit" className={BUTTON}>حفظ السياسة وإبقاؤها معطّلة</button>
             </fieldset>
         </form>}
+        {policy?.revision > 0 && <section aria-label="مراجعة تفويض الإدارة الآلية" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7">
+            <h3 className="font-bold">اعتماد الحدود المحفوظة</h3>
+            <p>حساب جوجل: {accountId} · النسخة: {policy.revision} · {policy.currency_code || "—"} · {policy.time_zone || "—"}</p>
+            <p>الحملات: {(policy.campaign_ids || []).join("، ") || "لم تُحدد"}</p>
+            <p>الإجراءات: {(policy.allowed_actions || []).map((value) => ACTIONS.find(([action]) => action === value)?.[1] || "إجراء غير مدعوم").join("، ") || "لم تُحدد"}</p>
+            <p>حد الحملة: {policy.max_campaign_daily_budget_native || "—"} · حد مجموع متوسط الميزانيات: {policy.max_account_daily_budget_native || "—"} {policy.currency_code || ""}</p>
+            <p>أقصى تغيير: {policy.max_budget_change_percent || "—"}% · مهلة الحملة: {policy.cooldown_seconds || "—"} ثانية · أقصى إجراءات يوم الحساب: {policy.max_actions_per_day || "—"}</p>
+            <p>الانتهاء: {policy.expires_at && Number.isFinite(new Date(policy.expires_at).getTime()) ? new Date(policy.expires_at).toLocaleString("ar-SA") : "لم يُحدد"}</p>
+            <p>الحدود تخص متوسط الميزانية لدى جوجل؛ ليست ضمانًا لسقف الصرف الفعلي.</p>
+            {dirty && <p className="text-amber-900">لديك تعديلات غير محفوظة. احفظها ثم راجع الحدود الجديدة قبل الاعتماد.</p>}
+            {policy.executor_available !== true && <p className="text-amber-900">التنفيذ الآلي غير متاح حاليًا؛ التفعيل غير متاح حتى اكتمال جاهزيته.</p>}
+            <label className="mt-2 block"><input type="checkbox" aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود" checked={acknowledged} disabled={busy || conflict || dirty || policy.executor_available !== true || policy.effective_enabled === true} onChange={(event) => setAcknowledged(event.target.checked)} /> أوافق على أن ينفذ ميزان الإجراءات المحددة تلقائيًا ضمن هذه الحملات والحدود دون موافقة منفصلة لكل إجراء.</label>
+            <button type="button" className={`${BUTTON} mt-3`} disabled={busy || conflict || dirty || !acknowledged || policy.executor_available !== true || policy.effective_enabled === true} onClick={() => mutate("activate")}>تفعيل الإدارة الآلية ضمن هذه الحدود</button>
+        </section>}
         {policy?.revision > 0 && <button type="button" className={`${BUTTON} mt-4 text-red-800`} disabled={busy || conflict} onClick={() => mutate("revoke")}>إلغاء التفويض المحفوظ</button>}
     </details>;
 }
