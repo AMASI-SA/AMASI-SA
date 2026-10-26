@@ -37,3 +37,13 @@ Next safe action: the existing lease owner completes or aborts its exact release
 Rollback plan: before the next preparation, capture the then-current verified live source/deployment/release identity and retain its reviewed commit/intent. If this feature later requires rollback, prepare a reviewed inverse source on the latest Production preserving unrelated fixes, generate its new governed intent, and use the same gates. Do not reset the workspace, reuse stale identity, erase databases, or reverse actual financial data. Exact verified prior live identity remains pending because the other publisher owns the current lease.
 
 Issue1006 is at its comment limit; its latest available records were read. This task-specific status is the durable checkpoint. No messages were sent to other users or conversations.
+
+## Resume inspection: active Snapchat publisher
+
+Fresh fetch on user resume returned Production a7103f71307b516f65e3d085c8cbd09a22d7abae (PR1545), preserving Google PR1542 and earlier product PR1539. Current AGENTS.md is unchanged. Preserve all these changes in the future combined source.
+
+Fresh /app status succeeded: active=true; actor codex-snap1545; prepared_at2026-10-26T17:23:40.639077+00:00; source07c90edafe14d1263844f9434bbf36d582b4913e; deploymenta7103f71307b516f65e3d085c8cbd09a22d7abae; release_id rg5-dbcb4c97bba2f1eaeea4716ea2cacbf40eaf4f5d0df4fd7dde107a13b7d5d992. The earlier products/TikTok lease observations are historical. No lease was modified by this task; no rehearsal or shared workspace mutation occurred.
+
+Android coordination confirmed this task owns the future combined server release, Android owns APK/ADB only. PR1543 is still Draft/unmerged at a8733bb7a3b321878a5055d67251cc771055caa7, adding configured purchase catalog support and numbering. Integrate that catalog fix with supplier source from PR1540 and numbering once, on refreshed Production; generate a new artifact, not either old PR artifact. Android reports97Mongo tests and run40358221224 passed; these are prior candidate evidence, not verification of the future combination.
+
+No source A/B was created in this resume and Production changed by this task:no. Next prerequisite remains a fresh active=false from /app after the lease owner finishes, followed by new combined source/CI/intent/rehearsal and all official release gates. Do not abort or verify another publisher's lease. Rollback baseline must be captured from the then-current verified live release before our own prepare.
