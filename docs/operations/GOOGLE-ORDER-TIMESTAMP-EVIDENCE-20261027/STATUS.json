@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-ORDER-TIMESTAMP-EVIDENCE-20261027",
   "branch": "codex/google-order-timestamp-evidence-wip-20261027",
   "base_sha": "02cdf74b34568a88df7e20d961f7e7d896418dc5",
-  "code_sha": "1fee239065d7bb7cca9257bff85b391f625c86eb",
+  "code_sha": "b631058301766edce71bdaedf53af06b62edb5e1",
   "state": "WIP UNWIRED BOUNDED SOURCE DATE COVERAGE; NOT RELEASE READY",
   "files": [
     "backend/integrations_control_center/google_order_timestamp_evidence.py",
@@ -12,19 +12,22 @@
     "backend/integrations_control_center/google_order_source_coverage.py",
     "backend/tests/test_google_order_source_coverage.py"
   ],
-  "behavior": "Bounded owner-scoped closed-day query expands normalized date by one day for candidate discovery. Exact ID and timezone-bearing source instant classify observed subsets; no identities or raw rows returned. Foreign owner and invalid scope fail closed; truncation suppresses counts. Zero identity rejected; leading zeros never equated.",
+  "behavior": "Bounded owner-scoped closed-day query expands normalized date by one day for candidate discovery. Mongo server excludes documents over 16384 BSON bytes before projection; up to 1001 docs (including sentinel) are transferred, with maxTimeMS 3000. Oversized exclusions and coverage gaps remain explicit. Exact identities and source instants classify observations only; no financial evidence.",
   "verification": {
-    "command": "python -m pytest -q backend/tests/test_google_order_source_coverage.py backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
-    "passed": 35,
+    "command": "python -m pytest -q backend/tests/test_google_order_source_coverage.py backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py backend/tests/test_google_product_sales_evidence_reader_mongo.py",
+    "passed": 36,
+    "skipped": 5,
     "exit_code": 0,
-    "red": "Missing module, ignored timezone metadata, and accepted all-zero string ID reproduced and fixed."
+    "reason": "local Mongo replica unavailable",
+    "replica_ci": "pending for exact code b631058301766edce71bdaedf53af06b62edb5e1"
   },
   "limitations": [
     "Unwired read-only diagnostic; source consistency is not provider authenticity or immutable history.",
-    "One-day candidate expansion cannot prove coverage or account for arbitrary normalized date drift; exhaustion does not imply complete sales.",
+    "Whole BSON document size filter deliberately excludes large valid orders; candidate date expansion excludes possible drift; no completeness or sales assertion.",
+    "BSON size scan and index performance unverified; timeout propagates and never produces zero.",
     "Rejects separate source timezone metadata pending verified interpretation.",
-    "No product mapping, sales, refunds, FX, historical costs, query index performance, or global snapshot consistency proved.",
-    "Real Mongo and CI not yet run for new adapter. No production data or writes."
+    "No product mapping, sales, refunds, FX, historical costs or global snapshot consistency proved.",
+    "No production data read, no production change, no provider writes or ad execution."
   ],
-  "next_safe_action": "Independently review reader and tests; add replica integration and CI, assess index and source provenance; keep coverage incomplete and outputs out of product sales/ranking."
+  "next_safe_action": "Verify exact-head CI and replica tests, obtain independent review of BSON-size filter and bounded projection; inspect performance in representative safe data before wiring; retain false coverage."
 }
