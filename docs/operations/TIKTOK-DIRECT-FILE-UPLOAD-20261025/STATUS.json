@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R7_B_frozen_CI_and_original_host_rehearsal_running",
+  "state": "R7_original_host_adapter0_exact_identity_B_CI_running",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -46,7 +46,9 @@
       "A": "8e410287744a15bc682ee954bad46f00b0e64465",
       "B": "559232996218ac4616554500c207d2406419e50e",
       "B_tree": "401d5b1bacf5d9030b679cb6030a1cff525a8aee",
-      "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf"
+      "runtime": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
+      "originalhost": "Fresh guard inactive before isolated /tmp/tiktok1533-release. Adapter EXIT0;asserted exactB559232996218ac4616554500c207d2406419e50e,A8e410287744a15bc682ee954bad46f00b0e64465/runtime46c158. Printed1533_REHEARSAL_IDENTITY_MATCH. No own1533lease/appmutation/publish.",
+      "checks": "CurrentB13SUCCESS5nonapplicableSKIP,CodeQLaggregate temporarilyneutral whilePythonpending. HostNode20,G47realMongo,OperationalBalanceBackend,CSPsecurity,PythonCodeQL still running atlastread;0failure. ProductionstillJ39f2."
     }
   },
   "user_added_requirement": "Generate a viewer-facing Saudi-market video caption from the selected product: engaging opening,product value,natural interaction CTA,relevant hashtags and organic/promoted variants;owner reviews before posting,no guaranteed reach or fabricated current-trend claims.",
@@ -89,7 +91,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T00:06:40.695Z",
+  "observed_at": "2026-10-26T00:09:48.040Z",
   "original_host": "Owned Terminal2 remains available. Fresh read-only guard reports active:false; /app HEAD39f2f5d855113b8b737f34e3c2d912b439c2e8b3. No R7 isolated clone/lease/app mutation. Terminal4 and5 were additionally created by this task (5 from accidental UI split);neveruse Terminal1 ownedbyotheractor.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
