@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
+import GooglePinnedCatalogReview from "./GooglePinnedCatalogReview";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100";
 const BUTTON = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40";
@@ -90,6 +91,7 @@ function PlanPanel({ planId }) {
                 <button type="submit" className={BUTTON} disabled={!reviewed}>حفظ خطة الموسم للمراجعة</button>
             </fieldset>
         </form>}
+        {plan && form && <GooglePinnedCatalogReview plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
         <section aria-label="جاهزية أدلة خطة الموسم" className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-7">
             <p>المبيعات: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — الأدلة لم تُجمع بعد.</p>
             <p>الربحية غير مثبتة عند نقص التكاليف. المخزون والمقاسات ووقت التجهيز وربط الكتالوج تحتاج التحقق.</p>

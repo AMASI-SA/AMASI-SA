@@ -43,6 +43,21 @@ test("loads saved owner context without default budgets or granting execution", 
     expect(api.put).not.toHaveBeenCalled();
 });
 
+test("catalog review uses saved revision and is hidden when the owner edits the plan", async () => {
+    await render();
+    api.get.mockResolvedValueOnce({ data: { plan_id: "seasonal-focus", plan_revision: 3,
+        provider_writes: 0, execution_authorized: false, source_verification: "catalog_row_only",
+        pinned_product_ids_reviewed: ["123"], catalog: { products: [{ product_id: "123", status: "unknown", verification: "verified" }],
+            missing_or_unverified_product_ids: [], category_membership_verified: false, variant_availability_verified: false,
+            source_writes: 0, execution_authorized: false } } });
+    await act(async () => button("قراءة منتجات الخطة المحفوظة").click());
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.textContent).toContain("التوفر القابل للشراء غير مثبت");
+    await input("الموسم", "موسم جديد");
+    expect(container.textContent).toContain("تعديلات غير محفوظة");
+    expect(container.textContent).not.toContain("المنتج 123");
+});
+
 test.each([false, undefined])("non-owner sees no form and makes no request %s", async (isOwner) => {
     await render({ isOwner }); expect(container.textContent).toBe(""); expect(api.get).not.toHaveBeenCalled();
 });
