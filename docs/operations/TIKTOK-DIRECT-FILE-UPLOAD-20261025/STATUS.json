@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "REAL_MERCHANT_PRIVATE_UPLOAD_APPROVED_ONCE_RESULT_UNKNOWN_BROWSER_ENVIRONMENT_UNAVAILABLE",
+  "state": "REAL_MERCHANT_FILE_INITIALIZATION_BLOCKED_NO_TRANSFER_NATIVE_WEB_LOGIN_REQUIRED",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "When browser environment returns, inspect current proposal or owner FILE history for AMASI_Princess_Shawl_Snap(2).mp4 on متجر اماسي, SELF_ONLY, own_business, is_aigc=true. Use status reconciliation on that same proposal first. Do not click approve/init again or create another proposal until existing outcome is known. For awaiting_upload, resume same fingerprint/session only if native confirmed boundary and upload capability remain valid. No spending or model call.",
+  "next": "No retry of blocked real-video API initialization. Complete native TikTok secure sign-in if user chooses, verify exact account, then upload the authorized file via native Studio. Otherwise investigate safe original rejection persistence before any new API attempt.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T18:43:05.908Z",
+  "observed_at": "2026-10-26T18:45:59.872Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -383,14 +383,19 @@
     "caption": "هالشتاء، دلّعي أميرتك بشال باسمها 🤎\nشال شتوي بأكمام وتطريز اسم تختارينه، هدية تحمل لمستك.\nتسوّقيه من أماسي.\n#أماسي #شال_شتوي #هدية_بالاسم #هدايا #السعودية",
     "preview": "One local immutable real-video proposal created and visibly reviewed; owner approval/init not yet sent.",
     "initialize_ui_clicks": 1,
-    "media_bytes_transferred": "UNKNOWN; last observed before transfer phase",
+    "media_bytes_transferred": 0,
     "publish_completion_proven": false,
     "new_live_model_requests": 0,
     "paid_campaign_writes": 0,
     "approve_checkbox_checked_once": true,
     "last_observed_ui": "جارٍ تجهيز وجهة الرفع في TikTok; busy progress visible; no transfer phase observed before browser environment became unavailable.",
-    "native_initialization_outcome": "UNKNOWN: browser environment became unavailable immediately after one approve-and-initialize UI action. Native call, transfer and completion may have proceeded; do not infer failure.",
+    "native_initialization_outcome": "Same-proposal reconciliation definitively blocked; no upload/transfer phase reached. Original failure code still unavailable through UI.",
     "repeat_initialization_performed": false,
-    "local_proposal": "One immutable real-video proposal on متجر اماسي; recover by exact filename in owner FILE history. Do not create another proposal."
+    "local_proposal": "One immutable real-video proposal on متجر اماسي; recover by exact filename in owner FILE history. Do not create another proposal.",
+    "environment_recovered": true,
+    "same_proposal_status_read": true,
+    "persisted_status": "blocked",
+    "ui_status": "توقفت العملية قبل تهيئة الرفع",
+    "browser_fallback": "Native TikTok homepage visibly signed out with login methods. No upload or post created on native web."
   }
 }
