@@ -3,14 +3,14 @@
   "branch": "codex/google-budget-diagnostic-wip-20261026",
   "parent": "71b7b2a08d27860f5d52f114b01e752d6c049fb2",
   "state": "WIP read-only diagnostic; no route, no production execution",
-  "scope": "single supplied Mongo database, all tenants/accounts, snapshot read, bounded cursor exhaustion",
+  "scope": "single supplied Mongo database, all tenants/accounts, snapshot read, bounded cursor exhaustion and creation ledger inventory",
   "files": [
     "backend/integrations_control_center/google_budget_readiness_diagnostic.py",
     "backend/tests/test_google_budget_readiness_diagnostic.py",
     "backend/tests/test_google_budget_readiness_diagnostic_mongo.py",
     ".github/workflows/google-budget-readiness-diagnostic.yml"
   ],
-  "verification": "8 passed local; 2 explicit real Mongo skips (no local replica); disposable replica CI added, actual result pending",
+  "verification": "11 local unit tests pass; 2 explicit real Mongo skips (no local replica); replica CI pending",
   "production_changed": false,
   "provider_writes": 0,
   "limitations": [
@@ -19,7 +19,8 @@
     "No zero-count result certifies migration or budget safety",
     "No automatic recovery or release of claims",
     "Hard limit 2000 per collection; truncation is incomplete",
-    "Real Mongo replica validation required"
+    "Real Mongo replica validation required",
+    "Reserved allocation record is presence-only, never proof of valid protected commitment"
   ],
   "next_safe_action": "Review and run real replica tests before any controlled read-only production invocation; do not expose identifiers or credentials"
 }

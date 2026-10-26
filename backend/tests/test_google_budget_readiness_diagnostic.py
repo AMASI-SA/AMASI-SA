@@ -39,7 +39,7 @@ async def test_legacy_claim_and_fence_are_counted_without_leaking_identity():
     db = DB({coll('standing'): [row(_dispatch_claim={'execution_claim_id': 'UNIQUE_CLAIM_X'})],
              coll('fences'): [row(status='claimed', execution_claim_id='UNIQUE_CLAIM_X')]})
     result = await diagnose(db)
-    assert result['complete'] and result['counts']['private_claims_without_guard_allocation'] == 1
+    assert result['complete'] and result['counts']['private_claims_without_reserved_record'] == 1
     assert result['counts']['claimed_fences'] == 1
     assert all(secret not in repr(result) for secret in ('private_owner', 'private_account', 'UNIQUE_CLAIM_X')) and db.session.aborted
 
@@ -48,7 +48,7 @@ async def test_guard_matching_stays_scoped_and_pending_is_never_safe():
     db = DB({coll('standing'): [row(_dispatch_claim={'execution_claim_id': 'claim'})],
              coll('guards'): [row(active_claim={'execution_claim_id': 'claim'}, allocations={'a': {'execution_claim_id': 'claim', 'state': 'reserved'}})]})
     result = await diagnose(db)
-    assert result['counts']['private_claims_without_guard_allocation'] == 0
+    assert result['counts']['private_claims_without_reserved_record'] == 0
     assert result['counts']['outstanding_allocations'] == 1 and not result['migration_safe']
 
 @pytest.mark.asyncio
@@ -79,4 +79,24 @@ async def test_uncertain_and_failed_after_submission_remain_unresolved():
 @pytest.mark.asyncio
 async def test_unknown_fence_status_is_unproven():
     result = await diagnose(DB({coll('fences'): [row(status='future_state')]}))
+    assert not result['complete']
+
+@pytest.mark.asyncio
+async def test_reserved_ledger_without_claim_is_reported():
+    entry = row(creation_identity='identity', state='reserved')
+    result = await diagnose(DB({coll('creation'): [row(_creation_ledger={'identity': entry})]}))
+    assert result['complete'] and result['counts']['nonterminal_creation_ledger_entries'] == 1
+    assert result['counts']['nonterminal_ledger_without_matching_claim'] == 1
+
+@pytest.mark.asyncio
+async def test_terminal_allocation_is_not_counted_as_reserved_record():
+    db = DB({coll('standing'): [row(_dispatch_claim={'execution_claim_id': 'claim'})],
+             coll('guards'): [row(allocations={'a': {'execution_claim_id': 'claim', 'state': 'settled'}})]})
+    result = await diagnose(db)
+    assert result['counts']['private_claims_with_reserved_record'] == 0
+    assert result['counts']['private_claims_without_reserved_record'] == 1
+
+@pytest.mark.asyncio
+async def test_unknown_ledger_state_is_incomplete():
+    result = await diagnose(DB({coll('creation'): [row(_creation_ledger={'x': row(creation_identity='x', state='future')})]}))
     assert not result['complete']

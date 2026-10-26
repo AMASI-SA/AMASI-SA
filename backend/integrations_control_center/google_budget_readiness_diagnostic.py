@@ -13,7 +13,7 @@ from pymongo import ReadPreference
 
 COLLECTIONS = {
     'standing': ('mezan_google_ads_automation_policies_v1', {'user_id': 1, 'account_id': 1, '_dispatch_claim': 1}),
-    'creation': ('mezan_google_ads_automation_creation_policies_v1', {'user_id': 1, 'account_id': 1, '_creation_claim': 1, '_dispatch_claim': 1}),
+    'creation': ('mezan_google_ads_automation_creation_policies_v1', {'user_id': 1, 'account_id': 1, '_creation_claim': 1, '_dispatch_claim': 1, '_creation_ledger': 1}),
     'fences': ('mezan_google_ads_execution_fences_v1', {'user_id': 1, 'account_id': 1, 'status': 1, 'execution_claim_id': 1}),
     'guards': ('mezan_google_ads_automation_budget_guards_v1', {'user_id': 1, 'account_id': 1, 'active_claim': 1, 'allocations': 1}),
     'proposals': ('mezan_google_ads_proposals_v1', {'user_id': 1, 'account_id': 1, 'status': 1, 'submission_started': 1, 'execution_claim_id': 1}),
@@ -57,6 +57,20 @@ def _analyze(rows):
                 malformed = True
                 continue
             seen.add(scope)
+            if kind == 'creation':
+                ledger = row.get('_creation_ledger', {})
+                if not isinstance(ledger, dict) or len(ledger) > MAX_ALLOCATIONS:
+                    malformed = True
+                else:
+                    for key, entry in ledger.items():
+                        if (not isinstance(entry, dict) or entry.get('creation_identity') != key
+                            or entry.get('user_id') != scope[0] or entry.get('account_id') != scope[1]
+                            or entry.get('state') not in {'reserved', 'owned', 'no_campaign'}):
+                            malformed = True
+                        elif entry['state'] == 'reserved':
+                            counts['nonterminal_creation_ledger_entries'] += 1
+                            if row.get('_creation_claim') != entry:
+                                counts['nonterminal_ledger_without_matching_claim'] += 1
             for field in fields:
                 claim = row.get(field)
                 if claim is None:
@@ -71,9 +85,8 @@ def _analyze(rows):
                     continue
                 # Correlation is only a presence diagnostic, never a recovery proof.
                 matched = any(isinstance(entry, dict) and entry.get('execution_claim_id') == claim_id
-                              for entry in guards.get(scope, {}).values())
-                if not matched:
-                    counts['private_claims_without_guard_allocation'] += 1
+                              and entry.get('state') == 'reserved' for entry in guards.get(scope, {}).values())
+                counts['private_claims_with_reserved_record' if matched else 'private_claims_without_reserved_record'] += 1
     for kind in ('fences', 'proposals'):
         for row in rows[kind]:
             if _scope(row) is None or not _nonempty(row.get('status')):
@@ -108,7 +121,7 @@ async def _scan(db, max_rows):
             counts, malformed = _analyze(rows)
             return {'complete': not malformed, 'reason': 'malformed_or_duplicate_state' if malformed else None,
                 'snapshot_at': datetime.now(timezone.utc).isoformat(),
-                'counts': {k: counts[k] for k in ('private_claims', 'private_claims_without_guard_allocation', 'claimed_fences', 'unresolved_proposals', 'active_guard_claims', 'outstanding_allocations')},
+                'counts': {k: counts[k] for k in ('private_claims', 'private_claims_with_reserved_record', 'private_claims_without_reserved_record', 'nonterminal_creation_ledger_entries', 'nonterminal_ledger_without_matching_claim', 'claimed_fences', 'unresolved_proposals', 'active_guard_claims', 'outstanding_allocations')},
                 'migration_safe': False, 'database_identity_verified': False, 'provider_writes': 0}
         finally:
             await session.abort_transaction()
