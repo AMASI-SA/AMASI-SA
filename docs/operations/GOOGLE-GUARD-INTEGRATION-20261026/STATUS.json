@@ -62,6 +62,9 @@
     "tests": "94 passed authority and standing; 48 passed 16 skipped in gateway/replica modules; Mongo replica CI still required for new source; git diff --check passed",
     "production_changed": false,
     "remaining": "Provider receipt identity, legacy claims migration and absence evidence, actual production Mongo transactions, funded first launch and full integration remain required. Runtime stays disabled.",
-    "next_safe_action": "Independent review then run full and replica CI on this checkpoint; do not enable runtime or deploy."
+    "next_safe_action": "Independent review then run full and replica CI on this checkpoint; do not enable runtime or deploy.",
+    "pr": 1579,
+    "code_sha": "e8162c3c23661042d3b4417b945e0ee12fdae403",
+    "wider_local_tests": "676 passed, 54 skipped (Mongo replica unavailable locally)"
   }
 }
