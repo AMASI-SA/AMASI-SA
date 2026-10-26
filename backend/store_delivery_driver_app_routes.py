@@ -36,7 +36,11 @@ from store_delivery_domain import (
     normalize_text,
 )
 from store_delivery_driver_routes import STORE_DRIVERS
-from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS
+from store_delivery_handover_routes import (
+    ASSIGNMENTS, EVENTS, ORDERS, SESSIONS, SessionCreate, ScanIn,
+    _barcode_candidates, _order_id, create_session_service,
+    scan_shipment_service, confirm_session_service,
+)
 from store_courier_domain import (
     DELIVERED as WORKFLOW_DELIVERED,
     DELIVERING as WORKFLOW_DELIVERING,
@@ -209,6 +213,52 @@ def _barcode_match(value: str) -> list[dict[str, Any]]:
         {"shipping_barcode": value},
         {"tracking_number": value},
     ]
+
+
+async def _resolve_receive_assignment(db, *, actor, driver, barcode):
+    """Claim only a ready unassigned store shipment for the authenticated driver.
+
+    Reuse the operator handover service's city, fee snapshot, instruction and
+    workflow CAS rules. No client-supplied driver or merchant identity is used.
+    A failed provider pickup leaves an assigned shipment which its owner can retry.
+    """
+    merchant_id = _merchant_id(driver)
+    order = await db[ORDERS].find_one(
+        {"user_id": merchant_id, "$or": _barcode_candidates(barcode)}, {"_id": 0})
+    if not order or not _order_id(order):
+        return None, {"accepted": False, "code": "shipment_not_found"}
+    identity = _order_id(order)
+    existing = await db[ASSIGNMENTS].find_one(
+        {"user_id": merchant_id, "order_id": identity, "active": True}, {"_id": 0})
+    if existing:
+        if normalize_text(existing.get("driver_id")) == normalize_text(driver["id"]):
+            return existing, None
+        # Deliberately omit customer, address, phone, amounts and assignment ID.
+        return None, {
+            "accepted": False, "code": "driver_shipment_assigned_to_another",
+            "order_number": existing.get("order_number"),
+            "current_driver_name": existing.get("driver_name_snapshot"),
+            "current_status": existing.get("status"),
+            "assigned_at": existing.get("assigned_at"),
+            "out_for_delivery_at": existing.get("out_for_delivery_at"),
+            "delivered_at": existing.get("delivered_at"),
+        }
+    session = await create_session_service(db, actor=actor, user_id=merchant_id,
+        payload=SessionCreate(driver_id=driver["id"]))
+    try:
+        scanned = await scan_shipment_service(db, actor=actor, user_id=merchant_id,
+            session_id=session["id"], payload=ScanIn(barcode=barcode))
+        if not scanned.get("accepted"):
+            return None, {"accepted": False, "code": scanned.get("code"),
+                "order_number": order.get("order_number")}
+        confirmed = await confirm_session_service(db, actor=actor, user_id=merchant_id,
+            session_id=session["id"], physical_label_scanned=False)
+        return confirmed["assignments"][0], None
+    finally:
+        # No reusable operator session is exposed to the driver application.
+        await db[SESSIONS].update_one(
+            {"user_id": merchant_id, "id": session["id"], "status": "open"},
+            {"$set": {"status": "closed", "closed_at": _now(), "source": "driver_self_assignment"}})
 
 
 def _true_barcode_match(value: str) -> list[dict[str, Any]]:
@@ -917,17 +967,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not session:
             raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
         barcode = normalize_text(payload.barcode)
-        assignment = await db[ASSIGNMENTS].find_one(
-            {
-                "user_id": merchant_id,
-                "driver_id": driver["id"],
-                "active": True,
-                "$or": _true_barcode_match(barcode),
-            },
-            {"_id": 0},
-        )
-        if not assignment:
-            return {"accepted": False, "code": "driver_assignment_barcode_not_found", "barcode": barcode}
+        assignment, rejection = await _resolve_receive_assignment(
+            db, actor=actor, driver=driver, barcode=barcode)
+        if rejection:
+            return {**rejection, "barcode": barcode}
         if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
             return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
         if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
@@ -936,6 +979,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "code": "driver_delivery_already_received",
                 "barcode": barcode,
                 "order_number": assignment.get("order_number"),
+                "current_driver_name": assignment.get("driver_name_snapshot"),
+                "current_status": assignment.get("status"),
+                "assigned_at": assignment.get("assigned_at"),
+                "out_for_delivery_at": assignment.get("out_for_delivery_at"),
             }
         if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
             return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
@@ -1484,17 +1531,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         if not session:
             raise HTTPException(status_code=404, detail={"code": "driver_receive_session_not_found"})
         barcode = normalize_text(payload.barcode)
-        assignment = await db[ASSIGNMENTS].find_one(
-            {
-                "user_id": merchant_id,
-                "driver_id": driver["id"],
-                "active": True,
-                "$or": _true_barcode_match(barcode),
-            },
-            {"_id": 0},
-        )
-        if not assignment:
-            return {"accepted": False, "code": "driver_assignment_barcode_not_found", "barcode": barcode}
+        assignment, rejection = await _resolve_receive_assignment(
+            db, actor=actor, driver=driver, barcode=barcode)
+        if rejection:
+            return {**rejection, "barcode": barcode}
         if normalize_text(assignment.get("status")) == DELIVERY_STATUS_DELIVERED:
             return {"accepted": False, "code": "driver_delivery_already_delivered", "barcode": barcode}
         if normalize_text(assignment.get("status")) == DELIVERY_STATUS_OUT_FOR_DELIVERY:
@@ -1503,6 +1543,10 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
                 "code": "driver_delivery_already_received",
                 "barcode": barcode,
                 "order_number": assignment.get("order_number"),
+                "current_driver_name": assignment.get("driver_name_snapshot"),
+                "current_status": assignment.get("status"),
+                "assigned_at": assignment.get("assigned_at"),
+                "out_for_delivery_at": assignment.get("out_for_delivery_at"),
             }
         if assignment.get("id") in {row.get("assignment_id") for row in session.get("accepted") or []}:
             return {"accepted": False, "code": "driver_delivery_already_scanned_in_session", "barcode": barcode}
