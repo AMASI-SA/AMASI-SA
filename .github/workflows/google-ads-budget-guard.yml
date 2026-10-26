@@ -7,6 +7,12 @@ on:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
       - backend/tests/test_google_ads_automation_budget_guard.py
       - backend/tests/test_google_ads_automation_budget_guard_mongo.py
+      - backend/integrations_control_center/google_ads_automation_policy.py
+      - backend/integrations_control_center/google_ads_automation_activation.py
+      - backend/integrations_control_center/google_ads_automation_creation_policy.py
+      - backend/integrations_control_center/google_ads_automation_policy_mutation_adapter.py
+      - backend/tests/test_google_ads_automation_policy_mutation_adapter.py
+      - backend/tests/test_google_ads_automation_policy_mutation_adapter_mongo.py
       - .github/workflows/google-ads-budget-guard.yml
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
@@ -14,6 +20,12 @@ on:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
       - backend/tests/test_google_ads_automation_budget_guard.py
       - backend/tests/test_google_ads_automation_budget_guard_mongo.py
+      - backend/integrations_control_center/google_ads_automation_policy.py
+      - backend/integrations_control_center/google_ads_automation_activation.py
+      - backend/integrations_control_center/google_ads_automation_creation_policy.py
+      - backend/integrations_control_center/google_ads_automation_policy_mutation_adapter.py
+      - backend/tests/test_google_ads_automation_policy_mutation_adapter.py
+      - backend/tests/test_google_ads_automation_policy_mutation_adapter_mongo.py
       - .github/workflows/google-ads-budget-guard.yml
   workflow_dispatch:
 
@@ -82,6 +94,8 @@ jobs:
           python -m pytest --noconftest -p no:cacheprovider -q --tb=short \
             backend/tests/test_google_ads_automation_budget_guard.py \
             backend/tests/test_google_ads_automation_budget_guard_mongo.py \
+            backend/tests/test_google_ads_automation_policy_mutation_adapter.py \
+            backend/tests/test_google_ads_automation_policy_mutation_adapter_mongo.py \
             --junitxml="$RUNNER_TEMP/google-budget-guard-proof/junit.xml"
       - name: Reject missing tests, skips, or partial transaction evidence
         if: always()
@@ -97,14 +111,16 @@ jobs:
           root = ET.parse(output / 'junit.xml').getroot()
           cases = list(root.iter('testcase'))
           mongo = [case for case in cases if case.get('classname', '').endswith('test_google_ads_automation_budget_guard_mongo')]
+          adapter_mongo = [case for case in cases if case.get('classname', '').endswith('test_google_ads_automation_policy_mutation_adapter_mongo')]
           errors = [case for case in cases if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped'))]
-          proof = {'tests': len(cases), 'replica_mongo_tests': len(mongo), 'failures_errors_or_skips': len(errors),
+          proof = {'tests': len(cases), 'replica_mongo_tests': len(mongo), 'adapter_replica_tests': len(adapter_mongo), 'failures_errors_or_skips': len(errors),
                    'source_sha': (output / 'source-sha.txt').read_text().strip(),
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 39, 'Expected at least31 unit and8 actual replica Mongo cases'
+          assert len(cases) >= 58, 'Expected45 unit/route and13 actual replica Mongo cases'
           assert len(mongo) == 8, 'Exactly8 replica Mongo transaction cases must execute'
+          assert len(adapter_mongo) == 5, 'Exactly5 policy adapter replica cases must execute'
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY
       - name: Preserve bounded Mongo diagnostics

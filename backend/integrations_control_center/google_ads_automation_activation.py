@@ -13,6 +13,7 @@ from pydantic import Field, ValidationError, field_validator
 
 from . import google_ads_automation_policy as policies
 from .google_ads_client import GoogleAdsClient, problem
+from .google_ads_automation_policy_mutation_adapter import mutate_google_automation_policy
 
 
 class AutomationActivationInput(policies.StrictInput):
@@ -48,7 +49,8 @@ def _validate_configuration(row, revision, current):
     policies._expiry(validated.expires_at, current)
 
 
-def attach_google_ads_automation_activation_routes(router, db, current_user, *, client_factory=GoogleAdsClient):
+def attach_google_ads_automation_activation_routes(router, db, current_user, *, client_factory=GoogleAdsClient, policy_mutation_writer=None):
+    """Optional guarded storage DI; None remains explicitly unmigrated legacy."""
     @router.post("/google_ads/automation/policy/{account_id}/activate")
     async def activate_policy(account_id: str, body: AutomationActivationInput, user=Depends(current_user)):
         actor = await policies._owner(db, user)
@@ -79,9 +81,7 @@ def attach_google_ads_automation_activation_routes(router, db, current_user, *, 
             "activation_revision": revision, "activated_by": actor["user_id"], "activated_at": current.isoformat(),
             "updated_by": actor["actor_id"], "updated_at": current.isoformat()}
         event = {**policies._event(actor, revision, True, current), "kind": "owner_activation"}
-        changed = await db[policies.AUTOMATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-            {"$set": proof, "$push": {"events": {"$each": [event], "$slice": -50}}})
-        if not changed.matched_count:
-            raise problem("google_automation_policy_changed", "تغيرت السياسة أو أُلغي التفويض؛ أعد تحميلها قبل التفعيل.", 409)
+        await mutate_google_automation_policy(db, policy_kind="standing", scope=scope,
+            expected_revision=body.expected_revision, values=proof, event=event, writer=policy_mutation_writer)
         result = await db[policies.AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
         return policies.public_policy(result, account_id=scope["account_id"], current=policies.now())
