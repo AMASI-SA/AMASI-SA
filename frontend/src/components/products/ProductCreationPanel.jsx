@@ -66,11 +66,12 @@ function errorMessage(error) {
         unsupported_product_type: "اختر منتجًا جاهزًا أو خدمة حسب الطلب.",
         invalid_product_option_name: "أسماء الخيارات مطلوبة ويجب ألا تتكرر.",
         invalid_product_option_values: "كل قائمة تحتاج قيمتين مختلفتين على الأقل.",
+        invalid_product_option_prices: "راجع الأسعار الإضافية لقيم الخيارات؛ يجب أن تكون مبالغ موجبة أو صفرًا.",
         text_option_cannot_have_values: "حقل النص لا يحتوي قيمًا ثابتة.",
         shipping_weight_required: "أدخل وزن الشحن بالكيلوجرام للخدمة المشحونة.",
         invalid_product_option_condition: "اختر حقل قائمة وقيمة صحيحة لشرط الظهور.",
         cyclic_product_option_condition: "شروط الظهور لا يمكن أن تعتمد على بعضها في حلقة.",
-        salla_product_options_uncertain: "أُنشئ المنتج، لكن لم يكتمل ربط شروط الحقول. سنصالح إعدادات المنتج الموجود قبل أي إعادة، دون إنشاء نسخة أخرى.",
+        salla_product_options_uncertain: "أُنشئ المنتج، لكن لم يكتمل التحقق من الخيارات وأسعارها وشروطها. سنكمل إعدادات المنتج الموجود قبل أي إعادة، دون إنشاء نسخة أخرى.",
     };
     if (Array.isArray(detail)) return "راجع بيانات المنتج والخيارات؛ بعض الحقول غير مكتملة أو تتجاوز الحد المسموح.";
     return messages[code] || detail?.message || "تعذر تنفيذ العملية";

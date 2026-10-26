@@ -21,7 +21,7 @@ export default function ProductCreationOptionsPreview({ options }) {
             <span>{option.name} · {option.required ? "مطلوب" : "اختياري"}</span>
             {option.description && <span className="block text-xs font-normal text-slate-600">{option.description}</span>}
             {option.type === "choice"
-                ? <select className="h-11 w-full rounded-xl border px-3" value={answers[index] || ""} onChange={(event) => choose(index, event.target.value)} required={option.required}><option value="">اختر {option.name}</option>{option.values.map((value) => <option key={value}>{value}</option>)}</select>
+                ? <select className="h-11 w-full rounded-xl border px-3" value={answers[index] || ""} onChange={(event) => choose(index, event.target.value)} required={option.required}><option value="">اختر {option.name}</option>{option.values.map((value, position) => <option key={value} value={value}>{value}{Number(option.value_prices?.[position]) > 0 ? ` (+${option.value_prices[position]} ر.س)` : ""}</option>)}</select>
                 : <input className="h-11 w-full rounded-xl border px-3" placeholder={option.description || "يكتب العميل النص هنا"} required={option.required} readOnly />}
         </label>)}
     </section>;

@@ -107,6 +107,31 @@ test("creates a service with age sizes and customer text, then previews both", a
     expect(preview.querySelector('input[placeholder="يكتب العميل النص هنا"]').readOnly).toBe(true);
 });
 
+test("keeps extra prices aligned when a value is removed and shows them in preview", async () => {
+    await act(async () => root.render(<ProductCreationPanel />));
+    await click("منتج جديد");
+    await change("اسم المنتج", "هودي بالاسم");
+    await change("SKU فريد", "HOOD-PRICE");
+    await change("السعر", "139");
+    await change("نوع المنتج في سلة", "service");
+    await change("وزن الشحن (كجم)", "0.1");
+    await click("إضافة قائمة اختيارات");
+    await change("اسم الخيار 1", "نوع المقاسات");
+    await change("قيمة 1 للخيار 1", "للكبار");
+    await change("قيمة 2 للخيار 1", "للصغار");
+    await change("السعر الإضافي للقيمة 1 للخيار 1 (ر.س)", "10");
+    await click("إضافة قيمة جديدة للخيار 1");
+    await change("قيمة 3 للخيار 1", "قيمة تحذف");
+    await change("السعر الإضافي للقيمة 3 للخيار 1 (ر.س)", "25");
+    const remove = container.querySelector('[aria-label="حذف القيمة 3 للخيار 1"]');
+    await act(async () => remove.click());
+    await submit();
+    expect(api.createProductCreationDraft.mock.calls[0][0].options[0]).toMatchObject({
+        values: ["للكبار", "للصغار"], value_prices: [10, 0],
+    });
+    expect(container.textContent).toContain("للكبار (+10 ر.س)");
+});
+
 test("editing an approved draft updates its type and options without losing media", async () => {
     const draft = {
         id: "approved-1", status: "approved", name: "منتج محفوظ", sku: "SAVED-1", price: 100,

@@ -20,6 +20,9 @@ export function serializeCreationOptions(options = []) {
             values: option.type === "choice" ? option.values.map((value) => value.trim()) : [],
         };
         if (option.description?.trim()) result.description = option.description.trim();
+        if (option.type === "choice" && option.value_prices?.length) {
+            result.value_prices = option.values.map((_, index) => Number(option.value_prices[index] || 0));
+        }
         if (option.condition) result.condition = { ...option.condition, option_index: Number(option.condition.option_index), value: option.condition.value.trim() };
         return result;
     });
@@ -53,6 +56,7 @@ export function creationOptionsError(options = []) {
         names.add(name);
         if ((option.description || "").length > 1000) return "الوصف التوضيحي بحد أقصى 1000 حرف.";
         if (!["text", "choice"].includes(option.type)) return "اختر حقل نص أو قائمة اختيارات.";
+        if (option.value_prices?.some((price) => !Number.isFinite(price) || price < 0 || price > 100000000)) return "السعر الإضافي يجب أن يكون صفرًا أو مبلغًا موجبًا.";
         if (option.type === "choice" && (
             option.values.length < 2 || option.values.length > 100
             || option.values.some((value) => !value || value.length > 100)
