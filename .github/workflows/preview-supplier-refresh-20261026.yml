@@ -1,0 +1,69 @@
+name: Isolated supplier Preview artifact 20261026
+on:
+  push:
+    branches: [codex/supplier-invoice-handoff-evidence-20261026]
+    paths: [.github/workflows/preview-supplier-refresh-20261026.yml]
+permissions:
+  contents: read
+jobs:
+  preview-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PREVIEW_SOURCE: 761a8f330cb3bfcadbd430e6ca9a954008dbe9de
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 761a8f330cb3bfcadbd430e6ca9a954008dbe9de
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - name: Build reviewed source for isolated Preview
+        env:
+          NODE_ENV: production
+          REACT_APP_BACKEND_URL: https://salla-analytics.preview.emergentagent.com
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PREVIEW_SOURCE"
+          test "$(node --version)" = v22.23.2
+          corepack prepare yarn@1.22.22 --activate
+          test "$(yarn --version)" = 1.22.22
+          yarn --cwd frontend install --frozen-lockfile --non-interactive --production=false
+          cd frontend
+          node node_modules/vite/bin/vite.js build --mode preview
+      - name: Package source and Preview artifact without runtime secrets
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/preview-package/frontend" "$RUNNER_TEMP/preview-output"
+          git archive --prefix=source/ "$PREVIEW_SOURCE" | tar -x -C "$RUNNER_TEMP/preview-package"
+          cp -a frontend/build "$RUNNER_TEMP/preview-package/frontend/build"
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'preview-package'
+          build = root / 'frontend/build'
+          assert not (build / 'build-meta.json').exists()
+          assert not (root / 'source/backend/release_identity.json').exists()
+          scripts = list((build / 'assets').glob('*.js'))
+          assert any(b'https://salla-analytics.preview.emergentagent.com' in p.read_bytes() for p in scripts)
+          metadata = dict(environment='preview', api_origin='https://salla-analytics.preview.emergentagent.com',
+              source_git_sha=os.environ['PREVIEW_SOURCE'], external_network='denied',
+              automatic_workers='disabled', contains_production_release_identity=False,
+              index_sha256=hashlib.sha256((build / 'index.html').read_bytes()).hexdigest())
+          (build / 'preview-meta.json').write_text(json.dumps(metadata, sort_keys=True) + '\n')
+          manifest = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in sorted(root.rglob('*')) if p.is_file()}
+          (root / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True) + '\n')
+          print(json.dumps(dict(source=os.environ['PREVIEW_SOURCE'], files=len(manifest),
+              unpacked_bytes=sum(p.stat().st_size for p in root.rglob('*') if p.is_file()))))
+          PY
+          tar -czf "$RUNNER_TEMP/preview-output/preview-supplier-761a8f330.tar.gz" -C "$RUNNER_TEMP/preview-package" .
+          cd "$RUNNER_TEMP/preview-output"
+          sha256sum preview-supplier-761a8f330.tar.gz > SHA256SUMS
+          ls -lh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-supplier-761a8f330
+          path: ${{ runner.temp }}/preview-output/
+          retention-days: 14
