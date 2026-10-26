@@ -62,9 +62,9 @@ def test_account_currency_periods_and_platform_conversions_remain_separate():
     assert out['success_classification'] == 'not_established'
 
 
-@pytest.mark.parametrize('changes', [{'complete': False}, {'verification': 'unverified'}, {'observed_at': '2026-10-01T04:00:00Z'}])
+@pytest.mark.parametrize('changes', [{'complete': False}, {'verification': 'unverified'}, {'observed_at': '2026-10-26T21:00:00Z'}])
 def test_partial_unverified_stale_records_do_not_supply_comparison_facts(changes):
-    out = build(request(records=[fact(**changes)]))['products'][0]
+    out = build(request(records=[fact(**changes)], max_observation_age_seconds=3600))['products'][0]
     assert out['windows']['last_14_days']['availability'] == 'unproven'
     assert out['windows']['last_14_days']['rows'] == []
     assert out['growth_14_days_percent'] is None
@@ -124,7 +124,8 @@ def test_builder_does_not_mutate_inputs_and_future_observations_do_not_become_fr
 
 def test_future_or_old_campaign_periods_are_not_current_test_evidence():
     for period in [('2026-11-01', '2026-11-14'), ('2025-10-13', '2025-10-26')]:
-        record = fact(provider='snapchat_ads', conversions='5', date_from=period[0], date_to=period[1])
+        record = fact(provider='snapchat_ads', conversions='5', date_from=period[0], date_to=period[1],
+            observed_at='2026-11-15T04:00:00Z' if period[0].startswith('2026-11') else '2026-10-27T04:00:00Z')
         product = build(request(records=[record]))['products'][0]
         assert product['campaign_evidence'] == []
         assert product['candidate_status'] == 'new_product_test_review'
@@ -148,3 +149,48 @@ def test_cost_evidence_reference_is_retained_with_its_native_currency():
     product = build(payload)['products'][0]
     assert product['cost_evidence_ref'] == 'cost:123:rev3'
     assert product['cost_currency_code'] == 'QAR' and product['profitability'] is None
+
+
+@pytest.mark.parametrize('provider', ['store_orders', 'snapchat_ads'])
+@pytest.mark.parametrize('observed', ['2026-10-24T22:00:00Z', '2026-10-26T20:59:59Z'])
+def test_complete_period_cannot_be_observed_before_source_local_day_closed(provider, observed):
+    with pytest.raises(ValidationError):
+        build(request(records=[fact(provider=provider, observed_at=observed)]))
+
+
+def test_closed_day_proof_uses_source_timezone_and_accepts_exact_next_midnight():
+    from integrations_control_center.google_product_evidence import ProductSourceRecord
+    riyadh = ProductSourceRecord.model_validate(fact(observed_at='2026-10-26T21:00:00Z'))
+    assert riyadh.complete is True  # midnight 27 October in Riyadh
+    with pytest.raises(ValidationError):
+        ProductSourceRecord.model_validate(fact(timezone='America/New_York', observed_at='2026-10-27T03:59:59Z'))
+    new_york = ProductSourceRecord.model_validate(fact(timezone='America/New_York', observed_at='2026-10-27T04:00:00Z'))
+    assert new_york.complete is True  # midnight 27 October in New York
+
+
+def test_incomplete_period_observation_remains_unproven_without_closed_day_claim():
+    product = build(request(records=[fact(complete=False, observed_at='2026-10-26T20:59:59Z')]))['products'][0]
+    assert product['windows']['last_14_days']['availability'] == 'unproven'
+
+
+@pytest.mark.parametrize('changes', [{'account_id': 'second-account'}, {'currency_code': 'QAR'}, {'date_from': '2026-09-29', 'date_to': '2026-10-12'}])
+def test_same_evidence_reference_cannot_claim_different_financial_scope(changes):
+    with pytest.raises(ValidationError): build(request(records=[fact(), fact(**changes)]))
+
+
+@pytest.mark.parametrize('key', ['evidence_ref', 'account_id', 'product_id'])
+def test_whitespace_source_identifiers_are_rejected(key):
+    with pytest.raises(ValidationError): build(request(records=[fact(**{key: '   '})]))
+
+
+def test_whitespace_association_or_cost_references_rejected():
+    record = fact(provider='snapchat_ads'); record['product_link_evidence_ref'] = ' '
+    with pytest.raises(ValidationError): build(request(records=[record]))
+    payload = request(); payload['products'][0].update(cost_quality='complete', unit_cost_native='20', cost_currency_code='SAR', cost_evidence_ref=' ', cost_verification='verified')
+    with pytest.raises(ValidationError): build(payload)
+
+
+def test_unknown_currency_code_rejected_using_existing_pinned_vocabulary():
+    with pytest.raises(ValidationError): build(request(records=[fact(currency_code='ZZZ')]))
+    payload = request(); payload['products'][0].update(cost_quality='complete', unit_cost_native='20', cost_currency_code='ZZZ', cost_evidence_ref='cost:1', cost_verification='verified')
+    with pytest.raises(ValidationError): build(payload)

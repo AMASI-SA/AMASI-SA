@@ -4,6 +4,10 @@ Inputs are a contract for future trusted source adapters, NOT a public API that
 turns caller-supplied 'verified' flags into source proof. No reader or executor
 is wired by this module. Product association proves advertised scope only, not
 order attribution. Monetary values remain in their original source currencies.
+Evidence references identify immutable source rows, not whole multi-account
+reports; adapters must qualify report IDs with the row scope. Currency names
+use the repository pinned ISO vocabulary, loaded once by its existing module;
+the pure builder performs no file, database or network reads.
 """
 from __future__ import annotations
 
@@ -14,6 +18,8 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from accounting_currency import CURRENCY_CODES
+
 Provider = Literal["store_orders", "google_ads", "snapchat_ads", "tiktok", "meta"]
 Verification = Literal["verified", "unverified"]
 
@@ -22,10 +28,27 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
+def _identity(value):
+    if value is not None and (not value.strip() or value != value.strip()):
+        raise ValueError("identity references cannot be blank or padded")
+    return value
+
+
+def _currency(value):
+    if value is not None and value not in CURRENCY_CODES:
+        raise ValueError("currency is outside the pinned ISO 4217 vocabulary")
+    return value
+
+
 class Observed(Strict):
     observed_at: datetime
-    evidence_ref: str = Field(min_length=1, max_length=240)
+    evidence_ref: str = Field(min_length=1, max_length=240, description="Immutable row-scoped source identity; qualify report references with their exact source row identity.")
     verification: Verification
+
+    @field_validator("evidence_ref")
+    @classmethod
+    def reference(cls, value):
+        return _identity(value)
 
     @field_validator("observed_at", mode="before")
     @classmethod
@@ -60,6 +83,16 @@ class ProductSource(Observed):
     cost_currency_code: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     cost_evidence_ref: str | None = Field(default=None, min_length=1, max_length=240)
     cost_verification: Verification = "unverified"
+
+    @field_validator("product_id", "mezan_product_id", "cost_evidence_ref")
+    @classmethod
+    def identifiers(cls, value):
+        return _identity(value)
+
+    @field_validator("cost_currency_code")
+    @classmethod
+    def currency(cls, value):
+        return _currency(value)
 
     @field_validator("unit_cost_native", "available_quantity")
     @classmethod
@@ -97,6 +130,16 @@ class ProductSourceRecord(Observed):
     product_link_verification: Verification = "unverified"
     product_link_evidence_ref: str | None = Field(default=None, min_length=1, max_length=240)
 
+    @field_validator("product_id", "account_id", "campaign_id", "product_link_evidence_ref")
+    @classmethod
+    def identifiers(cls, value):
+        return _identity(value)
+
+    @field_validator("currency_code")
+    @classmethod
+    def currency(cls, value):
+        return _currency(value)
+
     @field_validator("units_sold", "sales_native", "spend_native", "conversions", "conversion_value_native")
     @classmethod
     def numbers(cls, value):
@@ -111,6 +154,8 @@ class ProductSourceRecord(Observed):
             ZoneInfo(self.timezone)
         except (KeyError, ValueError):
             raise ValueError("unknown source timezone") from None
+        if self.complete and self.observed_at.astimezone(ZoneInfo(self.timezone)).date() <= last:
+            raise ValueError("a complete period must be observed after its last local day closes")
         refs = self.order_evidence_refs
         if len(set(refs)) != len(refs) or any(not ref.strip() or len(ref) > 240 for ref in refs):
             raise ValueError("order proofs must be unique bounded references")
@@ -142,6 +187,7 @@ class ProductEvidenceRequest(Strict):
         if len(set(ids)) != len(ids):
             raise ValueError("duplicate product identity")
         keys = set()
+        evidence_scopes = {}
         for row in self.records:
             if row.product_id not in ids:
                 raise ValueError("record belongs to an unselected product")
@@ -149,6 +195,9 @@ class ProductEvidenceRequest(Strict):
             if key in keys:
                 raise ValueError("duplicate or conflicting evidence scope")
             keys.add(key)
+            if row.evidence_ref in evidence_scopes and evidence_scopes[row.evidence_ref] != key:
+                raise ValueError("one evidence reference cannot identify conflicting source scopes")
+            evidence_scopes[row.evidence_ref] = key
         return self
 
 

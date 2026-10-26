@@ -31,9 +31,9 @@
       "result": "2 failed,22 passed: extreme decimal exponent and missing cost provenance in output"
     },
     "latest": {
-      "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py",
+      "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py backend/tests/test_accounting_currency.py",
       "exit_code": 0,
-      "result": "42 passed (24 evidence,18 commercial plan), no skips"
+      "result": "69 passed, no skips,1.08s"
     }
   },
   "source_investigation": {
@@ -56,5 +56,22 @@
   ],
   "production_changed": false,
   "provider_writes": 0,
-  "next_safe_action": "Root independently reviews pure contract+tests, preserves remote WIP checkpoint, then designs bounded trusted read adapters with explicit completeness before any endpoint/selection/runtime integration."
+  "next_safe_action": "Root independently reviews pure contract+tests, preserves remote WIP checkpoint, then designs bounded trusted read adapters with explicit completeness before any endpoint/selection/runtime integration.",
+  "previous_local_checkpoint": "c63af515745eb91f18fb889ddaf509b196df0733",
+  "remote_initial_wip_checkpoint": "846ae6a45cc924e6ec3ecb40c7fd7e283025942c",
+  "review_followup": {
+    "state": "Root-identified observation chronology and audit provenance findings fixed locally; fresh independent rereview pending",
+    "complete_period_observation": "A complete source record must be observed strictly after the last source-local date closes; aware observed_at converted with source timezone. Exact next midnight accepted; incomplete rows retain unproven status.",
+    "evidence_identity": "evidence_ref is explicitly immutable row-scoped identity; whole multi-account report IDs must be qualified with exact source row. Reuse across conflicting row scope rejected; native account/currency/timezone/period remain separate.",
+    "references": "Blank or padded product/account/campaign/catalog/association/cost evidence references rejected.",
+    "currency": "Reuses accounting_currency.CURRENCY_CODES from existing pinned ISO catalog; no duplicated list or exchange rates. Existing module loads static package data once at import; pure builder has no I/O.",
+    "tests_red": "12 failed,26 passed before followup fixes (observation chronology, conflicting ref, whitespace and invalid currency). Existing stale/future fixtures were corrected to respect new complete-period proof, preserving independent freshness tests.",
+    "latest_verification": {
+      "command": "PYTHONPATH=backend python -m pytest -q backend/tests/test_google_product_evidence.py backend/tests/test_google_commercial_plan.py backend/tests/test_accounting_currency.py",
+      "exit_code": 0,
+      "result": "69 passed, no skips,1.08s"
+    },
+    "production_changed": false,
+    "provider_writes": 0
+  }
 }
