@@ -9,7 +9,15 @@
   ],
   "verification": {
     "local": "16 passed, 5 skipped (no Mongo locally); real replica CI pending",
-    "diff_check": "pass"
+    "diff_check": "pass",
+    "replica_ci": {
+      "run": 40400497783,
+      "job": 121844759013,
+      "passed": 21,
+      "replica": 5,
+      "skips": 0,
+      "logs_verified": true
+    }
   },
   "behavior": "principal owner scope and server clock, excludes explicitly excluded pins, expected plan revision and full-field reread, no campaign actions or provider writes",
   "limitations": [
@@ -20,5 +28,6 @@
   ],
   "production_changed": false,
   "provider_writes": 0,
-  "next_safe_action": "Inspect independent CI and logs; owner-only route remains unattached"
+  "next_safe_action": "Coordinator reviews current production and registers route with independently verified session and server clock",
+  "code_sha": "cd38593b19169c4fb2de4b2cc0e510a28da97709"
 }
