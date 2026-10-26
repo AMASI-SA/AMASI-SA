@@ -38,10 +38,9 @@ and safe quality flags/reasons/actual observed_at. Amounts/points remain gated
 by that account's evidence. Aggregate authority and source finality stay intact.
 
 Frontend cards/chart normalize the contract and render account series
-independently. Executive details consume the same selected-period server
-snapshot; exact placement is under review to preserve frozen canonical
-financial JSON/read oracles. No changes to the frozen executive reducers are
-planned. Root owns integration, executive display, verification and publication;
+independently. Executive details consume the same-filter platform-spend display
+snapshot already attached by the existing page read. Canonical financial JSON,
+read oracles and frozen executive reducers remain unchanged. Root owns integration, executive display, verification and publication;
 two scoped authors own backend contract and cards/chart respectively, with an
 independent reviewer. No ad/budget activation is a test.
 
@@ -61,3 +60,11 @@ fresh source/intent pair directly on current reviewed Production, exact CI,
 actual clean-clone rehearsal, governed release and live account-display plus
 original hourly-chart/executive-profit acceptance. No new source tests have
 run yet. This initial checkpoint is WIP, not release approval.
+
+Workspace disconnected during implementation, and the browser tool is now
+unavailable. Root recovered the executive table/page source and regression
+cases directly against immutable GitHub base33c; these are preserved in this
+explicit WIP checkpoint. Backend and cards/chart authors are recovering their
+frozen source through the remaining GitHub tools. No new local tests or live
+publication are claimed. Exact remote CI and governed deployment remain
+required; the latter is blocked until the execution/browser environment returns.

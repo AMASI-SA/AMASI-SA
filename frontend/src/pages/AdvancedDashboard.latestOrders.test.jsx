@@ -1,4 +1,5 @@
-import React from "react";
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
 import fs from "fs";
 import path from "path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -780,4 +781,82 @@ test("provisional operational Snapchat to complete spend uses one backend read w
     expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_orders).toBe(3);
     expect(result.ads_v2.executive_breakdown.providers.snapchat.salla_sales_sar).toBe(500);
     expect(result.ads_v2.executive_breakdown.coverage.platform_cpa_denominator_complete).toBe(false);
+});
+
+
+function accountProfitPayload(sarAvailable) {
+    const accounts = [
+        { account_id: "usd", display_name: "USD account", currency: "USD", total_native: 21.685333, total_sar: 81.32,
+            quality: { status: "provisional", amount_available: true, provisional: true } },
+        { account_id: "sar", display_name: "Saudi account", currency: "SAR", total_native: sarAvailable ? 0 : null,
+            total_sar: sarAvailable ? 0 : null,
+            quality: { status: sarAvailable ? "provisional" : "incomplete", amount_available: sarAvailable, provisional: sarAvailable } },
+    ];
+    return {
+        totals: { total_sales: 1000, total_orders: 3, total_product_cost: 50, total_shipping_cost: 20,
+            total_payment_fees: 5, operating_expenses_total: 10, total_ads_cost: sarAvailable ? 81.32 : null,
+            net_profit: sarAvailable ? 700.19 : null, ads_spend_data_complete: false,
+            ads_spend_amount_available: sarAvailable, ads_spend_provisional: sarAvailable },
+        ads_v2: { spend_quality: { status: sarAvailable ? "provisional" : "incomplete",
+            amount_complete: false, amount_available: sarAvailable, provisional: sarAvailable },
+            executive_breakdown: { providers: {
+                snapchat: { spend_sar: 999, salla_orders: 7, salla_sales_sar: 550 },
+                meta: { spend_sar: 0 }, tiktok: { spend_sar: 0 }, google: { spend_sar: 0 },
+            }, total: { spend_sar: sarAvailable ? 81.32 : null, salla_orders: 3, salla_sales_sar: 1000 } } },
+        dashboard_platform_spend: { date_from: "2026-10-26", date_to: "2026-10-26",
+            providers: { snapchat: { accounts } } },
+    };
+}
+
+function inspectAccountProfit(payload, inspect) {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+        act(() => root.render(<ProfitCard data={payload} fromDate="2026-10-26" toDate="2026-10-26" />));
+        act(() => container.querySelector('[data-testid="advanced-profit-row-ads"]').click());
+        inspect(container, root);
+    } finally {
+        act(() => root.unmount());
+        container.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
+}
+
+test.each([false, true])("profit detail uses independent saved account expenses, SAR availability %s", (sarAvailable) => {
+    const payload = accountProfitPayload(sarAvailable);
+    inspectAccountProfit(payload, (container) => {
+        const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
+        expect(details.textContent).toContain("سناب الدولار");
+        expect(details.textContent).toContain("سناب السعودي");
+        expect(details.textContent).toContain("81.32 ر.س");
+        expect(details.textContent).not.toContain("999");
+        const sar = details.querySelector('[data-testid="snapchat-expense-sar"]');
+        expect(sar.textContent).toContain(sarAvailable ? "0.00 ر.س" : "غير مكتمل");
+        if (sarAvailable) expect(container.textContent).toContain("700.19");
+        else expect(payload.totals.net_profit).toBeNull();
+        expect(payload.ads_v2.executive_breakdown.providers.snapchat.spend_sar).toBe(999);
+    });
+});
+
+test("period changes suppress prior-period account values while waiting for the new saved snapshot", () => {
+    const payload = accountProfitPayload(true);
+    inspectAccountProfit(payload, (container, root) => {
+        act(() => root.render(<ProfitCard data={payload} fromDate="2026-10-27" toDate="2026-10-27" loading />));
+        const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
+        expect(details.querySelector('[data-testid="ads-executive-snapchat-account-table"]')).toBeNull();
+        expect(details.textContent).toContain("بانتظار بيانات حسابات سناب");
+        expect(details.textContent).not.toContain("999");
+    });
+});
+
+test("missing account contract cannot restore the combined Snapchat expense column", () => {
+    const payload = { ...accountProfitPayload(true), dashboard_platform_spend: undefined };
+    inspectAccountProfit(payload, (container) => {
+        const details = container.querySelector('[data-testid="advanced-profit-ads-details"]');
+        expect(details.textContent).toContain("بانتظار بيانات حسابات سناب");
+        expect(details.textContent).not.toContain("999");
+        expect(details.textContent).not.toContain("Snapchat");
+    });
 });
