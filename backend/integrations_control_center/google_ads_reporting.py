@@ -269,6 +269,28 @@ async def _accounts(db: Any, user_id: str) -> list[dict[str, Any]]:
     return output
 
 
+async def _recovery_owned_accounts(db, user_id):
+    """All API-proven active Google links; UI selection does not narrow proof."""
+    import re
+    rows = await db.mezan_integration_accounts_v2.find({"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID,
+        "connection_status": "connected", "connection_provenance": "api_connection"}, {"_id": 0}).to_list(length=MAX_GOOGLE_ADS_ACCOUNTS + 1)
+    if not rows or len(rows) > MAX_GOOGLE_ADS_ACCOUNTS:
+        raise GoogleAdsReportingError("google_reporting_recovery_accounts_unproved", "Bounded Google account scope is required.", status_code=409)
+    accounts, signatures = [], []
+    for row in rows:
+        account_id = str(row.get("ad_account_id") or row.get("external_account_id") or "").replace("-", "").strip()
+        external = str(row.get("external_account_id") or account_id).replace("-", "").strip()
+        login = str(row.get("login_customer_id") or "").replace("-", "").strip()
+        if (not re.fullmatch(r"[0-9]{1,30}", account_id) or external != account_id
+            or login and not re.fullmatch(r"[0-9]{1,30}", login)):
+            raise GoogleAdsReportingError("google_reporting_recovery_accounts_unproved", "Google account identity is ambiguous.", status_code=409)
+        accounts.append({**row, "ad_account_id": account_id})
+        signatures.append((account_id, login, str(row.get("mezan_integration_account_id") or ""), str(row.get("created_at") or "")))
+    if len({item[0] for item in signatures}) != len(signatures):
+        raise GoogleAdsReportingError("google_reporting_recovery_accounts_unproved", "Google account identity is ambiguous.", status_code=409)
+    return sorted(accounts, key=lambda item: item["ad_account_id"]), sorted(signatures)
+
+
 def _error_from_response(response: httpx.Response) -> GoogleAdsReportingError:
     payload: Any = {}
     try:
@@ -380,6 +402,8 @@ async def run_google_ads_reporting_sync(
     date_from: str,
     date_to: str,
     now: Callable[[], datetime] = _utcnow,
+    account_id: str | None = None,
+    recovery_mode: bool = False,
 ) -> dict[str, Any]:
     if GOOGLE_ADS_PROVIDER_ID not in GOOGLE_PROVIDER_IDS or not google_oauth_configured():
         raise GoogleAdsReportingError(
@@ -405,8 +429,26 @@ async def run_google_ads_reporting_sync(
     now_value = now().astimezone(timezone.utc)
     observed_at = _iso(now_value)
     await ensure_google_ads_reporting_indexes(db)
-    access_token = await _credential(db, user_id, now_value)
-    accounts = await _accounts(db, user_id)
+    access_token = await _credential(db, user_id, now_value) if not recovery_mode else None
+    recovery_scope = None
+    group_signature = None
+    if recovery_mode:
+        connection = await db.mezan_integrations_v2.find_one({"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID}, {"_id": 0})
+        accounts, group_signature = await _recovery_owned_accounts(db, user_id)
+        if (not connection or connection.get("connection_status") != "error"
+            or connection.get("connection_provenance") != "api_connection" or not connection.get("updated_at")
+            or account_id not in {item["ad_account_id"] for item in accounts} or start != end):
+            raise GoogleAdsReportingError("google_reporting_recovery_unproved", "Google recovery scope is not proven.", status_code=409)
+        recovery_scope = {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID,
+            "connection_status": "error", "connection_provenance": "api_connection",
+            **{key: connection[key] if key in connection else {"$exists": False}
+               for key in ("updated_at", "checked_at", "permission_observation_id", "google_reporting_recovery_generation")}}
+    else:
+        if account_id is not None:
+            raise GoogleAdsReportingError("google_reporting_recovery_mode_required", "Explicit recovery mode is required.", status_code=409)
+        accounts = await _accounts(db, user_id)
+    if recovery_mode:
+        access_token = await _credential(db, user_id, now_value)
     requested_days = _days(start, end)
     account_summaries: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -422,6 +464,8 @@ async def run_google_ads_reporting_sync(
                     account=account,
                 )
                 provider_calls += 1
+                if recovery_mode and metadata.get("provider_identity_proven") is not True:
+                    raise GoogleAdsReportingError("google_reporting_recovery_identity_unproved", "Native account identity is not proven.", status_code=409)
                 if metadata["manager"]:
                     raise GoogleAdsReportingError(
                         "google_ads_manager_account_requires_client_selection",
@@ -443,6 +487,11 @@ async def run_google_ads_reporting_sync(
                     query=query,
                 )
                 provider_calls += 1
+                if recovery_mode and (getattr(rows, "complete_response", False) is not True
+                    or any((row.get("customer") or {}).get("id") != account_id
+                        or (row.get("customer") or {}).get("currencyCode") != metadata.get("currency")
+                        or (row.get("customer") or {}).get("timeZone") != metadata.get("timezone") for row in rows)):
+                    raise GoogleAdsReportingError("google_reporting_recovery_read_unproved", "Complete scoped reporting evidence is required.", status_code=409)
                 currency = str(metadata.get("currency") or "").upper() or None
                 account_timezone = str(metadata.get("timezone") or "Asia/Riyadh")
                 fx_rate, fx_source = _fx_to_sar(currency)
@@ -619,26 +668,40 @@ async def run_google_ads_reporting_sync(
     status = "complete" if accounts_complete == len(account_summaries) else "partial"
     if rows_saved == 0 and errors:
         status = "failed"
-    await db.mezan_integrations_v2.update_one(
-        {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
-        {
-            "$set": {
-                "connection_status": "connected" if status != "failed" else "error",
-                "connection_provenance": "api_connection",
-                "has_data": rows_saved > 0,
-                "last_sync_at": observed_at if rows_saved > 0 else None,
-                "data_delay_minutes": 0 if status == "complete" else None,
-                "data_quality": "complete" if status == "complete" else "partial" if rows_saved else "unavailable",
-                "health_score": 100 if status == "complete" else 80 if rows_saved else 40,
-                "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
-                "checked_at": observed_at,
-                "updated_at": observed_at,
-            }
-        },
-        upsert=True,
-    )
+    recovery_confirmed = False
+    if recovery_mode and status == "complete" and not errors and accounts_complete == len(accounts) and rows_saved > 0:
+        from .google_ads_automation_policy import _owner
+        _, final_signature = await _recovery_owned_accounts(db, user_id)
+        if final_signature != group_signature:
+            raise GoogleAdsReportingError("google_reporting_recovery_group_changed", "Google account group changed during recovery.", status_code=409)
+        await _owner(db, {"id": user_id})
+        if not timedelta(0) <= now().astimezone(timezone.utc) - now_value < timedelta(seconds=90):
+            raise GoogleAdsReportingError("google_reporting_recovery_proof_expired", "Native recovery proof expired.", status_code=409)
+    if not recovery_mode or (status == "complete" and not errors and accounts_complete == len(accounts) and rows_saved > 0):
+        integration_update = await db.mezan_integrations_v2.update_one(
+            recovery_scope or {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
+            {
+                **({"$inc": {"google_reporting_recovery_generation": 1}} if recovery_mode else {}),
+                "$set": {
+                    "connection_status": "connected" if status != "failed" else "error",
+                    "connection_provenance": "api_connection",
+                    "has_data": rows_saved > 0,
+                    "last_sync_at": observed_at if rows_saved > 0 else None,
+                    "data_delay_minutes": 0 if status == "complete" else None,
+                    "data_quality": "complete" if status == "complete" else "partial" if rows_saved else "unavailable",
+                    "health_score": 100 if status == "complete" else 80 if rows_saved else 40,
+                    "source_mode": GOOGLE_ADS_REPORTING_SOURCE_MODE,
+                    "checked_at": observed_at,
+                    "updated_at": observed_at,
+                }
+            },
+            upsert=not recovery_mode,
+        )
+        if recovery_mode:
+            recovery_confirmed = integration_update.matched_count == 1
     return {
         "provider": GOOGLE_ADS_PROVIDER_ID,
+        **({"recovery_confirmed": recovery_confirmed} if recovery_mode else {}),
         "status": status,
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),

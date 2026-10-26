@@ -20,6 +20,7 @@ from .google_ads_client import GoogleAdsClient, identifier, problem
 from .google_ads_management import (DRAFTS, PROPOSALS, POLICIES, ANALYSES, account_client, available_accounts, digest,
     ensure_google_management_indexes, execute_google_proposal, get_proposal, now, preview_google_action, principal, public_proposal, reconcile_google_proposal)
 from .google_ads_workspace import google_lookup, read_google_workspace
+from .google_ads_reporting_recovery import GoogleReportingRecoveryInput, recover_google_reporting
 
 KEY = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 ACTION_NAMES = set(GoogleCampaignActionInput.model_fields["action"].annotation.__args__) | {"upload_image", "attach_video", "upload_html5"}
@@ -107,6 +108,10 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     attach_google_ads_automation_creation_policy_routes(router, db, current_user, client_factory=client_factory)
     from .google_ads_automation_creation_plan import attach_google_ads_automation_creation_plan_routes
     attach_google_ads_automation_creation_plan_routes(router, db, current_user, client_factory=client_factory)
+
+    @router.post(root + "/reporting-recovery")
+    async def reporting_recovery(body: GoogleReportingRecoveryInput, user=Depends(current_user)):
+        return await recover_google_reporting(db, user, body)
 
     async def actor_read(user=Depends(current_user)):
         return await principal(db, user)

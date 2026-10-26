@@ -1,6 +1,6 @@
 import api from "../lib/api";
 import {
-    GOOGLE_ADS_ROOT, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
+    GOOGLE_ADS_ROOT, recoverGoogleAdsReporting, createGoogleDraft, createLatestGoogleResponseGuard, executeGoogleProposal,
     getGoogleAdsWorkspace, getGoogleProducts, googleCampaignCapabilities, googleCapabilityCanCreate, googleIdempotencyKey,
     googleProposalCanApprove, googleProposalNeedsReconcile, updateGoogleDraft, uploadGoogleImage,
     googleErrorMessage, googleConfidenceLabel, googleRecommendationAction, previewGoogleRecommendation, analyzeGoogleCampaign,
@@ -149,4 +149,13 @@ test("operation identities refuse a browser without a secure random source", () 
     Object.defineProperty(globalThis, "crypto", { configurable: true, value: undefined });
     try { expect(() => googleIdempotencyKey()).toThrow("اتصالًا آمنًا"); expect(api.post).not.toHaveBeenCalled(); }
     finally { Object.defineProperty(globalThis, "crypto", descriptor); }
+});
+
+
+test("explicit Google reporting recovery makes one scoped POST with no retry", async () => {
+    api.post.mockResolvedValue({ data: { status: "recovered", accounts_checked: 3 } });
+    const result = await recoverGoogleAdsReporting({ accountId: "123", requestId: "recovery_request_001" });
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post).toHaveBeenCalledWith(`${GOOGLE_ADS_ROOT}/reporting-recovery`, { account_id: "123", request_id: "recovery_request_001" }, { timeout: 100000 });
+    expect(result.status).toBe("recovered");
 });

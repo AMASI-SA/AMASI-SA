@@ -143,6 +143,9 @@ export const getGoogleAdsWorkspace = ({ dateFrom, dateTo, accountId, entityType 
     entity_type: entityType, campaign_id: campaignId || undefined, group_id: groupId || undefined,
     page, limit: 25, campaign_query: query || undefined,
 })).then(data).then(normalizeGoogleAdsPayload);
+export const recoverGoogleAdsReporting = ({ accountId, requestId, signal } = {}) => api.post(`${GOOGLE_ADS_ROOT}/reporting-recovery`, {
+    account_id: String(accountId || ""), request_id: requestId,
+}, { timeout: 100000, ...(signal ? { signal } : {}) }).then(data);
 export const getGoogleAdsReadiness = ({ accountId, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/readiness`, options(signal, { account_id: accountId || undefined })).then(data).then(normalizeGoogleAdsPayload);
 export const getGoogleAdsSchema = ({ signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/management/schema`, options(signal)).then(data);
 export const getGoogleAssets = ({ accountId, signal } = {}) => api.get(`${GOOGLE_ADS_ROOT}/assets`, options(signal, { account_id: accountId })).then(data);

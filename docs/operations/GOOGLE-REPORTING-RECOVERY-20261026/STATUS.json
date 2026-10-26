@@ -1,0 +1,15 @@
+{
+  "task_id": "GOOGLE-REPORTING-RECOVERY-20261026",
+  "state": "WIP; not reviewed/CI/frontendverified; neverdeploy",
+  "base": "a7103f71307b516f65e3d085c8cbd09a22d7abae",
+  "scope": "Google only; explicit owner analytical read of all connected API-proven tenant accounts; native writes0",
+  "root_cause": "report sync failure marks global integration error; native accountclient then rejects linkedaccount before credential; no Google-only recovery UI",
+  "verification": "agent25pass2Mongo skips;71affectedbackendpass2skip; frontend Jest notrun",
+  "remaining": [
+    "fresh exact-source Google backend incl realMongo2 and frontend CI",
+    "independent acceptance review",
+    "current-production-aware v5 A/B if ready; no current lease or publish"
+  ],
+  "production_changed": false,
+  "full_autonomy_complete": false
+}
