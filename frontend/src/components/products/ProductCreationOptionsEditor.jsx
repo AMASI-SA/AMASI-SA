@@ -36,11 +36,15 @@ export default function ProductCreationOptionsEditor({ options, onChange, disabl
                                 <span>قيمة {valueIndex + 1} للخيار {index + 1}</span>
                                 <input maxLength={100} value={value} onChange={(event) => update(index, { values: option.values.map((entry, position) => position === valueIndex ? event.target.value : entry) })} className={INPUT} required />
                             </label>
-                            <button type="button" aria-label={`حذف القيمة ${valueIndex + 1} للخيار ${index + 1}`} onClick={() => update(index, { values: option.values.filter((_, position) => position !== valueIndex) })} className="rounded-lg px-3 py-3 text-sm font-bold text-rose-700">حذف القيمة</button>
+                            <label className="w-36 space-y-1 text-sm font-bold">
+                                <span>السعر الإضافي للقيمة {valueIndex + 1} للخيار {index + 1} (ر.س)</span>
+                                <input type="number" min="0" max="100000000" step="0.01" value={option.value_prices?.[valueIndex] ?? 0} onChange={(event) => update(index, { value_prices: option.values.map((_, position) => position === valueIndex ? event.target.value : (option.value_prices?.[position] ?? 0)) })} className={INPUT} />
+                            </label>
+                            <button type="button" aria-label={`حذف القيمة ${valueIndex + 1} للخيار ${index + 1}`} onClick={() => update(index, { values: option.values.filter((_, position) => position !== valueIndex), value_prices: option.values.filter((_, position) => position !== valueIndex).map((_, position) => option.value_prices?.[position >= valueIndex ? position + 1 : position] ?? 0) })} className="rounded-lg px-3 py-3 text-sm font-bold text-rose-700">حذف القيمة</button>
                         </div>)}
                         <div className="flex flex-wrap gap-2">
                             <button type="button" disabled={option.values.length >= 100} onClick={() => update(index, { values: [...option.values, ""] })} className="rounded-lg border bg-white px-3 py-2 text-sm font-bold disabled:opacity-50">إضافة قيمة جديدة للخيار {index + 1}</button>
-                            <button type="button" onClick={() => update(index, { name: option.name.trim() ? option.name : "المقاس", values: [...CHILD_SIZE_VALUES] })} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-bold text-indigo-800">استخدام مقاسات سنة إلى 10 سنوات</button>
+                            <button type="button" onClick={() => update(index, { name: option.name.trim() ? option.name : "المقاس", values: [...CHILD_SIZE_VALUES], value_prices: [] })} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-bold text-indigo-800">استخدام مقاسات سنة إلى 10 سنوات</button>
                         </div>
                     </>}
                     {option.type === "text" && <p className="text-xs text-slate-500">سيظهر للعميل حقل لكتابة النص عند الطلب.</p>}

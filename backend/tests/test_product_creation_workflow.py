@@ -56,6 +56,94 @@ class DB:
 OWNER = {"id": "owner-1", "role": "owner"}
 
 
+@pytest.mark.parametrize("failure", [None, "option_timeout", "ignored_price"])
+def test_service_six_options_prices_and_safe_resume(monkeypatch, failure):
+    async def scenario():
+        db = DB()
+        await db.salla_integrations.insert_one({
+            "user_id": "owner-1", "status": "connected", "scope": "products.read_write",
+        })
+        routes = endpoints(db)
+        remote = None
+        creates = 0
+        added = []
+        failed = False
+        hoodie = request(options=[
+            {"name": "نوع المقاسات", "type": "choice", "required": True,
+             "values": ["للكبار", "للصغار"], "value_prices": [10, 0]},
+            {"name": "الاسم", "type": "text", "required": True},
+            {"name": "الحرف", "type": "text", "required": True},
+            {"name": "مقاسات الصغار", "type": "choice", "required": True,
+             "values": [str(age) for age in range(1, 13)],
+             "condition": {"option_index": 0, "value": "للصغار"}},
+            {"name": "مقاسات الكبار", "type": "choice", "required": True,
+             "values": ["S", "M", "L", "XL", "XXL", "XXXL"],
+             "condition": {"option_index": 0, "value": "للكبار"}},
+            {"name": "ملاحظات", "type": "text"},
+        ])
+
+        async def provider(db, merchant_id, method, path, **kwargs):
+            nonlocal remote, creates, failed
+            payload = deepcopy(kwargs.get("json", {}))
+            if path.startswith("/products/sku/"):
+                return {"data": deepcopy(remote)}
+            if method == "POST" and path == "/products":
+                assert not payload.get("options"), "service fields must not be expanded as inline variants"
+                creates += 1
+                remote = {**payload, "id": 123, "type": "service", "options": []}
+                return {"data": deepcopy(remote)}
+            if method == "GET" and path == "/products/123":
+                return {"data": deepcopy(remote)}
+            if method == "POST" and path == "/products/123/options":
+                assert remote["status"] == "hidden"
+                assert payload["name"] not in added
+                added.append(payload["name"])
+                for index, value in enumerate(payload.get("values", [])):
+                    value["id"] = 1000 + len(added) * 100 + index
+                    value["price"] = {"amount": 0 if failure == "ignored_price" else value.get("price", 0), "currency": "SAR"}
+                remote["options"].append({**payload, "id": 100 + len(added)})
+                if failure == "option_timeout" and len(added) == 4 and not failed:
+                    failed = True
+                    raise httpx.ReadTimeout("option saved before timeout")
+                return {"data": deepcopy(remote["options"][-1])}
+            if method == "PUT" and path.startswith("/products/options/"):
+                assert "values" not in payload
+                saved = next(o for o in remote["options"] if str(o["id"]) == path.rsplit("/", 1)[-1])
+                saved.update(payload)
+                return {"data": deepcopy(saved)}
+            if method == "POST" and path == "/products/quantities/bulk":
+                assert len(remote["options"]) == 6
+                assert remote["options"][0]["values"][0]["price"]["amount"] == 10
+                remote["unlimited_quantity"] = True
+                return {"success": True}
+            if method == "POST" and path == "/products/123/status":
+                remote["status"] = payload["status"]
+                return {"data": deepcopy(remote)}
+            raise AssertionError((method, path))
+
+        async def save(*args, **kwargs):
+            return {"mezan_product_id": "mpv2_123", "salla_product_id": "123"}
+
+        monkeypatch.setattr(creation, "call_salla", provider)
+        monkeypatch.setattr(creation, "_save_created_product", save)
+        draft_id = (await routes["create_draft"](hoodie, OWNER))["draft"]["id"]
+        await routes["preview_draft"](draft_id, OWNER)
+        await routes["approve_draft"](draft_id, OWNER)
+        if failure:
+            with pytest.raises(HTTPException) as error:
+                await routes["publish_draft"](draft_id, {"confirmation": creation.PUBLISH_CONFIRMATION}, OWNER)
+            assert error.value.detail["product_created"] is True
+            assert creates == 1 and remote["status"] == "hidden"
+            if failure == "ignored_price":
+                return
+        result = await routes["publish_draft"](draft_id, {"confirmation": creation.PUBLISH_CONFIRMATION}, OWNER)
+        assert result["verified"] is True
+        assert creates == 1 and len(added) == len(set(added)) == 6
+        assert remote["options"][3]["visibility_condition_value"] == remote["options"][0]["values"][1]["id"]
+        assert remote["options"][4]["visibility_condition_value"] == remote["options"][0]["values"][0]["id"]
+    asyncio.run(scenario())
+
+
 def endpoints(db):
     router = make_product_creation_router(db, lambda: OWNER)
     return {route.endpoint.__name__: route.endpoint for route in router.routes}

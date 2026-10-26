@@ -337,3 +337,11 @@ def test_image_urls_require_https():
         assert str(exc) == "image_url_must_use_https"
     else:
         raise AssertionError("insecure image URL was accepted")
+
+
+@pytest.mark.parametrize("prices", [[-1, 0], [float("nan"), 0], [float("inf"), 0], [10], [100000001, 0]])
+def test_creation_rejects_invalid_extra_prices(prices):
+    with pytest.raises(ValueError, match="invalid_product_option_prices"):
+        creation_routes.normalize_creation_options([creation_routes.ProductCreationOption(
+            name="المقاس", type="choice", values=["كبار", "صغار"], value_prices=prices,
+        )])
