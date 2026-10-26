@@ -65,6 +65,9 @@
     "next_safe_action": "Independent review then run full and replica CI on this checkpoint; do not enable runtime or deploy.",
     "pr": 1579,
     "code_sha": "e8162c3c23661042d3b4417b945e0ee12fdae403",
-    "wider_local_tests": "676 passed, 54 skipped (Mongo replica unavailable locally)"
+    "wider_local_tests": "676 passed, 54 skipped (Mongo replica unavailable locally)",
+    "review_followup": "Gateway REST-shaped cases reject missing shared flag/reference count, other account or different budget. Google documents that explicitly_shared=false can change to true. The checks are pre-dispatch observations only, not an atomic provider compare-and-set; external writes may race. Runtime remains disabled pending an evidence-backed provider concurrency control or operational exclusion and conservative post-dispatch reconciliation; uncertain outcomes retain allocations and fences.",
+    "reference": "https://developers.google.com/google-ads/api/fields/v26/campaign_budget",
+    "focused_followup": "130 passed: authority, gateway and standing; real replica CI pending"
   }
 }

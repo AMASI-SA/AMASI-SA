@@ -70,6 +70,27 @@ class NativeProvider:
         return {'mutateOperationResponses':[{'campaignResult':{'resourceName':'customers/123/campaigns/456'}}]}
     async def verify_operations(self,*args,**kwargs):return self.verified,{'verified':self.verified}
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['other_account', 'different_resource', 'missing_shared', 'missing_reference_count'])
+async def test_rest_inventory_budget_identity_never_authorizes_mismatched_evidence(monkeypatch, change):
+    docs, evidence = case_documents('CHANGE_BUDGET')
+    provider = NativeProvider(evidence)
+    raw = deepcopy(evidence['campaign_snapshot']['campaign_budget'])
+    if change == 'other_account': raw['resourceName'] = 'customers/777/campaignBudgets/999'
+    elif change == 'different_resource': raw['resourceName'] = 'customers/123/campaignBudgets/1000'
+    elif change == 'missing_shared': raw.pop('explicitlyShared')
+    else: raw.pop('referenceCount')
+    async def rest_rows(*args, **kwargs):
+        return [{'campaign': deepcopy(evidence['campaign_snapshot']['campaign']), 'campaignBudget': raw}], True, None
+    monkeypatch.setattr(gateway, 'compatible_read', rest_rows)
+    monkeypatch.setattr(management, 'now', lambda: NOW)
+    evidence['inventory'] = await gateway._inventory(provider, evidence['metadata'])
+    with pytest.raises(HTTPException) as error:
+        authority._native_proof(docs[management.PROPOSALS][0], evidence,
+            docs[gateway.AUTOMATION_POLICIES][0], NOW)
+    assert error.value.detail['code'] == 'google_automation_native_evidence_invalid'
+    assert provider.writes == 0
+
 @pytest.fixture
 def integration(monkeypatch):
     docs,native=case_documents();docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
