@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import asyncio
 import threading
+from functools import wraps
 from datetime import datetime, timezone
 from bson import ObjectId
 from bson.decimal128 import Decimal128
@@ -521,7 +522,7 @@ async def test_repeated_runtime_composition_and_overlapping_reports_keep_context
     legacy_calls = []
     async def legacy_profitability(db, user_id, **kwargs):
         legacy_calls.append(user_id)
-        return {"by_campaign": {}, "totals": {}, "coverage": {}}
+        raise AssertionError("the direct legacy profitability layer must not run twice")
     async def filtered(db, user_id, **kwargs):
         await asyncio.sleep(0)
         return [{"id": user_id, "utm_campaign": "c", "source": "snapchat",
@@ -558,7 +559,17 @@ async def test_repeated_runtime_composition_and_overlapping_reports_keep_context
     )
     assert [result["campaigns"][0]["profitability"]["sales_sar"] for result in results] == [100, 200]
     assert module._MATCHED_ORDERS.get() is None
-    assert sorted(legacy_calls) == ["first", "first", "second"]
+    assert legacy_calls == []
+    assert first["source"]["campaign_profitability"]["legacy_profitability_bypassed"] is True
+    assert first["policy"] == {
+        "campaign_profitability_read_only": True,
+        "product_ad_spend_is_allocated_not_provider_fact": True,
+        "profitability_provider_write_reached": False,
+        "profitability_accounting_write_reached": False,
+        "profitability_qoyod_write_reached": False,
+    }
+    assert first["source"]["campaign_profitability"]["excluded_allocations"] == [
+        "payment_gateway_fees", "bnpl_fees", "merchant_shipping_cost", "operating_expenses"]
 
 
 @pytest.mark.asyncio
@@ -571,6 +582,8 @@ async def test_large_calculations_do_not_block_loop_or_exceed_admission_on_cance
     lock = threading.Lock()
     active = peak = 0
     original = module._calculate_current_cohort
+    limiter = module._work_limiter()
+    assert limiter._value == 2
     loop_thread = threading.get_ident()
     copies = 0
     original_copy = module._copy_inputs
@@ -604,6 +617,7 @@ async def test_large_calculations_do_not_block_loop_or_exceed_admission_on_cance
         await asyncio.wait_for(started.wait(), timeout=5)
         await asyncio.wait_for(all_copied.wait(), timeout=5)
         assert len(loads) == 2
+        assert limiter._value == 0
         # The third request is waiting for admission. Its exported mutable
         # arguments were already captured and cannot be silently replaced.
         kwargs["matched_orders"][("account-1", "campaign-1")][0]["total_amount"] = 999
@@ -616,6 +630,7 @@ async def test_large_calculations_do_not_block_loop_or_exceed_admission_on_cance
         await asyncio.sleep(0)
         assert not tasks[0].done()
         assert len(loads) == 2  # cancelled work still owns admission
+        assert limiter._value == 0
     finally:
         release.set()
     results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5)
@@ -626,6 +641,7 @@ async def test_large_calculations_do_not_block_loop_or_exceed_admission_on_cance
         assert result[0][("account-1", "campaign-1")]["ad_spend_sar"] == 30
     assert peak == module.MAX_CALCULATION_WORKERS == 2
     assert len(loads) == 3
+    assert limiter._value == 2
 
 
 @pytest.mark.asyncio
@@ -641,3 +657,117 @@ async def test_private_owned_capture_copies_outside_loop(calculation, monkeypatc
     result = await module._calculate_owned_profitability(object(), "owner", **kwargs)
     assert result[0][("account-1", "campaign-1")]["sales_sar"] == 150
     assert copies and all(thread != loop_thread for thread in copies)
+
+
+@pytest.fixture
+def runtime_report(calculation, monkeypatch):
+    import dashboard_v2_routes
+    from integrations_control_center import snapchat_salla_campaign_outcomes as salla
+    calls = []
+    async def filtered(db, user_id, **kwargs):
+        return [{"id": user_id, "utm_campaign": "c", "source": "snapchat",
+                 "total_amount": 100 if user_id == "first" else 200,
+                 "products": [{"quantity": 1, "cost": 40}], "order_date": "2026-10-25"}]
+    async def report(db, user_id, **kwargs):
+        campaigns, _, _, coverage = await module.routes._salla_outcomes(
+            db, user_id, date_from="2026-10-25", date_to="2026-10-25",
+            identities=[{"account_id": "a", "campaign_id": "c", "campaign_name": "Campaign"}])
+        return {"date_from": "2026-10-25", "date_to": "2026-10-25", "result_source": "salla",
+                "source": {"salla_attribution": coverage}, "totals": {"spend_sar": 10},
+                "campaigns": [{"account_id": "a", "campaign_id": "c", "spend_sar": 10,
+                               "salla_results": campaigns[("a", "c")]}]}
+    async def legacy(db, user_id, **kwargs):
+        calls.append(user_id)
+        return {"by_campaign": {}, "totals": {}, "coverage": {}}
+    monkeypatch.setattr(dashboard_v2_routes, "_filtered_orders", filtered)
+    monkeypatch.setattr(module.routes, "_salla_outcomes", salla.salla_campaign_outcomes)
+    monkeypatch.setattr(module.routes, "build_snapchat_result_source_report", report)
+    monkeypatch.setattr(module.routes, "_selected_metrics", module.routes._selected_metrics)
+    monkeypatch.setattr(module.profitability, "build_campaign_profitability", legacy)
+    def install(*, unknown_outer=False):
+        salla.install_snapchat_salla_campaign_outcomes()
+        module.profitability.install_snapchat_campaign_profitability()
+        if unknown_outer:
+            previous = module.routes.build_snapchat_result_source_report
+            @wraps(previous)
+            async def middleware(*args, **kwargs):
+                result = await previous(*args, **kwargs)
+                result["middleware_contract_preserved"] = True
+                return result
+            module.routes.build_snapchat_result_source_report = middleware
+        module.install_exact_salla_profitability_reuse()
+        return module.routes.build_snapchat_result_source_report
+    return install, calls
+
+
+@pytest.mark.asyncio
+async def test_unknown_outer_contract_is_never_unwrapped(runtime_report):
+    install, legacy_calls = runtime_report
+    report = install(unknown_outer=True)
+    result = await report(object(), "first", result_source="salla")
+    assert result["middleware_contract_preserved"] is True
+    assert result["campaigns"][0]["profitability"]["product_cost_sar"] == 40
+    assert result["source"]["campaign_profitability"]["legacy_profitability_bypassed"] is False
+    assert legacy_calls == ["first"]
+
+
+@pytest.mark.asyncio
+async def test_report_calculation_error_restores_capture_context(runtime_report, monkeypatch):
+    install, legacy_calls = runtime_report
+    report = install()
+    original = module._calculate_current_cohort
+    def fail(*args):
+        raise ValueError("test calculation failed")
+    monkeypatch.setattr(module, "_calculate_current_cohort", fail)
+    with pytest.raises(ValueError, match="test calculation failed"):
+        await report(object(), "first", result_source="salla")
+    assert module._MATCHED_ORDERS.get() is None
+    monkeypatch.setattr(module, "_calculate_current_cohort", original)
+    result = await report(object(), "second", result_source="salla")
+    assert result["campaigns"][0]["profitability"]["sales_sar"] == 200
+    assert legacy_calls == []
+
+
+@pytest.mark.asyncio
+async def test_report_cancellation_retains_worker_slot_and_restores_capture(runtime_report, monkeypatch):
+    install, legacy_calls = runtime_report
+    report = install()
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    release = threading.Event()
+    captured_after = []
+    original = module._calculate_current_cohort
+    limiter = module._work_limiter()
+    assert limiter._value == 2
+    def wait(*args):
+        loop.call_soon_threadsafe(started.set)
+        if not release.wait(timeout=10):
+            raise TimeoutError("test worker not released")
+        return original(*args)
+    monkeypatch.setattr(module, "_calculate_current_cohort", wait)
+    async def request():
+        try:
+            return await report(object(), "first", result_source="salla")
+        finally:
+            captured_after.append(module._MATCHED_ORDERS.get())
+    task = asyncio.create_task(request())
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        assert await asyncio.sleep(0, result="responsive") == "responsive"
+        task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        assert limiter._value == 1
+    finally:
+        release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=5)
+    assert captured_after == [None]
+    assert module._MATCHED_ORDERS.get() is None
+    assert limiter._value == 2
+    monkeypatch.setattr(module, "_calculate_current_cohort", original)
+    result = await report(object(), "second", result_source="salla")
+    assert result["campaigns"][0]["profitability"]["sales_sar"] == 200
+    assert legacy_calls == []

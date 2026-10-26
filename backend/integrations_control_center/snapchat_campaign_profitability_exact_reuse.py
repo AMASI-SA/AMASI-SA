@@ -272,6 +272,11 @@ def install_exact_salla_profitability_reuse() -> None:
     current_report = routes.build_snapchat_result_source_report
     if getattr(current_report, "_mezan_exact_profitability_reuse", False):
         return
+    legacy_bypassed = getattr(current_report, "_mezan_campaign_profitability_owner", None) is current_report
+    if legacy_bypassed:
+        # Remove only the direct, identified legacy calculation. Unknown outer
+        # wrappers may enforce additional contracts and must remain intact.
+        current_report = current_report._mezan_campaign_profitability_base
 
     # Preserve the other installers' markers. Otherwise a later router
     # composition wraps this report again and nested ContextVar resets hide
@@ -323,16 +328,32 @@ def install_exact_salla_profitability_reuse() -> None:
                     campaign["profitability"] = by_campaign[key]
 
             result.setdefault("totals", {})["profitability"] = totals
+            profitability._mark_read_only_profitability(result)
+            attribution = (result.get("source") or {}).get("salla_attribution") or {}
             result.setdefault("source", {}).setdefault(
                 "campaign_profitability", {}
             ).update({
+                **{key: attribution[key] for key in (
+                    "eligible_salla_orders", "ambiguous_orders", "unattributed_snapchat_orders",
+                ) if key in attribution},
                 "source_mode": SOURCE_MODE,
                 "reuses_visible_salla_matches": True,
                 "matched_orders": sum(len(rows) for rows in matched.values()),
+                "exact_matched_orders": sum(len(rows) for rows in matched.values()),
+                "exact_matched_sales_sar": totals["sales_sar"],
                 "campaigns_with_orders": sum(bool(rows) for rows in matched.values()),
+                "total_ad_spend_scope": "all_campaigns_in_report",
                 "cache_ttl_seconds": CACHE_TTL_SECONDS,
                 "cache_reuse_enabled": False,
                 "cache_reuse_disabled_reason": CACHE_REUSE_DISABLED_REASON,
+                "legacy_profitability_bypassed": legacy_bypassed,
+                "product_cost_source": "mezan_v2_cost_engine_with_salla_fallback_flagging",
+                "allocation_method": profitability.CAMPAIGN_PROFITABILITY_ALLOCATION_METHOD,
+                "excluded_allocations": [
+                    "payment_gateway_fees", "bnpl_fees", "merchant_shipping_cost", "operating_expenses",
+                ],
+                "campaign_rows_exact_match_only": True,
+                "cache_hit": False,
                 "read_only": True,
             })
             return result
@@ -340,6 +361,9 @@ def install_exact_salla_profitability_reuse() -> None:
             _MATCHED_ORDERS.reset(token)
 
     report_with_exact_profitability._mezan_exact_profitability_reuse = True  # type: ignore[attr-defined]
+    # This layer supplies the same response-policy contract, so subsequent
+    # router composition must not reinstall the now redundant legacy layer.
+    report_with_exact_profitability._mezan_campaign_profitability = True  # type: ignore[attr-defined]
     routes.build_snapchat_result_source_report = report_with_exact_profitability
 
 
