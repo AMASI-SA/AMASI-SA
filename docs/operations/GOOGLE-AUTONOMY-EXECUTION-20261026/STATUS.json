@@ -1,0 +1,15 @@
+{
+  "pr": 1535,
+  "branch": "codex/google-autonomy-execution-r3-20261026",
+  "base": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
+  "A": "b0740fcfe1ffe1efd5e7df20f56a8dff175b5c94",
+  "state": "SOURCE CI PENDING; no B/merge/lease/publish. Existing campaigns only, runtime defaults off.",
+  "previous_pair": {
+    "pr": 1529,
+    "A": "d5175bb5da5545ed82dd13a9e86164a1742db03f",
+    "B": "b99073bd9b7977e4a4df9630064240e31a9ae022",
+    "state": "closed unmerged production advanced; frozen unchanged",
+    "sourceCI": "746backend tests10.61s actualMongo +132frontend14suites"
+  },
+  "provider_writes": 0
+}
