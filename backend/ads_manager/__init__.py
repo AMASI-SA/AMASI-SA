@@ -34,6 +34,7 @@ def make_ads_manager_router(db: Any, current_user: Callable):
         attach_monthly_profit_goal_routes,
     )
     from campaign_ai_public_guard import attach_campaign_ai_public_guard
+    from google_ads_automation_scheduler import attach_google_ads_automation_scheduler
     from campaign_ai_subprocess_scheduler import (
         attach_campaign_ai_subprocess_scheduler,
     )
@@ -71,6 +72,7 @@ def make_ads_manager_router(db: Any, current_user: Callable):
     )
     attach_advertising_product_watch_routes(router, db, current_user)
     attach_campaign_ai_subprocess_scheduler(router)
+    attach_google_ads_automation_scheduler(router)
     attach_advertising_product_watch_scheduler(router)
     return router
 
