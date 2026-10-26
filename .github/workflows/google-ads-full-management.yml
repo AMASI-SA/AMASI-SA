@@ -70,6 +70,7 @@ jobs:
           backend/tests/test_google_ads_automation_gateway_mongo.py
           backend/tests/test_google_ads_automation_activation.py
           backend/tests/test_google_ads_automation_runtime.py
+          backend/tests/test_google_ads_automation_cycles.py
           backend/tests/test_google_ads_automation_creation_contract.py
           backend/tests/test_google_ads_automation_creation_policy.py
           backend/tests/test_google_ads_automation_creation_policy_mongo.py
@@ -79,6 +80,7 @@ jobs:
           backend/tests/test_google_ads_automation_creation_gateway.py
           backend/tests/test_google_ads_automation_creation_gateway_mongo.py
           backend/tests/test_google_ads_automation_creation_worker.py
+          backend/tests/test_google_ads_automation_creation_worker_mongo.py
           backend/tests/test_google_ads_management.py
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py

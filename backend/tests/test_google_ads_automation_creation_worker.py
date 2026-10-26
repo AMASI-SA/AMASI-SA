@@ -277,3 +277,40 @@ async def test_recovery_preserves_bson_naive_creation_and_management_cadence(mon
     assert calls == ["reconcile"]
     assert db[worker.CYCLES].rows[0]["creation_next_run_at"] == due
     assert db[worker.CYCLES].rows[0]["next_run_at"] == NOW+timedelta(hours=9)
+
+
+@pytest.mark.asyncio
+async def test_off_without_pending_has_no_cycle_claim(monkeypatch):
+    db, calls, deps, _ = setup(monkeypatch)
+    monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED", "false")
+    result = await worker.run_google_creation_cycle(db, **deps)
+    assert result["accounts"] == 0 and not calls and worker.CYCLES not in db.collections
+
+
+@pytest.mark.asyncio
+async def test_persisted_disabled_owner_blocks_creation(monkeypatch):
+    db, calls, deps, _ = setup(monkeypatch)
+    db.users.rows[0]["disabled"] = True
+    await worker.run_google_creation_cycle(db, **deps)
+    assert not calls
+
+
+@pytest.mark.asyncio
+async def test_shared_native_fence_blocks_new_creation(monkeypatch):
+    db, calls, deps, _ = setup(monkeypatch)
+    db[worker.FENCES].rows = [{"user_id": "owner", "account_id": "123", "status": "claimed"}]
+    await worker.run_google_creation_cycle(db, **deps)
+    assert not calls
+
+
+@pytest.mark.asyncio
+async def test_account_timeout_releases_only_cycle_mutex(monkeypatch):
+    db, calls, deps, _ = setup(monkeypatch)
+    monkeypatch.setattr(worker, "ACCOUNT_TIMEOUT_SECONDS", 0.01)
+    async def builder(database, **kwargs): await asyncio.Event().wait()
+    deps["plan_builder"] = builder
+    result = await worker.run_google_creation_cycle(db, **deps)
+    assert result["results"][0] == {"account_id": "123", "status": "failed", "code": "google_creation_cycle_failed"}
+    assert db[worker.CYCLES].rows[0]["state"] == "idle"
+    assert db[worker.CYCLES].rows[0]["creation_next_run_at"] == NOW+timedelta(minutes=15)
+    assert not calls

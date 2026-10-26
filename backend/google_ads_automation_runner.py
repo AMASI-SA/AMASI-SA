@@ -27,8 +27,8 @@ def _load_runtime():
     from dotenv import load_dotenv
     load_dotenv(ROOT_DIR / ".env")
     from motor.motor_asyncio import AsyncIOMotorClient
-    from integrations_control_center.google_ads_automation_worker import run_google_automation_cycle
-    return AsyncIOMotorClient, run_google_automation_cycle
+    from google_ads_automation_cycles import run_google_automation_cycles
+    return AsyncIOMotorClient, run_google_automation_cycles
 
 
 async def run_once() -> dict:
