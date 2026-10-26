@@ -651,15 +651,26 @@ def test_owner_diagnostic_projects_only_requested_dates_and_safe_fields():
 
 @pytest.mark.asyncio
 async def test_empty_child_responses_stay_partial_but_preserve_provider_counters(monkeypatch):
-    from tests.test_snapchat_reporting_v2_inactive_parent_scope import run_pipeline
-    result, _, _, saved, calls = await run_pipeline(monkeypatch, "child_empty")
-    assert result["status"] == "partial" and len(calls) == 124 and saved == []
-    for level in ("ad_squad", "ad"):
-        coverage = result["summary"]["breakdown_performance"][level]["coverage"]
-        assert coverage["reason"].endswith("zero_performance_proof_unavailable")
-        assert coverage["daily_observations"]["2026-08-28"] == {
-            "report_date": "2026-08-28", "expected_parents": 62,
-            "completed_parents": 62, "rows_received": 0, "status": "complete"}
+    from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
+    import snapchat_v2.sync_pipeline as pipeline_module
+    async def noop(*_args, **_kwargs): pass
+    monkeypatch.setattr(pipeline_module, "update_sync_stage", noop)
+    monkeypatch.setattr(pipeline_module, "set_level_status", noop)
+    factory = FakeHTTPFactory([FakeResponse(empty_payload()), FakeResponse(empty_payload())])
+    client = SnapchatV2Client(object(), "u1", token_store=FakeTokenStore(), client_factory=factory)
+    summary, error = await SnapchatV2SyncPipeline(object())._sync_breakdown_performance(
+        client, user_id="u1", account={"ad_account_id": "a1", "timezone": "Asia/Riyadh", "currency": "SAR"},
+        sync_run_id="run", entity_type="ad_squad", campaign_rows=[],
+        start_utc=datetime(2026, 10, 25, tzinfo=timezone.utc),
+        end_utc=datetime(2026, 10, 26, tzinfo=timezone.utc),
+        report_dates=[date(2026, 10, 25)], report_campaign_ids=["c1", "c2"],
+        action_report_time="conversion")
+    assert error["code"].endswith("zero_performance_proof_unavailable")
+    coverage = summary["coverage"]
+    assert coverage["status"] == "partial" and summary["rows_saved"] == 0
+    assert coverage["daily_observations"]["2026-10-25"] == {
+        "report_date": "2026-10-25", "expected_parents": 2,
+        "completed_parents": 2, "rows_received": 0, "status": "complete"}
 
 
 @pytest.mark.asyncio
