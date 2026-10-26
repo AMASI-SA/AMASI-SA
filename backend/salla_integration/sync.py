@@ -935,10 +935,26 @@ async def run_orders_sync(
                 raise ValueError("invalid Salla orders page: data must be a list")
             data = resp["data"]
             pages_fetched += 1
+            pagination = resp.get("pagination") or {}
+            total_pages = int(
+                pagination.get("totalPages")
+                or pagination.get("total_pages")
+                or pagination.get("last_page")
+                or 0
+            )
+            last_total_pages = max(last_total_pages, total_pages)
+            current_page = int(
+                pagination.get("currentPage")
+                or pagination.get("current_page")
+                or pagination.get("page")
+                or page
+            )
             if not data:
                 # An empty page only establishes the end when it does not
-                # contradict an earlier declared page count.
-                pagination_exhausted = not last_total_pages or page > last_total_pages
+                # contradict a declared page count or the requested page.
+                pagination_exhausted = current_page == page and (
+                    not last_total_pages or page > last_total_pages
+                )
                 break
 
             for raw in data:
@@ -1005,21 +1021,6 @@ async def run_orders_sync(
             # final page; otherwise a 30-day sync stops after the newest 30
             # orders. Prefer pagination metadata and otherwise continue until
             # Salla returns an empty page, bounded by MAX_PAGES_PER_RUN.
-            pagination = resp.get("pagination") or {}
-            total_pages = int(
-                pagination.get("totalPages")
-                or pagination.get("total_pages")
-                or pagination.get("last_page")
-                or 0
-            )
-            last_total_pages = max(last_total_pages, total_pages)
-            current_page = int(
-                pagination.get("currentPage")
-                or pagination.get("current_page")
-                or pagination.get("page")
-                or page
-            )
-
             if total_pages and current_page >= total_pages:
                 pagination_exhausted = current_page == page == total_pages == last_total_pages
                 break

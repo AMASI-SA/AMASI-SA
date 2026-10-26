@@ -18,6 +18,8 @@ from salla_integration import sync
         ([{"data": [{}], "pagination": {"currentPage": 1, "totalPages": 2}},
           {"data": []}], True),
         ([{"data": [{}], "pagination": {"currentPage": 2, "totalPages": 2}}], True),
+        ([{"data": [], "pagination": {"currentPage": 1, "totalPages": 2}}], True),
+        ([{"data": [], "pagination": {"currentPage": 2, "totalPages": 0}}], True),
     ],
 )
 async def test_bounded_order_sync_only_reports_untruncated_after_proven_end(

@@ -13,7 +13,7 @@ change requires an observed, non-contradictory end of pagination and rejects
 malformed page data; it does not manufacture a commerce coverage proof.
 
 Verification: focused pagination plus AI execution-evidence suites passed
-63 tests. The pagination regression reproduced on the unchanged base before
+65 tests. The pagination regression reproduced on the unchanged base before
 the fix. An expanded suite had 81 passing and two pre-existing failures in
 `test_salla_marketing_attribution_recovery.py`; both reproduce on unchanged
 base `72ab1aee0` (an outdated attribution expectation and a mocked persistence
