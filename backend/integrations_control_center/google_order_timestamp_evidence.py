@@ -4,7 +4,7 @@ This does not establish that a timestamp belongs to an order, prove source
 coverage, read an order, or count sales. Callers must first bind source and
 owner identity and must keep missing or unparseable timestamps unknown.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from zoneinfo import ZoneInfo
 
@@ -15,8 +15,8 @@ _INSTANT = re.compile(
 _RIYADH = ZoneInfo("Asia/Riyadh")
 
 
-def exact_riyadh_order_date(value):
-    """Return a business date for a precise offset-bearing instant, else None.
+def exact_source_instant(value):
+    """Return a UTC instant for precise offset-bearing input, else None.
 
     RFC 3339's -00:00 denotes an unknown local offset, so it is deliberately
     not upgraded to a proven UTC instant. Date-only and naive times are not
@@ -25,7 +25,16 @@ def exact_riyadh_order_date(value):
     if not isinstance(value, str) or not _INSTANT.fullmatch(value) or value.endswith("-00:00"):
         return None
     try:
-        instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+
+
+def exact_riyadh_order_date(value):
+    instant = exact_source_instant(value)
+    if instant is None:
+        return None
+    try:
         return instant.astimezone(_RIYADH).date()
     except (ValueError, OverflowError):
         return None
