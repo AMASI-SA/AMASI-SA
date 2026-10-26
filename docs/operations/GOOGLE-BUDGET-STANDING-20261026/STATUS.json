@@ -7,7 +7,21 @@
   "runtime_supported": false,
   "production_changed": false,
   "provider_writes": 0,
-  "verification": "48pass9Mongo skipped locally; new replica CI pending; workflow YAML/proof Python parse pass",
+  "verification": {
+    "local": "48passed9replica skipped",
+    "independent_combined": "80passed9replica skipped; diff-check clean",
+    "replica_ci": {
+      "run": 40380341701,
+      "job": 121774558226,
+      "source": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+      "passed": 57,
+      "actual_replica_tests": 9,
+      "skipped_errors_failures": 0,
+      "seconds": 5.25,
+      "root_logs_verified": true,
+      "runtime_enabled": false
+    }
+  },
   "changes": [
     "Standing reservation and settlement under same account transaction",
     "Quota history and private claim atomic with shared guard",
@@ -21,5 +35,7 @@
     "Gateway must prove budget_resource and shared_budget=false",
     "All live launch/owner UI/fresh product eligibility remains incomplete"
   ],
-  "next_safe_action": "Inspect exact head replica CI; fix failure without enabling runtime; then design integrated migration"
+  "next_safe_action": "Keep disabled. Integrate every policy mutation and standing authority/settlement under same guard only after gateway supplies native budget_resource/shared_budget evidence. Run postintegration replica tests and review before any release.",
+  "verified_code_checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+  "pr": 1550
 }
