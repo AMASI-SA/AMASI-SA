@@ -150,6 +150,7 @@ def initialization_diagnostic(value):
         "tiktok_file_response_unproven": "تعذر التحقق من استجابة TikTok. لا تكرر تهيئة الرفع.",
         "tiktok_file_transport_failed": "انقطع الاتصال أثناء تهيئة TikTok. حدّث حالة العملية قبل أي محاولة أخرى.",
         "tiktok_file_upload_destination_unproven": "تعذر إثبات وجهة رفع الملف. حدّث حالة العملية قبل أي محاولة أخرى.",
+        "tiktok_file_resume_unproven": "جلسة نقل الفيديو غير متاحة أو انتهت صلاحيتها. راجع حالة TikTok دون إنشاء طلب مكرر.",
         "tiktok_file_initialization_unproven": "لم تثبت نتيجة تهيئة الرفع. حدّث حالة العملية قبل أي محاولة أخرى.",
     }
     code = value.get("code")
@@ -281,8 +282,15 @@ async def reconcile(db, user, identifier, *, business_factory=TikTokCreatorAPI, 
         elif state == "SEND_TO_USER_INBOX" and value.delivery == "draft": status = "draft_delivered"
         elif state == "PUBLISH_COMPLETE":
             status = "published_public" if ids else "published_private" if value.delivery == "direct" and value.privacy_level != "PUBLIC_TO_EVERYONE" else "complete_pending_ids"
-        else: status = "awaiting_upload" if state == "PROCESSING_UPLOAD" and amount < value.file_size else "processing"
+        else:
+            status = "awaiting_upload" if state == "PROCESSING_UPLOAD" and amount < value.file_size else "processing"
+            # Native PROCESSING_UPLOAD proves a session ID, not that Mezan
+            # retained a validated, still-live upload capability for this file.
+            if status == "awaiting_upload" and (not row.get("upload_url_encrypted") or aware(row.get("upload_expires_at")) <= now()):
+                status = "uncertain"
         fields = {"status": status, "uploaded_bytes": amount, "public_post_ids": [str(i) for i in ids], "last_checked_at": now()}
+        if status == "uncertain" and not isinstance(row.get("initialization_diagnostic"), dict):
+            fields["initialization_diagnostic"] = initialization_diagnostic({"code": "tiktok_file_resume_unproven", "stage": "native_initialization"})
         query = {"_id": identifier, "user_id": user, "status": row["status"], "last_checked_at": row.get("last_checked_at")}
         stored = await mongo(db[PROPOSALS].update_one(query, {"$set": fields}))
         if stored.matched_count != 1:

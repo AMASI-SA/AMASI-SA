@@ -224,6 +224,32 @@ async def test_unknown_failure_diagnostic_does_not_release_uncertainty_fence(fil
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unavailable", ["missing_destination", "expired"])
+async def test_native_pending_status_never_claims_an_unavailable_upload_session(fileflow, unavailable):
+    from datetime import timedelta
+    db, state = fileflow
+    preview = await prepare(db, state, value(delivery="draft", privacy_level=None, caption="", disclosure="none"))
+    if unavailable == "missing_destination":
+        state.destination = "https://unapproved.test/video/?upload_token=fixture-private-capability"
+        with pytest.raises(HTTPException):
+            await initialize(db, state, preview)
+    else:
+        await initialize(db, state, preview)
+        await db[publishing.PROPOSALS].update_one({"_id": preview["proposal_id"]}, {"$set": {"upload_expires_at": publishing.now() - timedelta(seconds=1)}})
+    result = await publishing.reconcile(db, "owner", preview["proposal_id"], business_factory=state.factory, api_factory=state.factory)
+    assert result["status"] == "uncertain"
+    assert result["uploaded_bytes"] == 0
+    assert result["initialization_diagnostic"]["code"] == ("tiktok_file_upload_destination_unproven" if unavailable == "missing_destination" else "tiktok_file_resume_unproven")
+    assert "fixture-private-capability" not in json.dumps(result, default=str)
+    with pytest.raises(HTTPException):
+        await publishing.transfer(db, "owner", preview["proposal_id"], "b" * 64, business_factory=state.factory, api_factory=state.factory)
+    row = await publishing.owned(db, "owner", preview["proposal_id"])
+    fence = await db[publishing.FENCES].find_one({"_id": row["fence_id"]})
+    assert fence["active"] is True
+    assert len(state.initializations) == 1
+
+
+@pytest.mark.asyncio
 async def test_resume_reconciles_native_offset_and_returns_same_capability_without_another_init(fileflow):
     db, state = fileflow
     preview = await prepare(db, state, value(file_size=25 * 1024 * 1024))

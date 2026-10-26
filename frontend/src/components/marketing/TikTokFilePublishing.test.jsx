@@ -84,3 +84,17 @@ test("same-proposal status shows the persisted safe rejection and does not retry
     expect(uploadVideoFile).not.toHaveBeenCalled();
     expect(api.post.mock.calls.filter(([path]) => path.endsWith("approve-and-initialize"))).toHaveLength(1);
 });
+
+test("native pending status without a usable capability does not offer resume or another init", async () => {
+    await ready(); await act(async () => input("اعتماد رفع ملف TikTok").click());
+    api.post.mockRejectedValueOnce({ response: { data: "upstream error" } });
+    await act(async () => button("اعتماد رفع الملف ونشره").click());
+    api.post.mockResolvedValueOnce({ data: { ...proposal, status: "uncertain", uploaded_bytes: 0,
+        initialization_diagnostic: { code: "tiktok_file_resume_unproven", message: "جلسة نقل الفيديو غير متاحة أو انتهت صلاحيتها." } } });
+    await act(async () => button("تحديث حالة رفع الملف").click());
+    expect(host.textContent).toContain("جلسة نقل الفيديو غير متاحة");
+    expect(button("استكمال نفس عملية الرفع")).toBeUndefined();
+    expect(button("اعتماد رفع الملف ونشره")).toBeUndefined();
+    expect(uploadVideoFile).not.toHaveBeenCalled();
+    expect(api.post.mock.calls.filter(([path]) => path.endsWith("approve-and-initialize"))).toHaveLength(1);
+});
