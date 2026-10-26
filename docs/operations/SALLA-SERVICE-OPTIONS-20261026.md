@@ -119,3 +119,31 @@ Reloaded homepage for manual user handoff to open the project deployment panel.
 Before any laterprepare, re-read latest source/CI/intent and actual guard, as
 Snap/Google have newer work. Never publish the superseded4ab candidate blindly.
 No product creation retry; existing hoodie draft and media remain as recorded.
+
+## Combined release in progress — current acceptance target
+
+Salla GET now confirms existing manually-added hoodie30010520, SKU AMS13254,
+name هودي شتوي هيلو كيتي بالاسم فخامة, service/base139, six exact reference
+fields, adult surcharge10/kids0 and correct conditional12kids/6adult sizes.
+There are2images; user is handling media. DO NOT publish the pending
+AMASI-KITTY-PINK-2026 draft or create another hoodie.
+
+Editor recovered. Previous/tmp rehearsal EXISTS; no build process in that cwd,
+all three generated release files present with expected b381/rg5-46dd identity.
+Original retry2 exit absent; not reported as success. Fresh package verification
+on/tmp logged to full/app exited120, then same verification logged to ample/tmp
+EXIT0. Actual/app source HEAD11a/trackedclean/guardinactive; copied only absent
+ignored build/proof or verified identical existing bytes, then actual/app
+materialize_identity + isolated verify_package_boundaries EXIT0. No new source,
+cache protocol bypass, foreign worktree cleanup or ad/budget writes.
+
+Before ownprepare a freshguard was ACTIVE, so assertion refused beforeprepare.
+Confirmed actor snap-completion-20261026-root, source b381a5929b6541ec8e243572700c9504290b7274,
+deployment11a52dd933d7269cd80046219dcd93d5a6e62297/runtime
+rg5-46dd02b93f65a1191512ef02714642673af599140f4a38efcd307fccfe81bdee.
+Snap1553 publication ledger says prepublish0 and ONE Publish changes click,
+Deployment Started Oct26 23:01Asia/Riyadh. This carries1552 unchanged plus1553/1555.
+No own lease, no ownPublish, no ownerlease clear/reuse. Wait owner's explicit
+success and3probe verification/activefalse. Then refresh Mezan and visually
+verify optional extra-price input (required absent; blank→0; no save/create
+needed). Return actual existing productURL; do not claim our creation of it.
