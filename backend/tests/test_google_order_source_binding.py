@@ -43,3 +43,11 @@ def test_single_explicit_instant_is_observation_not_coverage_proof():
 def test_date_object_with_unverified_timezone_metadata_is_not_silently_ignored():
     r = row(); r["raw_by_source"]["salla_direct"]["date"]["timezone"] = "Asia/Riyadh"
     assert bound_salla_order_date(r, owner_id="owner")["status"] == "timestamp_unverified"
+
+
+def test_zero_identity_rejected_and_leading_zeros_not_equated():
+    for zero in (0, '0', '000'):
+        r = row(); r['order_id'] = zero; r['raw_by_source']['salla_direct']['id'] = zero
+        assert bound_salla_order_date(r, owner_id='owner')['status'] == 'identity_unverified'
+    r = row(); r['order_id'] = '042'
+    assert bound_salla_order_date(r, owner_id='owner')['status'] == 'identity_unverified'
