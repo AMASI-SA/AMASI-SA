@@ -109,8 +109,8 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     from .google_ads_automation_creation_plan import attach_google_ads_automation_creation_plan_routes
     attach_google_ads_automation_creation_plan_routes(router, db, current_user, client_factory=client_factory)
 
-    @router.post(root + "/reporting-recovery")
-    async def reporting_recovery(body: GoogleReportingRecoveryInput, user=Depends(current_user)):
+    @router.post(root + "/reporting-read-verification")
+    async def reporting_read_verification(body: GoogleReportingRecoveryInput, user=Depends(current_user)):
         return await recover_google_reporting(db, user, body)
 
     async def actor_read(user=Depends(current_user)):

@@ -1,14 +1,23 @@
 {
   "task_id": "GOOGLE-REPORTING-RECOVERY-20261026",
-  "state": "WIP; not reviewed/CI/frontendverified; neverdeploy",
-  "base": "a7103f71307b516f65e3d085c8cbd09a22d7abae",
-  "scope": "Google only; explicit owner analytical read of all connected API-proven tenant accounts; native writes0",
-  "root_cause": "report sync failure marks global integration error; native accountclient then rejects linkedaccount before credential; no Google-only recovery UI",
-  "verification": "agent25pass2Mongo skips;71affectedbackendpass2skip; frontend Jest notrun",
+  "state": "WIP DIAGNOSTIC ONLY; not a connection-recovery fix; do notdeploy",
+  "scope": "Explicit owner verification read of bounded API-proven Google accounts; strictday/hour/identity validation; provider campaignwrites0",
+  "public_result": "read_verified; connection_restored:false; explicit verified_account_ids",
+  "global_connection_writes": false,
+  "root_verification": "29passed2actualMongo local-skips1.63s; fresh CI/frontend/review pending",
+  "previous_source": {
+    "sha": "b172d81bab05120e59e4ac941a80a92d36b60b27",
+    "ci": "1123backend incl72actualMongo;165frontend15suites; all12workflows success",
+    "rejected": "independent late accountgroup race and invalid date/hour zerooverwrite; neverdeploy"
+  },
+  "fixes": [
+    "No globalconnection/provenance/health/checked_at/generation writes; cannot claim native management restored",
+    "strict recovery-only row validation before zero-fill; invalid out-of-day/hour/metrics/duplicates fail closed"
+  ],
   "remaining": [
-    "fresh exact-source Google backend incl realMongo2 and frontend CI",
-    "independent acceptance review",
-    "current-production-aware v5 A/B if ready; no current lease or publish"
+    "Fresh exact-source frontend+realMongoCI and independentreview",
+    "Actual connection restoration stillneeds verifiedOAuthrelink or completeatomic accountwriter contract",
+    "Do not label this diagnostic as completion of Google autonomy or nativeconnection recovery"
   ],
   "production_changed": false,
   "full_autonomy_complete": false

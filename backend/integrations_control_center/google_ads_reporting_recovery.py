@@ -1,4 +1,9 @@
-"""Explicit owner-requested Google-only analytical recovery, never ad writes."""
+"""Diagnostic Google-only analytical reads; NEVER restore management connection.
+
+A verified historical read snapshot cannot atomically prove the current account
+group. Global connection health remains untouched; verified OAuth relinking or
+an atomic group-writer contract is still required to restore native management.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +51,7 @@ async def recover_google_reporting(db,user,body,*,sync=run_google_ads_reporting_
     prior=await collection.find_one({'user_id':user_id},{'_id':0})
     instant=clock()
     if prior and prior.get('request_id')==body.request_id:
-        if prior.get('status')=='completed' and connection['connection_status']=='connected':return prior['result']
+        if prior.get('status')=='completed':return prior['result']
         raise problem('google_reporting_recovery_already_requested','هذا الطلب بدأ سابقًا؛ حدّث العرض قبل تقديم طلب جديد.',409)
     if connection['connection_status']!='error':
         raise problem('google_reporting_recovery_not_needed','ربط جوجل متاح؛ حدّث بيانات الحملات.',409)
@@ -70,9 +75,9 @@ async def recover_google_reporting(db,user,body,*,sync=run_google_ads_reporting_
         await _owner(db,user)
         result=await asyncio.wait_for(sync(db,user_id,date_from=day,date_to=day,account_id=account_id,
             recovery_mode=True,now=clock),timeout=90)
-        if result.get('recovery_confirmed') is not True:
+        if result.get('read_verified') is not True:
             raise problem('google_reporting_recovery_read_unconfirmed','لم تثبت قراءة جوجل كاملة؛ بقي الربط بحاجة للمراجعة.',409)
-        public={'provider':'google_ads','account_id':account_id,'request_id':body.request_id,'status':'recovered',
+        public={'provider':'google_ads','account_id':account_id,'request_id':body.request_id,'status':'read_verified','connection_restored':False,'verified_account_ids':result.get('verified_account_ids',[]),
             'report_date':day,'source_only':True,'provider_write_reached':False,'campaign_write_reached':False,
             'accounting_write_reached':False,'rows_saved':result.get('rows_saved',0),'accounts_checked':result.get('accounts_complete',0)}
         changed=await collection.update_one({'user_id':user_id,'claim_id':claim,'status':'running'},

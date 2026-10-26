@@ -291,6 +291,37 @@ async def _recovery_owned_accounts(db, user_id):
     return sorted(accounts, key=lambda item: item["ad_account_id"]), sorted(signatures)
 
 
+def _validate_recovery_rows(rows, account_id, metadata, report_day):
+    """Validate the entire account response before generating any zero facts."""
+    from decimal import Decimal, InvalidOperation
+    import re
+    seen = set()
+    if getattr(rows, "complete_response", False) is not True or len(rows) > 24:
+        raise GoogleAdsReportingError("google_reporting_recovery_read_unproved", "Complete one-day reporting is required.", status_code=409)
+    for row in rows:
+        customer = row.get("customer") if isinstance(row, dict) else None
+        segments = row.get("segments") if isinstance(row, dict) else None
+        metrics = row.get("metrics", {}) if isinstance(row, dict) else None
+        hour = segments.get("hour") if isinstance(segments, dict) else None
+        hour_valid = (type(hour) is int or isinstance(hour, str) and re.fullmatch(r"[0-9]{1,2}", hour))
+        if (not isinstance(customer, dict) or customer.get("id") != account_id
+            or customer.get("currencyCode") != metadata.get("currency") or customer.get("timeZone") != metadata.get("timezone")
+            or not isinstance(segments, dict) or segments.get("date") != report_day or not hour_valid
+            or not 0 <= int(hour) <= 23 or int(hour) in seen or not isinstance(metrics, dict)):
+            raise GoogleAdsReportingError("google_reporting_recovery_row_invalid", "Reporting row identity, date or hour is invalid.", status_code=409)
+        seen.add(int(hour))
+        for key in ("costMicros", "impressions", "clicks", "conversions", "conversionsValue"):
+            value = metrics.get(key, 0)
+            try:
+                amount = Decimal(str(value))
+                if isinstance(value, bool) or not amount.is_finite() or abs(amount) > 2**63 - 1:
+                    raise ValueError()
+                if key in ("costMicros", "impressions", "clicks") and amount != amount.to_integral_value():
+                    raise ValueError()
+            except (InvalidOperation, ValueError):
+                raise GoogleAdsReportingError("google_reporting_recovery_row_invalid", "Reporting metric is invalid.", status_code=409) from None
+
+
 def _error_from_response(response: httpx.Response) -> GoogleAdsReportingError:
     payload: Any = {}
     try:
@@ -487,11 +518,8 @@ async def run_google_ads_reporting_sync(
                     query=query,
                 )
                 provider_calls += 1
-                if recovery_mode and (getattr(rows, "complete_response", False) is not True
-                    or any((row.get("customer") or {}).get("id") != account_id
-                        or (row.get("customer") or {}).get("currencyCode") != metadata.get("currency")
-                        or (row.get("customer") or {}).get("timeZone") != metadata.get("timezone") for row in rows)):
-                    raise GoogleAdsReportingError("google_reporting_recovery_read_unproved", "Complete scoped reporting evidence is required.", status_code=409)
+                if recovery_mode:
+                    _validate_recovery_rows(rows, account_id, metadata, start.isoformat())
                 currency = str(metadata.get("currency") or "").upper() or None
                 account_timezone = str(metadata.get("timezone") or "Asia/Riyadh")
                 fx_rate, fx_source = _fx_to_sar(currency)
@@ -668,20 +696,24 @@ async def run_google_ads_reporting_sync(
     status = "complete" if accounts_complete == len(account_summaries) else "partial"
     if rows_saved == 0 and errors:
         status = "failed"
-    recovery_confirmed = False
+    read_verified = False
     if recovery_mode and status == "complete" and not errors and accounts_complete == len(accounts) and rows_saved > 0:
         from .google_ads_automation_policy import _owner
         _, final_signature = await _recovery_owned_accounts(db, user_id)
         if final_signature != group_signature:
             raise GoogleAdsReportingError("google_reporting_recovery_group_changed", "Google account group changed during recovery.", status_code=409)
         await _owner(db, {"id": user_id})
+        if not await db.mezan_integrations_v2.find_one(recovery_scope, {"_id": 0}):
+            raise GoogleAdsReportingError("google_reporting_recovery_connection_changed", "Connection changed during diagnostic reads.", status_code=409)
         if not timedelta(0) <= now().astimezone(timezone.utc) - now_value < timedelta(seconds=90):
             raise GoogleAdsReportingError("google_reporting_recovery_proof_expired", "Native recovery proof expired.", status_code=409)
-    if not recovery_mode or (status == "complete" and not errors and accounts_complete == len(accounts) and rows_saved > 0):
-        integration_update = await db.mezan_integrations_v2.update_one(
-            recovery_scope or {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
+        read_verified = True
+    # A diagnostic snapshot does NOT prove an atomic current account group.
+    # Never promote global connection/auth health in diagnostic mode.
+    if not recovery_mode:
+        await db.mezan_integrations_v2.update_one(
+            {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
             {
-                **({"$inc": {"google_reporting_recovery_generation": 1}} if recovery_mode else {}),
                 "$set": {
                     "connection_status": "connected" if status != "failed" else "error",
                     "connection_provenance": "api_connection",
@@ -695,13 +727,12 @@ async def run_google_ads_reporting_sync(
                     "updated_at": observed_at,
                 }
             },
-            upsert=not recovery_mode,
+            upsert=True,
         )
-        if recovery_mode:
-            recovery_confirmed = integration_update.matched_count == 1
     return {
         "provider": GOOGLE_ADS_PROVIDER_ID,
-        **({"recovery_confirmed": recovery_confirmed} if recovery_mode else {}),
+        **({"read_verified": read_verified, "verified_account_ids": [item["ad_account_id"] for item in accounts],
+            "connection_restored": False} if recovery_mode else {}),
         "status": status,
         "date_from": start.isoformat(),
         "date_to": end.isoformat(),

@@ -49,11 +49,11 @@ async def recover(db,body=BODY,**kwargs):
 async def test_one_explicit_request_proves_all_three_google_accounts_and_idempotent_ack(monkeypatch):
     db,calls,_=setup(monkeypatch)
     result=await recover(db)
-    assert result['status']=='recovered' and result['accounts_checked']==3
+    assert result['status']=='read_verified' and result['accounts_checked']==3
     assert result['provider_write_reached'] is False and result['campaign_write_reached'] is False
     assert {account for account,_ in calls}=={'123','234','345'} and len(calls)==6
     assert all('FROM customer' in query for _,query in calls)
-    assert db.mezan_integrations_v2.rows[0]['connection_status']=='connected'
+    assert db.mezan_integrations_v2.rows[0]['connection_status']=='error'
     assert (await recover(db))==result and len(calls)==6
     assert db[report.GOOGLE_ADS_DAILY_COLLECTION].rows and all(row['provider']=='google_ads' for row in db[report.GOOGLE_ADS_DAILY_COLLECTION].rows)
 
@@ -146,9 +146,9 @@ async def test_registered_owner_route_accepts_only_explicit_scoped_recovery(monk
     # Resolve the real class from before the offline Google context replacement.
     from httpx._client import AsyncClient as RealClient
     async with RealClient(transport=httpx.ASGITransport(app=app),base_url='http://test',trust_env=False) as client:
-        invalid=await client.post('/integrations-v2/google_ads/reporting-recovery',json={**BODY.model_dump(),'campaign_id':'unsafe'})
+        invalid=await client.post('/integrations-v2/google_ads/reporting-read-verification',json={**BODY.model_dump(),'campaign_id':'unsafe'})
         assert invalid.status_code==422 and calls==[]
-        result=await client.post('/integrations-v2/google_ads/reporting-recovery',json=BODY.model_dump())
+        result=await client.post('/integrations-v2/google_ads/reporting-read-verification',json=BODY.model_dump())
         assert result.status_code==200 and result.json()['accounts_checked']==3
     assert len(calls)==6
 
@@ -175,10 +175,10 @@ async def test_lost_completed_ack_replays_cached_result_without_new_google_read(
         return result
     monkeypatch.setattr(collection,'update_one',lost)
     with pytest.raises(HTTPException):await recover(db)
-    assert len(calls)==6 and db.mezan_integrations_v2.rows[0]['connection_status']=='connected'
+    assert len(calls)==6 and db.mezan_integrations_v2.rows[0]['connection_status']=='error'
     monkeypatch.setattr(collection,'update_one',original)
     result=await recover(db)
-    assert result['status']=='recovered' and len(calls)==6
+    assert result['status']=='read_verified' and len(calls)==6
 
 
 @pytest.mark.asyncio
@@ -206,12 +206,12 @@ async def seed_real(monkeypatch,real_db):
 
 
 @pytest.mark.asyncio
-async def test_real_mongo_recovery_three_accounts_original_state_cas_and_durable_replay(monkeypatch,authority_db):
+async def test_real_mongo_diagnostic_read_preserves_global_state_and_durable_replay(monkeypatch,authority_db):
     calls,_=await seed_real(monkeypatch,authority_db)
     result=await recover(authority_db)
     assert result['accounts_checked']==3 and len(calls)==6
     stored=await authority_db.mezan_integrations_v2.find_one({'user_id':'owner','provider':'google_ads'})
-    assert stored['connection_status']=='connected' and stored['google_reporting_recovery_generation']==1
+    assert stored['connection_status']=='error' and 'google_reporting_recovery_generation' not in stored
     assert (await recover(authority_db))==result and len(calls)==6
 
 
@@ -228,3 +228,47 @@ async def test_real_mongo_recovery_lease_excludes_concurrent_requests(monkeypatc
     finally:
         resume.set();await task
     assert len(calls)==6
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('segments',[{'date':'1999-01-01','hour':2},{'date':'2026-10-27','hour':99},
+    {'date':'2026-10-27','hour':-1},{'date':'2026-10-27','hour':True},{'date':'2026-10-27','hour':2.5},{}])
+async def test_malformed_or_out_of_day_rows_never_become_zero_facts(monkeypatch,segments):
+    db,calls,original=setup(monkeypatch)
+    async def malformed(client,*,access_token,account,query):
+        if 'LIMIT 1' in query:return await original(client,access_token=access_token,account=account,query=query)
+        return report.StreamRows([{'customer':{'id':account['ad_account_id'],'currencyCode':'SAR','timeZone':'Asia/Riyadh'},
+            'segments':segments,'metrics':{'costMicros':'1000000'}}],True)
+    monkeypatch.setattr(report,'_search_stream',malformed)
+    with pytest.raises(HTTPException):await recover(db)
+    assert db.mezan_integrations_v2.rows[0]['connection_status']=='error'
+    assert not db[report.GOOGLE_ADS_DAILY_COLLECTION].rows
+
+
+@pytest.mark.asyncio
+async def test_late_group_insert_can_never_promote_global_connection_health(monkeypatch):
+    db,calls,_=setup(monkeypatch);before=deepcopy(db.mezan_integrations_v2.rows[0])
+    original=report._recovery_owned_accounts;reads={'count':0}
+    async def late(database,user_id):
+        rows,signature=await original(database,user_id);reads['count']+=1
+        # The wrapper holds the original helper; this is the reporting final read.
+        if reads['count']==2:
+            database.mezan_integration_accounts_v2.rows.append({**database.mezan_integration_accounts_v2.rows[0],
+                'ad_account_id':'456','external_account_id':'456'})
+        return rows,signature
+    monkeypatch.setattr(report,'_recovery_owned_accounts',late)
+    result=await recover(db)
+    assert db.mezan_integrations_v2.rows[0]==before
+    assert result['status']=='read_verified' and result['connection_restored'] is False
+    assert set(result['verified_account_ids'])=={'123','234','345'} and '456' not in {account for account,_ in calls}
+    assert len(db.mezan_integration_accounts_v2.rows)==4
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_read_preserves_all_global_health_fields_exactly(monkeypatch):
+    db,calls,_=setup(monkeypatch)
+    db.mezan_integrations_v2.rows[0].update(health_score=40,data_quality='unavailable',checked_at='previous-check')
+    before=deepcopy(db.mezan_integrations_v2.rows[0])
+    result=await recover(db)
+    assert result['connection_restored'] is False and result['status']=='read_verified'
+    assert db.mezan_integrations_v2.rows[0]==before

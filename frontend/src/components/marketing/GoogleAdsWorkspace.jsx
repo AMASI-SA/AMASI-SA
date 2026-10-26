@@ -13,7 +13,7 @@ import {
     getGoogleProposal, getGoogleProposals, googleCampaignCapabilities,
     googleCapabilityCanCreate, googleCapabilityReason, googleCapabilityType,
     googleErrorMessage, googleConfidenceLabel, isGoogleRequestCancelled, updateGoogleManagementPolicy,
-    recoverGoogleAdsReporting, googleIdempotencyKey,
+    verifyGoogleAdsReportingRead, googleIdempotencyKey,
 } from "../../services/googleAds";
 
 const BUTTON = "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-40";
@@ -229,12 +229,10 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         setRecoveryBusy(true); setRecoveryAttempted(true); setNotice("");
         const requestedAccount = accountId;
         try {
-            const result = await recoverGoogleAdsReporting({ accountId: requestedAccount, requestId: googleIdempotencyKey() });
+            const result = await verifyGoogleAdsReportingRead({ accountId: requestedAccount, requestId: googleIdempotencyKey() });
             if (!mounted.current || recoveryAccountRef.current !== requestedAccount) return;
-            if (result?.status !== "recovered") throw new Error("قراءة جوجل غير مؤكدة.");
-            setError(""); setWorkspaceErrorCode("");
-            setNotice(`ثبتت قراءة ${result.accounts_checked || 0} من حسابات جوجل وتحدّث تقرير يوم واحد.`);
-            setRevision((value) => value + 1);
+            if (result?.status !== "read_verified") throw new Error("قراءة جوجل غير مؤكدة.");
+            setNotice(`ثبتت قراءة تقرير يوم واحد لـ ${result.accounts_checked || 0} من حسابات جوجل. اتصال إدارة الحملات لم يُستعد؛ أعد ربط جوجل من الإعدادات.`);
         } catch (failure) {
             if (mounted.current && recoveryAccountRef.current === requestedAccount) setError(googleErrorMessage(failure, "لم يثبت اكتمال القراءة. حدّث العرض قبل تقديم طلب جديد بعد خمس دقائق."));
         } finally {
@@ -324,10 +322,11 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
     }
     return <section className="space-y-4" dir="rtl" data-testid="google-ads-workspace">
         <header className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4"><div><h2 className="font-black">إدارة إعلانات جوجل</h2><p className="mt-1 text-xs leading-6 text-slate-500">الحساب والحملات والمجموعات والإعلانات ومواد الإعلان، مع مسودات المسوّق وذكاء ميزان.</p></div><button type="button" className={BUTTON} disabled={loading} onClick={() => setRevision((value) => value + 1)}>تحديث بيانات جوجل</button></header>
-        {(error || notice) && <p role={error ? "alert" : "status"} className={`rounded-xl p-3 text-sm font-bold ${error ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-900"}`}>{error || notice}</p>}
-        {workspaceErrorCode === "google_ads_account_not_owned" && permissions.owner === true && accountId && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm" role="region" aria-label="استعادة قراءة جوجل">
-            <p>يفحص هذا الطلب حسابات جوجل المرتبطة بمتجرك فقط ويحدّث تقرير يوم واحد، دون تغيير الحملات أو الميزانيات.</p>
-            <button type="button" className={`${BUTTON} mt-2`} disabled={loading || recoveryBusy || recoveryAttempted} onClick={recoverReporting}>{recoveryBusy ? "جارٍ التحقق من قراءة جوجل…" : recoveryAttempted ? "تم طلب قراءة جوجل" : "استعادة قراءة جوجل"}</button>
+        {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">{error}</p>}
+        {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-900">{notice}</p>}
+        {workspaceErrorCode === "google_ads_account_not_owned" && permissions.owner === true && accountId && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm" role="region" aria-label="تحقق تشخيصي من تقرير جوجل">
+            <p>طلب تشخيصي يقرأ تقرير يوم واحد لحسابات جوجل المرتبطة فقط. لا يستعيد اتصال إدارة الحملات؛ يلزم إعادة ربط جوجل من الإعدادات.</p>
+            <button type="button" className={`${BUTTON} mt-2`} disabled={loading || recoveryBusy || recoveryAttempted} onClick={recoverReporting}>{recoveryBusy ? "جارٍ التحقق من قراءة جوجل…" : recoveryAttempted ? "تم طلب قراءة جوجل" : "تحقق من قراءة تقرير جوجل"}</button>
         </div>}
         {!accountId && accounts.length > 0 && !loadingReadiness && <p role="status" className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">اختر حساب جوجل لعرض تقريره وإدارة حملاته. لا تُجمع حسابات مختلفة في تقرير واحد.</p>}
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-4"><label className="min-w-[230px] flex-1 text-xs font-bold text-slate-500">حساب جوجل<select aria-label="حساب إعلانات جوجل" className={`${INPUT} mt-2 text-slate-900`} value={accountId} onChange={(event) => changeContext({ accountId: event.target.value, parent: {}, kind: "campaigns" })}><option value="">اختر حساب جوجل</option>{accounts.map((item) => <option key={accountIdOf(item)} value={accountIdOf(item)}>{accountNameOf(item)} · {item.currency || "عملة الحساب"}</option>)}</select></label><button type="button" className={PRIMARY} disabled={!account || !creationAllowed} onClick={create}>إنشاء حملة جوجل</button><button type="button" className={BUTTON} disabled={!accountId || listLoading} onClick={() => readList("drafts")}>المسودات المحفوظة</button><button type="button" className={BUTTON} disabled={!accountId || listLoading} onClick={() => readList("history")}>سجل عمليات جوجل</button><button type="button" className={BUTTON} disabled={!accountId || loading || loadingReadiness || permissions.can_analyze === false} onClick={() => { setComposer(null); setAnalysis({ accountId, name: accountNameOf(account || {}) }); }}>تحليل الحساب بالذكاء</button></div>
