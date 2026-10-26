@@ -1,0 +1,25 @@
+{
+  "task_id": "TIKTOK-FILE-INIT-DIAGNOSTICS-20261026",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-file-recovery-r5-20261027",
+  "source_base": "2d275221ba351dd31fc6d8106cfad3db186f448b",
+  "state": "R5_SAME_VERIFIED_PATCH_ON_CURRENT_PRODUCTION_SOURCE_CI_PENDING",
+  "request": "Publish the attached merchant shawl video through Mezan. Any publishing option authorized; Mezan only. No native TikTok login retry.",
+  "change": "Persist allowlisted fixed initialization diagnostics; definitive native rejections409; clear stale UI phase. Native PROCESSING_UPLOAD without usable retained capability or with expired capability remains uncertain, preserving duplicate fence. Display expiry only for available sessions.",
+  "verification": "Same five code blobs as R4 source6a1ec: current frozen R4 CI559 backendPASS35.10s,167 frontendPASS27suites, CodeQLboth+aggregateSUCCESS, clean HostNode20 adapter/routeSUCCESS. Missing/expired capability regressions reproduced2FAIL then2PASS; fullFILE47PASS on isolatedMongo. R5 current-head checks required.",
+  "live": "Merchant AMASI_Princess_Shawl_Snap(2).mp4 5552622bytes: one direct attempt definitivelyblocked; one distinct draft init has native sessionPROCESSING_UPLOAD0; one same-session resume409. No bytes transferred or publication. Keep unresolved session fence; no repeatinit/resume absent validproof.",
+  "superseded_R4": {
+    "pr": 1566,
+    "A": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
+    "B": "aaed009f7817849ceb5919f16fc23cf304a7f1ef",
+    "runtime": "rg5-406452c4eee3b970ed6021da9144f10907c01300c9d067737ca9f12d453938a8",
+    "not_deployed": true,
+    "reason": "Production advanced through courier1570 and Snap pagination1572 to2d275; no overlap with6TikTokpaths. Preserve frozen pair unchanged."
+  },
+  "original_host": "Secure CodeServer signin restored. Fresh readonly guardinactive, /appHEAD2d275, trackedclean. OldR4/tmp rehearsal root absent; cannot claim that original-host adapter passed. /appfree587MiB, /tmpfree63729MiB. Use task-owned external/tmp cache; do not clean unrelated files.",
+  "production_changed": false,
+  "paid_campaign_writes": 0,
+  "new_model_requests": 0,
+  "next": "Freeze sourceA, run current-head CI; obtain exact candidateintent and create intent-onlyB. Rehearse exactB on originalhost after freshguardinactive. Normalmerge only on same currentreviewedbase; actualadapter/ownprepare/prepublish/onePublishchanges/newexplicitfinish/verify3.",
+  "parent_evidence": "codex/tiktok-file-preview-csp-r7-evidence-20261026 at ad9658e5f5e9a935fec0021f62cd9c3dbaf147c6"
+}

@@ -45,6 +45,7 @@ class Native:
         self.calls, self.initializations = [], []
         self.identity = "native-owner"
         self.timeout = False
+        self.rejection = None
         self.destination = "https://open-upload.tiktokapis.com/video/?upload_id=1&upload_token=fixture-capability-secret"
         self.settings = {"privacy_level_options": ["PUBLIC_TO_EVERYONE", "SELF_ONLY"], "max_video_post_duration_sec": 900,
             "comment_disabled": False, "duet_disabled": False, "stitch_disabled": False}
@@ -62,6 +63,8 @@ class Native:
             assert body["source_info"]["source"] == "FILE_UPLOAD" and "video_url" not in str(body)
             assert set(body) <= {"source_info", "post_info"}
             self.initializations.append((path, body))
+            if self.rejection:
+                return httpx.Response(403, json={"error": {"code": self.rejection, "message": "fixture-private-upload-capability"}})
             if self.timeout: raise httpx.ReadTimeout("fixture-capability-secret", request=request)
             data = {"publish_id": "v_pub_file~v2.test", "upload_url": self.destination}
         else:
@@ -154,6 +157,95 @@ async def test_uncertain_init_is_fenced_across_new_idempotency_keys(fileflow):
     assert row["status"] == "uncertain"
     other = await prepare(db, state, value(idempotency_key="different_request_123"))
     with pytest.raises(HTTPException): await initialize(db, state, other)
+    assert len(state.initializations) == 1
+
+
+@pytest.mark.asyncio
+async def test_definitive_native_rejection_is_an_owner_visible_conflict():
+    def handle(request):
+        return httpx.Response(403, json={"error": {"code": "scope_not_authorized", "message": "fixture-private-upload-capability"}})
+    async with transport.TikTokFileAPI(transport=httpx.MockTransport(handle)) as api:
+        with pytest.raises(HTTPException) as caught:
+            await api.call("POST", "/v2/post/publish/video/init/", token="fixture-access-secret", body={})
+    assert caught.value.status_code == 409
+    assert caught.value.detail["provider_code"] == "scope_not_authorized"
+    assert caught.value.detail["native_rejected"] is True
+    assert "fixture-private-upload-capability" not in str(caught.value.detail)
+
+
+@pytest.mark.parametrize("fields", [
+    {"code": "private-secret", "provider_code": "private-secret", "stage": "private-secret"},
+    {"code": "tiktok_file_provider_rejected", "provider_code": "private-secret", "message": "private-secret"},
+])
+def test_stored_diagnostics_never_echo_unknown_provider_codes_or_text(fields):
+    result = publishing.initialization_diagnostic(fields)
+    assert "private-secret" not in json.dumps(result)
+    assert "provider_code" not in result
+    assert result["stage"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_rejected_initialization_reason_survives_owner_history_without_another_init(fileflow):
+    db, state = fileflow
+    preview = await prepare(db, state)
+    state.rejection = "scope_not_authorized"
+    with pytest.raises(HTTPException):
+        await initialize(db, state, preview)
+    row = await publishing.owned(db, "owner", preview["proposal_id"])
+    assert row["status"] == "blocked"
+    result = publishing.public(row)
+    assert result["initialization_diagnostic"]["provider_code"] == "scope_not_authorized"
+    assert result["initialization_diagnostic"]["stage"] == "native_initialization"
+    assert result["initialization_diagnostic"]["message"]
+    assert "fixture-private-upload-capability" not in json.dumps(result, default=str)
+    await publishing.reconcile(db, "owner", preview["proposal_id"], business_factory=state.factory, api_factory=state.factory)
+    with pytest.raises(HTTPException):
+        await initialize(db, state, preview)
+    assert len(state.initializations) == 1
+
+
+@pytest.mark.asyncio
+async def test_unknown_failure_diagnostic_does_not_release_uncertainty_fence(fileflow):
+    db, state = fileflow
+    preview = await prepare(db, state)
+    state.timeout = True
+    with pytest.raises(HTTPException):
+        await initialize(db, state, preview)
+    row = await publishing.owned(db, "owner", preview["proposal_id"])
+    result = publishing.public(row)
+    assert result["status"] == "uncertain"
+    assert result["initialization_diagnostic"]["code"] == "tiktok_file_transport_failed"
+    assert "provider_code" not in result["initialization_diagnostic"]
+    assert "fixture-capability-secret" not in json.dumps(result, default=str)
+    other = await prepare(db, state, value(idempotency_key="diagnostic_request_123"))
+    with pytest.raises(HTTPException):
+        await initialize(db, state, other)
+    assert len(state.initializations) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unavailable", ["missing_destination", "expired"])
+async def test_native_pending_status_never_claims_an_unavailable_upload_session(fileflow, unavailable):
+    from datetime import timedelta
+    db, state = fileflow
+    preview = await prepare(db, state, value(delivery="draft", privacy_level=None, caption="", disclosure="none"))
+    if unavailable == "missing_destination":
+        state.destination = "https://unapproved.test/video/?upload_token=fixture-private-capability"
+        with pytest.raises(HTTPException):
+            await initialize(db, state, preview)
+    else:
+        await initialize(db, state, preview)
+        await db[publishing.PROPOSALS].update_one({"_id": preview["proposal_id"]}, {"$set": {"upload_expires_at": publishing.now() - timedelta(seconds=1)}})
+    result = await publishing.reconcile(db, "owner", preview["proposal_id"], business_factory=state.factory, api_factory=state.factory)
+    assert result["status"] == "uncertain"
+    assert result["uploaded_bytes"] == 0
+    assert result["initialization_diagnostic"]["code"] == ("tiktok_file_upload_destination_unproven" if unavailable == "missing_destination" else "tiktok_file_resume_unproven")
+    assert "fixture-private-capability" not in json.dumps(result, default=str)
+    with pytest.raises(HTTPException):
+        await publishing.transfer(db, "owner", preview["proposal_id"], "b" * 64, business_factory=state.factory, api_factory=state.factory)
+    row = await publishing.owned(db, "owner", preview["proposal_id"])
+    fence = await db[publishing.FENCES].find_one({"_id": row["fence_id"]})
+    assert fence["active"] is True
     assert len(state.initializations) == 1
 
 
