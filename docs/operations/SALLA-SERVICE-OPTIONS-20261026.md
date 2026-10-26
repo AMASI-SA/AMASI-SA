@@ -1,3 +1,55 @@
+# Salla service fields and surcharge — publication pending
+
+PR1552 merged: https://github.com/AMASI-SA/AMASI-SA/pull/1552
+
+- Source A: bbeea2cf3fe98707d8126ede6b337f98fd7d9f8e.
+- Intent-only B: 02e8d9a08820e792725b1a015e414299da05155b.
+- Merge M: 4ab6e8bc1d39d1a3df555c874ae1278d284529c1; exact tree of B.
+- Runtime expected: rg5-0721a23d53e6c688f8d0f9f4af48102bf63484828568ffe318287a381acf3185.
+- All11 B workflows finished success/expected TikTok skip. Products backend,
+  frontend surcharge regression/build, real-Mongo G47/stock, CodeQL, Security
+  Gate and v5 Host20 no-Git clean-clone/package/runtime-JSON rehearsal passed.
+- Focused backend47PASS. Source A readiness40382269832 artifact12679083345
+  ZIP SHA256 de8c9800ad8f972d0ea9f90f354907dfffb566a2c42bf5d21130a78fd17860a1;
+  intent JSON SHA2562e9de6f5fd1155c56da4aa8cf408d38b1385eb334d2a07c19ac8f46ef1493b94.
+- Independent /tmp/hoodie1552-rehearsal adapter EXIT0 under host20.20.2.
+- Original /app guard inactive before ff-only M; tracked changes absent;
+  unrelated untracked directories preserved. Governed adapter EXIT0, exact
+  expected A/runtime and package proof, log /tmp/hoodie1552-app-adapter.log.
+- Last observed /app HEAD=M and guard active:false. NO lease acquired;
+  NO Publish click, NO production runtime changed by1552, NO actual hoodie
+  creation attempt. Merging/preparing source is not publication.
+- Blocker: Emergent homepage works, but opening Salla Analytics hangs renderer;
+  Playwright Runtime.evaluate, DOMSnapshot and Page.getLayoutMetrics timed out.
+  Fresh canonical tab, reload and project Options path attempted. Options menu
+  only offers Rename/Move/Delete. No paid builder message, private browser API,
+  safeguard bypass, lease deletion or duplicate publish used.
+- Existing hoodie draft AMASI-KITTY-PINK-2026 remains intact in Mezan; last
+  Salla exact SKU lookup returned zero. Adult surcharge10/kids0 must be saved
+  in that draft after deployment. Six fields/conditions/prices need live
+  acceptance; exact old provider limit remains unproven due truncated422.
+- Images delivered individually, then user reported download failure; created
+  validated four-file ZIP AMASI_Salla_Photos.zip and delivered persistent link.
+  User plans to add media; read actual media before uploading anything again.
+
+## Exact next safe action
+
+Recover normal Emergent project UI. Re-read latest production branch, /app HEAD,
+tracked status and guard. If another owner advanced source or holds a lease,
+coordinate/preserve their work; do not reuse our old M blindly. If M still
+current and guard inactive, validate existing governed output or rebuild, then
+prepare/prepublish actor codex-products1552 and ONE authorized publication.
+Require explicit newer Deployment Succeeded and official3-probe verify, then
+inactive guard. Refresh existing draft, add10/0 surcharge, preview/approve/
+create and verify all six fields, IDs, conditions, base139/adult149, media,
+formatted description/category/SEO and actual storefront. Return real URL.
+
+This status-only branch must NOT be deployed or merged as a release: it changes
+source after the frozen intent. PR1552 comments are the canonical current
+ledger because Issue1006 reached its comment limit. Prior PR1539/shawl complete.
+
+## Original implementation checkpoint (historical)
+
 # Salla service customer fields and extra prices
 
 Owner request: repair and publish the Mezan creation flow, support the reference
