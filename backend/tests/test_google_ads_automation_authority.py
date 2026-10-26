@@ -32,6 +32,8 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
         campaign["observed_at"] = current.isoformat()
     for campaign in inventory["campaigns"]:
         campaign.update(budget_resource=f"customers/123/campaignBudgets/{campaign['campaign_id']}",shared_budget=False)
+        if campaign['campaign_id'] == '456':
+            campaign['budget_resource'] = 'customers/123/campaignBudgets/999'
     snapshot = {"campaign": {"id":"456", "resourceName":"customers/123/campaigns/456", "status":"PAUSED" if action == "RESUME_CAMPAIGN" else "ENABLED",
         "advertisingChannelType":"SEARCH", "campaignBudget":"customers/123/campaignBudgets/999"},
         "campaign_budget":{"resourceName":"customers/123/campaignBudgets/999", "period":"DAILY", "amountMicros":"20000000", "explicitlyShared":False, "referenceCount":1}, "groups":[],"ads":[]}
@@ -56,6 +58,34 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
         "mezan_integrations_v2":[{"user_id":"owner","provider":"google_ads","connection_status":"connected","connection_provenance":"api_connection"}],
         "mezan_integration_accounts_v2":[{"user_id":"owner","provider":"google_ads","ad_account_id":"123","connection_status":"connected","connection_provenance":"api_connection","mezan_selected":True}]}
     return docs, native
+
+
+@pytest.mark.parametrize("change", ["inventory_resource", "campaign_resource", "snapshot_resource",
+    "shared", "missing_shared", "reference_count", "missing_reference_count"])
+def test_native_proof_rejects_different_or_unproved_budget_identity(change):
+    docs, evidence = case_documents("CHANGE_BUDGET")
+    row = docs[PROPOSALS][0]
+    policy = docs[AUTOMATION_POLICIES][0]
+    target = next(c for c in evidence["inventory"]["campaigns"] if c["campaign_id"] == "456")
+    snapshot = evidence["campaign_snapshot"]
+    if change == "inventory_resource": target["budget_resource"] = "customers/123/campaignBudgets/1000"
+    elif change == "campaign_resource": snapshot["campaign"]["campaignBudget"] = "customers/123/campaignBudgets/1000"
+    elif change == "snapshot_resource": snapshot["campaign_budget"]["resourceName"] = "customers/123/campaignBudgets/1000"
+    elif change == "shared": snapshot["campaign_budget"]["explicitlyShared"] = True
+    elif change == "missing_shared": snapshot["campaign_budget"].pop("explicitlyShared")
+    elif change == "reference_count": snapshot["campaign_budget"]["referenceCount"] = 2
+    else: snapshot["campaign_budget"].pop("referenceCount")
+    # The before digest may legitimately match the same individual read; that
+    # alone cannot prove it is the budget used by the independently read inventory.
+    row["before_digest"] = digest(snapshot)
+    with pytest.raises(HTTPException) as error:
+        authority._native_proof(row, evidence, policy, NOW)
+    assert error.value.detail["code"] == "google_automation_native_evidence_invalid"
+
+
+def test_native_proof_accepts_same_unshared_budget_across_both_reads():
+    docs, evidence = case_documents("CHANGE_BUDGET")
+    authority._native_proof(docs[PROPOSALS][0], evidence, docs[AUTOMATION_POLICIES][0], NOW)
 
 
 def matches(row, query):

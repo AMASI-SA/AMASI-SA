@@ -178,11 +178,23 @@ def _native_proof(row, evidence, policy, current):
     # Snapshot and complete inventory must describe the same target settings.
     target = next((campaign for campaign in inventory.get("campaigns", [])
         if isinstance(campaign, dict) and campaign.get("campaign_id") == row.get("campaign_id")), None)
+    campaign = snapshot.get("campaign") or {}
+    budget = snapshot.get("campaign_budget") or {}
+    if not isinstance(campaign, dict) or not isinstance(budget, dict):
+        _fail("google_automation_native_evidence_invalid")
     human = human_snapshot(snapshot)
+    budget_name = target.get("budget_resource") if target else None
     try:
         same = (target and human["campaign_id"] == row.get("campaign_id")
             and human["status"] == target.get("status") and human["budget_mode"] == target.get("budget_mode")
-            and Decimal(human["budget_native"]) == Decimal(target.get("budget_native")))
+            and Decimal(human["budget_native"]) == Decimal(target.get("budget_native"))
+            and isinstance(budget_name, str)
+            and re.fullmatch(r"customers/" + re.escape(row["account_id"]) + r"/campaignBudgets/[0-9]+", budget_name)
+            and campaign.get("campaignBudget") == budget_name == budget.get("resourceName")
+            and target.get("shared_budget") is False
+            and budget.get("explicitlyShared") is False
+            and (type(budget.get("referenceCount")) is int and budget["referenceCount"] == 1
+                or type(budget.get("referenceCount")) is str and budget["referenceCount"] == "1"))
     except (TypeError, ValueError, ArithmeticError):
         same = False
     if not same:
