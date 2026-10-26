@@ -538,7 +538,7 @@
     "A": "b381a5929b6541ec8e243572700c9504290b7274",
     "B": "753c1717ceaf44156358aa986a4d082b20d0fdc7",
     "runtime": "rg5-46dd02b93f65a1191512ef02714642673af599140f4a38efcd307fccfe81bdee",
-    "state": "MERGED; NO deployment; originalhostisolatedrehearsal outcomeUNKNOWN during Preview sleep/recovery",
+    "state": "DEPLOYED by Snap carrier; owner records 3guard probes and inactive lease; root Google UI refreshed and plan form loaded",
     "source_ci": {
       "google": 40386587700,
       "backend": 1130,
@@ -569,11 +569,11 @@
       ],
       "source_updated": false
     },
-    "publisher": "Available Republish, latestfinish21:37baseline; PreviewUnavailable explicitagentresting after editor disconnect. PreviewRefresh thenResumePreview clicked; Resuming... disabled observed",
+    "publisher": "Carrier published once; Google ownpublish0",
     "superseded_pr": 1549,
-    "production_changed": false,
+    "production_changed": true,
     "provider_writes": 0,
-    "next_safe_action": "Once ResumePreview done, reopen sameEditorURL. Read exactsavedretry2exit/log/cloneHEAD first. No blindrerun. If0 then transfer only ignoredbuild+proof afterfreshinactiveguardcleanHEADMremoteM; actual/app adapter materializeidentity+verify_packages; prepare/prepublishsingleclickpublish; require newerfinish3liveprobesclosedlease and behavior.",
+    "next_safe_action": "Complete read-only Google plan acceptance and remaining guarded launch/evidence work in isolated worktree. No duplicatepublish.",
     "merge": "11a52dd933d7269cd80046219dcd93d5a6e62297",
     "B_checks": "13workflows:12success1expectedunrelatedTikTokskip",
     "B_host20": {
@@ -595,9 +595,50 @@
       "samehost_clean_clone": "/tmp/mezan-google1555-rehearsal",
       "retry2_log": "/app/.git/google1555-evidence/build-retry2.log",
       "retry2_exit_file": "/app/.git/google1555-evidence/build-retry2.exit",
-      "retry2_outcome": "UNKNOWN; not rerun"
+      "retry2_outcome": "interrupted by Preview sleep; no exit; clean retry3 completed",
+      "retry3_exit": 0
     },
     "lease_created": false,
-    "publish_clicked": false
+    "publish_clicked": false,
+    "carrier": {
+      "actor": "snap-completion-20261026-root",
+      "deployment": "9d9118d",
+      "finished_riyadh": "2026-10-26T23:10:00+03:00",
+      "evidence_comments": [
+        6426285664,
+        6426348820
+      ],
+      "guard_verify": "carrier reports exit0,3pass,activefalse; root did not operate foreign lease"
+    },
+    "live_google": {
+      "connection": "connected",
+      "account": "5052346701",
+      "campaigns": 22,
+      "plan_form": "revision0loaded,blanklimits,save disabled beforereview; no businessplan save",
+      "natural_language_extraction": false
+    }
+  },
+  "guard_integration": {
+    "branch": "codex/google-guard-integration-wip-20261026",
+    "pr": 1560,
+    "source": "371a1382cfa856cb841276027dfface241839caa",
+    "runtime_enabled": false,
+    "production_changed": false,
+    "full_ci": {
+      "run": 40395280792,
+      "backend": 1177,
+      "skips": 0,
+      "seconds": 42.01,
+      "frontend": 162,
+      "build": "success"
+    },
+    "replica_ci": {
+      "run": 40395280816,
+      "passed": 75,
+      "actual_replica": 11,
+      "failures_errors_skips": 0
+    },
+    "root_logs_verified": true,
+    "next_safe_action": "Independent acceptance of native budget proof/legacy claims; funded first launch and product evidence remain"
   }
 }
