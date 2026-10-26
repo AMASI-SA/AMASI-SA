@@ -62,12 +62,34 @@
     "tests": "94 passed authority and standing; 48 passed 16 skipped in gateway/replica modules; Mongo replica CI still required for new source; git diff --check passed",
     "production_changed": false,
     "remaining": "Provider receipt identity, legacy claims migration and absence evidence, actual production Mongo transactions, funded first launch and full integration remain required. Runtime stays disabled.",
-    "next_safe_action": "Independent review then run full and replica CI on this checkpoint; do not enable runtime or deploy.",
+    "next_safe_action": "Review external writer race and provider proof; do not merge, deploy, or enable runtime. Preserve allocations and fences for uncertain outcomes.",
     "pr": 1579,
     "code_sha": "e8162c3c23661042d3b4417b945e0ee12fdae403",
     "wider_local_tests": "676 passed, 54 skipped (Mongo replica unavailable locally)",
     "review_followup": "Gateway REST-shaped cases reject missing shared flag/reference count, other account or different budget. Google documents that explicitly_shared=false can change to true. The checks are pre-dispatch observations only, not an atomic provider compare-and-set; external writes may race. Runtime remains disabled pending an evidence-backed provider concurrency control or operational exclusion and conservative post-dispatch reconciliation; uncertain outcomes retain allocations and fences. End-to-end execution exercises real compatible_read with four rejected REST rows and verifies no provider mutation or submission floor.",
     "reference": "https://developers.google.com/google-ads/api/fields/v26/campaign_budget",
-    "focused_followup": "134 passed: authority, gateway and standing; real replica CI pending for latest checkpoint"
+    "focused_followup": "134 passed: authority, gateway and standing; real replica CI pending for latest checkpoint",
+    "tested_source": "d22a09f02ca928c0cb7cd083e434cb082c55a0f7",
+    "ci_guard": {
+      "run": 40419973827,
+      "job": 121911693832,
+      "source": "3fc5744c86d61e10f358a8c6b9fb36a1105afcef",
+      "code_equivalent_to_tested_source": true,
+      "passed": 75,
+      "real_replica_tests": 11,
+      "skipped": 0,
+      "result": "success"
+    },
+    "ci_full": {
+      "run": 40420062895,
+      "source": "d22a09f02ca928c0cb7cd083e434cb082c55a0f7",
+      "backend_job": 121911985733,
+      "backend_passed": 1193,
+      "backend_skipped": 0,
+      "frontend_job": 121911985268,
+      "frontend_passed": 162,
+      "frontend_suites": 15,
+      "build": "success"
+    }
   }
 }
