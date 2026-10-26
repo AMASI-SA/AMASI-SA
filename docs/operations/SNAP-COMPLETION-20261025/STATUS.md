@@ -1,3 +1,9 @@
+# Verified account source9b01; publication resume
+
+Latest source `9b01c748f1eaabc9adcedb167049c3a2e2f8b2b9`, tree `dd9023413160a9ba7cd0954f33628e7fe28a57e2`, PR1537. All41 checks finished:35success/6conditional skips. Independent review found singleton-hour dots disabled; fixed with explicit account point dots and actual mounted Recharts tests for81.32 and0 plus future-null. Prior2734 backend452passed. No other material review finding; live acceptance pending.
+
+Execution returned as an EMPTY scratch workspace; old worktrees absent. Browser also returned as fresh session; Emergent signed in and SallaAnalytics opened at https://app.emergent.sh/chat (tab7, variable deploy). Do not claim environment still unavailable. Need resume actual project Code Server, fresh guard/status/Production inspection and full governed release. No new merge/intent/lease/publish yet. Production unchanged by this increment. Never reuse old1527artifacts. Current remote source authoritative. Canonical documentation branch must not deploy.
+
 # Account-separation source checkpoint — PR1537; not deployed
 
 Current user goal: separate Snapchat advertising accounts in cards, chart and executive profit advertising expenses. Preserve paused Saudi readability and keep a known USD amount/curve visible when Saudi evidence is unknown. Never activate campaigns or budgets as tests.
