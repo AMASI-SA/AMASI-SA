@@ -539,7 +539,7 @@ function OperatingProfitDetails({ totals = {}, total = 0 }) {
     return <ProfitDetailBox testid="advanced-profit-operating-details"><DetailTitle title="💼 تفاصيل المصروفات التشغيلية" count={`${integer(rows.length)} بند`} tone="text-orange-900" />{rows.length === 0 ? <EmptyDetails text="لا توجد مصروفات تشغيلية في هذه الفترة" /> : <div className="text-xs">{rows.map(([name, value]) => <div key={name} className="flex justify-between border-b py-2"><b>{name}</b><span className="num font-black text-orange-700">{money(value)}</span></div>)}<div className="flex justify-between border-t-2 border-orange-200 py-2"><b>الإجمالي</b><span className="num font-black text-orange-800">{money(total)}</span></div></div>}</ProfitDetailBox>;
 }
 
-export function ProfitCard({ data, loading = false }) {
+export function ProfitCard({ data, loading = false, fromDate, toDate }) {
     const [expanded, setExpanded] = useState(null);
     const t = data?.totals || {};
     const adsQuality = data?.ads_v2?.spend_quality || {};
@@ -567,6 +567,10 @@ export function ProfitCard({ data, loading = false }) {
     const operationalNoActivityObserved = adsSpendProvisional
         && Array.isArray(adsQuality.snapchat?.reason_codes)
         && adsQuality.snapchat.reason_codes.includes("snapchat_operational_no_activity_observed");
+    const platformSnapshot = data?.dashboard_platform_spend;
+    const accountRangeMatches = (!fromDate || platformSnapshot?.date_from === fromDate)
+        && (!(toDate || fromDate) || platformSnapshot?.date_to === (toDate || fromDate));
+    const snapchatAccounts = accountRangeMatches ? platformSnapshot?.providers?.snapchat?.accounts : null;
     const fees = t.total_payment_fees ?? (Number(t.other_payment_fees || 0) + Number(t.tamara_fees || 0) + Number(t.tabby_fees || 0) + Number(t.emkan_fees || 0) + Number(t.bank_fees || 0) + Number(t.ad_bank_commission_fees || 0));
     const rows = [
         { key: "sales", label: "المبيعات", value: t.total_sales, Icon: CircleDollarSign, color: "text-emerald-700" },
@@ -587,7 +591,7 @@ export function ProfitCard({ data, loading = false }) {
     const netProfit = finiteFinancialValue(t.net_profit);
     const netMargin = adsSpendAvailable && sales > 0 && netProfit !== null ? (netProfit / sales * 100).toFixed(2) : null;
     const details = {
-        ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} /></ProfitDetailBox>,
+        ads: <ProfitDetailBox testid="advanced-profit-ads-details"><AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} snapchatAccounts={Array.isArray(snapchatAccounts) ? snapchatAccounts : null} /></ProfitDetailBox>,
         shipping: <ShippingProfitDetails rows={data?.shipping_breakdown} total={t.total_shipping_cost} />,
         payment: <PaymentProfitDetails rows={data?.payment_breakdown} total={fees} />,
         operating: <OperatingProfitDetails totals={t} total={t.operating_expenses_total} />,
@@ -898,7 +902,7 @@ export default function AdvancedDashboard() {
         {(Boolean(data) || loading) && <>
         <Panel title="ملخص الفترة" testid="advanced-period-summary"><div className="bg-slate-50 px-4 text-slate-800"><h2 className="font-extrabold">ملخص الفترة</h2></div><div className="p-3"><SummaryStrip data={data} filters={filters} loading={loading} /></div></Panel>
         <CampaignAdvisorCard />
-        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div></div></main></div>
+        <div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1280px]:grid-cols-[minmax(420px,460px)_minmax(0,1fr)]"><aside dir="rtl" className="min-w-0 space-y-4"><DashboardAdsSpendCard collapsible fromDate={filters.from} toDate={filters.to} /><TopProductsCard rows={data?.product_cost_v2?.product_rows} summary={data?.product_cost_v2} filters={filters} loading={loading} />{ABANDONED_CARTS_DASHBOARD_AUTO_SYNC ? <AbandonedCartsCard carts={carts} summary={cartSummary} /> : <Panel testid="advanced-abandoned-carts-frozen" title="السلات المتروكة"><div className="bg-slate-800 px-4 text-white"><h2 className="font-bold">السلات المتروكة</h2></div><p role="status" className="p-4 text-sm">تم إيقاف التحديث التلقائي مؤقتًا لتحسين أداء لوحة التحكم.</p></Panel>}</aside><main dir="rtl" className="min-w-0"><div dir="ltr" className="dashboard-columns grid min-w-0 grid-cols-1 items-start gap-4 min-[1120px]:grid-cols-[minmax(0,2fr)_minmax(280px,.92fr)]"><div dir="rtl" className="min-w-0 space-y-4"><ProfitCard data={data} loading={loading} fromDate={filters.from} toDate={filters.to} /><LatestOrders orders={orders} totals={data?.totals} /></div><div dir="rtl" className="min-w-0 space-y-4"><GaLive data={ga} /><LatestSoldProductsCard collapsible /></div></div></main></div>
         </>}
     </div>;
 }
