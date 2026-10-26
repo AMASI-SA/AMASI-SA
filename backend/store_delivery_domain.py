@@ -34,8 +34,11 @@ def normalize_text(value: Any) -> str:
 
 
 def normalize_city(value: Any) -> str:
-    """Normalize city text for V1 exact city coverage matching."""
-    return normalize_text(value).casefold()
+    """Normalize known equivalent city names without expanding coverage."""
+    city = normalize_text(value).casefold()
+    if city in {"الرياض", "رياض", "riyadh"}:
+        return "الرياض"
+    return city
 
 
 def money(value: Any) -> Decimal:
