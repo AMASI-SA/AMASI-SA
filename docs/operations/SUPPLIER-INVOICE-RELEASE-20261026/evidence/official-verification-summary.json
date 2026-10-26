@@ -1,0 +1,22 @@
+{
+  "verified": true,
+  "checks": 3,
+  "source_git_sha": "761a8f330cb3bfcadbd430e6ca9a954008dbe9de",
+  "deployment_git_sha": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
+  "release_id": "rg5-82da34e8c680c0bb12638192f5adc916a1b0f8a180006dc1b087290d604c97d4",
+  "protocol_version": 5,
+  "active": false,
+  "frontend_artifact_tree_sha256": "e558ab6bd751fdb7913d83f3c9de876016ba5b399ce01bf3964326a147d2626a",
+  "boot_started_at_observations": [
+    "2026-10-26T18:36:04.655411+00:00",
+    "2026-10-26T18:36:09.038171+00:00"
+  ],
+  "ui_publish_id": "a210f99",
+  "ui_completed": "Oct 26, 09:37 PM",
+  "ui_success_labels": [
+    "Website published",
+    "Health check passed",
+    "Live!"
+  ],
+  "provenance": "Transcribed from official /app production_release_guard.py verify output and subsequent status; original /root/supplier1547-preserved-20261026/verify.json"
+}
