@@ -1,0 +1,158 @@
+{
+  "task_id": "GOOGLE-ORDER-EVIDENCE-RESEARCH-20261026",
+  "state": "READ-ONLY SOURCE RESEARCH; CONTRACT PROPOSAL ONLY; NO SALES IMPLEMENTATION OR SOURCE READERS WIRED",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-order-evidence-research-20261026",
+  "base_sha": "b6e85300a52e04156100508829f88a5c3f0c1e6b",
+  "inspected_local_source_sha": "007158998cdad36e1340d950582ceda60c502c7b",
+  "source_proof": "All twelve cited source files have identical Git blob SHAs at inspected local source and remote-backed base b6e85300a52e04156100508829f88a5c3f0c1e6b. This is code evidence, not a fresh read of production data or source coverage.",
+  "production_changed": false,
+  "provider_writes": 0,
+  "customer_data_read": false,
+  "findings": [
+    {
+      "area": "Canonical intake and business timestamp",
+      "paths": [
+        "backend/salla_integration/auto_sync.py:155",
+        "backend/orders_db.py:965",
+        "backend/orders_db.py:1013",
+        "backend/salla_integration/sync.py:761"
+      ],
+      "detail": "Salla intake calls upsert_order(source=salla_direct,raw=original provider payload). Raw snapshot is retained in unified_orders.raw_by_source.salla_direct; raw.date or raw.created_at is the source creation time. Bind raw.id/reference_id to owner-scoped order_id/order_number before trusting its timestamp or items."
+    },
+    {
+      "area": "Local observation clocks are not order creation",
+      "paths": [
+        "backend/orders_db.py:914",
+        "backend/orders_db.py:1022",
+        "backend/webhook_routes.py:552"
+      ],
+      "detail": "updated_at/data_sources.at/last_salla_direct_sync_at are local write/observation clocks; received_at is local first ingestion. Make payloads without a date use current Riyadh day and order_date_inferred=true. Never use these local clocks to assign sales windows."
+    },
+    {
+      "area": "Normalized day is not sufficient boundary proof",
+      "paths": [
+        "backend/salla_integration/sync.py:404",
+        "backend/orders_db.py:837"
+      ],
+      "detail": "_normalize_date removes positive offset/Z and takes date without converting the instant to Riyadh. Date first-writer/fill-empty rules can preserve an older normalized value; inferred-date override needs explicit raw/date flags. order_date_inferred=false alone does not prove correct Riyadh boundary. A bounded normalized-day query is only candidate discovery."
+    },
+    {
+      "area": "Existing source-aware date parsing",
+      "paths": [
+        "backend/integrations/qoyod/candidate_orders.py:299",
+        "backend/integrations/qoyod/candidate_orders.py:343",
+        "backend/order_engine/mapper.py:296",
+        "backend/order_engine/mapper.py:986"
+      ],
+      "detail": "_salla_business_date/unified_order_date_evidence prefer preserved Salla date then created_at, convert explicit offsets or date-object timezone into Riyadh and return provenance. Order Engine _parse_datetime normalizes source timestamps to aware UTC and rejects absent creation date in its mapper. Existing fallbacks default naive/malformed timezone to Riyadh or accept normalized order_date, so a future high-assurance evidence adapter needs a stricter proof contract; do not blindly promote those fallback results."
+    },
+    {
+      "area": "Exact product and source-item identity",
+      "paths": [
+        "backend/salla_integration/sync.py:694",
+        "backend/order_engine/mapper.py:710",
+        "backend/product_catalog_cost_resolution.py:118",
+        "backend/product_catalog_cost_resolution.py:179"
+      ],
+      "detail": "Canonical rows retain source order-item ID, product/parent IDs, variant ID and SKU. Generic current-catalog resolver includes SKU/name fallback and indexes aliases into overwriteable dictionaries; it is appropriate for existing display/cost compatibility, not independent verified order-product attribution. Exact raw item/parent IDs and unique source-item identities must drive new evidence. Preserve actual quantity=2 and repeated distinct source rows; never dedupe by product or SKU."
+    },
+    {
+      "area": "Current cost quality versus historical cost",
+      "paths": [
+        "backend/product_v2_details_routes.py:304",
+        "backend/order_option_cost_snapshot_routes.py:116",
+        "backend/order_option_cost_snapshot_routes.py:174",
+        "backend/product_cost_revision.py:69"
+      ],
+      "detail": "Current mezan_product_cost_profiles_v2 stores base/variant costs and updated_at; variant overrides base, explicit zero is valid, Salla fallback remains separate from explicit Mezan cost. These current values are not a historical sale-cost ledger. Global product-cost revision helps detect changes to current-cost observations but is not sale-time cost proof."
+    },
+    {
+      "area": "Saved order-item cost snapshot",
+      "paths": [
+        "backend/order_option_cost_snapshot_routes.py:216",
+        "backend/order_option_cost_snapshot_routes.py:346",
+        "backend/order_option_cost_snapshot_routes.py:403",
+        "backend/order_option_cost_snapshot_routes.py:431"
+      ],
+      "detail": "mezan_order_item_cost_snapshots_v2 is owner/order/item scoped and retains source_item_id, product identities, quantity, base/option/component amounts, cost_complete/mezan_cost_complete/uses_salla_fallback/calculated_at. Rebuild overwrites the snapshot using current profiles and writes Mongo; it is not immutable historical sale cost and must never be called from a read-only evidence adapter. Read individual flags/line amounts; GET total substitutes missing values with zero and cannot establish complete economics."
+    },
+    {
+      "area": "Bundle economics",
+      "paths": [
+        "backend/bundle_fulfillment_v2.py:443",
+        "backend/order_option_cost_snapshot_routes.py:379"
+      ],
+      "detail": "Read-only bundle order_view distinguishes expected_cost versus actual_cost, quantity, frozen revision and reconciliation_required. Actual requires leaves with actual costs. A bundle remains one sale line; component consumption is not additional product sales. Do not count expected cost as actual or add parent cost to leaf cost."
+    },
+    {
+      "area": "Currency and profit limits",
+      "paths": [
+        "backend/order_currency.py:240",
+        "backend/order_currency.py:271"
+      ],
+      "detail": "order_amount_to_sar uses exact stored order FX; unavailable foreign FX remains unknown. Native order currency and current cost currency must remain distinct. Product quantity evidence is not revenue/profit evidence; discounts, returns, tax, shipping, payment/BNPL fees and ad-cost allocation are not established by merely finding a base cost."
+    }
+  ],
+  "proposed_contract": {
+    "scope": "Bounded owner-only diagnostic observations for pinned numeric Salla products in a saved commercial-plan revision; no ranking, complete-sales totals, profit or campaign execution",
+    "request": "Server principal supplies owner_id. Client may supply plan_id and expected_revision only. Server clock fixes as_of and closed Riyadh business-day windows. Re-read saved revision/fields after reads; no client-submitted source facts or verified flags.",
+    "window_discovery": "For each closed target window, use at most the union of order_date in [window_start minus 1 day, window_end plus 1 day] as a coarse indexed candidate query. Use explicit inclusion projection and a bounded limit+1 (example design 5001 for a server bound of 5000). Resolve every included order from its preserved raw source timestamp and filter its exact Riyadh business date into the requested window. The plus/minus-one-day expansion does not prove no orders are missed: normalized date drift, unsupported source timezone, missing rows and earlier first-writer values remain coverage limitations.",
+    "timestamp_exact": {
+      "priority": [
+        "raw_by_source.salla_direct.date.date + its explicit IANA timezone (or embedded offset/Z)",
+        "raw_by_source.salla_direct.created_at with explicit offset/Z"
+      ],
+      "rule": "Bind raw source identity to owner/order first; parse full instant, preserve original raw timestamp/source timezone, normalize to aware UTC, then derive Asia/Riyadh business date. An explicit offset is authoritative. A date-only value can be labelled business_date_only, never upgraded to exact instant; a naive timestamp requires separately proven source timezone. Invalid/missing/contradictory timestamp or timezone becomes unknown. Never substitute ingestion/update times.",
+      "evidence_output": [
+        "source_path",
+        "source_timestamp_exact",
+        "source_timezone",
+        "created_at_utc",
+        "business_date_riyadh",
+        "source_identity_proof_ref",
+        "row_scoped_evidence_ref",
+        "observation_clock_separate_from_creation"
+      ]
+    },
+    "product_match": "Read only projected source items, bind unique raw item ID to exact normalized source_item_id/order_item_id, resolve explicit parent/product ID to selected product. A variant alias requires exactly one catalog parent and source-variant proof. Generic item.id is an order-line ID, not a product-ID shortcut. SKU/name-only, contradictory parent IDs or duplicate variant mappings are ambiguous and excluded from verified matches.",
+    "metrics": "Return observed_matched_order_count and observed_units only as diagnostic observations with explicit subset scope. Deduplicate order count by (owner,order_number,selected_product_id); sum quantities of distinct proven source item IDs, preserving quantity=2. Do not label these counts total sales or conversions. Native-money observations remain per currency and period. Do not send incomplete observations into ProductSourceRecord.verified_orders because that field explicitly requires complete store-order proof.",
+    "cost_observation": "Read matching saved snapshots/current profiles only; validate exact owner/order/source-item/product/variant/quantity and cost flags. Describe current_profile, recomputed_snapshot, bundle_expected or bundle_actual basis with timestamp/reference. Incomplete/mismatched/unverifiable currency or option/component costs stay unknown; no profit or ROAS is computed. Do not call calculate_order_cost_snapshot, ensure_indexes, sync, rebuild or any source writer.",
+    "coverage": "Return coverage_status=unknown/partial (or truncated) and complete=false unless a separately verified source coverage watermark proves the entire exact order range and all unresolved retries. Finite cursor exhaustion is not provider completeness. Auto-sync recent reconciliation, global last_sync_at or one successful report is not that watermark. Mark current absence as not_observed, never zero sales.",
+    "read_consistency": "The existing intake has scoped transaction/fences but no verified global order-evidence snapshot generation for the requested window. Plan revision recheck and row hashes detect some changes, not all concurrent insertions or a consistent multi-row source snapshot. Keep that limitation explicit; do not claim atomic historical completeness.",
+    "not_in_scope": [
+      "Writing or backfilling source-order timestamps",
+      "Changing source intake/merge rules",
+      "Rebuilding order costs",
+      "Selecting or ranking advertised products",
+      "Launching or modifying campaigns",
+      "Converting provider-attributed conversions into store-order totals"
+    ]
+  },
+  "acceptance_tests_proposed": [
+    "Riyadh midnight: raw timestamp 2026-08-14T21:30:00Z resolves to 2026-08-15; normalized order_date 2026-08-14 only discovers candidate, never controls final window.",
+    "Date object with Asia/Riyadh wall clock resolves to the same UTC instant as its offset/Z representation; explicit offset overrides a conflicting default; unsupported/invalid timezone fails closed.",
+    "Local received_at/updated_at/created_at changes never move an order into a new sales window.",
+    "Missing raw timestamp, inferred day, date-only value or naive timestamp without proven timezone yields explicit unknown/exactness limitation.",
+    "Conflicting raw.id/reference_id versus owner-scoped canonical identity rejects source proof; cross-tenant rows never contribute.",
+    "Coarse plus/minus-one-day candidates outside the exact Riyadh window are excluded; limit+1 truncation is explicit and never complete=true.",
+    "Empty candidate query with no provider coverage watermark returns not_observed and complete=false, not zero sales or known negative growth.",
+    "Source-created day drift beyond coarse range remains a documented coverage gap; cursor exhaustion never removes that gap.",
+    "Exact source-item mapping accepts product and parent identities; SKU/name-only matches or duplicate variant parents remain ambiguous.",
+    "Two distinct source item IDs for same product plus quantity=2 are preserved; product-level order count stays one.",
+    "Missing/partial cost, Salla fallback, explicit zero, variant override and quantity mismatch are classified distinctly without fabricated profit.",
+    "Snapshot rebuilt after sale is labelled recomputed/current basis, not immutable sale-time cost; no rebuild/update/ensure-index functions invoked.",
+    "Bundle expected and actual costs stay distinct; component consumption adds no sale units or extra parent cost.",
+    "Foreign order FX absent stays unknown; native currency is preserved and not relabelled SAR.",
+    "Concurrent plan revision/field change invalidates result; repeat row observations do not establish a global source snapshot/watermark.",
+    "Instrumented fake DB/network clients reject insert/update/delete/create_index/provider calls during the diagnostic read; owner-only route contract maintained."
+  ],
+  "verification": {
+    "kind": "Static source inspection and Git object identity comparison only",
+    "executed_source_tests": [],
+    "source_blob_comparison": "12 of 12 cited files match between inspected source and remote-backed base",
+    "production_data_read": false,
+    "acceptance_tests_status": "Proposed, not implemented or executed"
+  },
+  "next_safe_action": "Review this contract, decide whether diagnostic subset observations are useful, then implement a dedicated bounded read-only adapter with unknown coverage. Full complete-sales comparison requires a separately evidenced authoritative creation-time/coverage contract; do not invent complete=true."
+}
