@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R5_FROZEN_AB_PR1578_CI_AND_ORIGINAL_HOST_PENDING",
+  "state": "R5_PR1578_ORIGINAL_HOST_ADAPTER_EXIT0_EXACT_IDENTITY_CI_PENDING",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Freshoriginalguardinactive; isolatedcleanclone at exactB17f840, use task-owned/tmp cache; verify adapterEXIT0 exactsourcee7fd/runtime25ac. Require fullcurrentB CI/allCodeQL and unchangedProduction2d275 before normalmerge.",
+  "next": "Wait currentB allCI/CodeQL. Freshreviewedbase2d275 and headB17f840; normalmergePR1578, verify MtreeeqB. Freshoriginalguardinactive/trackedclean/currentAPPancestorM; FF-only then actualadapter with ownexternalcache. Prepare only when hostingUIready.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -405,7 +405,7 @@
     "tree": "51ab2995a1198d02b2b492b7c245fd3cf4410b9c",
     "pr": 1578,
     "files": 6,
-    "state": "Frozen A/B; fresh finalPR1578 CI pending; originalrehearsal next",
+    "state": "Original-host rehearsal passed; current B CodeQLpython and stock checks pending at lastread; all othersapplicableSUCCESS. No merge yet.",
     "validation": "Current B native backend559PASS35.10s; frontend167PASS27suites11.398s; CI HostNode20 clean-clone adapter and exact governed JSON route all stepsSUCCESS. All current head checks complete. Original-host R4 result cannot yet be read.",
     "scope": "Safe fixed initialization failure persistence and owner UI; definite native rejection409; uncertain fence retained; stale preparing phase cleared. Does not yet establish actual production native rejection cause.",
     "source_A": "e7fd8ca1aaa03d27557b75072512d366a0409acb",
@@ -415,7 +415,7 @@
     "runtime": "rg5-25ac843f04d3dcd8aaa2095340d23fd1d8e16650bbdd759523d3faaa3540454f",
     "source_readiness_run": 40418574920,
     "intent_artifact": 12696855733,
-    "original_host_rehearsal": "R5 notstarted. Freshguardinactive/currentAPP2d275/trackedclean verified. OldR4tmp rootgone. Appfree587MiB/tmp63729MiB; use cacheoutside/app. No ownlease.",
+    "original_host_rehearsal": "PASS. Freshguardinactive, cleanclone /tmp/tiktok1578-release-vmil8ivn/source exactB17f840. AdapterEXIT0 and explicitassertions exactsourcee7fd/runtime25ac printed. Private adapter.log retained, cacheexternal/tmp. No ownlease.",
     "superseded_frozen_pair": {
       "pr": 1554,
       "A": "820ce2582715da52d300d7ba13925719f7c86c40",
