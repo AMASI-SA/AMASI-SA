@@ -1,0 +1,41 @@
+{
+  "task_id": "GOOGLE-BUDGET-STANDING-20261026",
+  "branch": "codex/google-budget-standing-wip-20261026",
+  "state": "WIP ONLY; disabled; no runtime migration; never publish as launch implementation",
+  "base": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
+  "source_baseline": "f2c4f740504d1df93c8d345ae88ed16705bf5e72",
+  "runtime_supported": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "verification": {
+    "local": "48passed9replica skipped",
+    "independent_combined": "80passed9replica skipped; diff-check clean",
+    "replica_ci": {
+      "run": 40380341701,
+      "job": 121774558226,
+      "source": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+      "passed": 57,
+      "actual_replica_tests": 9,
+      "skipped_errors_failures": 0,
+      "seconds": 5.25,
+      "root_logs_verified": true,
+      "runtime_enabled": false
+    }
+  },
+  "changes": [
+    "Standing reservation and settlement under same account transaction",
+    "Quota history and private claim atomic with shared guard",
+    "Unknown outcomes retain reservations; successful outcomes require native reflection",
+    "Reflected allocations retire atomically permitting future operations; no double count",
+    "Pause/decrease allowed even above lowered cap"
+  ],
+  "remaining": [
+    "Independent final review and actual replica CI",
+    "Integrate six policy routes and all authority/settlement budget writers together",
+    "Gateway must prove budget_resource and shared_budget=false",
+    "All live launch/owner UI/fresh product eligibility remains incomplete"
+  ],
+  "next_safe_action": "Keep disabled. Integrate every policy mutation and standing authority/settlement under same guard only after gateway supplies native budget_resource/shared_budget evidence. Run postintegration replica tests and review before any release.",
+  "verified_code_checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+  "pr": 1550
+}
