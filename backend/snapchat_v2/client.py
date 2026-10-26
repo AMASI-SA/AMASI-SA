@@ -1109,6 +1109,24 @@ class SnapchatV2Client:
             "report_days": len(date_values),
         }
 
+    def preflight_child_total_scope(self, campaign_ids: Iterable[str], report_dates: Iterable[date]) -> None:
+        """Budget both child levels together without trimming the proven scope.
+
+        Pagination/retries can still exhaust the existing hard request budget;
+        a successful preflight is a lower-bound check, never a budget bypass.
+        """
+        parents = {clean_text(value, limit=128) for value in campaign_ids if clean_text(value, limit=128)}
+        days = set(report_dates)
+        expected = 2 * len(parents) * len(days)
+        if not parents or not days or expected > max(0, MAX_PROVIDER_CALLS - self.provider_calls):
+            raise SnapchatClientError(
+                "snapchat_child_catalog_scope_budget_exceeded",
+                "The complete catalog child scope exceeds the remaining provider request budget.",
+                coverage=_coverage(status="incomplete", data_state="unknown_incomplete",
+                    expected_requests=expected, completed_requests=0, rows_received=0,
+                    reason="complete_catalog_child_scope_budget_exceeded"),
+            )
+
     async def fetch_breakdown_daily_total_facts(
         self,
         account: dict[str, Any],

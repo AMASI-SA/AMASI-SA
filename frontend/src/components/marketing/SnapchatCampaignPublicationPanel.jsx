@@ -169,7 +169,7 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
     return <section dir="rtl" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4"
         data-testid="snapchat-publication-panel">
         <h3 className="text-base font-black">إنشاء حملة متكاملة نشطة مباشرةً</h3>
-        <p className="text-sm text-slate-600">تنشأ الحملة والمجموعة والإعلان نشطة مباشرةً، وقد يبدأ الصرف بميزانية المجموعة التي تدخلها. الهدف مبيعات وتحسين الشراء، والمزايدة والمواضع تلقائية، والزر «تسوق الآن». راجع الخطة كاملة قبل اعتماد الإنشاء والتشغيل.</p>
+        <p className="text-sm text-slate-600">تنشأ الحملة والمجموعة والإعلان نشطة مباشرةً، وقد يبدأ الصرف بميزانية المجموعة التي تدخلها. الهدف مبيعات وتحسين الشراء، والمزايدة والمواضع تلقائية، وزر الدعوة وفق اختيارك في الخطة. راجع الخطة كاملة قبل اعتماد الإنشاء والتشغيل.</p>
         {!executionEnabled && <p role="status" className="text-sm">تنفيذ عمليات Snapchat متوقف حاليًا.</p>}
         {!activationEnabled && <p role="status" className="text-sm">التشغيل المباشر غير متاح حاليًا؛ لا يمكن إنشاء هذه الخطة حتى يتاح.</p>}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}

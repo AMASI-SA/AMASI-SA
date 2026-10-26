@@ -48,3 +48,11 @@ Independent review found and corrected stale empty proof surviving populated ref
 Broad local run:679passed/35skipped/3failed,8.92s. The three failures are hourly publication heartbeat cases refusing admission under host resource pressure (cgroup usage 7,798,558,720/8,589,934,592 bytes). Exact unchanged base3a23b587a reproduces the same3failed/2passed in0.59s. Do not hide this as a green local broad run, alter production governor, or relax thresholds. Reporting CI on d916 passed these cases under its own isolated environment.
 
 Post-completion producer demotion was investigated and rejected: real fail_sync_run filters status=running. New storage-boundary regressions prove mid-publication failure retains valid mixed old/new committed days and completed producers; bookkeeping failure does not invalidate them.
+
+## Saudi live finding and request-scope repair
+
+Live read-only account inspection: Saudi has 62 stored campaigns, 0 active, spend 0 SAR complete. Last closed day 25 October: account/campaign complete, groups/ads incomplete; all other displayed readiness checks complete. Public Profile catalog denies access while management role admin and approved mutation/activation gates open. No grant or provider write was performed.
+
+Source now falls back to complete same-run account-bound provider campaign catalogs when DAY campaign response is complete/empty and no DAY parent IDs exist. Sends actual child stats requests; preflights both levels together against existing 500-call limit without trimming parents/days or raising limits. Transient ID list is removed before storing summaries/diagnostics. Child [] responses stay explicitly partial; no zero-performance proof is invented. 62 parents × 1 day × 2 levels = 124 minimum calls; 7 days = 868 must fail preflight. Live one-day read sync and provider responses remain required after publication. No claim Saudi readiness is fixed on production.
+
+Checkpoint 01430aba7a4b53c60b7994ecf3d739a9e046628e passed all 13 listed workflow runs, including CodeQL/Security, affected Snapchat suites, actual Mongo, frontend tests/build, candidate A/B build and candidate intent. New fallback source and CTA explanatory text need fresh CI. Local fallback suite 95 passed/1.86s. No source/intent B pair is frozen yet; never reuse the 01430 candidate for new source bytes.
