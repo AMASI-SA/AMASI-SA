@@ -482,5 +482,44 @@
     "true_connection_recovery": "NOT complete; verifiedOAuthrelink or atomicallaccountwritercontract needed",
     "independent_review": "Accepted bounded diagnosticWIP only: both original repros fixed; full globaldoc unchanged; malformedrows rejected beforezeros;29localpass2Mongo skip",
     "verified_code_checkpoint": "e1772c18a233d21e7a05a1c66b137f850c5515f1"
+  },
+  "continuation_20261026": {
+    "scope": "Google reporting prevention, owner seasonal context, disabled standing budget WIP",
+    "main": {
+      "branch": "codex/google-completion-20261026",
+      "pr": 1549,
+      "verified_code": "ef9d01cf44b9f639b9fb9890909de27928d19c48",
+      "status_checkpoint": "578886046a1ce839d9767a7afa0ae0a651a5abed",
+      "status_path": "docs/operations/GOOGLE-COMPLETION-20261026/STATUS.json",
+      "ci": {
+        "run": 40379860237,
+        "backend": 1130,
+        "frontend": 172,
+        "frontend_suites": 16,
+        "build": "success",
+        "root_logs_verified": true
+      },
+      "state": "Draft; not merged/published"
+    },
+    "budget": {
+      "branch": "codex/google-budget-standing-wip-20261026",
+      "pr": 1550,
+      "checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+      "status_path": "docs/operations/GOOGLE-BUDGET-STANDING-20261026/STATUS.json",
+      "runtime_enabled": false,
+      "replica_run": 40380341701,
+      "replica_state": "in_progress"
+    },
+    "live_baseline": {
+      "account": "5052346701",
+      "connection": "connected",
+      "campaigns": 22,
+      "manage_paused_test_campaign": "opened readonly successfully",
+      "restored_by_this_work": false
+    },
+    "blocker": "Emergent home usable, but project app.emergent.sh/chat DOM/screenshot timed out; no /app guard access, no lease/publish",
+    "provider_writes": 0,
+    "production_changed": false,
+    "remaining": "Natural language extraction, sourced ranking/category membership, cross-platform attribution, atomic OAuth generation contract, all guarded writers and launch cycle incomplete. Do not claim100%."
   }
 }
