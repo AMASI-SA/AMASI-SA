@@ -155,4 +155,4 @@ jobs:
           grep -q 'المنصة: الصرف وتكلفة الطلب' "$TABLE"
           grep -q 'tooltip={adsExecutiveTooltip}' "$CARD"
           grep -q 'testid="advanced-profit-ads-details"' "$ADVANCED"
-          grep -q '<AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} />' "$ADVANCED"
+          grep -Fq '<AdsExecutiveBreakdownTable data={data?.ads_v2?.executive_breakdown} snapchatAccounts=' "$ADVANCED"
