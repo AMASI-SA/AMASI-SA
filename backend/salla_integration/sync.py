@@ -896,6 +896,7 @@ async def run_orders_sync(
     errors_sample: list[dict] = []
     pages_fetched = 0
     last_total_pages = 0
+    pagination_exhausted = False
     attribution_details_fetched = 0
     attribution_orders_recovered = 0
     attribution_recovery_errors = 0
@@ -930,9 +931,14 @@ async def run_orders_sync(
                 })
                 raise
 
-            data = resp.get("data") or []
+            if not isinstance(resp, dict) or not isinstance(resp.get("data"), list):
+                raise ValueError("invalid Salla orders page: data must be a list")
+            data = resp["data"]
             pages_fetched += 1
             if not data:
+                # An empty page only establishes the end when it does not
+                # contradict an earlier declared page count.
+                pagination_exhausted = not last_total_pages or page > last_total_pages
                 break
 
             for raw in data:
@@ -1015,13 +1021,16 @@ async def run_orders_sync(
             )
 
             if total_pages and current_page >= total_pages:
+                pagination_exhausted = current_page == page == total_pages == last_total_pages
                 break
 
             page += 1
             # Be polite to Salla's rate limiter
             await asyncio.sleep(0.25 if from_date and to_date else 0.15)
 
-        truncated = bool(last_total_pages and last_total_pages > max_pages)
+        # Hitting the page cap without an observed end is incomplete even
+        # when the provider omitted its total-pages metadata.
+        truncated = not pagination_exhausted
         await finish_sync_log(db, log_id, "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
@@ -1065,7 +1074,7 @@ async def run_orders_sync(
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
         "source_total_pages": last_total_pages,
-        "truncated": bool(last_total_pages and last_total_pages > max_pages),
+        "truncated": truncated,
         "attribution_details_fetched": attribution_details_fetched,
         "attribution_orders_recovered": attribution_orders_recovered,
         "attribution_recovery_errors": attribution_recovery_errors,
