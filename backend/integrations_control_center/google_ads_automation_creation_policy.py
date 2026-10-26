@@ -22,6 +22,7 @@ from . import google_ads_automation_creation_contract as contract
 from . import google_ads_automation_policy as base
 from .google_ads_ai import PRODUCT_COLLECTION, PRODUCT_PROJECTION, _public_product
 from .google_ads_client import GoogleAdsClient, identifier, problem
+from .google_ads_campaign_builder import _display_width
 from .google_ads_management import account_client
 from .google_ads_workspace import compatible_read
 
@@ -124,13 +125,18 @@ def public_creation_policy(row, account_id, current):
     expiry = contract._instant(row.get("expires_at"))
     expired = expiry is None or expiry <= current
     stamp = contract._instant(row.get("activated_at"))
-    proof = (type(row.get("activation_version")) is int and row["activation_version"] == 1
+    proof = (type(row.get("revision")) is int and row["revision"] >= 1
+        and type(row.get("activation_version")) is int and row["activation_version"] == 1
         and type(row.get("activation_revision")) is int and row["activation_revision"] == row.get("revision")
         and row.get("activated_by") == row.get("user_id") and stamp is not None and stamp <= current)
     in_flight = row.get("_dispatch_claim") is not None or row.get("_creation_claim") is not None
+    blockers = list(row.get("configuration_blockers") or [])
+    if row.get("auto_enable_new") is True and "auto_enable_not_implemented" not in blockers:
+        blockers.append("auto_enable_not_implemented")
     return {**{key: row[key] for key in PUBLIC_FIELDS if key in row}, "configured": True,
         "executor_available": available, "expired": expired,
-        "effective_enabled": bool(available and row.get("enabled") is True and proof and not expired and not row.get("configuration_blockers")),
+        "configuration_blockers": blockers,
+        "effective_enabled": bool(available and row.get("enabled") is True and proof and not expired and not blockers),
         "activation_required": not proof, "in_flight_authorized": in_flight,
         "provider_writes": 0, "initial_status": "PAUSED", "budget_semantics": "average_daily_not_hard_spend_cap"}
 
@@ -145,8 +151,11 @@ def _expiry(value, current):
 async def _catalog(db, user_id, ids, maximum_age, current):
     scopes, review, blockers, domains = [], [], [], set()
     for selected in ids:
-        row = await db[PRODUCT_COLLECTION].find_one({"user_id": user_id,
-            "$or": [{"salla_product_id": selected}, {"mezan_product_id": selected}]}, PRODUCT_PROJECTION)
+        matches = await db[PRODUCT_COLLECTION].find({"user_id": user_id,
+            "$or": [{"salla_product_id": selected}, {"mezan_product_id": selected}]}, PRODUCT_PROJECTION).to_list(length=2)
+        if len(matches) > 1:
+            raise problem("google_creation_product_ambiguous", "معرف المنتج يطابق أكثر من سجل؛ صحح هوية الكتالوج قبل التفويض.", 409)
+        row = matches[0] if matches else None
         if not row or row.get("user_id") != user_id:
             raise problem("google_creation_product_not_owned", "أحد المنتجات غير متاح ضمن كتالوج متجرك.", 404)
         product = _public_product(row)
@@ -167,6 +176,7 @@ async def _catalog(db, user_id, ids, maximum_age, current):
         if (not isinstance(row.get("source_revision"), str) or not re.fullmatch(r"[a-f0-9]{64}", row["source_revision"])
             or not contract._fresh(row.get("last_synced_at"), current, maximum_age)): codes.append("product_facts_stale")
         if (not contract._plain(row.get("name")) or len(row["name"]) > 500
+            or product["name"] != row.get("name") or (product["sku"] or None) != (row.get("sku") or None)
             or (row.get("sku") and (not contract._plain(row["sku"]) or len(row["sku"]) > 160))):
             codes.append("product_copy_unproved")
         blockers.extend(f"{code}:{scope.product_id}" for code in codes)
@@ -204,6 +214,25 @@ async def _native(db, user_id, account_id, geos, client_factory):
         await client.close()
 
 
+def _creative_blockers(template, products):
+    """Check the concrete reviewed expansion without fabricating native proof."""
+    blocked = []
+    for product in products:
+        fields = {"product_name": product["name"], "product_short_name": product["product_short_name"], "sku": product["sku"]}
+        try:
+            headlines = [contract._render(text, fields) for text in template.headlines]
+            descriptions = [contract._render(text, fields) for text in template.descriptions]
+            keywords = [contract._render(item.text, fields) for item in template.keywords]
+            names = [contract._render(text, fields) for text in (template.campaign_name, template.group_name)]
+            if (any(not 1 <= _display_width(text) <= 30 for text in headlines) or any(not 1 <= _display_width(text) <= 90 for text in descriptions)
+                or any(not 1 <= len(text) <= 80 or len(text.split()) > 10 for text in keywords)
+                or any(not 1 <= len(text) <= 255 for text in names)):
+                raise ValueError()
+        except (contract.CreationContractError, ValueError):
+            blocked.append("creative_asset_limit:" + product["product_id"])
+    return blocked
+
+
 def _changed():
     raise problem("google_creation_policy_changed", "تغيرت سياسة الإنشاء؛ أعد تحميل النسخة المحفوظة قبل المتابعة.", 409)
 
@@ -230,6 +259,8 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
     @router.put(root)
     async def save(account_id: str, body: CreationPolicySave, user=Depends(current_user)):
         actor = await base._owner(db, user)
+        if body.auto_enable_new:
+            raise problem("google_creation_auto_enable_unavailable", "التفعيل اللاحق غير مكتمل حاليًا. احفظ التفويض لإنشاء حملات موقوفة فقط.", 422)
         scope = await base._account_scope(db, actor, account_id)
         prior = await db[CREATION_POLICIES].find_one(scope, {"_id": 0})
         if (prior or {}).get("revision", 0) != body.expected_revision: _changed()
@@ -248,6 +279,7 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         current, revision = now(), body.expected_revision + 1
         template = contract.ApprovedSearchRSATemplate.model_validate({**template_input,
             "approved_version": body.template.version, "approved_by": actor["user_id"], "approved_at": current.isoformat()})
+        blockers += _creative_blockers(template, products)
         values = body.model_dump(exclude={"expected_revision", "product_ids", "template", "acknowledge_template", "enabled"})
         try:
             approved = contract.GoogleAutomationCreationPolicy.model_validate({**values, **scope, "schema_version": 1,
@@ -298,10 +330,10 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
             or template.version != settings.template_version or template.template_id != settings.template_id
             or contract._instant(template.approved_at) is None or contract._instant(template.approved_at) > now()):
             raise problem("google_creation_template_unapproved", "القالب الحالي يحتاج اعتماد المالك مجددًا.", 409)
-        if settings.auto_enable_new and body.acknowledge_auto_enable is not True:
-            raise problem("google_creation_enable_ack_required", "راجع واعتمد سماح التفعيل اللاحق ضمن الميزانية قبل تشغيل التفويض.", 422)
+        if settings.auto_enable_new:
+            raise problem("google_creation_auto_enable_unavailable", "التفعيل اللاحق غير مكتمل حاليًا؛ أعد حفظ السياسة بإنشاء حملات موقوفة فقط.", 409)
         scopes, products, blockers, domain = await _catalog(db, actor["user_id"], [p.product_id for p in settings.product_scopes], settings.catalog_max_age_seconds, now())
-        if blockers:
+        if blockers or _creative_blockers(template, products):
             raise problem("google_creation_products_not_ready", "أحد المنتجات مخفي أو غير متاح أو يحتاج تحديث بياناته؛ احفظ السياسة وراجعها بعد التحديث.", 409)
         prior_products = {p["product_id"]: (p.get("source_revision"), p.get("name"), p.get("final_url")) for p in row.get("product_review", [])}
         if (domain != settings.allowed_domain or scopes != [p.model_dump() for p in settings.product_scopes]
@@ -316,8 +348,18 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         current, revision = now(), body.expected_revision + 1
         _expiry(settings.expires_at, current)
         _, final_products, final_blockers, _ = await _catalog(db, actor["user_id"], [p.product_id for p in settings.product_scopes], settings.catalog_max_age_seconds, current)
-        if (final_blockers or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"]) for p in final_products)):
+        if (final_blockers or _creative_blockers(template, final_products)
+            or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"]) for p in final_products)):
             raise problem("google_creation_product_review_changed", "تغيرت جاهزية المنتج أثناء التحقق؛ راجع السياسة مجددًا.", 409)
+        # The final catalog read is awaited: authority and runtime may have
+        # changed while it was in flight. Check again after that boundary.
+        await base._owner(db, user)
+        await base._account_scope(db, actor, account_id)
+        _require_runtime()
+        current = now()
+        _expiry(settings.expires_at, current)
+        if any(not contract._fresh(p.get("last_synced_at"), current, settings.catalog_max_age_seconds) for p in final_products):
+            raise problem("google_creation_products_not_ready", "تحتاج حقائق المنتج تحديثًا قبل تفعيل الإنشاء.", 409)
         changed = await db[CREATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
             {"$set": {"enabled": True, "revision": revision, "activation_version": 1, "activation_revision": revision,
                 "activated_by": actor["user_id"], "activated_at": current.isoformat(), "configuration_blockers": [],

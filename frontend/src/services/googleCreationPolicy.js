@@ -7,7 +7,7 @@ function endpoint(accountId) {
     return `${GOOGLE_ADS_ROOT}/automation/creation-policy/${id}`;
 }
 export const getGoogleCreationPolicy = (accountId, { signal } = {}) => api.get(endpoint(accountId), { signal }).then((result) => result.data);
-export const saveGoogleCreationPolicy = (accountId, payload, { signal } = {}) => api.put(endpoint(accountId), { ...payload, enabled: false }, { signal }).then((result) => result.data);
+export const saveGoogleCreationPolicy = (accountId, payload, { signal } = {}) => api.put(endpoint(accountId), { ...payload, enabled: false, auto_enable_new: false }, { signal }).then((result) => result.data);
 export const revokeGoogleCreationPolicy = (accountId, revision, { signal } = {}) => api.post(`${endpoint(accountId)}/revoke`, { expected_revision: revision }, { signal }).then((result) => result.data);
 export function activateGoogleCreationPolicy(accountId, revision, acknowledgements, { signal } = {}) {
     if (acknowledgements?.creation !== true || acknowledgements?.creative !== true || typeof acknowledgements?.autoEnable !== "boolean") {

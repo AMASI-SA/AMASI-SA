@@ -103,13 +103,13 @@ test("activation requires independent creation and creative acknowledgements and
     expect(api.put).not.toHaveBeenCalled();
 });
 
-test("auto-enable permission needs an additional explicit acknowledgement", async () => {
+test("unsupported launch permission is disabled and cannot activate a legacy row", async () => {
     api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/products") ? { items: [product] } : { ...saved, executor_available: true, auto_enable_new: true } }));
-    await render(); await clickAck("اعتماد إنشاء الحملات تلقائيًا"); await clickAck("اعتماد النصوص والمنتجات المحفوظة");
+    await render();
+    expect(container.querySelector('[aria-label="التفعيل اللاحق للحملات الجديدة غير متاح"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="التفعيل اللاحق للحملات الجديدة غير متاح"]').checked).toBe(false);
     expect(button("تفعيل تفويض الإنشاء ضمن هذه الحدود").disabled).toBe(true);
-    await clickAck("اعتماد التفعيل اللاحق ضمن التمويل المثبت");
-    await act(async () => button("تفعيل تفويض الإنشاء ضمن هذه الحدود").click());
-    expect(api.post.mock.calls[0][1].acknowledge_auto_enable).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
 });
 
 test("conflict keeps edited copy but blocks another write until explicit reload", async () => {
@@ -149,7 +149,23 @@ test("revocation sends scoped CAS and reports already authorized work may finish
 });
 
 test("service save cannot enable configuration and activation cannot coerce acknowledgements", async () => {
-    await saveGoogleCreationPolicy("123", { enabled: true }); expect(api.put.mock.calls[0][1].enabled).toBe(false);
+    await saveGoogleCreationPolicy("123", { enabled: true, auto_enable_new: true }); expect(api.put.mock.calls[0][1].enabled).toBe(false);
+    expect(api.put.mock.calls[0][1].auto_enable_new).toBe(false);
     await expect(activateGoogleCreationPolicy("123", 3, { creation: 1, creative: true, autoEnable: false })).rejects.toThrow();
     expect(api.post).not.toHaveBeenCalled();
+});
+
+test("reloading during product search resets busy state and ignores its late failure", async () => {
+    let rejectSearch;
+    api.get.mockImplementation((url, options) => url.endsWith("/products") && options.params?.query === "old"
+        ? new Promise((_, reject) => { rejectSearch = reject; })
+        : Promise.resolve({ data: url.endsWith("/products") ? { items: [product] } : saved }));
+    await render(); await input("بحث منتجات سياسة الإنشاء", "old");
+    await act(async () => button("بحث المنتجات").click());
+    expect(button("بحث المنتجات").disabled).toBe(true);
+    await act(async () => button("إعادة تحميل سياسة الإنشاء").click());
+    expect(button("بحث المنتجات").disabled).toBe(false);
+    await act(async () => rejectSearch(new Error("old search failed")));
+    expect(container.textContent).not.toContain("تعذر البحث في المنتجات");
+    expect(button("بحث المنتجات").disabled).toBe(false);
 });

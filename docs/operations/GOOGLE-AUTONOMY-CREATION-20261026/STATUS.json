@@ -1,14 +1,15 @@
 {
   "state": "WIP NOT WIRED / NOT DEPLOYABLE",
-  "branch": "codex/google-autonomy-creation-wip-20261026",
   "pure_contract_tests": 98,
-  "policy_agent_reported_tests": "36policy;134withcontract; frontend15written pendingexactCI; rootnotyetintegrated",
+  "policy_tests": "46hermetic;272combinedwithcontract+nativebuilder pass;3actualMongo locallyskipped",
+  "policy_independent_review": "all5findings reproduced/fixed/reverified;no furthermaterialblocker",
+  "plan_tests": "23pass;167combinedwithcontract+policy; advancingclock91s regression",
+  "frontend": "15writtenNOTexecutedlocally; exactCIrequired",
   "provider_writes": 0,
   "remaining": [
-    "Finish authority, native creation gateway, readonly planner",
-    "Wire routes/UI/worker and verify full integration, concurrency and Mongo",
-    "Separate owner-funded launch capability not implemented; creation always PAUSED",
-    "Fresh production-based source CI/intent before any merge"
-  ],
-  "preserved_manual_test_campaign": "never automatically adopt"
+    "Finishauthoritylogicalreservation/tests+nativegatewayindependentaudit",
+    "FinishcreationworkerandwireUI/routes/runner/CI",
+    "Fullcurrent-production-basedCIandMongo beforemerge/intent",
+    "Automaticfundedlaunchseparateunfinished; onlyPAUSEDsupported"
+  ]
 }

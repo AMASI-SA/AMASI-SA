@@ -25,6 +25,11 @@ class Collection:
     async def find_one(self, scope, projection=None):
         return next((deepcopy(row) for row in self.rows if matches(row, scope)), None)
     async def create_index(self, keys, **kwargs): self.indexes.append((keys, kwargs))
+    def find(self, scope, projection=None):
+        rows = [deepcopy(row) for row in self.rows if matches(row, scope)]
+        class Cursor:
+            async def to_list(self, length): return rows[:length]
+        return Cursor()
     async def insert_one(self, row):
         if any(all(prior.get(key) == row.get(key) for key in ("user_id", "account_id")) for prior in self.rows):
             raise DuplicateKeyError("duplicate")
@@ -181,11 +186,11 @@ async def test_activation_is_separate_requires_all_acknowledgements_and_preserve
     target, db, calls = app(monkeypatch)
     monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
-        assert (await client.put("/google_ads/automation/creation-policy/123", json=body(auto_enable_new=True))).status_code == 200
+        assert (await client.put("/google_ads/automation/creation-policy/123", json=body())).status_code == 200
         db.policies.rows[0].update(_creation_claim={"private": "claim"}, _creation_days=["private quota"])
         payload = {"expected_revision": 1, "acknowledge_creation": True, "acknowledge_creative": True}
-        assert (await client.post("/google_ads/automation/creation-policy/123/activate", json=payload)).status_code == 422
-        response = await client.post("/google_ads/automation/creation-policy/123/activate", json={**payload, "acknowledge_auto_enable": True})
+        assert (await client.post("/google_ads/automation/creation-policy/123/activate", json={**payload, "acknowledge_creative": False})).status_code == 422
+        response = await client.post("/google_ads/automation/creation-policy/123/activate", json=payload)
     assert response.status_code == 200, response.text
     row = db.policies.rows[0]
     assert row["enabled"] is True and row["revision"] == row["activation_revision"] == 2
@@ -274,3 +279,102 @@ async def test_owner_revocation_during_native_activation_read_defeats_activation
     async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
         response = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1, "acknowledge_creation": True, "acknowledge_creative": True})
     assert response.status_code == 409 and db.policies.rows[0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_rendered_rsa_limits_must_be_reviewed_before_activation(monkeypatch):
+    target, db, _ = app(monkeypatch)
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    payload = body(); payload["template"]["headlines"][0] = "{product_name}"
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        saved = await client.put("/google_ads/automation/creation-policy/123", json=payload)
+        assert saved.status_code == 200 and "creative_asset_limit:1" in saved.json()["configuration_blockers"]
+        activated = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1, "acknowledge_creation": True, "acknowledge_creative": True})
+    assert activated.status_code == 409 and db.policies.rows[0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_product_changed_to_hidden_during_metadata_read_cannot_activate(monkeypatch):
+    target, db, _ = app(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        assert (await client.put("/google_ads/automation/creation-policy/123", json=body())).status_code == 200
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    async def hide_during_native(*args, **kwargs):
+        db.products.rows[0]["status"] = "inactive"
+        return [{"geoTargetConstant": {"id": "2682", "status": "ENABLED"}}], True, []
+    monkeypatch.setattr(policy, "compatible_read", hide_during_native)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        response = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1, "acknowledge_creation": True, "acknowledge_creative": True})
+    assert response.status_code == 409 and db.policies.rows[0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_unimplemented_launch_permission_is_rejected_and_legacy_rows_are_not_effective(monkeypatch):
+    target, db, _ = app(monkeypatch)
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        unsupported = await client.put("/google_ads/automation/creation-policy/123", json=body(auto_enable_new=True))
+        assert unsupported.status_code == 422 and unsupported.json()["detail"]["code"] == "google_creation_auto_enable_unavailable"
+        assert db.policies.rows == []
+        assert (await client.put("/google_ads/automation/creation-policy/123", json=body())).status_code == 200
+        db.policies.rows[0].update(auto_enable_new=True, enabled=True, activation_version=1,
+            activation_revision=1, activated_by="owner", activated_at=NOW.isoformat())
+        read = await client.get("/google_ads/automation/creation-policy/123")
+        assert read.json()["effective_enabled"] is False and "auto_enable_not_implemented" in read.json()["configuration_blockers"]
+        activated = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1,
+            "acknowledge_creation": True, "acknowledge_creative": True, "acknowledge_auto_enable": True})
+    assert activated.status_code == 409
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("changes", [{"name": "هدية a@b.com"}, {"name": "هودي " * 60}, {"sku": "AMS / private"}])
+async def test_owner_approved_expansion_cannot_differ_from_raw_creator_fields(monkeypatch, changes):
+    target, db, _ = app(monkeypatch)
+    db.products.rows[0].update(changes)
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        saved = await client.put("/google_ads/automation/creation-policy/123", json=body())
+        assert saved.status_code == 200 and "product_copy_unproved:1" in saved.json()["configuration_blockers"]
+        activated = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1,
+            "acknowledge_creation": True, "acknowledge_creative": True})
+    assert activated.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_product_alias_ambiguity_cannot_select_an_arbitrary_owned_row(monkeypatch):
+    target, db, calls = app(monkeypatch)
+    duplicate = deepcopy(db.products.rows[0]); duplicate.update(salla_product_id="2", mezan_product_id="1")
+    db.products.rows.append(duplicate)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        response = await client.put("/google_ads/automation/creation-policy/123", json=body())
+    assert response.status_code == 409 and response.json()["detail"]["code"] == "google_creation_product_ambiguous"
+    assert db.policies.rows == [] and calls["metadata"] == 0
+
+
+@pytest.mark.asyncio
+async def test_owner_permission_revoked_during_final_catalog_read_denies_activation(monkeypatch):
+    target, db, _ = app(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        assert (await client.put("/google_ads/automation/creation-policy/123", json=body())).status_code == 200
+    original, reads = policy._catalog, 0
+    async def revoke_after_final_read(*args, **kwargs):
+        nonlocal reads
+        result = await original(*args, **kwargs); reads += 1
+        if reads == 2: db.users.rows[0]["disabled"] = True
+        return result
+    monkeypatch.setattr(policy, "_catalog", revoke_after_final_read)
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        response = await client.post("/google_ads/automation/creation-policy/123/activate", json={"expected_revision": 1,
+            "acknowledge_creation": True, "acknowledge_creative": True})
+    assert response.status_code == 403 and db.policies.rows[0]["enabled"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,text", [("headlines", "冬" * 16), ("descriptions", "冬" * 46)])
+async def test_rsa_review_uses_google_display_width_not_python_character_count(monkeypatch, field, text):
+    target, db, _ = app(monkeypatch)
+    payload = body(); payload["template"][field][0] = text
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        response = await client.put("/google_ads/automation/creation-policy/123", json=payload)
+    assert response.status_code == 200 and "creative_asset_limit:1" in response.json()["configuration_blockers"]

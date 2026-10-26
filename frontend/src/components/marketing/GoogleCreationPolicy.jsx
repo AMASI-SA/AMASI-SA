@@ -7,7 +7,7 @@ const BUTTON = "rounded-lg border px-3 py-2 text-sm font-bold disabled:opacity-4
 const NUMBERS = [["owner_generation", "جيل الإنشاء", 1, 2147483647], ["template_version", "إصدار القالب", 1, 2147483647],
     ["max_paused_campaigns", "أقصى حملات جديدة موقوفة", 1, 20], ["max_daily_creations", "أقصى إنشاءات في يوم الحساب", 1, 20],
     ["max_total_creations", "أقصى إنشاءات إجمالًا", 1, 100], ["catalog_max_age_seconds", "أقصى عمر لبيانات المنتج · ثانية", 60, 86400]];
-const BLOCKERS = { product_not_public: "المنتج مخفي أو مؤرشف", product_out_of_stock: "المنتج غير متاح بالمخزون", product_facts_stale: "حدّث حقائق المنتج", product_copy_unproved: "راجع النص الأصلي للمنتج" };
+const BLOCKERS = { product_not_public: "المنتج مخفي أو مؤرشف", product_out_of_stock: "المنتج غير متاح بالمخزون", product_facts_stale: "حدّث حقائق المنتج", product_copy_unproved: "راجع النص الأصلي للمنتج", creative_asset_limit: "النص بعد الاستبدال يحتاج تعديلًا لحدود جوجل", auto_enable_not_implemented: "التفعيل اللاحق غير متاح؛ أعد حفظ السياسة بإنشاء موقوف فقط" };
 function localDate(value) {
     if (!value || !Number.isFinite(new Date(value).getTime())) return "";
     const date = new Date(value);
@@ -22,7 +22,7 @@ function formFrom(row) {
         budget_native: row.budget_native || "", max_account_daily_budget_native: row.max_account_daily_budget_native || "",
         geo_target_ids: (row.geo_target_ids || []).join("\n"), max_paused_campaigns: String(row.max_paused_campaigns || ""),
         max_daily_creations: String(row.max_daily_creations || ""), max_total_creations: String(row.max_total_creations || ""),
-        catalog_max_age_seconds: String(row.catalog_max_age_seconds || ""), expires_at: localDate(row.expires_at), auto_enable_new: row.auto_enable_new === true };
+        catalog_max_age_seconds: String(row.catalog_max_age_seconds || ""), expires_at: localDate(row.expires_at), auto_enable_new: false };
 }
 function lines(value) { return String(value).split("\n").map((line) => line.trim()).filter(Boolean); }
 function inputError(message) { const failure = new Error(message); failure.creationInput = true; throw failure; }
@@ -59,6 +59,7 @@ function CreationPanel({ accountId }) {
     useEffect(() => {
         let active = true; const controller = new AbortController(); request.current = controller;
         search.current?.abort(); const initialSearchGeneration = ++searchRevision.current;
+        setSearching(false);
         setBusy(true); setError(""); setNotice("");
         getGoogleCreationPolicy(accountId, { signal: controller.signal }).then((result) => {
             if (active) { setRow(result); setForm(formFrom(result)); setDirty(false); setTemplateAck(false); setConflict(false); setAcks({ creation: false, creative: false, autoEnable: false }); }
@@ -74,7 +75,7 @@ function CreationPanel({ accountId }) {
         const generation = ++searchRevision.current;
         setSearching(true);
         try { const result = await getGoogleProducts({ query, limit: 50, signal: controller.signal }); if (mounted.current && generation === searchRevision.current) setProducts(result.items || []); }
-        catch (failure) { if (mounted.current && !isGoogleRequestCancelled(failure)) setError("تعذر البحث في المنتجات. بقي اختيارك محفوظًا."); }
+        catch (failure) { if (mounted.current && generation === searchRevision.current && !isGoogleRequestCancelled(failure)) setError("تعذر البحث في المنتجات. بقي اختيارك محفوظًا."); }
         finally { if (mounted.current && generation === searchRevision.current) setSearching(false); }
     }
     async function mutate(kind) {
@@ -97,7 +98,7 @@ function CreationPanel({ accountId }) {
         } finally { inflight.current = false; if (mounted.current) setBusy(false); }
     }
     const choices = [...products, ...(row?.product_review || []).filter((old) => !products.some((item) => item.product_id === old.product_id))];
-    const canActivate = row?.executor_available === true && !row?.effective_enabled && !(row?.configuration_blockers || []).length && !dirty && !busy && !conflict;
+    const canActivate = row?.executor_available === true && row?.auto_enable_new !== true && !row?.effective_enabled && !(row?.configuration_blockers || []).length && !dirty && !busy && !conflict;
     return <details className="rounded-2xl border bg-white p-4" aria-label="سياسة إنشاء حملات جوجل">
         <summary className="cursor-pointer font-black">سياسة إنشاء حملات جوجل</summary>
         <p className="mt-3 text-sm leading-7">إنشاء SEARCH بإعلان RSA من المنتجات والقالب المعتمدين فقط. تبدأ الحملة موقوفة. الحفظ وحده لا يفعل الإنشاء ولا يغيّر الحملات الحالية.</p>
@@ -117,7 +118,7 @@ function CreationPanel({ accountId }) {
                     <label className="text-sm font-bold">معرفات الاستهداف الجغرافي<textarea required aria-label="معرفات استهداف الإنشاء" className={INPUT} value={form.geo_target_ids} onChange={(event) => edit("geo_target_ids", event.target.value)} /></label>
                 </div>
                 <p className="text-xs leading-6 text-slate-500">الأموال بعملة حساب جوجل الأصلية. الميزانيات متوسطات يومية وليست سقفًا للصرف الفعلي. يُعاد إثبات التمويل قبل أي تفعيل؛ لا نخفض الحملات القائمة تلقائيًا لتمويل حملة جديدة. زيادة جيل الإنشاء أو إصدار القالب قرار صريح لنية إنشاء جديدة.</p>
-                <label className="block text-sm"><input type="checkbox" checked={form.auto_enable_new} onChange={(event) => edit("auto_enable_new", event.target.checked)} /> السماح بالتفعيل اللاحق للحملات الجديدة بعد إثبات ملكيتها وتوفر التمويل</label>
+                <label className="block text-sm"><input type="checkbox" checked={false} disabled readOnly aria-label="التفعيل اللاحق للحملات الجديدة غير متاح" /> التفعيل اللاحق للحملات الجديدة غير متاح في هذه المرحلة؛ تنشأ الحملات موقوفة فقط.</label>
                 <div className="grid gap-3 sm:grid-cols-2">{[["template_id", "معرف القالب"], ["campaign_name", "اسم الحملة من القالب"], ["group_name", "اسم المجموعة من القالب"]].map(([key, label]) => <label key={key} className="text-sm font-bold">{label}<input required aria-label={label} className={INPUT} value={form[key]} onChange={(event) => edit(key, event.target.value)} /></label>)}</div>
                 <p className="text-xs leading-6 text-slate-500">المتغيرات المسموح بها فقط: {"{product_name}"}، {"{product_short_name}"}، {"{sku}"}. الاسم المختصر بداية الاسم الأصلي عند حدود الكلمات، دون اختراع نص أو ادعاء. يجب أن يطابق النص حد جوجل بعد الاستبدال.</p>
                 {[["headlines", "عناوين RSA · 3 إلى 15"], ["descriptions", "أوصاف RSA · 2 إلى 4"], ["keywords", "الكلمات المفتاحية · PHRASE: أو EXACT:"]].map(([key, label]) => <label key={key} className="block text-sm font-bold">{label}<textarea required rows={3} aria-label={label} className={INPUT} value={form[key]} onChange={(event) => edit(key, event.target.value)} /></label>)}
@@ -133,7 +134,7 @@ function CreationPanel({ accountId }) {
             {(row.product_review || []).map((product) => <article key={product.product_id} className="my-2 rounded-lg bg-white p-3"><p className="font-bold">{product.name}</p><p dir="ltr">{product.final_url}</p><ul>{(row.template?.headlines || []).map((text, index) => <li key={`h${index}`}>{creativeText(text, product)}</li>)}{(row.template?.descriptions || []).map((text, index) => <li key={`d${index}`}>{creativeText(text, product)}</li>)}</ul></article>)}
             {dirty && <p>احفظ التعديلات ثم راجع النسخة الجديدة قبل التفعيل.</p>}
             {row.executor_available !== true && <p>التفعيل غير متاح حتى اكتمال جاهزية مسار الإنشاء الآلي.</p>}
-            {[['creation', 'اعتماد إنشاء الحملات تلقائيًا'], ['creative', 'اعتماد النصوص والمنتجات المحفوظة'], ...(row.auto_enable_new ? [['autoEnable', 'اعتماد التفعيل اللاحق ضمن التمويل المثبت']] : [])].map(([key, label]) => <label key={key} className="block"><input aria-label={label} type="checkbox" disabled={!canActivate} checked={acks[key]} onChange={(event) => setAcks((value) => ({ ...value, [key]: event.target.checked }))} /> {label}</label>)}
+            {[['creation', 'اعتماد إنشاء الحملات تلقائيًا'], ['creative', 'اعتماد النصوص والمنتجات المحفوظة']].map(([key, label]) => <label key={key} className="block"><input aria-label={label} type="checkbox" disabled={!canActivate} checked={acks[key]} onChange={(event) => setAcks((value) => ({ ...value, [key]: event.target.checked }))} /> {label}</label>)}
             <button type="button" className={`${BUTTON} mt-3`} disabled={!canActivate || !acks.creation || !acks.creative || (row.auto_enable_new && !acks.autoEnable)} onClick={() => mutate("activate")}>تفعيل تفويض الإنشاء ضمن هذه الحدود</button>
             <button type="button" className={`${BUTTON} mr-2 mt-3 text-red-800`} disabled={busy || conflict} onClick={() => mutate("revoke")}>إلغاء تفويض الإنشاء</button>
         </section>}
