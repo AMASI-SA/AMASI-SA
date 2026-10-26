@@ -1,0 +1,32 @@
+{
+  "task_id": "TIKTOK-FILE-INIT-DIAGNOSTICS-20261026",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/tiktok-file-init-diagnostics-r3-20261026",
+  "source_base": "11a52dd933d7269cd80046219dcd93d5a6e62297",
+  "state": "R3_SOURCE_ABOVE_CURRENT_GOOGLE_PRODUCTION_CI_PENDING",
+  "request": "Publish the attached merchant shawl video from Mezan. User explicitly allows any publishing option, then reiterates Mezan only. No native-web authentication retry.",
+  "parent_evidence": "codex/tiktok-file-preview-csp-r7-evidence-20261026 at 36efc06d4014d6ebfc897603052c12ef30b16019",
+  "live_result": "Exactly one approved SELF_ONLY real-file proposal on متجر اماسي reconciles blocked before transfer. No successful post or bytes transferred. Never repeat this approval blindly.",
+  "verified_gap": "Native allowlisted rejection becomes HTTP502; owner history omits safe failure code; frontend retains a stale preparing phase. Regression failed 502 != expected409 before fix.",
+  "change": "Persist and expose fixed allowlisted initialization diagnostic without raw native messages or capabilities; definitive rejection409; unknown outcomes retain uncertainty fence; clear stale UI phase.",
+  "verification": "Exact diagnostic source patch initially reproduced502!=409, then27localPASS18SKIP; prior current-source native CI557realMongo and166frontend PASS. R2 native first runfailed with unreadable remote logs; unchanged isolated rerunPASSED. R3 fresh current-head checks required.",
+  "production_changed": false,
+  "next": "Run focused real Mongo/backend and frontend regression checks, review diff, push recoverable source checkpoint/PR. Follow current-head CI and v5 sourceA/intentB rehearsal before any authorized release. Actual original native rejection remains unknown. No campaign/model/credential changes.",
+  "superseded_pairs": [
+    {
+      "pr": 1554,
+      "A": "820ce2582715da52d300d7ba13925719f7c86c40",
+      "B": "e6595104fcc4117e38d180382cf14ada3008bce3",
+      "reason": "Production advanced to reviewed Snapchat1553",
+      "not_deployed": true
+    },
+    {
+      "pr": 1556,
+      "A": "062053ff712fc26f9f578becfaac079a5bf2c115",
+      "B": "476c53096ba028a391c9d4e8f78258075ba23325",
+      "reason": "Production advanced to reviewed Google1555",
+      "not_deployed": true
+    }
+  ],
+  "original_host_repair": "Failed prior rehearsalENOSPC on/app: removed only436MiB regenerable toolcache/yarn after guardinactive/no active build. appfree936MiB; Node/source/env/data preserved. Subsequent own rehearsal uses separate/tmp YARN_CACHE_FOLDER, still running at last observation."
+}

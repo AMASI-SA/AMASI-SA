@@ -18,7 +18,7 @@ from pymongo.errors import DuplicateKeyError
 from .tiktok_creator_accounts import CREDENTIALS, _signature, aware, now, verified_creator
 from .tiktok_creator_api import BoundedCreatorJSONRoute, TikTokCreatorAPI, admission, mongo, problem
 from .tiktok_content_publishing import settings_proof
-from .tiktok_file_api import MAX_VIDEO_BYTES, TikTokFileAPI, source_info, upload_url
+from .tiktok_file_api import MAX_VIDEO_BYTES, REJECTIONS, REJECTION_MESSAGES, TikTokFileAPI, source_info, upload_url
 from .tiktok_oauth_security import decrypt_tiktok_token, encrypt_tiktok_token
 
 PROPOSALS = "mezan_tiktok_file_proposals_v1"
@@ -130,11 +130,37 @@ def plan(row):
 
 def public(row):
     value = plan(row)
-    return {"proposal_id": row["_id"], "creator_ref": row["creator_ref"], "status": row["status"],
+    result = {"proposal_id": row["_id"], "creator_ref": row["creator_ref"], "status": row["status"],
         "confirmation_digest": row["confirmation_digest"], "input": value["input"], "settings": value["proof"]["settings"],
         "source_info": value["body"]["source_info"], "expires_at": row["expires_at"],
         "uploaded_bytes": row.get("uploaded_bytes"), "public_post_ids": row.get("public_post_ids", []),
         "upload_expires_at": row.get("upload_expires_at"), "created_at": row["created_at"]}
+    if isinstance(row.get("initialization_diagnostic"), dict):
+        result["initialization_diagnostic"] = initialization_diagnostic(row["initialization_diagnostic"])
+    return result
+
+
+def initialization_diagnostic(value):
+    """Only fixed codes and messages may leave persistence; provider text is private."""
+    messages = {
+        "tiktok_file_authorization_changed": "تغير تفويض الحساب قبل تهيئة الرفع. أعد التحقق من ربط الحساب.",
+        "tiktok_file_already_submitted": "سبق بدء هذه العملية. حدّث حالتها قبل أي إرسال جديد.",
+        "tiktok_file_provider_rejected": "رفض TikTok تهيئة رفع الفيديو لهذا الحساب.",
+        "tiktok_file_provider_http_error": "لم تثبت استجابة TikTok. حدّث حالة العملية قبل أي محاولة أخرى.",
+        "tiktok_file_response_unproven": "تعذر التحقق من استجابة TikTok. لا تكرر تهيئة الرفع.",
+        "tiktok_file_transport_failed": "انقطع الاتصال أثناء تهيئة TikTok. حدّث حالة العملية قبل أي محاولة أخرى.",
+        "tiktok_file_upload_destination_unproven": "تعذر إثبات وجهة رفع الملف. حدّث حالة العملية قبل أي محاولة أخرى.",
+        "tiktok_file_initialization_unproven": "لم تثبت نتيجة تهيئة الرفع. حدّث حالة العملية قبل أي محاولة أخرى.",
+    }
+    code = value.get("code")
+    if not isinstance(code, str) or code not in messages:
+        code = "tiktok_file_initialization_unproven"
+    stage = value.get("stage")
+    result = {"code": code, "stage": stage if stage in ("before_initialization", "native_initialization") else "unknown", "message": messages[code]}
+    provider = value.get("provider_code")
+    if code == "tiktok_file_provider_rejected" and isinstance(provider, str) and provider in REJECTIONS:
+        result.update({"provider_code": provider, "message": REJECTION_MESSAGES[provider]})
+    return result
 
 
 async def owned(db, user, identifier):
@@ -220,8 +246,12 @@ async def execute(db, user, identifier, confirmation, *, business_factory=TikTok
         except BaseException as error:
             rejected = isinstance(error, HTTPException) and isinstance(error.detail, dict) and error.detail.get("native_rejected") is True
             status = "blocked" if not submitted or rejected else "uncertain"
+            detail = error.detail if isinstance(error, HTTPException) and isinstance(error.detail, dict) else {}
+            diagnostic = initialization_diagnostic({"code": detail.get("code"),
+                "provider_code": detail.get("provider_code") if rejected else None,
+                "stage": "native_initialization" if submitted else "before_initialization"})
             async def persist():
-                await mongo(db[PROPOSALS].update_one({"_id": identifier, "user_id": user, "status": {"$in": ["previewed", "validating", "submitted"]}}, {"$set": {"status": status}}))
+                await mongo(db[PROPOSALS].update_one({"_id": identifier, "user_id": user, "status": {"$in": ["previewed", "validating", "submitted"]}}, {"$set": {"status": status, "initialization_diagnostic": diagnostic}}))
                 if status == "blocked":
                     await mongo(db[FENCES].update_one({"_id": fence, "user_id": user, "proposal_id": identifier}, {"$set": {"active": False}}))
             await asyncio.shield(persist())
