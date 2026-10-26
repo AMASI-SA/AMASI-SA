@@ -11,7 +11,9 @@ writes to Snapchat, Salla, accounting or Qoyod.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
@@ -22,6 +24,7 @@ from salla_marketing_attribution import (
     attach_projected_salla_attribution,
 )
 from product_cost_revision import get_product_cost_revision
+from resource_governor import ResourcePressure, governor
 
 from . import snapchat_account_timezone_manager as manager
 
@@ -33,6 +36,9 @@ PROFIT_CACHE_TTL_SECONDS = 0
 _FINANCIAL_MATCHED: ContextVar[
     dict[tuple[str, str], list[dict[str, Any]]]
 ] = ContextVar("snapchat_financial_matched_orders", default={})
+_OWNED_FINANCIAL_MATCHED: ContextVar[dict | None] = ContextVar("snapchat_owned_financial_matched", default=None)
+_OWNED_INPUT_TOKEN = object()
+_PROFIT_WORKERS = ThreadPoolExecutor(max_workers=2, thread_name_prefix="snap-created-profit")
 
 _PROFIT_CACHE: dict[
     tuple[
@@ -306,22 +312,52 @@ async def calculate_financial_profitability(
     financial_matched: dict[tuple[str, str], list[dict[str, Any]]],
     campaign_spend: dict[tuple[str, str], float],
     total_spend_sar: float | None = None,
+    _ownership_token: object | None = None,
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, Any]]:
+    # Only the route's private, request-owned inputs can be transferred without
+    # a synchronous snapshot. Public callers retain their original contract.
+    if _ownership_token is not _OWNED_INPUT_TOKEN:
+        financial_matched = deepcopy(financial_matched)
+        campaign_spend = deepcopy(campaign_spend)
     from . import snapchat_campaign_profitability as profitability
 
-    # Freeze caller-owned data before loading cost context, so an await cannot
-    # silently mix an earlier cohort with later mutations to spend or orders.
-    financial_matched = deepcopy(financial_matched)
-    campaign_spend = deepcopy(campaign_spend)
     report_total_spend = (
         round(_float(total_spend_sar), 2)
         if total_spend_sar is not None
         else profitability._total_campaign_spend(campaign_spend)
     )
-    # Cost revision does not cover order membership, policy, catalog identity,
-    # or all component writes. Recalculate using this request's cohort and
-    # current context instead of serving an unverifiable five-minute snapshot.
-    cost_context = await profitability._load_cost_context(db, user_id) if financial_matched else {}
+    # Hold admission until the CPU worker actually finishes, including after
+    # cancellation. No database object is accessed from the worker thread.
+    try:
+        async with governor.heavy("ads", task_name="snapchat_created_profitability"):
+            cost_context = await profitability._load_cost_context(db, user_id) if financial_matched else {}
+            future = asyncio.get_running_loop().run_in_executor(
+                _PROFIT_WORKERS, _calculate_financial_profitability_sync,
+                profitability, financial_matched, campaign_spend, report_total_spend, cost_context,
+            )
+            try:
+                return await asyncio.shield(future)
+            except asyncio.CancelledError:
+                while not future.done():
+                    try:
+                        await asyncio.shield(future)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                if future.done() and not future.cancelled():
+                    future.exception()
+                raise
+    except ResourcePressure as exc:
+        raise manager.SnapchatNativeSyncError(
+            "resource_pressure", "تعذر حساب الربحية الآن بسبب ضغط الموارد؛ حاول مجددًا.",
+            status_code=503, retryable=True,
+        ) from exc
+
+
+def _calculate_financial_profitability_sync(profitability, financial_matched, campaign_spend,
+                                            report_total_spend, cost_context):
+    """CPU-only calculation for a detached or exclusively owned cohort."""
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
     for key, orders in financial_matched.items():
         bucket = profitability._new_campaign_bucket()
@@ -396,6 +432,7 @@ def install_fixed_created_order_semantics() -> None:
             )
         )
         _FINANCIAL_MATCHED.set(financial_matched)
+        _OWNED_FINANCIAL_MATCHED.set(financial_matched)
         return by_campaign, by_date, coverage
 
     outcomes._mezan_fixed_created_orders = True  # type: ignore[attr-defined]
@@ -407,6 +444,7 @@ def install_fixed_created_order_semantics() -> None:
 
     async def report(*args: Any, **kwargs: Any) -> dict[str, Any]:
         token = _FINANCIAL_MATCHED.set({})
+        owner_token = _OWNED_FINANCIAL_MATCHED.set(None)
         try:
             result = dict(await current_report(*args, **kwargs) or {})
             result_source = _text(
@@ -507,6 +545,8 @@ def install_fixed_created_order_semantics() -> None:
                     financial_matched=financial_matched,
                     campaign_spend=campaign_spend,
                     total_spend_sar=spend_total,
+                    _ownership_token=(_OWNED_INPUT_TOKEN
+                        if _OWNED_FINANCIAL_MATCHED.get() is financial_matched else None),
                 )
                 for campaign in campaigns:
                     key = (
@@ -545,6 +585,7 @@ def install_fixed_created_order_semantics() -> None:
             return result
         finally:
             _FINANCIAL_MATCHED.reset(token)
+            _OWNED_FINANCIAL_MATCHED.reset(owner_token)
 
     report._mezan_fixed_created_orders = True  # type: ignore[attr-defined]
     manager.build_account_timezone_campaign_report = report
