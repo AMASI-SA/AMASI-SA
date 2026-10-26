@@ -37,7 +37,7 @@ async def credentials():
 
 async def refresh(collection):
     return await commit_refreshed_credential(collection,user_id='owner',grant_generation='old',token_revision=2,
-        ciphertext='refreshed-encrypted', expires_at=NOW,updated_at=NOW)
+        ciphertext='refreshed-encrypted', expires_at=NOW,updated_at=NOW, operation_id='op_0123456789abcdef')
 
 @pytest.mark.asyncio
 async def test_relink_wins_before_old_refresh_cas(credentials):
@@ -78,3 +78,36 @@ async def test_lost_write_ack_propagates_and_does_not_replay(credentials):
     # This read proves what the test injected, not a general recovery protocol.
     # A competing writer could also produce revision 3; callers need an operation
     # identity before treating unknown acknowledgement as their own success.
+
+@pytest.mark.asyncio
+async def test_concurrent_refresh_same_revision_only_winner_has_positive_proof(credentials):
+    from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
+    async def attempt(op):
+        try:
+            await commit_refreshed_credential(credentials,user_id='owner',grant_generation='old',token_revision=2,
+                ciphertext='encrypted',expires_at=NOW,updated_at=NOW,operation_id=op)
+            return 'committed'
+        except RefreshConflict:
+            return 'conflict'
+    ops=['op_aaaaaaaaaaaaaaaa','op_bbbbbbbbbbbbbbbb']
+    results=await asyncio.gather(*(attempt(op) for op in ops))
+    assert sorted(results) == ['committed','conflict']
+    proofs = [await resolve_refreshed_credential(credentials,user_id='owner',grant_generation='old',token_revision=2,operation_id=op) for op in ops]
+    assert proofs == ['committed' if result == 'committed' else 'unknown' for result in results]
+
+@pytest.mark.asyncio
+async def test_read_only_resolution_of_lost_ack_and_later_relink(credentials):
+    from integrations_control_center.google_oauth_generation import resolve_refreshed_credential
+    class LostAck:
+        calls=0
+        async def update_one(self,*a,**kw):
+            self.calls+=1
+            await credentials.update_one(*a,**kw)
+            raise TimeoutError('lost acknowledgment')
+    wrapper=LostAck()
+    with pytest.raises(TimeoutError): await refresh(wrapper)
+    async def resolve():
+        return await resolve_refreshed_credential(credentials,user_id='owner',grant_generation='old',token_revision=2,operation_id='op_0123456789abcdef')
+    assert await resolve() == 'committed' and wrapper.calls == 1
+    await credentials.update_one({'user_id':'owner'},{'$set':{'grant_generation':'new','token_revision':0}})
+    assert await resolve() == 'unknown' and wrapper.calls == 1

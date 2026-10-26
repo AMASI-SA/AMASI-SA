@@ -69,12 +69,14 @@
   },
   "next_safe_action": "Run real Mongo CI, review operation identity and uniqueness, migrate all grant/refresh writers together before enabling",
   "mongo_replica_followup": {
-    "state": "CI pending; 10 passed 3 Mongo skipped locally due to unavailable mongod/docker",
+    "state": "CI pending; local 12 passed and 5 Mongo skipped",
     "tests": [
-      "relink wins before stale CAS",
+      "relink wins before CAS",
       "refresh precedes relink",
-      "lost ACK after actual write, no replay"
+      "lost ACK after Mongo write",
+      "concurrent refresh same revision and unique IDs",
+      "read-only resolution after lost ACK and relink"
     ],
-    "caveat": "No operation identity exists; observing revision+1 cannot attribute ambiguous ACK to this invocation. No recovery implementation. Unique user_id index required before integration."
+    "caveat": "Recovery only positively proves matching grant, next revision and unique operation identity. Missing or overwritten marker remains unknown. Operation IDs must be durably persisted before send and never reused; not implemented by existing writers. Unique tenant index required."
   }
 }
