@@ -98,3 +98,24 @@ description/category/SEO and storefront acceptance, then return actual URL.
 
 Images/video already completed and delivered. User is also adding images to
 Salla manually; read product media before uploading to prevent duplicates.
+
+## Resume: optional surcharge confirmed, manual publisher handoff needed
+
+User renewed publish authorization and specified surcharge must be optional.
+Existing implementation already meets this: value_prices defaults to [], UI
+number input has no required attribute, empty input serializes to0. No extra
+source change needed. Read PR1552/status/AGENTS fresh. Production branch now
+f37d4bebfb64e1e94b0aafd6cf3a52a700b1886f (Snap1553), expected source
+deba9c17e2e5299ca2463981aedbbf153b306ff0/runtime
+rg5-690975c11226fe8c81cdcc141d09bd26b4ca2af15f2683f363454767666523a4.
+Git diff proves creation/pricing editor/preview/serializer unchanged from1552.
+Read Snap1553 coordination: Google1555 is pending above f37d4be; publisher also
+unresponsive there. Last direct /app read still4ab6e8bc1d39d1a3df555c874ae1278d284529c1,
+trackedclean, guardinactive. NO update of /app or lease/publish this resume.
+Renewed normal UI attempts: closed stale virtual project tab then fresh project,
+Published filter route, and lightweight DOM-only button read; project opening
+still times out (Runtime.evaluate and Page.getFrameTree). No private APIs used.
+Reloaded homepage for manual user handoff to open the project deployment panel.
+Before any laterprepare, re-read latest source/CI/intent and actual guard, as
+Snap/Google have newer work. Never publish the superseded4ab candidate blindly.
+No product creation retry; existing hoodie draft and media remain as recorded.
