@@ -1,0 +1,17 @@
+{
+  "task_id": "GOOGLE-OAUTH-OPERATION-20261026",
+  "state": "WIP; no real credential or provider writer integration",
+  "base": "e377f6efc3733a059b9448daa9f98b5be4fd51c8",
+  "production_changed": false,
+  "provider_writes": 0,
+  "verification": "5 unit passed; 4 replica skipped locally; exact source replica CI pending",
+  "contract": "unique UUIDv4 operation _id, majority write, retryWrites disabled, process-local acknowledged ticket consumed before atomic single-use claim; any ambiguous ACK grants no ticket/no retry",
+  "limitations": [
+    "ticket is an internal capability and Python-level trusted caller only",
+    "No HTTP or credential writer integration and no durable dispatch proof",
+    "No OAuth projection transaction or worker restart recovery",
+    "Never delete or TTL operation records while IDs could be reused",
+    "Owner access, grant fence and all writers need integration and independent review"
+  ],
+  "next_safe_action": "Run exact source replica CI, independent review; integrate and prove provider send path without retries before production"
+}
