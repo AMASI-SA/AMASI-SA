@@ -11,7 +11,11 @@ class Store:
     database=SimpleNamespace(client=SimpleNamespace(options=SimpleNamespace(retry_writes=False)))
     def __init__(self): self.rows={};self.options=[]
     def with_options(self,**kw): self.options.append(kw);return self
+    async def create_index(self,keys,unique,name):
+        assert keys == [('user_id',1),('grant_generation',1),('token_revision',1)] and unique is True
     async def insert_one(self,doc):
+        if any(all(row.get(k)==doc.get(k) for k in ('user_id','grant_generation','token_revision')) for row in self.rows.values()):
+            raise DuplicateKeyError('duplicate grant/revision')
         if doc['_id'] in self.rows: raise DuplicateKeyError('duplicate')
         self.rows[doc['_id']]=doc.copy()
     async def update_one(self,q,u,upsert=False):
@@ -68,3 +72,22 @@ async def test_unknown_registration_ack_cannot_mint_ticket():
     assert c.calls == 1 and await inspect_refresh_operation(c,**s) == 'registered'
     with pytest.raises(OperationNotClaimed):
         await claim_refresh_operation(c,**s,attempt_id=str(uuid4()),now=NOW,ticket=None)
+
+
+@pytest.mark.asyncio
+async def test_distinct_operation_ids_same_grant_revision_are_fenced():
+    c=Store();s=scope();first=await register_refresh_operation(c,**s,now=NOW)
+    with pytest.raises(OperationAlreadyExists):
+        await register_refresh_operation(c,**{**s,'operation_id':str(uuid4())},now=NOW)
+    await claim_refresh_operation(c,**s,attempt_id=str(uuid4()),now=NOW,ticket=first)
+    with pytest.raises(OperationAlreadyExists):
+        await register_refresh_operation(c,**{**s,'operation_id':str(uuid4())},now=NOW)
+    assert await register_refresh_operation(c,**{**s,'grant_generation':'new','operation_id':str(uuid4())},now=NOW) is not None
+
+@pytest.mark.asyncio
+async def test_index_creation_failure_cannot_grant_ticket_or_write():
+    class IndexFails(Store):
+        async def create_index(self,*a,**kw): raise TimeoutError('index unconfirmed')
+    c=IndexFails()
+    with pytest.raises(TimeoutError):await register_refresh_operation(c,**scope(),now=NOW)
+    assert not c.rows

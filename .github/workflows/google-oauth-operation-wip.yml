@@ -49,7 +49,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('oauth-results.xml').findall('.//testcase')
           replica = [c for c in cases if c.get('classname','').endswith('test_google_oauth_operation_mongo')]
-          assert len(cases) == 9 and len(replica) == 4
+          assert len(cases) == 13 and len(replica) == 6
           assert not [c for c in cases if any(c.find(x) is not None for x in ('failure','error','skipped'))]
           PY
       - name: Remove replica

@@ -48,6 +48,7 @@ async def test_lost_registration_ack_never_retries_or_accepts_duplicate(operatio
         database=operations.database
         calls=0
         def with_options(self,**kw):self.target=operations.with_options(**kw);return self
+        async def create_index(self,*a,**kw):return await self.target.create_index(*a,**kw)
         async def insert_one(self,doc):
             self.calls+=1;await self.target.insert_one(doc);raise TimeoutError('lost ack')
     w=Lost();s=scope()
@@ -67,3 +68,26 @@ async def test_lost_claim_ack_does_not_grant_permission_or_retry(operations):
     with pytest.raises(TimeoutError):await claim_refresh_operation(w,**s,attempt_id=str(uuid4()),now=NOW,ticket=ticket)
     assert w.calls==1 and await inspect_refresh_operation(operations,**s)=='claimed'
     with pytest.raises(OperationNotClaimed):await claim_refresh_operation(operations,**s,attempt_id=str(uuid4()),now=NOW,ticket=ticket)
+
+
+@pytest.mark.asyncio
+async def test_distinct_ids_same_generation_revision_only_one_registers(operations):
+    s=scope();other={**s,'operation_id':str(uuid4())}
+    async def register(item):
+        try:return await register_refresh_operation(operations,**item,now=NOW)
+        except OperationAlreadyExists:return None
+    tickets=await asyncio.gather(register(s),register(other))
+    assert sum(t is not None for t in tickets)==1
+    # A relink gets a new scope, while the original scope remains fenced.
+    fresh={**s,'grant_generation':'new','operation_id':str(uuid4())}
+    assert await register_refresh_operation(operations,**fresh,now=NOW) is not None
+    with pytest.raises(OperationAlreadyExists):
+        await register_refresh_operation(operations,**{**s,'operation_id':str(uuid4())},now=NOW)
+
+@pytest.mark.asyncio
+async def test_conflicting_sparse_scope_index_fails_closed(operations):
+    from pymongo.errors import OperationFailure
+    await operations.create_index([('user_id',1),('grant_generation',1),('token_revision',1)],
+        unique=True, sparse=True, name='google_refresh_grant_revision_unique')
+    with pytest.raises(OperationFailure):await register_refresh_operation(operations,**scope(),now=NOW)
+    assert await operations.count_documents({})==0

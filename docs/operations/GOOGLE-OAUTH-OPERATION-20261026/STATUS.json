@@ -1,24 +1,16 @@
 {
   "task_id": "GOOGLE-OAUTH-OPERATION-20261026",
-  "state": "WIP; no real credential or provider writer integration",
+  "state": "WIP scoped unique journal index added; replica CI pending; no writer integration",
   "base": "e377f6efc3733a059b9448daa9f98b5be4fd51c8",
   "production_changed": false,
   "provider_writes": 0,
   "verification": {
-    "unit_local": 5,
-    "replica_local_skipped": 4,
-    "ci": {
-      "run": 40401648078,
-      "job": 121848747091,
-      "passed": 9,
-      "replica": 4,
-      "skips": 0,
-      "seconds": 2.51,
-      "job_test_and_evidence_steps": "success",
-      "logs_read": true
-    }
+    "unit_local": 7,
+    "replica_local_skipped": 6,
+    "previous_source": "7527bfc0bce5647dd01886433690f5e13d681528",
+    "previous_ci": "9 passed incl4 replica; source superseded"
   },
-  "contract": "unique UUIDv4 operation _id, majority write, retryWrites disabled, process-local acknowledged ticket consumed before atomic single-use claim; any ambiguous ACK grants no ticket/no retry",
+  "contract": "Unique durable (user_id,grant_generation,token_revision) scope index before registration; UUID4 operation _id; majority writes, retries disabled; unacknowledged writes never grant ticket.",
   "limitations": [
     "ticket is an internal capability and Python-level trusted caller only",
     "No HTTP or credential writer integration and no durable dispatch proof",

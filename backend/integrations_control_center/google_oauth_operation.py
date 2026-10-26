@@ -5,7 +5,9 @@ IDs, and registers before an external refresh. A claim ACK permits at most one
 attempt. An ambiguous registration or claim ACK NEVER authorizes sending; no
 retry or inference from a later read. A relink fence must still be checked by
 all credential writers; this module does not implement that integration.
-Rows must not be deleted or TTL-expired while IDs could be reused.
+Rows must not be deleted or TTL-expired while IDs or generation/revision scopes could be reused.
+This collection is dedicated to this journal and must have no preexisting partial
+or sparse unique scope indexes. A failed index creation prevents all sends.
 """
 from datetime import datetime
 from uuid import UUID
@@ -57,8 +59,14 @@ async def register_refresh_operation(collection, *, user_id, grant_generation, t
     if not isinstance(now, datetime) or now.utcoffset() is None: raise OperationInvalid('invalid time')
     # Mongo _id unique index is intrinsic. A duplicate is never permission to
     # send, even if every field appears to match.
+    writer = _writer(collection)
+    # A distinct operation ID cannot authorize a concurrent refresh for the
+    # same grant and token revision. Mongo builds/validates this non-sparse,
+    # non-partial unique index before returning an acknowledged ticket.
+    await writer.create_index([('user_id', 1), ('grant_generation', 1), ('token_revision', 1)],
+        unique=True, name='google_refresh_grant_revision_unique')
     try:
-        await _writer(collection).insert_one({'_id':operation_id,'user_id':user_id,'grant_generation':grant_generation,
+        await writer.insert_one({'_id':operation_id,'user_id':user_id,'grant_generation':grant_generation,
             'token_revision':token_revision,'state':'registered','created_at':now})
     except DuplicateKeyError:
         raise OperationAlreadyExists('operation ID already registered') from None
