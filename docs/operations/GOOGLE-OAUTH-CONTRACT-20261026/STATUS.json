@@ -1,0 +1,67 @@
+{
+  "task_id": "GOOGLE-OAUTH-CONTRACT-20261026",
+  "state": "DESIGN WIP ONLY; no runtime implementation, migration or OAuth recovery",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-oauth-contract-wip-20261026",
+  "base_sha": "11a52dd933d7269cd80046219dcd93d5a6e62297",
+  "reviewed_source_sha": "753c1717ceaf44156358aa986a4d082b20d0fdc7",
+  "updated_at": "2026-10-26T20:35:49.287752+00:00",
+  "scope": "Two repository documents only: proposed atomic Google grant, account membership and refresh contract",
+  "files": [
+    "docs/operations/GOOGLE-OAUTH-CONTRACT-20261026/STATUS.json",
+    "docs/operations/GOOGLE-OAUTH-CONTRACT-20261026/DESIGN.md"
+  ],
+  "live_baseline": {
+    "evidence_owner": "Parent coordinator, prior live UI checks in this task",
+    "google_ads_account_id": "5052346701",
+    "integration_status": "connected",
+    "management_read": "Campaign table with 22 rows and native management detail read succeeded before this design work",
+    "independently_rechecked_by_this_document_task": false,
+    "recovery_credit": "None: this document task performed no OAuth, provider or live database action"
+  },
+  "implemented_prevention_in_base": {
+    "description": "Reporting health no longer writes connection_status or connection_provenance and does not upsert the global connection document",
+    "actual_oauth_recovery": false,
+    "generation_contract_implemented": false
+  },
+  "proposed_generations": [
+    "grant_generation",
+    "token_revision",
+    "account_set_revision"
+  ],
+  "required_writer_surfaces": [
+    "google_projection._persist_google_projection",
+    "google_ads_reporting._refresh_access_token",
+    "google_merchant_registration._fresh_google_context",
+    "google_merchant_registration._persist_merchant_result",
+    "google_analytics_realtime_routes._fresh_google_access_token (also used by GA4 source attribution)",
+    "ads_auto_sync_scheduler._mark_needs_reauth",
+    "service._persist_test_snapshot guard for Google direct/base-router calls"
+  ],
+  "unimplemented_work": [
+    "Generation schema and shared refresh CAS helper across Ads, Merchant and GA4",
+    "Complete validated provider discovery and atomic projection commit",
+    "Generation-fenced reauth invalidation and management proof checks",
+    "Real replica race, rollback, commit-ack-loss and service compatibility acceptance"
+  ],
+  "verification": {
+    "type": "Documentation/schema/scope validation only; no runtime behavior verified by this task",
+    "json_parse": "passed: json.loads, required scope flags and full source SHA lengths validated",
+    "git_diff_check": "passed: git diff --check before local commit",
+    "runtime_tests": "not run: docs-only work",
+    "replica_tests": "not run; proposed acceptance only"
+  },
+  "ci": {
+    "state": "not requested or run by this document task"
+  },
+  "pr": null,
+  "production_changed": false,
+  "provider_calls": 0,
+  "credential_access": false,
+  "release_guard_actions": 0,
+  "publish_actions": 0,
+  "remote_checkpoint": {
+    "state": "Parent coordinator to push the local commit and record exact full SHA; do not treat local-only docs as durable completion"
+  },
+  "next_safe_action": "Parent: push this dedicated documentation branch and record its exact full SHA. Before implementation, fetch latest production and applicable AGENTS, review DESIGN.md against all current shared Google credential/account writers, freeze a bounded schema and compatibility contract, then add failing disposable-replica acceptance tests. No live OAuth/recovery is required merely because this design exists."
+}
