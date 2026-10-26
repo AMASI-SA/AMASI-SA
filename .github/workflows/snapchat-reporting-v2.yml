@@ -51,6 +51,12 @@ on:
       - "frontend/src/pages/AdvancedDashboard.mobile.test.jsx"
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
+      - "backend/integrations_control_center/snapchat_decision_outcomes.py"
+      - "backend/integrations_control_center/snapchat_decision_metrics.py"
+      - "backend/integrations_control_center/snapchat_decision_ledger.py"
+      - "backend/tests/test_snapchat_decision_outcomes_v1.py"
+      - "backend/tests/test_snapchat_decision_metrics_v1.py"
+      - "backend/tests/test_snapchat_decision_ledger_v1.py"
       - "backend/tests/test_snapchat_reporting_v2_*.py"
       - ".github/workflows/snapchat-reporting-v2.yml"
   workflow_dispatch:
@@ -124,6 +130,9 @@ jobs:
           tests/test_dashboard_v2_salla_ads_executive.py
           tests/test_campaign_ai_unified_execution_evidence.py
           tests/test_campaign_ai_execution_quality_p0_3.py
+          tests/test_snapchat_decision_outcomes_v1.py
+          tests/test_snapchat_decision_metrics_v1.py
+          tests/test_snapchat_decision_ledger_v1.py
           -q
           --tb=short
 
