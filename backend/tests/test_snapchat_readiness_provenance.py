@@ -568,3 +568,95 @@ async def test_actual_mongo_empty_projection_matches_shared_reader_and_hides_pro
         {"report_date": DATES[0]}, {"$unset": {"empty_hierarchy_proof.unknown_key": "", "rows.ad": ""}})
     invalid = await diagnose(isolated_mongo)
     assert invalid["status"] == "incomplete"
+
+
+@pytest.mark.asyncio
+async def test_actual_mongo_projects_only_safe_observations_for_requested_days(isolated_mongo):
+    requested = "2026-10-22"
+    await isolated_mongo[diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION].insert_one({
+        **SCOPE, "sync_run_id": "daily", "coverage": {"ad": {"daily_observations": {
+            requested: {"report_date": requested, "status": "complete", "expected_parents": 2,
+                        "completed_parents": 2, "rows_received": 0, "secret": "private"},
+            "2026-10-23": {"report_date": "2026-10-23", "status": "complete", "secret": "private"},
+        }}}})
+    rows, truncated = await diagnostic._find_rows(isolated_mongo, diagnostic.SNAPCHAT_SYNC_RUNS_COLLECTION,
+        {**SCOPE, "sync_run_id": "daily"}, diagnostic._run_projection([requested]), 1)
+    assert not truncated
+    observed = rows[0]["coverage"]["ad"]["daily_observations"]
+    assert list(observed) == [requested] and "secret" not in str(observed)
+    assert diagnostic._public_run(rows[0])["coverage"]["ad"]["daily_observations"] == [{
+        "report_date": requested, "status": "complete", "expected_parents": 2,
+        "completed_parents": 2, "rows_received": 0}]
+
+
+from snapchat_v2.client import SnapchatClientError, SnapchatV2Client
+from tests.test_snapchat_reporting_v2_entity_performance import FakeHTTPFactory, FakeResponse, FakeTokenStore, total_performance_payload
+
+
+def empty_payload():
+    value = total_performance_payload("adsquad", "unused")
+    value["total_stats"][0]["total_stat"]["breakdown_stats"]["adsquad"] = []
+    return value
+
+
+@pytest.mark.asyncio
+async def test_two_days_distinguish_complete_empty_day_from_observed_rows():
+    factory = FakeHTTPFactory([FakeResponse(empty_payload()), FakeResponse(empty_payload()),
+        FakeResponse(total_performance_payload("adsquad", "s1")),
+        FakeResponse(total_performance_payload("adsquad", "s2"))])
+    client = SnapchatV2Client(object(), "u1", token_store=FakeTokenStore(), client_factory=factory)
+    result = await client.fetch_breakdown_daily_total_facts(
+        {"ad_account_id": "a1", "timezone": "Asia/Riyadh", "currency": "SAR"},
+        campaign_ids=["c1", "c2"], entity_type="ad_squad",
+        report_dates=[date(2026, 10, 25), date(2026, 10, 26)], sync_run_id="run")
+    assert result["coverage"]["daily_observations"] == {
+        "2026-10-25": {"report_date": "2026-10-25", "expected_parents": 2,
+            "completed_parents": 2, "rows_received": 0, "status": "complete"},
+        "2026-10-26": {"report_date": "2026-10-26", "expected_parents": 2,
+            "completed_parents": 2, "rows_received": 2, "status": "complete"},
+    }
+    assert {row["report_date"] for row in result["rows"]} == {"2026-10-26"}
+    assert len(factory.clients[0].calls) == 4
+
+
+@pytest.mark.asyncio
+async def test_failed_parent_preserves_partial_and_unattempted_day_without_fake_rows():
+    failure = FakeResponse({"request_status": "ERROR"}); failure.status_code = 403
+    factory = FakeHTTPFactory([FakeResponse(empty_payload()), failure])
+    client = SnapchatV2Client(object(), "u1", token_store=FakeTokenStore(), client_factory=factory)
+    with pytest.raises(SnapchatClientError) as raised:
+        await client.fetch_breakdown_daily_total_facts(
+            {"ad_account_id": "a1", "timezone": "Asia/Riyadh", "currency": "SAR"},
+            campaign_ids=["c1", "c2"], entity_type="ad_squad",
+            report_dates=[date(2026, 10, 25), date(2026, 10, 26)], sync_run_id="run")
+    observations = raised.value.coverage["daily_observations"]
+    assert observations["2026-10-25"]["status"] == "partial"
+    assert observations["2026-10-25"]["completed_parents"] == 1
+    assert observations["2026-10-26"]["status"] == "not_started"
+    assert observations["2026-10-26"]["rows_received"] == 0
+
+
+def test_owner_diagnostic_projects_only_requested_dates_and_safe_fields():
+    day = "2026-10-25"
+    projection = diagnostic._run_projection([day])
+    assert projection[f"coverage.ad.daily_observations.{day}.rows_received"] == 1
+    assert not any("raw" in key or "metrics" in key for key in projection)
+    source = {"coverage": {"ad": {"daily_observations": {day: {
+        "report_date": day, "status": "complete", "expected_parents": 2,
+        "completed_parents": 2, "rows_received": 0, "secret": "not returned"}}}}}
+    public = diagnostic._public_run(deepcopy(source))["coverage"]["ad"]["daily_observations"]
+    assert public == [{"report_date": day, "status": "complete", "expected_parents": 2,
+                       "completed_parents": 2, "rows_received": 0}]
+
+
+@pytest.mark.asyncio
+async def test_empty_child_responses_stay_partial_but_preserve_provider_counters(monkeypatch):
+    from tests.test_snapchat_reporting_v2_inactive_parent_scope import run_pipeline
+    result, _, _, saved, calls = await run_pipeline(monkeypatch, "child_empty")
+    assert result["status"] == "partial" and len(calls) == 124 and saved == []
+    for level in ("ad_squad", "ad"):
+        coverage = result["summary"]["breakdown_performance"][level]["coverage"]
+        assert coverage["reason"].endswith("zero_performance_proof_unavailable")
+        assert coverage["daily_observations"]["2026-08-28"] == {
+            "report_date": "2026-08-28", "expected_parents": 62,
+            "completed_parents": 62, "rows_received": 0, "status": "complete"}

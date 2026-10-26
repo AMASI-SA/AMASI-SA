@@ -1219,9 +1219,19 @@ class SnapchatV2Client:
         }
         facts: dict[tuple[str, str], dict[str, Any]] = {}
         completed_requests = 0
+        # These counters describe provider requests, not an assertion that a
+        # missing row has zero metrics. They remain diagnostic evidence only.
+        daily_observations = {
+            day.isoformat(): {"report_date": day.isoformat(),
+                "expected_parents": len(campaign_values), "completed_parents": 0,
+                "rows_received": 0, "status": "not_started"}
+            for day in date_values
+        }
         try:
             async with self.client_factory(timeout=HTTP_TIMEOUT_SECONDS) as client:
                 for report_date in date_values:
+                    day_observation = daily_observations[report_date.isoformat()]
+                    day_observation["status"] = "partial"
                     local_start = datetime.combine(
                         report_date, time.min, tzinfo=account_tz
                     )
@@ -1409,7 +1419,13 @@ class SnapchatV2Client:
                                         f"snapchat_{entity_type}_total_duplicate_conflict",
                                         f"Snapchat returned conflicting {entity_type} TOTAL rows.",
                                     )
+                                if existing is None:
+                                    day_observation["rows_received"] += 1
                                 facts[key] = fact
+                        # Count a parent only after every returned page and row
+                        # was validated; a failed or malformed page stays partial.
+                        day_observation["completed_parents"] += 1
+                    day_observation["status"] = "complete"
         except SnapchatClientError as exc:
             if not exc.coverage:
                 exc.coverage = _coverage(
@@ -1420,6 +1436,7 @@ class SnapchatV2Client:
                     rows_received=len(facts),
                     reason=exc.code,
                 )
+            exc.coverage["daily_observations"] = daily_observations
             raise
         rows = list(facts.values())
         coverage = _coverage(
@@ -1431,6 +1448,7 @@ class SnapchatV2Client:
         )
         coverage["provider_granularity"] = "TOTAL"
         coverage["frequency_summed"] = False
+        coverage["daily_observations"] = daily_observations
         return {
             "rows": rows,
             "coverage": coverage,
