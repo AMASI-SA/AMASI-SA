@@ -9,7 +9,7 @@ import {
 } from "../../services/snapchatCampaignPublication";
 
 const EMPTY = { campaignName: "", groupName: "", creativeName: "", adName: "",
-    headline: "", url: "", budget: "", start: "", country: "", pixel: "",
+    headline: "", callToAction: "SHOP_NOW", url: "", budget: "", start: "", country: "", pixel: "",
     window: "SWIPE_28DAY_VIEW_1DAY", product: "", variant: "", reason: "" };
 const STAGES = ["الحملة", "المجموعة", "الإبداع", "الإعلان"];
 const NAME_FIELDS = ["campaign_name", "group_name", "creative_name", "ad_name"];
@@ -147,7 +147,7 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
                     product_variant_id: form.variant || null, media_upload_id: media.upload_id,
                     profile_id: profile, pixel_id: form.pixel, campaign_name: form.campaignName,
                     group_name: form.groupName, creative_name: form.creativeName, ad_name: form.adName,
-                    headline: form.headline, destination_url: form.url,
+                    headline: form.headline, call_to_action: form.callToAction, destination_url: form.url,
                     daily_budget_micro: publicationAmountToMicro(form.budget),
                     start_time: new Date(form.start).toISOString(), country: form.country,
                     conversion_window: form.window, reason: form.reason,
@@ -169,7 +169,7 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
     return <section dir="rtl" className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4"
         data-testid="snapchat-publication-panel">
         <h3 className="text-base font-black">إنشاء حملة متكاملة نشطة مباشرةً</h3>
-        <p className="text-sm text-slate-600">تنشأ الحملة والمجموعة والإعلان نشطة مباشرةً، وقد يبدأ الصرف بميزانية المجموعة التي تدخلها. الهدف مبيعات وتحسين الشراء، والمزايدة والمواضع تلقائية، والزر «تسوق الآن». راجع الخطة كاملة قبل اعتماد الإنشاء والتشغيل.</p>
+        <p className="text-sm text-slate-600">تنشأ الحملة والمجموعة والإعلان نشطة مباشرةً، وقد يبدأ الصرف بميزانية المجموعة التي تدخلها. الهدف مبيعات وتحسين الشراء، والمزايدة والمواضع تلقائية، وزر الدعوة وفق اختيارك في الخطة. راجع الخطة كاملة قبل اعتماد الإنشاء والتشغيل.</p>
         {!executionEnabled && <p role="status" className="text-sm">تنفيذ عمليات Snapchat متوقف حاليًا.</p>}
         {!activationEnabled && <p role="status" className="text-sm">التشغيل المباشر غير متاح حاليًا؛ لا يمكن إنشاء هذه الخطة حتى يتاح.</p>}
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
@@ -202,6 +202,11 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
                     <Field label="اسم الإبداع" value={form.creativeName} onChange={(v) => field("creativeName", v)} maxLength={200} />
                     <Field label="اسم الإعلان" value={form.adName} onChange={(v) => field("adName", v)} maxLength={200} />
                     <Field label="العنوان" value={form.headline} onChange={(v) => field("headline", v)} maxLength={34} />
+                    <label className="block text-sm">زر الدعوة<select className={cls} required
+                        data-testid="publication-cta" value={form.callToAction}
+                        onChange={(event) => field("callToAction", event.target.value)}>
+                        <option value="SHOP_NOW">تسوق الآن</option><option value="ORDER_NOW">اطلب الآن</option>
+                    </select></label>
                     <Field label="رابط المنتج HTTPS" type="url" value={form.url} onChange={(v) => field("url", v)} />
                     <Field label={"ميزانية المجموعة اليومية · " + (account?.currency || "اختر الحساب")}
                         value={form.budget} onChange={(v) => field("budget", v)} testId="publication-budget" />
@@ -236,6 +241,7 @@ export default function SnapchatCampaignPublicationPanel({ ownerId, accountId = 
             <strong>{STATUS[job.status] || job.status}</strong>
             <p className="text-sm">ميزانية المجموعة: {(Number(job.plan?.daily_budget_micro) / 1_000_000).toLocaleString("ar-SA")} {job.plan?.currency}
                 {" · "}{job.plan?.country?.toUpperCase()}{" · "}{job.plan?.start_time}</p>
+            <p className="text-sm">زر الدعوة: {job.plan?.call_to_action === "ORDER_NOW" ? "اطلب الآن" : "تسوق الآن"}</p>
             <p className="text-sm">{job.plan?.product_name} · {job.plan?.headline} · {job.plan?.destination_url}</p>
             <p className="text-sm">الخيار: {job.plan?.product_variant_id || "المنتج كاملًا"} · نافذة التحويل: {job.plan?.conversion_window}</p>
             <p className="break-all text-xs">Pixel: {job.plan?.pixel_id} · الملف العام: {job.plan?.profile_id} · الفيديو الموثق: {job.plan?.media_id}</p>

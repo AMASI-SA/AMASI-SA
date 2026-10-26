@@ -45,10 +45,44 @@ from .sync_runs import (
 )
 from .total_facts import upsert_total_facts
 from .committed_totals import publish_committed_totals
+from .empty_hierarchy import empty_hierarchy_proof, complete_empty_response
 
 MAX_SYNC_DAYS = 30
 HEARTBEAT_SECONDS = 20.0
 logger = logging.getLogger(__name__)
+
+
+def _campaign_scope_ids(campaign_rows: list[dict], report_campaign_ids: list[str] | None) -> list[str]:
+    return sorted({str(row.get("campaign_id") or "").strip() for row in campaign_rows
+                   if str(row.get("campaign_id") or "").strip()
+                   and any(float(row.get(field) or 0) > 0 for field in
+                           ("spend_native", "impressions", "swipes", "video_views", "purchases", "purchase_value_native"))}
+                  | {str(value).strip() for value in (report_campaign_ids or []) if str(value).strip()})
+
+
+def _current_campaign_catalog_scope(fetched: dict, account_id: str) -> dict | None:
+    """Transient same-response scope; stored inactive catalog rows are not evidence."""
+    coverage = fetched.get("coverage") or {}
+    rows = fetched.get("rows")
+    expected = coverage.get("expected_requests")
+    if (not isinstance(rows, list) or coverage.get("status") != "complete"
+            or coverage.get("data_state") != ("confirmed_data" if rows else "confirmed_no_data")
+            or type(expected) is not int or expected <= 0
+            or type(coverage.get("completed_requests")) is not int
+            or coverage["completed_requests"] != expected
+            or type(coverage.get("rows_received")) is not int
+            or coverage["rows_received"] != len(rows)):
+        return None
+    ids = []
+    for row in rows:
+        if (not isinstance(row, dict) or row.get("ad_account_id") != account_id
+                or row.get("entity_type") != "campaign"
+                or not isinstance(row.get("external_id"), str) or not row["external_id"].strip()):
+            return None
+        ids.append(row["external_id"].strip())
+    if len(set(ids)) != len(ids):
+        return None
+    return {"ad_account_id": account_id, "campaign_ids": sorted(ids)}
 
 
 async def _release_lease_then_admission(
@@ -268,6 +302,10 @@ class SnapchatV2SyncPipeline:
                     **saved,
                     "coverage": fetched["coverage"],
                 }
+                if entity_type == "campaign":
+                    scope = _current_campaign_catalog_scope(fetched, account_id)
+                    if scope is not None:
+                        summary["_campaign_catalog_scope"] = scope
             except Exception as exc:  # noqa: BLE001
                 errors.append(
                     {
@@ -311,32 +349,9 @@ class SnapchatV2SyncPipeline:
         report_dates: list[date] | None = None,
         report_campaign_ids: list[str] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-        campaign_ids = sorted(
-            {
-                str(row.get("campaign_id") or "").strip()
-                for row in campaign_rows
-                if str(row.get("campaign_id") or "").strip()
-                and any(
-                    float(row.get(field) or 0) > 0
-                    for field in (
-                        "spend_native",
-                        "impressions",
-                        "swipes",
-                        "video_views",
-                        "purchases",
-                        "purchase_value_native",
-                    )
-                )
-            }
-        )
-        # HOUR activity is not the campaign DAY report's scope. The provider
-        # can return historical/zero-spend DAY parents while HOUR is zero.
-        # Carry only successfully published DAY identities, never infer child
-        # facts from catalog membership or a campaign's configured status.
-        campaign_ids = sorted(set(campaign_ids) | {
-            str(value).strip() for value in (report_campaign_ids or [])
-            if str(value).strip()
-        })
+        # Request real child reports for the exact parent scope. Membership
+        # alone never creates facts or a complete zero-performance observation.
+        campaign_ids = _campaign_scope_ids(campaign_rows, report_campaign_ids)
         parent_lookup: dict[str, str] = {}
         if entity_type == "ad":
             identities = await list_entities(
@@ -396,6 +411,12 @@ class SnapchatV2SyncPipeline:
                     f"snapchat_{entity_type}_report_coverage_incomplete",
                     "Snapchat report coverage does not prove the returned fact scope.",
                     coverage=report_coverage,
+                )
+            if entity_type in {"ad_squad", "ad"} and not performance["rows"]:
+                raise SnapchatClientError(
+                    f"snapchat_{entity_type}_zero_performance_proof_unavailable",
+                    "The provider returned no child facts; committed zero-performance proof is not represented.",
+                    coverage={**report_coverage, "provider_data_state": report_coverage.get("data_state")},
                 )
             write = await upsert_total_facts(
                 self.db,
@@ -718,12 +739,47 @@ class SnapchatV2SyncPipeline:
                 sync_run_id=sync_run_id,
             )
             warnings.extend(identity_errors)
+            # IDs exist only in this run's local handoff. Do not persist or
+            # expose them in summaries, diagnostics, empty proofs or logs.
+            catalog_scope = identity_summary.pop("_campaign_catalog_scope", None)
+            child_scope_error = None
+            if (not campaign_error and not report_campaign_ids
+                    and complete_empty_response(campaign_summary.get("coverage") or {})
+                    and isinstance(catalog_scope, dict)
+                    and catalog_scope.get("ad_account_id") == account_id
+                    and catalog_scope.get("campaign_ids")):
+                fallback_ids = _campaign_scope_ids(hourly["campaign_rows"], catalog_scope["campaign_ids"])
+                try:
+                    client.preflight_child_total_scope(fallback_ids, total_report_dates)
+                    report_campaign_ids = fallback_ids
+                except SnapchatClientError as exc:
+                    child_scope_error = exc
+            empty_proof = empty_hierarchy_proof(
+                account, total_report_dates, action_report_time,
+                campaign_summary, identity_summary,
+            ) if not campaign_error and not hourly["campaign_rows"] else None
             # Exact account-day hierarchy facts are the intelligence/read surface,
             # not the financial source. Bound each rolling run to seven days
             # so large historical backfills cannot exhaust Snapchat's request
             # budget; older days retain their previously persisted TOTAL rows
             # and hourly facts remain available as the safe fallback.
             for entity_type in ("ad_squad", "ad"):
+                if child_scope_error is not None:
+                    coverage = dict(child_scope_error.coverage or {})
+                    await set_level_status(self.db, sync_run_id, entity_type, "partial",
+                                           coverage=coverage, now=self.now)
+                    breakdown_summary[entity_type] = {"rows_saved": 0, "coverage": coverage}
+                    warnings.append({"level": entity_type, "code": child_scope_error.code, "retryable": False})
+                    continue
+                if empty_proof is not None:
+                    # No synthetic child facts or requests: all three complete
+                    # catalogs are empty and bounded DAY stats confirm no data.
+                    coverage = {"status": "complete", "data_state": "confirmed_no_data",
+                                "proof_source": "complete_empty_catalog_and_account_day"}
+                    await set_level_status(self.db, sync_run_id, entity_type, "complete",
+                                           coverage=coverage, now=self.now)
+                    breakdown_summary[entity_type] = {"rows_saved": 0, "coverage": coverage}
+                    continue
                 level_summary, level_error = await self._sync_breakdown_performance(
                     client,
                     user_id=str(user_id),
@@ -866,6 +922,7 @@ class SnapchatV2SyncPipeline:
                 "campaign_rows": len(hourly["campaign_rows"]),
                 "account_rows": len(hourly["account_rows"]),
                 "breakdown_performance": breakdown_summary,
+                "empty_hierarchy_proof": empty_proof,
                 "provider_calls": client.provider_calls,
                 "request_windows": hourly["request_windows"],
                 "identity": identity_summary,

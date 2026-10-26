@@ -27,6 +27,7 @@ from .reconciliation import calculate_cost_components, list_reconciliation
 from .salla_outcomes import load_salla_campaign_outcomes
 from .period_diagnostics import audit_period_partition
 from .period_evidence import total_period_complete
+from .empty_hierarchy import empty_period_complete
 from .status import snapchat_v2_status
 from .sync_pipeline import MAX_SYNC_DAYS, SnapchatV2SyncPipeline
 from .total_facts import (
@@ -297,6 +298,7 @@ async def _entity_performance_report(
         action_report_time=action_report_time,
     )
     source_collection = "mezan_snapchat_hourly_facts_v2"
+    empty_proven = False
     if timezone_name == str(account.get("timezone") or ""):
         try:
             total_facts = await load_total_facts(
@@ -319,6 +321,14 @@ async def _entity_performance_report(
             facts = total_facts
             source_collection = SNAPCHAT_TOTAL_FACTS_COLLECTION
             level_status = "complete"
+        elif not total_facts and not facts and await empty_period_complete(
+            db, user_id=user_id, account_id=account_id,
+            currency=str(account.get("currency") or ""), timezone_name=timezone_name,
+            date_from=date_from, date_to=date_to, action=action_report_time,
+        ):
+            source_collection = SNAPCHAT_TOTAL_FACTS_COLLECTION
+            level_status = "complete"
+            empty_proven = True
         elif total_facts:
             # Existing TOTAL evidence without its source proof must not be
             # upgraded by an unrelated latest run or an hourly fallback.
@@ -368,7 +378,7 @@ async def _entity_performance_report(
 
     rows: list[dict[str, Any]] = []
     selected_facts: list[dict[str, Any]] = []
-    for external_id in sorted(set(identity_by_id) | set(buckets)):
+    for external_id in ([] if empty_proven else sorted(set(identity_by_id) | set(buckets))):
         identity = identity_by_id.get(external_id) or {}
         fact_rows = buckets.get(external_id, [])
         row_campaign_id = str(identity.get("campaign_id") or "")
@@ -442,6 +452,7 @@ async def _entity_performance_report(
             "source_collection": source_collection,
         },
         "performance_sync_status": level_status,
+        "empty_hierarchy_proven": empty_proven,
         "source_collection": source_collection,
     }
 

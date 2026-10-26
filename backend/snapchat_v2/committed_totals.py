@@ -11,6 +11,7 @@ from bson import BSON
 
 from .models import SNAPCHAT_PROVIDER, build_attribution_key
 from .sync_runs import SNAPCHAT_SYNC_RUNS_COLLECTION
+from .empty_hierarchy import valid_proof
 
 COLLECTION = "mezan_snapchat_committed_totals_v1"
 FACTS_COLLECTION = "mezan_snapchat_daily_total_facts_v2"
@@ -66,6 +67,24 @@ async def publish_committed_totals(db: Any, sync_run_id: str) -> int:
         if len(BSON.encode(document)) > MAX_DOCUMENT_BYTES:
             raise ValueError("snapchat_committed_totals_document_limit")
         documents.append((key, document))
+    proof = (run.get("summary") or {}).get("empty_hierarchy_proof")
+    if proof:
+        days = set(proof.get("report_dates") or [])
+        if (facts or run.get("identity_sync_status") != "complete"
+                or not valid_proof(proof, account_id=scope["ad_account_id"],
+                    currency=proof.get("currency", ""), timezone_name=proof.get("account_timezone", ""),
+                    action=window.get("action_report_time"), days=days)
+                or not days or not all(window.get("date_from", "~") <= day <= window.get("date_to", "") for day in days)):
+            raise ValueError("snapchat_committed_empty_proof_invalid")
+        for day in sorted(days):
+            key = {**scope, "report_date": day, "account_timezone": proof["account_timezone"],
+                   "action_report_time": proof["action_report_time"], "attribution_key": proof["attribution_key"]}
+            document = {**key, "sync_run_id": str(sync_run_id),
+                "finished_at": run["finished_at"], "rows": {level: [] for level in LEVELS},
+                "empty_hierarchy_proof": proof}
+            if len(BSON.encode(document)) > MAX_DOCUMENT_BYTES:
+                raise ValueError("snapchat_committed_totals_document_limit")
+            documents.append((key, document))
     collection = db[COLLECTION]
     await collection.create_index([
         (name, 1) for name in ("user_id", "provider", "ad_account_id", "report_date",
@@ -74,7 +93,12 @@ async def publish_committed_totals(db: Any, sync_run_id: str) -> int:
     for key, document in documents:
         # One atomic write switches all three levels of a day together. Failed
         # later refreshes never touch this document; the source run stays proven.
-        await collection.update_one(key, {"$set": document}, upsert=True)
+        update = {"$set": document}
+        if "empty_hierarchy_proof" not in document:
+            # A successful nonempty refresh replaces the earlier empty state,
+            # including its proof; stale proof must not poison diagnostics.
+            update["$unset"] = {"empty_hierarchy_proof": ""}
+        await collection.update_one(key, update, upsert=True)
     return len(documents)
 
 

@@ -821,7 +821,7 @@ def test_untrusted_reference_alone_does_not_change_the_default_native_builder():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["none", "changed_claim", "same_plan_reapproved",
-    "creative_headline", "creative_media", "creative_destination"])
+    "creative_headline", "creative_media", "creative_destination", "creative_cta"])
 async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolution(environment, monkeypatch, change):
     env = environment
     job = await approved(env)
@@ -850,6 +850,8 @@ async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolu
             creative = env.entities["provider-creative-1"]
             if change == "creative_headline":
                 creative["headline"] = "unapproved provider edit"
+            elif change == "creative_cta":
+                creative["call_to_action"] = "ORDER_NOW"
             elif change == "creative_media":
                 creative["top_snap_media_id"] = "unapproved-media"
             else:
@@ -933,3 +935,49 @@ async def test_real_transport_rechecks_invoking_claim_after_awaited_token_resolu
         assert parent["lease_token"] == "different-server-worker-claim"
         assert parent["status"] == "running"  # Cancelled loser did not stop the new claimant.
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cta", ["SHOP_NOW", "ORDER_NOW"])
+async def test_publication_cta_is_approved_readback_verified_and_retry_stable(environment, cta):
+    env = environment
+    intent = payload().model_copy(update={"call_to_action": cta})
+    preview = await module.preview_publication(env.db, "owner", intent)
+    assert preview["plan"].get("call_to_action", "SHOP_NOW") == cta
+    job = await module.approve_publication(env.db, "owner", preview["publication_id"],
+        module.PublicationApproval(confirm_token=preview["confirm_token"], expected_revision=preview["revision"]))
+    result = await module.run_publication(env.db, "owner", job["publication_id"])
+    assert result["status"] == "completed"
+    assert env.entities["provider-creative-1"]["call_to_action"] == cta
+    assert (await module.preview_publication(env.db, "owner", intent))["status"] == "completed"
+    assert (await module.run_publication(env.db, "owner", job["publication_id"]))["status"] == "completed"
+    assert env.writes == list(module.ACTIONS)
+    other = intent.model_copy(update={"call_to_action": "ORDER_NOW" if cta == "SHOP_NOW" else "SHOP_NOW"})
+    with pytest.raises(HTTPException) as caught:
+        await module.preview_publication(env.db, "owner", other)
+    assert caught.value.detail["code"] == "snapchat_publication_idempotency_conflict"
+
+
+def test_publication_cta_rejects_unsupported_values():
+    from pydantic import ValidationError
+    assert payload().call_to_action == "SHOP_NOW"
+    with pytest.raises(ValidationError):
+        module.PublicationInput.model_validate({**payload().model_dump(), "call_to_action": "UNKNOWN"})
+
+@pytest.mark.asyncio
+async def test_legacy_shop_now_plan_and_request_fingerprint_are_reusable(environment):
+    env = environment
+    intent = payload()
+    preview = await module.preview_publication(env.db, "owner", intent)
+    row = env.db[module.PUBLICATION_COLLECTION].rows[0]
+    legacy_request = intent.model_dump(mode="json")
+    legacy_request.pop("call_to_action")
+    row["request_fingerprint"] = module._hash(legacy_request)
+    row["plan"].pop("call_to_action")
+    row["plan_fingerprint"] = module._hash(row["plan"])
+    retried = await module.preview_publication(env.db, "owner", intent)
+    assert retried["publication_id"] == preview["publication_id"]
+    job = await module.approve_publication(env.db, "owner", retried["publication_id"],
+        module.PublicationApproval(confirm_token=retried["confirm_token"], expected_revision=retried["revision"]))
+    result = await module.run_publication(env.db, "owner", job["publication_id"])
+    assert result["status"] == "completed"
+    assert env.entities["provider-creative-1"]["call_to_action"] == "SHOP_NOW"

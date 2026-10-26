@@ -875,6 +875,7 @@ async def test_profile_denial_is_capability_specific_and_never_exports_provider_
     assert caught.value.detail == {
         "code": code, "provider_http_status": upstream_status,
         "required_capability": "public_profile_sharing_read",
+        "remediation": "verify_profile_api_app_access_token_grant_and_profile_role",
     }
     assert "must-not-export" not in str(caught.value.detail)
     assert "synthetic-secret" not in str(caught.value.detail)

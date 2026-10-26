@@ -200,6 +200,7 @@ async def available_public_profile_ids(provider: Any, account_id: str) -> set[st
                                  else "snapchat_media_profile_authorization_required"),
                         "provider_http_status": response.status_code,
                         "required_capability": "public_profile_sharing_read",
+                        "remediation": "verify_profile_api_app_access_token_grant_and_profile_role",
                     })
                 if response.status_code != 200:
                     raise _failure(502, "snapchat_media_profile_catalog_unavailable")

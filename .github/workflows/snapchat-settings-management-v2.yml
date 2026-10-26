@@ -75,6 +75,16 @@ jobs:
               frontend/src/services/snapchatCampaignPublication.test.js|\
               .github/workflows/snapchat-campaign-publication.yml|\
               docs/operations/SNAP-COMPLETION-20261025/PUBLICATION.md|\
+              docs/operations/SNAP-COMPLETION-20261025/PUBLICATION-CTA.md|\
+              docs/operations/SNAP-COMPLETION-20261025/COMMERCIAL-SCALE-GUARD.md|\
+              docs/operations/SNAP-COMPLETION-20261025/EMPTY-HIERARCHY.md|\
+              docs/operations/SNAP-COMPLETION-20261026/STATUS.md|\
+              backend/campaign_ai_execution_quality_gate.py|\
+              backend/snapchat_v2/committed_totals.py|\
+              backend/snapchat_v2/empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_inactive_parent_scope.py|\
+              backend/tests/test_snapchat_reporting_v2_commit_completion.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\
@@ -133,6 +143,16 @@ jobs:
               frontend/src/services/snapchatCampaignPublication.test.js|\
               .github/workflows/snapchat-campaign-publication.yml|\
               docs/operations/SNAP-COMPLETION-20261025/PUBLICATION.md|\
+              docs/operations/SNAP-COMPLETION-20261025/PUBLICATION-CTA.md|\
+              docs/operations/SNAP-COMPLETION-20261025/COMMERCIAL-SCALE-GUARD.md|\
+              docs/operations/SNAP-COMPLETION-20261025/EMPTY-HIERARCHY.md|\
+              docs/operations/SNAP-COMPLETION-20261026/STATUS.md|\
+              backend/campaign_ai_execution_quality_gate.py|\
+              backend/snapchat_v2/committed_totals.py|\
+              backend/snapchat_v2/empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_empty_hierarchy.py|\
+              backend/tests/test_snapchat_reporting_v2_inactive_parent_scope.py|\
+              backend/tests/test_snapchat_reporting_v2_commit_completion.py|\
               backend/integrations_control_center/snapchat_media_upload.py|\
               backend/integrations_control_center/snapchat_readiness_provenance.py|\
               backend/tests/test_snapchat_readiness_provenance.py|\

@@ -1519,6 +1519,14 @@ def evaluate_execution_quality(
     freshness = value.get("freshness") if isinstance(value.get("freshness"), dict) else {}
     if freshness.get("status") != "fresh":
         blockers.append("execution_data_stale")
+    if action == "scale" and value.get("provider") == "snapchat":
+        commercial = value.get("commercial_scale")
+        commercial = commercial if isinstance(commercial, dict) else {}
+        if (commercial.get("status") != "complete"
+                or commercial.get("source") != "unified_marketing_contract:mezan_exact_campaign_attribution"
+                or commercial.get("account_id") != value.get("account_id")
+                or not commercial.get("campaign_id") or commercial.get("errors")):
+            blockers.append("execution_campaign_profitability_unproven")
     provider_sync = (
         value.get("provider_sync") if isinstance(value.get("provider_sync"), dict) else {}
     )
