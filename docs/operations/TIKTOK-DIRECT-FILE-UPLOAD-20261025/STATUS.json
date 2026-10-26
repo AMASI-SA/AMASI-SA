@@ -1,9 +1,9 @@
 {
   "task_id": "TIKTOK-DIRECT-FILE-UPLOAD-20261025",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/tiktok-file-caption-r5-20261026",
-  "source_base": "cb08def11cdf5ef01ea28df253bd201891b91adc",
-  "state": "R5_source_checkpoint_latest_reviewed_Google1522",
+  "branch": "codex/tiktok-file-preview-csp-r7-20261026",
+  "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
+  "state": "R7_CSP_source_checkpoint_on_reviewed_Snap1527",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -15,9 +15,9 @@
     "Fresh backend/frontend/contract tests and actual browser-to-TikTok CORS/native acceptance required before claiming end-to-end success."
   ],
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
-  "production_changed": false,
+  "production_changed": true,
   "provider_writes": 0,
-  "next": "Freeze fresh R5 source directly on reviewed J cb08;run source readiness and create intent-only B;fresh B checks;original-host isolated adapter0/exactidentity;normal merge exact B tree;actual /app adapter;own prepare/prepublish and one publish;explicit finish+verify3;PRIVATE native file test;caption catalog smoke without new model request.",
+  "next": "Newsource A directly39f2 reviewedSnap1527;source readiness->intentonlyB;freshallBchecks;wait foreignreleaseendsandguardinactive beforeisolatedoriginalhostadapter;normalmergeexactBtree;actual/appadapter/ownprepare/prepublish/onePublish/explicitfinish/verify3inactive;nativePRIVATEfileproof. No liveAI/publicfixture/mediarelay.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -28,7 +28,18 @@
     "live_attempt": "Read-only native readiness from isolated /tmp clone100fd on original host used the project development database. It returned no connected creator records;this is not evidence about the connected Production account and no native OpenAPI call occurred. No DB write,init,media transfer or model request. Production UI readiness must be tested after deployment.",
     "preview_fix": "Central local-video URL constructor wraps bytes with an allowlisted video MIME and accepts only canonical same-origin blob UUID capabilities;explicit HTML/entity metacharacters rejected and invalid object URL revoked. Both metadata reader and visible preview use this guard. Node independent acceptance8 PASS;Jest adds9 cases. Fresh full CodeQL/native/frontend CI required.",
     "original_host_superseded": "1516 isolated original-host adapter exit0 exact old A/runtime;not valid evidence for changedR2source. R2 must repeat fresh adapter after reviewed intent B.",
-    "R4": "B20a8e60c0b81d05af433bcf23ba44cec4e37efbb fresh current-head27 checks:21SUCCESS6nonapplicableSKIP,0pending/failure. CodeQLbothlanguages+aggregateSUCCESS0alerts. Native552backend/165frontend,security,release/HostNode20,G47,stock,balance,Qoyod,Snap/legal pass. PR1523 ready for review. Production remainsJd888."
+    "R4": "B20a8e60c0b81d05af433bcf23ba44cec4e37efbb fresh current-head27 checks:21SUCCESS6nonapplicableSKIP,0pending/failure. CodeQLbothlanguages+aggregateSUCCESS0alerts. Native552backend/165frontend,security,release/HostNode20,G47,stock,balance,Qoyod,Snap/legal pass. PR1523 ready for review. Production remainsJd888.",
+    "R5": "All27 B checks completed:21SUCCESS6nonapplicableSKIP;CodeQLbothlanguages+aggregateSUCCESS0annotations. Original-host isolated adapter EXIT0;asserted exactB/sourceA/runtime. Normal merge M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318 tree88270dba341b98a32e1b540daadec3cc327df0c6 exactlyequals B.",
+    "R5_actual_app": "TIKTOK1524_APP_ADAPTER_RETRY_EXIT=0;TIKTOK1524_APP_IDENTITY_MATCH exactM/A/runtime;TIKTOK1524_GUARD active:false.",
+    "R6": {
+      "source_readiness_run": 40246997012,
+      "intent_artifact": 12618903610,
+      "source_A": "b7962f8fc212d8a7f18695bf7dce816797dbff95",
+      "intent_B": "8fd280846bb720fb3a54e20af21943abc03c6841",
+      "tree": "d6f9d125156a08a064b17803af744705ebc3b227",
+      "runtime": "rg5-1074a8f70121544b2b56c772d4d240379638710b31fdada2731643d8d83786fd",
+      "originalhost": "Fresh inactiveguard required in samecommand beforeclone;isolated/tmp/tiktok1530-release adapterlaunched,awaitoutput."
+    }
   },
   "user_added_requirement": "Generate a viewer-facing Saudi-market video caption from the selected product: engaging opening,product value,natural interaction CTA,relevant hashtags and organic/promoted variants;owner reviews before posting,no guaranteed reach or fabricated current-trend claims.",
   "frontend": "Default local-file source,local blob preview,4MiB bounded fingerprint blocks,sequential native PUTs with no Mezan auth/cookies,progress,explicit status check and original-session resume. Existing URL/photo source preserved. Added helper/component tests;not yet executed.",
@@ -39,8 +50,13 @@
   "wip_checkpoint": "100fd4954f7d6cd4df0b1bde8a4086047018be67",
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
-    "guard_active": false,
-    "observed": "Fresh original-host guard reports active:false. /app remains untouched by this task."
+    "guard_active": true,
+    "actor": "codex-tiktok1524",
+    "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+    "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+    "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+    "prepared_at": "2026-10-25T23:37:49.946806+00:00",
+    "ui_blocker": "Resolved by owner;Publish changes dialog visible. No final Publish click yet."
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -65,9 +81,9 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-25T23:17:52.297Z",
-  "original_host": "Code-server lost connection during obsolete R3 isolated build. Reload Window restored editor;new container session has new Terminal2 owned by this task and /tmp prior task clones absent. No completed R3 result can be used;R4 fresh clone/adapter required. /app tracked clean;preserved untracked .emergent/testing/ and deployer-agent-docs/.",
-  "live_readiness": "Existing Production BusinessAPI creator readiness freshly PASS for متجر اماسي الجديد:publish/draft/comments-read available;messages not granted,automatic repliesoff,verified URL properties empty. This does not prove new OpenAPI token/CORS path. No postinitialized/mediauploaded/modelcalled.",
+  "observed_at": "2026-10-26T00:04:23.543Z",
+  "original_host": "Actual /app HEAD M219c4db4a45cbfc2bc5499909c0fcad5e3ddb318. Adapter first EXIT2 due generated backend/__pycache__;fresh inactive guard,validated bytecode-only cache cleanup (1dir),retry EXIT0. Exact sourceA d8b4e6ff6ce11cd8965bab035e2035865202dcc8/runtime rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8 asserted. Trackedclean;only prior untracked .emergent/testing/ and deployer-agent-docs/ preserved. Finalguard active:false. No ownlease/prepare/prepublish/Publish.",
+  "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
     "pr": 1523,
     "A": "092ce35d31c459d971bf74c595b0a11dd09aae20",
@@ -76,5 +92,57 @@
     "not_deployed": true,
     "checks": "B20a8e60c0b81d05af433bcf23ba44cec4e37efbb fresh current-head27 checks:21SUCCESS6nonapplicableSKIP,0pending/failure. CodeQLbothlanguages+aggregateSUCCESS0alerts. Native552backend/165frontend,security,release/HostNode20,G47,stock,balance,Qoyod,Snap/legal pass. PR1523 ready for review. Production remainsJd888.",
     "reason": "Production advanced with Google1522 before any R4 original-host rehearsal. Preserve frozen pair."
+  },
+  "repository_production_branch_changed": true,
+  "publish": {
+    "click_count": 1,
+    "prepublish": "ready_to_publish:true exact sourceA/M/runtime protocol5",
+    "ui_after_click": "Publishing your website to cloud...8m28s;Workspace ready,Changes packaged,Website built,Database ready,Keys & settings applied. Still no newer explicitfinish.",
+    "previous_explicit_finish": "Oct26 02:09AM Asia/Riyadh",
+    "new_finish_observed": false,
+    "started": "Oct26 02:38AM Asia/Riyadh",
+    "finished": "Oct26 02:47AM Asia/Riyadh explicit Deployment finished and Deployment successful"
+  },
+  "runtime_probe": "Read-only /api/health during build still served prior Google1522 source2589081034abeda50d6151611f0ffc6fb0d350ed/runtime rg5-d5d75bda9223f6b82b825e56093d8517b4221ee426fae2fcc8238e127afb8788;not ownrelease yet. No guard verify attempted before explicitfinish.",
+  "production_verification": {
+    "verified": true,
+    "checks": 3,
+    "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+    "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+    "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+    "frontend_requests_per_probe": 42,
+    "final_guard_active": false
+  },
+  "live_file_test": "Official MP4 H264High/AAC fixture and 5s derived WebM VP8/Opus both fail local metadata with تعذر تشغيل هذا الفيديو على جهازك. Investigating actual cause;not claiming codec cause. No native proposal/init/upload. No byte proxy/storage substitution.",
+  "live_caption": "Livecatalog search هودي returned10 products;selected بوكس الشتاء | هودي وسلسال. Generate button enabled. No model request,within prior consumed live-test budget.",
+  "deployed_R5": {
+    "A": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+    "B": "6d8d1a39a074d2d17161a55b16d3a0389abeef9d",
+    "M": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+    "runtime": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+    "published": "Oct26 02:47AM Asia/Riyadh explicit Deployment finished and Deployment successful",
+    "verification": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
+      "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
+      "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
+      "frontend_requests_per_probe": 42,
+      "final_guard_active": false
+    }
+  },
+  "CSP_fix": {
+    "cause": "LiveHTTP CSP200 lacked media-src and default-src 'self' denied blob video;HTML meta already allowed it but cannot relax HTTP CSP. Both MP4 andWebM localmetadata failed before nativeinit.",
+    "changed": "Add media-src 'self' blob: to frontend/public/_headers,_headers.json,vite.config.js;match governed CIexpectedheader and add4surface localpreviewcontract check. No script/object/framing/connect authority change.",
+    "regression": "Independent edge policy assertion EXIT1 before fix,EXIT0 after fix;4surfacesPASS and script-src self/object-src none/frame-ancestors none preserved."
+  },
+  "superseded_R6": {
+    "pr": 1530,
+    "A": "b7962f8fc212d8a7f18695bf7dce816797dbff95",
+    "B": "8fd280846bb720fb3a54e20af21943abc03c6841",
+    "runtime": "rg5-1074a8f70121544b2b56c772d4d240379638710b31fdada2731643d8d83786fd",
+    "not_deployed": true,
+    "reason": "Reviewed Production advanced with Snap1527 during BCI;sourcepaths do not overlap CSPfix. Frozen pair preserved.",
+    "originalhost": "Fresh inactiveguard before isolated rehearsal;EXIT0 observed;log exactsource/runtime."
   }
 }
