@@ -27,7 +27,7 @@ async def test_snapshot_sees_private_claim_fence_and_leaves_documents_unchanged(
     await fences.insert_one({**scope, 'status': 'claimed', 'execution_claim_id': 'claim'})
     before = [await standing.count_documents({}), await fences.count_documents({})]
     result = await diagnose(db)
-    assert result['complete'] and result['counts']['private_claims_without_reserved_record'] == 1
+    assert result['inventory_exhausted'] and not result['complete'] and result['counts']['private_claims_without_reserved_record'] == 1
     assert result['counts']['claimed_fences'] == 1 and not result['database_identity_verified']
     assert [await standing.count_documents({}), await fences.count_documents({})] == before
     assert not await db[COLLECTIONS['guards'][0]].count_documents({})

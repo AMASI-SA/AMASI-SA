@@ -10,7 +10,7 @@
     "backend/tests/test_google_budget_readiness_diagnostic_mongo.py",
     ".github/workflows/google-budget-readiness-diagnostic.yml"
   ],
-  "verification": "11 local unit tests pass; 2 explicit real Mongo skips (no local replica); replica CI pending",
+  "verification": "12 local tests passed; 2 real replica tests skipped locally; replica CI pending",
   "production_changed": false,
   "provider_writes": 0,
   "limitations": [
@@ -20,7 +20,8 @@
     "No automatic recovery or release of claims",
     "Hard limit 2000 per collection; truncation is incomplete",
     "Real Mongo replica validation required",
-    "Reserved allocation record is presence-only, never proof of valid protected commitment"
+    "Reserved allocation record is presence-only, never proof of valid protected commitment",
+    "inventory_exhausted only proves cursors exhausted; complete always false because structural authority validation is not implemented"
   ],
   "next_safe_action": "Review and run real replica tests before any controlled read-only production invocation; do not expose identifiers or credentials"
 }

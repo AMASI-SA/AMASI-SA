@@ -119,7 +119,8 @@ async def _scan(db, max_rows):
                     return {'complete': False, 'reason': 'row_limit', 'migration_safe': False, 'database_identity_verified': False, 'provider_writes': 0}
                 rows[name] = docs
             counts, malformed = _analyze(rows)
-            return {'complete': not malformed, 'reason': 'malformed_or_duplicate_state' if malformed else None,
+            return {'complete': False, 'inventory_exhausted': True, 'structural_validation': 'limited_not_authority',
+                'reason': 'malformed_or_duplicate_state' if malformed else 'limited_structure_only',
                 'snapshot_at': datetime.now(timezone.utc).isoformat(),
                 'counts': {k: counts[k] for k in ('private_claims', 'private_claims_with_reserved_record', 'private_claims_without_reserved_record', 'nonterminal_creation_ledger_entries', 'nonterminal_ledger_without_matching_claim', 'claimed_fences', 'unresolved_proposals', 'active_guard_claims', 'outstanding_allocations')},
                 'migration_safe': False, 'database_identity_verified': False, 'provider_writes': 0}

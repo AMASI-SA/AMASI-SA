@@ -65,7 +65,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = ET.parse('/tmp/google-budget-readiness.xml').findall('.//testcase')
           replica = [c for c in cases if 'diagnostic_mongo' in c.get('classname', '')]
-          assert len(cases) == 13 and len(replica) == 2
+          assert len(cases) == 14 and len(replica) == 2
           assert not any(c.find(t) is not None for c in cases for t in ('failure', 'error', 'skipped'))
           END
       - name: Remove disposable replica

@@ -30,7 +30,7 @@ def row(**kwargs): return {'user_id': 'private_owner', 'account_id': 'private_ac
 @pytest.mark.asyncio
 async def test_readonly_empty_snapshot_does_not_certify_migration_or_production():
     db = DB(); result = await diagnose(db)
-    assert result['complete'] is True and not result['migration_safe'] and not result['database_identity_verified']
+    assert result['complete'] is False and result['inventory_exhausted'] and not result['migration_safe'] and not result['database_identity_verified']
     assert result['counts']['private_claims'] == 0 and db.session.aborted
     assert db.session.options['read_concern'].level == 'snapshot'
 
@@ -39,7 +39,7 @@ async def test_legacy_claim_and_fence_are_counted_without_leaking_identity():
     db = DB({coll('standing'): [row(_dispatch_claim={'execution_claim_id': 'UNIQUE_CLAIM_X'})],
              coll('fences'): [row(status='claimed', execution_claim_id='UNIQUE_CLAIM_X')]})
     result = await diagnose(db)
-    assert result['complete'] and result['counts']['private_claims_without_reserved_record'] == 1
+    assert result['inventory_exhausted'] and not result['complete'] and result['counts']['private_claims_without_reserved_record'] == 1
     assert result['counts']['claimed_fences'] == 1
     assert all(secret not in repr(result) for secret in ('private_owner', 'private_account', 'UNIQUE_CLAIM_X')) and db.session.aborted
 
@@ -85,7 +85,7 @@ async def test_unknown_fence_status_is_unproven():
 async def test_reserved_ledger_without_claim_is_reported():
     entry = row(creation_identity='identity', state='reserved')
     result = await diagnose(DB({coll('creation'): [row(_creation_ledger={'identity': entry})]}))
-    assert result['complete'] and result['counts']['nonterminal_creation_ledger_entries'] == 1
+    assert result['inventory_exhausted'] and not result['complete'] and result['counts']['nonterminal_creation_ledger_entries'] == 1
     assert result['counts']['nonterminal_ledger_without_matching_claim'] == 1
 
 @pytest.mark.asyncio
@@ -100,3 +100,11 @@ async def test_terminal_allocation_is_not_counted_as_reserved_record():
 async def test_unknown_ledger_state_is_incomplete():
     result = await diagnose(DB({coll('creation'): [row(_creation_ledger={'x': row(creation_identity='x', state='future')})]}))
     assert not result['complete']
+
+@pytest.mark.asyncio
+async def test_plausible_but_incomplete_ledger_never_claims_full_authority_validation():
+    entry = row(creation_identity='x', state='owned')
+    result = await diagnose(DB({coll('creation'): [row(_creation_ledger={'x': entry})]}))
+    assert result['inventory_exhausted'] and not result['complete']
+    assert result['structural_validation'] == 'limited_not_authority'
+    assert not result['migration_safe'] and not result['database_identity_verified']
