@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Resume native-confirmed existing draft upload once via exact selected merchant file; do not create another native init. Then reconcile sameproposal. Original direct privateproposal blocked; no successful publish yet. Continue R3diagnostic code release if needed; no native-web login/spend/model changes.",
+  "next": "Preserve same pending draft session/fence; no new init. Reproduce and fix false awaiting_upload state after destination/capability persistence failure or expiry, then fresh R3source CI/intent/release. Diagnose exact existing capability validity through owner-visible history after repair. Do not bypass fence or alter file fingerprint.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T19:45:28.350Z",
+  "observed_at": "2026-10-26T19:50:24.066Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -453,6 +453,10 @@
     "native_confirmed_uploaded_bytes": 0,
     "file_bytes": 5552622,
     "error": "Approve/init response surfaced generic error, but same-proposal native status is awaiting_upload0bytes. Do not assume init failure and never initialize again.",
-    "next": "Use UI استكمال نفس عملية الرفع with the selected exact file; same fingerprint/native offset0 only."
+    "next": "Use UI استكمال نفس عملية الرفع with the selected exact file; same fingerprint/native offset0 only.",
+    "resume_ui_clicks": 1,
+    "resume_result": "409 owner-visible لا يمكن استكمال الرفع الآن؛ راجع حالة TikTok دون إنشاء طلب مكرر.",
+    "init_retry": false,
+    "blocker": "Native publish/session ID exists and native status PROCESSING_UPLOAD0, but a valid resumable capability/expiry is not proven. Do not infer the signed upload URL was persisted or usable."
   }
 }
