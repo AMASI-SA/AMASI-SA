@@ -9,8 +9,11 @@ from datetime import timedelta
 
 from fastapi import HTTPException
 import pytest
+from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 
 from integrations_control_center import google_ads_automation_gateway as gateway
+from integrations_control_center import google_ads_automation_budget_guard as guard
+from motor.motor_asyncio import AsyncIOMotorClientSession
 from integrations_control_center import google_ads_automation_authority as authority
 from integrations_control_center import google_ads_management as management
 from integrations_control_center.google_ads_campaign_contract import GoogleCampaignActionInput
@@ -21,6 +24,7 @@ from tests.test_google_ads_automation_gateway import NativeProvider
 
 
 async def setup(monkeypatch,db):
+    set_guard_time(NOW)
     docs,native=case_documents();docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     await seed(db,docs)
     provider=NativeProvider(native)
@@ -85,16 +89,20 @@ async def test_real_shared_account_fence_serializes_manual_and_automation(monkey
 @pytest.mark.asyncio
 async def test_real_authority_postcommit_ack_loss_holds_then_terminally_cancels_without_http(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db)
-    original=authority._linearize_claim
-    async def lose_ack(*args,**kwargs):
-        await original(*args,**kwargs)
-        raise TimeoutError('test-only policy CAS committed but response lost')
-    monkeypatch.setattr(authority,'_linearize_claim',lose_ack)
+    original=AsyncIOMotorClientSession.commit_transaction
+    async def lose_ack(session):
+        await original(session)
+        raise TimeoutError('test-only budget transaction committed but response lost')
+    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',lose_ack)
     result=await execute(authority_db,row)
     assert result['status']=='uncertain' and result['submission_started'] is False and provider.writes==0
     configured=await authority_db[gateway.AUTOMATION_POLICIES].find_one({'user_id':'owner','account_id':'123'})
     assert configured['_dispatch_claim']['proposal_id']==row['proposal_id']
+    budget=await authority_db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    allocation=budget['allocations'][budget['active_claim']['allocation_id']]
+    assert allocation['state']=='reserved' and allocation['proposal_id']==row['proposal_id']
     assert (await authority_db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',original)
     monkeypatch.setattr(management,'now',lambda:NOW+timedelta(minutes=6))
     monkeypatch.delenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED')
     result=await gateway.reconcile_google_automation_proposal(authority_db,user_id='owner',account_id='123',proposal_id=row['proposal_id'])

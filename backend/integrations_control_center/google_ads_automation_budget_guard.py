@@ -552,7 +552,10 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             if not (completed or cancelled or rejected or stopped):
                 _fail('google_budget_guard_settlement_unproved')
             changed = await db[AUTOMATION_POLICIES].update_one({**scope, '_dispatch_claim': claim},
-                {'$set': {'_dispatch_claim': None}, '$inc': {'_dispatch_generation': 1}}, session=session)
+                {'$set': {'_dispatch_claim': None, '_dispatch_last_settlement': {
+                    'claim_id': command.execution_claim_id,
+                    'status': 'completed' if completed else 'cancelled_before_dispatch' if cancelled else 'provider_rejected' if rejected else 'stopped_before_provider_dispatch',
+                    'observed_at': stamp}}, '$inc': {'_dispatch_generation': 1}}, session=session)
             if changed.matched_count != 1:
                 _fail('google_budget_guard_settlement_unproved')
             old['allocations'][command.allocation_id] = {**entry, 'state': 'native_enabled' if completed else 'settled', 'settled_at': stamp,

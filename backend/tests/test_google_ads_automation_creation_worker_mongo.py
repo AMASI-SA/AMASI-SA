@@ -12,6 +12,7 @@ import uuid
 from motor.motor_asyncio import AsyncIOMotorClient
 import pytest
 import pytest_asyncio
+from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 
 import google_ads_automation_cycles as cycles
 from integrations_control_center import google_ads_automation_creation_worker as creation

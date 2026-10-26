@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-GUARD-INTEGRATION-20261026",
   "branch": "codex/google-guard-integration-wip-20261026",
   "parent": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf",
-  "state": "WIP ONLY; mandatory writer migration implemented; legacy test fixtures not migrated; never deploy",
+  "state": "WIP ONLY: mandatory writer migration and unit/Mongo fixture+replica CI wiring; actualCI pending, runtime disabled",
   "runtime_enabled": false,
   "production_changed": false,
   "provider_writes": 0,
@@ -10,7 +10,17 @@
     "focused": "64passed11actualMongo local skips1.85s",
     "compile": "pass",
     "diff_check": "pass",
-    "legacy_policy_activation_units": "37pass3fail before stop; nontransactional fakeDB now returns503; must upgrade collaborators, do not restore legacy bypass"
+    "legacy_policy_activation_units": "37pass3fail before stop; nontransactional fakeDB now returns503; must upgrade collaborators, do not restore legacy bypass",
+    "legacy_unit_migration": "475passed5.43s then extra legacyclaim failclosed test passed in targeted72; source settlement audit compatibility preserved",
+    "replica_modules": "8modules43explicitlocalMongo skips; collected without import errors; actual acceptance pending",
+    "ci_wiring": "full1177tests, standing75expectedincl11actualreplica, YAMLparse+allrunstepsbash-npass",
+    "root_full_workflow_local": {
+      "passed": 1096,
+      "skipped": 81,
+      "seconds": 15.45,
+      "exit_code": 0,
+      "limitation": "Mongo replica unavailable locally; actual CI required"
+    }
   },
   "changes": [
     "Six mandatory same-db transaction policy writers; no optional None legacy path",
@@ -19,11 +29,11 @@
     "Unknown outcomes retained; known precommit conflicts409; runtime literal false even if flags set"
   ],
   "remaining": [
-    "Independent full review",
-    "Upgrade legacy test DB fixtures to transaction contract",
-    "Actual replica acceptance including six route epoch and OAuth-loss revoke",
-    "Fresh complete Google gateway regression CI",
-    "Creation/funded first-launch migration still separate"
+    "Exact source full and focused actual replica CI",
+    "Independent final review after fixture upgrades",
+    "Native budget response proof; pre-migration privateclaim recovery/absence evidence before runtime enable",
+    "Creation fundedfirstlaunch migration and allownerlaunch/catalognativeproofs remain"
   ],
-  "next_safe_action": "Review diff and fix test collaborators before any readiness claim; extend disposable replica CI; no live flags or provider writes"
+  "next_safe_action": "Push coherent WIP checkpoint and inspect actualreplica CI; never enableflags or deployasautonomycomplete",
+  "pr": 1560
 }

@@ -46,10 +46,9 @@ class GatewayCollection(Collection):
 
 class GatewayDB(DB):
     def __init__(self,docs):
-        self.collections={k:GatewayCollection(v) for k,v in docs.items()};self.users=self['users']
+        self._tx_setup({k:GatewayCollection(v) for k,v in docs.items()});self.collections=self._tx_collections;self.users=self['users']
     def __getitem__(self,key):
-        if key not in self.collections:self.collections[key]=GatewayCollection([])
-        return self.collections[key]
+        return self._tx_get(key)
 
 class NativeProvider:
     def __init__(self,native):
@@ -75,6 +74,13 @@ class NativeProvider:
 def integration(monkeypatch):
     docs,native=case_documents();docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     db=GatewayDB(docs);provider=NativeProvider(native)
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    from datetime import datetime
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):return NOW
+    monkeypatch.setattr(guard,'datetime',Clock)
+    monkeypatch.setattr(guard,'budget_guard_runtime_available',lambda:True)
     monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','true')
     monkeypatch.setattr(management,'now',lambda:NOW)
     monkeypatch.setattr(authority,'_now',lambda current=None:NOW)
@@ -216,12 +222,9 @@ async def test_manual_proposal_cannot_enter_automation_execution(integration):
 @pytest.mark.asyncio
 async def test_operator_kill_after_policy_claim_never_reaches_submission_floor(integration,monkeypatch):
     db,provider=integration;row=await preview(db)
-    original=authority._linearize_claim
-    async def kill_after_ack(*args,**kwargs):
-        result=await original(*args,**kwargs)
+    async def kill_after_ack():
         monkeypatch.delenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED')
-        return result
-    monkeypatch.setattr(authority,'_linearize_claim',kill_after_ack)
+    db.after_commit=kill_after_ack
     result=await execute(db,row)
     assert result['status']=='uncertain' and result['submission_started'] is False
     assert provider.writes==0 and db[management.FENCES].rows[0]['status']=='claimed'
