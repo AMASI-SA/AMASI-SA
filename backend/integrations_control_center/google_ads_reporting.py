@@ -619,12 +619,13 @@ async def run_google_ads_reporting_sync(
     status = "complete" if accounts_complete == len(account_summaries) else "partial"
     if rows_saved == 0 and errors:
         status = "failed"
+    # Report availability is not OAuth/account ownership authority. A failed
+    # report must not revoke management, and partial/successful reads must not
+    # restore a revoked connection or create an unverified connection record.
     await db.mezan_integrations_v2.update_one(
         {"user_id": user_id, "provider": GOOGLE_ADS_PROVIDER_ID},
         {
             "$set": {
-                "connection_status": "connected" if status != "failed" else "error",
-                "connection_provenance": "api_connection",
                 "has_data": rows_saved > 0,
                 "last_sync_at": observed_at if rows_saved > 0 else None,
                 "data_delay_minutes": 0 if status == "complete" else None,
@@ -635,7 +636,7 @@ async def run_google_ads_reporting_sync(
                 "updated_at": observed_at,
             }
         },
-        upsert=True,
+        upsert=False,
     )
     return {
         "provider": GOOGLE_ADS_PROVIDER_ID,

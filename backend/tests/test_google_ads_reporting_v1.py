@@ -184,3 +184,85 @@ async def test_google_ads_manager_account_is_not_reported_as_spend(monkeypatch):
         "google_ads_manager_account_requires_client_selection"
     )
     assert db[module.GOOGLE_ADS_DAILY_COLLECTION].updates == []
+
+
+class ConnectionCollection(FakeCollection):
+    """Minimal persisted connection state, independent of reporting behavior."""
+
+    def __init__(self, state):
+        super().__init__()
+        self.document = None if state is None else {
+            "user_id": "owner-1", "provider": "google_ads",
+            "connection_status": state,
+            "connection_provenance": "api_connection",
+            "permission_observation_id": "oauth-generation-1",
+        }
+
+    async def update_one(self, query, update, upsert=False):
+        await super().update_one(query, update, upsert=upsert)
+        if self.document is None and upsert:
+            self.document = deepcopy(query)
+        if self.document is not None:
+            self.document.update(deepcopy(update.get("$set", {})))
+        return FakeUpdateResult()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connection_state", ["connected", "error", "needs_reauth", None])
+@pytest.mark.parametrize("outcome", ["complete", "partial", "failed"])
+async def test_reporting_does_not_revoke_restore_or_create_connection(
+    monkeypatch, connection_state, outcome
+):
+    db = FakeDB()
+    db.mezan_integrations_v2 = ConnectionCollection(connection_state)
+    before = deepcopy(db.mezan_integrations_v2.document)
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def credential(*args, **kwargs):
+        return "test-access-token"
+
+    async def accounts(*args, **kwargs):
+        return [{"ad_account_id": "111"}, {"ad_account_id": "222"}]
+
+    async def metadata(*args, account, **kwargs):
+        if outcome == "failed" or outcome == "partial" and account["ad_account_id"] == "222":
+            raise module.GoogleAdsReportingError(
+                "google_ads_transient_read_failure", "Temporary reporting failure.",
+                status_code=503, retryable=True,
+            )
+        return {"display_name": "Test", "currency": "SAR",
+                "timezone": "Asia/Riyadh", "manager": False}
+
+    async def search_stream(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(module, "google_oauth_configured", lambda: True)
+    monkeypatch.setattr(module, "google_ads_reporting_enabled", lambda: True)
+    monkeypatch.setattr(module, "ensure_google_ads_reporting_indexes", noop)
+    monkeypatch.setattr(module, "_credential", credential)
+    monkeypatch.setattr(module, "_accounts", accounts)
+    monkeypatch.setattr(module, "_account_metadata", metadata)
+    monkeypatch.setattr(module, "_search_stream", search_stream)
+    monkeypatch.setattr(module, "upsert_platform_hour", noop)
+
+    result = await module.run_google_ads_reporting_sync(
+        db, "owner-1", date_from="2026-08-05", date_to="2026-08-05"
+    )
+    assert result["status"] == outcome
+    collection = db.mezan_integrations_v2
+    if before is None:
+        assert collection.document is None
+    else:
+        for field in ("connection_status", "connection_provenance", "permission_observation_id"):
+            assert collection.document[field] == before[field]
+    assert len(collection.updates) == 1
+    written = collection.updates[0]
+    assert written["upsert"] is False
+    assert "connection_status" not in written["update"]["$set"]
+    assert "connection_provenance" not in written["update"]["$set"]
+    assert "permission_observation_id" not in written["update"]["$set"]
+    assert written["update"]["$set"]["data_quality"] == {
+        "complete": "complete", "partial": "partial", "failed": "unavailable"
+    }[outcome]
