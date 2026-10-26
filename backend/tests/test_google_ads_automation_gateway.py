@@ -192,6 +192,29 @@ async def test_native_drift_before_authority_never_sends_and_leaves_no_authoriza
     assert provider.writes==0 and db[management.FENCES].rows[0]['status']=='released'
     assert '_dispatch_claim' not in db[gateway.AUTOMATION_POLICIES].rows[0]
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['other_account', 'different_resource', 'missing_shared', 'missing_reference_count'])
+async def test_execute_never_mutates_when_rest_inventory_budget_proof_changes(integration, change):
+    db, provider = integration
+    row = await preview(db)
+    async def changed_rest_row(query):
+        snap = provider.native['campaign_snapshot']
+        budget = deepcopy(snap['campaign_budget'])
+        if change == 'other_account': budget['resourceName'] = 'customers/777/campaignBudgets/999'
+        elif change == 'different_resource': budget['resourceName'] = 'customers/123/campaignBudgets/1000'
+        elif change == 'missing_shared': budget.pop('explicitlyShared')
+        else: budget.pop('referenceCount')
+        return [{'campaign': deepcopy(snap['campaign']), 'campaignBudget': budget}], True
+    provider.search = changed_rest_row
+    try:
+        result = await execute(db, row)
+        assert result['status'] != 'completed'
+    except HTTPException:
+        pass
+    assert provider.writes == 0
+    assert db[management.PROPOSALS].rows[0].get('submission_started') is not True
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind',['not_acknowledged','cancel_after_claim','kill_after_claim'])
 async def test_submission_floor_failure_never_calls_google_and_holds_claim(integration,monkeypatch,kind):
