@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R7_app_adapter_retry_then_own_prepare_when_exact_identity",
+  "state": "R7_actual_adapter_retry0_own_prepared_lease",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Read ownedTerminal2 retry exit and1533_PREPARED fields. If EXIT0/prepared exactA/M/runtime:openRepublishdialog,ownprepublish immediatelybeforeonePublish,newexplicitfinish,verify3inactive. If fail inspectexactlog;neverweaken sourcechecks orclearforeignlease. Nativeoperations0.",
+  "next": "OpenRepublishdialog. Run ownprepublish ready:true exactidentity immediatelybeforeone finalPublishchanges. ObserveNEWexplicitfinish after02:47Riyadh/currentownstart,thenownverify3/finalinactive. Then nativePRIVATEfiletest usingofficialMP4;CSPHTTP mustallowmedia-srcselfblob. No modelrequest/publicfixture/mediarelay.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -61,12 +61,11 @@
   "wip_pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1513",
   "release_hold": {
     "guard_active": true,
-    "actor": "codex-tiktok1524",
-    "source_git_sha": "d8b4e6ff6ce11cd8965bab035e2035865202dcc8",
-    "deployment_git_sha": "219c4db4a45cbfc2bc5499909c0fcad5e3ddb318",
-    "release_id": "rg5-cc63f20fd962e33efa1c3b97d0b49a758410fc9ef581bb6bbc3b47b5aaf0f5f8",
-    "prepared_at": "2026-10-25T23:37:49.946806+00:00",
-    "ui_blocker": "Resolved by owner;Publish changes dialog visible. No final Publish click yet."
+    "actor": "codex-tiktok1533",
+    "source_git_sha": "8e410287744a15bc682ee954bad46f00b0e64465",
+    "deployment_git_sha": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
+    "release_id": "rg5-46c158c5f0815b144603999d04031e2865927d5b2a0ef9cfcc2a9c7ff4d211bf",
+    "prepared_at": "2026-10-26T00:19:15.135795+00:00"
   },
   "superseded_frozen_pair": {
     "pr": 1516,
@@ -91,8 +90,8 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T00:18:22.216Z",
-  "original_host": "Actual/app adapter EXIT2 at final frontend verifier because generated backend/__pycache__ reappeared after validated cleanup. Frozen governed source unchanged. Fresh inactiveguard/currentM33c2/trackedclean required again;targeted bytecode-only cleanup then full adapter retry launched. On EXIT0 exactA/runtime assertions immediately followedby ownprepare codex-tiktok1533 in samecommand;result pending. Do not repeat prepare or Publish without reading result.",
+  "observed_at": "2026-10-26T00:19:56.748Z",
+  "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
     "pr": 1523,
