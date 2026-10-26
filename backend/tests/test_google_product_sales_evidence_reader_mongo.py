@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from integrations_control_center.google_product_sales_evidence_reader import read_product_sales_evidence
+from integrations_control_center.google_order_source_coverage import read_source_date_coverage
 
 @pytest_asyncio.fixture
 async def replica_db():
@@ -47,3 +48,32 @@ async def test_real_empty_and_limit_plus_one_remain_unknown(replica_db):
     out=await read(replica_db,limit=3)
     assert out['truncated'] is True and out['observed_documents'] is None
     assert out['products'][0]['units_sold'] is None
+
+
+@pytest.mark.asyncio
+async def test_real_source_projection_owner_and_closed_day(replica_db):
+    def order(owner, number, instant, normalized):
+        return {'user_id': owner, 'order_id': '42', 'order_number': number, 'order_date': normalized,
+                'raw_by_source': {'salla_direct': {'id': 42, 'reference_id': number, 'created_at': instant,
+                                                    'customer': {'name': 'not returned'}}}}
+    await replica_db.unified_orders.insert_many([
+        order('owner', '77', '2026-08-14T21:30:00Z', '2026-08-14'),
+        order('other', '78', '2026-08-14T21:30:00Z', '2026-08-14'),
+        order('owner', '79', '2026-08-15', '2026-08-15')])
+    out = await read_source_date_coverage(replica_db, owner_id='owner', date_from='2026-08-15',
+        date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc))
+    assert out['observed_bound_inside'] == 1 and out['observed_unverified'] == 1
+    assert out['coverage_complete'] is False and out['sales'] is None and out['snapshot_consistent'] is False
+    assert 'not returned' not in str(out) and await replica_db.unified_orders.count_documents({}) == 3
+
+
+@pytest.mark.asyncio
+async def test_real_source_limit_plus_one_suppresses_all_partial_counts(replica_db):
+    await replica_db.unified_orders.insert_many([
+        {'user_id': 'owner', 'order_id': '42', 'order_number': str(i), 'order_date': '2026-08-15',
+         'raw_by_source': {'salla_direct': {'id': 42, 'reference_id': i, 'created_at': '2026-08-15T00:00:00Z'}}}
+        for i in range(1, 4)])
+    out = await read_source_date_coverage(replica_db, owner_id='owner', date_from='2026-08-15',
+        date_to='2026-08-15', as_of=datetime(2026, 8, 17, tzinfo=timezone.utc), limit=2)
+    assert out['truncated'] is True and out['observed_bound_inside'] is None and out['observed_unverified'] is None
+    assert out['coverage_complete'] is False and out['sales'] is None
