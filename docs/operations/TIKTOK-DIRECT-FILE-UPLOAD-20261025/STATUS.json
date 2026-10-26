@@ -89,7 +89,7 @@
     "not_deployed": true,
     "reason": "Google1520 merged during source/B CI;new fresh Production-parent source required. Native B552 backend/165frontend PASS;JS0alerts,Python pending at last observation. Original-host R3 rehearsal launched after inactiveguard;result must be treated obsolete."
   },
-  "observed_at": "2026-10-26T15:48:27.941Z",
+  "observed_at": "2026-10-26T15:53:11.260Z",
   "original_host": "Fullactualadapter retryEXIT0;exactM33c2/A8e410/runtime46c158 asserted. Ownprepare codex-tiktok1533 succeeded immediately after adapter. Trackedsourceunchanged;onlygeneratedcachecleanup1directory.",
   "live_readiness": "Production FILE readiness PASS on متجر اماسي الجديد: nativeOpenAPI identity andcreatorsettings proven,max600s,privacy SELF_ONLY/PUBLIC_TO_EVERYONE/MUTUAL_FOLLOW_FRIENDS. This proves current token compatible forreads. No nativeinit/media transferred.",
   "superseded_R4": {
@@ -237,7 +237,21 @@
       "prepublish": "ready_to_publish:true exact source99610/M058e/runtimec13a before finalPublish changes",
       "ui": "Publishing... disabled",
       "previous_finish": "Oct26 06:29PM Asia/Riyadh",
-      "new_finish_observed": false
+      "new_finish_observed": false,
+      "started": "Oct26 06:47PM Asia/Riyadh",
+      "ui_event_container": "b302fa0e-b96a-5270-8448-32ee17c230a5",
+      "phase": "Building your website; Changes packaged; no failure observed"
     }
-  }
+  },
+  "live_fixture_browser_decode": {
+    "confirmed": true,
+    "source": "official TikTok developer MP4 opened in native video page",
+    "duration": 180.483333,
+    "width": 1920,
+    "height": 1080,
+    "readyState": 4,
+    "selected_file_bytes": 32440799,
+    "no_native_upload_yet": true
+  },
+  "support_context_readonly": "Read prior Emergent support replies: Preview disk/environment is separate from Production; historical Production linux/amd64. No support message sent. Current Preview supervisor uses existing approved arm64Node; Production propagation is an experiment, not assumed."
 }
