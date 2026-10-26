@@ -1,7 +1,7 @@
 """Owner-only review of pinned commercial-plan products; no campaign execution.
 
-This module is deliberately unattached. A future integrator must attach only to
-an authenticated router and retain server-owned principal and clock boundaries.
+The authenticated router supplies the server-owned principal and clock. The
+review is informational and does not authorize advertising execution.
 """
 from copy import deepcopy
 from datetime import datetime, timezone
