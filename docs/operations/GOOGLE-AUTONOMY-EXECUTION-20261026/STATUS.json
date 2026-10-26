@@ -3,7 +3,7 @@
   "branch": "codex/google-autonomy-execution-r3-20261026",
   "base": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
   "A": "b0740fcfe1ffe1efd5e7df20f56a8dff175b5c94",
-  "state": "FROZEN intent-only B; finalB CI/independent Host20 pending; no merge/ownlease/publish",
+  "state": "READY all31finalBchecks success/expectedskip/neutral inclindependentHost20; markedready; actualforeignlease1533active soNOmerge/App/prepare/publish",
   "previous_pair": {
     "pr": 1529,
     "A": "d5175bb5da5545ed82dd13a9e86164a1742db03f",
@@ -24,5 +24,7 @@
     "active": true,
     "deployment": "33c2f1ca440954e4cce0c52e96a8f2c3e6673678",
     "root_yielded": true
-  }
+  },
+  "final_B_readiness_run": 40248986559,
+  "independent_host20_job": 121336917785
 }
