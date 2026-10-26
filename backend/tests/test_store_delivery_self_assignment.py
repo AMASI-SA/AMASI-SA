@@ -18,6 +18,10 @@ ACTOR = {"id": "driver-account", "role": "store_driver", "created_by": "merchant
 DRIVER = {"user_id": "merchant", "id": "driver", "account_user_id": "driver-account", "name": "الموصل", "city": "الرياض", "status": "active", "delivery_fee": 20}
 
 
+async def assignment_count(db):
+    return await db[ASSIGNMENTS].count_documents({})
+
+
 def setup(monkeypatch, *, city="الرياض", stage="completed", existing=None, provider_fails=False):
     mongo_uri = os.environ.get("MZ2_TEST_MONGO_URI")
     if mongo_uri:
@@ -102,7 +106,7 @@ def test_other_driver_is_reported_without_transfer_or_customer_data(monkeypatch)
     assert body["out_for_delivery_at"] == "2026-10-25T12:00:00+00:00"
     assert not {"customer_mobile", "driver_id", "assignment_id"} & body.keys()
     assert not calls
-    assert asyncio.run(db[ASSIGNMENTS].count_documents({})) == 1
+    assert asyncio.run(assignment_count(db)) == 1
 
 
 @pytest.mark.parametrize("kwargs,code", [({"city": "جدة"}, "driver_city_mismatch"), ({"stage": "in_progress"}, "store_courier_order_not_completed")])
@@ -112,7 +116,7 @@ def test_not_eligible_has_no_assignment_or_provider_write(monkeypatch, kwargs, c
     assert body["accepted"] is False
     assert body["code"] == code
     assert not calls
-    assert asyncio.run(db[ASSIGNMENTS].count_documents({})) == 0
+    assert asyncio.run(assignment_count(db)) == 0
 
 
 def test_provider_failure_remains_assigned_and_retryable(monkeypatch):
@@ -128,21 +132,21 @@ def test_provider_failure_remains_assigned_and_retryable(monkeypatch):
         return {"slug": "delivering"}
     monkeypatch.setattr(app_routes, "_push_salla_delivery_status", push)
     assert scan().json()["accepted"] is True
-    assert asyncio.run(db[ASSIGNMENTS].count_documents({})) == 1
+    assert asyncio.run(assignment_count(db)) == 1
 
 
 def test_self_assigned_same_driver_can_receive_by_order_number(monkeypatch):
     db, scan, calls = setup(monkeypatch, existing={"driver_id": "driver", "status": "assigned"})
     assert scan("101").json()["accepted"] is True
     assert calls == ["delivering"]
-    assert asyncio.run(db[ASSIGNMENTS].count_documents({})) == 1
+    assert asyncio.run(assignment_count(db)) == 1
 
 
 def test_unknown_shipment_has_no_effect(monkeypatch):
     db, scan, calls = setup(monkeypatch)
     assert scan("missing").json()["code"] == "shipment_not_found"
     assert not calls
-    assert asyncio.run(db[ASSIGNMENTS].count_documents({})) == 0
+    assert asyncio.run(assignment_count(db)) == 0
 
 
 def test_two_couriers_racing_cannot_overwrite_winning_order(monkeypatch):
