@@ -1,0 +1,18 @@
+{
+  "state": "FUTURE WIP PURE PREVIEW ONLY / NEVER DEPLOY",
+  "branch": "codex/google-autonomy-launch-wip-20261026",
+  "parent_source": "fe5e9cd7c09bbbf3aaa0e4fb604e1a3aaf216a85",
+  "verification": "Root183passed1.73s (85launch+98creation), no IO/provider/model/permissionwrites",
+  "semantics": "First launch only; prospective owner-generation approval; pre-existingownedPAUSED needs explicit scopedownerack; no manualcampaign adoption or implicitstandingallowlist",
+  "funding": "Decimal active commitments+nonreflectedpendingallocations+targetbudget under minimumactiveownercaps; no budgetcuts/invention; PAUSEDlogicalreservation notlaunchfunding",
+  "runtime_supported": false,
+  "executable": false,
+  "remaining": [
+    "Fresh catalog/nativeconfiguration adapter proofs",
+    "Shared permanentaccountbudgetguard and Mongo transaction capability",
+    "All creation/standing policy writers and automated budget increases mustparticipate in guard/cap protocol",
+    "Separate launchauthority/gateway/worker/UI explicit opt-in; no currentflag enableslaunch"
+  ],
+  "production_changed": false,
+  "current_release_PR": 1542
+}
