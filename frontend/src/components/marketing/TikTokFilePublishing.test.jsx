@@ -65,5 +65,22 @@ test("ambiguous init is not retried by the approval button", async () => {
     api.post.mockRejectedValueOnce({ response: { data: { detail: { message:"راجع حالة العملية" } } } });
     await act(async () => button("اعتماد رفع الملف ونشره").click());
     expect(host.textContent).toContain("راجع حالة العملية"); expect(button("اعتماد رفع الملف ونشره")).toBeUndefined(); expect(uploadVideoFile).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("جارٍ تجهيز وجهة الرفع في TikTok");
+    expect(api.post.mock.calls.filter(([path]) => path.endsWith("approve-and-initialize"))).toHaveLength(1);
+});
+
+test("same-proposal status shows the persisted safe rejection and does not retry init", async () => {
+    await ready(); await act(async () => input("اعتماد رفع ملف TikTok").click());
+    api.post.mockRejectedValueOnce({ response: { data: "upstream error" } });
+    await act(async () => button("اعتماد رفع الملف ونشره").click());
+    api.post.mockResolvedValueOnce({ data: { ...proposal, status: "blocked", initialization_diagnostic: {
+        code: "tiktok_file_provider_rejected", provider_code: "scope_not_authorized", stage: "native_initialization",
+        message: "حساب TikTok لم يمنح التطبيق صلاحية هذه العملية. أعد التفويض بالصلاحيات المطلوبة."
+    } } });
+    await act(async () => button("تحديث حالة رفع الملف").click());
+    expect(host.textContent).toContain("scope_not_authorized");
+    expect(host.textContent).toContain("أعد التفويض بالصلاحيات المطلوبة");
+    expect(host.textContent).not.toContain("جارٍ تجهيز وجهة الرفع في TikTok");
+    expect(uploadVideoFile).not.toHaveBeenCalled();
     expect(api.post.mock.calls.filter(([path]) => path.endsWith("approve-and-initialize"))).toHaveLength(1);
 });

@@ -37,10 +37,10 @@ export default function TikTokFilePublishing({ onBusyChange }) {
         if (running.current) return;
         running.current = true; setBusy(true); setError(""); controller.current = new AbortController();
         try { await action({ signal: controller.current.signal, timeout: 60000 }); }
-        catch (failure) { if (mounted.current) setError(failureMessage(failure)); }
+        catch (failure) { if (mounted.current) { setError(failureMessage(failure)); setPhase(""); } }
         finally { running.current = false; if (mounted.current) setBusy(false); }
     }
-    const receive = (data) => { if (mounted.current) { setProposal(withoutTransfer(data)); setApproved(false); } };
+    const receive = (data) => { if (mounted.current) { setProposal(withoutTransfer(data)); setApproved(false); setPhase(""); } };
     function change(name, value) { if (busy) return; setForm((old) => ({ ...old, [name]: value })); setApproved(false); if (!pending(proposal)) { setProposal(null); requestKey.current = null; } }
     function chooseCreator(value) {
         if (busy) return;
@@ -112,6 +112,7 @@ export default function TikTokFilePublishing({ onBusyChange }) {
             <button className={BUTTON} type="submit" disabled={!form.media_rights_confirmed}>معاينة رفع الملف</button>
         </fieldset></form>}
         {proposal && <div className="space-y-3 rounded-xl bg-slate-50 p-4"><p role="status" className="font-bold">{STATUS[proposal.status] || "حدّث حالة العملية"}</p><p>{frozen.file_name} · {frozen.delivery === "direct" ? PRIVACY[frozen.privacy_level] : "مسودة"}</p>{frozen.caption && <p className="whitespace-pre-wrap">{frozen.caption}</p>}
+            {proposal.initialization_diagnostic && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800"><p>{proposal.initialization_diagnostic.message}</p>{proposal.initialization_diagnostic.provider_code && <p>رمز TikTok: <code dir="ltr">{proposal.initialization_diagnostic.provider_code}</code></p>}</div>}
             <p className="text-sm">الإفصاح: {({ none: "غير تجاري", own_business: "نشاطي التجاري", paid_partnership: "شراكة مدفوعة" })[frozen.disclosure]} · فيديو بالذكاء الاصطناعي: {frozen.is_aigc ? "نعم" : "لا"}</p>
             {proposal.status === "previewed" && !initialized.current && <><label className="flex gap-2 text-sm"><input aria-label="اعتماد رفع ملف TikTok" type="checkbox" disabled={busy} checked={approved} onChange={(e) => setApproved(e.target.checked)} />أعتمد إرسال هذا الفيديو بإعداداته المعروضة إلى TikTok مرة واحدة.</label><button type="button" className={BUTTON} disabled={busy || !approved} onClick={execute}>اعتماد رفع الملف ونشره</button></>}
             <button type="button" className={BUTTON} disabled={busy} onClick={() => work(async (options) => { const { data } = await api.post(`${ROOT}/proposals/${proposal.proposal_id}/status`, {}, options); initialized.current = data.status !== "previewed"; receive(data); })}>تحديث حالة رفع الملف</button>
