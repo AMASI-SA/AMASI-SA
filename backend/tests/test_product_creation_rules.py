@@ -220,7 +220,9 @@ def test_creation_carries_customer_text_and_age_choices(product_type):
     ]))
     payload = build_salla_product_payload(draft)
     assert draft["options"][0]["name"] == "المقاس"
-    assert payload["options"][0]["type"] == "select"
+    # Salla Merchant API uses radio for a single customer choice; select is
+    # a frontend control name and is rejected by POST /products with 422.
+    assert payload["options"][0]["type"] == "radio"
     assert payload["options"][0]["required"] is True
     assert [value["name"] for value in payload["options"][0]["values"]] == ages
     assert payload["options"][1] == {

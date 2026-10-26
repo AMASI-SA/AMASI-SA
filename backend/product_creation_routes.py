@@ -345,7 +345,7 @@ def build_salla_product_payload(draft: dict[str, Any]) -> dict[str, Any]:
         payload["options"] = [
             {
                 "name": option["name"],
-                "type": "select" if option["type"] == "choice" else "text",
+                "type": "radio" if option["type"] == "choice" else "text",
                 "required": option["required"],
                 "display_type": "text",
                 **({"description": option["description"]} if option.get("description") else {}),

@@ -97,7 +97,7 @@ def test_draft_preview_approval_publish_and_readback(monkeypatch, drop_options):
             if method == "POST" and path == "/products":
                 payload = kwargs["json"]
                 assert payload["product_type"] == "service"
-                assert payload["options"][0]["type"] == "select"
+                assert payload["options"][0]["type"] == "radio"
                 assert len(payload["options"][0]["values"]) == 10
                 assert payload["options"][1]["type"] == "text"
                 remote = {**payload, "id": 123, "type": payload["product_type"]}
@@ -194,6 +194,7 @@ def test_gift_condition_is_verified_before_sale_and_retry_never_duplicates(monke
                 return {"data": deepcopy(remote)}
             if method == "POST" and path == "/products":
                 payload = deepcopy(kwargs["json"])
+                assert [option["type"] for option in payload["options"]] == ["radio", "text"]
                 assert payload["status"] == "hidden"
                 assert payload["quantity"] == 0 and payload["unlimited_quantity"] is False
                 remote = {**payload, "id": 123, "type": "service"}
