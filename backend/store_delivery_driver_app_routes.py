@@ -38,7 +38,7 @@ from store_delivery_domain import (
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import (
     ASSIGNMENTS, EVENTS, ORDERS, SESSIONS, SessionCreate, ScanIn,
-    _barcode_candidates, _order_id, create_session_service,
+    _barcode_candidates, _order_id, _order_number, create_session_service,
     scan_shipment_service, confirm_session_service,
 )
 from store_courier_domain import (
@@ -243,6 +243,21 @@ async def _resolve_receive_assignment(db, *, actor, driver, barcode):
             "out_for_delivery_at": existing.get("out_for_delivery_at"),
             "delivered_at": existing.get("delivered_at"),
         }
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": merchant_id, "order_number": _order_number(order)}, {"_id": 0})
+    if (workflow and workflow.get("stage") == "completed"
+            and workflow.get("assembly_status") == "completed"
+            and (normalize_text(workflow.get("carrier_label_type")) != "store_courier"
+                 or workflow.get("carrier_label_ready") is not True)
+            and not normalize_text(workflow.get("store_courier_assignee_id"))):
+        from fulfillment_carrier_label import recover_store_courier_label_for_handover
+        from order_engine.shipping_label_service import ShippingLabelError
+        try:
+            await recover_store_courier_label_for_handover(db, user_id=merchant_id,
+                                                           order_number=_order_number(order))
+        except ShippingLabelError as exc:
+            return None, {"accepted": False, "code": exc.code,
+                          "order_number": _order_number(order)}
     session = await create_session_service(db, actor=actor, user_id=merchant_id,
         payload=SessionCreate(driver_id=driver["id"]))
     try:
