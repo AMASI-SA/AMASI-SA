@@ -278,3 +278,81 @@ test.each([false, true, { amount: 81.32 }, -1, NaN])("rejects unsupported known 
     expect(normalized.providers.snapchat.known_account_count).toBeNull();
     expect(normalized.providers.snapchat.incomplete_account_count).toBeNull();
 });
+
+
+function accountDisplayPayload() {
+    const day = "2026-10-26";
+    const point = (hour_index, spend_sar, status = "provisional") => ({ date: day, hour_index,
+        hour: String(hour_index).padStart(2, "0") + ":00", spend_sar, status });
+    const account = (account_id, currency, total_native, total_sar, available) => ({
+        account_id, currency, display_name: account_id, timezone: currency === "USD" ? "America/Los_Angeles" : "Asia/Riyadh",
+        projection_timezone: "Asia/Riyadh", total_native, total_sar,
+        daily_sar: { [day]: total_sar }, daily_state: { [day]: total_sar === 0 ? "provisional_zero" : "provisional_data" },
+        hourly_sar: { [day]: [point(0, total_sar), point(1, 0, "future")] },
+        quality: { connected: true, status: available ? "provisional" : "incomplete", amount_available: available,
+            amount_complete: false, complete: false, provisional: available, data_state: available ? "provisional_data" : "unknown_incomplete",
+            observed_at: "2026-10-25T21:00:00Z", reason_codes: ["snapchat_operational_hour_observation"] },
+    });
+    return { ...fourPlatformPayload(), date_from: day, date_to: day,
+        providers: { snapchat: { connected: true, accounts: [
+            account("USD.A", "USD", 21.685333, 81.32, true),
+            account("__proto__", "SAR", 0, 0, false),
+        ] } } };
+}
+
+test("normalizes independent account evidence without rescuing an unknown account with zero", () => {
+    const result = normalizeDashboardAdsSpend(accountDisplayPayload());
+    const [usd, sar] = result.providers.snapchat.accounts;
+    expect(usd.total_native).toBe(21.685333);
+    expect(usd.total_sar).toBe(81.32);
+    expect(usd.hourly_sar["2026-10-26"][0].spend_sar).toBe(81.32);
+    expect(usd.hourly_sar["2026-10-26"][1].spend_sar).toBeNull();
+    expect(usd.quality.observed_at).toBe("2026-10-25T21:00:00Z");
+    expect(sar.account_id).toBe("__proto__");
+    expect(sar.total_sar).toBeNull();
+    expect(sar.total_native).toBeNull();
+    expect(sar.hourly_sar["2026-10-26"][0].spend_sar).toBeNull();
+    expect(sar.quality.amount_available).toBe(false);
+});
+
+test("preserves explicit empty accounts and real observed zero with future null", () => {
+    const payload = accountDisplayPayload();
+    const sar = payload.providers.snapchat.accounts[1];
+    sar.quality = { ...sar.quality, amount_available: true, provisional: true, status: "provisional", data_state: "provisional_zero" };
+    const normalized = normalizeDashboardAdsSpend(payload).providers.snapchat.accounts[1];
+    expect(normalized.total_native).toBe(0);
+    expect(normalized.total_sar).toBe(0);
+    expect(normalized.hourly_sar["2026-10-26"].map((point) => point.spend_sar)).toEqual([0, null]);
+    payload.providers.snapchat.accounts = [];
+    expect(normalizeDashboardAdsSpend(payload).providers.snapchat.accounts).toEqual([]);
+    delete payload.providers.snapchat.accounts;
+    expect(normalizeDashboardAdsSpend(payload).providers.snapchat.accounts).toBeUndefined();
+});
+
+test("account IDs stay exact and duplicates or non-scalar metadata cannot invent native currency", () => {
+    const payload = accountDisplayPayload();
+    const first = payload.providers.snapchat.accounts[0];
+    payload.providers.snapchat.accounts = [first, { ...first, account_id: "USD.B", display_name: {}, currency: null },
+        first, { ...first, account_id: {} }];
+    const accounts = normalizeDashboardAdsSpend(payload).providers.snapchat.accounts;
+    expect(accounts.map((row) => row.account_id)).toEqual(["USD.A", "USD.B"]);
+    expect(accounts[1].display_name).toBe("");
+    expect(accounts[1].currency).toBeNull();
+    expect(accounts[1].total_native).toBeNull();
+    expect(accounts[1].total_sar).toBe(81.32);
+});
+
+test("rejects wrong projection windows, boolean amounts and duplicate hourly evidence", () => {
+    const payload = accountDisplayPayload();
+    const first = payload.providers.snapchat.accounts[0];
+    first.projection_timezone = "UTC";
+    expect(normalizeDashboardAdsSpend(payload).providers.snapchat.accounts[0].total_sar).toBeNull();
+    first.projection_timezone = "Asia/Riyadh";
+    first.total_sar = false;
+    expect(normalizeDashboardAdsSpend(payload).providers.snapchat.accounts[0].quality.amount_available).toBe(false);
+    first.total_sar = 81.32;
+    first.hourly_sar["2026-10-26"].push({ ...first.hourly_sar["2026-10-26"][0], spend_sar: 1 });
+    const points = normalizeDashboardAdsSpend(payload).providers.snapchat.accounts[0].hourly_sar["2026-10-26"];
+    expect(points[0].spend_sar).toBeNull();
+    expect(points[1].spend_sar).toBeNull();
+});

@@ -82,6 +82,74 @@ function normalizeProvider(provider, value = {}) {
     };
 }
 
+
+function normalizeSnapchatAccounts(rows, from, to) {
+    const seen = new Set();
+    const inPeriod = (day) => Boolean(safeDate(day) && from && to && day >= from && day <= to);
+    const numericHour = (value) => (typeof value === "number" || typeof value === "string" && value.trim() !== "")
+        && Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 23 ? Number(value) : null;
+    const validHourStates = new Set(["provisional", "confirmed_data", "confirmed_zero", "confirmed", "reconciled"]);
+    const validDayStates = new Set(["provisional_data", "provisional_zero", "confirmed_data", "confirmed_zero"]);
+    return rows.flatMap((row) => {
+        if (!row || typeof row !== "object" || Array.isArray(row)
+            || typeof row.account_id !== "string" || !row.account_id.trim()
+            || row.account_id.length > 512 || seen.has(row.account_id)) return [];
+        seen.add(row.account_id);
+        const raw = row.quality && typeof row.quality === "object" && !Array.isArray(row.quality) ? row.quality : {};
+        const total = knownAmount(row.total_sar);
+        const available = Boolean(from && to && row.projection_timezone === "Asia/Riyadh"
+            && raw.amount_available === true && raw.connected !== false
+            && ["complete", "provisional"].includes(raw.status)
+            && raw.data_state !== "unknown_incomplete" && total !== null);
+        const currency = typeof row.currency === "string" && /^[A-Z]{3}$/.test(row.currency) ? row.currency : null;
+        const daily = {}, states = {}, hourly = {};
+        if (row.daily_sar && typeof row.daily_sar === "object" && !Array.isArray(row.daily_sar)) {
+            Object.entries(row.daily_sar).forEach(([day, value]) => {
+                if (!inPeriod(day)) return;
+                const state = typeof row.daily_state?.[day] === "string" ? row.daily_state[day] : "unknown_incomplete";
+                daily[day] = available && validDayStates.has(state) ? knownAmount(value) : null;
+                states[day] = available ? state : "unknown_incomplete";
+            });
+        }
+        if (row.hourly_sar && typeof row.hourly_sar === "object" && !Array.isArray(row.hourly_sar)) {
+            Object.entries(row.hourly_sar).forEach(([day, series]) => {
+                if (!inPeriod(day) || !Array.isArray(series)) return;
+                const points = new Map();
+                series.forEach((point) => {
+                    const index = numericHour(point?.hour_index);
+                    if (index === null || safeDate(point?.date) !== day) return;
+                    if (points.has(index)) {
+                        points.get(index).spend_sar = null;
+                        points.get(index).status = "unknown_incomplete";
+                        return;
+                    }
+                    const status = typeof point.status === "string" ? point.status : "unknown_incomplete";
+                    points.set(index, { date: day, hour_index: index,
+                        hour: HOUR_RE.test(point.hour || "") ? point.hour : String(index).padStart(2, "0") + ":00",
+                        spend_sar: available && validHourStates.has(status) ? knownAmount(point.spend_sar) : null,
+                        status: available ? status : status === "future" ? "future" : "unknown_incomplete" });
+                });
+                hourly[day] = [...points.values()].sort((a, b) => a.hour_index - b.hour_index);
+            });
+        }
+        const observed = typeof raw.observed_at === "string" && /^\d{4}-\d{2}-\d{2}T/.test(raw.observed_at)
+            && Number.isFinite(Date.parse(raw.observed_at)) ? raw.observed_at : null;
+        return [{ account_id: row.account_id,
+            display_name: typeof row.display_name === "string" ? row.display_name.trim().slice(0, 240) : "",
+            currency, timezone: typeof row.timezone === "string" ? row.timezone : null,
+            projection_timezone: row.projection_timezone === "Asia/Riyadh" ? row.projection_timezone : null,
+            total_native: available && currency ? knownAmount(row.total_native) : null,
+            total_sar: available ? total : null, daily_sar: daily, daily_state: states, hourly_sar: hourly,
+            quality: { status: available ? raw.status : "incomplete",
+                data_state: available && typeof raw.data_state === "string" ? raw.data_state : "unknown_incomplete",
+                amount_available: available, amount_complete: available && raw.amount_complete === true,
+                complete: available && raw.complete === true, coverage_complete: available && raw.coverage_complete === true,
+                provisional: available && (raw.provisional === true || raw.status === "provisional"),
+                connected: raw.connected === true, observed_at: observed,
+                reason_codes: Array.isArray(raw.reason_codes) ? raw.reason_codes.filter((x) => typeof x === "string").slice(0, 20) : [] } }];
+    });
+}
+
 export function normalizeDashboardAdsSpend(payload = {}) {
     const value = payload && typeof payload === "object" ? payload : {};
     const providers = Object.fromEntries(
@@ -90,6 +158,10 @@ export function normalizeDashboardAdsSpend(payload = {}) {
             normalizeProvider(provider, value?.providers?.[provider]),
         ]),
     );
+    if (Array.isArray(value?.providers?.snapchat?.accounts)) {
+        providers.snapchat.accounts = normalizeSnapchatAccounts(value.providers.snapchat.accounts,
+            safeDate(value.date_from), safeDate(value.date_to));
+    }
     const daily = Array.isArray(value.daily_spend)
         ? value.daily_spend
             .map((point) => normalizePoint(point, false))
