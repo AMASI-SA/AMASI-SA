@@ -19,6 +19,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 import hashlib
 import inspect
 import json
@@ -42,7 +43,7 @@ MAX_ALLOCATIONS = 100
 MAX_PAYLOAD_BYTES = 262144
 _PROOF = object()
 _ID = re.compile(r'^[A-Za-z0-9_.:-]{1,160}$')
-_MONEY = re.compile(r'^(?:[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$|^0\.[0-9]{0,5}[1-9][0-9]{0,5}$')
+_MONEY = re.compile(r'^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$')
 _COLLECTIONS = {'standing': AUTOMATION_POLICIES, 'creation': CREATION_POLICIES}
 _FIELDS = {'standing': frozenset(STANDING_FIELDS), 'creation': frozenset(CREATION_FIELDS)}
 
@@ -222,6 +223,7 @@ def _command(command):
             or not isinstance(command.campaign_id, str) or not re.fullmatch(r'[0-9]{1,30}', command.campaign_id)
             or not isinstance(command.currency_code, str) or not re.fullmatch(r'[A-Z]{3}', command.currency_code)
             or not isinstance(command.budget_native, str) or not _MONEY.fullmatch(command.budget_native)
+            or Decimal(command.budget_native) <= 0
             or not isinstance(command.binding_digest, str) or not re.fullmatch(r'[a-f0-9]{64}', command.binding_digest)):
             _fail('google_budget_guard_command_invalid')
         return command
@@ -348,4 +350,46 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
                 'لم يتأكد حجز الميزانية؛ تحقق بالقراءة واحتفظ بالقفل دون إعادة إرسال.', 503)
         if isinstance(exc.detail, dict):
             exc.detail.update(commit_attempted=phase['commit_attempted'], preserve_execution_fence=True, automatic_retry_allowed=False)
+        raise exc from None
+
+
+async def read_google_budget_guard_commit(db, *, user_id, account_id, operation_id):
+    """Read storage evidence after an unknown ACK; NEVER permission or release.
+
+    Missing/currently overwritten evidence is NOT proof of an absent historical
+    commit. The caller must retain its execution fence and cannot resend. This
+    path works without a current probe token or an enabled runtime, but still
+    uses an explicit read transaction with snapshot/majority and the same session.
+    """
+    async def read():
+        scope = _scope(user_id, account_id)
+        if not isinstance(operation_id, str) or not _ID.fullmatch(operation_id):
+            _fail('google_budget_guard_command_invalid')
+        async with await db.client.start_session() as session:
+            _transaction(session)
+            row = await db[BUDGET_GUARDS].find_one({'_id': _guard_id(scope)}, session=session)
+            if row is not None:
+                _validate_guard(row, scope)
+            entries = [entry for entry in (row or {}).get('allocations', {}).values() if entry.get('operation_id') == operation_id]
+            if len(entries) > 1:
+                _fail('google_budget_guard_state_unproved')
+            last = (row or {}).get('last_commit')
+            exact_last = last if isinstance(last, dict) and last.get('operation_id') == operation_id else None
+            await session.abort_transaction()
+            return {'storage_outcome': 'committed' if entries or exact_last else 'not_proven',
+                'operation_id': operation_id, 'guard_epoch': row['epoch'] if row is not None else None,
+                'allocation': _plain(entries[0]) if entries else None, 'last_commit': _plain(exact_last),
+                'provider_dispatch_authorized': False, 'provider_writes': 0,
+                'preserve_execution_fence': True, 'automatic_retry_allowed': False}
+    try:
+        return await asyncio.wait_for(read(), timeout=10)
+    except asyncio.CancelledError as exc:
+        exc.preserve_execution_fence = True
+        exc.automatic_retry_allowed = False
+        raise
+    except Exception as exc:
+        if not isinstance(exc, HTTPException):
+            exc = problem('google_budget_guard_recovery_unconfirmed', 'لم يتأكد سجل الحجز؛ احتفظ بالقفل دون إعادة إرسال.', 503)
+        if isinstance(exc.detail, dict):
+            exc.detail.update(preserve_execution_fence=True, automatic_retry_allowed=False)
         raise exc from None

@@ -144,3 +144,32 @@ async def test_real_transaction_tenant_scope_and_policy_absence_are_independent(
     assert await db.raw[guard.BUDGET_GUARDS].count_documents({})==2
     assert (await db.raw[AUTOMATION_POLICIES].find_one({'user_id':'owner','account_id':'123'}))['max_account_daily_budget_native']=='55'
     assert (await db.raw[AUTOMATION_POLICIES].find_one({'user_id':'other','account_id':'123'}))['max_account_daily_budget_native']=='1'
+
+
+@pytest.mark.asyncio
+async def test_real_commit_cancellation_after_commit_retains_allocation(mongo_guard,monkeypatch):
+    db,capability=mongo_guard;await seed(db,capability)
+    original=AsyncIOMotorClientSession.commit_transaction
+    async def cancelled(session):await original(session);raise asyncio.CancelledError()
+    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',cancelled)
+    with pytest.raises(asyncio.CancelledError) as caught:await run(db,capability,allocation,'cancel_after_commit')
+    assert caught.value.commit_attempted and caught.value.preserve_execution_fence
+    assert caught.value.automatic_retry_allowed is False
+    stored=await db.raw[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    assert stored['active_claim']['operation_id']=='cancel_after_commit'
+
+
+@pytest.mark.asyncio
+async def test_real_commit_timeout_after_commit_is_unknown_not_permission(mongo_guard,monkeypatch):
+    db,capability=mongo_guard;await seed(db,capability)
+    original=AsyncIOMotorClientSession.commit_transaction;committed=asyncio.Event()
+    async def delayed_ack(session):
+        await original(session);committed.set();await asyncio.Event().wait()
+    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',delayed_ack)
+    pending=asyncio.create_task(guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
+        operation_id='timeout_after_commit',capability=capability,planner=allocation,timeout_seconds=1))
+    await asyncio.wait_for(committed.wait(),5)
+    with pytest.raises(HTTPException) as caught:await pending
+    assert caught.value.detail['commit_attempted'] and caught.value.detail['preserve_execution_fence']
+    stored=await db.raw[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    assert stored['active_claim']['operation_id']=='timeout_after_commit'

@@ -1,14 +1,14 @@
 {
   "state": "FUTURE WIP STORAGE PRIMITIVE / NEVER DEPLOY",
-  "root_tests": "13passed6Mongo-skipped1.42s; transaction Mongo notprovenlocally",
-  "source_snapshot": "Initialexactguard/module/unit13cases+6optionalreplicaMongo scenarios; laterhardeningseparate",
+  "root_tests": "31passed8replicaMongo-skipped1.90s; no actualMongoTX proof",
+  "features": "Explicit same-session transaction, deepimmutablepolicy snapshots, whitelistedcommands, epochshared bypolicywrites+allocations, preciseDecimal budget, unknowncommit/cancelhold, readonlycommitinspection neverpermission",
   "provider_dispatch_authorized": false,
   "runtime_available": false,
-  "source_release": "1542alreadymerged3aaf8d20652a0b7aeb03473f23afe41714a242d6; NOTPUBLISHED; thesefuturefilesareNOTin1542",
+  "current_release": "1542mergedM3aaf8d20652a0b7aeb03473f23afe41714a242d6; hostadapter firstattemptfailed; no ownlease orpublish",
   "remaining": [
-    "Allpolicywriters/globalautomatedincreasesmigration",
-    "ActualreplicaMongoCI and capabilityproof",
-    "Owner/native/catalog authority+launchgateway+worker+explicitUI optin"
+    "ReplicaMongoCI+runtimeTXcapability",
+    "Migrate allpolicywriters/globalautomatedincreases",
+    "Freshownership/catalog/native authority+gateway/worker+UI scoped opt-in"
   ],
   "no_live_writes": true
 }

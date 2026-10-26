@@ -171,3 +171,120 @@ async def test_timeout_during_commit_preserves_unknown_and_never_retries(monkeyp
             capability=capability,planner=mutation,timeout_seconds=.01)
     assert caught.value.detail['commit_attempted'] and caught.value.detail['preserve_execution_fence']
     assert db.sessions[-1].commit_calls==1
+
+
+def allocation(snapshot):
+    return guard.LaunchAllocation('launch1','google_create_'+'a'*64,'999','proposal1','claim1','SAR','15','b'*64)
+
+
+def with_creation():
+    return DB({CREATION_POLICIES:[{'user_id':'owner','account_id':'123','revision':1,'enabled':True,
+        'max_account_daily_budget_native':'55','_creation_ledger':{'original':{'held':True}}}]})
+
+
+@pytest.mark.asyncio
+async def test_allocation_binds_server_loaded_absence_and_is_not_dispatch_authority():
+    db=with_creation();capability=await supported(db)
+    result=await run(db,allocation,capability=capability)
+    assert result['committed'] and result['provider_dispatch_authorized'] is False
+    stored=db.rows[guard.BUDGET_GUARDS][0];entry=stored['allocations']['launch1']
+    assert entry['standing_policy_present'] is False and entry['standing_policy_revision'] is None
+    assert entry['creation_policy_revision']==1 and entry['guard_epoch_before']==0
+    assert stored['active_claim']['execution_claim_id']=='claim1'
+    assert db.rows[CREATION_POLICIES][0]['_creation_ledger']=={'original':{'held':True}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('amount',['0','0.00000001','0.00000100','1.0000001','NaN','Infinity','-1','01','1000000000000'])
+async def test_allocation_budget_is_positive_exact_six_digit_decimal(amount):
+    db=with_creation();capability=await supported(db)
+    def invalid(snapshot):
+        return guard.LaunchAllocation('launch1','google_create_'+'a'*64,'999','proposal1','claim1','SAR',amount,'b'*64)
+    with pytest.raises(HTTPException):await run(db,invalid,capability=capability)
+    assert guard.BUDGET_GUARDS not in db.rows
+
+
+@pytest.mark.asyncio
+async def test_duplicate_allocation_or_creation_identity_never_reserves_again():
+    db=with_creation();capability=await supported(db);await run(db,allocation,capability=capability)
+    before=deepcopy(db.rows)
+    with pytest.raises(HTTPException):await run(db,allocation,capability=capability,operation_id='op2')
+    assert db.rows==before
+    # Even after a future proved terminal settlement clears active_claim, the
+    # permanently consumed creation identity must never auto-reenable.
+    db.rows[guard.BUDGET_GUARDS][0]['active_claim']=None
+    with pytest.raises(HTTPException):await run(db,allocation,capability=capability,operation_id='op3')
+
+
+@pytest.mark.asyncio
+async def test_capability_is_database_bound_and_expired_probe_cannot_be_used(monkeypatch):
+    db=with_creation();other=with_creation();capability=await supported(db)
+    with pytest.raises(HTTPException):await run(other,allocation,capability=capability)
+    assert not other.sessions
+    monkeypatch.setattr(guard.time,'monotonic',lambda:capability.probed_monotonic+61)
+    with pytest.raises(HTTPException):await run(db,allocation,capability=capability)
+    assert len(db.sessions)==1
+
+
+@pytest.mark.asyncio
+async def test_tenant_and_account_scope_cannot_read_or_modify_other_policies():
+    db=with_creation();capability=await supported(db)
+    def other(snapshot):
+        assert snapshot.creation_policy is None and snapshot.user_id=='other'
+        return mutation(snapshot)
+    await run(db,other,capability=capability,user_id='other')
+    assert db.rows[CREATION_POLICIES][0]['user_id']=='owner'
+    assert db.rows[AUTOMATION_POLICIES][0]['user_id']=='other'
+
+
+@pytest.mark.asyncio
+async def test_policy_lowering_does_not_remove_or_refund_existing_allocation():
+    db=with_creation();capability=await supported(db);await run(db,allocation,capability=capability)
+    before=deepcopy(db.rows[guard.BUDGET_GUARDS][0])
+    await run(db,lambda snapshot:guard.PolicyMutation('creation',1,{'enabled':False,'max_account_daily_budget_native':'1'}),
+        capability=capability,operation_id='owner_revoke')
+    after=db.rows[guard.BUDGET_GUARDS][0]
+    assert before['allocations']==after['allocations'] and before['active_claim']==after['active_claim']
+    assert after['epoch']==before['epoch']+1
+
+
+@pytest.mark.asyncio
+async def test_external_cancellation_after_commit_holds_fence_and_never_retries(monkeypatch):
+    db=with_creation();capability=await supported(db)
+    original=Session.commit_transaction
+    async def cancelled(session):await original(session);raise asyncio.CancelledError()
+    monkeypatch.setattr(Session,'commit_transaction',cancelled)
+    with pytest.raises(asyncio.CancelledError) as caught:await run(db,allocation,capability=capability)
+    assert caught.value.commit_attempted and caught.value.preserve_execution_fence
+    assert db.rows[guard.BUDGET_GUARDS][0]['active_claim'] and db.sessions[-1].commit_calls==1
+
+
+@pytest.mark.asyncio
+async def test_read_based_recovery_proves_storage_only_and_never_grants_dispatch():
+    db=with_creation();capability=await supported(db);db.lose_commit_ack=True
+    with pytest.raises(HTTPException):await run(db,allocation,capability=capability)
+    before=deepcopy(db.rows)
+    proof=await guard.read_google_budget_guard_commit(db,user_id='owner',account_id='123',operation_id='op1')
+    assert proof['storage_outcome']=='committed' and proof['allocation']['state']=='reserved'
+    assert proof['provider_dispatch_authorized'] is False and proof['preserve_execution_fence']
+    assert proof['automatic_retry_allowed'] is False and db.rows==before
+    missing=await guard.read_google_budget_guard_commit(db,user_id='owner',account_id='123',operation_id='unknown')
+    assert missing['storage_outcome']=='not_proven' and missing['preserve_execution_fence']
+    foreign=await guard.read_google_budget_guard_commit(db,user_id='other',account_id='123',operation_id='op1')
+    assert foreign['storage_outcome']=='not_proven' and foreign['allocation'] is None
+
+
+@pytest.mark.asyncio
+async def test_overwritten_policy_commit_record_is_not_proof_of_historical_absence():
+    db=DB();capability=await supported(db);await run(db,capability=capability)
+    await run(db,lambda snapshot:guard.PolicyMutation('standing',1,{'enabled':False}),capability=capability,operation_id='op2')
+    proof=await guard.read_google_budget_guard_commit(db,user_id='owner',account_id='123',operation_id='op1')
+    assert proof['storage_outcome']=='not_proven' and proof['preserve_execution_fence']
+
+
+@pytest.mark.asyncio
+async def test_duplicate_policy_rows_never_establish_absence_or_reserve():
+    db=with_creation();db.rows[CREATION_POLICIES].append(deepcopy(db.rows[CREATION_POLICIES][0]))
+    capability=await supported(db)
+    with pytest.raises(HTTPException):await run(db,allocation,capability=capability)
+    assert guard.BUDGET_GUARDS not in db.rows
