@@ -5,7 +5,7 @@ import buildContract from "./build-contract.cjs";
 import governedPreview from "./scripts/governed-preview.cjs";
 
 const FRONTEND_NOINDEX_DIRECTIVES = "noindex, nofollow, noarchive, nosnippet, noimageindex";
-const FRONTEND_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests";
+const FRONTEND_CSP = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self' https: wss:; frame-src 'self' https:; form-action 'self' https:; upgrade-insecure-requests";
 const FRONTEND_SECURITY_HEADERS = Object.freeze({
   "Content-Security-Policy": FRONTEND_CSP,
   "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
