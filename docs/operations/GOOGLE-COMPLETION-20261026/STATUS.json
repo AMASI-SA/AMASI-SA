@@ -62,7 +62,16 @@
     "pr": 1550,
     "checkpoint": "bd9c34423341e67a16d4d9500cd305bd37f32344",
     "runtime_enabled": false,
-    "replica_ci": 40380341701,
-    "state": "pending"
+    "replica_ci": {
+      "run": 40380341701,
+      "job": 121774558226,
+      "source": "bd9c34423341e67a16d4d9500cd305bd37f32344",
+      "passed": 57,
+      "actual_replica": 9,
+      "failures_errors_skips": 0
+    },
+    "state": "pending",
+    "replica_state": "success;57passed including9actualMongo,0skip",
+    "status_checkpoint": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf"
   }
 }
