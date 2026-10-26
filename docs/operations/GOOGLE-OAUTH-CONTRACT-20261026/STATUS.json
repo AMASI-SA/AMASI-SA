@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-OAUTH-CONTRACT-20261026",
-  "state": "DESIGN WIP ONLY; no runtime implementation, migration or OAuth recovery",
+  "state": "WIP: unwired generation-fenced token refresh CAS primitive; no runtime integration",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-oauth-contract-wip-20261026",
   "base_sha": "11a52dd933d7269cd80046219dcd93d5a6e62297",
@@ -9,7 +9,9 @@
   "scope": "Two repository documents only: proposed atomic Google grant, account membership and refresh contract",
   "files": [
     "docs/operations/GOOGLE-OAUTH-CONTRACT-20261026/STATUS.json",
-    "docs/operations/GOOGLE-OAUTH-CONTRACT-20261026/DESIGN.md"
+    "docs/operations/GOOGLE-OAUTH-CONTRACT-20261026/DESIGN.md",
+    "backend/integrations_control_center/google_oauth_generation.py",
+    "backend/tests/test_google_oauth_generation.py"
   ],
   "live_baseline": {
     "evidence_owner": "Parent coordinator, prior live UI checks in this task",
@@ -39,6 +41,7 @@
     "service._persist_test_snapshot guard for Google direct/base-router calls"
   ],
   "unimplemented_work": [
+    "Integrate with all refresh writers and atomic grant projection; real replica and lost-ACK recovery acceptance",
     "Generation schema and shared refresh CAS helper across Ads, Merchant and GA4",
     "Complete validated provider discovery and atomic projection commit",
     "Generation-fenced reauth invalidation and management proof checks",
@@ -49,7 +52,8 @@
     "json_parse": "passed: json.loads, required scope flags and full source SHA lengths validated",
     "git_diff_check": "passed: git diff --check before local commit",
     "runtime_tests": "not run: docs-only work",
-    "replica_tests": "not run; proposed acceptance only"
+    "replica_tests": "not run; proposed acceptance only",
+    "focused": "10 passed in 0.77s, initial missing-module red reproduced"
   },
   "ci": {
     "state": "not requested or run by this document task"
@@ -63,5 +67,5 @@
   "remote_checkpoint": {
     "state": "Parent coordinator to push the local commit and record exact full SHA; do not treat local-only docs as durable completion"
   },
-  "next_safe_action": "Parent: push this dedicated documentation branch and record its exact full SHA. Before implementation, fetch latest production and applicable AGENTS, review DESIGN.md against all current shared Google credential/account writers, freeze a bounded schema and compatibility contract, then add failing disposable-replica acceptance tests. No live OAuth/recovery is required merely because this design exists."
+  "next_safe_action": "Checkpoint remote; independently review, integrate all shared writers and grant-generation creation before use; do not deploy as OAuth recovery"
 }
