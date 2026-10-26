@@ -5,7 +5,6 @@ not establish category membership, variant availability, profitability, a
 landing URL or permission to advertise. Duplicates fail closed.
 """
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
 import hashlib
 import re
 
@@ -66,17 +65,8 @@ async def read_catalog_products(db, *, owner_id, product_ids, as_of, max_age_sec
             status = 'hidden'
         elif raw_status == 'out_of_stock':
             status = 'out_of_stock'
-        elif raw_status == 'active' and row.get('archived') is False and type(row.get('variants_count')) is int and row.get('variants_count') == 0:
-            if row.get('unlimited_quantity') is True:
-                unlimited, status = True, 'available'
-            elif type(row.get('quantity')) in (int, float, str):
-                try:
-                    value = Decimal(str(row['quantity']))
-                    if value.is_finite() and value >= 0 and value.adjusted() <= 24 and value.as_tuple().exponent >= -18:
-                        quantity = str(value)
-                        status = 'available' if value > 0 else 'out_of_stock'
-                except InvalidOperation:
-                    pass
+        # Light sync maps absent variants to zero and coerces unlimited values.
+        # Neither proves purchasable inventory: active products remain unknown.
         ref = 'catalog-v2:' + hashlib.sha256((owner_id+'\0'+pid+'\0'+revision+'\0'+observed.isoformat()).encode()).hexdigest()
         output.append(ProductSource(product_id=pid, mezan_product_id='mpv2_'+pid,
             observed_at=observed, evidence_ref=ref, verification='verified', status=status,

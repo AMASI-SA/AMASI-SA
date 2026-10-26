@@ -18,9 +18,9 @@ async def read(rows, ids=['123']):
     db=Db(rows); result=await read_catalog_products(db, owner_id='owner', product_ids=ids, as_of=NOW, max_age_seconds=3600); assert db.c.query['user_id']=='owner'; return result
 @pytest.mark.asyncio
 async def test_valid_owner_product_and_unknown_cost():
-    out=await read([row()]); p=out['products'][0]; assert p.status=='available' and p.cost_quality=='unknown' and out['execution_authorized'] is False and out['category_membership_verified'] is False
+    out=await read([row()]); p=out['products'][0]; assert p.status=='unknown' and p.cost_quality=='unknown' and out['execution_authorized'] is False and out['category_membership_verified'] is False
 @pytest.mark.asyncio
-@pytest.mark.parametrize('changes,expected',[({'status':'inactive'},'hidden'),({'quantity':0},'out_of_stock'),({'variants_count':2},'unknown'),({'archived':True},'hidden'),({'quantity':None},'unknown')])
+@pytest.mark.parametrize('changes,expected',[({'status':'inactive'},'hidden'),({'quantity':0},'unknown'),({'variants_count':2},'unknown'),({'archived':True},'hidden'),({'quantity':None},'unknown')])
 async def test_fail_closed_inventory(changes,expected):
     out=await read([row(**changes)]); assert out['products'][0].status==expected
 @pytest.mark.asyncio
