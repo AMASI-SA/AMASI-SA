@@ -57,10 +57,12 @@ def customization_contract(row, variant=None):
     return fields, issues
 
 
-async def catalog(db, owner):
+async def catalog(db, owner, *, components_only=False):
     result = []
     for collection, kind, identity in [('mezan_products_v2','product','mezan_product_id'),
                                         ('mezan_cost_resources_v2','component','id')]:
+        if components_only and kind == 'product':
+            continue
         seen = set()
         for row in await rows(db, owner, collection):
             if not usable(row) or row.get('archived') or row.get('deleted_at'):
@@ -153,7 +155,8 @@ def inventory_view(state):
 
 async def assert_no_source_collision(db, owner, state):
     """A later canonical invoice requires explicit reconciliation, never two debts."""
-    keys = {(p['supplier_id'],p['invoice_number']) for p in state.get('inventory_purchases', [])}
+    from operational_invoice_numbers import supplier_reference
+    keys = {(p['supplier_id'],supplier_reference(p)) for p in state.get('inventory_purchases', []) if supplier_reference(p)}
     if keys and any((r.get('supplier_id'),str(r.get('invoice_number') or '').strip()) in keys
                     for r in await rows(db,owner,'mezan_supplier_invoices_v2')):
         fail('inventory_invoice_source_conflict', 'فاتورة المخزون أصبحت موجودة في ميزان 2؛ يلزم مطابقتها قبل تحديث الأرصدة')
@@ -209,6 +212,9 @@ def personalize(line, quantity, item):
 
 async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=None):
     payload = compatible_payload(payload)
+    # Keep old durable request hashes unchanged after schema default insertion.
+    if payload.get('supplier_invoice_number') is None:
+        payload.pop('supplier_invoice_number', None)
     stamp = clock or now()
     await claim_movement(db, owner, actor, {**payload, '_operation':'inventory_purchase'})
     async def apply(state):
@@ -217,24 +223,33 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
             return prior
         await active_gate(db, owner, state)
         supplier = await entity(db, owner, 'supplier', payload['supplier_id'], 'SAR')
-        ref = payload['invoice_number'].strip()
+        from operational_invoice_numbers import references, next_purchase_number
+        automatic = 'supplier_invoice_number' in payload
+        ref = payload.get('invoice_number', '').strip()
+        supplier_ref = payload['supplier_invoice_number'].strip() if automatic else ref
+        if automatic and ref:
+            fail('inventory_invoice_number_invalid', 'رقم ميزان يصدر تلقائيًا؛ أدخل مرجع المورد في خانته', 422)
         try:
             issued = date.fromisoformat(payload['invoice_date'])
-            if not ref or issued > instant(stamp).astimezone(ZoneInfo('Asia/Riyadh')).date() or issued < instant(state['started_at']).astimezone(ZoneInfo('Asia/Riyadh')).date():
+            if (not automatic and not ref) or issued > instant(stamp).astimezone(ZoneInfo('Asia/Riyadh')).date() or issued < instant(state['started_at']).astimezone(ZoneInfo('Asia/Riyadh')).date():
                 raise ValueError()
         except (ValueError, TypeError):
             fail('inventory_invoice_date_invalid', 'أدخل رقم وتاريخ فاتورة ضمن فترة التشغيل')
         invoices = state.setdefault('inventory_purchases', [])
         other = [p for c in state.get('customer_exchanges', []) for p in c['purchases']]
-        if any(p['supplier_id']==supplier['id'] and p['invoice_number']==ref for p in invoices+other):
+        if supplier_ref and any(p['supplier_id']==supplier['id'] and supplier_ref in references(p) for p in invoices+other):
             fail('inventory_invoice_duplicate', 'فاتورة المورد مسجلة بالفعل')
-        if any(r.get('supplier_id')==supplier['id'] and str(r.get('invoice_number') or '').strip()==ref
-               for r in await rows(db, owner, 'mezan_supplier_invoices_v2')):
+        external_rows = await rows(db, owner, 'mezan_supplier_invoices_v2')
+        if supplier_ref and any(r.get('supplier_id')==supplier['id'] and str(r.get('invoice_number') or '').strip()==supplier_ref
+               for r in external_rows):
             fail('inventory_invoice_existing_mz2', 'الفاتورة موجودة في ميزان 2؛ لا يمكن تسجيلها مرة أخرى')
-        available = {line_identity(r):r for r in await catalog(db, owner)}
         lines = payload['lines']
         if not lines:
             fail('inventory_lines_invalid', 'اختر المنتجات دون تكرار البنود')
+        # Configured lines use canonical product/option metadata below. Legacy
+        # variant labels are not their identity and must not block this path.
+        available = {line_identity(r):r for r in await catalog(db, owner,
+            components_only=all(line.get('purchase_configuration') for line in lines))}
         from operational_purchase_metadata import products, locations, describe
         bases={(p['kind'],p['id']):p for p in await products(db,owner)}
         bases.update({(p['kind'],p['id']):p for p in available.values() if p['kind']=='component'})
@@ -265,10 +280,13 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
                 'personalizations':personalizations,
                 'unallocated_quantity':quantity-sum(p['quantity'] for p in personalizations),
                 'unit_price':fmt(unit_price), **{key:fmt(value) for key,value in values.items()}})
+        if automatic:
+            ref = next_purchase_number(state, external_rows + [{'invoice_number':supplier_ref}])
         identity = digest(['inventory-invoice',owner,supplier['id'],ref])
         invoice = {'id':identity,'obligation_id':'inventory-purchase:'+identity,
             'supplier_id':supplier['id'],'supplier_name':supplier['name'],
-            'invoice_number':ref,'invoice_date':issued.isoformat(),'lines':normalized,
+            'invoice_number':ref,**({'supplier_invoice_number':supplier_ref} if automatic else {}),
+            'invoice_date':issued.isoformat(),'lines':normalized,
             **{key:fmt(value) for key,value in totals.items()}, 'currency':'SAR',
             'actor_id':actor,'recorded_at':stamp,'source':source,'note':payload.get('note',''),
             'receipt_basis':'actual_supplier_invoice_operational_only'}

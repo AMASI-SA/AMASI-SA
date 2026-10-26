@@ -20,6 +20,8 @@ from pymongo.errors import DuplicateKeyError
 
 from fulfillment_v2_routes import _actor_context, _require_permission
 from product_option_cost_routes import RESOURCES
+from component_category_policy import COMPONENT_CATEGORIES, unique_category_ids
+from supplier_category_service_policy import supplier_category_selection
 
 
 MEZAN_SUPPLIERS_V2 = "mezan_suppliers_v2"
@@ -118,6 +120,9 @@ def _public_supplier(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "email": _text(row.get("email")) or None,
         "notes": _text(row.get("notes")) or None,
         "status": _text(row.get("status")) or "active",
+        "category_ids": unique_category_ids(row.get("category_ids")),
+        "category_links": [dict(link) for link in row.get("category_links") or []],
+        "category_assignment_required": not bool(row.get("category_ids")),
         "service_ids": [
             _text(link.get("service_id")) for link in service_links
             if _text(link.get("service_id"))
@@ -140,7 +145,8 @@ class MezanSupplierWriteRequest(BaseModel):
     email: str | None = Field(default=None, max_length=254)
     notes: str | None = Field(default=None, max_length=1000)
     status: Literal["active", "inactive"] = "active"
-    service_ids: list[str] = Field(min_length=1, max_length=200)
+    category_ids: list[str] = Field(min_length=1, max_length=50)
+    service_ids: list[str] = Field(default_factory=list, max_length=200)
 
     @field_validator("company_name")
     @classmethod
@@ -166,8 +172,14 @@ class MezanSupplierWriteRequest(BaseModel):
             if service_id and service_id not in seen:
                 seen.add(service_id)
                 result.append(service_id)
+        return result
+
+    @field_validator("category_ids")
+    @classmethod
+    def normalize_category_ids(cls, values: list[str]) -> list[str]:
+        result = unique_category_ids(values)
         if not result:
-            raise ValueError("supplier_service_required")
+            raise ValueError("supplier_category_required")
         return result
 
 
@@ -293,6 +305,7 @@ def make_mezan_supplier_management_router(
                 "user_id": merchant_id,
                 "kind": "service",
                 "track_inventory": {"$ne": True},
+                "status": {"$ne": "inactive"},
             },
             {
                 "_id": 0,
@@ -304,6 +317,7 @@ def make_mezan_supplier_management_router(
                 "kind": 1,
                 "track_inventory": 1,
                 "requires_preparation": 1,
+                "category_ids": 1,
             },
         ).sort("name", 1).to_list(2000)
         services = [
@@ -314,15 +328,21 @@ def make_mezan_supplier_management_router(
                 "unit": _text(row.get("unit")) or "job",
                 "unit_cost": row.get("unit_cost"),
                 "requires_preparation": bool(row.get("requires_preparation")),
+                "category_ids": unique_category_ids(row.get("category_ids")),
             }
             for row in raw_services
             if _is_service(row)
         ]
+        categories = await db[COMPONENT_CATEGORIES].find(
+            {"user_id": merchant_id, "status": {"$ne": "inactive"}},
+            {"_id": 0, "id": 1, "name": 1},
+        ).sort("name", 1).to_list(2000)
         public_suppliers = [_public_supplier(row) for row in suppliers]
         return {
             "ok": True,
             "suppliers": public_suppliers,
             "services": services,
+            "categories": categories,
             "summary": {
                 "total": len(public_suppliers),
                 "active": sum(
@@ -334,7 +354,8 @@ def make_mezan_supplier_management_router(
                 "services": len(services),
             },
             "rules": {
-                "service_required": True,
+                "service_required": False,
+                "category_required": True,
                 "legacy_supplier_data_used": False,
                 "accounting_linked": True,
                 "delete_supported": False,
@@ -365,10 +386,9 @@ def make_mezan_supplier_management_router(
         _require_permission(context, SUPPLIERS_MANAGE_PERMISSION)
         await ensure_mezan_supplier_indexes(db)
         now = _now()
-        links = await _service_links(
-            db,
-            user_id=context["merchant_id"],
-            service_ids=payload.service_ids,
+        category_links, links = await supplier_category_selection(
+            db, user_id=context["merchant_id"],
+            category_ids=payload.category_ids, service_ids=payload.service_ids,
         )
         row = {
             "id": f"msv2_{uuid.uuid4().hex}",
@@ -380,6 +400,8 @@ def make_mezan_supplier_management_router(
             "email": payload.email,
             "notes": payload.notes,
             "status": payload.status,
+            "category_ids": payload.category_ids,
+            "category_links": category_links,
             "service_ids": [link["service_id"] for link in links],
             "service_links": links,
             "created_by": context["actor_id"],
@@ -426,10 +448,9 @@ def make_mezan_supplier_management_router(
                 status_code=404,
                 detail={"code": "mezan_supplier_not_found"},
             )
-        links = await _service_links(
-            db,
-            user_id=context["merchant_id"],
-            service_ids=payload.service_ids,
+        category_links, links = await supplier_category_selection(
+            db, user_id=context["merchant_id"],
+            category_ids=payload.category_ids, service_ids=payload.service_ids,
         )
         patch = {
             "company_name": payload.company_name,
@@ -439,6 +460,8 @@ def make_mezan_supplier_management_router(
             "email": payload.email,
             "notes": payload.notes,
             "status": payload.status,
+            "category_ids": payload.category_ids,
+            "category_links": category_links,
             "service_ids": [link["service_id"] for link in links],
             "service_links": links,
             "updated_by": context["actor_id"],

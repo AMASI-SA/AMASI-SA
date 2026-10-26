@@ -26,6 +26,36 @@ async def setup(db):
 def purchase():return command(lines=[{'kind':'product','item_id':'product','quantity':10,'unit_price':'15','tax':'0','location_id':'location','purchase_configuration':deepcopy(RAW)}, {'kind':'product','item_id':'product','quantity':100,'unit_price':'20','tax':'0','location_id':'location','purchase_configuration':deepcopy(READY)}])
 async def snapshot(db):return {name:await db[name].find({}).to_list(1000) for name in PHYSICAL}
 
+
+def test_configured_catalog_and_purchase_do_not_require_legacy_variant_labels():
+ async def scenario(db):
+  await setup(db)
+  await db.mezan_products_v2.update_one({'mezan_product_id':'product'}, {'$set':{
+   'variants_count':1,'variants':[{'id':'legacy-id','display_name':'123'}]}})
+  original=await db.mezan_products_v2.find_one({});physical=await snapshot(db)
+  async with client(db) as c:
+   base='/api/operational-balances'
+   legacy=await c.get(base+'/inventory-catalog')
+   assert legacy.status_code==409
+   assert legacy.json()['detail']['code']=='inventory_variant_ambiguous'
+   modern=await c.get(base+'/inventory-catalog?configured=true')
+   assert modern.status_code==200,modern.text
+   assert [p['id'] for p in modern.json()['products']]==['product']
+   assert [(o['id'],o['name'],o['type'],o['required']) for o in modern.json()['products'][0]['options']]==[(o['id'],o['name'],o['type'],o['required']) for o in OPTIONS]
+   assert all(p['kind']=='component' for p in modern.json()['items'])
+   bad=purchase();bad['lines'][0]['purchase_configuration']['selections'][0]['value_id']='invented'
+   before=await read(db,'owner')
+   rejected=await c.post(base+'/inventory-purchases',json=bad)
+   assert rejected.status_code==422
+   assert await read(db,'owner')==before
+   good=purchase();good['request_id']='configured-after-bad'
+   saved=await c.post(base+'/inventory-purchases',json=good)
+   assert saved.status_code==200,saved.text
+   assert saved.json()['gross']=='2150.00'
+  assert await snapshot(db)==physical
+  assert await db.mezan_products_v2.find_one({})==original
+ run(scenario)
+
 def test_raw10_ready100_cost_retry_returns_and_physical_separation():
  async def scenario(db):
   await setup(db);before=await snapshot(db)
