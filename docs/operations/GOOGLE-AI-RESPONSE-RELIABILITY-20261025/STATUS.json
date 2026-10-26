@@ -749,7 +749,7 @@
     "pr": 1564,
     "source": "8f01a77314763eaae0131269b4c421cf19d34611",
     "production_base": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
-    "state": "MERGED; own guard prepare exit0, no publish yet",
+    "state": "MERGED; NOT PUBLISHED; publisher project UI timed out; own lease aborted",
     "root_backend_tests": "73passed2.04s",
     "real_mongo_source": {
       "source": "cd38593b19169c4fb2de4b2cc0e510a28da97709",
@@ -760,7 +760,7 @@
     },
     "provider_writes": 0,
     "production_changed": false,
-    "next": "Inspect publisher UI. Only own matching active lease; prepublish then exactly one publish; newer finish, 3guard verify, closed, behavioral UI.",
+    "next": "When publisher project UI responds: fetch latest production and inspect actualguard. If head stays M72ab and artifacts intact, validate packages then prepare/prepublish once; publish once, wait newer finish, verify3 and activefalse, test UI. If head changes create new A/B; do not reuse frozen pair.",
     "A": "8f01a77314763eaae0131269b4c421cf19d34611",
     "B": "d7fd4608ed9e703aa1ddf1e84263f7e05b46e780",
     "runtime": "rg5-a8f6fe87faf3cfc48c53aad5bd570019e7c38ca6c90415bb798a40337f43042e",
@@ -790,9 +790,11 @@
     "lease": {
       "actor": "codex-google1564",
       "prepare_exit": 0,
-      "release": "rg5-a8f6fe87faf3cfc48c53aad5bd570019e7c38ca6c90415bb798a40337f43042e",
-      "merge": "72ab1aee0fa9520b3a5f91f924906a3be3337531",
-      "publish_clicked": false
+      "prepublish": false,
+      "publish_clicked": false,
+      "aborted": true,
+      "abort_reason": "publisher UI DOM and screenshot timeout",
+      "active_after": false
     }
   },
   "legacy_claim_gap": {
