@@ -91,6 +91,32 @@ class OrdersInstructionPermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.db.raw[routes.PIECES].find_one({"piece_id": "p1"})["status"], "blocked")
         self.assertEqual(self.db.raw[routes.PIECES].find_one({"piece_id": "p2"})["status"], "in_progress")
 
+    async def test_order_contract_advertises_complete_edit_flow(self):
+        response = self.client.get("/api/order-tracking-notes/orders/1")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["capabilities"]["edit_flow_version"], 1)
+
+    async def test_apk60_general_and_urgent_false_flag_remain_nonblocking(self):
+        options = self.client.get("/api/order-tracking-notes/orders/1").json()["stage_options"]
+        for stages in (["current_stage"], [option["value"] for option in options]):
+            with self.subTest(stages=stages):
+                response = self.create(
+                    edit_flow=False, target_ids=[], priority="urgent",
+                    required_action="arrival_confirmation", enforcement="notice",
+                    approval_required=False, proposed_changes=[], target_stages=stages,
+                )
+                self.assertEqual(response.status_code, 201, response.text)
+                row = self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one(
+                    {"id": response.json()["instruction"]["id"]})
+                self.assertFalse(row.get("edit_flow"))
+                self.assertFalse(row["operational_hold"])
+        self.assertEqual(self.db.raw[routes.PIECES].count_documents({"status": "in_progress"}), 2)
+
+    async def test_false_flag_does_not_accept_unknown_client_fields(self):
+        response = self.create(edit_flow=False, unsupported_client_field=True)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].count_documents({}), 0)
+
     async def test_other_app_page_or_disabled_access_cannot_create(self):
         for patch_value in ({"permissions": ["app.page.my_products"]}, {"enabled": False}):
             self.db.raw[MOBILE_APP_ACCESS].update_one({"user_id": "staff"}, {"$set": patch_value})
