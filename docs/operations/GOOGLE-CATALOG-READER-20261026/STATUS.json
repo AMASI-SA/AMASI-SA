@@ -1,0 +1,31 @@
+{
+  "task_id": "GOOGLE-CATALOG-READER-20261026",
+  "branch": "codex/google-catalog-evidence-wip-20261026",
+  "base": "87776582fe0fc4d0204c808d3fd7fe32d42bbfe9",
+  "state": "WIP read-only internal catalog reader; no runtime route or release",
+  "scope": [
+    "backend/integrations_control_center/google_product_catalog_reader.py",
+    "backend/tests/test_google_product_catalog_reader.py"
+  ],
+  "verification": {
+    "ci_run": 40399978594,
+    "job": 121842900125,
+    "total_passed": 11,
+    "real_replica": 3,
+    "skips": 0,
+    "seconds": 2.48,
+    "logs_verified": true,
+    "local": "8 passed 3 skips: Mongo unavailable locally"
+  },
+  "production_changed": false,
+  "provider_writes": 0,
+  "limitations": [
+    "Pinned product IDs only; no category membership or variant availability proof; active products remain inventory unknown because light sync can omit variants and coerces unlimited flags",
+    "No pricing, profitability, product URL, sales or platform attribution proof",
+    "Fresh catalog row does not establish complete source catalog snapshot",
+    "No route, executor or authorization wired",
+    "Before wiring, derive owner from trusted session and as_of from server clock; reject client-supplied freshness authority"
+  ],
+  "next_safe_action": "Review independent acceptance; wire only server-derived session owner and server clock, after trusted variant/section proof and fresh production base; no runtime authorization",
+  "code_sha": "fe70743e329a57c45e36289a928e7f2ee7fda593"
+}
