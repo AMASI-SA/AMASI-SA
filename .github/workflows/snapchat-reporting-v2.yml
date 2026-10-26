@@ -40,12 +40,15 @@ on:
       - "frontend/src/pages/SnapchatV2Page*"
       - "frontend/src/components/DashboardAdsSpendCard.jsx"
       - "frontend/src/components/DashboardAdsSpendCard.test.jsx"
+      - "frontend/src/components/AdsExecutiveBreakdownTable.jsx"
+      - "frontend/src/components/ProfitSummaryCard.adsExecutive.test.jsx"
       - "frontend/src/services/dashboardAdsSpend.js"
       - "frontend/src/services/dashboardAdsSpend.test.js"
       - "frontend/src/lib/dashboardPlatformSpendMerge.js"
       - "frontend/src/lib/dashboardPlatformSpendMerge.test.js"
       - "frontend/src/pages/AdvancedDashboard.jsx"
       - "frontend/src/pages/AdvancedDashboard.latestOrders.test.jsx"
+      - "frontend/src/pages/AdvancedDashboard.mobile.test.jsx"
       - "backend/snapchat_v2_test_bootstrap.py"
       - "backend/integrations_control_center/snapchat_native_tracking_routes.py"
       - "backend/tests/test_snapchat_reporting_v2_*.py"
@@ -146,6 +149,8 @@ jobs:
           src/components/marketing/SnapchatDecisionReadiness.test.jsx
           src/pages/SnapchatV2Page.test.jsx
           src/components/DashboardAdsSpendCard.test.jsx
+          src/components/ProfitSummaryCard.adsExecutive.test.jsx
           src/services/dashboardAdsSpend.test.js
           src/lib/dashboardPlatformSpendMerge.test.js
           src/pages/AdvancedDashboard.latestOrders.test.jsx
+          src/pages/AdvancedDashboard.mobile.test.jsx
