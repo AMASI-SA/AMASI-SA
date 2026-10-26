@@ -184,353 +184,366 @@ async def ensure_store_delivery_handover_indexes(db: Any) -> None:
     await db[EVENTS].create_index([("user_id", 1), ("occurred_at", -1)])
 
 
+async def create_session_service(db: Any, *, actor: dict, user_id: str, payload: SessionCreate) -> dict[str, Any]:
+    await ensure_store_delivery_handover_indexes(db)
+    driver = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": payload.driver_id}, {"_id": 0})
+    if not driver:
+        raise HTTPException(status_code=404, detail={"code": "store_driver_not_found"})
+    if driver.get("status") != "active":
+        raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
+    now = _now()
+    session = {
+        "id": str(uuid.uuid4()), "user_id": user_id, "driver_id": driver["id"],
+        "driver_name_snapshot": driver.get("name"), "driver_city_snapshot": driver.get("city"),
+        "delivery_fee_snapshot": driver.get("delivery_fee"), "status": "open",
+        "accepted": [], "rejected": [], "started_at": now,
+        "started_by": normalize_text(actor.get("id")), "confirmed_at": None,
+    }
+    await db[SESSIONS].insert_one(session)
+    session.pop("_id", None)
+    session.pop("user_id", None)
+    return session
+
+
+async def scan_shipment_service(db: Any, *, actor: dict, user_id: str, session_id: str, payload: ScanIn) -> dict[str, Any]:
+    session = await db[SESSIONS].find_one({"user_id": user_id, "id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail={"code": "handover_session_not_found"})
+    if session.get("status") != "open":
+        raise HTTPException(status_code=409, detail={"code": "handover_session_closed"})
+    driver = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": session["driver_id"]}, {"_id": 0})
+    barcode = normalize_text(payload.barcode)
+    order = await db[ORDERS].find_one({"user_id": user_id, "$or": _barcode_candidates(barcode)}, {"_id": 0})
+    if not order:
+        rejected = {"barcode": barcode, "code": "shipment_not_found", "scanned_at": _now()}
+        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
+        return {"accepted": False, **rejected}
+
+    canonical_order_id = _order_id(order)
+    if not canonical_order_id:
+        rejected = {"barcode": barcode, "order_number": _order_number(order), "code": "canonical_order_identity_missing", "scanned_at": _now()}
+        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
+        return {"accepted": False, **rejected}
+
+    if any(normalize_text(row.get("order_id")) == canonical_order_id for row in session.get("accepted") or []):
+        return {"accepted": False, "barcode": barcode, "code": "shipment_already_scanned"}
+    active = await db[ASSIGNMENTS].find_one(
+        {"user_id": user_id, "order_id": canonical_order_id, "active": True},
+        {
+            "_id": 0,
+            "id": 1,
+            "driver_id": 1,
+            "driver_name_snapshot": 1,
+            "status": 1,
+            "order_number": 1,
+        },
+    )
+    if active:
+        active_status = normalize_text(active.get("status"))
+        same_driver = normalize_text(active.get("driver_id")) == normalize_text(driver.get("id"))
+        return {
+            "accepted": False,
+            "barcode": barcode,
+            "order_number": _order_number(order),
+            "code": (
+                "shipment_already_delivered"
+                if active_status == "delivered"
+                else "shipment_already_assigned_to_driver"
+                if same_driver
+                else "shipment_already_assigned"
+            ),
+            "can_reassign": bool(
+                not same_driver
+                and active_status in {"assigned", "out_for_delivery"}
+            ),
+            "assignment_id": active.get("id"),
+            "current_driver_id": active.get("driver_id"),
+            "current_driver_name": active.get("driver_name_snapshot"),
+            "current_status": active_status,
+        }
+
+    workflow = await db[WORKFLOWS].find_one(
+        {"user_id": user_id, "order_number": _order_number(order)},
+        {"_id": 0},
+    )
+    if not workflow:
+        return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
+    blocker = store_courier_assignment_blocker(workflow)
+    if blocker:
+        return {"accepted": False, "barcode": barcode, "code": blocker}
+    if normalize_text(workflow.get("store_courier_assignee_id")):
+        return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
+
+    city = _order_city(order)
+    try:
+        snapshot = assignment_snapshot(driver=driver, shipping_city=city)
+    except StoreDeliveryRuleError as exc:
+        rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, "code": str(exc), "scanned_at": _now()}
+        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
+        return {"accepted": False, **rejected}
+
+    accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, **snapshot, "scanned_at": _now()}
+    await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"accepted": accepted}})
+    return {"accepted": True, "shipment": accepted}
+
+
+async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session_id: str, physical_label_scanned: bool = True) -> dict[str, Any]:
+    session = await db[SESSIONS].find_one({"user_id": user_id, "id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail={"code": "handover_session_not_found"})
+    if session.get("status") != "open":
+        raise HTTPException(status_code=409, detail={"code": "handover_session_closed"})
+    accepted = list(session.get("accepted") or [])
+    if not accepted:
+        raise HTTPException(status_code=409, detail={"code": "handover_session_empty"})
+
+    order_ids = [item["order_id"] for item in accepted]
+    existing = await db[ASSIGNMENTS].find_one({"user_id": user_id, "order_id": {"$in": order_ids}, "active": True}, {"_id": 0, "order_id": 1})
+    if existing:
+        raise HTTPException(status_code=409, detail={"code": "shipment_already_assigned", "order_id": existing.get("order_id")})
+
+    driver = await db[STORE_DRIVERS].find_one(
+        {"user_id": user_id, "id": session.get("driver_id"), "status": "active"},
+        {"_id": 0},
+    )
+    if not driver:
+        raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
+
+    now = _now()
+    rows = []
+    for item in accepted:
+        try:
+            current_snapshot = assignment_snapshot(
+                driver=driver,
+                shipping_city=normalize_text(item.get("shipping_city") or item.get("shipping_city_snapshot")),
+            )
+        except StoreDeliveryRuleError as exc:
+            raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
+        rows.append({
+            "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
+            "order_id": item["order_id"], "order_number": item.get("order_number"), "barcode": item.get("barcode"),
+            **current_snapshot,
+            "status": "assigned", "active": True, "assigned_at": now,
+            "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
+        })
+
+    inserted_ids: list[str] = []
+    inserted_instruction_ids: list[str] = []
+    updated_orders: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    updated_workflows: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    try:
+        for row in rows:
+            workflow = await db[WORKFLOWS].find_one(
+                {"user_id": user_id, "order_number": row.get("order_number")},
+                {"_id": 0},
+            )
+            if not workflow:
+                raise HTTPException(status_code=409, detail={"code": "store_courier_shipment_not_found"})
+            blocker = store_courier_assignment_blocker(workflow)
+            if blocker:
+                raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
+            if normalize_text(workflow.get("store_courier_assignee_id")):
+                raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned", "order_number": row.get("order_number")})
+            await enforce_assignment_instructions(
+                db,
+                user_id=user_id,
+                order_number=normalize_text(row.get("order_number")),
+                actor_id=normalize_text(actor.get("id")),
+            )
+            await db[ASSIGNMENTS].insert_one(row)
+            inserted_ids.append(row["id"])
+            tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
+                {
+                    "user_id": user_id,
+                    "order_number": row.get("order_number"),
+                    "status": {"$in": ["active", "waiting_customer_service_approval"]},
+                    "target_stages": "store_courier",
+                },
+                {"_id": 0},
+            ).to_list(100)
+            for tracking in tracking_rows:
+                instruction_id = f"tracking-{tracking['id']}"
+                instruction_result = await db[STORE_DELIVERY_INSTRUCTIONS].update_one(
+                    {"user_id": user_id, "id": instruction_id},
+                    {"$setOnInsert": {
+                        "id": instruction_id,
+                        "user_id": user_id,
+                        "order_id": row["order_id"],
+                        "driver_id": row["driver_id"],
+                        "driver_name_snapshot": row.get("driver_name_snapshot"),
+                        "instruction_type": (
+                            "scheduled"
+                            if tracking.get("delivery_date")
+                            else "urgent"
+                            if tracking.get("priority") == "urgent"
+                            else "general"
+                        ),
+                        "priority": tracking.get("priority") or "normal",
+                        "note": tracking.get("note") or "تعليمات من خدمة العملاء",
+                        "delivery_date": tracking.get("delivery_date"),
+                        "delivery_time": tracking.get("delivery_time"),
+                        "status": "active",
+                        "acknowledged_at": None,
+                        "acknowledged_by_driver_id": None,
+                        "version": 1,
+                        "created_at": now,
+                        "created_by": tracking.get("created_by"),
+                        "updated_at": now,
+                        "source_tracking_instruction_id": tracking["id"],
+                    }},
+                    upsert=True,
+                )
+                if getattr(instruction_result, "upserted_id", None) is not None:
+                    inserted_instruction_ids.append(instruction_id)
+
+            order_filter = _assignment_order_filter(user_id, row)
+            prior = await db[ORDERS].find_one(
+                order_filter,
+                {
+                    "_id": 0,
+                    "order_id": 1,
+                    "order_number": 1,
+                    "store_delivery_assignment_id": 1,
+                    "store_delivery_driver_id": 1,
+                    "store_delivery_driver_name": 1,
+                    "store_delivery_fee_snapshot": 1,
+                    "store_delivery_status": 1,
+                    "store_delivery_assigned_at": 1,
+                    "store_delivery_updated_at": 1,
+                },
+            )
+            if not prior:
+                raise RuntimeError("canonical_order_not_found_during_handover_confirm")
+            order_patch = {
+                "store_delivery_assignment_id": row["id"],
+                "store_delivery_driver_id": row["driver_id"],
+                "store_delivery_driver_name": row.get("driver_name_snapshot"),
+                "store_delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
+                "store_delivery_status": "assigned",
+                "store_delivery_assigned_at": now,
+                "store_delivery_updated_at": now,
+            }
+            order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+            if order_result.matched_count != 1:
+                raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
+            updated_orders.append((prior, order_patch))
+
+            workflow_patch = {
+                "delivery_flow": "store_courier",
+                "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                "store_courier_assignee_id": (
+                    normalize_text(driver.get("account_user_id"))
+                    or f"store-driver:{driver['id']}"
+                ),
+                "store_courier_assignee_name": driver.get("name"),
+                "store_courier_driver_profile_id": driver["id"],
+                "store_delivery_assignment_id": row["id"],
+                "store_courier_assigned_at": now,
+                "store_courier_assigned_by_id": normalize_text(actor.get("id")),
+                "store_courier_assignment_barcode": row.get("barcode"),
+                "store_courier_label_verified_at": now,
+                "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
+                # The handover scanner is reading the physical printed
+                # store-courier label now, so a prior separate print-confirm
+                # scan is not required.
+                "carrier_label_print_confirmed": True,
+                "carrier_label_print_confirmed_at": (
+                    workflow.get("carrier_label_print_confirmed_at") or now
+                ),
+                "carrier_label_print_confirmed_by": (
+                    workflow.get("carrier_label_print_confirmed_by")
+                    or normalize_text(actor.get("id"))
+                ),
+                "carrier_label_print_confirmed_by_name": (
+                    workflow.get("carrier_label_print_confirmed_by_name")
+                    or normalize_text(actor.get("name") or actor.get("email"))
+                ),
+                "updated_at": now,
+            }
+            if not physical_label_scanned:
+                for key in tuple(workflow_patch):
+                    if key.startswith("carrier_label_print_confirmed"):
+                        workflow_patch.pop(key)
+            workflow_result = await db[WORKFLOWS].update_one(
+                {
+                    "user_id": user_id,
+                    "order_number": row.get("order_number"),
+                    "carrier_label_type": "store_courier",
+                    "carrier_label_ready": True,
+                    "stage": "completed",
+                    "assembly_status": "completed",
+                    "$or": [
+                        {"store_courier_assignee_id": {"$exists": False}},
+                        {"store_courier_assignee_id": None},
+                        {"store_courier_assignee_id": ""},
+                    ],
+                },
+                {"$set": workflow_patch},
+            )
+            if workflow_result.modified_count != 1:
+                raise HTTPException(status_code=409, detail={"code": "store_courier_assignment_conflict", "order_number": row.get("order_number")})
+            updated_workflows.append((workflow, workflow_patch))
+    except Exception:
+        if inserted_ids:
+            await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+        if inserted_instruction_ids:
+            await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
+                "user_id": user_id,
+                "id": {"$in": inserted_instruction_ids},
+            })
+        await _rollback_confirm_targets(
+            db,
+            user_id=user_id,
+            updated_orders=updated_orders,
+            updated_workflows=updated_workflows,
+        )
+        raise
+
+    session_update = await db[SESSIONS].update_one(
+        {"user_id": user_id, "id": session_id, "status": "open"},
+        {"$set": {"status": "confirmed", "confirmed_at": now, "confirmed_by": normalize_text(actor.get("id")), "assigned_count": len(rows)}},
+    )
+    if session_update.modified_count != 1:
+        await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
+        if inserted_instruction_ids:
+            await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
+                "user_id": user_id,
+                "id": {"$in": inserted_instruction_ids},
+            })
+        await _rollback_confirm_targets(
+            db,
+            user_id=user_id,
+            updated_orders=updated_orders,
+            updated_workflows=updated_workflows,
+        )
+        raise HTTPException(status_code=409, detail={"code": "handover_session_confirm_conflict"})
+
+    created = [{k: v for k, v in row.items() if k not in {"_id", "user_id"}} for row in rows]
+    await db[EVENTS].insert_one({
+        "id": str(uuid.uuid4()), "user_id": user_id, "event_type": "store_delivery_handover_confirmed",
+        "session_id": session_id, "driver_id": session.get("driver_id"), "assigned_count": len(created),
+        "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
+    })
+    return {"confirmed": True, "session_id": session_id, "assigned_count": len(created), "assignments": created}
+
+
 def make_store_delivery_handover_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/handover", tags=["Store Delivery Handover"])
 
     @router.post("/sessions", status_code=201)
     async def create_session(payload: SessionCreate, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_operator(user)
-        user_id = _merchant_user_id(actor)
-        await ensure_store_delivery_handover_indexes(db)
-        driver = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": payload.driver_id}, {"_id": 0})
-        if not driver:
-            raise HTTPException(status_code=404, detail={"code": "store_driver_not_found"})
-        if driver.get("status") != "active":
-            raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
-        now = _now()
-        session = {
-            "id": str(uuid.uuid4()), "user_id": user_id, "driver_id": driver["id"],
-            "driver_name_snapshot": driver.get("name"), "driver_city_snapshot": driver.get("city"),
-            "delivery_fee_snapshot": driver.get("delivery_fee"), "status": "open",
-            "accepted": [], "rejected": [], "started_at": now,
-            "started_by": normalize_text(actor.get("id")), "confirmed_at": None,
-        }
-        await db[SESSIONS].insert_one(session)
-        session.pop("_id", None)
-        session.pop("user_id", None)
-        return session
+        return await create_session_service(db, actor=actor, user_id=_merchant_user_id(actor), payload=payload)
 
     @router.post("/sessions/{session_id}/scan")
     async def scan_shipment(session_id: str, payload: ScanIn, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_operator(user)
-        user_id = _merchant_user_id(actor)
-        session = await db[SESSIONS].find_one({"user_id": user_id, "id": session_id}, {"_id": 0})
-        if not session:
-            raise HTTPException(status_code=404, detail={"code": "handover_session_not_found"})
-        if session.get("status") != "open":
-            raise HTTPException(status_code=409, detail={"code": "handover_session_closed"})
-        driver = await db[STORE_DRIVERS].find_one({"user_id": user_id, "id": session["driver_id"]}, {"_id": 0})
-        barcode = normalize_text(payload.barcode)
-        order = await db[ORDERS].find_one({"user_id": user_id, "$or": _barcode_candidates(barcode)}, {"_id": 0})
-        if not order:
-            rejected = {"barcode": barcode, "code": "shipment_not_found", "scanned_at": _now()}
-            await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
-            return {"accepted": False, **rejected}
-
-        canonical_order_id = _order_id(order)
-        if not canonical_order_id:
-            rejected = {"barcode": barcode, "order_number": _order_number(order), "code": "canonical_order_identity_missing", "scanned_at": _now()}
-            await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
-            return {"accepted": False, **rejected}
-
-        if any(normalize_text(row.get("order_id")) == canonical_order_id for row in session.get("accepted") or []):
-            return {"accepted": False, "barcode": barcode, "code": "shipment_already_scanned"}
-        active = await db[ASSIGNMENTS].find_one(
-            {"user_id": user_id, "order_id": canonical_order_id, "active": True},
-            {
-                "_id": 0,
-                "id": 1,
-                "driver_id": 1,
-                "driver_name_snapshot": 1,
-                "status": 1,
-                "order_number": 1,
-            },
-        )
-        if active:
-            active_status = normalize_text(active.get("status"))
-            same_driver = normalize_text(active.get("driver_id")) == normalize_text(driver.get("id"))
-            return {
-                "accepted": False,
-                "barcode": barcode,
-                "order_number": _order_number(order),
-                "code": (
-                    "shipment_already_delivered"
-                    if active_status == "delivered"
-                    else "shipment_already_assigned_to_driver"
-                    if same_driver
-                    else "shipment_already_assigned"
-                ),
-                "can_reassign": bool(
-                    not same_driver
-                    and active_status in {"assigned", "out_for_delivery"}
-                ),
-                "assignment_id": active.get("id"),
-                "current_driver_id": active.get("driver_id"),
-                "current_driver_name": active.get("driver_name_snapshot"),
-                "current_status": active_status,
-            }
-
-        workflow = await db[WORKFLOWS].find_one(
-            {"user_id": user_id, "order_number": _order_number(order)},
-            {"_id": 0},
-        )
-        if not workflow:
-            return {"accepted": False, "barcode": barcode, "code": "store_courier_shipment_not_found"}
-        blocker = store_courier_assignment_blocker(workflow)
-        if blocker:
-            return {"accepted": False, "barcode": barcode, "code": blocker}
-        if normalize_text(workflow.get("store_courier_assignee_id")):
-            return {"accepted": False, "barcode": barcode, "code": "store_courier_already_assigned"}
-
-        city = _order_city(order)
-        try:
-            snapshot = assignment_snapshot(driver=driver, shipping_city=city)
-        except StoreDeliveryRuleError as exc:
-            rejected = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, "code": str(exc), "scanned_at": _now()}
-            await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"rejected": rejected}})
-            return {"accepted": False, **rejected}
-
-        accepted = {"barcode": barcode, "order_id": canonical_order_id, "order_number": _order_number(order), "shipping_city": city, **snapshot, "scanned_at": _now()}
-        await db[SESSIONS].update_one({"user_id": user_id, "id": session_id}, {"$push": {"accepted": accepted}})
-        return {"accepted": True, "shipment": accepted}
+        return await scan_shipment_service(db, actor=actor, user_id=_merchant_user_id(actor), session_id=session_id, payload=payload)
 
     @router.post("/sessions/{session_id}/confirm")
     async def confirm_session(session_id: str, user: dict = Depends(current_user)) -> dict[str, Any]:
         actor = _require_operator(user)
-        user_id = _merchant_user_id(actor)
-        session = await db[SESSIONS].find_one({"user_id": user_id, "id": session_id}, {"_id": 0})
-        if not session:
-            raise HTTPException(status_code=404, detail={"code": "handover_session_not_found"})
-        if session.get("status") != "open":
-            raise HTTPException(status_code=409, detail={"code": "handover_session_closed"})
-        accepted = list(session.get("accepted") or [])
-        if not accepted:
-            raise HTTPException(status_code=409, detail={"code": "handover_session_empty"})
-
-        order_ids = [item["order_id"] for item in accepted]
-        existing = await db[ASSIGNMENTS].find_one({"user_id": user_id, "order_id": {"$in": order_ids}, "active": True}, {"_id": 0, "order_id": 1})
-        if existing:
-            raise HTTPException(status_code=409, detail={"code": "shipment_already_assigned", "order_id": existing.get("order_id")})
-
-        driver = await db[STORE_DRIVERS].find_one(
-            {"user_id": user_id, "id": session.get("driver_id"), "status": "active"},
-            {"_id": 0},
-        )
-        if not driver:
-            raise HTTPException(status_code=409, detail={"code": "driver_inactive"})
-
-        now = _now()
-        rows = []
-        for item in accepted:
-            try:
-                current_snapshot = assignment_snapshot(
-                    driver=driver,
-                    shipping_city=normalize_text(item.get("shipping_city") or item.get("shipping_city_snapshot")),
-                )
-            except StoreDeliveryRuleError as exc:
-                raise HTTPException(status_code=409, detail={"code": str(exc), "order_id": item.get("order_id")}) from exc
-            rows.append({
-                "id": str(uuid.uuid4()), "user_id": user_id, "session_id": session_id,
-                "order_id": item["order_id"], "order_number": item.get("order_number"), "barcode": item.get("barcode"),
-                **current_snapshot,
-                "status": "assigned", "active": True, "assigned_at": now,
-                "assigned_by": normalize_text(actor.get("id")), "delivered_at": None,
-            })
-
-        inserted_ids: list[str] = []
-        inserted_instruction_ids: list[str] = []
-        updated_orders: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        updated_workflows: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        try:
-            for row in rows:
-                workflow = await db[WORKFLOWS].find_one(
-                    {"user_id": user_id, "order_number": row.get("order_number")},
-                    {"_id": 0},
-                )
-                if not workflow:
-                    raise HTTPException(status_code=409, detail={"code": "store_courier_shipment_not_found"})
-                blocker = store_courier_assignment_blocker(workflow)
-                if blocker:
-                    raise HTTPException(status_code=409, detail={"code": blocker, "order_number": row.get("order_number")})
-                if normalize_text(workflow.get("store_courier_assignee_id")):
-                    raise HTTPException(status_code=409, detail={"code": "store_courier_already_assigned", "order_number": row.get("order_number")})
-                await enforce_assignment_instructions(
-                    db,
-                    user_id=user_id,
-                    order_number=normalize_text(row.get("order_number")),
-                    actor_id=normalize_text(actor.get("id")),
-                )
-                await db[ASSIGNMENTS].insert_one(row)
-                inserted_ids.append(row["id"])
-                tracking_rows = await db[ORDER_TRACKING_INSTRUCTIONS].find(
-                    {
-                        "user_id": user_id,
-                        "order_number": row.get("order_number"),
-                        "status": {"$in": ["active", "waiting_customer_service_approval"]},
-                        "target_stages": "store_courier",
-                    },
-                    {"_id": 0},
-                ).to_list(100)
-                for tracking in tracking_rows:
-                    instruction_id = f"tracking-{tracking['id']}"
-                    instruction_result = await db[STORE_DELIVERY_INSTRUCTIONS].update_one(
-                        {"user_id": user_id, "id": instruction_id},
-                        {"$setOnInsert": {
-                            "id": instruction_id,
-                            "user_id": user_id,
-                            "order_id": row["order_id"],
-                            "driver_id": row["driver_id"],
-                            "driver_name_snapshot": row.get("driver_name_snapshot"),
-                            "instruction_type": (
-                                "scheduled"
-                                if tracking.get("delivery_date")
-                                else "urgent"
-                                if tracking.get("priority") == "urgent"
-                                else "general"
-                            ),
-                            "priority": tracking.get("priority") or "normal",
-                            "note": tracking.get("note") or "تعليمات من خدمة العملاء",
-                            "delivery_date": tracking.get("delivery_date"),
-                            "delivery_time": tracking.get("delivery_time"),
-                            "status": "active",
-                            "acknowledged_at": None,
-                            "acknowledged_by_driver_id": None,
-                            "version": 1,
-                            "created_at": now,
-                            "created_by": tracking.get("created_by"),
-                            "updated_at": now,
-                            "source_tracking_instruction_id": tracking["id"],
-                        }},
-                        upsert=True,
-                    )
-                    if getattr(instruction_result, "upserted_id", None) is not None:
-                        inserted_instruction_ids.append(instruction_id)
-
-                order_filter = _assignment_order_filter(user_id, row)
-                prior = await db[ORDERS].find_one(
-                    order_filter,
-                    {
-                        "_id": 0,
-                        "order_id": 1,
-                        "order_number": 1,
-                        "store_delivery_assignment_id": 1,
-                        "store_delivery_driver_id": 1,
-                        "store_delivery_driver_name": 1,
-                        "store_delivery_fee_snapshot": 1,
-                        "store_delivery_status": 1,
-                        "store_delivery_assigned_at": 1,
-                        "store_delivery_updated_at": 1,
-                    },
-                )
-                if not prior:
-                    raise RuntimeError("canonical_order_not_found_during_handover_confirm")
-                order_patch = {
-                    "store_delivery_assignment_id": row["id"],
-                    "store_delivery_driver_id": row["driver_id"],
-                    "store_delivery_driver_name": row.get("driver_name_snapshot"),
-                    "store_delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
-                    "store_delivery_status": "assigned",
-                    "store_delivery_assigned_at": now,
-                    "store_delivery_updated_at": now,
-                }
-                order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
-                if order_result.matched_count != 1:
-                    raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
-                updated_orders.append((prior, order_patch))
-
-                workflow_patch = {
-                    "delivery_flow": "store_courier",
-                    "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
-                    "store_courier_assignee_id": (
-                        normalize_text(driver.get("account_user_id"))
-                        or f"store-driver:{driver['id']}"
-                    ),
-                    "store_courier_assignee_name": driver.get("name"),
-                    "store_courier_driver_profile_id": driver["id"],
-                    "store_delivery_assignment_id": row["id"],
-                    "store_courier_assigned_at": now,
-                    "store_courier_assigned_by_id": normalize_text(actor.get("id")),
-                    "store_courier_assignment_barcode": row.get("barcode"),
-                    "store_courier_label_verified_at": now,
-                    "store_courier_label_verified_by_id": normalize_text(actor.get("id")),
-                    # The handover scanner is reading the physical printed
-                    # store-courier label now, so a prior separate print-confirm
-                    # scan is not required.
-                    "carrier_label_print_confirmed": True,
-                    "carrier_label_print_confirmed_at": (
-                        workflow.get("carrier_label_print_confirmed_at") or now
-                    ),
-                    "carrier_label_print_confirmed_by": (
-                        workflow.get("carrier_label_print_confirmed_by")
-                        or normalize_text(actor.get("id"))
-                    ),
-                    "carrier_label_print_confirmed_by_name": (
-                        workflow.get("carrier_label_print_confirmed_by_name")
-                        or normalize_text(actor.get("name") or actor.get("email"))
-                    ),
-                    "updated_at": now,
-                }
-                workflow_result = await db[WORKFLOWS].update_one(
-                    {
-                        "user_id": user_id,
-                        "order_number": row.get("order_number"),
-                        "carrier_label_type": "store_courier",
-                        "carrier_label_ready": True,
-                        "stage": "completed",
-                        "assembly_status": "completed",
-                        "$or": [
-                            {"store_courier_assignee_id": {"$exists": False}},
-                            {"store_courier_assignee_id": None},
-                            {"store_courier_assignee_id": ""},
-                        ],
-                    },
-                    {"$set": workflow_patch},
-                )
-                if workflow_result.modified_count != 1:
-                    raise HTTPException(status_code=409, detail={"code": "store_courier_assignment_conflict", "order_number": row.get("order_number")})
-                updated_workflows.append((workflow, workflow_patch))
-        except Exception:
-            if inserted_ids:
-                await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
-            if inserted_instruction_ids:
-                await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
-                    "user_id": user_id,
-                    "id": {"$in": inserted_instruction_ids},
-                })
-            await _rollback_confirm_targets(
-                db,
-                user_id=user_id,
-                updated_orders=updated_orders,
-                updated_workflows=updated_workflows,
-            )
-            raise
-
-        session_update = await db[SESSIONS].update_one(
-            {"user_id": user_id, "id": session_id, "status": "open"},
-            {"$set": {"status": "confirmed", "confirmed_at": now, "confirmed_by": normalize_text(actor.get("id")), "assigned_count": len(rows)}},
-        )
-        if session_update.modified_count != 1:
-            await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
-            if inserted_instruction_ids:
-                await db[STORE_DELIVERY_INSTRUCTIONS].delete_many({
-                    "user_id": user_id,
-                    "id": {"$in": inserted_instruction_ids},
-                })
-            await _rollback_confirm_targets(
-                db,
-                user_id=user_id,
-                updated_orders=updated_orders,
-                updated_workflows=updated_workflows,
-            )
-            raise HTTPException(status_code=409, detail={"code": "handover_session_confirm_conflict"})
-
-        created = [{k: v for k, v in row.items() if k not in {"_id", "user_id"}} for row in rows]
-        await db[EVENTS].insert_one({
-            "id": str(uuid.uuid4()), "user_id": user_id, "event_type": "store_delivery_handover_confirmed",
-            "session_id": session_id, "driver_id": session.get("driver_id"), "assigned_count": len(created),
-            "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
-        })
-        return {"confirmed": True, "session_id": session_id, "assigned_count": len(created), "assignments": created}
+        return await confirm_session_service(db, actor=actor, user_id=_merchant_user_id(actor), session_id=session_id)
 
     return router
 
