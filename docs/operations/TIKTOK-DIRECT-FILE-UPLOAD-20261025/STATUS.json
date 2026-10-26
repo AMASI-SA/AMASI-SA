@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R5_PR1578_MERGED_D82C_TREE_EQUALS_B_ACTUAL_APP_ADAPTER_PENDING",
+  "state": "R5_PR1578_MERGED_REHEARSAL_PASS_BROWSER_CREDENTIAL_STATE_UNRESUMABLE_DEPLOY_PENDING",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Freshoriginalguardinactive/currentAPPancestorM/trackedclean, FF-only /app toreviewedM d82c, preserveuntracked/env/worktrees. Actualadapter with own/tmp caches mustEXIT0/exactidentity. Only then ownprepare/prepublish and onefinalPublishchanges whenHostingUIready; newexplicitfinish thenverify3.",
+  "next": "New usable browserruntime required. Recover known CodeServer /?folder=/app without inspecting protected credential state; freshguardstatus. Only ifinactive, trackedclean and APPHEADancestor currentreviewedM, fetch andFF-only reviewedProduction (noreset). Ifstilld82c: actual/appadapter with /tmp/tiktok1578-release-vmil8ivn/toolcache and yarn-cache outside/app, assertA e7fd/runtime25ac. Ownprepare/prepublish onlywhenHostingUIready; onefinalPublishchanges, explicitnewfinish, ownunmodifiedverify3 closeslease. Preserve existingnative0byte draftfence; do notinitagain.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -365,7 +365,7 @@
     "cause": "Unproven. UI exposes generic error and blocked status. No provider code available through current UI/console; do not assume scope/app audit/codec/CORS cause.",
     "screenshot": "tiktok-edge-fixed-native-test-1793035691941.jpg"
   },
-  "production_changes_this_turn": "Reviewed Production Git branch advanced by normalmergePR1578, treeeqfrozenB; actual public runtime not changed by this task yet. No ownlease orPublishchanges.",
+  "production_changes_this_turn": "Production Git branch changed by authorized normalmerge1578 with exacttestedtree; no actual/appFF, no ownlease, no runtimepublish. Freshpublichealth shows earlier courier sourcec944/runtime0f58 verified. Merchant upload/publication incomplete.",
   "merchant_shawl_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
     "file_bytes": 5552622,
@@ -405,7 +405,7 @@
     "tree": "51ab2995a1198d02b2b492b7c245fd3cf4410b9c",
     "pr": 1578,
     "files": 6,
-    "state": "All24headchecks completed18SUCCESS6SKIP, bothCodeQL+aggregateSUCCESS. OriginalhostadapterEXIT0/exactidentity. Normalmerge1578 d82c tree equals frozenB.",
+    "state": "PR1578 normalmerged M d82c2d4670b7b56a3dde142fab1fa777802d45c5, MtreeexactB. All24currentB checks18SUCCESS6SKIP; bothCodeQL+aggregateSUCCESS. OriginalcleanadapterEXIT0/exactA/runtime. Actual/appadapter and livepublish NOTperformed.",
     "validation": "Current B native backend559PASS35.10s; frontend167PASS27suites11.398s; CI HostNode20 clean-clone adapter and exact governed JSON route all stepsSUCCESS. All current head checks complete. Original-host R4 result cannot yet be read.",
     "scope": "Safe fixed initialization failure persistence and owner UI; definite native rejection409; uncertain fence retained; stale preparing phase cleared. Does not yet establish actual production native rejection cause.",
     "source_A": "e7fd8ca1aaa03d27557b75072512d366a0409acb",
@@ -457,7 +457,7 @@
     },
     "coordination": "Sharedprimary/app markerabsent. NoCoordinatorboard/claims created;standardv5sourceprotocolapplies.",
     "intent_zip_sha256": "159e8db5f1520fc6bf388bb2158772c93aecbe98accccb9510f5259b78c1574c",
-    "hosting_state": "CodeServer securebrowserAuthsubmitted; positive signed-inCodeServerUI79. NewownTerminal2. Terminal1foreign preserved.",
+    "hosting_state": "Secure CodeServer auth submitted and positivelyverified atUI79; ownTerminal2. BrowserDOM subsequently repeatedlytimedout, then toolkernelreset. Cua getState and one newruntime getTab87 both refused: Browser observation is unavailable because native credential state cannot be safely resumed. Stop browser attempts; no credentials read/reentered and no protection bypass. No Republish/finalPublish action.",
     "superseded_R4": {
       "pr": 1566,
       "A": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
@@ -469,7 +469,19 @@
     },
     "safe_local_db_read": "Read-only application/.env DB query for exact known creator found0proposal records. This does NOT establish live Production capability absence; do not broaden or infer. UI remains authoritative live state.",
     "merge_M": "d82c2d4670b7b56a3dde142fab1fa777802d45c5",
-    "merge_tree_matches_intent_B": true
+    "merge_tree_matches_intent_B": true,
+    "live_public_probe": {
+      "ok": true,
+      "source_git_sha": "c944ff70ae1c5874e2584ec0060944d2d27dcfb5",
+      "release_id": "rg5-0f58cf8071f853f4b7936e51c4e37ce42abb3c500b2015d16f6f4defefa300d7",
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "meaning": "Public runtime is still the earlier courier release; TikTok1578 is NOTdeployed."
+    },
+    "current_reviewed_M": "d82c2d4670b7b56a3dde142fab1fa777802d45c5",
+    "no_own_lease": true,
+    "no_publish_click": true
   },
   "merchant_shawl_draft_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
@@ -494,6 +506,6 @@
     "resume_result": "409 owner-visible لا يمكن استكمال الرفع الآن؛ راجع حالة TikTok دون إنشاء طلب مكرر.",
     "init_retry": false,
     "blocker": "Native publish/session ID exists and native status PROCESSING_UPLOAD0, but a valid resumable capability/expiry is not proven. Do not infer the signed upload URL was persisted or usable.",
-    "latest_readonly_status": "Final read-only same-proposal refresh completed: TikTok waits for transfer, native uploaded0 of5552622bytes; status/resume controls enabled. UIstilloldfalse-resume. No repeatedresumeorinit."
+    "latest_readonly_status": "Last confirmed liveUI was pending0/5552622bytes. Browser nowunavailable; no newstatuscheck/init/resume/media transfer orsuccessfulpublication thisresume."
   }
 }
