@@ -138,3 +138,32 @@ async def test_report_owns_distinct_cohorts_and_reinstallation_is_idempotent(mon
                         'two': {('two', 'c'): [{'id': 'two'}]}}
     assert module._FINANCIAL_MATCHED.get() is before
     assert module._OWNED_FINANCIAL_MATCHED.get() is None
+
+@pytest.mark.asyncio
+async def test_cancel_during_global_release_drains_before_return(admitted, monkeypatch):
+    entered = threading.Event()
+    finish = threading.Event()
+    def worker(*args):
+        entered.set()
+        assert finish.wait(5)
+        return {}, {}
+    monkeypatch.setattr(module, '_calculate_financial_profitability_sync', worker)
+    task = asyncio.create_task(call({('a', 'c'): [{}]}))
+    while not entered.is_set():
+        await asyncio.sleep(.001)
+    await admitted._global._condition.acquire()
+    try:
+        finish.set()
+        while admitted._active.get('ads', 0):
+            await asyncio.sleep(.001)
+        task.cancel()
+        await asyncio.sleep(.01)
+        task.cancel()
+        await asyncio.sleep(.01)
+        assert not task.done()
+        assert admitted._global.in_use == 1
+    finally:
+        admitted._global._condition.release()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert admitted._global.in_use == 0
