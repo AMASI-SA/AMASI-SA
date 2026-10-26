@@ -2,27 +2,29 @@
   "task_id": "GOOGLE-ORDER-TIMESTAMP-EVIDENCE-20261027",
   "branch": "codex/google-order-timestamp-evidence-wip-20261027",
   "base_sha": "02cdf74b34568a88df7e20d961f7e7d896418dc5",
-  "code_sha": "7c75c0ca5584e55a3a04b742e8a884721d7db9b8",
-  "state": "WIP UNWIRED IDENTITY AND TIMESTAMP CONSISTENCY; COVERAGE UNPROVEN",
+  "code_sha": "1fee239065d7bb7cca9257bff85b391f625c86eb",
+  "state": "WIP UNWIRED BOUNDED SOURCE DATE COVERAGE; NOT RELEASE READY",
   "files": [
     "backend/integrations_control_center/google_order_timestamp_evidence.py",
     "backend/tests/test_google_order_timestamp_evidence.py",
     "backend/integrations_control_center/google_order_source_binding.py",
-    "backend/tests/test_google_order_source_binding.py"
+    "backend/tests/test_google_order_source_binding.py",
+    "backend/integrations_control_center/google_order_source_coverage.py",
+    "backend/tests/test_google_order_source_coverage.py"
   ],
-  "behavior": "Requires trusted owner, exact raw/canonical Salla internal ID and reference, matching explicit-offset instants when both present. Rejects unsupported timezone metadata. Observations are consistency only; no source authenticity, immutable snapshot or coverage proof.",
+  "behavior": "Bounded owner-scoped closed-day query expands normalized date by one day for candidate discovery. Exact ID and timezone-bearing source instant classify observed subsets; no identities or raw rows returned. Foreign owner and invalid scope fail closed; truncation suppresses counts. Zero identity rejected; leading zeros never equated.",
   "verification": {
-    "command": "python -m pytest -q backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
-    "passed": 28,
+    "command": "python -m pytest -q backend/tests/test_google_order_source_coverage.py backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py",
+    "passed": 35,
     "exit_code": 0,
-    "red": "Missing module and conflicting timezone metadata reproduced before fixes."
+    "red": "Missing module, ignored timezone metadata, and accepted all-zero string ID reproduced and fixed."
   },
   "limitations": [
-    "Unwired pure helper; no route or production reads.",
-    "Conservative numeric identities only; matching fields is consistency, not provider authenticity or immutable history.",
-    "Rejects source timezone metadata pending a correct verified interpretation; other non-offset dates unknown.",
-    "No coverage watermark, product mapping, sales, refunds, FX, historical costs, or global read consistency proved.",
-    "No production data read, no production change, no provider writes or ad execution."
+    "Unwired read-only diagnostic; source consistency is not provider authenticity or immutable history.",
+    "One-day candidate expansion cannot prove coverage or account for arbitrary normalized date drift; exhaustion does not imply complete sales.",
+    "Rejects separate source timezone metadata pending verified interpretation.",
+    "No product mapping, sales, refunds, FX, historical costs, query index performance, or global snapshot consistency proved.",
+    "Real Mongo and CI not yet run for new adapter. No production data or writes."
   ],
-  "next_safe_action": "Independent audit, then use in bounded owner-scoped diagnostic projection with unknown/truncated coverage; real Mongo replica tests and CI. Do not treat exhaustion as complete sales."
+  "next_safe_action": "Independently review reader and tests; add replica integration and CI, assess index and source provenance; keep coverage incomplete and outputs out of product sales/ranking."
 }
