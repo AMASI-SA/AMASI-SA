@@ -833,5 +833,33 @@
     "path": "docs/operations/GOOGLE-ORDER-EVIDENCE-RESEARCH-20261026/STATUS.json",
     "findings": "Salla raw timestamps have potential timezone proof; normalized order_date drops offset; +/-1day candidate fetch is not completeness proof; 16 acceptance tests proposed, not executed",
     "runtime_changed": false
+  },
+  "continuation_20261027": {
+    "production_head_observed": "2d275221ba351dd31fc6d8106cfad3db186f448b",
+    "production_changed_this_continuation": false,
+    "catalog_carrier": "c944ff70ae1c5874e2584ec0060944d2d27dcfb5 verified build-meta; no saved plan so catalog review not functionally exercised",
+    "budget": {
+      "branch": "codex/google-guard-integration-wip-20261026",
+      "checkpoint": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
+      "pr": 1560,
+      "source": "d22a09f02ca928c0cb7cd083e434cb082c55a0f7",
+      "ci": "40420062895:1193 backend,162 frontend, build; 40419973827:75 tests,11 Mongo replica, no skips",
+      "state": "WIP runtime disabled; external change between reads and mutate, legacy claims, production transactions and response proof unresolved"
+    },
+    "oauth": {
+      "branch": "codex/google-oauth-dispatch-followup-20261027",
+      "pr": 1580,
+      "contract_tested": "54d4b305",
+      "ci": "40419934431 25 passed including 6 replica, no skips",
+      "transport_source": "c94246af331f4d3155b7b548143c730c63167d60",
+      "state": "WIP disconnected; actual Ads GA4 Merchant writers reproduced stale refresh after relink; migrate all writers and atomic relink generation before runtime; network compatibility unverified"
+    },
+    "sales": {
+      "branch": "codex/google-order-timestamp-evidence-wip-20261027",
+      "checkpoint": "9da1995f044f06e523e2655755cef8cc548f6f9b",
+      "source": "b631058301766edce71bdaedf53af06b62edb5e1",
+      "state": "WIP diagnostic no runtime; local 36 pass and 5 skipped Mongo; CI 40420195892 pending; independent review 28 pass, Mongo and production index/performance unverified; coverage false"
+    },
+    "next": "Review current CI and exact checkpoints, continue adapters and production safety evidence; do not activate spending or publish WIP as complete."
   }
 }
