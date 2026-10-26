@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-26T17:45:45.261Z",
+  "updated_at": "2026-10-26T17:46:40.329Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -461,7 +461,7 @@
     "task_id": "GOOGLE-REPORTING-RECOVERY-20261026",
     "pr": 1546,
     "branch": "codex/google-reporting-recovery-wip-20261026",
-    "checkpoint": "e1772c18a233d21e7a05a1c66b137f850c5515f1",
+    "checkpoint": "0cf79ad7ca967b40239399cc42343bceca1bada4",
     "state": "WIP diagnostic only; not nativeconnection recovery; not published",
     "provider_writes": 0,
     "global_connection_health_writes": 0,
@@ -472,11 +472,15 @@
     "new_ci": {
       "source": "e1772c18a233d21e7a05a1c66b137f850c5515f1",
       "run": 40371342449,
-      "frontend_job": 121742585963,
       "backend_job": 121742586791,
-      "state": "in_progress at lastread; no fresh fullCI success claimed"
+      "backend": "1131passed30.95s inclrealMongo",
+      "frontend_job": 121742585963,
+      "frontend": "165passed15suites+build",
+      "state": "success",
+      "root_logs_verified": true
     },
     "true_connection_recovery": "NOT complete; verifiedOAuthrelink or atomicallaccountwritercontract needed",
-    "independent_review": "Accepted bounded diagnosticWIP only: both original repros fixed; full globaldoc unchanged; malformedrows rejected beforezeros;29localpass2Mongo skip"
+    "independent_review": "Accepted bounded diagnosticWIP only: both original repros fixed; full globaldoc unchanged; malformedrows rejected beforezeros;29localpass2Mongo skip",
+    "verified_code_checkpoint": "e1772c18a233d21e7a05a1c66b137f850c5515f1"
   }
 }
