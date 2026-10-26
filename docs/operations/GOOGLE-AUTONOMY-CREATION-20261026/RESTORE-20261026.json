@@ -1,9 +1,11 @@
 {
   "state": "WIP NOT DEPLOYABLE",
   "restored_head": "3cba125d4df8f837d0d5015f3d693351f38a4577",
-  "lost_local_source": "Previous unsaved authority/gateway/worker/composite source unavailable; reimplementation underway",
-  "preserved": "Early new creation_gateway.py and minimal management standing_creation seam; author syntax compilation/diff check pass only",
-  "functional_verification": "NOT YET RUN for this captured gateway; authority/worker dependencies unfinished",
+  "baseline": "Root144contract+policy passed1.94s in restored venv",
+  "gateway": "Initial reimplemented gateway+typedmanagement seam checkpoint08452fbe71616fcfc7da73b74f1ba5ce315b9bc9; compilation only, lifecycle pending",
+  "authority": "New implementation+unit tests; author26passed1.46s; independent review, negative cases and actualMongo pending",
+  "worker": "Reimplementation in progress; not saved here yet",
+  "publication": "1535 remains unmerged/unpublished; login required, actualguard state unknown",
   "production_changed": false,
-  "publication": "1535 still unmerged/unpublished; Emergent login required; current actualguard unknown"
+  "next": "Do not deploy WIP. Complete integrated gateway/authority/worker and currentMongo/UI/CI; preserve milestones early."
 }
