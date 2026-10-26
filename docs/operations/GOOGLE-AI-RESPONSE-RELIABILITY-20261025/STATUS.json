@@ -383,7 +383,7 @@
     "actor": "codex-google1542",
     "publish": {
       "clicked_once": true,
-      "started_at": "2026-10-26",
+      "started_at": "2026-10-26 20:05 Asia/Riyadh",
       "timezone": "Asia/Riyadh",
       "prepare_exit": 0,
       "prepublish_exit": 0,
@@ -391,11 +391,16 @@
       "baseline_live_runtime": "rg5-5add503b868b0d6a60afd4e8d70462f7c56a73c2aa85a5e4afa18f6ad7666f86",
       "newer_finish_observed": false,
       "verified": false
+    },
+    "live_acceptance": {
+      "state": "pending release; existing baseline integration error/accountnotowned before deploy",
+      "provider_writes": 0,
+      "reauth_required": "not proven; investigate transient reporting health gate first"
     }
   },
   "launch_future": {
     "branch": "codex/google-autonomy-launch-wip-20261026",
-    "checkpoint": "d1b1c496ab8f559e9a8aa3c23a0a5ad4762c05da",
+    "checkpoint": "6407f1f66076ff1292b21af0ec3a372773f66783",
     "state": "FUTUREWIP ONLY; savedseparately; notin1542; neverdeploy",
     "root_tests": "183purepreviewpass1.73s plus31budgetguardpass8replicaMongo local-skips1.90s",
     "remaining": [
@@ -403,6 +408,18 @@
       "Allcreation/standingpolicywriters andautomatedbudgetincreases mustparticipate",
       "Freshproduct/nativeconfigserverproof, launchauthority/gateway/worker/UI optin"
     ],
-    "decisions": "firstlaunchonly; noauto-reenablemanualpause; prospectivegeneration; oldownedneedsseparatescopedack; minglobalownercaps/noautomaticcuts"
+    "decisions": "firstlaunchonly; noauto-reenablemanualpause; prospectivegeneration; oldownedneedsseparatescopedack; minglobalownercaps/noautomaticcuts",
+    "replica_ci": {
+      "run": 40366094882,
+      "job": 121724082771,
+      "source": "6407f1f66076ff1292b21af0ec3a372773f66783",
+      "state": "success",
+      "tests": 39,
+      "actual_replica_mongo_tests": 8,
+      "failures_errors_skips": 0,
+      "seconds": 3.42,
+      "root_log_verified": true,
+      "runtime_enabled": false
+    }
   }
 }
