@@ -1,6 +1,9 @@
 import api from "../lib/api";
 
 const ERROR_LABELS = {
+    supplier_category_required: "اختر تصنيفًا واحدًا على الأقل للمورد.",
+    supplier_category_not_found: "أحد التصنيفات غير متاح؛ حدّث القائمة.",
+    supplier_service_category_mismatch: "الخدمة المختارة لا تتبع تصنيفات المورد.",
     supplier_company_name_exists: "يوجد مورد في ميزان 2 بالاسم نفسه.",
     supplier_service_required: "اختر خدمة واحدة على الأقل يقدمها المورد.",
     supplier_service_not_found: "إحدى الخدمات المحددة لم تعد موجودة في كتالوج الخدمات.",

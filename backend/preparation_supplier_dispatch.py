@@ -29,6 +29,7 @@ from ai_store_access_contract import (
     role_assignment_owner_user_id,
 )
 from mezan_supplier_management_routes import MEZAN_SUPPLIERS_V2
+from supplier_category_service_policy import require_supplier_product_categories
 from order_review_export_controls import user_can_manage_preparation
 from order_review_routes import (
     WORKFLOWS,
@@ -1074,7 +1075,7 @@ async def _active_suppliers(db: Any, *, user_id: str) -> list[dict[str, Any]]:
         {
             "user_id": user_id,
             "status": {"$ne": "inactive"},
-            "service_ids.0": {"$exists": True},
+            "$or": [{"category_ids.0": {"$exists": True}}, {"service_ids.0": {"$exists": True}}],
         },
         {
             "_id": 0,
@@ -1082,6 +1083,8 @@ async def _active_suppliers(db: Any, *, user_id: str) -> list[dict[str, Any]]:
             "company_name": 1,
             "contact_person": 1,
             "service_ids": 1,
+            "category_ids": 1,
+            "category_links": 1,
             "service_links": 1,
         },
     ).sort("company_name", 1).to_list(2000)
@@ -1572,7 +1575,7 @@ def make_preparation_supplier_dispatch_router(
                 "user_id": user_id,
                 "id": _text(payload.supplier_id),
                 "status": {"$ne": "inactive"},
-                "service_ids.0": {"$exists": True},
+                "$or": [{"category_ids.0": {"$exists": True}}, {"service_ids.0": {"$exists": True}}],
             },
             {"_id": 0},
         )
@@ -1581,6 +1584,9 @@ def make_preparation_supplier_dispatch_router(
                 status_code=404,
                 detail={"code": "supplier_dispatch_supplier_not_found"},
             )
+        await require_supplier_product_categories(
+            db, user_id=user_id, supplier=supplier, pieces=selected,
+        )
         # TEMPORARILY DISABLED until the preparation application is complete:
         # allow dispatching a product to a supplier outside its linked services.
         # Re-enable this exact block to restore the supplier-specialty guard.
