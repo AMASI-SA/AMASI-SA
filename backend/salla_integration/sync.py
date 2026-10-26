@@ -850,6 +850,21 @@ async def update_sync_log(db, log_id: str, **counters) -> None:
         await db.salla_sync_logs.update_one({"id": log_id}, update)
 
 
+def _pagination_number(pagination: dict, keys: tuple[str, ...], *, minimum: int) -> Optional[int]:
+    """Read an optional provider field without treating invalid values as absent."""
+    values = [pagination[key] for key in keys if key in pagination and pagination[key] is not None]
+    if not values:
+        return None
+    parsed = []
+    for value in values:
+        if isinstance(value, bool) or not str(value).isdigit():
+            raise ValueError("invalid Salla orders pagination number")
+        parsed.append(int(value))
+    if any(value < minimum for value in parsed) or len(set(parsed)) != 1:
+        raise ValueError("invalid Salla orders pagination number")
+    return parsed[0]
+
+
 # ── Public sync routines ──────────────────────────────────────────────────
 async def run_orders_sync(
     db,
@@ -896,6 +911,9 @@ async def run_orders_sync(
     errors_sample: list[dict] = []
     pages_fetched = 0
     last_total_pages = 0
+    pagination_exhausted = False
+    pagination_consistent = True
+    pagination_observations: list[tuple[Optional[int], Optional[int]]] = []
     attribution_details_fetched = 0
     attribution_orders_recovered = 0
     attribution_recovery_errors = 0
@@ -930,9 +948,39 @@ async def run_orders_sync(
                 })
                 raise
 
-            data = resp.get("data") or []
+            if not isinstance(resp, dict) or not isinstance(resp.get("data"), list):
+                raise ValueError("invalid Salla orders page: data must be a list")
+            data = resp["data"]
             pages_fetched += 1
+            pagination = resp.get("pagination")
+            if pagination is None:
+                pagination = {}
+            if not isinstance(pagination, dict):
+                raise ValueError("invalid Salla orders pagination metadata")
+            observed_total = _pagination_number(
+                pagination, ("totalPages", "total_pages", "last_page"), minimum=0,
+            )
+            observed_page = _pagination_number(
+                pagination, ("currentPage", "current_page", "page"), minimum=1,
+            )
+            if pagination_observations:
+                previous_total, previous_page = pagination_observations[-1]
+                if ((observed_total is None) != (previous_total is None)
+                        or (observed_page is None) != (previous_page is None)
+                        or (observed_total is not None and observed_total != previous_total)):
+                    pagination_consistent = False
+            pagination_observations.append((observed_total, observed_page))
+            total_pages = observed_total if observed_total is not None else 0
+            last_total_pages = max(last_total_pages, total_pages)
+            current_page = observed_page if observed_page is not None else page
+            if current_page != page or (data and observed_total == 0):
+                pagination_consistent = False
             if not data:
+                # An empty page only establishes the end when it does not
+                # contradict a declared page count or the requested page.
+                pagination_exhausted = current_page == page and (
+                    not last_total_pages or page > last_total_pages
+                )
                 break
 
             for raw in data:
@@ -999,35 +1047,24 @@ async def run_orders_sync(
             # final page; otherwise a 30-day sync stops after the newest 30
             # orders. Prefer pagination metadata and otherwise continue until
             # Salla returns an empty page, bounded by MAX_PAGES_PER_RUN.
-            pagination = resp.get("pagination") or {}
-            total_pages = int(
-                pagination.get("totalPages")
-                or pagination.get("total_pages")
-                or pagination.get("last_page")
-                or 0
-            )
-            last_total_pages = max(last_total_pages, total_pages)
-            current_page = int(
-                pagination.get("currentPage")
-                or pagination.get("current_page")
-                or pagination.get("page")
-                or page
-            )
-
             if total_pages and current_page >= total_pages:
+                pagination_exhausted = current_page == page == total_pages == last_total_pages
                 break
 
             page += 1
             # Be polite to Salla's rate limiter
             await asyncio.sleep(0.25 if from_date and to_date else 0.15)
 
-        truncated = bool(last_total_pages and last_total_pages > max_pages)
+        # Hitting the page cap without an observed end is incomplete even
+        # when the provider omitted its total-pages metadata.
+        truncated = not pagination_exhausted or not pagination_consistent
         await finish_sync_log(db, log_id, "completed", extra={
             "created": created, "updated": updated, "skipped": skipped,
             "errors_count": errors_count, "errors_sample": errors_sample[:20],
             "pages_fetched": pages_fetched,
             "source_total_pages": last_total_pages,
             "truncated": truncated,
+            "pagination_consistent": pagination_consistent,
             "attribution_details_fetched": attribution_details_fetched,
             "attribution_orders_recovered": attribution_orders_recovered,
             "attribution_recovery_errors": attribution_recovery_errors,
@@ -1065,7 +1102,8 @@ async def run_orders_sync(
         "errors_count": errors_count,
         "pages_fetched": pages_fetched,
         "source_total_pages": last_total_pages,
-        "truncated": bool(last_total_pages and last_total_pages > max_pages),
+        "truncated": truncated,
+        "pagination_consistent": pagination_consistent,
         "attribution_details_fetched": attribution_details_fetched,
         "attribution_orders_recovered": attribution_orders_recovered,
         "attribution_recovery_errors": attribution_recovery_errors,
