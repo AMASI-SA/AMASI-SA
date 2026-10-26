@@ -2,6 +2,13 @@ name: Google catalog review replica
 on:
   push:
     branches: [codex/google-catalog-review-wip-20261026]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_product_catalog_*.py
+      - backend/integrations_control_center/google_ads_routes.py
+      - backend/tests/test_google_product_catalog_*.py
+      - .github/workflows/google-catalog-review-replica.yml
   workflow_dispatch:
 permissions:
   contents: read
