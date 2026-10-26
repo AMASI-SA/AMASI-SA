@@ -449,8 +449,10 @@ class SnapchatV2SyncPipeline:
             return result, None
         except Exception as exc:  # noqa: BLE001
             code = str(getattr(exc, "code", type(exc).__name__))[:96]
+            daily_observations = getattr(exc, "_snapchat_daily_observations", None)
             coverage = {
                 **dict(getattr(exc, "coverage", {}) or {}),
+                **({"daily_observations": daily_observations} if isinstance(daily_observations, dict) else {}),
                 "status": "partial",
                 "data_state": "unknown_incomplete",
                 "reason": code,
