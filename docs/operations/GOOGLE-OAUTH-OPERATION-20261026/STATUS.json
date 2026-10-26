@@ -4,7 +4,20 @@
   "base": "e377f6efc3733a059b9448daa9f98b5be4fd51c8",
   "production_changed": false,
   "provider_writes": 0,
-  "verification": "5 unit passed; 4 replica skipped locally; exact source replica CI pending",
+  "verification": {
+    "unit_local": 5,
+    "replica_local_skipped": 4,
+    "ci": {
+      "run": 40401648078,
+      "job": 121848747091,
+      "passed": 9,
+      "replica": 4,
+      "skips": 0,
+      "seconds": 2.51,
+      "job_test_and_evidence_steps": "success",
+      "logs_read": true
+    }
+  },
   "contract": "unique UUIDv4 operation _id, majority write, retryWrites disabled, process-local acknowledged ticket consumed before atomic single-use claim; any ambiguous ACK grants no ticket/no retry",
   "limitations": [
     "ticket is an internal capability and Python-level trusted caller only",
@@ -13,5 +26,6 @@
     "Never delete or TTL operation records while IDs could be reused",
     "Owner access, grant fence and all writers need integration and independent review"
   ],
-  "next_safe_action": "Run exact source replica CI, independent review; integrate and prove provider send path without retries before production"
+  "next_safe_action": "Run exact source replica CI, independent review; integrate and prove provider send path without retries before production",
+  "source": "7527bfc0bce5647dd01886433690f5e13d681528"
 }
