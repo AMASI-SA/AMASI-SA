@@ -193,6 +193,37 @@ async def sync_completed_carrier_label(
 __all__ = ["sync_completed_carrier_label"]
 
 
+async def recover_store_courier_label_for_handover(db, *, user_id, order_number):
+    """Persist freshly verified courier proof when a print-only read left it absent."""
+    from operational_atomic import operational_owner
+    from assembly_status_policy import source_status
+    from order_engine import shipping_label_service as shipping
+
+    number = _text(order_number)
+    fence = await shipping._assert_current_print_status(db, user_id, number)
+    result = await shipping.refresh_shipping_label(db, user_id, number)
+    if not (result.get("ready") is True and result.get("order_status_completed") is True
+            and result.get("label_type") == "store_courier"):
+        return False
+
+    async def persist(scoped):
+        workflow = await _require_completed_workflow(scoped, user_id=user_id, order_number=number)
+        assignment = {key: workflow.get(key) for key in (
+            "store_courier_assignee_id", "store_courier_assignee_name", "store_delivery_assignment_id")}
+        current = {"epoch": workflow.get("shipping_status_epoch", 0),
+                   "shipping": await shipping._label_baseline(scoped, user_id, number),
+                   "assignment": assignment}
+        if current != fence or any(assignment.values()) or await source_status(scoped, user_id, number) not in {"in_progress", "completed"}:
+            raise ShippingLabelError("shipping_snapshot_changed", "تغيرت بيانات الشحنة؛ أعد المحاولة.")
+        await scoped[WORKFLOWS].update_one(
+            {"user_id": user_id, "order_number": number},
+            {"$set": _workflow_patch(result, now=_now())},
+        )
+        return True
+
+    return await operational_owner(db, user_id, persist)
+
+
 async def prepare_completed_carrier_label(db, *, user_id, order_number, actor_id, actor_name, authorize):
     """One explicit issue contract for completed-page and assembly clients.
 

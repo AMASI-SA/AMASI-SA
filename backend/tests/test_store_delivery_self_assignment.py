@@ -149,6 +149,20 @@ def test_unknown_shipment_has_no_effect(monkeypatch):
     assert asyncio.run(assignment_count(db)) == 0
 
 
+def test_missing_courier_label_snapshot_recovers_before_self_assignment(monkeypatch):
+    import fulfillment_carrier_label as labels
+    db, scan, calls = setup(monkeypatch)
+    asyncio.run(db[WORKFLOWS].update_one({}, {"$unset": {"carrier_label_type": "", "carrier_label_ready": ""}}))
+    async def recover(db, *, user_id, order_number):
+        await db[WORKFLOWS].update_one({"user_id": user_id, "order_number": order_number},
+            {"$set": {"carrier_label_type": "store_courier", "carrier_label_ready": True}})
+        return True
+    monkeypatch.setattr(labels, "recover_store_courier_label_for_handover", recover)
+    assert scan("101").json()["accepted"] is True
+    assert calls == ["delivering"]
+    assert asyncio.run(assignment_count(db)) == 1
+
+
 def test_two_couriers_racing_cannot_overwrite_winning_order(monkeypatch):
     from fastapi import HTTPException
     from store_delivery_handover_routes import (
