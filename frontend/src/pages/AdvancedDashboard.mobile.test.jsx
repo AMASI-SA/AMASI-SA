@@ -40,12 +40,19 @@ test("orders collapse with an icon-only control while the count and average rema
 });
 
 test.each([
-    ["ads", "أداء المنصات الإعلانية", ["Snapchat", "TikTok", "Meta", "Google Ads", "الإجمالي"]],
+    ["ads", "أداء المنصات الإعلانية", ["TikTok", "Meta", "Google Ads", "الإجمالي"]],
     ["shipping", "تفاصيل تكاليف الشحن", ["الشركة", "الشحنات", "سعر الوحدة", "ضريبة الوحدة", "الإجمالي"]],
     ["payment", "تفاصيل رسوم طرق الدفع", ["طريقة الدفع / الحساب", "الطلبات", "المبلغ الخاضع", "نسبة العمولة", "VAT", "إجمالي الرسوم"]],
 ])("%s details retain every column inside their own keyboard-accessible scroll region", (key, label, headings) => {
     const data = {
         totals: { total_sales: 1000, total_orders: 4, total_ads_cost: 100, total_shipping_cost: 20, total_payment_fees: 10 },
+        dashboard_platform_spend: { date_from: "2026-10-26", date_to: "2026-10-26",
+            providers: { snapchat: { accounts: [
+                { account_id: "usd", display_name: "US account", currency: "USD", total_native: 21.685333, total_sar: 81.32,
+                    quality: { amount_available: true, status: "provisional", provisional: true } },
+                { account_id: "sar", display_name: "Saudi account", currency: "SAR", total_native: 0, total_sar: 0,
+                    quality: { amount_available: true, status: "provisional", provisional: true } },
+            ] } } },
         shipping_breakdown: [{ name: "شركة تجريبية", orders_count: 1, total_cost: 20 }],
         payment_breakdown: [{ name: "مدى", orders_count: 1, total_sales: 100, fee_amount: 10 }],
     };
@@ -58,6 +65,17 @@ test.each([
     expect(Array.from(region.querySelectorAll('thead th'), (th) => th.textContent)).toEqual(
         key === "ads" ? ["المقياس", ...headings] : headings,
     );
+    if (key === "ads") {
+        const accountRegion = host.querySelector('[role="region"][aria-label="صرف كل حساب سناب"]');
+        expect(accountRegion).not.toBeNull();
+        expect(accountRegion.tabIndex).toBe(0);
+        expect(accountRegion.classList.contains("dashboard-table-scroll")).toBe(true);
+        expect(accountRegion.querySelectorAll("tbody tr")).toHaveLength(2);
+        expect(accountRegion.textContent).toContain("سناب الدولار");
+        expect(accountRegion.textContent).toContain("سناب السعودي");
+        expect(accountRegion.textContent).toContain("81.32 ر.س");
+        expect(accountRegion.textContent).not.toContain("Snapchat");
+    }
     const toggle = host.querySelector('.dashboard-panel-toggle');
     act(() => toggle.click());
     act(() => toggle.click());

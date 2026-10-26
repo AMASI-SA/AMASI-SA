@@ -13,10 +13,14 @@ jest.mock("../services/dashboardAdsSpend", () => ({
     ...jest.requireActual("../services/dashboardAdsSpend"), getDashboardAdsSpend: jest.fn(),
 }));
 
+let mockAccountChartPoints = [];
+let mockAccountChartLines = [];
+beforeEach(() => { mockAccountChartPoints = []; mockAccountChartLines = []; });
+
 jest.mock("recharts", () => ({
     ResponsiveContainer: ({ children }) => <div>{children}</div>,
-    LineChart: ({ children }) => <div>{children}</div>,
-    Line: ({ name }) => <div>{`line:${name}`}</div>,
+    LineChart: ({ children, data }) => { mockAccountChartPoints = data; return <div>{children}</div>; },
+    Line: ({ name, dataKey, connectNulls }) => { mockAccountChartLines.push({ name, dataKey, connectNulls }); return <div>{`line:${name}`}</div>; },
     CartesianGrid: () => null,
     Legend: () => null,
     Tooltip: () => null,
@@ -405,3 +409,117 @@ test.each(["unavailable", "missing_amount", "confirmed", "hour_only", "absent"])
             hour: data.hourly_spend[0].snapchat }).toEqual(before);
     },
 );
+
+
+function independentAccountData(sarAvailable = false) {
+    const day = "2026-10-26";
+    const account = (account_id, currency, native, sar, available) => ({ account_id, currency,
+        display_name: account_id, timezone: currency === "USD" ? "America/Los_Angeles" : "Asia/Riyadh",
+        projection_timezone: "Asia/Riyadh", total_native: native, total_sar: sar,
+        daily_sar: { [day]: sar }, daily_state: { [day]: sar === 0 ? "provisional_zero" : "provisional_data" },
+        hourly_sar: { [day]: [
+            { date: day, hour_index: 0, hour: "00:00", spend_sar: sar, status: "provisional" },
+            { date: day, hour_index: 1, hour: "01:00", spend_sar: null, status: "future" },
+        ] }, quality: { amount_available: available, status: available ? "provisional" : "incomplete",
+            connected: true, provisional: available, data_state: available ? "provisional_data" : "unknown_incomplete",
+            observed_at: "2026-10-25T21:00:00Z", reason_codes: [] } });
+    return { date_from: day, date_to: day, chart_granularity: "hour", total_sar: null, known_total_sar: 81.32,
+        provider_totals_sar: { snapchat: 999, meta: 0, tiktok: 0, google: 0 },
+        spend_quality: { status: "incomplete", amount_available: false },
+        providers: { ...providers(), snapchat: { connected: true, amount_available: false, data_quality: "incomplete",
+            accounts: [account("USD.A", "USD", 21.685333, 81.32, true),
+                account("__proto__", "SAR", sarAvailable ? 0 : null, sarAvailable ? 0 : null, sarAvailable)] } },
+        hourly_spend: [
+            { date: day, hour_index: 0, hour: "00:00", snapchat: 999, meta: null, tiktok: null, google: null },
+            { date: day, hour_index: 1, hour: "01:00", snapchat: null, meta: null, tiktok: null, google: null },
+        ], daily_spend: [] };
+}
+
+function independentAccountMarkup(data, fromDate = "2026-10-26", toDate = fromDate) {
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(<DashboardAdsSpendCardContent data={data} fromDate={fromDate} toDate={toDate} />);
+    return host;
+}
+
+test("independent USD card and curve remain when Saudi evidence is unknown", () => {
+    const host = independentAccountMarkup(independentAccountData());
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("21.69 USD");
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("81.32 ر.س");
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-__proto__"]').textContent).toContain("غير مكتملة");
+    expect(host.textContent).not.toContain("999");
+    const lines = mockAccountChartLines.filter((line) => typeof line.dataKey === "function");
+    expect(lines).toHaveLength(1);
+    expect(lines[0].name).toContain("سناب الدولار");
+    expect(lines[0].dataKey(mockAccountChartPoints[0])).toBe(81.32);
+    expect(lines[0].dataKey(mockAccountChartPoints[1])).toBeNull();
+    expect(lines[0].connectNulls).toBe(false);
+    expect(mockAccountChartLines.some((line) => line.name === "سناب شات")).toBe(false);
+});
+
+test("Saudi observed zero has its own curve, native currency and source hint", () => {
+    const data = independentAccountData(true);
+    data.providers.snapchat.accounts[1].quality.reason_codes = ["snapchat_operational_no_activity_observed"];
+    const host = independentAccountMarkup(data);
+    const row = host.querySelector('[data-testid="dashboard-snapchat-account-__proto__"]');
+    expect(row.textContent).toContain("0.00 SAR");
+    expect(row.querySelector('[data-testid="dashboard-snapchat-account-no-activity-hint"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"] time').dateTime).toBe("2026-10-25T21:00:00Z");
+    const lines = mockAccountChartLines.filter((line) => typeof line.dataKey === "function");
+    expect(lines).toHaveLength(2);
+    expect(lines[1].dataKey(mockAccountChartPoints[0])).toBe(0);
+    expect(lines[1].dataKey(mockAccountChartPoints[1])).toBeNull();
+    expect(mockAccountChartPoints).toHaveLength(2);
+});
+
+test("selected-range changes suppress old account values and curves", () => {
+    const host = independentAccountMarkup(independentAccountData(true), "2026-10-27");
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]').textContent).toContain("بانتظار بيانات الفترة");
+    expect(host.textContent).not.toContain("21.69");
+    expect(mockAccountChartLines.some((line) => typeof line.dataKey === "function")).toBe(false);
+});
+
+test("explicit empty account list omits the combined Snapchat tile and curve", () => {
+    const data = independentAccountData();
+    data.providers.snapchat.accounts = [];
+    const host = independentAccountMarkup(data);
+    expect(host.querySelector('[data-testid="dashboard-ads-provider-snapchat"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-snapchat-accounts-empty"]')).not.toBeNull();
+    expect(mockAccountChartLines.some((line) => line.name === "سناب شات")).toBe(false);
+});
+
+test("two USD identities and object-safe labels remain independent", () => {
+    const data = independentAccountData();
+    const first = data.providers.snapchat.accounts[0];
+    data.providers.snapchat.accounts = [first, { ...first, account_id: "USD.B", display_name: {} }];
+    const host = independentAccountMarkup(data);
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="dashboard-snapchat-account-USD.B"]')).not.toBeNull();
+    expect(host.textContent).not.toContain("[object Object]");
+    expect(mockAccountChartLines.filter((line) => typeof line.dataKey === "function")).toHaveLength(2);
+});
+
+test("account daily curves preserve actual null gaps on the common SAR axis", () => {
+    const data = independentAccountData();
+    data.date_to = "2026-10-27";
+    const usd = data.providers.snapchat.accounts[0];
+    usd.daily_sar = { "2026-10-26": 81.32, "2026-10-27": null };
+    usd.daily_state = { "2026-10-26": "provisional_data", "2026-10-27": "unknown_incomplete" };
+    data.providers.snapchat.accounts = [usd];
+    data.daily_spend = [{ date: "2026-10-26", snapchat: 999 }, { date: "2026-10-27", snapchat: null }];
+    independentAccountMarkup(data, "2026-10-26", "2026-10-27");
+    const line = mockAccountChartLines.find((item) => typeof item.dataKey === "function");
+    expect(line.dataKey(mockAccountChartPoints[0])).toBe(81.32);
+    expect(line.dataKey(mockAccountChartPoints[1])).toBeNull();
+    expect(line.connectNulls).toBe(false);
+});
+
+test("unknown native total does not relabel converted SAR as USD", () => {
+    const data = independentAccountData();
+    data.providers.snapchat.accounts[0].total_native = null;
+    const host = independentAccountMarkup(data);
+    const row = host.querySelector('[data-testid="dashboard-snapchat-account-USD.A"]');
+    expect(row.textContent).toContain("81.32 ر.س");
+    expect(row.textContent).not.toContain("81.32 USD");
+    expect(row.textContent).not.toContain("0.00 USD");
+});

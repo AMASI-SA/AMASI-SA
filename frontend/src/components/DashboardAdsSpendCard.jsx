@@ -106,6 +106,85 @@ function providerValue(data, provider) {
     return "لا بيانات";
 }
 
+
+const ACCOUNT_COLORS = ["#eab308", "#0f766e", "#c2410c", "#7c3aed"];
+function displayAccounts(rows) {
+    if (!Array.isArray(rows)) return [];
+    const ids = new Set();
+    return rows.filter((row) => {
+        if (typeof row?.account_id !== "string" || !row.account_id.trim() || ids.has(row.account_id)) return false;
+        ids.add(row.account_id);
+        return true;
+    });
+}
+function accountAvailable(row) {
+    return row?.quality?.amount_available === true && row.quality.connected !== false
+        && row.quality.status !== "incomplete" && row.quality.data_state !== "unknown_incomplete"
+        && row.projection_timezone === "Asia/Riyadh" && hasKnownAmount(row.total_sar);
+}
+function accountName(row) {
+    const label = row.currency === "USD" ? "سناب الدولار" : row.currency === "SAR" ? "سناب السعودي" : "حساب سناب";
+    const name = typeof row.display_name === "string" ? row.display_name.trim() : "";
+    return name ? label + " · " + name : label;
+}
+function accountChartPoints(data, singleDay, accounts, from, to, ready) {
+    const points = new Map();
+    chartPoints(data, singleDay).forEach((point) => {
+        const key = singleDay ? point.hour_index : point.date;
+        if (singleDay ? !Number.isInteger(key) || key < 0 || key > 23 : typeof key !== "string") return;
+        points.set(key, { ...point, snapchat_accounts: new Map() });
+    });
+    accounts.forEach((account) => {
+        const source = singleDay ? account.hourly_sar?.[from] : Object.entries(account.daily_sar || {}).map(([date, spend_sar]) =>
+            ({ date, spend_sar, status: account.daily_state?.[date] }));
+        if (!Array.isArray(source)) return;
+        source.forEach((point) => {
+            const key = singleDay ? point.hour_index : point.date;
+            if (singleDay ? !Number.isInteger(key) || key < 0 || key > 23 || point.date !== from
+                : typeof key !== "string" || key < from || key > to) return;
+            const current = points.get(key) || { date: singleDay ? from : key,
+                ...(singleDay ? { hour_index: key, hour: String(key).padStart(2, "0") + ":00" } : {}),
+                snapchat_accounts: new Map() };
+            const knownState = ["provisional", "confirmed", "confirmed_data", "confirmed_zero", "reconciled",
+                "provisional_data", "provisional_zero"].includes(point.status);
+            current.snapchat_accounts.set(account.account_id, ready && accountAvailable(account)
+                && knownState && hasKnownAmount(point.spend_sar) ? Number(point.spend_sar) : null);
+            points.set(key, current);
+        });
+    });
+    return [...points.values()].sort((a, b) => singleDay ? a.hour_index - b.hour_index : a.date.localeCompare(b.date));
+}
+function SnapchatAccountCard({ account, ready, color }) {
+    const available = ready && accountAvailable(account);
+    const currency = typeof account.currency === "string" && /^[A-Z]{3}$/.test(account.currency) ? account.currency : null;
+    const native = available && currency && hasKnownAmount(account.total_native) ? Number(account.total_native) : null;
+    const provisional = available && (account.quality?.provisional === true || account.quality?.status === "provisional");
+    const observed = typeof account.quality?.observed_at === "string" && Number.isFinite(Date.parse(account.quality.observed_at))
+        ? account.quality.observed_at : null;
+    const noActivity = provisional && Array.isArray(account.quality?.reason_codes)
+        && account.quality.reason_codes.includes("snapchat_operational_no_activity_observed");
+    return <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2"
+        data-testid={"dashboard-snapchat-account-" + account.account_id}>
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+            <span>{accountName(account)}</span>
+        </div>
+        <div className="mt-1 text-[11px] font-extrabold text-slate-900">
+            {!ready ? "بانتظار بيانات الفترة" : !available ? "بيانات غير مكتملة"
+                : native !== null ? native.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + currency
+                : money(account.total_sar)}
+        </div>
+        {available && native !== null && <div className="mt-0.5 text-[10px] font-bold text-slate-600">{money(account.total_sar)} بالريال السعودي</div>}
+        <div className="mt-0.5 text-[9px] font-semibold text-slate-500">{!available ? "غير مكتمل" : provisional ? "أولي" : "مكتمل"}</div>
+        {ready && observed && <time className="mt-1 block text-[9px] text-slate-500" dateTime={observed}>
+            آخر رصد: {new Date(observed).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit" })}
+        </time>}
+        {noActivity && <p className="mt-1 text-[9px] leading-4 text-amber-700" data-testid="dashboard-snapchat-account-no-activity-hint">
+            لم يُرصد نشاط في هذا الحساب حتى آخر فحص. الأرقام أولية وقد تتأخر تقارير سناب.
+        </p>}
+    </div>;
+}
+
 export function DashboardAdsSpendCardContent({
     data,
     fromDate,
@@ -117,11 +196,13 @@ export function DashboardAdsSpendCardContent({
     collapsible = false,
 }) {
     const singleDay = isSingleDay(fromDate, toDate);
-    const points = useMemo(
-        () => chartPoints(data, singleDay),
-        [data, singleDay],
-    );
     const snapchatState = data?.providers?.snapchat || {};
+    const accountMode = Array.isArray(snapchatState.accounts);
+    const accounts = useMemo(() => displayAccounts(snapchatState.accounts), [snapchatState.accounts]);
+    const accountRangeReady = data?.date_from === fromDate && data?.date_to === (toDate || fromDate);
+    const points = useMemo(() => accountMode
+        ? accountChartPoints(data, singleDay, accounts, fromDate, toDate || fromDate, accountRangeReady)
+        : chartPoints(data, singleDay), [data, singleDay, accountMode, accounts, fromDate, toDate, accountRangeReady]);
     const totalIncomplete = data?.spend_quality?.amount_available === false
         || data?.spend_quality?.status === "incomplete"
         || snapchatAmountIncomplete(snapchatState);
@@ -143,7 +224,10 @@ export function DashboardAdsSpendCardContent({
         ),
         [points],
     );
-    const hasAnySeries = Object.values(availableSeries).some(Boolean);
+    const accountLines = accounts.map((account, index) => ({ account, color: ACCOUNT_COLORS[index % ACCOUNT_COLORS.length] }))
+        .filter(({ account }) => points.some((point) => hasKnownAmount(point.snapchat_accounts?.get(account.account_id))));
+    const visibleProviders = DASHBOARD_ADS_PROVIDERS.filter((provider) => !accountMode || provider !== "snapchat");
+    const hasAnySeries = visibleProviders.some((provider) => availableSeries[provider]) || accountLines.length > 0;
     const hasTikTokMakeMarker = singleDay
         && data?.providers?.tiktok?.hourly_source === "make_daily_total_marker";
 
@@ -204,7 +288,9 @@ export function DashboardAdsSpendCardContent({
                 </div>
 
                 <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="dashboard-ads-provider-totals">
-                    {DASHBOARD_ADS_PROVIDERS.map((provider) => {
+                    {accountMode && accounts.map((account, index) => <SnapchatAccountCard key={account.account_id}
+                        account={account} ready={accountRangeReady} color={ACCOUNT_COLORS[index % ACCOUNT_COLORS.length]} />)}
+                    {visibleProviders.map((provider) => {
                         const meta = PROVIDER_META[provider];
                         const state = data?.providers?.[provider] || {};
                         const operationalNoActivityObserved = provider === "snapchat"
@@ -264,6 +350,8 @@ export function DashboardAdsSpendCardContent({
                     })}
                 </div>
 
+                {accountMode && accounts.length === 0 && <p className="mb-2 text-[10px] text-slate-500" data-testid="dashboard-snapchat-accounts-empty">لا توجد حسابات سناب مفعّلة لهذه الفترة</p>}
+                {accountMode && <p className="mb-2 text-[10px] font-semibold text-slate-500">جميع قيم الرسم بالريال السعودي، ولكل حساب سناب منحنى مستقل.</p>}
                 {singleDay && (
                     <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600">
                         {hasTikTokMakeMarker
@@ -319,7 +407,10 @@ export function DashboardAdsSpendCardContent({
                                     }}
                                 />
                                 <Legend wrapperStyle={{ direction: "rtl", fontSize: 11 }} />
-                                {DASHBOARD_ADS_PROVIDERS.map((provider) => (
+                                {accountLines.map(({ account, color }) => <Line key={account.account_id}
+                                    type="monotone" dataKey={(point) => point.snapchat_accounts?.get(account.account_id) ?? null}
+                                    name={accountName(account)} stroke={color} strokeWidth={2.5} connectNulls={false} dot={false} />)}
+                                {visibleProviders.map((provider) => (
                                     availableSeries[provider] ? (
                                         <Line
                                             key={provider}

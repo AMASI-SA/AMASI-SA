@@ -41,8 +41,7 @@ Frontend cards/chart normalize the contract and render account series
 independently. Executive details consume the same-filter platform-spend display
 snapshot already attached by the existing page read. Canonical financial JSON,
 read oracles and frozen executive reducers remain unchanged. Root owns integration, executive display, verification and publication;
-two scoped authors own backend contract and cards/chart respectively, with an
-independent reviewer. No ad/budget activation is a test.
+the initial scoped authors reviewed the contract before disconnection. No ad/budget activation is a test.
 
 ## Previous release and current state
 
@@ -64,7 +63,27 @@ run yet. This initial checkpoint is WIP, not release approval.
 Workspace disconnected during implementation, and the browser tool is now
 unavailable. Root recovered the executive table/page source and regression
 cases directly against immutable GitHub base33c; these are preserved in this
-explicit WIP checkpoint. Backend and cards/chart authors are recovering their
-frozen source through the remaining GitHub tools. No new local tests or live
+explicit WIP checkpoint. The prior agents could not resume under the available execution mode. Root
+reconstructed backend and cards/chart source against the approved contract and
+immutable base, and preserved the complete source remotely. Byte-identical
+recovery of uncommitted workspace files is not claimed. No new local tests or live
 publication are claimed. Exact remote CI and governed deployment remain
 required; the latter is blocked until the execution/browser environment returns.
+
+The complete reconstruction contains independent account cards, native amounts
+and SAR equivalents, common-SAR-axis account curves, per-account observation
+and quality, and separate executive expense rows bound to the existing saved
+same-filter platform snapshot. Global financial calculations/reducers and
+canonical financial JSON remain untouched. The actual JavaScript normalizer
+passed a direct isolated smoke check for knownUSD/unknownSAR, observedSAR0,
+future-null and explicit-empty behavior with zero native calls.
+
+Initial remote checkpoint23aebf52 CI confirmed backend/account-display and
+executive unit tests. Three workflow failures traced to one existing mobile
+header expectation (combined Snapchat column) and one exact JSX-call grep.
+These were aligned to the required separate account presentation while
+retaining keyboard scroll-region and real runtime behavior checks. New
+cards/chart normalizer regressions and mobile account-region assertions are
+included; fresh complete-source CI is now required. No deployment is possible
+while the execution/browser environment remains unavailable. No release lease,
+new intent or merge is authorized by this checkpoint alone.
