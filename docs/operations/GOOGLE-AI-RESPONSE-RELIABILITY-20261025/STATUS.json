@@ -671,8 +671,16 @@
     "checkpoint": "96b1d666e512ec3c926d3d927f109401c5a2380e",
     "docs_only": true,
     "runtime_changed": false,
-    "runtime_checkpoint": "4f6550305e38ff4a73790070c74ce6634ad659a1",
-    "remaining": "real Mongo race tests, unique user identity migration, unknown ACK recovery, integrate all credential writers"
+    "runtime_checkpoint": "f32e8abff46e61930302e2547d66df5be7f0c24e",
+    "remaining": "f32 CI pending; durable operation identity before send, unique user identity migration, all shared refresh writers and multi-document OAuth transaction",
+    "prior_ci": {
+      "source": "707fdca3e933efb5a663257848c961a90340c695",
+      "run": 40400010888,
+      "passed": 13,
+      "actual_mongo": 3,
+      "skips": 0,
+      "root_logs_verified": true
+    }
   },
   "last_verified_production_head": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
   "courier_release_coordination": {
@@ -684,9 +692,24 @@
   "catalog_reader": {
     "branch": "codex/google-catalog-evidence-wip-20261026",
     "pr": 1563,
-    "checkpoint": "ddcab2c335190b916e5fea10a03f2e543b796206",
+    "checkpoint": "b6e85300a52e04156100508829f88a5c3f0c1e6b",
     "state": "WIP only; independent review 47pass, owner-scoped pure reader; active inventory unknown due light sync",
     "runtime_wired": false,
-    "remaining": "real Mongo CI; prove product options/stock, category membership and owner session before runtime"
+    "remaining": "real Mongo CI; prove product options/stock, category membership and owner session before runtime",
+    "ci": {
+      "source": "fe70743e329a57c45e36289a928e7f2ee7fda593",
+      "run": 40399978594,
+      "job": 121842900125,
+      "passed": 11,
+      "replica": 3,
+      "skips": 0,
+      "root_logs_verified": true
+    }
+  },
+  "budget_diagnostic": {
+    "branch": "codex/google-budget-diagnostic-wip-20261026",
+    "source": "0ef387c293fab7ed749c72d2bff6c50c05fe3a6d",
+    "state": "WIP; limited structural inventory, complete=false/migration_safe=false always; CI pending",
+    "production_database_inspected": false
   }
 }
