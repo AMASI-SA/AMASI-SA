@@ -133,15 +133,19 @@ def _coverage_complete(snapshot: Any, window: Any) -> bool:
 def _scope_complete(scope: Any, *, store: bool = False) -> bool:
     if not isinstance(scope, dict):
         return False
-    if scope.get("cost_complete") is False:
+    # Older/partial snapshots may omit this proof or retain null/string values.
+    # Unknown cost is never evidence of a complete, successful experiment.
+    if scope.get("cost_complete") is not True:
         return False
     required = (
-        ("orders", "sales_sar")
+        ("orders", "sales_sar", "product_cost_sar", "gross_profit_before_marketing_sar")
         if store
         else (
             "orders",
             "sales_sar",
             "spend_sar",
+            "product_cost_sar",
+            "contribution_profit_sar",
         )
     )
     return all(_number(scope.get(key)) is not None for key in required)

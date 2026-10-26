@@ -562,6 +562,73 @@ def test_missing_expected_metric_prevents_partial_success_verdict():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["baseline", "post"])
+@pytest.mark.parametrize("scope", ["campaign", "account", "store"])
+@pytest.mark.parametrize("invalid", [None, 0, 1, "true", "false", "missing"])
+async def test_unknown_cost_proof_cannot_finalize_success(monkeypatch, phase, scope, invalid):
+    db = DB()
+    baseline = snapshot()
+    post = snapshot(multiplier=1.2)
+    changed = baseline if phase == "baseline" else post
+    for item in changed["windows"]:
+        if invalid == "missing":
+            item[scope].pop("cost_complete")
+        else:
+            item[scope]["cost_complete"] = invalid
+    decision = await make_decision(db, expected={"sales_direction": "increase"}, baseline=baseline)
+
+    async def capture(*args, **kwargs):
+        return deepcopy(post)
+
+    monkeypatch.setattr(outcomes, "capture_decision_baseline", capture)
+    result = await outcomes.evaluate_ad_decision(db, "owner-1", decision, now=DECISION_AT + timedelta(hours=48))
+    evaluation = result["evaluations"][0]
+    assert evaluation["outcome_status"] == "inconclusive"
+    assert evaluation["data_completeness"]["complete"] is False
+    assert f"{phase}_{scope}_metrics_incomplete" in evaluation["caveats"]
+    assert evaluation["appended"] is False
+    assert evaluation["retryable"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", ["campaign", "account", "store"])
+@pytest.mark.parametrize("key", ["product_cost_sar", "profit"])
+async def test_complete_flag_without_financial_amounts_cannot_finalize_success(monkeypatch, scope, key):
+    db = DB()
+    decision = await make_decision(db, expected={"sales_direction": "increase"})
+    post = snapshot(multiplier=1.2)
+    field = ("gross_profit_before_marketing_sar" if scope == "store" else "contribution_profit_sar") if key == "profit" else key
+    for item in post["windows"]:
+        item[scope][field] = None
+
+    async def capture(*args, **kwargs):
+        return deepcopy(post)
+
+    monkeypatch.setattr(outcomes, "capture_decision_baseline", capture)
+    result = await outcomes.evaluate_ad_decision(db, "owner-1", decision, now=DECISION_AT + timedelta(hours=48))
+    evaluation = result["evaluations"][0]
+    assert evaluation["outcome_status"] == "inconclusive"
+    assert f"post_{scope}_metrics_incomplete" in evaluation["caveats"]
+    assert evaluation["appended"] is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_complete_zero_financial_outcome_remains_measurable(monkeypatch):
+    db = DB()
+    decision = await make_decision(db, expected={"sales_direction": "decrease"})
+
+    async def capture(*args, **kwargs):
+        return snapshot(multiplier=0)
+
+    monkeypatch.setattr(outcomes, "capture_decision_baseline", capture)
+    result = await outcomes.evaluate_ad_decision(db, "owner-1", decision, now=DECISION_AT + timedelta(hours=48))
+    evaluation = result["evaluations"][0]
+    assert evaluation["data_completeness"]["complete"] is True
+    assert evaluation["outcome_status"] == "successful"
+    assert evaluation["appended"] is True
+
+
+@pytest.mark.asyncio
 async def test_incomplete_cost_data_is_recorded_as_inconclusive(monkeypatch):
     db = DB()
     decision = await make_decision(
