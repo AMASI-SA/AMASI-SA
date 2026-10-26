@@ -1438,6 +1438,15 @@ class SnapchatV2Client:
                 )
             exc.coverage["daily_observations"] = daily_observations
             raise
+        except Exception as exc:
+            # Preserve the original exception type/code and avoid copying its
+            # message, token-store details or arbitrary attributes. Some custom
+            # exceptions forbid attributes; diagnostics must never mask them.
+            try:
+                exc._snapchat_daily_observations = daily_observations
+            except Exception:
+                pass
+            raise
         rows = list(facts.values())
         coverage = _coverage(
             status="complete",

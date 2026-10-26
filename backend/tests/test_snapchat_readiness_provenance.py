@@ -660,3 +660,49 @@ async def test_empty_child_responses_stay_partial_but_preserve_provider_counters
         assert coverage["daily_observations"]["2026-08-28"] == {
             "report_date": "2026-08-28", "expected_parents": 62,
             "completed_parents": 62, "rows_received": 0, "status": "complete"}
+
+
+@pytest.mark.asyncio
+async def test_token_store_failure_retains_original_error_and_sanitized_daily_counts(monkeypatch):
+    from snapchat_v2.sync_pipeline import SnapchatV2SyncPipeline
+    from snapchat_v2.token_store import SnapchatTokenStoreError
+    import snapchat_v2.sync_pipeline as pipeline_module
+
+    class FailingSecondToken:
+        calls = 0
+        async def get_access_token(self, *_args, **_kwargs):
+            self.calls += 1
+            if self.calls == 2:
+                raise SnapchatTokenStoreError("snapchat_needs_reauth", "private token details", needs_reauth=True)
+            return "safe-token"
+
+    async def noop(*_args, **_kwargs): pass
+    monkeypatch.setattr(pipeline_module, "update_sync_stage", noop)
+    monkeypatch.setattr(pipeline_module, "set_level_status", noop)
+    client = SnapchatV2Client(object(), "u1", token_store=FailingSecondToken(),
+        client_factory=FakeHTTPFactory([FakeResponse(empty_payload())]))
+    pipeline = SnapchatV2SyncPipeline(object())
+    summary, error = await pipeline._sync_breakdown_performance(
+        client, user_id="u1", account={"ad_account_id": "a1", "timezone": "Asia/Riyadh", "currency": "SAR"},
+        sync_run_id="run", entity_type="ad_squad", campaign_rows=[],
+        start_utc=datetime(2026, 10, 25, tzinfo=timezone.utc),
+        end_utc=datetime(2026, 10, 26, tzinfo=timezone.utc),
+        report_dates=[date(2026, 10, 25)], report_campaign_ids=["c1", "c2"],
+        action_report_time="conversion")
+    assert error["code"] == "snapchat_needs_reauth" and summary["coverage"]["status"] == "partial"
+    assert summary["coverage"]["daily_observations"]["2026-10-25"]["completed_parents"] == 1
+    assert "private token details" not in str(summary) and "private token details" not in str(error)
+
+
+@pytest.mark.asyncio
+async def test_exception_that_disallows_attributes_is_not_masked():
+    class LockedError(RuntimeError):
+        def __setattr__(self, _name, _value): raise TypeError("locked")
+    class FailedToken:
+        async def get_access_token(self, *_args, **_kwargs): raise LockedError("original")
+    client = SnapchatV2Client(object(), "u1", token_store=FailedToken(), client_factory=FakeHTTPFactory([]))
+    with pytest.raises(LockedError, match="original"):
+        await client.fetch_breakdown_daily_total_facts(
+            {"ad_account_id": "a1", "timezone": "Asia/Riyadh", "currency": "SAR"},
+            campaign_ids=["c1"], entity_type="ad_squad",
+            report_dates=[date(2026, 10, 25)], sync_run_id="run")
