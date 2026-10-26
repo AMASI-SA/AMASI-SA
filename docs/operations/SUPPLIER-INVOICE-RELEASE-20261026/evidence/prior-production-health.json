@@ -1,0 +1,318 @@
+{
+  "ok": true,
+  "service": "backend",
+  "release": {
+    "verified_identity_available": true,
+    "release_id": "rg5-dbcb4c97bba2f1eaeea4716ea2cacbf40eaf4f5d0df4fd7dde107a13b7d5d992",
+    "git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+    "source_git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+    "source_base_git_sha": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+    "branch": "hotfix/prod-snap-meta-final",
+    "prepared_at": null,
+    "protocol_version": 5,
+    "identity_kind": "mezan_runtime_release_identity_v5",
+    "identity_schema_version": 2,
+    "backend_runtime_source_verified": true,
+    "backend_runtime_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 1012,
+      "manifest_sha256": "a89c3b43b13375d8137469ed300b5cedc3867e734110441634a3e54d0cd8dd89",
+      "modified_count": 2,
+      "projection_tree_oid": "33a3c3dab9d114801a9a3a7bd8df765a602c9e9f",
+      "scope": "backend_runtime_package_v1",
+      "scope_tree_oid": "0346414a418df9f4d8da97adb1bb6dbfce33361f",
+      "source_base_git_sha": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+      "source_base_root_tree_oid": "3b7042866d972cdeeaa03199e5c404d7cf0c5ec3",
+      "source_base_scope_tree_oid": "2f50fceb87e54a39702d781e1185a2c5dc9002f0",
+      "source_git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+      "source_root_tree_oid": "184daa7ae2b8e2d92a867f2d3557900e196987fc",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "8c6eb051f0e4612f1b3fadd500222cad4298d097ea2f63770d545a5227f89684"
+    },
+    "release_control_source_bound": true,
+    "release_control_source": {
+      "added_count": 0,
+      "deleted_count": 0,
+      "file_count": 239,
+      "manifest_sha256": "d52b8c061ceee0e3993a3071050adb00a16e250432b1f56299da8c9956e3fab2",
+      "modified_count": 2,
+      "projection_tree_oid": "81a7a7f63a0a9f128dc98ceb0c5d9e19c2ea1cf3",
+      "scope": "release_control_source_v1",
+      "scope_tree_oid": "81a7a7f63a0a9f128dc98ceb0c5d9e19c2ea1cf3",
+      "source_base_git_sha": "3aaf8d20652a0b7aeb03473f23afe41714a242d6",
+      "source_base_root_tree_oid": "3b7042866d972cdeeaa03199e5c404d7cf0c5ec3",
+      "source_base_scope_tree_oid": "4793d4272277f5fd430500a0e54aa290fff31074",
+      "source_git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+      "source_root_tree_oid": "184daa7ae2b8e2d92a867f2d3557900e196987fc",
+      "tombstone_count": 0,
+      "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree_sha256": "f55c93d14610447bf97e4c55f32b43bd50ca506b4965bf53ef1a41f4b4af6f5d"
+    },
+    "critical_file_hashes_match": true,
+    "critical_file_hashes": {
+      "server.py": "daf34e6e24e95846b808b9bbdf94d48928bcf3ecdd9b180e81b5396ce1eeb33c",
+      "release_identity.py": "ee4c098266722c10f6d973927f25de3602081c4923f9992f1de85d71775fca4d",
+      "release_protocol_v5.py": "1961ac18a5363ec425ceec4f98f96f611d378b09e19380d4756bd6776987d8ef",
+      "frontend_build_identity.py": "7896dfa2c9b4fea8c426b47c5b75e331380c0a4a3f947028aa4f5afa101f9d87",
+      "integrations/qoyod_manual/routes.py": "f2b9e527b5790b6d22311d18d5d3847c11ee69e719a41cf7d244aa92f6761e37",
+      "integrations/qoyod_manual/send.py": "8c8aaf2f6e5b3a47512d2a3ee812473254f9da94ce8ee1f0041aa0510e4d9c03"
+    },
+    "frontend_build_verified": true,
+    "frontend_build": {
+      "schema_version": 1,
+      "git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+      "source": {
+        "scope": "git_head_frontend_tree_v1",
+        "git_tree_oid": "a5f36ff96184a3888c9dd5250eb7d23eef521006",
+        "file_count": 1001,
+        "tree_sha256": "d2b8c59b06462f96aa775bc80aa7249d3670bbd044ec1e16ba8ac2fe1e77b1ef"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "environment": {
+        "mode": "production",
+        "effective": {
+          "NODE_ENV": "production",
+          "VITE_USER_NODE_ENV_present": false,
+          "VITE_prefixed_keys": []
+        },
+        "allowed_client_keys": [
+          "REACT_APP_BACKEND_URL"
+        ],
+        "values": {
+          "REACT_APP_BACKEND_URL": {
+            "present": true,
+            "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+          }
+        }
+      },
+      "index": {
+        "path": "index.html",
+        "bytes": 3359,
+        "sha256": "e6ac1cfe9fc682df7b28b9c74c38e3a75317c4fbb98c71bcebaf928db39803e5"
+      },
+      "entrypoints": [
+        {
+          "path": "assets/index-B5vllbu5.css",
+          "bytes": 226618,
+          "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
+        },
+        {
+          "path": "assets/index-r6X1fdiN.js",
+          "bytes": 7254460,
+          "sha256": "29b7ad54777ad4c24f30c10f9bffc5475976ca9be1575ea740cac96780757d1d"
+        }
+      ],
+      "assets": [
+        {
+          "path": "assets/ChartDashboard-CaykhI2L.js",
+          "bytes": 19125,
+          "sha256": "93d343f71e25c722d0208311752b2964fa9fff264d2f1eb3dfb796b1469dbe46"
+        },
+        {
+          "path": "assets/CustomerExchanges-BR1BUJ1f.js",
+          "bytes": 14550,
+          "sha256": "6521fe7d47558b1c642835b3679d8ee54d7de6ac3ed47f32ce8283c404b25267"
+        },
+        {
+          "path": "assets/CustomerReturns-BpxmvTr4.js",
+          "bytes": 11314,
+          "sha256": "c2b5de0c9f2979ac6ffa504052af95105251a9dfca2a968ba492816ce675daa0"
+        },
+        {
+          "path": "assets/OpeningBalances-C3_rk_ki.js",
+          "bytes": 17012,
+          "sha256": "b9027439f6cb232f8ae868a05c22c6fe2c022eaffbfa54e1b394baab17f39143"
+        },
+        {
+          "path": "assets/OpeningBalances-DU09JJQo.css",
+          "bytes": 6251,
+          "sha256": "c3a0a67351b8f1375b11285a1f55deb255fe99e714e9fcc2a5942fbe5271c1a5"
+        },
+        {
+          "path": "assets/OperationalBalances-iJoiHLhB.js",
+          "bytes": 94819,
+          "sha256": "3c48f28d96d03c8fd1f607ec41290a44eaf5ee602a73cf594420bc1faaa9f7b2"
+        },
+        {
+          "path": "assets/esm-Ca61H3iQ.js",
+          "bytes": 435694,
+          "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+        },
+        {
+          "path": "assets/index-B5vllbu5.css",
+          "bytes": 226618,
+          "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
+        },
+        {
+          "path": "assets/index-r6X1fdiN.js",
+          "bytes": 7254460,
+          "sha256": "29b7ad54777ad4c24f30c10f9bffc5475976ca9be1575ea740cac96780757d1d"
+        },
+        {
+          "path": "assets/jsx-runtime-CfuWmoMz.js",
+          "bytes": 8947,
+          "sha256": "7df31f76df489cefea1b2bdf9dee5c402c2367e8f311cf2a612e24c79e064754"
+        }
+      ],
+      "public_files": [
+        {
+          "path": ".well-known/security.txt",
+          "bytes": 252,
+          "sha256": "e22bb861fea6e29f935fc8a61bf8037cc76924311b50c8beda4c42452f83c876"
+        },
+        {
+          "path": "amas-delivery-manifest.webmanifest",
+          "bytes": 539,
+          "sha256": "5d120d2090200e1fe5d328eac2501342cf18d65791a4adf86bdc2d245b0e7906"
+        },
+        {
+          "path": "assets/ChartDashboard-CaykhI2L.js",
+          "bytes": 19125,
+          "sha256": "93d343f71e25c722d0208311752b2964fa9fff264d2f1eb3dfb796b1469dbe46"
+        },
+        {
+          "path": "assets/CustomerExchanges-BR1BUJ1f.js",
+          "bytes": 14550,
+          "sha256": "6521fe7d47558b1c642835b3679d8ee54d7de6ac3ed47f32ce8283c404b25267"
+        },
+        {
+          "path": "assets/CustomerReturns-BpxmvTr4.js",
+          "bytes": 11314,
+          "sha256": "c2b5de0c9f2979ac6ffa504052af95105251a9dfca2a968ba492816ce675daa0"
+        },
+        {
+          "path": "assets/OpeningBalances-C3_rk_ki.js",
+          "bytes": 17012,
+          "sha256": "b9027439f6cb232f8ae868a05c22c6fe2c022eaffbfa54e1b394baab17f39143"
+        },
+        {
+          "path": "assets/OpeningBalances-DU09JJQo.css",
+          "bytes": 6251,
+          "sha256": "c3a0a67351b8f1375b11285a1f55deb255fe99e714e9fcc2a5942fbe5271c1a5"
+        },
+        {
+          "path": "assets/OperationalBalances-iJoiHLhB.js",
+          "bytes": 94819,
+          "sha256": "3c48f28d96d03c8fd1f607ec41290a44eaf5ee602a73cf594420bc1faaa9f7b2"
+        },
+        {
+          "path": "assets/esm-Ca61H3iQ.js",
+          "bytes": 435694,
+          "sha256": "01c20db866a77cba389fc397e9abf160764d525bad3bf95996be6c2ea218fd39"
+        },
+        {
+          "path": "assets/index-B5vllbu5.css",
+          "bytes": 226618,
+          "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
+        },
+        {
+          "path": "assets/index-r6X1fdiN.js",
+          "bytes": 7254460,
+          "sha256": "29b7ad54777ad4c24f30c10f9bffc5475976ca9be1575ea740cac96780757d1d"
+        },
+        {
+          "path": "assets/jsx-runtime-CfuWmoMz.js",
+          "bytes": 8947,
+          "sha256": "7df31f76df489cefea1b2bdf9dee5c402c2367e8f311cf2a612e24c79e064754"
+        },
+        {
+          "path": "favicon.svg",
+          "bytes": 1049,
+          "sha256": "83023c2b09a7438ec24c0160dc9bd19b87a1aa9d9d0bae7899ae1a4ae898d033"
+        },
+        {
+          "path": "index.html",
+          "bytes": 3359,
+          "sha256": "e6ac1cfe9fc682df7b28b9c74c38e3a75317c4fbb98c71bcebaf928db39803e5"
+        },
+        {
+          "path": "operational-notifications-sw.js",
+          "bytes": 1234,
+          "sha256": "d052e03a1c1c44bfba70c0b4cd6d9d6043beac21b1e9d5d4960f8f32d745aa6f"
+        },
+        {
+          "path": "service-worker.js",
+          "bytes": 574,
+          "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+        },
+        {
+          "path": "sw.js",
+          "bytes": 574,
+          "sha256": "c81e48cc4257fc1af42c731588f47dfe3a784591bd60f1b603d46d3856f2cebd"
+        }
+      ],
+      "artifact_tree_sha256": "7b59e997fd72d5c4ae02985702b0931f0512a2a21ddae1a90bad85bec8dfef64",
+      "build_meta": {
+        "path": "build-meta.json",
+        "bytes": 284986,
+        "sha256": "8bd7f729fa8c4828220310d02d7f25ec170decc705759bad3f8b44b9f54234d7"
+      }
+    },
+    "frontend_reproducibility": {
+      "schema_version": 1,
+      "kind": "frontend_two_clean_builds_v1",
+      "git_sha": "07c90edafe14d1263844f9434bbf36d582b4913e",
+      "source": {
+        "scope": "git_head_frontend_tree_v1",
+        "git_tree_oid": "a5f36ff96184a3888c9dd5250eb7d23eef521006",
+        "file_count": 1001,
+        "tree_sha256": "d2b8c59b06462f96aa775bc80aa7249d3670bbd044ec1e16ba8ac2fe1e77b1ef"
+      },
+      "toolchain": {
+        "node": "22.23.2",
+        "yarn": "1.22.22",
+        "vite": "8.2.4"
+      },
+      "environment": {
+        "mode": "production",
+        "effective": {
+          "NODE_ENV": "production",
+          "VITE_USER_NODE_ENV_present": false,
+          "VITE_prefixed_keys": []
+        },
+        "allowed_client_keys": [
+          "REACT_APP_BACKEND_URL"
+        ],
+        "values": {
+          "REACT_APP_BACKEND_URL": {
+            "present": true,
+            "sha256": "d2e055b74392bfdfcf1d64af1e88a91ab7029a49729a7ac53870bf48bfe4e5ff"
+          }
+        }
+      },
+      "passes": [
+        {
+          "ordinal": 1,
+          "build_meta": {
+            "path": "build-meta.json",
+            "bytes": 284986,
+            "sha256": "8bd7f729fa8c4828220310d02d7f25ec170decc705759bad3f8b44b9f54234d7"
+          },
+          "artifact_tree_sha256": "7b59e997fd72d5c4ae02985702b0931f0512a2a21ddae1a90bad85bec8dfef64"
+        },
+        {
+          "ordinal": 2,
+          "build_meta": {
+            "path": "build-meta.json",
+            "bytes": 284986,
+            "sha256": "8bd7f729fa8c4828220310d02d7f25ec170decc705759bad3f8b44b9f54234d7"
+          },
+          "artifact_tree_sha256": "7b59e997fd72d5c4ae02985702b0931f0512a2a21ddae1a90bad85bec8dfef64"
+        }
+      ],
+      "retained_pass": 2,
+      "proof_file": {
+        "path": "frontend/.release/reproducible-build.json",
+        "bytes": 1521,
+        "sha256": "6a1ee9e802ce98926f1790e606932797b147f2ac1be29cff224b070894190f99"
+      }
+    },
+    "boot_started_at": "2026-10-26T20:46:37.659145+03:00"
+  }
+}
