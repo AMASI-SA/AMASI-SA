@@ -1,11 +1,14 @@
 {
-  "scope": "Google only; automaticcampaigncreation purecontract",
-  "state": "WIP UNWIRED NOTDEPLOYABLE; pureSEARCH-RSAdata/templates/intent only",
-  "base": "b99073bd9b7977e4a4df9630064240e31a9ae022",
+  "state": "WIP NOT WIRED / NOT DEPLOYABLE",
+  "branch": "codex/google-autonomy-creation-wip-20261026",
+  "pure_contract_tests": 98,
+  "policy_agent_reported_tests": "36policy;134withcontract; frontend15written pendingexactCI; rootnotyetintegrated",
   "provider_writes": 0,
-  "full_autonomy_complete": false,
-  "tests": "98creationstandalone;278withbuilder/plannerpass; genericmanualoriginrejects spoofedledger; nohardcodedcustomerIDs inlibrary",
-  "behavior": "Explicitowner product/template/geo/bidding/budgetcaps; modelchoiceonly product+template; freshsellableProductV2source_revision; deterministicidentityexcludeincidentalrefresh butintentbindsdraft/catalog/approval; initialPAUSED; separateenablefunding/correlationledger proof.",
-  "remaining": "Separateownercreationpolicy/template UI+CAS/activation; nativecatalog/Googlecontext proof; creationintentDRAFTS state machine; actualvalidate-only→quota+accountfence→singlecreate→readback ledger; no duplicate/unknownretry; separateenablewithinheadroom. No automaticexistingbudgetcuts; preservedtestneveradopted.",
-  "production": "1520live6recs;1522foundationlivecarriedviaTikTok1524sourceD8b healthflagsverified andactualguardinactive;1529executionB frozenCIpending notmerged"
+  "remaining": [
+    "Finish authority, native creation gateway, readonly planner",
+    "Wire routes/UI/worker and verify full integration, concurrency and Mongo",
+    "Separate owner-funded launch capability not implemented; creation always PAUSED",
+    "Fresh production-based source CI/intent before any merge"
+  ],
+  "preserved_manual_test_campaign": "never automatically adopt"
 }
