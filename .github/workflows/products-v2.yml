@@ -179,6 +179,6 @@ jobs:
       - name: Test product creation form
         env:
           CI: "true"
-        run: yarn test --watchAll=false --runInBand --runTestsByPath src/components/products/ProductCreationPanel.test.jsx
+        run: yarn test --watchAll=false --runInBand --runTestsByPath src/components/products/ProductCreationPanel.test.jsx src/components/products/ProductCreationConfirmation.test.jsx
       - name: Build frontend
         run: yarn build
