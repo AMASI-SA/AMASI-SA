@@ -409,7 +409,7 @@ export function DashboardAdsSpendCardContent({
                                 <Legend wrapperStyle={{ direction: "rtl", fontSize: 11 }} />
                                 {accountLines.map(({ account, color }) => <Line key={account.account_id}
                                     type="monotone" dataKey={(point) => point.snapchat_accounts?.get(account.account_id) ?? null}
-                                    name={accountName(account)} stroke={color} strokeWidth={2.5} connectNulls={false} dot={false} />)}
+                                    name={accountName(account)} stroke={color} strokeWidth={2.5} connectNulls={false} dot={{ r: 3, strokeWidth: 1 }} />)}
                                 {visibleProviders.map((provider) => (
                                     availableSeries[provider] ? (
                                         <Line

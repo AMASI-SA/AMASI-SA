@@ -20,7 +20,7 @@ beforeEach(() => { mockAccountChartPoints = []; mockAccountChartLines = []; });
 jest.mock("recharts", () => ({
     ResponsiveContainer: ({ children }) => <div>{children}</div>,
     LineChart: ({ children, data }) => { mockAccountChartPoints = data; return <div>{children}</div>; },
-    Line: ({ name, dataKey, connectNulls }) => { mockAccountChartLines.push({ name, dataKey, connectNulls }); return <div>{`line:${name}`}</div>; },
+    Line: ({ name, dataKey, connectNulls, dot, stroke, strokeWidth }) => { mockAccountChartLines.push({ name, dataKey, connectNulls, dot, stroke, strokeWidth }); return <div>{`line:${name}`}</div>; },
     CartesianGrid: () => null,
     Legend: () => null,
     Tooltip: () => null,
@@ -522,4 +522,32 @@ test("unknown native total does not relabel converted SAR as USD", () => {
     expect(row.textContent).toContain("81.32 ر.س");
     expect(row.textContent).not.toContain("81.32 USD");
     expect(row.textContent).not.toContain("0.00 USD");
+});
+
+
+test.each([["USD.A", 81.32], ["__proto__", 0]])("real chart renders a lone observed point for %s without future points", (accountId, expected) => {
+    independentAccountMarkup(independentAccountData(true));
+    const line = mockAccountChartLines.find((item) => typeof item.dataKey === "function"
+        && item.dataKey(mockAccountChartPoints[0]) === expected);
+    expect(line).toBeDefined();
+    const { LineChart: RealLineChart, Line: RealLine } = jest.requireActual("recharts");
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+        act(() => root.render(<RealLineChart width={500} height={300} data={mockAccountChartPoints}>
+            <RealLine {...line} isAnimationActive={false} />
+        </RealLineChart>));
+        const dots = host.querySelectorAll("circle.recharts-line-dot");
+        expect(dots).toHaveLength(1);
+        expect(Number(dots[0].getAttribute("cx"))).toBeGreaterThanOrEqual(0);
+        expect(Number(dots[0].getAttribute("cy"))).toBeGreaterThanOrEqual(0);
+        expect(line.dataKey(mockAccountChartPoints[1])).toBeNull();
+        expect(line.connectNulls).toBe(false);
+    } finally {
+        act(() => root.unmount());
+        host.remove();
+        globalThis.IS_REACT_ACT_ENVIRONMENT = false;
+    }
 });
