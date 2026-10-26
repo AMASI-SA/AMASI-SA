@@ -22,6 +22,12 @@ the fix. An expanded suite had 81 passing and two pre-existing failures in
 base `72ab1aee0` (an outdated attribution expectation and a mocked persistence
 seam that no longer matches the owner transaction path).
 
+The existing Review Completion Resumable workflow now runs the 21 pagination
+cases when the Salla sync source or the test changes, and its JUnit guard
+requires all 21 to execute without skips, failures, or errors. The exact
+workflow-style standalone command passed locally (21 passed); the combined
+remote workflow and its real Mongo checks remain subject to fresh exact-head CI.
+
 The current Snapchat scale gate remains fail-closed with
 `campaign_commerce_freshness_unproven`. Completing the end-to-end contract
 requires a bounded, exhaustive, tenant- and period-bound Salla snapshot,
