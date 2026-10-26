@@ -1,3 +1,13 @@
+# Current release integration — PR #1553
+
+Current branch: codex/snap-completion-release-r2-20261026. Current reviewed base:4ab6e8bc1d39d1a3df555c874ae1278d284529c1, preserving #1552 Salla customer option pricing and #1547 suppliers. Source checkpoint3d9053ca42d26f1f4b59834f7f322224f74a77b7 copies only this task paths over that base; zero overlap with intervening changes. Exact latest source/intent SHAs and CI results are in PR #1553. Old PR #1548 is closed as superseded; its intent6681df33 MUST NOT deploy above the new base. No old intent is reused or edited by hand.
+
+Fresh final integrated local check before base integration:305passed/3local-Mongo-skips, exit0,3.54s. The source A495101 and intent B6681df33 checks were isolated evidence for the previous base; they do not qualify the new release. New current-base exact-head CI, new candidate intent and intent-only B, then Host20 clean-clone rehearsal remain required.
+
+Production changed by this task:no. Another conversation deployed supplier source761a8f330cb3bfcadbd430e6ca9a954008dbe9de with verified release rg5-82da34e8c680c0bb12638192f5adc916a1b0f8a180006dc1b087290d604c97d4. Remote then advanced to #1552. Recheck remote/live/shared lease before any prepare. Emergent home is authenticated; multiple project/terminal attempts timed out, including a fresh home-tab approach (Options offers rename/move/delete only). No paid chat prompt, release lease, provider write, campaign activation, or budget change was performed. Current production acceptance remains blocked; Public Profile authorization and trusted upstream commerce freshness remain unresolved as detailed below.
+
+Historical implementation and verification record follows.
+
 # Snapchat full management continuation — 2026-10-26
 
 Repository: AMASI-SA/AMASI-SA. Task branch: codex/snap-completion-20261027. Draft PR: #1548. Base: 3a23b587a218f2b190cf1913e3b0b1d22c175cbd, including supplier/purchase #1547. Recoverable initial checkpoint: e7074aef47aee06d9441603677f8330c7a2a7ac6. This document and PR carry continuation evidence because prior status reports Issue #1006 reached its comment limit.
