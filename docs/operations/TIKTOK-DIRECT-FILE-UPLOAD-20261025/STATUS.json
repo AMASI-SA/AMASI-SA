@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R5_PR1578_ORIGINAL_HOST_ADAPTER_EXIT0_EXACT_IDENTITY_CI_PENDING",
+  "state": "R5_PR1578_MERGED_D82C_TREE_EQUALS_B_ACTUAL_APP_ADAPTER_PENDING",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "Wait currentB allCI/CodeQL. Freshreviewedbase2d275 and headB17f840; normalmergePR1578, verify MtreeeqB. Freshoriginalguardinactive/trackedclean/currentAPPancestorM; FF-only then actualadapter with ownexternalcache. Prepare only when hostingUIready.",
+  "next": "Freshoriginalguardinactive/currentAPPancestorM/trackedclean, FF-only /app toreviewedM d82c, preserveuntracked/env/worktrees. Actualadapter with own/tmp caches mustEXIT0/exactidentity. Only then ownprepare/prepublish and onefinalPublishchanges whenHostingUIready; newexplicitfinish thenverify3.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -365,7 +365,7 @@
     "cause": "Unproven. UI exposes generic error and blocked status. No provider code available through current UI/console; do not assume scope/app audit/codec/CORS cause.",
     "screenshot": "tiktok-edge-fixed-native-test-1793035691941.jpg"
   },
-  "production_changes_this_turn": "No new source/runtime deployment, no own lease, no merge, no paid writes, no live model requests. Frozen R4 PR1566 and durable evidence saved; existing original-host rehearsal outcome unproven after502.",
+  "production_changes_this_turn": "Reviewed Production Git branch advanced by normalmergePR1578, treeeqfrozenB; actual public runtime not changed by this task yet. No ownlease orPublishchanges.",
   "merchant_shawl_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
     "file_bytes": 5552622,
@@ -405,7 +405,7 @@
     "tree": "51ab2995a1198d02b2b492b7c245fd3cf4410b9c",
     "pr": 1578,
     "files": 6,
-    "state": "Original-host rehearsal passed; current B CodeQLpython and stock checks pending at lastread; all othersapplicableSUCCESS. No merge yet.",
+    "state": "All24headchecks completed18SUCCESS6SKIP, bothCodeQL+aggregateSUCCESS. OriginalhostadapterEXIT0/exactidentity. Normalmerge1578 d82c tree equals frozenB.",
     "validation": "Current B native backend559PASS35.10s; frontend167PASS27suites11.398s; CI HostNode20 clean-clone adapter and exact governed JSON route all stepsSUCCESS. All current head checks complete. Original-host R4 result cannot yet be read.",
     "scope": "Safe fixed initialization failure persistence and owner UI; definite native rejection409; uncertain fence retained; stale preparing phase cleared. Does not yet establish actual production native rejection cause.",
     "source_A": "e7fd8ca1aaa03d27557b75072512d366a0409acb",
@@ -467,7 +467,9 @@
       "CI": "18SUCCESS6SKIP; native559backend/167frontend; CIHostNode20cleanadapterPASS",
       "reason": "Reviewed courier1570/Snap1572 advancedProduction2d275. No6pathoverlap. Oldown/tmp R4root absent afterenvironmentrecovery."
     },
-    "safe_local_db_read": "Read-only application/.env DB query for exact known creator found0proposal records. This does NOT establish live Production capability absence; do not broaden or infer. UI remains authoritative live state."
+    "safe_local_db_read": "Read-only application/.env DB query for exact known creator found0proposal records. This does NOT establish live Production capability absence; do not broaden or infer. UI remains authoritative live state.",
+    "merge_M": "d82c2d4670b7b56a3dde142fab1fa777802d45c5",
+    "merge_tree_matches_intent_B": true
   },
   "merchant_shawl_draft_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
