@@ -387,11 +387,11 @@ def make_operational_balance_router(db, current_user):
         return await save_adjustment(db,owner,actor['id'],payload.model_dump(),source='employee_app' if user.get('_session_client')=='amasi_mobile' else 'mezan2')
 
     @router.get('/inventory-catalog')
-    async def inventory_catalog(user=Depends(current_user)):
+    async def inventory_catalog(configured: bool = False, user=Depends(current_user)):
         _, owner, _ = await scope(db, user, 'view')
         from operational_balance_inventory import catalog
         from operational_purchase_metadata import products, locations
-        return {'items':await catalog(db,owner), 'products':await products(db,owner), 'locations':await locations(db,owner)}
+        return {'items':await catalog(db,owner,components_only=configured), 'products':await products(db,owner), 'locations':await locations(db,owner)}
 
     @router.get('/inventory-opening/context')
     async def inventory_opening_context(user=Depends(current_user)):

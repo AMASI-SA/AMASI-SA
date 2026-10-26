@@ -25,3 +25,11 @@ Next: inspect Draft PR/CI, review new API and native counterpart, then follow v5
 Remote checkpoint: ac53114cfcacf999616fe9fc40335a248e936bac.
 Native counterpart checkpoint: fd36d0cbfa844be2b95dc9eb3f7345da2594f351, verified against remote.
 Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1508. CI pending on creation; no pass inferred. Numbering tests renamed to match existing operational-balance CI discovery glob. Both source worktrees were clean after checkpoint pushes.
+
+## Configured catalog root repair — 2026-10-26
+
+User requests fix + final Android package. Added opt-in configured=true catalog mode: components from catalog(), product descriptions/options from existing canonical products(). Legacy catalog default and variant validation unchanged. save_purchase builds legacy product variant catalog only when at least one line actually uses legacy identity; fully configured lines still validate canonical product/options/location through describe(). No fabricated IDs or physical inventory mutations.
+
+Regression reproduces numeric legacy variant label failure: legacy catalog409 remains; configured catalog succeeds; invented configured value422 leaves state unchanged; valid raw/ready purchase succeeds with original product and physical collections untouched. 81 tests PASS on dedicated replica-set Mongo127.0.0.1:27306 (invoiceCatalog), databases retained, covering metadata, variants, inventory, numbering and supplier adjustments. Earlier standalone run59 PASS/2 environment failures (transactions require replica set); no regression assertion was weakened.
+
+Native counterpart87ee444752ceeef020fe99c198d521e25e3d2691 requests configured mode, keeps independent supplier data on catalog errors, blocks new saves on failed choices and retains durable retries. Purchases57 PASS and TypeScript PASS; code17 build pending. Server deployment required. Other conversation01a15540-73c4-7031-9fc2-7aa300339542 is being asked to coordinate fresh guard checks then v5 build/intent/deployment. No production writes, guard mutation or deployment performed here.

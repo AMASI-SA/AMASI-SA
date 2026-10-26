@@ -57,10 +57,12 @@ def customization_contract(row, variant=None):
     return fields, issues
 
 
-async def catalog(db, owner):
+async def catalog(db, owner, *, components_only=False):
     result = []
     for collection, kind, identity in [('mezan_products_v2','product','mezan_product_id'),
                                         ('mezan_cost_resources_v2','component','id')]:
+        if components_only and kind == 'product':
+            continue
         seen = set()
         for row in await rows(db, owner, collection):
             if not usable(row) or row.get('archived') or row.get('deleted_at'):
@@ -241,10 +243,13 @@ async def save_purchase(db, owner, actor, payload, *, source='mezan2', clock=Non
         if supplier_ref and any(r.get('supplier_id')==supplier['id'] and str(r.get('invoice_number') or '').strip()==supplier_ref
                for r in external_rows):
             fail('inventory_invoice_existing_mz2', 'الفاتورة موجودة في ميزان 2؛ لا يمكن تسجيلها مرة أخرى')
-        available = {line_identity(r):r for r in await catalog(db, owner)}
         lines = payload['lines']
         if not lines:
             fail('inventory_lines_invalid', 'اختر المنتجات دون تكرار البنود')
+        # Configured lines use canonical product/option metadata below. Legacy
+        # variant labels are not their identity and must not block this path.
+        available = {line_identity(r):r for r in await catalog(db, owner,
+            components_only=all(line.get('purchase_configuration') for line in lines))}
         from operational_purchase_metadata import products, locations, describe
         bases={(p['kind'],p['id']):p for p in await products(db,owner)}
         bases.update({(p['kind'],p['id']):p for p in available.values() if p['kind']=='component'})
