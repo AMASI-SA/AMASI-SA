@@ -1,7 +1,7 @@
 {
   "branch": "codex/google-autonomy-creation-wip-20261026",
-  "checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
-  "state": "WIP reviewedpolicy+plan saved e54a4a591d99d860b8035d170e4e68b6478ef8aa; root wiredroutes/UI/CI locally and179focusedpassed2.16s; gateway34tests/authority29/worker43 reported; reviewhardening+Mongotests+runtimecomposition ongoing. NeverdeployWIP.",
+  "checkpoint": "11f4db6234ab68ff4e8ca7eda32d1756504dd164",
+  "state": "Rebuilt nativecreationauthority/gateway/worker/runtime preserved inWIP11f4db6234ab68ff4e8ca7eda32d1756504dd164. Root276pass27Mongo skips beforelatesthardening. Agentcurrentauthority42/gateway41/worker43+runtime49, newMongo cases pendingCI. Catalogracefixed; no-claimcancel tombstone beingimplemented; postfloorfreshnessfixed locally forboth automationkinds.",
   "full_autonomy_complete": false,
   "environment_blocker": "Prior scratch checkout absent. Remote recovery refs prefix codex/google-creation- returned empty. Latest local-only authority/gateway/worker/composite source cannot be assumed recoverable; reconstruct and freshly test missing implementation from durablecontract/policy/plan checkpoint.",
   "root_integration_checkpoint": "3cba125d4df8f837d0d5015f3d693351f38a4577",
@@ -17,5 +17,6 @@
     "codex/google-creation-gateway-recovery-20261026",
     "codex/google-creation-runtime-recovery-20261026"
   ],
-  "recovery_note": "Verified durable3cba125d4df8f837d0d5015f3d693351f38a4577 only. Restoring this branch to fresh checkout; do not call missing latermodules completed or tested in restoredsource."
+  "recovery_note": "Verified durable3cba125d4df8f837d0d5015f3d693351f38a4577 only. Restoring this branch to fresh checkout; do not call missing latermodules completed or tested in restoredsource.",
+  "lost_source": "Oldunsavedsourceunavailable; newlyreimplementedcode independentlytested, not claimedidentical."
 }
