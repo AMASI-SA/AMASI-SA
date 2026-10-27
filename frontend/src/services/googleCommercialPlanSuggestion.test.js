@@ -2,7 +2,7 @@ import api from "../lib/api";
 import { applyGoogleSuggestionToEmptyFields, suggestGoogleCommercialPlan, validateGoogleCommercialPlanSuggestion } from "./googleCommercialPlanSuggestion";
 
 jest.mock("../lib/api", () => ({ __esModule: true, default: { post: jest.fn() } }));
-const instruction = "ركز على الشتاء بالسعودية للرجال الباحثين عن هدية من 2026-11-01 إلى 2026-12-31 والرسالة دفء الشتاء https://example.com/shawls";
+const instruction = "ركز على الشتاء بالسعودية واستهدف الرجال الباحثين عن هدية من 2026-11-01 إلى 2026-12-31 والرسالة دفء الشتاء https://example.com/shawls";
 const response = () => ({ instruction, fields: { season: "الشتاء", starts_on: "2026-11-01", ends_on: "2026-12-31", market: "SA",
     audience: "الرجال الباحثين عن هدية", message: "دفء الشتاء", category_url: "https://example.com/shawls" },
     evidence: { season: "الشتاء", starts_on: "2026-11-01", ends_on: "2026-12-31", market: "السعودية", audience: "الرجال الباحثين عن هدية", message: "دفء الشتاء", category_url: "https://example.com/shawls" },

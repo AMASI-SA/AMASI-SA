@@ -1,8 +1,8 @@
 {
   "branch": "codex/google-plan-suggestion-ui-20261027",
   "base_sha": "5c3353034be910ab2bde62c12512d1d8ded26faa",
-  "previous_checkpoint": "d153b356342d40860ecb590ffe23f899592d3f14",
-  "status": "implemented_tests_pending_dependency_install",
+  "previous_checkpoint": "775cab4725dbbc8ff7ef9ef915b7fa7e19522c2b",
+  "status": "focused_acceptance_passed_pending_integrated_verification",
   "owner": "plan_ui",
   "scope": "Explicit natural-language commercial-plan suggestion preview and apply-empty-fields UI",
   "files": [
@@ -22,10 +22,13 @@
   "checks": {
     "git_diff_check": "passed",
     "frontend_toolchain": "Governed Node 22.23.2 and Yarn 1.22.22 verified",
-    "frozen_dependency_install": "running: fetching packages",
-    "tests": "not yet run"
+    "frozen_dependency_install": "passed, frozen lockfile, exit 0",
+    "tests": "64 passed in 3 suites, no skipped tests, exit 0",
+    "test_command": "CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GoogleCommercialPlan.test.jsx src/services/googleCommercialPlanSuggestion.test.js src/components/marketing/GooglePinnedCatalogReview.test.jsx",
+    "initial_failure": "5 positive service fixtures correctly rejected because the instruction did not contain their exact audience quotation; corrected fixture wording only, then all 64 passed",
+    "build_and_ci": "coordinator owns combined PR 1584 verification"
   },
-  "next": "Complete frozen install, run focused form/service/catalog suites, preserve results, send coordinator for integrated review/CI/build/live verification",
+  "next": "Coordinator integrates the one-line service fixture correction, independently verifies combined source/CI/build, then performs Release Guard and live acceptance",
   "deployment": "not performed",
   "paid_advertising_changes": false
 }
