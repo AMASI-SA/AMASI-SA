@@ -169,6 +169,11 @@ async def test_instruction_gate_precedes_but_preserves_piece_status_guard(env, m
             raise HTTPException(409, detail={"code": "customer_service_instruction_action_required"})
 
     def status_gate(piece):
+        # The anchor's preliminary eligibility check precedes candidate selection.
+        # Exercise the selected candidate's final guard, after instruction gating.
+        if not calls:
+            calls.append("anchor_status")
+            return None
         calls.append("status")
         return {"code": "synthetic_piece_status_blocked"}
 
@@ -179,7 +184,7 @@ async def test_instruction_gate_precedes_but_preserves_piece_status_guard(env, m
     assert response.status_code == 409, response.text
     assert response.json()["detail"]["code"] == (
         "customer_service_instruction_action_required" if instruction_blocks else "synthetic_piece_status_blocked")
-    assert calls == (["instruction"] if instruction_blocks else ["instruction", "status"])
+    assert calls == (["anchor_status", "instruction"] if instruction_blocks else ["anchor_status", "instruction", "status"])
     assert (await db[r.SESSIONS].find_one({"id": session["id"]}))["scan_count"] == 0
     assert await db[r.RECEIVING_EVENTS].count_documents({"event_type": "supplier_piece_scanned"}) == 0
 
