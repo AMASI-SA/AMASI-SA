@@ -82,6 +82,117 @@ class EditFlowTests(fixtures.InstructionNotificationTests):
         await self.stops();self.items[0]['quantity']=2;self.select('cs')
         self.assertEqual(self.post('send-edit',{'revision':revision(snapshot(self.items,['i1','i2']))}).status_code,409)
 
+    async def test_new_order_item_invalidates_sent_order_revision(self):
+        tasks, digest = await self.sent()
+        self.items.append({'order_item_id': 'i3', 'name': 'added', 'quantity': 1})
+        self.select(tasks[0]['assignee_id'])
+        response = self.post('tasks/submit', {'task_ids': [tasks[0]['id']],
+            'confirmation': 'modified', 'note': 'Done', 'revision': digest})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.db.raw[notifications.TASKS].count_documents({'status': 'submitted'}), 0)
+
+    async def test_creator_can_resend_changed_revision_before_execution(self):
+        tasks, first = await self.sent()
+        self.items[0]['options_normalized']['size'] = 'XL'
+        second = revision(snapshot(self.items, ['i1', 'i2']))
+        self.select('cs')
+        response = self.post('send-edit', {'revision': second})
+        self.assertEqual(response.status_code, 200, response.text)
+        event_count = self.db.raw[notifications.NOTIFICATIONS].count_documents({})
+        self.assertEqual(self.post('send-edit', {'revision': second}).status_code, 200)
+        self.assertEqual(self.db.raw[notifications.NOTIFICATIONS].count_documents({}), event_count)
+        self.select(tasks[0]['assignee_id'])
+        payload = {'task_ids': [tasks[0]['id']], 'confirmation': 'modified', 'note': 'Done'}
+        self.assertEqual(self.post('tasks/submit', {**payload, 'revision': first}).status_code, 409)
+        self.assertEqual(self.post('tasks/submit', {**payload, 'revision': second}).status_code, 200)
+
+    async def test_submission_fence_wins_race_against_resend(self):
+        tasks, first = await self.sent()
+        self.items[0]['options_normalized']['size'] = 'XL'
+        second = revision(snapshot(self.items, ['i1', 'i2']))
+        original = fixtures.Collection.find_one_and_update
+        async def interleave(collection, query, update, **kwargs):
+            if update.get('$set', {}).get('edit_revision') == second:
+                self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({'id': 'n', 'edit_revision': first},
+                    {'$set': {'edit_submission_started': True}})
+            return await original(collection, query, update, **kwargs)
+        self.select('cs')
+        with patch.object(fixtures.Collection, 'find_one_and_update', interleave):
+            response = self.post('send-edit', {'revision': second})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one({'id': 'n'})['edit_revision'], first)
+
+    async def test_resend_wins_before_submission_fence_without_task_writes(self):
+        tasks, first = await self.sent()
+        original = fixtures.Collection.__getattr__
+        def interleave(collection, name):
+            method = original(collection, name)
+            if name != 'update_one':
+                return method
+            async def update(query, value, **kwargs):
+                if value.get('$set', {}).get('edit_submission_started') is True:
+                    self.db.raw[ORDER_TRACKING_INSTRUCTIONS].update_one({'id': 'n', 'edit_revision': first},
+                        {'$set': {'edit_revision': 'f' * 64}})
+                return await method(query, value, **kwargs)
+            return update
+        self.select(tasks[0]['assignee_id'])
+        with patch.object(fixtures.Collection, '__getattr__', interleave):
+            response = self.post('tasks/submit', {'task_ids': [tasks[0]['id']],
+                'confirmation': 'modified', 'note': 'Done', 'revision': first})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self.db.raw[notifications.TASKS].count_documents({'status': 'submitted'}), 0)
+
+    async def test_partial_execution_cannot_be_overwritten_by_resend(self):
+        tasks, first = await self.sent()
+        self.select(tasks[0]['assignee_id'])
+        self.assertEqual(self.post('tasks/submit', {'task_ids': [tasks[0]['id']],
+            'confirmation': 'modified', 'note': 'Done', 'revision': first}).status_code, 200)
+        self.items[0]['options_normalized']['size'] = 'XL'
+        self.select('cs')
+        self.assertEqual(self.post('send-edit', {'revision': revision(snapshot(self.items, ['i1', 'i2']))}).status_code, 409)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one({'id': 'n'})['edit_revision'], first)
+
+    async def test_reassigned_pending_worker_can_acknowledge_sent_revision(self):
+        tasks, digest = await self.sent()
+        task = next(t for t in tasks if t['assignee_id'] == 'a')
+        self.db.raw.users.insert_one({'id': 'c', 'role': 'employee', 'created_by': 'owner'})
+        self.db.raw.mezan_preparation_pieces_v1.update_one({'piece_id': task['piece_id']}, {'$set': {'responsible_employee_id': 'c'}})
+        self.select('c')
+        response = self.post('stop-acknowledgment', {'task_ids': [task['id']], 'note': 'Stopped'})
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = {'task_ids': [task['id']], 'confirmation': 'modified', 'note': 'Done', 'revision': digest}
+        self.assertEqual(self.post('tasks/submit', payload).status_code, 200)
+        self.select('a')
+        self.assertIn(self.post('tasks/submit', payload).status_code, (403, 404, 409))
+
+    async def test_completed_submission_retry_is_read_only_and_actor_scoped(self):
+        tasks, digest = await self.sent()
+        for task in tasks:
+            self.select(task['assignee_id'])
+            payload = {'task_ids': [task['id']], 'confirmation': 'modified', 'note': 'Done', 'revision': digest}
+            self.assertEqual(self.post('tasks/submit', payload).status_code, 200)
+        before = list(self.db.raw[notifications.NOTIFICATIONS].find())
+        response = self.post('tasks/submit', payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self.post('complete', {'note': 'Done'}).status_code, 200)
+        self.assertEqual(list(self.db.raw[notifications.NOTIFICATIONS].find()), before)
+        self.select('owner')
+        self.assertIn(self.post('tasks/submit', payload).status_code, (403, 404))
+        self.assertEqual(self.post('complete', {'note': 'Done'}).status_code, 403)
+
+    async def test_recovery_capabilities_are_actor_and_revision_scoped(self):
+        tasks, digest = await self.sent()
+        self.select('cs')
+        caps = self.client.get('/api/order-tracking-notes/instructions/n').json()['capabilities']
+        self.assertEqual(caps['edit_flow_version'], 1)
+        self.assertFalse(caps['can_send_edit_revision'])
+        self.items[0]['options_normalized']['size'] = 'XL'
+        self.assertTrue(self.client.get('/api/order-tracking-notes/instructions/n').json()['capabilities']['can_send_edit_revision'])
+        self.select('a')
+        caps = self.client.get('/api/order-tracking-notes/instructions/n').json()['capabilities']
+        self.assertFalse(caps['can_send_edit_revision'])
+        self.assertFalse(caps['can_acknowledge_edit_stop'])
+
 # The legacy suite runs separately; only run this class's own test methods here.
 for name in dir(fixtures.InstructionNotificationTests):
     if name.startswith('test_') and name not in EditFlowTests.__dict__:

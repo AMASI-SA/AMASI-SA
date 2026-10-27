@@ -4,8 +4,10 @@ import json
 from fastapi import HTTPException
 
 
-def snapshot(items, item_ids):
+def snapshot(items, item_ids, *, require_all=False):
     selected = set(item_ids)
+    if require_all and {str(item.get("order_item_id") or item.get("id") or "") for item in items} != selected:
+        raise HTTPException(409, detail={"code": "edit_flow_items_changed"})
     result = {}
     for item in items:
         iid = str(item.get("order_item_id") or item.get("id") or "")

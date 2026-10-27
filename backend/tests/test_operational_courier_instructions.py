@@ -70,8 +70,9 @@ def test_linked_legacy_cards_and_ack_are_not_a_second_task_path():
 
 def test_receive_barcode_stop_does_not_move_delivery_or_accept_scan():
     db = DB(); db.raw[ORDER_TRACKING_INSTRUCTIONS].insert_one(instruction())
+    db.raw[driver.ORDERS].insert_one({"user_id": "owner", "order_id": "salla-1", "order_number": "1", "shipping_barcode": "barcode"})
     db.raw.store_drivers.insert_one({"id": "d", "user_id": "owner", "account_user_id": "actor", "status": "active"})
-    db.raw.store_delivery_assignments.insert_one({"id": "assignment", "user_id": "owner", "driver_id": "d", "order_number": "1", "barcode": "barcode", "active": True, "status": "assigned"})
+    db.raw.store_delivery_assignments.insert_one({"id": "assignment", "user_id": "owner", "driver_id": "d", "order_id": "salla-1", "order_number": "1", "barcode": "barcode", "active": True, "status": "assigned"})
     db.raw.store_delivery_driver_receive_sessions.insert_one({"id": "session", "user_id": "owner", "driver_id": "d", "status": "open", "accepted": []})
     async def current(): return {"id": "actor", "created_by": "owner", "role": "store_driver", "_session_client": "amasi_mobile"}
     app = FastAPI(); app.include_router(driver.make_store_delivery_driver_app_router(db, current))

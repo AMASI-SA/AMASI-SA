@@ -1022,15 +1022,19 @@ def make_order_tracking_notes_router(
 
     async def current_edit_snapshot(row, merchant_id):
         order = await get_order(repository, user_id=merchant_id, order_number=row["order_number"])
-        return edit_snapshot(_model_dict(order).get("items") or [], (row.get("edit_baseline") or {}).keys())
+        return edit_snapshot(_model_dict(order).get("items") or [], (row.get("edit_baseline") or {}).keys(), require_all=row.get("scope") == "order")
 
     @router.post("/instructions/{instruction_id}/stop-acknowledgment")
     async def acknowledge_edit_stop(instruction_id: str, payload: StopAcknowledgment, user: dict = Depends(instruction_user)):
         context, row, _ = await authorized_instruction(instruction_id, user)
-        if row.get("edit_flow") != 1 or row.get("edit_phase") not in {"awaiting_stop", "awaiting_salla"} or row.get("status") != "active":
+        if row.get("edit_flow") != 1 or row.get("edit_phase") not in {"awaiting_stop", "awaiting_salla", "revision_sent"} or row.get("status") != "active":
             raise HTTPException(409, detail={"code": "edit_flow_stop_not_pending"})
+        if row.get("resolution_intent"):
+            raise HTTPException(409, detail={"code": "instruction_resolution_in_progress"})
+        if row.get("edit_phase") == "revision_sent":
+            require_sent(row, await current_edit_snapshot(row, context["merchant_id"]), row.get("edit_revision"))
         tasks = await ensure_instruction_tasks(db, context["merchant_id"], row)
-        own = {task["id"] for task in tasks if task.get("assignee_id") == context["actor_id"] and task.get("current", True)}
+        own = {task["id"] for task in tasks if task.get("assignee_id") == context["actor_id"] and task.get("current", True) and task.get("status") == "pending"}
         if not set(payload.task_ids).issubset(own) or not text(payload.note):
             raise HTTPException(403, detail={"code": "instruction_task_not_assigned"})
         now = _now()
@@ -1046,7 +1050,7 @@ def make_order_tracking_notes_router(
         context, row, can_manage = await authorized_instruction(instruction_id, user)
         if not can_manage or text(row.get("created_by")) != context["actor_id"]:
             raise HTTPException(403, detail={"code": "instruction_creator_resume_required"})
-        if row.get("edit_flow") != 1 or row.get("status") != "active" or row.get("edit_phase") != "awaiting_salla":
+        if row.get("edit_flow") != 1 or row.get("status") != "active" or row.get("edit_phase") not in {"awaiting_salla", "revision_sent"}:
             raise HTTPException(409, detail={"code": "edit_flow_stop_not_confirmed"})
         tasks = await ensure_instruction_tasks(db, context["merchant_id"], row)
         if not tasks or any(not task.get("current", True) or task.get("stop_acknowledged_by") != task.get("assignee_id") or not task.get("stop_acknowledged_at") or task.get("status") != "pending" for task in tasks):
@@ -1055,7 +1059,9 @@ def make_order_tracking_notes_router(
         preview = edit_candidate(row, current)
         if not preview["changed"] or preview["revision"] != payload.revision:
             raise HTTPException(409, detail={"code": "edit_flow_revision_mismatch"})
-        updated = await db[ORDER_TRACKING_INSTRUCTIONS].find_one_and_update({"user_id": context["merchant_id"], "id": row["id"], "status": "active", "edit_phase": row["edit_phase"], "edit_revision": row.get("edit_revision"), "resolution_intent": None}, {"$set": {"edit_phase": "revision_sent", "edit_revision": preview["revision"], "edit_requested": current, "edit_sent_at": _now(), "edit_sent_by": context["actor_id"]}}, return_document=ReturnDocument.AFTER)
+        if row.get("edit_phase") == "revision_sent" and row.get("edit_revision") == payload.revision and not row.get("resolution_intent"):
+            return {"ok": True, "revision": payload.revision}
+        updated = await db[ORDER_TRACKING_INSTRUCTIONS].find_one_and_update({"user_id": context["merchant_id"], "id": row["id"], "status": "active", "edit_phase": row["edit_phase"], "edit_revision": row.get("edit_revision"), "edit_submission_started": {"$ne": True}, "resolution_intent": None}, {"$set": {"edit_phase": "revision_sent", "edit_revision": preview["revision"], "edit_requested": current, "edit_sent_at": _now(), "edit_sent_by": context["actor_id"]}}, return_document=ReturnDocument.AFTER)
         if not updated:
             raise HTTPException(409, detail={"code": "edit_flow_revision_mismatch"})
         await emit_instruction_notification(db, merchant_id=context["merchant_id"], instruction={**updated, "notification_revision": preview["revision"]}, event_type="edit_sent")
@@ -1085,13 +1091,13 @@ def make_order_tracking_notes_router(
         edit_revision_current = False
         if row.get("edit_flow") == 1 and row.get("edit_phase") == "revision_sent":
             try:
-                edit_revision_current = edit_revision(edit_snapshot(card_items, (row.get("edit_baseline") or {}).keys())) == row.get("edit_revision")
+                edit_revision_current = edit_revision(edit_snapshot(card_items, (row.get("edit_baseline") or {}).keys(), require_all=row.get("scope") == "order")) == row.get("edit_revision")
             except HTTPException:
                 pass
         edit_preview = None
         if row.get("edit_flow") == 1 and text(row.get("created_by")) == context["actor_id"] and row.get("edit_phase") in {"awaiting_salla", "revision_sent"}:
             try:
-                edit_preview = edit_candidate(row, edit_snapshot(card_items, (row.get("edit_baseline") or {}).keys()))
+                edit_preview = edit_candidate(row, edit_snapshot(card_items, (row.get("edit_baseline") or {}).keys(), require_all=row.get("scope") == "order"))
             except HTTPException as exc:
                 edit_preview = {"changed": False, "error": exc.detail}
         cards = product_cards(row, result["tasks"], card_pieces, card_items,
@@ -1099,7 +1105,20 @@ def make_order_tracking_notes_router(
         edit_resume_pending = False
         if row.get("edit_flow") == 1 and row.get("status") == "active":
             edit_resume_pending = can_resume_edit(row, await ensure_instruction_tasks(db, context["merchant_id"], row), context["actor_id"]) and (not row.get("resolution_intent") or row["resolution_intent"].get("actor_id") == context["actor_id"])
+        edit_active = row.get("edit_flow") == 1 and row.get("status") == "active" and not row.get("resolution_intent")
+        can_send_edit = bool(edit_active and can_manage and text(row.get("created_by")) == context["actor_id"]
+            and row.get("edit_phase") in {"awaiting_salla", "revision_sent"}
+            and not row.get("edit_submission_started") and edit_preview and edit_preview.get("changed")
+            and edit_preview.get("revision") != row.get("edit_revision") and result["tasks"]
+            and all(t.get("current", True) and t.get("status") == "pending" and t.get("stop_acknowledged_at")
+                    and t.get("stop_acknowledged_by") == t.get("assignee_id") for t in result["tasks"]))
+        can_ack_edit = bool(edit_active and row.get("edit_phase") in {"awaiting_stop", "awaiting_salla", "revision_sent"}
+            and (row.get("edit_phase") != "revision_sent" or edit_revision_current)
+            and any(t.get("status") == "pending" and (not t.get("stop_acknowledged_at")
+                    or t.get("stop_acknowledged_by") != context["actor_id"]) for t in own_current))
         return {"instruction": result, "edit_preview": edit_preview, "edit_revision_current": edit_revision_current, "product_cards": cards, "evidence": evidence, "events": events, "capabilities": {
+            "edit_flow_version": 1, "can_send_edit_revision": can_send_edit,
+            "can_acknowledge_edit_stop": can_ack_edit,
             "can_manage": can_manage, "can_approve_resume": result["can_approve_resume"], "can_close_instruction": result["can_close_instruction"], "can_acknowledge": active and (bool(own_current) or not row.get("thread_protocol")),
             "can_complete": result["can_close_instruction"] or edit_resume_pending,
             "can_claim_task": await can_claim_review(row, user, context) and bool(await db[TASKS].find_one({"merchant_id": context["merchant_id"], "instruction_id": row["id"], "assignee_id": "", "status": "pending"})),
@@ -1135,6 +1154,23 @@ def make_order_tracking_notes_router(
 
     @router.post("/instructions/{instruction_id}/tasks/submit")
     async def submit_tasks(instruction_id: str, payload: TaskSubmission, user: dict = Depends(instruction_user)):
+        # A lost successful response must not require another write or notification.
+        # Authorize replay from immutable submission ownership, not page access.
+        replay_context = await _actor_context(db, user)
+        completed = await db[ORDER_TRACKING_INSTRUCTIONS].find_one({
+            "user_id": replay_context["merchant_id"], "id": text(instruction_id),
+            "status": "completed", "edit_flow": 1}, {"_id": 0})
+        if completed:
+            submitted = await db[TASKS].find({
+                "merchant_id": replay_context["merchant_id"], "instruction_id": completed["id"],
+                "id": {"$in": payload.task_ids}, "status": "submitted",
+                "submitted_by": replay_context["actor_id"], "assignee_id": replay_context["actor_id"],
+                "submitted_revision": payload.revision, "confirmation": payload.confirmation,
+                "result_note": text(payload.note)}, {"_id": 0, "id": 1}).to_list(200)
+            if not payload.revision or payload.revision != completed.get("edit_revision") or {t["id"] for t in submitted} != set(payload.task_ids):
+                raise HTTPException(403, detail={"code": "instruction_task_not_assigned"})
+            return {"ok": True, "already_completed": True,
+                    "instruction": {"id": completed["id"], "status": "completed"}}
         context, row, _ = await authorized_instruction(instruction_id, user)
         if context["actor_id"] not in await recipients(db, context["merchant_id"], row):
             raise HTTPException(status_code=409, detail={"code": "instruction_stage_not_reached"})
@@ -1161,6 +1197,16 @@ def make_order_tracking_notes_router(
             raise HTTPException(status_code=422, detail={"code": "customer_service_instruction_result_required"})
         if row.get("required_action") in {"upload_photos", "upload_photos_and_result"} and not await db[ORDER_TRACKING_EVIDENCE].count_documents({"user_id": context["merchant_id"], "instruction_id": row["id"], "created_by": context["actor_id"], "status": "submitted"}):
             raise HTTPException(status_code=409, detail={"code": "customer_service_instruction_photo_evidence_required"})
+        if row.get("edit_flow") == 1:
+            # This durable fence shares the same instruction document as resend.
+            # Once execution submission starts, its revision cannot be replaced.
+            # A crash before the task write permits retry at this same revision.
+            fenced = await db[ORDER_TRACKING_INSTRUCTIONS].update_one({
+                "user_id": context["merchant_id"], "id": row["id"], "status": "active",
+                "edit_phase": "revision_sent", "edit_revision": payload.revision,
+                "resolution_intent": None}, {"$set": {"edit_submission_started": True}})
+            if not fenced.matched_count:
+                raise HTTPException(409, detail={"code": "edit_flow_revision_mismatch"})
         now = _now()
         for task_id in set(payload.task_ids):
             await db[TASKS].update_one({"id": task_id, "merchant_id": context["merchant_id"], "assignee_id": context["actor_id"], "status": "pending"}, {"$set": {"status": "submitted", "submitted_at": now, "submitted_by": context["actor_id"], "confirmation": payload.confirmation, "result_note": text(payload.note), "submitted_revision": payload.revision}})
@@ -1351,6 +1397,7 @@ def make_order_tracking_notes_router(
             "action_options": [{"value": key, "label": value} for key, value in ACTION_LABELS.items()],
             "capabilities": {
                 "can_manage": _can_manage_tracking_instructions(actor, context),
+                "edit_flow_version": 1,
             },
         }
 
@@ -1929,6 +1976,14 @@ def make_order_tracking_notes_router(
         )
         if not instruction:
             raise HTTPException(status_code=404, detail={"code": "customer_service_instruction_not_found"})
+        if instruction.get("edit_flow") == 1 and instruction.get("status") == "completed":
+            if text(instruction.get("completed_by")) != context["actor_id"] or not await db[TASKS].find_one({
+                "merchant_id": context["merchant_id"], "instruction_id": instruction["id"],
+                "status": "submitted", "submitted_by": context["actor_id"],
+                "submitted_revision": instruction.get("edit_revision")}):
+                raise HTTPException(403, detail={"code": "instruction_task_not_assigned"})
+            return {"ok": True, "already_completed": True,
+                    "instruction": {"id": instruction["id"], "status": "completed"}}
         employee_edit_resume = False
         if instruction.get("edit_flow") == 1 and instruction.get("status") != "completed":
             edit_tasks = await ensure_instruction_tasks(db, context["merchant_id"], instruction)

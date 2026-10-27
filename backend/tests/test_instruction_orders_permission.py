@@ -111,6 +111,19 @@ class OrdersInstructionPermissionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(row.get("edit_flow"))
                 self.assertFalse(row["operational_hold"])
         self.assertEqual(self.db.raw[routes.PIECES].count_documents({"status": "in_progress"}), 2)
+        self.assertGreater(self.db.raw[notifications.NOTIFICATIONS].count_documents({"recipient_id": "worker"}), 0)
+
+    async def test_apk60_cancel_false_uses_existing_approval_flow(self):
+        response = self.create("cancel_order", edit_flow=False)
+        self.assertEqual(response.status_code, 201, response.text)
+        row = self.db.raw[ORDER_TRACKING_INSTRUCTIONS].find_one({"id": response.json()["instruction"]["id"]})
+        self.assertFalse(row.get("edit_flow"))
+        self.assertTrue(row["operational_hold"])
+
+    async def test_edit_flow_true_is_rejected_for_general_note(self):
+        response = self.create(edit_flow=True)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(self.db.raw[ORDER_TRACKING_INSTRUCTIONS].count_documents({}), 0)
 
     async def test_false_flag_does_not_accept_unknown_client_fields(self):
         response = self.create(edit_flow=False, unsupported_client_field=True)
