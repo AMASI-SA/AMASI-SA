@@ -1,0 +1,29 @@
+{
+  "task": "GOOGLE-VARIANT-STOCK-PROOF-20261027",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-variant-stock-proof-20261027",
+  "base_sha": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "status": "WIP focused acceptance passed; independent review and Mongo projection verification pending",
+  "scope": "Source-bound inventory evidence for Google automatic PAUSED Search creation",
+  "ownership_extension": "Coordinator explicitly approved additive metadata only in product_v2_details_routes._details_patch, creation-only projection seams in plan/gateway/authority, and supplied the Arabic UI blocker mapping. Shared writers and google_ads_ai projection are unchanged.",
+  "contract": "inventory_evidence_v1 binds strict version, source revision, exact canonical stock fingerprint, details observation, bounded variant count and available/unavailable/unproved state. Missing legacy proof, unknown arrays, stale/replaced source, partial canonical rows or changed stock fail closed. Intent binds inventory digest.",
+  "tests": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_creation_inventory.py backend/tests/test_google_ads_automation_creation_contract.py backend/tests/test_google_ads_automation_creation_policy.py backend/tests/test_google_ads_automation_creation_authority.py backend/tests/test_google_ads_automation_creation_plan.py",
+    "result": "282 passed, no skips, exit 0",
+    "diff_check": "passed",
+    "mongo": "pending own disposable loopback 27184",
+    "ci": "pending draft PR",
+    "independent_review": "budget_audit assigned; pending immutable checkpoint"
+  },
+  "source_docs": ["https://docs.salla.dev/product/product-details", "https://docs.salla.dev/product/list-product", "https://docs.salla.dev/product-variants/list"],
+  "limitations": [
+    "This validates explicit bounded details evidence; it does not establish full remote variant-list pagination coverage.",
+    "Legacy rows and missing/ambiguous arrays require details refresh; no invented no-variant inference.",
+    "At most 50 variants are supported; larger or partial projected sets are unproved.",
+    "Strict bounded numeric stock strings are supported; boolean quantities and truthy string unlimited flags are unproved.",
+    "No funded launch, feature-flag activation or live-provider operation is included."
+  ],
+  "next": "Independent review immutable checkpoint, verify actual Mongo projection, run affected gateway/worker regressions, then coordinator integration and required CI/release validation",
+  "production_changed": "no",
+  "deployment": "not attempted"
+}

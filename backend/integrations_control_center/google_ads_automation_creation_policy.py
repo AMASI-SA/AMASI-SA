@@ -20,7 +20,8 @@ from pymongo.errors import DuplicateKeyError
 
 from . import google_ads_automation_creation_contract as contract
 from . import google_ads_automation_policy as base
-from .google_ads_ai import PRODUCT_COLLECTION, PRODUCT_PROJECTION, _public_product
+from .google_ads_ai import PRODUCT_COLLECTION, _public_product
+from .google_ads_creation_inventory import PRODUCT_PROJECTION, inventory_readiness
 from .google_ads_client import GoogleAdsClient, identifier, problem
 from .google_ads_campaign_builder import _display_width
 from .google_ads_management import account_client
@@ -170,9 +171,13 @@ async def _catalog(db, user_id, ids, maximum_age, current):
         if scope.product_id in {item["product_id"] for item in scopes}:
             raise problem("google_creation_product_duplicate", "اختر كل منتج مرة واحدة فقط.", 422)
         available = row.get("unlimited_quantity") is True or contract._amount(row.get("quantity")) is not None
+        inventory_state, _ = inventory_readiness(row, current, maximum_age)
         codes = []
         if row.get("status") != "active" or row.get("archived") is not False: codes.append("product_not_public")
         if not available: codes.append("product_out_of_stock")
+        elif inventory_state == "unavailable": codes.append("product_out_of_stock")
+        elif inventory_state != "available": codes.append("product_inventory_unproved")
+        available = available and inventory_state == "available"
         if (not isinstance(row.get("source_revision"), str) or not re.fullmatch(r"[a-f0-9]{64}", row["source_revision"])
             or not contract._fresh(row.get("last_synced_at"), current, maximum_age)): codes.append("product_facts_stale")
         if (not contract._plain(row.get("name")) or len(row["name"]) > 500

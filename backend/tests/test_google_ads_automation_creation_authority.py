@@ -52,7 +52,8 @@ class Collection:
     def find(self, query, projection=None):
         rows=[deepcopy(row) for row in self.rows if matches(row,query)]
         if projection and any(value==1 for value in projection.values()):
-            rows=[{key:value for key,value in row.items() if projection.get(key)==1} for row in rows]
+            rows=[{key:(value[:projection[key]['$slice']] if isinstance(projection.get(key),dict) and '$slice' in projection[key] else value)
+                   for key,value in row.items() if projection.get(key)==1 or isinstance(projection.get(key),dict) and '$slice' in projection[key]} for row in rows]
         return Cursor(rows)
     async def create_index(self,*args,**kwargs): return 'index'
     async def update_one(self, query, update):

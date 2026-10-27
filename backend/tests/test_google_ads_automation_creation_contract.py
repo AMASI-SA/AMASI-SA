@@ -9,6 +9,17 @@ from integrations_control_center import google_ads_automation_creation_contract 
 NOW = datetime(2026, 10, 26, 9, tzinfo=timezone.utc)
 
 
+def prove_inventory(product):
+    from product_inventory_proof import build_inventory_evidence
+    product.update(details_loaded=True, details_synced_at=product["last_synced_at"])
+    product.setdefault("variants", []); product.setdefault("variants_count", len(product["variants"]))
+    product.setdefault("options_count", 0)
+    raw = {key: product[key] for key in ("quantity", "unlimited_quantity", "variants")}
+    raw["options"] = product.get("options", [])
+    product["inventory_evidence_v1"] = build_inventory_evidence(raw, product)
+    return product
+
+
 def case():
     template = {"template_id": "winter-search", "version": 1, "approved_version": 1,
         "approved_by": "owner", "approved_at": NOW.isoformat(), "ad_format": "RSA",
@@ -31,6 +42,7 @@ def case():
         "name": "هودي شتوي بناتي بطباعة الاسم والحرف حسب الطلب", "sku": "AMS11549",
         "status": "active", "archived": False, "quantity": 4, "unlimited_quantity": False,
         "canonical_url": "https://amasi-sa.com/p1", "source_revision": "a" * 64, "last_synced_at": NOW.isoformat()}
+    prove_inventory(product)
     native_context = {"user_id": "owner", "account_id": "123", "currency_code": "SAR", "time_zone": "Asia/Riyadh",
         "source": "google_ads_api", "identity_verified": True, "complete": True, "observed_at": NOW.isoformat(),
         "supported_campaign_types": ["SEARCH"], "geo_target_ids": ["2682"],
@@ -101,6 +113,7 @@ def test_explicit_unlimited_inventory_and_public_url_leaf_are_supported():
     values = prepared_case()
     values["product"].update(quantity=None, unlimited_quantity=True, canonical_url=None,
         raw_salla={"urls": {"product": "https://amasi-sa.com/p1"}, "private": "never return this"})
+    prove_inventory(values["product"])
     result = contract.prepare_google_creation_intent(**values)
     assert result["ready_for_paused_preview"] is True and "never return this" not in str(result)
 
@@ -172,6 +185,7 @@ def test_catalog_refresh_and_policy_limit_revision_do_not_duplicate_creation_ide
 def test_catalog_revision_drift_is_detected_without_creating_a_new_identity():
     values = prepared_case(); original = contract.prepare_google_creation_intent(**values)
     values["product"]["source_revision"] = "b" * 64
+    prove_inventory(values["product"])
     revised = contract.prepare_google_creation_intent(**values)
     assert revised["creation_identity"] == original["creation_identity"] and revised["intent_digest"] != original["intent_digest"]
     with pytest.raises(contract.CreationContractError, match="creation_intent_changed"):
