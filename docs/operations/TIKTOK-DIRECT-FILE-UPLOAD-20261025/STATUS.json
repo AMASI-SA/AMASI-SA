@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/tiktok-file-preview-csp-r7-20261026",
   "source_base": "39f2f5d855113b8b737f34e3c2d912b439c2e8b3",
-  "state": "R5_PR1578_MERGED_REHEARSAL_PASS_BROWSER_CREDENTIAL_STATE_UNRESUMABLE_DEPLOY_PENDING",
+  "state": "TIKTOK1578_INCLUDED_IN_CURRENT_5C335_BROWSER_NATIVE_STATE_STILL_BLOCKED_LIVE_OLD",
   "request": "Choose a video file on the device and upload to TikTok without an operator-supplied URL; no media bytes may pass through or be stored on Mezan.",
   "acceptance": [
     "File picker,local preview,bounded streaming fingerprint,validated size/type/duration and sequential native chunks with visible progress.",
@@ -17,7 +17,7 @@
   "known_boundaries": "Business API currently uses URLs; Content Posting API documents FILE_UPLOAD. Actual compatibility of the connected account token,app approval and cross-origin upload URL remains unverified. Do not substitute a storage proxy or upload bytes to Mezan.",
   "production_changed": true,
   "provider_writes": 0,
-  "next": "New usable browserruntime required. Recover known CodeServer /?folder=/app without inspecting protected credential state; freshguardstatus. Only ifinactive, trackedclean and APPHEADancestor currentreviewedM, fetch andFF-only reviewedProduction (noreset). Ifstilld82c: actual/appadapter with /tmp/tiktok1578-release-vmil8ivn/toolcache and yarn-cache outside/app, assertA e7fd/runtime25ac. Ownprepare/prepublish onlywhenHostingUIready; onefinalPublishchanges, explicitnewfinish, ownunmodifiedverify3 closeslease. Preserve existingnative0byte draftfence; do notinitagain.",
+  "next": "A usable new browserruntime is required for originalhost/hosting UI. Read currentAGENTS, currentProduction and originalguard beforeanymutation; do notrepublishstale d82c/runtime25ac. Current5c335 includesTikTokfix and latercourier1581 intent, so follow currentreviewedv5release and leaseowner. Verify currentdeploymenthealth independently; neververify/clearanotheractorlease. Merchantdraftfenceremains; no init/resume retry until validproof.",
   "verification": {
     "baseline": "New typed route404 before attachment,422 after;focused route PASS0.84s.",
     "backend": "56 PASS2.74s on isolated real Mongo: original30 cases plus resume boundaries,expiry,unknown native transport,Saudi caption schema/catalog grounding,owner authorization,idempotent billing,and guaranteed reach/offer/spam rejection.",
@@ -365,7 +365,7 @@
     "cause": "Unproven. UI exposes generic error and blocked status. No provider code available through current UI/console; do not assume scope/app audit/codec/CORS cause.",
     "screenshot": "tiktok-edge-fixed-native-test-1793035691941.jpg"
   },
-  "production_changes_this_turn": "Production Git branch changed by authorized normalmerge1578 with exacttestedtree; no actual/appFF, no ownlease, no runtimepublish. Freshpublichealth shows earlier courier sourcec944/runtime0f58 verified. Merchant upload/publication incomplete.",
+  "production_changes_this_turn": "Readonlypublichealth andGitHub verification plusevidencecheckpoint only. No newcodechanges/appmutation/merge/lease/runtimepublish/providerinit/media transfer orsuccessfulvideo publication.",
   "merchant_shawl_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
     "file_bytes": 5552622,
@@ -457,7 +457,7 @@
     },
     "coordination": "Sharedprimary/app markerabsent. NoCoordinatorboard/claims created;standardv5sourceprotocolapplies.",
     "intent_zip_sha256": "159e8db5f1520fc6bf388bb2158772c93aecbe98accccb9510f5259b78c1574c",
-    "hosting_state": "Secure CodeServer auth submitted and positivelyverified atUI79; ownTerminal2. BrowserDOM subsequently repeatedlytimedout, then toolkernelreset. Cua getState and one newruntime getTab87 both refused: Browser observation is unavailable because native credential state cannot be safely resumed. Stop browser attempts; no credentials read/reentered and no protection bypass. No Republish/finalPublish action.",
+    "hosting_state": "New user resume: one targeted cua.getTab87 failed immediately with native credential state cannot be safely resumed; no further browser retries, credentialentry or bypass. No server/app mutations or lease/publish thisresume.",
     "superseded_R4": {
       "pr": 1566,
       "A": "6a1ecb3f4fda9f4392704f5182a25ad3b08674a5",
@@ -477,11 +477,19 @@
       "verified_identity_available": true,
       "critical_file_hashes_match": true,
       "frontend_build_verified": true,
-      "meaning": "Public runtime is still the earlier courier release; TikTok1578 is NOTdeployed."
+      "meaning": "Freshread-onlypublichealth stillpreviouscourierrelease. TikTok1578 notdeployed."
     },
-    "current_reviewed_M": "d82c2d4670b7b56a3dde142fab1fa777802d45c5",
+    "current_reviewed_M": "5c3353034be910ab2bde62c12512d1d8ded26faa",
     "no_own_lease": true,
-    "no_publish_click": true
+    "no_publish_click": true,
+    "current_reviewed_contains_tiktok_fix": true,
+    "latest_reviewed_advancement": {
+      "merged_pr": 1581,
+      "source_A": "8e7103f728134d243247785e712926c46720a232",
+      "intent_B": "be63f5e2140118f1fbceec243b7aaf0c051abd73",
+      "merge_M": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+      "comparison": "GitHub compare d82c...5c335 statusahead, threecourier/intentpaths only. All TikTok code unchanged. Do not deploy stale R5runtime25ac over laterreviewedcourier release."
+    }
   },
   "merchant_shawl_draft_upload": {
     "file_name": "AMASI_Princess_Shawl_Snap(2).mp4",
