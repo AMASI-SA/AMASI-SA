@@ -19,7 +19,15 @@
     "skipped": 5,
     "exit_code": 0,
     "reason": "local Mongo replica unavailable",
-    "replica_ci": "pending for exact code b631058301766edce71bdaedf53af06b62edb5e1"
+    "replica_ci": {
+      "source_sha": "b631058301766edce71bdaedf53af06b62edb5e1",
+      "run": 40420195892,
+      "job": 121912428829,
+      "result": "41 passed in3.59s incl5realMongo replica tests,zero skips",
+      "state": "success",
+      "logs_independently_read": true,
+      "checkout_sha_verified_in_logs": true
+    }
   },
   "limitations": [
     "Unwired read-only diagnostic; source consistency is not provider authenticity or immutable history.",

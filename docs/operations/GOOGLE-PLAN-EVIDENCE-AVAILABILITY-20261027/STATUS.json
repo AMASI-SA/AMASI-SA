@@ -1,0 +1,78 @@
+{
+  "task_id": "GOOGLE-PLAN-EVIDENCE-AVAILABILITY-20261027",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-order-evidence-availability-wip-20261027",
+  "base_sha": "9da1995f044f06e523e2655755cef8cc548f6f9b",
+  "local_tested_source_sha": "37d1a643b68ddc2c427e2f00debf98fb30743c1b",
+  "state": "WIP standalone owner-only router; UNATTACHED; read-only source-date diagnostics only; no release intent",
+  "scope": [
+    "backend/integrations_control_center/google_plan_evidence_availability.py",
+    "backend/tests/test_google_plan_evidence_availability.py",
+    "backend/tests/test_google_plan_evidence_availability_mongo.py"
+  ],
+  "route_contract": {
+    "registration": "attach_google_plan_evidence_availability_routes(router,db,current_user,clock=None); root integration only, not called by this branch",
+    "method": "GET",
+    "path": "/google_ads/commercial-plans/{plan_id}/evidence-availability",
+    "query": "expected_revision >=1; no client owner/as_of/source data or budgets",
+    "authority": "Existing principal write=False; owner flag required; server derives owner and UTC clock; no Google OAuth or provider calls needed",
+    "saved_plan": "Owner+plan ID lookup, exact integer revision and immutable copy of fields; re-read revision and complete fields after source query; stale revision or changed fields returns409; numeric Salla pinned IDs minus exclusions; no unexcluded pins means no order read",
+    "windows": "Server-derived complete calendar-day intervals: last14,previous14,last30,last90 in Asia/Riyadh. These are diagnostic windows, not a claim of complete source facts.",
+    "population": "All owner candidate source orders in the bounded normalized-date query; NOT orders proven to match selected products. Product sales/units/profit remain null.",
+    "response": "mode=source_date_availability_diagnostic, per-window observed_bound_source_dates and availability status; explicit coverage_complete=false/snapshot_consistent=false/product_mapping_verified=false; no raw order or customer payload"
+  },
+  "indexed_read": {
+    "declared_production_source": "backend/server.py:5155 declares compound index [(user_id,1),(order_date,-1)] at startup; current live presence not inspected",
+    "hint": "Exact compound key pattern(user_id1,order_date-1) requested; missing/incompatible index fails closed503 instead of unbounded fallback",
+    "query": "Owner-scoped normalized order_date covering closed90-day range +/-1calendar day; BSON entire document <=16384bytes before projection; cursorlimit1001 forlimit1000; maxTimeMS3000; route deadline6seconds",
+    "projection": "Only owner/order identity, normalized day and raw Salla IDs/date/created_at. No products/items, totals, customer, payment or currency fields selected.",
+    "limits": "Document-size exclusion is deliberate, uncounted and not provider completeness. Index fetch/BSON filtering may still scan many candidate documents until maxTimeMS. No production performance claim.",
+    "truncation": "Any limit+1 sentinel suppresses all per-window and unverified/subset counts; no partial total is displayed as complete"
+  },
+  "verification": {
+    "initial_red": "Expected missing-module import exit2 before implementation",
+    "unit_api": "9 passed before realMongo",
+    "prior_base_ci": "Independently read b631checkout and41passed5replica0skip fromrun40420195892/job121912428829",
+    "exact_source_command": "GOOGLE_SALES_TEST_MONGO_URI=mongodb://127.0.0.1:27183/ PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_plan_evidence_availability.py backend/tests/test_google_plan_evidence_availability_mongo.py backend/tests/test_google_order_source_coverage.py backend/tests/test_google_order_source_binding.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_product_sales_evidence_reader.py backend/tests/test_google_product_sales_evidence_reader_mongo.py",
+    "exact_source_result": {
+      "exit_code": 0,
+      "tests": 57,
+      "real_replica_tests": 12,
+      "new_real_replica_tests": 7,
+      "skips_errors_failures": 0,
+      "seconds": 3.16,
+      "source_sha": "37d1a643b68ddc2c427e2f00debf98fb30743c1b"
+    },
+    "replica_infrastructure": "Reused binary only, Mongo7.0.14; own loopback27183/gSalesTest, own /tmp/google-availability-mongo-27183. Synthetic disposable databases only, fixture cleanup and own server shutdown in same exec. No existing dbpath/port/data used.",
+    "index_proof": "Real Mongo executionStats explain with same filter/projection/hint returnsIXSCAN,noCOLLSCAN,totalDocsExamined1 forowner fixture; separate missing-index API test returns503 with no results",
+    "other_checks": "compileall and git diff --check passed before source checkpoint",
+    "initial_infrastructure_failures": "Workspace dbpath initial mongod open:Operation not permitted before datafiles; forked server from separateexec not reachable during testexec. Neither counted as acceptance. Final same-exec startup/test/shutdown passed all57 without skips.",
+    "new_branch_ci": "not yet run; root must include new tests in integration CI and independently review before wiring/release"
+  },
+  "acceptance_covered": [
+    "owner/staff/cross-tenant/revision authorization boundaries",
+    "no order read for all-excluded pins",
+    "one source query for four server windows",
+    "exact hinted compound index and narrow projection",
+    "realMongo absence of required index fails503",
+    "realMongo source UTC/Riyadh midnight and open-day exclusion",
+    "unverified source timestamps remain diagnostic",
+    "oversized source rows excluded without zero-sales claim",
+    "limit+1 suppresses partial diagnostic counts",
+    "realMongo and fake plan revision/same-revision field mutation return409",
+    "no customer/items/raw orders or financial data returned",
+    "all selected product financial/quantity values remain null"
+  ],
+  "limitations": [
+    "No shared router attachment or UI integration changed",
+    "No source-product mapping, actual sales, returns/refunds, current/historical cost, FX or profitability computed",
+    "No upstream coverage watermark; date drift and missing source rows remain possible",
+    "Source snapshot mutable; revision reread is not a global transaction or source coverage proof",
+    "No production index inspection, production DB read, provider writes, ads activation, budget changes, merge or deployment"
+  ],
+  "production_changed": false,
+  "source_writes": 0,
+  "provider_writes": 0,
+  "execution_authorized": false,
+  "next_safe_action": "Root independently reviews the standalone module, includes its two test suites in isolated integration CI on exact source (Mongo8 replica as used by baseCI), then may attach router via root-owned Google bootstrap. Expose only diagnostic availability language; product sales and completeness stay unproven."
+}
