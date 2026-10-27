@@ -1,0 +1,23 @@
+{
+  "state": "WIP UI implemented; local tests pending; backend owned by root; do not merge or deploy",
+  "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "branch": "codex/google-plan-suggestion-ui-20261027",
+  "scope": [
+    "frontend/src/components/marketing/GoogleCommercialPlan.jsx",
+    "frontend/src/components/marketing/GoogleCommercialPlan.test.jsx",
+    "frontend/src/components/marketing/GoogleCommercialPlanSuggestion.jsx",
+    "frontend/src/services/googleCommercialPlanSuggestion.js",
+    "frontend/src/services/googleCommercialPlanSuggestion.test.js"
+  ],
+  "invariants": [
+    "No automatic persistence or execution",
+    "No generated budgets, IDs or exclusions",
+    "Explicit source-quoted proposal preview; empty fields only",
+    "Any form edit, save, reload, scope change or owner unmount invalidates response"
+  ],
+  "checks": {
+    "git diff --check": 0
+  },
+  "next": "Run focused frontend suites then independent review and root integration.",
+  "production_changed": false
+}
