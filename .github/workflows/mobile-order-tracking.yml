@@ -7,6 +7,14 @@ on:
       - "backend/mobile_app_permissions.py"
       - "backend/mobile_app_request_context.py"
       - "backend/server.py"
+      - "backend/order_tracking_notes_routes.py"
+      - "backend/instruction_edit_flow.py"
+      - "backend/operational_push.py"
+      - "backend/tests/test_instruction_*.py"
+      - "backend/tests/test_operational_*.py"
+      - "backend/tests/test_instruction_orders_permission.py"
+      - "backend/tests/test_instruction_edit_flow.py"
+      - "backend/tests/test_operational_instruction_notifications.py"
       - "backend/tests/test_mobile_order_tracking.py"
       - ".github/workflows/mobile-order-tracking.yml"
   workflow_dispatch:
@@ -44,7 +52,7 @@ jobs:
           bcrypt==4.1.3 PyJWT==2.13.0 python-multipart==0.0.20
           mongomock-motor==0.0.36 reportlab==5.0.1 Pillow==12.3.0
           qrcode==8.2 arabic-reshaper==3.0.1 python-bidi==0.6.11
-          PyMuPDF==1.28.2 tzdata==2026.4
+          PyMuPDF==1.28.2 tzdata==2026.4 email-validator==2.3.0 requests==2.34.2
       - name: Start isolated Mongo
         run: |
           set -euo pipefail
@@ -66,6 +74,15 @@ jobs:
           tests/test_mobile_app_request_context.py
           tests/test_mobile_app_manager_role.py
           tests/test_mobile_app_permission_owner_resolution.py
+          tests/test_instruction_orders_permission.py
+          tests/test_instruction_edit_flow.py
+          tests/test_operational_instruction_notifications.py
+          tests/test_instruction_product_cards.py
+          tests/test_instruction_comments_progress.py
+          tests/test_operational_push.py
+          tests/test_order_tracking_notes.py
+          tests/test_operational_courier_instructions.py
+          tests/test_assembly_search_instruction_batch.py
           --junitxml=tracking-results.xml
       - name: Require real tracking tests without skips
         run: |

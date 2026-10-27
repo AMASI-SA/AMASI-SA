@@ -153,6 +153,42 @@ async def test_successful_scan_commits_exactly_once(env):
     ) == 1
 
 
+@pytest.mark.parametrize("instruction_blocks", [False, True])
+async def test_instruction_gate_precedes_but_preserves_piece_status_guard(env, monkeypatch, instruction_blocks):
+    from fastapi import HTTPException
+    db, http, _ = env
+    session, pieces = await seed(env)
+    calls = []
+
+    async def candidates(*args, **kwargs):
+        return pieces
+
+    async def instruction_gate(*args, **kwargs):
+        calls.append("instruction")
+        if instruction_blocks:
+            raise HTTPException(409, detail={"code": "customer_service_instruction_action_required"})
+
+    def status_gate(piece):
+        # The anchor's preliminary eligibility check precedes candidate selection.
+        # Exercise the selected candidate's final guard, after instruction gating.
+        if not calls:
+            calls.append("anchor_status")
+            return None
+        calls.append("status")
+        return {"code": "synthetic_piece_status_blocked"}
+
+    monkeypatch.setattr(r, "supplier_scan_group_candidates", candidates)
+    monkeypatch.setattr(r, "enforce_stage_instructions", instruction_gate)
+    monkeypatch.setattr(r, "piece_scan_blocker", status_gate)
+    response = await post_scan(http, session["id"], pieces[0], "instruction-status-guard")
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == (
+        "customer_service_instruction_action_required" if instruction_blocks else "synthetic_piece_status_blocked")
+    assert calls == (["anchor_status", "instruction"] if instruction_blocks else ["anchor_status", "instruction", "status"])
+    assert (await db[r.SESSIONS].find_one({"id": session["id"]}))["scan_count"] == 0
+    assert await db[r.RECEIVING_EVENTS].count_documents({"event_type": "supplier_piece_scanned"}) == 0
+
+
 async def test_same_request_same_payload_is_idempotent(env):
     db, http, _ = env
     session, pieces = await seed(env)

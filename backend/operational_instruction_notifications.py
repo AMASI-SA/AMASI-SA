@@ -9,6 +9,8 @@ NOTIFICATIONS = "operational_instruction_notifications_v1"
 ACTIVE = ["active", "waiting_customer_service_approval"]
 log = logging.getLogger(__name__)
 LABELS = {
+    "stop_acknowledged": "تم إيقاف التجهيز؛ أرسل التعديل الجديد",
+    "edit_sent": "وصل تعديل سلة؛ اطبع البطاقة الجديدة ونفّذ التعديل",
     "created": "تعليمات جديدة للطلب", "assigned": "تعليمات تخص مهمتك الحالية",
     "submitted": "تنفيذ بانتظار موافقة خدمة العملاء", "approved": "تمت الموافقة وفك الإيقاف؛ استكمل التجهيز",
     "rejected": "رُفض التنفيذ؛ راجع سبب الرفض", "completed": "اكتملت التعليمات وفُك الإيقاف",
