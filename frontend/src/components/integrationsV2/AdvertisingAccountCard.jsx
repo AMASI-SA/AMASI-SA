@@ -188,9 +188,14 @@ export default function AdvertisingAccountCard({
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="text-xs font-extrabold text-slate-700">الحسابات</div>
                     <div className="text-[10px] font-bold text-slate-500">
-                        صلاحيات حالية: {currentPermissions.length} · ناقصة: {missingPermissions.length}
+                        {integration.provider === "snapchat_ads" && integration.permissions?.unknown
+                            ? "الصلاحيات الممنوحة غير مؤكدة"
+                            : `صلاحيات حالية: ${currentPermissions.length} · ناقصة: ${missingPermissions.length}`}
                     </div>
                 </div>
+                {integration.provider === "snapchat_ads" && integration.permissions?.unknown && (
+                    <p className="mb-2 text-[10px] text-slate-500">الصلاحيات المطلوبة عند الربط لا تثبت موافقة سناب عليها.</p>
+                )}
                 {accounts.length ? (
                     <div className="space-y-2" data-testid={`advertising-account-rows-${integration.provider}`}>
                         {accounts.slice(0, 4).map((account, index) => {

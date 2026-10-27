@@ -83,3 +83,15 @@ test("the full applications card remains unchanged when compact mode is not sele
     expect(markup).toContain("قراءة أداء الحملات");
     expect(markup).toContain("الصلاحيات الحالية");
 });
+
+test("Snapchat displays unknown grants separately from scopes for the next link", () => {
+    const integration = { ...GOOGLE_INTEGRATION, provider: "snapchat_ads",
+        permissions: { current: [], missing: [], unknown: true } };
+    const compact = renderToStaticMarkup(<IntegrationCard compactAdvertisingAccounts integration={integration} />);
+    expect(compact).toContain("الصلاحيات الممنوحة غير مؤكدة");
+    expect(compact).toContain("الصلاحيات المطلوبة عند الربط لا تثبت موافقة سناب عليها");
+    expect(compact).not.toContain("صلاحيات حالية: 0");
+    const full = renderToStaticMarkup(<IntegrationCard integration={integration} />);
+    expect(full).toContain("لم نتمكن من التحقق من الصلاحيات");
+    expect(full).toContain("الصلاحيات المطلوبة عند الربط لا تثبت موافقة سناب عليها");
+});

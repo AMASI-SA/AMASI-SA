@@ -8,6 +8,8 @@ on:
     paths:
       - "backend/integrations_control_center/snapchat_*.py"
       - "backend/integrations_control_center/__init__.py"
+      - "backend/integrations_control_center/service.py"
+      - "backend/tests/test_snapchat_scope_diagnostic.py"
       - "backend/tests/test_snapchat_native_integrations_v2.py"
       - "backend/tests/test_snapchat_native_data_sync_v2.py"
       - "backend/tests/test_snapchat_native_async_selected_reads.py"
@@ -24,6 +26,8 @@ on:
       - "frontend/src/lib/api.js"
       - "frontend/src/lib/snapchatSyncRecovery.js"
       - "frontend/src/components/integrationsV2/ProviderMark.jsx"
+      - "frontend/src/components/integrationsV2/AdvertisingAccountCard*"
+      - "frontend/src/components/integrationsV2/IntegrationCardV2.jsx"
       - "docs/SNAPCHAT_INTEGRATIONS_V2_SETUP.md"
       - ".github/workflows/snapchat-integrations-v2.yml"
   workflow_dispatch:
@@ -73,6 +77,7 @@ jobs:
           tests/test_snapchat_native_tracking_diagnostics_v2.py
           tests/test_snapchat_tracking_error_details_v2.py
           tests/test_snapchat_native_integrations_v2.py
+          tests/test_snapchat_scope_diagnostic.py
           tests/test_snapchat_account_selection_v2.py
           -q
           --tb=short
@@ -103,5 +108,6 @@ jobs:
           src/lib/api.authRefresh.test.js
           src/components/marketing/SnapchatPeriodDiagnostic.test.jsx
           src/pages/SnapchatV2Page.test.jsx
+          src/components/integrationsV2/AdvertisingAccountCard.test.jsx
       - name: Build frontend
         run: CI=false yarn build
