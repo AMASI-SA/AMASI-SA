@@ -118,7 +118,7 @@ jobs:
           src/components/marketing/GoogleAnalysisAttempts.test.jsx
           src/components/marketing/GoogleAutomationPolicy.test.jsx
           src/components/marketing/GoogleCreationPolicy.test.jsx
-          src/components/marketing/GoogleCommercialPlan.test.jsx
+          src/components/marketing/GoogleCommercialPlan.test.jsx src/services/googleCommercialPlanSuggestion.test.js
           src/components/marketing/GooglePinnedCatalogReview.test.jsx
           src/components/marketing/GoogleRecommendationAction.test.jsx
           src/components/marketing/GoogleCampaignComposer.test.jsx

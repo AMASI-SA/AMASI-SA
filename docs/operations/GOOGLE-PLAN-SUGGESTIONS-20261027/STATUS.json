@@ -12,5 +12,26 @@
     "review": "pending"
   },
   "production_changed": false,
-  "next": "Integrate source-quoted owner preview UI, preserve existing fields and limits, review independently, run exact source CI and governed release workflow. Never describe suggestions as reviewed or as authority."
+  "next": "Validate combined server and owner preview UI, independently review, then prepare Release Guard A/B only after actual-host access and fresh guard status.",
+  "updated_at": "2026-10-27T00:37:02.185Z",
+  "stage": "integrated_source_candidate_ci_pending",
+  "frontend_source": "775cab4725dbbc8ff7ef9ef915b7fa7e19522c2b",
+  "backend_checkpoint_validation": {
+    "sha": "9652a7292d580896594c7c1a780ab9ee37714936",
+    "management_run": 40426862964,
+    "backend_passed": 1158,
+    "frontend_passed": 189,
+    "frontend_suites": 17,
+    "frontend_build": "passed",
+    "release_readiness_run": 40426862707,
+    "reproducible_build": "passed"
+  },
+  "combined_validation": "pending CI and independent frontend acceptance",
+  "live_observation": {
+    "google_account": "5052346701",
+    "connection_label": "connected",
+    "management_refresh": "22 campaigns returned; metrics updated; no ownership error",
+    "paid_mutations": 0,
+    "release_editor": "observed HTTP 502 Host Error; no /app mutation or guard lease"
+  }
 }
