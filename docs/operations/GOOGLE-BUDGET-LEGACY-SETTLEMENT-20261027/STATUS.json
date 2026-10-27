@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-BUDGET-LEGACY-SETTLEMENT-20261027",
-  "state": "WIP terminal legacy claim recovery; actual replica verified; independent review in progress",
+  "state": "WIP terminal legacy claim recovery; actual replica and independent review passed; not deployed",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-budget-safety-20261027",
   "base_sha": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
@@ -46,13 +46,17 @@
   },
   "independent_review": {
     "agent": "budget_audit",
-    "state": "in progress; review concern about fence snapshot race fixed with a real same-transaction marker CAS and actual replica regression"
+    "state": "Final immutable c343dc0 and equivalent local tree reviewed read-only; no direct bypass found; fence marker addresses snapshot race",
+    "independent_unit_tests": {
+      "passed": 11
+    },
+    "limits": "Wider integrated CI, actual legacy records when activation is later considered, and external provider-writer risks remain separate"
   },
   "remaining": [
-    "Independent review of immutable final code SHA and wider CI before integration",
+    "Run wider integrated CI before integration; independent final code review passed",
     "Runtime remains false; funded first launch, owner opt-in, native permissions and live connection acceptance are separate",
     "External direct Google/manual writers are outside Mongo transactions. Current checks are pre-dispatch observations, not an atomic provider compare-and-set or a hard spending cap; do not block safe disabled code improvements solely on that fact",
     "No live production database or provider call performed; production Mongo transaction capability not inferred from local tests"
   ],
-  "next_safe_action": "Review immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled"
+  "next_safe_action": "Independently inspect immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a and actual replica results, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled"
 }
