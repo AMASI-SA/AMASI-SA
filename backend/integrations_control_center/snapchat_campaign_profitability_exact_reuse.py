@@ -16,6 +16,7 @@ from copy import deepcopy
 from functools import wraps
 import hashlib
 import json
+import math
 from typing import Any
 from weakref import WeakKeyDictionary, ref
 
@@ -160,6 +161,35 @@ async def _calculate_profitability_attempt(
     return result
 
 
+def _spend_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
+
+
+def _report_spend_scope_complete(result, campaign_spend, matched, *, campaign_query):
+    rows = result.get("campaigns") or []
+    page = result.get("campaign_pagination") or {}
+    source = result.get("source") or {}
+    headline = _spend_number((result.get("totals") or {}).get("spend_sar"))
+    return (
+        not _text(campaign_query)
+        and type(page.get("total")) is int
+        and page["total"] == len(rows) == len(campaign_spend)
+        and source.get("row_limit_reached") is False
+        and source.get("entity_limit_reached") is False
+        and source.get("spend_source") == "snapchat_native_selected_accounts"
+        and set(matched) <= set(campaign_spend)
+        and all(value is not None for value in campaign_spend.values())
+        and headline is not None
+        and round(sum(campaign_spend.values()), 2) == round(headline, 2)
+    )
+
+
 def _calculate_current_cohort(cost_context, matched_orders, campaign_spend):
     """Pure calculation only: no database, provider or financial write seam."""
     by_campaign: dict[tuple[str, str], dict[str, Any]] = {}
@@ -170,10 +200,17 @@ def _calculate_current_cohort(cost_context, matched_orders, campaign_spend):
                 bucket,
                 profitability._order_cost_and_products(order, cost_context),
             )
-        by_campaign[key] = profitability._finalize_campaign(
-            bucket,
-            spend_sar=round(_float(campaign_spend.get(key)), 6),
-        )
+        spend = _spend_number(campaign_spend.get(key))
+        row = profitability._finalize_campaign(bucket, spend_sar=round(spend or 0, 6))
+        row["ad_spend_complete"] = spend is not None
+        if spend is None:
+            # Cost/sales remain known; absent provider spend is never zero.
+            for field in ("ad_spend_sar", "contribution_profit_sar", "profit_margin_pct"):
+                row[field] = None
+            for product in row.get("products") or []:
+                for field in ("allocated_ad_spend_sar", "contribution_profit_sar", "profit_margin_pct"):
+                    product[field] = None
+        by_campaign[key] = row
 
     all_complete = all(
         row.get("product_cost_sar") is not None
@@ -181,10 +218,12 @@ def _calculate_current_cohort(cost_context, matched_orders, campaign_spend):
     )
     total_sales = round(sum(_float(row.get("sales_sar")) for row in by_campaign.values()), 2)
     total_known_cost = round(sum(_float(row.get("known_product_cost_sar")) for row in by_campaign.values()), 2)
-    total_spend = round(sum(_float(row.get("ad_spend_sar")) for row in by_campaign.values()), 2)
+    spend_complete = all(row["ad_spend_complete"] for row in by_campaign.values())
+    total_spend = (round(sum(row["ad_spend_sar"] for row in by_campaign.values()), 2)
+                   if spend_complete else None)
     total_profit = (
         round(total_sales - total_known_cost - total_spend, 2)
-        if all_complete else None
+        if all_complete and spend_complete else None
     )
     totals = {
         "orders": sum(int(row.get("orders") or 0) for row in by_campaign.values()),
@@ -192,6 +231,7 @@ def _calculate_current_cohort(cost_context, matched_orders, campaign_spend):
         "product_cost_sar": total_known_cost if all_complete else None,
         "known_product_cost_sar": total_known_cost,
         "ad_spend_sar": total_spend,
+        "ad_spend_complete": spend_complete,
         "contribution_profit_sar": total_profit,
         "profit_margin_pct": (
             round(total_profit / total_sales * 100, 2)
@@ -300,7 +340,7 @@ def install_exact_salla_profitability_reuse() -> None:
                 (
                     _text(campaign.get("account_id")),
                     _text(campaign.get("campaign_id")),
-                ): _float(campaign.get("spend_sar"))
+                ): _spend_number(campaign.get("spend_sar"))
                 for campaign in result.get("campaigns") or []
                 if _text(campaign.get("account_id"))
                 and _text(campaign.get("campaign_id"))
@@ -311,6 +351,9 @@ def install_exact_salla_profitability_reuse() -> None:
             matched = dict(matched)
             for key in campaign_spend:
                 matched.setdefault(key, [])
+            spend_scope_complete = _report_spend_scope_complete(
+                result, campaign_spend, matched, campaign_query=kwargs.get("campaign_query"),
+            )
             by_campaign, totals = await _calculate_owned_profitability(
                 db,
                 str(user_id),
@@ -319,6 +362,10 @@ def install_exact_salla_profitability_reuse() -> None:
                 matched_orders=matched,
                 campaign_spend=campaign_spend,
             )
+            if not spend_scope_complete:
+                for field in ("ad_spend_sar", "contribution_profit_sar", "profit_margin_pct"):
+                    totals[field] = None
+                totals["ad_spend_complete"] = False
             for campaign in result.get("campaigns") or []:
                 key = (
                     _text(campaign.get("account_id")),
@@ -342,7 +389,9 @@ def install_exact_salla_profitability_reuse() -> None:
                 "exact_matched_orders": sum(len(rows) for rows in matched.values()),
                 "exact_matched_sales_sar": totals["sales_sar"],
                 "campaigns_with_orders": sum(bool(rows) for rows in matched.values()),
-                "total_ad_spend_scope": "all_campaigns_in_report",
+                "total_ad_spend_scope": "all_campaigns_in_report" if spend_scope_complete else "unproven",
+                "total_ad_spend_scope_complete": spend_scope_complete,
+                "known_visible_ad_spend_sar": round(sum(value for value in campaign_spend.values() if value is not None), 2),
                 "cache_ttl_seconds": CACHE_TTL_SECONDS,
                 "cache_reuse_enabled": False,
                 "cache_reuse_disabled_reason": CACHE_REUSE_DISABLED_REASON,

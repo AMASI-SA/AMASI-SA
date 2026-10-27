@@ -150,3 +150,31 @@ Old Draft1586/e83426b02efb2b0b16b9ccd72062d5dfc3a25ec9 remains historical;
 its actual merge-tree check found no conflict and Actions run40427228638 was
 queued. No production merge was performed. Fresh-source CI must pass its own
 real-Mongo gate before any readiness statement. Independent review pending.
+
+### Scoped pagination/spend correctness follow-up
+
+Independent review reproduced an inherited total-profit scope error: real Salla
+matching captures c1+c2 (sales2000/cost80), while native campaigns are paginated.
+Page1 supplies spend10 and reported profit1910; page2 supplies100 and reported
+1820. Actual full spend110 implies1810. Regression failed on both partial pages
+before this fix; the full-scope110/1810 case already passed.
+
+Only the exact profitability adapter changes: absent, negative, boolean or
+nonfinite campaign spend remains unknown, not implicit zero. Cost/sales stay
+available; unknown-spend campaign/product contribution and allocated-ad values
+are null. Total spend/profit is additionally withheld unless the report proves
+full, unfiltered unique campaign coverage with no local truncation, native
+spend source, matched identities covered, valid spends, and sum reconciled to
+the native headline. No additional provider/DB spend query is introduced and
+the captured full cohort is preserved. Pagination/search/truncated/unknown
+scope reports retain independently valid visible campaign profitability, with
+`total_ad_spend_scope=unproven` and total ad-spend/profit/margin null. The known
+visible spend is separately labelled; it is not asserted as global spend.
+
+Fresh validation94PASS/2explicit no-Mongo skips, exit0. The94passes are not Motor
+or live-Mongo evidence. Draft1589 current-source precursor68877b37c230831cdbecc40550d053c3ffe581bd
+has real-Mongo workflow run40427449690 queued at last observation. Scope review
+and actual CI completion still required. No production change. Next safe step:
+independent regression review in snap-profit-loader-current, run
+`python -m pytest backend/tests/test_snapchat_campaign_profitability_exact_reuse_v2.py -q`,
+then inspect actual-Mongo CI without treating queued as success.

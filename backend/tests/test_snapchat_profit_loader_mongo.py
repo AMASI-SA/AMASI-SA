@@ -85,7 +85,9 @@ async def test_real_mongo_minimal_report_loader_cost_context_and_guard(mongo_db,
             date_from='2026-10-25', date_to='2026-10-25',
             identities=[{'account_id': 'a', 'campaign_id': 'c'}])
         return {'date_from': '2026-10-25', 'date_to': '2026-10-25', 'result_source': 'salla',
-            'source': {'salla_attribution': coverage}, 'totals': {'spend_sar': 10},
+            'source': {'salla_attribution': coverage, 'row_limit_reached': False,
+                       'entity_limit_reached': False, 'spend_source': 'snapchat_native_selected_accounts'},
+            'campaign_pagination': {'total': 1}, 'totals': {'spend_sar': 10},
             'campaigns': [{'account_id': 'a', 'campaign_id': 'c', 'spend_sar': 10,
                            'salla_results': campaigns[('a', 'c')]}]}
     # monkeypatch records both globals before installers mutate them.

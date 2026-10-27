@@ -865,3 +865,77 @@ async def test_report_with_real_cooperative_loader_and_guard(runtime_report, mon
         assert result['source']['campaign_profitability']['cache_reuse_enabled'] is False
     assert legacy_calls == [] and limiter._value == 2
     assert module._MATCHED_ORDERS.get() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('page', [1, 2, 0])
+async def test_paged_report_never_uses_zero_for_offpage_spend(monkeypatch, page):
+    import dashboard_v2_routes as dashboard
+    from integrations_control_center import snapchat_salla_campaign_outcomes as salla
+    async def filtered(*args, **kwargs):
+        return [{'order_number': str(i), 'utm_campaign': f'c{i}', 'source': 'snapchat',
+                 'total_amount': 1000, 'order_status': 'completed',
+                 'products': [{'sku': 'item', 'quantity': 1}]} for i in (1, 2)]
+    async def revision(*args):
+        return 1
+    async def context(*args):
+        by_id, by_variant, by_sku = module.profitability._index_products([
+            {'id': 'p', 'salla_product_id': 'p', 'sku': 'item', 'cost_price_from_salla': 40, 'variants': []}])
+        return {'products_by_id': by_id, 'products_by_variant': by_variant, 'products_by_sku': by_sku,
+                'profile_map': {}, 'option_map': {}, 'product_binding_map': {}, 'resources': {}, 'policy': {}}
+    async def report(db, user_id, **kwargs):
+        campaigns, _, _, coverage = await module.routes._salla_outcomes(db, user_id,
+            date_from='2026-10-25', date_to='2026-10-25',
+            identities=[{'account_id': 'a', 'campaign_id': f'c{i}'} for i in (1, 2)])
+        visible = (1, 2) if page == 0 else (page,)
+        return {'date_from': '2026-10-25', 'date_to': '2026-10-25',
+                'campaign_pagination': {'page': 1 if page == 0 else page, 'total': 2},
+                'source': {'salla_attribution': coverage, 'row_limit_reached': False, 'entity_limit_reached': False, 'spend_source': 'snapchat_native_selected_accounts'},
+                'totals': {'spend_sar': 110},
+                'campaigns': [{'account_id': 'a', 'campaign_id': f'c{i}',
+                               'spend_sar': 10 if i == 1 else 100, 'salla_results': campaigns[('a', f'c{i}')]}
+                              for i in visible]}
+    monkeypatch.setattr(dashboard, '_filtered_orders', filtered)
+    monkeypatch.setattr(module, 'get_product_cost_revision', revision)
+    monkeypatch.setattr(module.profitability, '_load_cost_context', context)
+    monkeypatch.setattr(module.routes, '_salla_outcomes', salla.salla_campaign_outcomes)
+    monkeypatch.setattr(module.routes, 'build_snapchat_result_source_report', report)
+    module.install_exact_salla_profitability_reuse()
+    result = await module.routes.build_snapchat_result_source_report(object(), 'u')
+    totals = result['totals']['profitability']
+    assert totals['sales_sar'] == 2000 and totals['product_cost_sar'] == 80
+    assert totals['ad_spend_sar'] == (110 if page == 0 else None)
+    assert totals['contribution_profit_sar'] == (1810 if page == 0 else None)
+    assert result['campaigns'][0]['profitability']['contribution_profit_sar'] == (860 if page == 2 else 950)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('spend', [None, True, -1, float('nan'), float('inf')])
+async def test_missing_or_invalid_spend_does_not_create_profit(calculation, spend):
+    kwargs, _ = calculation
+    kwargs['campaign_spend'] = {('account-1', 'campaign-1'): spend}
+    rows, totals = await module.calculate_profitability_from_exact_matches(object(), 'u', **kwargs)
+    row = rows[('account-1', 'campaign-1')]
+    assert row['product_cost_sar'] == 60 and row['sales_sar'] == 150
+    assert row['ad_spend_sar'] is None and row['contribution_profit_sar'] is None
+    assert totals['ad_spend_sar'] is None and totals['contribution_profit_sar'] is None
+
+
+def test_report_spend_scope_requires_full_unfiltered_reconciled_native_rows():
+    key = ('a', 'c')
+    result = {'campaigns': [{'account_id': 'a', 'campaign_id': 'c'}],
+              'campaign_pagination': {'total': 1}, 'totals': {'spend_sar': 10},
+              'source': {'row_limit_reached': False, 'entity_limit_reached': False,
+                         'spend_source': 'snapchat_native_selected_accounts'}}
+    assert module._report_spend_scope_complete(result, {key: 10}, {key: []}, campaign_query=None)
+    for field, value in [('total', 2), ('total', True)]:
+        changed = deepcopy(result)
+        changed['campaign_pagination'][field] = value
+        assert not module._report_spend_scope_complete(changed, {key: 10}, {key: []}, campaign_query=None)
+    for field in ('row_limit_reached', 'entity_limit_reached'):
+        changed = deepcopy(result)
+        changed['source'][field] = True
+        assert not module._report_spend_scope_complete(changed, {key: 10}, {key: []}, campaign_query=None)
+    assert not module._report_spend_scope_complete(result, {key: 10}, {key: []}, campaign_query='search')
+    assert not module._report_spend_scope_complete(result, {key: 9}, {key: []}, campaign_query=None)
+    assert not module._report_spend_scope_complete(result, {key: 10}, {('a', 'other'): []}, campaign_query=None)
