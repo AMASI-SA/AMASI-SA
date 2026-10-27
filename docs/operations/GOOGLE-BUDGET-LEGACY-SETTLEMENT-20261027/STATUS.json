@@ -1,0 +1,58 @@
+{
+  "task_id": "GOOGLE-BUDGET-LEGACY-SETTLEMENT-20261027",
+  "state": "WIP terminal legacy claim recovery; actual replica verified; independent review in progress",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-budget-safety-20261027",
+  "base_sha": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
+  "code_sha": "c343dc0fd4031c0e9a566852ff978db5bd45995a",
+  "code_tree": "175acd90db412064b15decfcdc65aefff179ae1d",
+  "local_equivalent_code_sha": "c5a6a853566632303e84222126cec420635562cf",
+  "runtime_enabled": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "changes": [
+    "Atomic terminal recovery of a pre-migration private standing claim without a common allocation, after original proposal/operations/before-snapshot/budget/owner-account fence binding checks",
+    "Known cancellation or provider rejection creates a settled tombstone; completed execution creates a retained native reflection hold; unresolved outcome rolls back with private claim, quota and fence preserved",
+    "A same-session real fence marker CAS conflicts with concurrent release/replacement; no fence is released by settlement",
+    "Owner revocation and settlement remain independent of Google OAuth; no legacy nontransactional fallback; no runtime flags enabled",
+    "Future launch allocations reject unexplained private standing claims"
+  ],
+  "files": [
+    "backend/integrations_control_center/google_ads_automation_authority.py",
+    "backend/integrations_control_center/google_ads_automation_budget_guard.py",
+    "backend/tests/test_google_ads_automation_authority.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement_mongo.py"
+  ],
+  "verification": {
+    "regression_red": "Known terminal legacy recovery failed before implementation with google_budget_guard_settlement_unproved",
+    "narrow_units": {
+      "passed": 136,
+      "seconds": 1.64
+    },
+    "actual_replica": {
+      "command": "python -m pytest --noconftest -q --tb=short backend/tests/test_google_ads_legacy_budget_settlement.py backend/tests/test_google_ads_legacy_budget_settlement_mongo.py backend/tests/test_google_ads_automation_budget_guard.py backend/tests/test_google_ads_automation_budget_guard_mongo.py backend/tests/test_google_ads_guard_integration.py backend/tests/test_google_ads_guard_integration_mongo.py backend/tests/test_google_ads_budget_guard_standing.py backend/tests/test_google_ads_automation_authority.py backend/tests/test_google_ads_automation_gateway.py",
+      "mongodb": "7.0.14 disposable loopback replica on 27182; explicit primary proof; process and only generated databases cleaned after tests",
+      "passed": 208,
+      "actual_replica_tests": 16,
+      "failures_errors_skips": 0,
+      "seconds": 6.97,
+      "exit_code": 0,
+      "cases": "legacy cancellation/completion, uncertain rollback, postcommit lost ACK retention, and external fence release after snapshot read before CAS"
+    },
+    "diff_check": "pass",
+    "remote_integrity": "Each connector blob hash and resulting tree exactly matched tested local Git objects; connector commit differs only in author/commit metadata",
+    "ci": "Not launched on new branch; baseline edf6bed8 had actual replica CI recorded separately"
+  },
+  "independent_review": {
+    "agent": "budget_audit",
+    "state": "in progress; review concern about fence snapshot race fixed with a real same-transaction marker CAS and actual replica regression"
+  },
+  "remaining": [
+    "Independent review of immutable final code SHA and wider CI before integration",
+    "Runtime remains false; funded first launch, owner opt-in, native permissions and live connection acceptance are separate",
+    "External direct Google/manual writers are outside Mongo transactions. Current checks are pre-dispatch observations, not an atomic provider compare-and-set or a hard spending cap; do not block safe disabled code improvements solely on that fact",
+    "No live production database or provider call performed; production Mongo transaction capability not inferred from local tests"
+  ],
+  "next_safe_action": "Review immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled"
+}
