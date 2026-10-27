@@ -579,6 +579,25 @@ def _card_from_snapshot(
         for account in snapshot.get("accounts") or []
         if account.get("mezan_integration_account_id")
     ]
+    # Snapchat's existing credential projection stores both provider-returned
+    # scopes and requested-scope fallbacks identically. Existing records cannot
+    # distinguish them, so neither is proof of a grant. Restrict only the
+    # presentation; capability and authorization decisions above remain intact.
+    displayed_current = current
+    displayed_missing = missing
+    permissions_unknown = bool(
+        snapshot["connection_provenance"] in {"api_connection", "legacy_integration"}
+        and not snapshot.get("permissions_observed")
+        and bool(definition.required_permissions)
+    )
+    if definition.provider == "snapchat_ads":
+        displayed_current = []
+        displayed_missing = []
+        permissions_unknown = snapshot["connection_provenance"] in {
+            "api_connection", "legacy_integration"
+        }
+        for account in accounts:
+            account["permissions"] = []
     return sanitize_for_output(
         {
             "provider": definition.provider,
@@ -590,14 +609,9 @@ def _card_from_snapshot(
             "source_mode": snapshot.get("source_mode") or "unknown",
             "accounts": accounts,
             "permissions": {
-                "current": current,
-                "missing": missing,
-                "unknown": bool(
-                    snapshot["connection_provenance"]
-                    in {"api_connection", "legacy_integration"}
-                    and not snapshot.get("permissions_observed")
-                    and bool(definition.required_permissions)
-                ),
+                "current": displayed_current,
+                "missing": displayed_missing,
+                "unknown": permissions_unknown,
             },
             "capabilities": capabilities,
             "last_sync_at": snapshot.get("last_sync_at"),

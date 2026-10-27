@@ -462,6 +462,12 @@ export default function IntegrationCard({
                 />
             </div>
 
+            {integration.provider === "snapchat_ads" && permissionsUnknown && (
+                <p className="mt-2 text-xs text-slate-500">
+                    الصلاحيات المطلوبة عند الربط لا تثبت موافقة سناب عليها.
+                </p>
+            )}
+
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <AiList title="ما يستطيع الذكاء الاصطناعي فعله" items={integration.ai?.can} positive />
                 <AiList title="ما لا يستطيع فعله الآن" items={integration.ai?.cannot} />
