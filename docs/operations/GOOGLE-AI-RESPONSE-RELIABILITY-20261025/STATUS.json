@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-26T17:46:40.329Z",
+  "updated_at": "2026-10-27T00:41:47.650Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -78,7 +78,7 @@
     "Implement first-launch authority/gateway/worker and explicit owner opt-in using fresh catalog/nativeconfig/inventory proofs",
     "No live automation activation or budget/campaign writes performed; full autonomy remains incomplete"
   ],
-  "next_safe_action": "Do NOT repeat1542 publication: own3probe verified andownleaseclosed. Otherconversations may have advanced/published Snapchat1545; before anyAppchange inspect fresh Productionbranch and actualguard, never foreignlease. Preserve code branches aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06(futureWIP, codef2c4 CI58pass/13replica) and e1772c18a233d21e7a05a1c66b137f850c5515f1(Draft1546diagnostic-only). Wait fresh1546CI +independent rereview; never describe diagnostic as restoredconnection. Whenbrowser works verifyactualGoogleUI; true recovery needs verifiedOAuthrelink or fullatomicaccountwriterdesign; no secrets/env inspection, nativewrites, flags or activation.",
+  "next_safe_action": "Finish exact UI acceptance and CI, preserve reviewed standalone candidates. Recover actual host UI and read guard before clean-clone rehearsal/Source A + intent-only B/prepare/prepublish/one publish/3 live identity checks. Never publish WIP budget/recovery diagnostics as completed autonomy.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -699,7 +699,7 @@
       "limitation": "scope unique lock prevents parallel refresh; integration with actual HTTP/writers, durable recovery and multi-doc atomic OAuth incomplete"
     }
   },
-  "last_verified_production_head": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
+  "last_verified_production_head": "5c3353034be910ab2bde62c12512d1d8ded26faa",
   "courier_release_coordination": {
     "pr": 1559,
     "production_merge": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -861,5 +861,99 @@
       "state": "WIP diagnostic no runtime; local 36 pass and 5 skipped Mongo; CI 40420195892 pending; independent review 28 pass, Mongo and production index/performance unverified; coverage false"
     },
     "next": "Review current CI and exact checkpoints, continue adapters and production safety evidence; do not activate spending or publish WIP as complete."
+  },
+  "continuation_20261027_reviewed_slices": {
+    "production_changed": false,
+    "live": {
+      "account": "5052346701",
+      "connection_label": "connected",
+      "management_refresh": "Root clicked Refresh Google data and observed 22 campaigns and refreshed metrics without account_not_owned; no paid mutation.",
+      "runtime_source": "c944ff70ae1c5874e2584ec0060944d2d27dcfb5",
+      "runtime_release": "rg5-0f58cf8071f853f4b7936e51c4e37ce42abb3c500b2015d16f6f4defefa300d7",
+      "catalog_review": "No saved owner plan (revision0), not functionally exercised."
+    },
+    "host": {
+      "editor": "502 Host Error, then Preview Unavailable: app resting after inactivity.",
+      "emergent_ui": "Fresh /home opened, then DOMSnapshot and getLayoutMetrics protocol timeout. No paid chat used.",
+      "actual_guard_read": false,
+      "app_writes": false,
+      "lease": false,
+      "publish": false
+    },
+    "oauth": {
+      "pr": 1588,
+      "branch": "codex/google-refresh-cas-fix-20261027",
+      "source": "40a54c806081ae7f2ca86f06c84bef7de4279db0",
+      "scope": "Actual Ads/GA4/Merchant snapshot CAS + acknowledged majority/journaled write and primary-majority readback; scheduler cannot mark newer OAuth relink invalid by tenant alone.",
+      "ci": {
+        "run": 40427240671,
+        "job": 121935941918,
+        "focused_passed": 69,
+        "replica_passed": 21,
+        "compatibility_passed": 71,
+        "skips": 0
+      },
+      "root_review": "Inspected all runtime diffs and CI logs; own48 unit tests passed.",
+      "independent_review": "140 passed, including21 actual replica; no blocker within narrow scope.",
+      "limitations": [
+        "Not generation migration/singleflight/send-once journal",
+        "Not atomic OAuth/account projection recovery",
+        "No post-readback dispatch fence or ABA guarantee"
+      ],
+      "release": "Source-only; readiness/host deployment outstanding."
+    },
+    "suggestions": {
+      "pr": 1584,
+      "branch": "codex/google-plan-suggestions-20261027",
+      "source": "40d7c95789a0e80c2e510c77411ed4702fa2e763",
+      "backend_ci": {
+        "source": "9652a7292d580896594c7c1a780ab9ee37714936",
+        "run": 40426862964,
+        "backend_passed": 1158,
+        "frontend_passed": 189,
+        "frontend_suites": 17,
+        "build": "passed",
+        "reproducible_build_run": 40426862707
+      },
+      "combined_ci": 40427561988,
+      "scope": "Source-quoted owner preview, apply empty fields only; no product IDs/money/authorization inferred.",
+      "root_backend_passed": 46,
+      "ui_acceptance": "pending fixture-only correction for exact literal quotation; code not marked ready.",
+      "execution_authorized": false
+    },
+    "budget": {
+      "pr": 1560,
+      "branch": "codex/google-guard-integration-wip-20261026",
+      "checkpoint": "0fbc710ddd54c118f1154ca72f38ac8dd3bcab39",
+      "legacy_code": "c343dc0fd4031c0e9a566852ff978db5bd45995a",
+      "root_fast_forward": "Expected prior edf6bed8 checked and advanced non-forced to integrated checkpoint.",
+      "local_tests": 208,
+      "actual_replica_tests": 16,
+      "focused_workflow_tests": 91,
+      "skips": 0,
+      "independent": "11 unit passed; found fence release race and verified added same-TX CAS marker + actual replica race test.",
+      "runtime_enabled": false,
+      "ci": "fresh integrated push CI pending",
+      "remaining": [
+        "Production transactions and actual legacy inventory unproved",
+        "Native response proof and external Google writer race",
+        "Funded launch and owner authorization UI incomplete"
+      ]
+    },
+    "source_dates": {
+      "branch": "codex/google-order-evidence-availability-wip-20261027",
+      "checkpoint": "66634b9a7b539f42b8d0017d2e7015f0bb283334",
+      "tests_passed": 57,
+      "actual_replica_tests": 12,
+      "skips": 0,
+      "previous_ci": {
+        "source": "b631058301766edce71bdaedf53af06b62edb5e1",
+        "run": 40420195892,
+        "tests": 41,
+        "replica": 5
+      },
+      "state": "Unattached diagnostic only; no product sales/units/profit or complete coverage; independent integration review still needed."
+    },
+    "next": "Finish exact UI acceptance and CI, preserve reviewed standalone candidates. Recover actual host UI and read guard before clean-clone rehearsal/Source A + intent-only B/prepare/prepublish/one publish/3 live identity checks. Never publish WIP budget/recovery diagnostics as completed autonomy."
   }
 }
