@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-27T00:41:47.650Z",
+  "updated_at": "2026-10-27T00:51:22.205Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -78,7 +78,7 @@
     "Implement first-launch authority/gateway/worker and explicit owner opt-in using fresh catalog/nativeconfig/inventory proofs",
     "No live automation activation or budget/campaign writes performed; full autonomy remains incomplete"
   ],
-  "next_safe_action": "Finish exact UI acceptance and CI, preserve reviewed standalone candidates. Recover actual host UI and read guard before clean-clone rehearsal/Source A + intent-only B/prepare/prepublish/one publish/3 live identity checks. Never publish WIP budget/recovery diagnostics as completed autonomy.",
+  "next_safe_action": "Restore actual Emergent project host UI; fetch current production; run /app production_release_guard.py status and proceed only inactive. Revalidate source base and select one reviewed slice (PR1588 CAS or PR1584 owner suggestions), build exact Source A, freeze intent-only B, complete CI and independent review, actual-host clean-clone adapter rehearsal, prepare/prepublish/one authorized publish, explicit newer completion/3 identity probes/closed lease/live behavior. Budget WIP and source-date diagnostics remain non-release scope; no funded activation without saved owner limits.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -870,7 +870,15 @@
       "management_refresh": "Root clicked Refresh Google data and observed 22 campaigns and refreshed metrics without account_not_owned; no paid mutation.",
       "runtime_source": "c944ff70ae1c5874e2584ec0060944d2d27dcfb5",
       "runtime_release": "rg5-0f58cf8071f853f4b7936e51c4e37ce42abb3c500b2015d16f6f4defefa300d7",
-      "catalog_review": "No saved owner plan (revision0), not functionally exercised."
+      "catalog_review": "No saved owner plan (revision0), not functionally exercised.",
+      "management_policy": {
+        "revision": 0,
+        "approved_campaigns": [],
+        "approved_actions": [],
+        "approved_budget_limits": false,
+        "runtime_disabled": true
+      },
+      "creation_policy": "Disabled; no selected products or entered campaign/aggregate budget observed. No save or activation."
     },
     "host": {
       "editor": "502 Host Error, then Preview Unavailable: app resting after inactivity.",
@@ -878,7 +886,8 @@
       "actual_guard_read": false,
       "app_writes": false,
       "lease": false,
-      "publish": false
+      "publish": false,
+      "manual_input_needed": "Wake shared project preview from Emergent UI; cloud-browser home is not operable at present. No consent is missing; no lease touched."
     },
     "oauth": {
       "pr": 1588,
@@ -891,7 +900,20 @@
         "focused_passed": 69,
         "replica_passed": 21,
         "compatibility_passed": 71,
-        "skips": 0
+        "skips": 0,
+        "full_management": {
+          "run": 40427240712,
+          "backend_passed": 1130,
+          "frontend_passed": 189,
+          "frontend_suites": 17,
+          "build": "passed"
+        },
+        "release_readiness": {
+          "run": 40427240749,
+          "status": "passed",
+          "actual_host_rehearsal": "not run"
+        },
+        "security_codeql_ga4_scheduler": "passed"
       },
       "root_review": "Inspected all runtime diffs and CI logs; own48 unit tests passed.",
       "independent_review": "140 passed, including21 actual replica; no blocker within narrow scope.",
@@ -905,7 +927,7 @@
     "suggestions": {
       "pr": 1584,
       "branch": "codex/google-plan-suggestions-20261027",
-      "source": "40d7c95789a0e80c2e510c77411ed4702fa2e763",
+      "source": "e343461d7f53c1d55ca6557d6f859538467b0935",
       "backend_ci": {
         "source": "9652a7292d580896594c7c1a780ab9ee37714936",
         "run": 40426862964,
@@ -915,11 +937,34 @@
         "build": "passed",
         "reproducible_build_run": 40426862707
       },
-      "combined_ci": 40427561988,
+      "combined_ci": {
+        "run": 40428132659,
+        "backend_passed": 1158,
+        "frontend_passed": 226,
+        "frontend_suites": 18,
+        "build": "passed",
+        "skips": 0
+      },
       "scope": "Source-quoted owner preview, apply empty fields only; no product IDs/money/authorization inferred.",
       "root_backend_passed": 46,
-      "ui_acceptance": "pending fixture-only correction for exact literal quotation; code not marked ready.",
-      "execution_authorized": false
+      "ui_acceptance": "Root independently64 passed3suites,1.103s; exactsource file equality verified.",
+      "execution_authorized": false,
+      "independent_review": "No blocker;46 backend tests plus real Python-to-JS contract interoperability passed.",
+      "release_readiness": {
+        "run": 40428132727,
+        "status": "passed",
+        "candidate_intent_artifact": 12700757142,
+        "source_base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+        "root_clean_build_passes": 2,
+        "root_verifier_exit": 0,
+        "ci_candidate_matches_root_proof": true,
+        "artifact_tree_sha256": "01db767d5d104a0131592b7af91afa18136668cbe73e637b4debe85191e3fc43",
+        "proof_sha256": "897ff903e5edc6c93833090bc98d2221fb6b1c6a58a21638b6d00c94ddf2d7bf",
+        "worktree_clean": true,
+        "intent_only_B_frozen": false,
+        "actual_host_rehearsal": false,
+        "operator_note": "Initial local command omitted candidate-bootstrap mode and was correctly rejected against previous intent. Correct documented source-candidate mode then passed twice; no guard or source relaxed."
+      }
     },
     "budget": {
       "pr": 1560,
@@ -933,12 +978,23 @@
       "skips": 0,
       "independent": "11 unit passed; found fence release race and verified added same-TX CAS marker + actual replica race test.",
       "runtime_enabled": false,
-      "ci": "fresh integrated push CI pending",
+      "ci": {
+        "guard_run": 40427999453,
+        "tests": 91,
+        "actual_replica_tests": 16,
+        "skips": 0,
+        "full_management_run": 40427999393,
+        "backend_passed": 1193,
+        "frontend_passed": 162,
+        "frontend_suites": 15,
+        "frontend_build": "passed"
+      },
       "remaining": [
         "Production transactions and actual legacy inventory unproved",
         "Native response proof and external Google writer race",
         "Funded launch and owner authorization UI incomplete"
-      ]
+      ],
+      "root_review": "Inspected authority+guard delta and exact CI logs; own11 settlement unit tests passed0.77s."
     },
     "source_dates": {
       "branch": "codex/google-order-evidence-availability-wip-20261027",
@@ -954,6 +1010,6 @@
       },
       "state": "Unattached diagnostic only; no product sales/units/profit or complete coverage; independent integration review still needed."
     },
-    "next": "Finish exact UI acceptance and CI, preserve reviewed standalone candidates. Recover actual host UI and read guard before clean-clone rehearsal/Source A + intent-only B/prepare/prepublish/one publish/3 live identity checks. Never publish WIP budget/recovery diagnostics as completed autonomy."
+    "next": "Restore actual Emergent project host UI; fetch current production; run /app production_release_guard.py status and proceed only inactive. Revalidate source base and select one reviewed slice (PR1588 CAS or PR1584 owner suggestions), build exact Source A, freeze intent-only B, complete CI and independent review, actual-host clean-clone adapter rehearsal, prepare/prepublish/one authorized publish, explicit newer completion/3 identity probes/closed lease/live behavior. Budget WIP and source-date diagnostics remain non-release scope; no funded activation without saved owner limits."
   }
 }
