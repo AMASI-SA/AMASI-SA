@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-27T00:51:22.205Z",
+  "updated_at": "2026-10-27T00:57:16.337Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -922,7 +922,8 @@
         "Not atomic OAuth/account projection recovery",
         "No post-readback dispatch fence or ABA guarantee"
       ],
-      "release": "Source-only; readiness/host deployment outstanding."
+      "release": "Source-only; readiness/host deployment outstanding.",
+      "all_registered_source_ci": "passed"
     },
     "suggestions": {
       "pr": 1584,
@@ -964,7 +965,8 @@
         "intent_only_B_frozen": false,
         "actual_host_rehearsal": false,
         "operator_note": "Initial local command omitted candidate-bootstrap mode and was correctly rejected against previous intent. Correct documented source-candidate mode then passed twice; no guard or source relaxed."
-      }
+      },
+      "all_registered_source_ci": "passed (including CodeQL and Security Gate)"
     },
     "budget": {
       "pr": 1560,
@@ -1010,6 +1012,30 @@
       },
       "state": "Unattached diagnostic only; no product sales/units/profit or complete coverage; independent integration review still needed."
     },
-    "next": "Restore actual Emergent project host UI; fetch current production; run /app production_release_guard.py status and proceed only inactive. Revalidate source base and select one reviewed slice (PR1588 CAS or PR1584 owner suggestions), build exact Source A, freeze intent-only B, complete CI and independent review, actual-host clean-clone adapter rehearsal, prepare/prepublish/one authorized publish, explicit newer completion/3 identity probes/closed lease/live behavior. Budget WIP and source-date diagnostics remain non-release scope; no funded activation without saved owner limits."
+    "next": "Restore actual Emergent project host UI; fetch current production; run /app production_release_guard.py status and proceed only inactive. Revalidate source base and select one reviewed slice (PR1588 CAS or PR1584 owner suggestions), build exact Source A, freeze intent-only B, complete CI and independent review, actual-host clean-clone adapter rehearsal, prepare/prepublish/one authorized publish, explicit newer completion/3 identity probes/closed lease/live behavior. Budget WIP and source-date diagnostics remain non-release scope; no funded activation without saved owner limits.",
+    "variant_inventory_gap": {
+      "state": "confirmed gap; narrow fix in progress",
+      "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+      "branch": "codex/google-variant-stock-proof-20261027",
+      "implementation_owner": "plan_ui",
+      "independent_reviewer": "budget_audit",
+      "root_ui_change": "Arabic product_inventory_unproved label only; include in upcoming source checkpoint.",
+      "reproduction": "Actual _details_patch canonical writer: active,parentquantity4,details_loadedtrue,count2,allvariantquantities0 -> save200/blockers[],activate200/effective_enabledtrue,prepare ready_for_paused_previewtrue. In-memory route fixtures only; no provider/liveDB.",
+      "baseline_tests_passed": 195,
+      "hidden_name_note": "A product name containing hidden is not a hidden-status flag; existing canonical visibility/archive/parent-stock guards enforce blockers.",
+      "proof_risks": [
+        "Existing creation shared projection slices variants50 and omits count/details timestamp",
+        "List sync may overwrite variants while preserving old details metadata",
+        "Timestamp-only detail provenance is insufficient; boolean-coercing raw 'false' must not authorize inventory"
+      ],
+      "agreed_scope": [
+        "Creation-only bounded projection across policy/plan/gateway/authority",
+        "Deterministic policy and prepare/revalidation inventory proof helper",
+        "Minimal additive revision+canonical-stock-bound metadata at product_v2_details_routes._details_patch; no changes to global normalizer or otherwriters",
+        "Legacy or ambiguous evidence fails closed until details refreshed",
+        "Canonical writer, actual route, fresh authority and realprojection acceptance; independent review"
+      ],
+      "deployment": "none; no source or flags on production"
+    }
   }
 }
