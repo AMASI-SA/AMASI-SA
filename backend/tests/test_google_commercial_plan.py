@@ -79,7 +79,7 @@ async def test_save_keeps_instruction_and_limits_without_granting_authorization(
     assert result['fields']['limits']['daily_budget_native'] == '50'
     assert result['revision'] == 1 and result['provider_writes'] == 0
     assert result['execution_authorized'] is False and result['status'] == 'reviewed_context_only'
-    assert result['natural_language_extraction_available'] is False
+    assert result['natural_language_extraction_available'] is True
     assert 'user_id' not in result and 'reviews' not in result
     assert len(db.plans.rows[0]['reviews']) == 1
 

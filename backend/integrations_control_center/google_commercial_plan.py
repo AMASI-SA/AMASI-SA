@@ -2,7 +2,7 @@
 
 The original instruction and explicit fields are saved together. Category URLs
 and product suggestions are claims to verify, not catalog membership or profit
-proof. This bounded vertical does not extract arbitrary prose or rank products.
+proof. Source-quoted suggestions need owner review; this module never ranks products.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from pymongo.errors import DuplicateKeyError
 
 from .google_ads_client import problem
 from .google_ads_management import principal
+from .google_ads_plan_suggestions import PlanSuggestionInput, suggest_commercial_plan
 
 PLANS = "mezan_google_commercial_plans_v1"
 
@@ -123,7 +124,7 @@ def review_context(body: CommercialPlanInput, current: datetime) -> dict:
 def public_plan(row):
     return {key: row[key] for key in ("plan_id", "revision", "fields", "review_context", "created_at", "updated_at", "updated_by") if key in row} | {
         "provider_writes": 0, "execution_authorized": False,
-        "status": "reviewed_context_only", "natural_language_extraction_available": False,
+        "status": "reviewed_context_only", "natural_language_extraction_available": True,
     }
 
 
@@ -158,6 +159,12 @@ def attach_google_commercial_plan_routes(router, db, current_user):
         if not actor["owner"]:
             raise problem("google_ads_owner_required", "الخطة التجارية متاحة للمالك فقط.", 403)
         return actor
+
+    @router.post("/google_ads/commercial-plan-suggestions")
+    async def suggest_plan(body: PlanSuggestionInput, actor=Depends(owner)):
+        # The owner gate runs before reasoning; this route does not read a plan,
+        # save changes, call an advertising provider, or grant authority.
+        return await suggest_commercial_plan(body)
 
     @router.get("/google_ads/commercial-plans/{plan_id}")
     async def read_plan(plan_id: str, actor=Depends(owner)):
