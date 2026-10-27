@@ -101,11 +101,30 @@ test.each(["توجيه المالك", "الموسم", "حد الميزانية �
     expect(element(label).value).toBe(label === "حد الميزانية اليومي الاختياري" ? "99" : "تعديل المالك");
 });
 
-test("saving the plan cancels a pending suggestion and late result cannot replace saved form", async () => {
+test("changing review acknowledgement aborts and discards a late suggestion", async () => {
     let finish; api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     await render(); await input("توجيه المالك", suggestionInstruction); await suggest();
     const signal = api.post.mock.calls[0][2].signal;
-    await acknowledge(); await save(); expect(signal.aborted).toBe(true);
+    await acknowledge(); expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: suggestionResponse() }));
+    expect(button("تعبئة الحقول الفارغة فقط")).toBeUndefined(); expect(api.put).not.toHaveBeenCalled();
+});
+
+test("reloading the saved plan cancels extraction and cannot apply the previous form's result", async () => {
+    let finish; api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await render(); await input("توجيه المالك", suggestionInstruction); await suggest();
+    const signal = api.post.mock.calls[0][2].signal;
+    await act(async () => button("إعادة تحميل خطة الموسم").click()); expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: suggestionResponse() }));
+    expect(button("تعبئة الحقول الفارغة فقط")).toBeUndefined(); expect(element("توجيه المالك").value).toBe(fields.instruction);
+    expect(api.put).not.toHaveBeenCalled();
+});
+
+test("saving the plan cancels a pending suggestion and late result cannot replace saved form", async () => {
+    let finish; api.post.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    await render(); await input("توجيه المالك", suggestionInstruction); await acknowledge(); await suggest();
+    const signal = api.post.mock.calls[0][2].signal;
+    await save(); expect(signal.aborted).toBe(true);
     await act(async () => finish({ data: suggestionResponse() }));
     expect(button("تعبئة الحقول الفارغة فقط")).toBeUndefined(); expect(api.put).toHaveBeenCalledTimes(1);
     expect(element("توجيه المالك").value).toBe(fields.instruction);

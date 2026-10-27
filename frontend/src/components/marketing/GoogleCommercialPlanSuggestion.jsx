@@ -6,20 +6,20 @@ const LABELS = { season: "الموسم", starts_on: "بداية الموسم", e
     audience: "الجمهور المستهدف", message: "الرسالة التسويقية", category_url: "رابط القسم" };
 const BUTTON = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40";
 
-export default function GoogleCommercialPlanSuggestion({ form, disabled, onApply }) {
+export default function GoogleCommercialPlanSuggestion({ form, reviewed, disabled, onApply }) {
     const [suggestion, setSuggestion] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
     const request = useRef(null), scope = useRef(null);
-    scope.current = { form, disabled };
+    scope.current = { form, reviewed, disabled };
     useEffect(() => {
         request.current?.abort(); request.current = null;
         setSuggestion(null); setError(""); setBusy(false);
         return () => { request.current?.abort(); request.current = null; };
-    }, [form, disabled]);
+    }, [form, reviewed, disabled]);
     async function suggest() {
         if (disabled || request.current || !form.instruction.trim()) return;
         const original = form, controller = new AbortController(); request.current = controller;
         const current = () => request.current === controller && !controller.signal.aborted
-            && scope.current.form === original && !scope.current.disabled;
+            && scope.current.form === original && scope.current.reviewed === reviewed && !scope.current.disabled;
         setBusy(true); setError(""); setSuggestion(null);
         try {
             const result = await suggestGoogleCommercialPlan(original.instruction, { signal: controller.signal });
@@ -42,7 +42,7 @@ export default function GoogleCommercialPlanSuggestion({ form, disabled, onApply
                 {String(form[key] || "").trim() && <p className="text-xs text-slate-500">الحقل مكتوب حاليًا؛ لن يستبدله الاقتراح.</p>}
             </div>)}
             {suggestion.missing_fields.length > 0 && <p>حقول لم تتضح من التوجيه: {suggestion.missing_fields.map((key) => LABELS[key]).join("، ")}. أكملها يدويًا.</p>}
-            <p>تأكد من اتجاه الطلب والاستبعادات والتواريخ، خصوصًا المواسم الهجرية. اختيار المنتجات تلقائيًا غير متاح هنا.</p>
+            <p>وجود الاقتباس لا يثبت صحة فهم التوجيه؛ راجع معنى كل حقل واتجاه الطلب والاستبعادات والتواريخ، خصوصًا المواسم الهجرية. اختيار المنتجات تلقائيًا غير متاح هنا.</p>
             <button type="button" className={BUTTON} disabled={!applicable} onClick={() => onApply(suggestion)}>تعبئة الحقول الفارغة فقط</button>
         </div>}
     </section>;

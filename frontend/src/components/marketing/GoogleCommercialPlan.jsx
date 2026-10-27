@@ -86,7 +86,7 @@ function PlanPanel({ planId }) {
             <p className="text-xs text-slate-500">النسخة المحفوظة: {plan?.revision || 0} · المنتجات والأدلة تحتاج تحققًا مستقلًا</p>
             <fieldset disabled={busy || conflict} className="space-y-4">
                 <label className="block text-sm font-bold">توجيه المالك<textarea required maxLength={6000} aria-label="توجيه المالك" className={INPUT} rows={3} value={form.instruction} onChange={(event) => edit("instruction", event.target.value)} placeholder="ركز على هدايا الشتاء بالسعودية وهذا رابط قسم الشالات…" /></label>
-                <GoogleCommercialPlanSuggestion form={form} disabled={busy || conflict} onApply={applySuggestion} />
+                <GoogleCommercialPlanSuggestion form={form} reviewed={reviewed} disabled={busy || conflict} onApply={applySuggestion} />
                 <div className="grid gap-3 sm:grid-cols-2">{FIELDS.map(([key, label, type]) => <label className="text-sm font-bold" key={key}>{label}<input required={["season", "starts_on", "ends_on", "market", "audience", "message"].includes(key)} type={type} className={INPUT} aria-label={label} value={form[key] || ""} onChange={(event) => edit(key, event.target.value)} /></label>)}</div>
                 <label className="block text-sm font-bold">الاستبعادات الإضافية<textarea aria-label="الاستبعادات الإضافية" className={INPUT} rows={2} value={form.exclusions} onChange={(event) => edit("exclusions", event.target.value)} placeholder="استبعاد واحد في كل سطر" /></label>
                 <div className="grid gap-3 sm:grid-cols-2">
