@@ -8,6 +8,7 @@ on:
       - "backend/dashboard_order_loading.py"
       - "backend/dashboard_v2_routes.py"
       - "backend/tests/test_dashboard_order_loading_cooperative.py"
+      - "backend/tests/test_snapchat_profit_loader_mongo.py"
       - "backend/integrations_control_center/__init__.py"
       - "backend/integrations_control_center/snapchat_campaign_profitability_exact_reuse.py"
       - "backend/integrations_control_center/snapchat_campaign_profitability.py"
@@ -22,6 +23,17 @@ permissions:
 jobs:
   backend-contract:
     runs-on: ubuntu-24.04
+    services:
+      mongo:
+        image: mongo:8.0.12
+        ports: ["27018:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_SNAP_PROFIT_MONGO_URL: "mongodb://127.0.0.1:27018"
+      MONGO_URL: "mongodb://127.0.0.1:1/snap_profit_ci_unused"
+      DB_NAME: "snap_profit_ci_unused"
     defaults:
       run:
         working-directory: backend
@@ -35,7 +47,8 @@ jobs:
           python -m pip install -q
           fastapi==0.110.1
           pydantic==2.13.4
-          pymongo==4.5.0
+          pymongo==4.18.2
+          motor==3.7.1
           httpx
           pytest
           pytest-asyncio
@@ -62,6 +75,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_dashboard_order_loading_cooperative.py
+          tests/test_snapchat_profit_loader_mongo.py
           tests/test_order_currency_accounting.py
           tests/test_snapchat_campaign_profitability_exact_reuse_v2.py
           tests/test_snapchat_campaign_profitability_v1.py

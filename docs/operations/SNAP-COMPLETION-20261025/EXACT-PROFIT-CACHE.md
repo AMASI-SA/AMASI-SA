@@ -119,3 +119,21 @@ change. Next safe step: independently review this opt-in loader and composed
 report cancellation; validate actual Motor cursor behavior before release.
 No atomic database snapshot, upstream freshness certificate or cache reuse is
 asserted. Remains WIP pending review and production-shaped validation.
+
+### Real-Mongo CI gate (pending, not yet evidence)
+
+The existing exact-reuse workflow now provisions mongo:8.0.12 and installs
+Motor3.7.1/PyMongo4.18.2, exactly matching backend/requirements.txt. Its existing
+path filters include the opt-in loader, dashboard entry point and both new
+test files. `TEST_SNAP_PROFIT_MONGO_URL` is explicitly set by CI; real-Mongo
+tests skip only when that variable is absent, and fail on missing driver,
+connection/ping or runtime errors when set. Local collection:2skipped because
+this workspace has neither mongod nor Docker; this is not driver proof.
+Tests exercise actual Motor batch iteration/limit/close/cancellation and a
+minimal composed report using real unified_orders, catalog/context loading,
+line cost engine and exact worker guard. Native provider reporting remains a
+minimal read-only report seam. The feature remains WIP until this gate passes
+and independent scope review completes. No new architecture or production
+requirements changes. Prior remote loader checkpoint:
+a124938d88b7fe59479616ba65754cda97b85262, tree
+8fd41cd5f3f631b54b7204f639efe4ac05c46636; verified tree-equivalent4849e2a.
