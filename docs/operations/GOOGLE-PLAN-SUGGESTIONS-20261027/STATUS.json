@@ -13,9 +13,9 @@
   },
   "production_changed": false,
   "next": "Validate combined server and owner preview UI, independently review, then prepare Release Guard A/B only after actual-host access and fresh guard status.",
-  "updated_at": "2026-10-27T00:37:02.185Z",
-  "stage": "integrated_source_candidate_ci_pending",
-  "frontend_source": "775cab4725dbbc8ff7ef9ef915b7fa7e19522c2b",
+  "updated_at": "2026-10-27T00:42:33.730Z",
+  "stage": "reviewed_combined_source_ci_pending",
+  "frontend_source": "539d7c1de211b3d3a97bb5874af544b4216f0bee",
   "backend_checkpoint_validation": {
     "sha": "9652a7292d580896594c7c1a780ab9ee37714936",
     "management_run": 40426862964,
@@ -26,12 +26,18 @@
     "release_readiness_run": 40426862707,
     "reproducible_build": "passed"
   },
-  "combined_validation": "pending CI and independent frontend acceptance",
+  "combined_validation": {
+    "root_backend": "46 passed in0.90s",
+    "root_frontend": "64 passed,3 suites,1.103s; exact five source/test files match UI checkpoint",
+    "fixture_correction": "Positive audience fixture now contains exact quote; implementation unchanged.",
+    "ci": "New source CI required after this fixture correction.",
+    "independent_review": "Google seasons auditor source review found no blocking issue; backend46 passed."
+  },
   "live_observation": {
     "google_account": "5052346701",
     "connection_label": "connected",
     "management_refresh": "22 campaigns returned; metrics updated; no ownership error",
     "paid_mutations": 0,
-    "release_editor": "observed HTTP 502 Host Error; no /app mutation or guard lease"
+    "release_editor": "502 then Preview Unavailable: resting after inactivity. Fresh Emergent home opens then DOM and screenshot protocol timeouts. No /app mutation or guard lease."
   }
 }
