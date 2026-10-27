@@ -40,8 +40,8 @@ def _stock_snapshot(product):
         if not isinstance(variant, dict):
             raise ValueError("invalid variant")
         identity = variant.get("id")
-        if (not isinstance(identity, str) or not identity.strip() or identity != identity.strip()
-                or len(identity) > 160 or identity in identities):
+        if (not isinstance(identity, str) or not re.fullmatch(r"[1-9][0-9]{0,29}", identity)
+                or identity in identities):
             raise ValueError("unproved variant identity")
         identities.add(identity)
         rows.append({key: variant.get(key) for key in ("id", "quantity", "unlimited_quantity")})
@@ -110,7 +110,8 @@ def build_inventory_evidence(raw, product):
             return proof
         for raw_variant, canonical in zip(variants, snapshot["variants"]):
             if (not _raw_stock_valid(raw_variant) or type(raw_variant.get("id")) not in {str, int}
-                    or str(raw_variant["id"]).strip() != canonical["id"]):
+                    or not re.fullmatch(r"[1-9][0-9]{0,29}", str(raw_variant["id"]))
+                    or str(raw_variant["id"]) != canonical["id"]):
                 return proof
         proof["state"] = _stock_state(snapshot)
     except (TypeError, ValueError, OverflowError):

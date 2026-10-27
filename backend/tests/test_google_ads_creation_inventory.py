@@ -29,7 +29,7 @@ def detailed(raw=None):
         return _details_patch(raw if raw is not None else raw_product(), user_id="owner")
 
 
-def variant(identity="size-s", quantity=2, unlimited=False):
+def variant(identity=1936825372, quantity=2, unlimited=False):
     return {"id": identity, "quantity": quantity, "unlimited_quantity": unlimited}
 
 
@@ -38,7 +38,7 @@ def prepare(product):
     return contract.prepare_google_creation_intent(**values)
 
 
-@pytest.mark.parametrize("raw", [raw_product(), raw_product(quantity="4", stock_quantity=4), raw_product(variants=[variant(), variant("size-m", 0)]),
+@pytest.mark.parametrize("raw", [raw_product(), raw_product(quantity="4", stock_quantity=4), raw_product(variants=[variant(), variant(1936825373, 0)]),
     raw_product(quantity=None, unlimited_quantity=True), raw_product(variants=[variant(quantity=None, unlimited=True)])])
 def test_actual_details_writer_proves_positive_simple_or_variant_inventory(raw):
     product = detailed(raw)
@@ -51,7 +51,7 @@ def test_actual_details_writer_proves_positive_simple_or_variant_inventory(raw):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("quantities,enabled,blocker", [([0, 0], False, "product_out_of_stock:1"), ([0, 2], True, None)])
 async def test_canonical_variants_control_saved_blockers_activation_and_prepare(monkeypatch, quantities, enabled, blocker):
-    product = detailed(raw_product(variants=[variant(str(index), quantity) for index, quantity in enumerate(quantities)]))
+    product = detailed(raw_product(variants=[variant(1936825372 + index, quantity) for index, quantity in enumerate(quantities)]))
     db = DB(); db.products.rows = [product]
     target, db, calls = app(monkeypatch, db=db)
     monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
@@ -77,7 +77,7 @@ async def test_canonical_variants_control_saved_blockers_activation_and_prepare(
     lambda raw: raw.update(product_options=[{"id": "size"}]),
     lambda raw: raw.update(variants=[{"quantity": 1, "unlimited_quantity": False}]),
     lambda raw: raw.update(variants=[variant(), variant()]),
-    lambda raw: raw.update(variants=[variant(str(index)) for index in range(51)]),
+    lambda raw: raw.update(variants=[variant(1936825372 + index) for index in range(51)]),
     lambda raw: raw.update(variants=[variant(quantity=None)]),
     lambda raw: raw.update(options=[{"id": "size"}], variants=[]),
 ])
@@ -109,6 +109,12 @@ def test_documented_salla_sku_numeric_stock_string_and_explicit_unlimited():
     product = detailed(raw)
     assert inventory_readiness(product, NOW, 3600)[0] == "available"
     assert prepare(product)["ready_for_paused_preview"]
+
+
+@pytest.mark.parametrize("identity", [None, True, False, 0, -1, 1.5, "size-s", " 1936825372", "01"])
+def test_variant_identity_must_be_explicit_positive_provider_numeric_id(identity):
+    product = detailed(raw_product(variants=[variant(identity)]))
+    assert inventory_readiness(product, NOW, 3600)[0] == "unproved"
 
 
 def test_later_recent_light_sync_cannot_keep_detail_authority_even_at_identical_timestamp():
@@ -155,6 +161,26 @@ def test_variant_change_is_bound_even_if_new_valid_evidence_keeps_parent_source_
     values["product"] = changed
     assert prepare(changed)["ready_for_paused_preview"]
     with pytest.raises(contract.CreationContractError): contract.revalidate_google_creation_intent(intent, **values)
+
+
+@pytest.mark.asyncio
+async def test_owner_activation_rejects_changed_positive_variant_even_with_same_source_revision(monkeypatch):
+    original = detailed(raw_product(variants=[variant()]))
+    db = DB(); db.products.rows = [original]
+    target, db, calls = app(monkeypatch, db=db)
+    monkeypatch.setattr(policy, "creation_runtime_available", lambda: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(target), base_url="http://test") as client:
+        saved = await client.put("/google_ads/automation/creation-policy/123", json=body())
+        changed = detailed(raw_product(variants=[variant(quantity=3)]))
+        changed["source_revision"] = original["source_revision"]
+        changed["inventory_evidence_v1"]["source_revision"] = original["source_revision"]
+        db.products.rows[0] = changed
+        assert inventory_readiness(changed, NOW, 3600)[0] == "available"
+        activated = await client.post("/google_ads/automation/creation-policy/123/activate", json={
+            "expected_revision": 1, "acknowledge_creation": True, "acknowledge_creative": True})
+    assert saved.status_code == 200 and activated.status_code == 409
+    assert activated.json()["detail"]["code"] == "google_creation_product_review_changed"
+    assert db.policies.rows[0]["enabled"] is False and calls["mutations"] == 0
 
 
 @pytest.mark.asyncio
