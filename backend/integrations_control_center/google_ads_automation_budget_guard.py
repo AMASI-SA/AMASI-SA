@@ -32,6 +32,7 @@ from fastapi import HTTPException
 from pymongo import ReadPreference
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from .google_ads_automation_policy import AUTOMATION_POLICIES, PUBLIC_FIELDS as STANDING_FIELDS
 from .google_ads_automation_creation_policy import CREATION_POLICIES, PUBLIC_FIELDS as CREATION_FIELDS
@@ -87,6 +88,7 @@ class BudgetReservationSettlement:
     """Terminal proof is reloaded from PROPOSALS in this same transaction."""
     allocation_id: str
     execution_claim_id: str
+    recover_legacy_terminal: bool = False
 
 
 @dataclass(frozen=True)
@@ -234,6 +236,8 @@ def _command(command):
         if any(not isinstance(value, str) or not _ID.fullmatch(value)
             for value in (command.allocation_id, command.execution_claim_id)):
             _fail('google_budget_guard_command_invalid')
+        if type(command.recover_legacy_terminal) is not bool:
+            _fail('google_budget_guard_command_invalid')
         return command
     if isinstance(command, PolicyMutation):
         if (command.policy_kind not in _COLLECTIONS or type(command.expected_revision) is not int
@@ -290,13 +294,16 @@ def standing_commitment(snapshot, command, current):
     if (policy is None or policy.get('revision') != command.expected_revision
         or policy.get('enabled') is not True or policy.get('_dispatch_claim') is not None):
         _fail('google_budget_guard_policy_changed')
-    from .google_ads_automation_authority import activation_proof_valid
+    from .google_ads_automation_authority import activation_proof_valid, policy_authorization_digest
     if not activation_proof_valid(thaw_snapshot(policy), current):
         _fail('google_budget_guard_activation_unproved')
     expiry = _instant(policy.get('expires_at'))
     if expiry is None or expiry <= current:
         _fail('google_budget_guard_policy_changed')
     inventory, claim = command.inventory, command.claim
+    if (claim.get('policy_revision') != policy.get('revision')
+        or claim.get('policy_digest') != policy_authorization_digest(thaw_snapshot(policy))):
+        _fail('google_budget_guard_policy_changed')
     observed = _instant(inventory.get('observed_at'))
     if (inventory.get('complete') is not True or inventory.get('source') != 'google_ads_api'
         or inventory.get('account_id') != snapshot.account_id or observed is None
@@ -426,6 +433,10 @@ def _allocation(snapshot, command, operation_id, stamp):
     allocations = old['allocations']
     if old['active_claim'] is not None or len(allocations) >= MAX_ALLOCATIONS:
         _fail('google_budget_guard_allocation_pending')
+    if (snapshot.standing_policy or {}).get('_dispatch_claim') is not None:
+        # A pre-migration claim may not have a common allocation yet. Absence
+        # from the new ledger does not prove available funding for a launch.
+        _fail('google_budget_guard_legacy_claim_pending')
     if (command.allocation_id in allocations or any(entry.get('creation_identity') == command.creation_identity
         or entry.get('campaign_id') == command.campaign_id or entry.get('operation_id') == operation_id for entry in allocations.values())):
         _fail('google_budget_guard_identity_consumed')
@@ -515,15 +526,40 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                     'proposal_id': claim['proposal_id'], 'execution_claim_id': claim['execution_claim_id']})
             result = {'kind': 'standing_reservation', 'allocation_id': command.allocation_id, **commitment}
         elif isinstance(command, BudgetReservationSettlement):
-            from .google_ads_management import PROPOSALS, digest
+            from .google_ads_management import PROPOSALS, FENCES, digest
             from .google_ads_automation_authority import _bound_proposal, stopped_before_http_proven
             old = thaw_snapshot(snapshot.guard)
             entry = old['allocations'].get(command.allocation_id)
             claim = thaw_snapshot((snapshot.standing_policy or {}).get('_dispatch_claim'))
+            legacy = entry is None and command.recover_legacy_terminal
+            if legacy:
+                if (not isinstance(claim, dict) or old.get('active_claim') is not None
+                    or len(old['allocations']) >= MAX_ALLOCATIONS
+                    or command.allocation_id != 'standing_' + command.execution_claim_id
+                    or claim.get('claim_id') != command.execution_claim_id
+                    or claim.get('execution_claim_id') != command.execution_claim_id
+                    or not isinstance(claim.get('proposal_id'), str) or not _ID.fullmatch(claim['proposal_id'])
+                    or not isinstance(claim.get('campaign_id'), str) or not re.fullmatch(r'[0-9]{1,30}',claim['campaign_id'])
+                    or claim.get('action') not in {'pause','enable','set_budget'}
+                    or claim.get('budget_semantics') != 'average_daily_budget'
+                    or any(item.get('execution_claim_id') == command.execution_claim_id
+                        or item.get('proposal_id') == claim['proposal_id']
+                        or item.get('campaign_id') == claim['campaign_id'] and item.get('state') not in {'settled','cancelled_before_http'}
+                        for item in old['allocations'].values())):
+                    _fail('google_budget_guard_settlement_unproved')
+                # The provisional entry exists only in this transaction's local
+                # memory. Unknown outcome rolls back even a newly created guard.
+                _money(claim.get('campaign_budget_before_native'))
+                _money(claim.get('campaign_budget_target_native'))
+                entry = {**scope,'allocation_id':command.allocation_id,'operation_id':operation_id,
+                    'kind':'standing','state':'reserved','origin':'legacy_terminal_recovery',
+                    'campaign_id':claim['campaign_id'],'action':claim['action'],'proposal_id':claim['proposal_id'],
+                    'execution_claim_id':command.execution_claim_id,'claim_digest':_digest(claim),
+                    'budget_native':claim['campaign_budget_target_native'],'created_at':stamp}
             if (not entry or entry.get('kind') != 'standing' or entry.get('state') != 'reserved'
                 or entry.get('execution_claim_id') != command.execution_claim_id or not isinstance(claim, dict)
                 or _digest(claim) != entry.get('claim_digest')
-                or (old.get('active_claim') or {}).get('allocation_id') != command.allocation_id):
+                or not legacy and (old.get('active_claim') or {}).get('allocation_id') != command.allocation_id):
                 _fail('google_budget_guard_settlement_unproved')
             proposal = await db[PROPOSALS].find_one({**scope, 'proposal_id': entry['proposal_id'],
                 'execution_claim_id': command.execution_claim_id}, {'_id': 0}, session=session)
@@ -535,6 +571,29 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                 or source['policy_revision'] != claim.get('policy_revision')
                 or source['policy_digest'] != claim.get('policy_digest')):
                 _fail('google_budget_guard_settlement_unproved')
+            if legacy:
+                if (proposal.get('campaign_id') != entry['campaign_id'] or proposal.get('action') != entry['action']
+                    or not isinstance(proposal.get('currency'),str) or not re.fullmatch(r'[A-Z]{3}',proposal['currency'])
+                    or not await db[FENCES].find_one({**scope,'proposal_id':entry['proposal_id'],
+                        'execution_claim_id':command.execution_claim_id,'status':'claimed'}, {'_id':0}, session=session)):
+                    _fail('google_budget_guard_settlement_unproved')
+                before = proposal.get('before_snapshot')
+                campaign = before.get('campaign') if isinstance(before,dict) else None
+                budget = before.get('campaign_budget') if isinstance(before,dict) else None
+                micros = budget.get('amountMicros') if isinstance(budget,dict) else None
+                if (not isinstance(campaign,dict) or not isinstance(budget,dict) or campaign.get('id') != entry['campaign_id']
+                    or digest(before) != proposal.get('before_digest')
+                    or budget.get('period') != 'DAILY' or isinstance(micros,bool)
+                    or not isinstance(micros,(str,int)) or not re.fullmatch(r'[0-9]{1,18}',str(micros))):
+                    _fail('google_budget_guard_settlement_unproved')
+                before_amount = Decimal(str(micros)) / Decimal(1000000)
+                planned = proposal.get('planned')
+                if (not isinstance(planned,dict) or planned.get('action') != entry['action']
+                    or _money(claim['campaign_budget_before_native']) != before_amount
+                    or _money(entry['budget_native']) != (_money(planned.get('budget_native'))
+                        if entry['action']=='set_budget' else before_amount)):
+                    _fail('google_budget_guard_settlement_unproved')
+                entry['currency_code'] = proposal['currency']
             rejection = proposal.get('rejection') or {}
             completed = proposal.get('status') == 'completed' and proposal.get('verified') is True and proposal.get('submission_started') is True
             cancelled = proposal.get('status') == 'failed' and proposal.get('submission_started') is False and proposal.get('safe_error') == 'execution_cancelled_before_dispatch'
@@ -547,14 +606,31 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                 stopped = authorized is not None and stopped_at is not None and stopped_at >= authorized
             if not (completed or cancelled or rejected or stopped):
                 _fail('google_budget_guard_settlement_unproved')
+            if legacy:
+                # Snapshot reads alone do not conflict with a concurrent native
+                # fence release. A real marker write participates in that CAS
+                # boundary; it never releases or changes the fence's ownership.
+                fenced = await db[FENCES].update_one({**scope,'proposal_id':entry['proposal_id'],
+                    'execution_claim_id':command.execution_claim_id,'status':'claimed'},
+                    {'$set':{'_budget_settlement_operation_id':operation_id,
+                        '_budget_settlement_observed_at':stamp}}, session=session)
+                if fenced.matched_count != 1:
+                    _fail('google_budget_guard_settlement_unproved')
+            generation = (snapshot.standing_policy or {}).get('_dispatch_generation')
+            if type(generation) is not int or not 0 <= generation < 2**63 - 2:
+                _fail('google_budget_guard_settlement_unproved')
             changed = await db[AUTOMATION_POLICIES].update_one({**scope, '_dispatch_claim': claim},
-                {'$set': {'_dispatch_claim': None}, '$inc': {'_dispatch_generation': 1}}, session=session)
+                {'$set': {'_dispatch_claim': None, '_dispatch_last_settlement': {
+                    'claim_id': command.execution_claim_id,
+                    'status': 'completed' if completed else 'cancelled_before_dispatch' if cancelled else 'provider_rejected' if rejected else 'stopped_before_provider_dispatch',
+                    'observed_at': stamp,'legacy_recovered':legacy}}, '$inc': {'_dispatch_generation': 1}}, session=session)
             if changed.matched_count != 1:
                 _fail('google_budget_guard_settlement_unproved')
             old['allocations'][command.allocation_id] = {**entry, 'state': 'native_enabled' if completed else 'settled', 'settled_at': stamp,
                 'outcome': 'completed' if completed else 'cancelled_before_http' if cancelled or stopped else 'provider_rejected'}
             update.update(allocations=old['allocations'], active_claim=None)
-            result = {'kind': 'standing_settlement', 'allocation_id': command.allocation_id, 'quota_refunded': False}
+            result = {'kind': 'standing_settlement', 'allocation_id': command.allocation_id,
+                'quota_refunded': False,'legacy_recovered':legacy}
         else:
             allocations, claim = _allocation(snapshot, command, operation_id, stamp)
             update.update(allocations=allocations, active_claim=claim)
@@ -591,6 +667,11 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
         exc.automatic_retry_allowed = False
         raise
     except Exception as exc:
+        if (not phase['commit_attempted'] and (isinstance(exc, DuplicateKeyError)
+            or isinstance(exc, OperationFailure) and exc.code == 112)):
+            # A known-aborted precommit conflict asks the owner to refresh. It
+            # still grants no dispatch, retry, refund or fence-release evidence.
+            exc = problem('google_budget_guard_policy_changed', 'تغيرت سياسة جوجل أثناء المعاملة؛ أعد تحميلها.', 409)
         if not isinstance(exc, HTTPException):
             exc = problem('google_budget_guard_commit_unconfirmed' if phase['commit_attempted'] else 'google_budget_guard_transaction_unconfirmed',
                 'لم يتأكد حجز الميزانية؛ تحقق بالقراءة واحتفظ بالقفل دون إعادة إرسال.', 503)

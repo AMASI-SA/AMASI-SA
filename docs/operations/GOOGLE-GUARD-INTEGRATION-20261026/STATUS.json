@@ -1,0 +1,95 @@
+{
+  "task_id": "GOOGLE-GUARD-INTEGRATION-20261026",
+  "branch": "codex/google-guard-integration-wip-20261026",
+  "parent": "e0009aeae800e2a1cf8bddcd8fafeb639fd0cadf",
+  "state": "WIP mandatory writer migration verified with real replica CI; runtime disabled and unmerged",
+  "runtime_enabled": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "verification": {
+    "focused": "64passed11actualMongo local skips1.85s",
+    "compile": "pass",
+    "diff_check": "pass",
+    "legacy_policy_activation_units": "37pass3fail before stop; nontransactional fakeDB now returns503; must upgrade collaborators, do not restore legacy bypass",
+    "legacy_unit_migration": "475passed5.43s then extra legacyclaim failclosed test passed in targeted72; source settlement audit compatibility preserved",
+    "replica_modules": "8modules43explicitlocalMongo skips; collected without import errors; actual acceptance pending",
+    "ci_wiring": "full1177tests, standing75expectedincl11actualreplica, YAMLparse+allrunstepsbash-npass",
+    "root_full_workflow_local": {
+      "passed": 1096,
+      "skipped": 81,
+      "seconds": 15.45,
+      "exit_code": 0,
+      "limitation": "Mongo replica unavailable locally; actual CI required"
+    },
+    "actual_full_ci": {
+      "run": 40395280792,
+      "backend_job": 121826564686,
+      "passed": 1177,
+      "skipped": 0,
+      "seconds": 42.01,
+      "frontend": 162,
+      "build": "success",
+      "root_logs_read": true
+    },
+    "actual_guard_ci": {
+      "run": 40395280816,
+      "job": 121826564816,
+      "passed": 75,
+      "actual_replica": 11,
+      "failures_errors_skips": 0,
+      "seconds": 6.02,
+      "root_logs_read": true
+    },
+    "independent_review": "229pass2.92s; CI URI rejection reproduced then fixed using plainloopback against initiated verified replica. No transaction bypass found."
+  },
+  "changes": [
+    "Six mandatory same-db transaction policy writers; no optional None legacy path",
+    "Standing authority/settlement common guard, transaction policy digest and quota",
+    "Native budget resource/shared flags/referenceCount proof",
+    "Unknown outcomes retained; known precommit conflicts409; runtime literal false even if flags set"
+  ],
+  "remaining": [
+    "Native budget response proof; pre-migration privateclaim recovery/absence evidence before runtime enable",
+    "Creation fundedfirstlaunch migration and allownerlaunch/catalognativeproofs remain"
+  ],
+  "next_safe_action": "Review native provider budget proofs and legacyclaims migration before production integration; implement funded first launch separately; never enable runtime from flags alone",
+  "pr": 1560,
+  "source_sha": "371a1382cfa856cb841276027dfface241839caa",
+  "latest_budget_identity_checkpoint": {
+    "base_sha": "71b7b2a08d27860f5d52f114b01e752d6c049fb2",
+    "state": "WIP default-off, not independently reviewed or deployed",
+    "change": "Require campaign snapshot and complete inventory to identify the same owner-account unshared budget and both prove reference count one before authorization. Same amount alone is insufficient.",
+    "tests": "94 passed authority and standing; 48 passed 16 skipped in gateway/replica modules; Mongo replica CI still required for new source; git diff --check passed",
+    "production_changed": false,
+    "remaining": "Provider receipt identity, legacy claims migration and absence evidence, actual production Mongo transactions, funded first launch and full integration remain required. Runtime stays disabled.",
+    "next_safe_action": "Review external writer race and provider proof; do not merge, deploy, or enable runtime. Preserve allocations and fences for uncertain outcomes.",
+    "pr": 1579,
+    "code_sha": "e8162c3c23661042d3b4417b945e0ee12fdae403",
+    "wider_local_tests": "676 passed, 54 skipped (Mongo replica unavailable locally)",
+    "review_followup": "Gateway REST-shaped cases reject missing shared flag/reference count, other account or different budget. Google documents that explicitly_shared=false can change to true. The checks are pre-dispatch observations only, not an atomic provider compare-and-set; external writes may race. Runtime remains disabled pending an evidence-backed provider concurrency control or operational exclusion and conservative post-dispatch reconciliation; uncertain outcomes retain allocations and fences. End-to-end execution exercises real compatible_read with four rejected REST rows and verifies no provider mutation or submission floor.",
+    "reference": "https://developers.google.com/google-ads/api/fields/v26/campaign_budget",
+    "focused_followup": "134 passed: authority, gateway and standing; real replica CI pending for latest checkpoint",
+    "tested_source": "d22a09f02ca928c0cb7cd083e434cb082c55a0f7",
+    "ci_guard": {
+      "run": 40419973827,
+      "job": 121911693832,
+      "source": "3fc5744c86d61e10f358a8c6b9fb36a1105afcef",
+      "code_equivalent_to_tested_source": true,
+      "passed": 75,
+      "real_replica_tests": 11,
+      "skipped": 0,
+      "result": "success"
+    },
+    "ci_full": {
+      "run": 40420062895,
+      "source": "d22a09f02ca928c0cb7cd083e434cb082c55a0f7",
+      "backend_job": 121911985733,
+      "backend_passed": 1193,
+      "backend_skipped": 0,
+      "frontend_job": 121911985268,
+      "frontend_passed": 162,
+      "frontend_suites": 15,
+      "build": "success"
+    }
+  }
+}

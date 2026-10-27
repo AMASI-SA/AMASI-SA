@@ -1,0 +1,81 @@
+{
+  "task_id": "GOOGLE-BUDGET-LEGACY-SETTLEMENT-20261027",
+  "state": "WIP terminal legacy claim recovery; actual replica and independent review passed; not deployed",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-budget-safety-20261027",
+  "base_sha": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
+  "code_sha": "c343dc0fd4031c0e9a566852ff978db5bd45995a",
+  "code_tree": "175acd90db412064b15decfcdc65aefff179ae1d",
+  "local_equivalent_code_sha": "c5a6a853566632303e84222126cec420635562cf",
+  "runtime_enabled": false,
+  "production_changed": false,
+  "provider_writes": 0,
+  "changes": [
+    "Atomic terminal recovery of a pre-migration private standing claim without a common allocation, after original proposal/operations/before-snapshot/budget/owner-account fence binding checks",
+    "Known cancellation or provider rejection creates a settled tombstone; completed execution creates a retained native reflection hold; unresolved outcome rolls back with private claim, quota and fence preserved",
+    "A same-session real fence marker CAS conflicts with concurrent release/replacement; no fence is released by settlement",
+    "Owner revocation and settlement remain independent of Google OAuth; no legacy nontransactional fallback; no runtime flags enabled",
+    "Future launch allocations reject unexplained private standing claims"
+  ],
+  "files": [
+    "backend/integrations_control_center/google_ads_automation_authority.py",
+    "backend/integrations_control_center/google_ads_automation_budget_guard.py",
+    "backend/tests/test_google_ads_automation_authority.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement_mongo.py"
+  ],
+  "verification": {
+    "regression_red": "Known terminal legacy recovery failed before implementation with google_budget_guard_settlement_unproved",
+    "narrow_units": {
+      "passed": 136,
+      "seconds": 1.64
+    },
+    "actual_replica": {
+      "command": "python -m pytest --noconftest -q --tb=short backend/tests/test_google_ads_legacy_budget_settlement.py backend/tests/test_google_ads_legacy_budget_settlement_mongo.py backend/tests/test_google_ads_automation_budget_guard.py backend/tests/test_google_ads_automation_budget_guard_mongo.py backend/tests/test_google_ads_guard_integration.py backend/tests/test_google_ads_guard_integration_mongo.py backend/tests/test_google_ads_budget_guard_standing.py backend/tests/test_google_ads_automation_authority.py backend/tests/test_google_ads_automation_gateway.py",
+      "mongodb": "7.0.14 disposable loopback replica on 27182; explicit primary proof; process and only generated databases cleaned after tests",
+      "passed": 208,
+      "actual_replica_tests": 16,
+      "failures_errors_skips": 0,
+      "seconds": 6.97,
+      "exit_code": 0,
+      "cases": "legacy cancellation/completion, uncertain rollback, postcommit lost ACK retention, and external fence release after snapshot read before CAS"
+    },
+    "diff_check": "pass",
+    "remote_integrity": "Each connector blob hash and resulting tree exactly matched tested local Git objects; connector commit differs only in author/commit metadata",
+    "ci": "New exact workflow gate locally verified on an actual replica; integrated GitHub CI is to be triggered by root advancing existing WIP PR1560",
+    "exact_guard_ci_gate": {
+      "workflow_commit": "dc9434aab12534a822724267b170f67f7c8c9542",
+      "command": "Same seven test modules as .github/workflows/google-ads-budget-guard-standing.yml, disposable loopback Mongo 7.0.14 replica on 27182, pytest JUnit count verification",
+      "passed": 91,
+      "actual_replica_tests": 16,
+      "failures_errors_skips": 0,
+      "seconds": 6.3,
+      "exit_code": 0,
+      "yaml_and_all_shell_syntax": "pass",
+      "collection": "91 tests",
+      "workflow_assertions": "At least 91 total, exactly 16 real replica cases, zero failures/errors/skips",
+      "runtime_enabled_by_workflow": false
+    }
+  },
+  "independent_review": {
+    "agent": "budget_audit",
+    "state": "Final immutable c343dc0 and equivalent local tree reviewed read-only; no direct bypass found; fence marker addresses snapshot race",
+    "independent_unit_tests": {
+      "passed": 11
+    },
+    "limits": "Wider integrated CI, actual legacy records when activation is later considered, and external provider-writer risks remain separate"
+  },
+  "remaining": [
+    "Run wider integrated CI before integration; independent final code review passed",
+    "Runtime remains false; funded first launch, owner opt-in, native permissions and live connection acceptance are separate",
+    "External direct Google/manual writers are outside Mongo transactions. Current checks are pre-dispatch observations, not an atomic provider compare-and-set or a hard spending cap; do not block safe disabled code improvements solely on that fact",
+    "No live production database or provider call performed; production Mongo transaction capability not inferred from local tests"
+  ],
+  "next_safe_action": "Independently inspect immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a and actual replica results, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled",
+  "integration_plan": {
+    "target_branch": "codex/google-guard-integration-wip-20261026",
+    "last_observed_head": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
+    "safe_if_unchanged": "Root may fast-forward existing WIP branch to this branch checkpoint without force because code c343dc0 directly descends from edf6bed8; do not create a duplicate PR",
+    "target_ref_updated_by_this_task": false
+  }
+}
