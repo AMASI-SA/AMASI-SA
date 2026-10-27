@@ -42,7 +42,20 @@
     },
     "diff_check": "pass",
     "remote_integrity": "Each connector blob hash and resulting tree exactly matched tested local Git objects; connector commit differs only in author/commit metadata",
-    "ci": "Not launched on new branch; baseline edf6bed8 had actual replica CI recorded separately"
+    "ci": "New exact workflow gate locally verified on an actual replica; integrated GitHub CI is to be triggered by root advancing existing WIP PR1560",
+    "exact_guard_ci_gate": {
+      "workflow_commit": "dc9434aab12534a822724267b170f67f7c8c9542",
+      "command": "Same seven test modules as .github/workflows/google-ads-budget-guard-standing.yml, disposable loopback Mongo 7.0.14 replica on 27182, pytest JUnit count verification",
+      "passed": 91,
+      "actual_replica_tests": 16,
+      "failures_errors_skips": 0,
+      "seconds": 6.3,
+      "exit_code": 0,
+      "yaml_and_all_shell_syntax": "pass",
+      "collection": "91 tests",
+      "workflow_assertions": "At least 91 total, exactly 16 real replica cases, zero failures/errors/skips",
+      "runtime_enabled_by_workflow": false
+    }
   },
   "independent_review": {
     "agent": "budget_audit",
@@ -58,5 +71,11 @@
     "External direct Google/manual writers are outside Mongo transactions. Current checks are pre-dispatch observations, not an atomic provider compare-and-set or a hard spending cap; do not block safe disabled code improvements solely on that fact",
     "No live production database or provider call performed; production Mongo transaction capability not inferred from local tests"
   ],
-  "next_safe_action": "Independently inspect immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a and actual replica results, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled"
+  "next_safe_action": "Independently inspect immutable code c343dc0fd4031c0e9a566852ff978db5bd45995a and actual replica results, integrate selectively on latest Google WIP preserving other conversations, run required CI and keep runtime disabled",
+  "integration_plan": {
+    "target_branch": "codex/google-guard-integration-wip-20261026",
+    "last_observed_head": "edf6bed8ec14fe031a3a8511a2ae4a2105857e9d",
+    "safe_if_unchanged": "Root may fast-forward existing WIP branch to this branch checkpoint without force because code c343dc0 directly descends from edf6bed8; do not create a duplicate PR",
+    "target_ref_updated_by_this_task": false
+  }
 }
