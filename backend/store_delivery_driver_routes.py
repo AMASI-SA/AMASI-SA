@@ -180,6 +180,17 @@ async def _event(db: Any, *, user_id: str, driver_id: str, event_type: str, acto
     })
 
 
+def _driver_version_filter(expected_version: int) -> dict[str, Any]:
+    """CAS selector: legacy records lacking version are logically version 1.
+
+    Never relax the predicate for newer versions: concurrent updates must
+    still fail with HTTP 409 rather than overwrite a newer driver edit.
+    """
+    if expected_version == 1:
+        return {"$or": [{"version": 1}, {"version": {"$exists": False}}]}
+    return {"version": expected_version}
+
+
 def _public_driver(doc: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in doc.items() if key not in {"_id", "user_id", "city_key"}}
 
@@ -324,7 +335,7 @@ def make_store_delivery_driver_router(db: Any, current_user: Callable[..., Any])
         patch.update({"updated_at": _now(), "updated_by": normalize_text(actor.get("id")), "version": payload.expected_version + 1})
         try:
             result = await db[STORE_DRIVERS].find_one_and_update(
-                {"user_id": user_id, "id": driver_id, "$or": ([{"version": 1}, {"version": {"$exists": False}}] if payload.expected_version == 1 else [{"version": payload.expected_version}])}, {"$set": patch},
+                {"user_id": user_id, "id": driver_id, **_driver_version_filter(payload.expected_version)}, {"$set": patch},
                 return_document=True, projection={"_id": 0, "user_id": 0, "city_key": 0})
         except DuplicateKeyError as exc:
             raise HTTPException(status_code=409, detail={"code": "store_driver_phone_exists"}) from exc
