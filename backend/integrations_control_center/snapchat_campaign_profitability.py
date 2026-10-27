@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 from typing import Any
 
 from dashboard_v2_routes import (
@@ -669,6 +670,17 @@ async def build_campaign_profitability(
     return result
 
 
+def _mark_read_only_profitability(result: dict[str, Any]) -> None:
+    """Shared response policy for the legacy and exact-cohort presenters."""
+    result.setdefault("policy", {}).update({
+        "campaign_profitability_read_only": True,
+        "product_ad_spend_is_allocated_not_provider_fact": True,
+        "profitability_provider_write_reached": False,
+        "profitability_accounting_write_reached": False,
+        "profitability_qoyod_write_reached": False,
+    })
+
+
 def install_snapchat_campaign_profitability() -> None:
     from . import snapchat_campaign_result_source_routes as routes
 
@@ -676,6 +688,7 @@ def install_snapchat_campaign_profitability() -> None:
     if getattr(current, "_mezan_campaign_profitability", False):
         return
 
+    @wraps(current)
     async def wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
         result = await current(*args, **kwargs)
         db = args[0] if args else kwargs.get("db")
@@ -723,17 +736,14 @@ def install_snapchat_campaign_profitability() -> None:
 
         result.setdefault("totals", {})["profitability"] = profitability["totals"]
         result.setdefault("source", {})["campaign_profitability"] = profitability["coverage"]
-        result.setdefault("policy", {}).update({
-            "campaign_profitability_read_only": True,
-            "product_ad_spend_is_allocated_not_provider_fact": True,
-            "profitability_provider_write_reached": False,
-            "profitability_accounting_write_reached": False,
-            "profitability_qoyod_write_reached": False,
-        })
+        _mark_read_only_profitability(result)
         return result
 
     wrapped._mezan_campaign_profitability = True  # type: ignore[attr-defined]
     wrapped._mezan_campaign_profitability_base = current  # type: ignore[attr-defined]
+    # Unlike inherited marker attributes, this identity is true only when the
+    # function itself is the direct legacy layer, not an unrelated outer layer.
+    wrapped._mezan_campaign_profitability_owner = wrapped  # type: ignore[attr-defined]
     routes.build_snapchat_result_source_report = wrapped
 
 

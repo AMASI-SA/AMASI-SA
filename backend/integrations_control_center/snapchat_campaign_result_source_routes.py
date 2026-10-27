@@ -10,6 +10,7 @@ The route is read-only and never writes to Snapchat, Salla, accounting or Qoyod.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from typing import Any, Callable
 
@@ -209,6 +210,7 @@ async def _salla_outcomes(
     date_from: str,
     date_to: str,
     identities: list[dict[str, Any]],
+    matched_orders_out: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, Any]]:
     from dashboard_v2_routes import _filtered_orders
 
@@ -220,6 +222,7 @@ async def _salla_outcomes(
         payment_methods=None,
         shipping_companies=None,
         include_marketing_attribution=True,
+        cooperative=True,
     )
     id_lookup = _unique_lookup(identities, "campaign_id")
     name_lookup = _unique_lookup(identities, "campaign_name")
@@ -236,7 +239,11 @@ async def _salla_outcomes(
     matched_by_name = 0
     ambiguous = 0
     unmatched_snapchat = 0
-    for order in orders:
+    for index, order in enumerate(orders):
+        # Bound uninterrupted matching work without moving DB or mutable report
+        # state to threads. Cancellation discards this request-local cohort.
+        if index % 128 == 0:
+            await asyncio.sleep(0)
         key, match_kind = _match_order_campaign(
             order,
             id_lookup=id_lookup,
@@ -253,6 +260,8 @@ async def _salla_outcomes(
         elif match_kind == "campaign_name":
             matched_by_name += 1
         amount = _number(order.get("total_amount") or order.get("total")) or 0.0
+        if matched_orders_out is not None:
+            matched_orders_out.setdefault(key, []).append(order)
         order_date = _text(order.get("order_date"))[:10]
         by_campaign[key]["orders"] += 1
         by_campaign[key]["sales_sar"] += amount
