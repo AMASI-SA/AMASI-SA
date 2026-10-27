@@ -5,7 +5,7 @@
   "base_sha": "5c3353034be910ab2bde62c12512d1d8ded26faa",
   "previous_checkpoint": "ebafb1de8c545b166361d608860e352a8c55bd69",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1590",
-  "status": "WIP focused and real Mongo acceptance passed; final independent review and CI pending",
+  "status": "Source candidate independently reviewed and CI passed; actual-host Release Guard and deployment blocked by unavailable shared preview",
   "scope": "Source-bound inventory evidence for Google automatic PAUSED Search creation",
   "ownership_extension": "Coordinator explicitly approved additive metadata only in product_v2_details_routes._details_patch, creation-only projection seams in plan/gateway/authority, and supplied the Arabic UI blocker mapping. Shared writers and google_ads_ai projection are unchanged.",
   "contract": "inventory_evidence_v1 binds strict version, source revision, exact canonical stock fingerprint, details observation, bounded variant count and available/unavailable/unproved state. Missing legacy proof, absent/null/conflicting arrays, stale/replaced source, partial canonical rows or changed stock fail closed. Explicit positive numeric SKU IDs required. Saved owner review and intent both bind inventory digest.",
@@ -14,11 +14,64 @@
     "result": "377 passed, no skips, exit 0",
     "diff_check": "passed",
     "mongo": "4 passed, no skips, exit 0: test_google_ads_creation_inventory_mongo.py on own disposable loopback 27184, Mongo 7.0.14; same-lifecycle shutdown exit 0",
-    "ci": "draft PR 1590; latest checkpoint CI pending",
-    "independent_review": "budget_audit found missing saved-review stock binding; fixed and regression passed. Final immutable-source review pending",
-    "release_runtime_classification": "Root independently confirmed new helper, details writer and creation projection are included; no Release Guard classifier changes needed"
+    "ci": {
+      "source_sha": "04032c6fae983db356ee738d74fd7c742771d342",
+      "google": {
+        "run": 40430669454,
+        "backend_passed": 1208,
+        "frontend_passed": 189,
+        "frontend_suites": 17,
+        "build": "passed",
+        "root_logs_verified": true
+      },
+      "products_v2": {
+        "run": 40430669456,
+        "backend_passed": 286,
+        "build": "passed",
+        "root_logs_verified": true
+      },
+      "release_readiness": {
+        "run": 40430669358,
+        "status": "passed",
+        "actual_host": "skipped, not evidence"
+      },
+      "codeql": {
+        "run": 40430669376,
+        "python": "success",
+        "javascript_typescript": "success"
+      }
+    },
+    "independent_review": "budget_audit reran74 tests on exact source; no additional blocking finding. Saved-review digest is compared at both activation reads and creation intent binding.",
+    "release_runtime_classification": "Root independently confirmed new helper, details writer and creation projection are included; no Release Guard classifier changes needed",
+    "root": {
+      "focused": {
+        "passed": 377,
+        "seconds": 3.2,
+        "exit": 0
+      },
+      "shared_writer": {
+        "passed": 8,
+        "seconds": 0.76,
+        "exit": 0,
+        "cwd": "backend"
+      },
+      "mongo": {
+        "passed": 4,
+        "seconds": 0.83,
+        "exit": 0,
+        "skips": 0,
+        "instance": "own disposable loopback27186",
+        "shutdown_exit": 0
+      },
+      "source_match": "All16 modified/new local files match immutable remote Git blob hashes.",
+      "initial_operator_error": "First combined run used repo cwd for an existing relative-path product test:384passed/1FileNotFoundError. Correct backend cwd rerun8/8passed; no code changes."
+    }
   },
-  "source_docs": ["https://docs.salla.dev/product/product-details", "https://docs.salla.dev/product/list-product", "https://docs.salla.dev/product-variants/list"],
+  "source_docs": [
+    "https://docs.salla.dev/product/product-details",
+    "https://docs.salla.dev/product/list-product",
+    "https://docs.salla.dev/product-variants/list"
+  ],
   "limitations": [
     "This validates explicit bounded details evidence; it does not establish full remote variant-list pagination coverage.",
     "Legacy rows and missing/ambiguous arrays require details refresh; no invented no-variant inference.",
@@ -26,7 +79,21 @@
     "Strict bounded numeric stock strings are supported; boolean quantities and truthy string unlimited flags are unproved.",
     "No funded launch, feature-flag activation or live-provider operation is included."
   ],
-  "next": "Independent review latest immutable checkpoint and CI, then coordinator integration and required release/live validation",
+  "next": "Restore shared Emergent project UI; fetch latest production and read actual /app Release Guard status before any /app change or rehearsal. Select and rebuild Source A against current production, freeze intent-only B, pass exact checks and actual-host rehearsal, prepare/prepublish/one publish, new completion+3identity probes+closedlease, then functional live test. Keep unsupported evidence and runtime flags blocked.",
   "production_changed": "no",
-  "deployment": "not attempted"
+  "deployment": "not attempted",
+  "updated_at": "2026-10-27T01:14:17.600Z",
+  "source_sha": "04032c6fae983db356ee738d74fd7c742771d342",
+  "status_branch": "codex/google-variant-stock-status-20261027",
+  "release": {
+    "production_head_observed": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+    "intent_only_B_frozen": false,
+    "actual_guard_read": false,
+    "actual_host_rehearsal": false,
+    "lease_created": false,
+    "merge": false,
+    "publish": false,
+    "live_acceptance": false,
+    "blocker": "Editor visibly reports Preview Unavailable and asks to restart app from Emergent. Fresh Emergent home DOMSnapshot and screenshot protocol time out. No paid chat used."
+  }
 }
