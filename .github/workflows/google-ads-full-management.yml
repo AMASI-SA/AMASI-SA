@@ -88,6 +88,7 @@ jobs:
           backend/tests/test_google_ads_client.py
           backend/tests/test_google_ads_reporting_v1.py
           backend/tests/test_google_commercial_plan.py
+          backend/tests/test_google_ads_plan_suggestions.py
           backend/tests/test_google_ads_workspace.py
           backend/tests/test_google_ads_overview.py
           backend/tests/test_google_ads_protobuf_contract.py

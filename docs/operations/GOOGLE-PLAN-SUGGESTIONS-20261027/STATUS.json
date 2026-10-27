@@ -1,0 +1,16 @@
+{
+  "task": "GOOGLE-PLAN-SUGGESTIONS-20261027",
+  "branch": "codex/google-plan-suggestions-20261027",
+  "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "state": "WIP backend owner-only quoted suggestions; frontend integration in progress",
+  "scope": "Suggest season, explicit ISO dates, supported country, audience, message and category URL from exact spans of the supplied instruction. No automatic budget, product IDs, exclusions or authorization.",
+  "verification": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
+    "exit_code": 0,
+    "passed": 46,
+    "provider_calls": "Synthetic reasoning only; no live model request",
+    "review": "pending"
+  },
+  "production_changed": false,
+  "next": "Integrate source-quoted owner preview UI, preserve existing fields and limits, review independently, run exact source CI and governed release workflow. Never describe suggestions as reviewed or as authority."
+}
