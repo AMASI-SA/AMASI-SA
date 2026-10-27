@@ -7,7 +7,7 @@ const BUTTON = "rounded-lg border px-3 py-2 text-sm font-bold disabled:opacity-4
 const NUMBERS = [["owner_generation", "جيل الإنشاء", 1, 2147483647], ["template_version", "إصدار القالب", 1, 2147483647],
     ["max_paused_campaigns", "أقصى حملات جديدة موقوفة", 1, 20], ["max_daily_creations", "أقصى إنشاءات في يوم الحساب", 1, 20],
     ["max_total_creations", "أقصى إنشاءات إجمالًا", 1, 100], ["catalog_max_age_seconds", "أقصى عمر لبيانات المنتج · ثانية", 60, 86400]];
-const BLOCKERS = { product_not_public: "المنتج مخفي أو مؤرشف", product_out_of_stock: "المنتج غير متاح بالمخزون", product_facts_stale: "حدّث حقائق المنتج", product_copy_unproved: "راجع النص الأصلي للمنتج", creative_asset_limit: "النص بعد الاستبدال يحتاج تعديلًا لحدود جوجل", auto_enable_not_implemented: "التفعيل اللاحق غير متاح؛ أعد حفظ السياسة بإنشاء موقوف فقط" };
+const BLOCKERS = { product_not_public: "المنتج مخفي أو مؤرشف", product_out_of_stock: "المنتج غير متاح بالمخزون", product_inventory_unproved: "حدّث تفاصيل المنتج للتحقق من مخزون المقاسات والخيارات المتاحة", product_facts_stale: "حدّث حقائق المنتج", product_copy_unproved: "راجع النص الأصلي للمنتج", creative_asset_limit: "النص بعد الاستبدال يحتاج تعديلًا لحدود جوجل", auto_enable_not_implemented: "التفعيل اللاحق غير متاح؛ أعد حفظ السياسة بإنشاء موقوف فقط" };
 function localDate(value) {
     if (!value || !Number.isFinite(new Date(value).getTime())) return "";
     const date = new Date(value);

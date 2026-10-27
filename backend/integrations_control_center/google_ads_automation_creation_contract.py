@@ -9,6 +9,7 @@ each dispatch again. Nothing here creates a worker, policy, draft or campaign.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from product_inventory_proof import inventory_readiness
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -354,6 +355,9 @@ def prepare_google_creation_intent(*, policy, template, product, native_context,
     if (not isinstance(product.get("source_revision"), str) or not re.fullmatch(r"[a-f0-9]{64}", product["source_revision"])
         or not _fresh(product.get("last_synced_at"), current, policy.catalog_max_age_seconds)):
         _fail("creation_catalog_unproved")
+    inventory_state, inventory_digest = inventory_readiness(product, current, policy.catalog_max_age_seconds)
+    if inventory_state != "available":
+        _fail("creation_product_unavailable" if inventory_state == "unavailable" else "creation_product_inventory_unproved")
     if _canonical_url(product) != scope.final_url:
         _fail("creation_product_url_changed")
     name, sku = product.get("name"), product.get("sku") or None
@@ -383,7 +387,7 @@ def prepare_google_creation_intent(*, policy, template, product, native_context,
         "template_id": template.template_id, "template_version": template.version, "owner_generation": policy.owner_generation}
     product_binding = {"catalog_collection": "mezan_products_v2", "product_id": choice.product_id,
         "source_revision": product["source_revision"], "product_name": name, "product_short_name": fields["product_short_name"],
-        "sku": sku, "final_url": scope.final_url}
+        "sku": sku, "final_url": scope.final_url, "inventory_digest": inventory_digest}
     binding = {"schema_version": 1, "identity": identity, "policy_digest": _digest(policy.model_dump(mode="json")),
         "policy_revision": policy.revision, "template_digest": approved_template_digest(template),
         "product": product_binding, "draft_digest": _digest(draft_value), "initial_status": "PAUSED"}

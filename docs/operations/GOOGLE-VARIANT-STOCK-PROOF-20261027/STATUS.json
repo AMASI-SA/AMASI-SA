@@ -1,0 +1,32 @@
+{
+  "task": "GOOGLE-VARIANT-STOCK-PROOF-20261027",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-variant-stock-proof-20261027",
+  "base_sha": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "previous_checkpoint": "ebafb1de8c545b166361d608860e352a8c55bd69",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1590",
+  "status": "WIP focused and real Mongo acceptance passed; final independent review and CI pending",
+  "scope": "Source-bound inventory evidence for Google automatic PAUSED Search creation",
+  "ownership_extension": "Coordinator explicitly approved additive metadata only in product_v2_details_routes._details_patch, creation-only projection seams in plan/gateway/authority, and supplied the Arabic UI blocker mapping. Shared writers and google_ads_ai projection are unchanged.",
+  "contract": "inventory_evidence_v1 binds strict version, source revision, exact canonical stock fingerprint, details observation, bounded variant count and available/unavailable/unproved state. Missing legacy proof, absent/null/conflicting arrays, stale/replaced source, partial canonical rows or changed stock fail closed. Explicit positive numeric SKU IDs required. Saved owner review and intent both bind inventory digest.",
+  "tests": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_creation_inventory.py backend/tests/test_google_ads_automation_creation_contract.py backend/tests/test_google_ads_automation_creation_policy.py backend/tests/test_google_ads_automation_creation_authority.py backend/tests/test_google_ads_automation_creation_plan.py backend/tests/test_google_ads_automation_creation_gateway.py backend/tests/test_google_ads_automation_creation_worker.py",
+    "result": "377 passed, no skips, exit 0",
+    "diff_check": "passed",
+    "mongo": "4 passed, no skips, exit 0: test_google_ads_creation_inventory_mongo.py on own disposable loopback 27184, Mongo 7.0.14; same-lifecycle shutdown exit 0",
+    "ci": "draft PR 1590; latest checkpoint CI pending",
+    "independent_review": "budget_audit found missing saved-review stock binding; fixed and regression passed. Final immutable-source review pending",
+    "release_runtime_classification": "Root independently confirmed new helper, details writer and creation projection are included; no Release Guard classifier changes needed"
+  },
+  "source_docs": ["https://docs.salla.dev/product/product-details", "https://docs.salla.dev/product/list-product", "https://docs.salla.dev/product-variants/list"],
+  "limitations": [
+    "This validates explicit bounded details evidence; it does not establish full remote variant-list pagination coverage.",
+    "Legacy rows and missing/ambiguous arrays require details refresh; no invented no-variant inference.",
+    "At most 50 variants are supported; larger or partial projected sets are unproved.",
+    "Strict bounded numeric stock strings are supported; boolean quantities and truthy string unlimited flags are unproved.",
+    "No funded launch, feature-flag activation or live-provider operation is included."
+  ],
+  "next": "Independent review latest immutable checkpoint and CI, then coordinator integration and required release/live validation",
+  "production_changed": "no",
+  "deployment": "not attempted"
+}
