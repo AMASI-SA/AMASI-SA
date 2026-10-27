@@ -28,6 +28,11 @@ also passed. The new regression
 failed before the display correction. Frontend dependencies are unavailable in
 this scratch checkout; the two UI rendering assertions and production frontend
 build must pass the triggered Snapchat Integrations V2 CI before integration.
+First CI on `505a518b` had 71 passed / 1 failed: the test captured an old
+`_actions` function before another test installed Snapchat's wrapper. The
+regression now resolves that function dynamically. Running the exact nine-file
+CI backend command with the same fixture JWT setting passed all 72 cases
+locally; fresh remote CI and frontend checks are still required.
 No B intent or deployment was attempted. A future separate scope-provenance
 contract would need explicit provider-confirmed evidence and safe migration;
 until then legacy scope values remain unverified.

@@ -4,7 +4,7 @@ from copy import deepcopy
 import pytest
 
 from integrations_control_center.catalog import PROVIDER_BY_ID, build_capability_matrix
-from integrations_control_center.service import _actions, _ai_actions, _card_from_snapshot
+from integrations_control_center import service
 from integrations_control_center.snapchat_catalog_native import install_snapchat_native_catalog
 from integrations_control_center import snapchat_projection
 from tests.test_snapchat_native_integrations_v2 import FakeDB
@@ -24,7 +24,7 @@ def test_snapchat_card_does_not_present_unproven_persisted_scopes_as_granted(mon
                       "permissions": ["snapchat-marketing-api"], "has_data": True}],
     }
     before = deepcopy(snapshot)
-    card = _card_from_snapshot(PROVIDER_BY_ID["snapchat_ads"], snapshot)
+    card = service._card_from_snapshot(PROVIDER_BY_ID["snapchat_ads"], snapshot)
     assert card["permissions"]["unknown"] is True
     assert card["permissions"]["current"] == []
     assert card["permissions"]["missing"] == []
@@ -36,8 +36,8 @@ def test_snapchat_card_does_not_present_unproven_persisted_scopes_as_granted(mon
         evidence_capabilities=["campaigns.read"],
     )
     assert card["capabilities"] == expected_capabilities
-    assert card["ai"] == _ai_actions(PROVIDER_BY_ID["snapchat_ads"], snapshot, expected_capabilities)
-    assert card["actions"] == _actions(PROVIDER_BY_ID["snapchat_ads"], snapshot)
+    assert card["ai"] == service._ai_actions(PROVIDER_BY_ID["snapchat_ads"], snapshot, expected_capabilities)
+    assert card["actions"] == service._actions(PROVIDER_BY_ID["snapchat_ads"], snapshot)
     assert snapshot == before
 
 
@@ -48,7 +48,7 @@ def test_non_snapchat_permission_evidence_is_unchanged():
         "has_data": True, "permissions_observed": True,
         "current_permissions": ["ads_read"], "missing_permissions": [], "accounts": [],
     }
-    card = _card_from_snapshot(PROVIDER_BY_ID["meta_ads"], snapshot)
+    card = service._card_from_snapshot(PROVIDER_BY_ID["meta_ads"], snapshot)
     assert card["permissions"]["current"] == ["ads_read"]
     assert card["permissions"]["unknown"] is False
 
