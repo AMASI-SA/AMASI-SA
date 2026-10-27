@@ -450,7 +450,8 @@ async def _settle(db, *, user_id, account_id, claim_id, current):
     capability = await probe_google_budget_guard_transactions(db)
     result = await run_google_budget_guard_transaction(db, **scope,
         operation_id="settle_" + claim_id, capability=capability,
-        planner=lambda snapshot: BudgetReservationSettlement("standing_" + claim_id, claim_id))
+        planner=lambda snapshot: BudgetReservationSettlement("standing_" + claim_id, claim_id,
+            recover_legacy_terminal=True))
     if result.get("committed") is not True:
         _fail("google_automation_settlement_unproved")
     return {"released": True, "claim_id": claim_id, "provider_writes": 0, "quota_refunded": False}

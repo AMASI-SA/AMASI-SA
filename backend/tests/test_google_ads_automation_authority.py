@@ -174,15 +174,14 @@ async def test_default_off_creates_no_claim_or_database_writes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_legacy_private_claim_without_common_allocation_stays_held_for_explicit_migration():
+async def test_unresolved_legacy_claim_without_common_allocation_stays_held_for_proven_terminal_recovery():
     from integrations_control_center.google_ads_automation_budget_guard import BUDGET_GUARDS
     docs,native=case_documents();db=DB(docs)
     await authorize(db,native)
-    # A pre-migration private claim has no common allocation. Even a known
-    # terminal proposal cannot manufacture missing shared budget provenance.
+    # An unresolved pre-migration claim has no safe terminal proof. No
+    # common allocation may be invented to bypass the uncertain outcome.
     db[BUDGET_GUARDS].rows=[]
-    db[PROPOSALS].rows[0].update(status='failed',submission_started=False,
-        safe_error='execution_cancelled_before_dispatch')
+    db[PROPOSALS].rows[0].update(status='uncertain',submission_started=True)
     held=deepcopy(db[AUTOMATION_POLICIES].rows[0])
     with pytest.raises(HTTPException) as error:
         await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id='claim1',current=NOW)
