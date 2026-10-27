@@ -1,0 +1,44 @@
+{
+  "task_id": "GOOGLE-REFRESH-CAS-FIX-20261027",
+  "state": "IMPLEMENTED narrow runtime fix; local actual-helper and replica acceptance passed; independent review and exact-source CI pending; not deployed",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-refresh-cas-fix-20261027",
+  "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "prior_WIP_reviewed": "c94246af331f4d3155b7b548143c730c63167d60",
+  "scope": "Actual Ads, GA4 and Merchant refresh helpers now compare the exact observed credential snapshot and verify majority persistence before returning the refreshed token. Google-only scheduler records failed refreshes without tenant-only connection invalidation.",
+  "implemented": [
+    "Shared wired credential persistence helper compares existing encrypted access/refresh material, timestamps, scopes, subject/email/type and optional generation fields",
+    "Explicit absent versus null field comparison, upsert false, majority journaled acknowledged write and matched_count check",
+    "Exact primary-majority readback before token return; conflict, unacknowledged write, lost acknowledgement or failed readback returns a sanitized error and no token",
+    "Actual Ads _credential/_refresh_access_token, GA4 _fresh_google_access_token and Merchant _fresh_google_context migrated",
+    "Google scheduler preserves diagnostic run/error records but no longer marks connection needs_reauth from an unfenced old refresh error",
+    "All five modified/new runtime paths are included by existing backend_runtime_source_path_included classifier; no identity protocol modification"
+  ],
+  "verification": {
+    "regression_before_fix": "Actual-helper tests: 42 failed, 3 passed; failures proved overwrite and missing acknowledged-readback checks",
+    "focused_command": "GOOGLE_REFRESH_CAS_TEST_MONGOD=<disposable binary> PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_credential_refresh_cas.py backend/tests/test_google_credential_refresh_cas_mongo.py --tb=short",
+    "focused_result": "69 passed in 5.34s; 48 unit cases and 21 actual disposable single-node Mongo replica cases; zero skips",
+    "mongo": "Dedicated temporary dbpath, loopback27181, mongod7.0.14, random databases only; process stopped and temporary storage removed by fixture",
+    "broader_result": "92 passed, 27 expected local Mongo skips in 1.78s across actual-helper tests and existing Ads reporting, GA4 realtime/source, Ads management and client suites; dedicated CI supplies Mongo for these existing management cases",
+    "initial_replica_fixture_failure": "Three concurrent-call counter assertions initially attributed shared httpx monkeypatch calls to a different coroutine; corrected to one shared counter with a two-party provider barrier. One storage winner/one conflict assertion unchanged. Fresh full69case run passed.",
+    "whitespace": "git diff --check passed",
+    "release_identity_classifier": "All five runtime files returned included=true",
+    "ci": "Dedicated Google credential refresh CAS workflow added; exact-source remote run pending",
+    "independent_review": "Early reviewer notified; immutable source review pending"
+  },
+  "limitations": [
+    "Narrow stale-refresh overwrite fix, not a grant-generation migration or ABA-proof credential identity scheme",
+    "OAuth account projection remains non-atomic; no complete discovery or account-membership recovery claim",
+    "No durable send-once journal integration; two already in-flight provider refresh calls are possible and the CAS proves only one storage winner",
+    "No new application-level retry; shared Mongo client retryWrites option is unchanged. Majority options do not disable driver retries; any replay still uses the exact snapshot predicate",
+    "A relink after committed readback and before downstream token use is outside this fix; no cross-provider dispatch atomicity claim",
+    "Failed refresh remains a visible diagnostic, but does not automatically revoke global Google connection status; actual verified reauthorization remains a separate owner workflow",
+    "Owner connection was working before this task; no recovery credit and no live OAuth operation performed"
+  ],
+  "production_changed": false,
+  "live_credential_access": false,
+  "live_provider_calls": 0,
+  "release_guard_actions": 0,
+  "merge_or_publish": false,
+  "next_safe_action": "Push this dedicated task branch, inspect exact source CI and independent review including actual-helper replica cases, resolve any blocker, then hand off candidate to coordinator for current-production integration and separately governed release. Do not merge or publish from this subtask."
+}
