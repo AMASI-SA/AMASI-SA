@@ -11,6 +11,11 @@ capability label, not evidence that a provider OAuth scope of that name exists.
 The 403's cause remains unproven; application access, token grant, linked
 profile role, and sharing policy are distinct possibilities. Do not claim that
 adding any single scope resolves the error. No new provider grant was attempted.
+Snap's [Public Profile getting-started documentation](https://developers.snap.com/marketing-api/Public-Profile-API/GetStarted)
+states that this API requires application allowlisting; it does not establish
+which condition caused this specific sharing-policy rejection. Its
+[Profile Asset Management reference](https://developers.snap.com/marketing-api/Public-Profile-API/ProfileAssetManagement)
+documents the account sharing-policies endpoint used by the integration.
 
 Current projection stores actual scope supplied by the token response and,
 when absent, the requested-scope fallback in the same `scope` and permission
