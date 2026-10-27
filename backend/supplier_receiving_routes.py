@@ -2673,9 +2673,6 @@ def _supplier_receiving_search_piece_view(
     else:
         blocker = piece_scan_blocker(piece)
         if blocker is None:
-            blocker = piece_scan_blocker(piece)
-            if blocker:
-                raise HTTPException(status_code=409, detail=blocker)
             dispatch_blocker = supplier_receiving_dispatch_blocker(piece, supplier_id)
             if (
                 dispatch_blocker
@@ -4762,6 +4759,9 @@ def make_supplier_receiving_router(
                 stage="supplier_receiving",
                 actor_id=context["actor_id"],
             )
+            blocker = piece_scan_blocker(piece)
+            if blocker:
+                raise HTTPException(status_code=409, detail=blocker)
             dispatch_blocker = supplier_receiving_dispatch_blocker(
                 piece,
                 (session.get("supplier_snapshot") or {}).get("id")
