@@ -63,6 +63,7 @@ async def salla_campaign_outcomes(
         payment_methods=None,
         shipping_companies=None,
         include_marketing_attribution=True,
+        cooperative=True,
     )
     id_lookup = _unique_lookup(identities, "campaign_id")
     name_lookup = _unique_lookup(identities, "campaign_name")

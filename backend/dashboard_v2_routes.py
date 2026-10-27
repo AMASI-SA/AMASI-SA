@@ -496,6 +496,7 @@ async def _filtered_orders(
     payment_methods: str | None,
     shipping_companies: str | None,
     include_marketing_attribution: bool = False,
+    cooperative: bool = False,
 ) -> list[dict[str, Any]]:
     settings = await ensure_user_settings(db, user_id)
     query: dict[str, Any] = {"user_id": user_id}
@@ -507,10 +508,14 @@ async def _filtered_orders(
             query["order_date"]["$lte"] = to_date
     if settings.get("hide_inferred_date_orders"):
         query["order_date_inferred"] = {"$ne": True}
-    orders = await _to_list(
+    from dashboard_order_loading import cooperative_order_rows, prepare_order_rows
+
+    load_rows = cooperative_order_rows if cooperative else _to_list
+    orders = await load_rows(
         db.unified_orders.find(query, {"_id": 0, "raw_by_source": 0}),
         100000,
     )
+    projected_rows = []
     if orders:
         # Historical rows predate promoted SAR fields. Fetch only the Salla FX
         # proof needed to hydrate them in memory; no customer/payment/product
@@ -518,16 +523,25 @@ async def _filtered_orders(
         raw_projection = dict(SALLA_RAW_CURRENCY_PROJECTION)
         if include_marketing_attribution:
             raw_projection.update(SALLA_RAW_ATTRIBUTION_PROJECTION)
-        projected_rows = await _to_list(
+        projected_rows = await load_rows(
             db.unified_orders.find(query, raw_projection),
             100000,
         )
-        hydrate_order_currency_fields(orders, projected_rows)
-        if include_marketing_attribution:
-            attach_projected_salla_attribution(orders, projected_rows)
+        if not cooperative:
+            hydrate_order_currency_fields(orders, projected_rows)
+            if include_marketing_attribution:
+                attach_projected_salla_attribution(orders, projected_rows)
     pm_list = [part.strip() for part in (payment_methods or "").split(",") if part.strip()]
     ship_list = [part.strip() for part in (shipping_companies or "").split(",") if part.strip()]
     included_statuses = settings.get("report_included_statuses") or []
+    if cooperative:
+        return await prepare_order_rows(
+            orders, projected_rows, include_attribution=include_marketing_attribution,
+            hydrate_currency=hydrate_order_currency_fields,
+            attach_attribution=attach_projected_salla_attribution, matches=_matches_any,
+            payment_methods=pm_list, shipping_companies=ship_list,
+            included_statuses=included_statuses,
+        )
     return [
         order for order in orders
         if _matches_any(order.get("payment_method", ""), pm_list)

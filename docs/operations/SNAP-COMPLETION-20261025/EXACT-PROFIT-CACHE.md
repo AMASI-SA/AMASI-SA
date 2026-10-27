@@ -67,3 +67,55 @@ whole-report gap cannot yet be described as fully resolved. Changing this
 shared loader requires independent dashboard contract coverage and bounded
 cancellation/resource handling. Cache reuse remains disabled and no commerce
 freshness proof is enabled by this follow-up.
+
+### Opt-in shared-loader checkpoint (2026-10-27, WIP)
+
+`_filtered_orders(cooperative=True)` is enabled only by the two Snapchat/Salla
+outcome producers. Default dashboard callers retain the original behavior.
+`dashboard_order_loading.py` iterates the existing two cursor queries with a
+128-document driver batch and the existing 100,000-document cap per query,
+yielding between Python batches. It closes each async cursor on success,
+limit, error and cancellation; repeated cancellation waits for close to finish.
+Hydration, projected attribution and filters run in 128-order batches on the
+request task. Currency projections preserve last-row-wins including missing raw;
+attribution preserves last-dict-raw-wins. Input/output order and existing filters
+are unchanged. Two lookup maps add O(n) reference storage, bounded by the same
+query cap; rows are not deep-copied by this loader. No new worker is allocated.
+Lightweight to_list-only adapter fallback preserves compatibility but has no
+cooperative latency guarantee. Motor supports the bounded async path; no live
+Mongo process was available for driver/network measurement in this workspace.
+
+Verification: 85 PASS, exit0, across loader, currency and seven related
+profitability/report suites. New tests cover duplicate projection semantics,
+actual currency and attribution helpers, identical legacy outputs and query
+filters, 20k records with two concurrent loads, record limit, cursor errors,
+cancellation during hydration, and repeated cancellation during close. A
+composed report test uses the actual shared loader, real Salla matching and
+exact guarded calculator path, verifies two concurrent 20k cohorts, cost/sales,
+all cursors closed, ContextVar reset, and guard slots restored. Transport and
+cost-context reads are in-memory seams, not production evidence.
+
+Synthetic CPU comparison (20k SAR orders, actual loader hydration/filter code,
+no DB/network/decoding latency): legacy one-request wall/gap 0.124s/0.124s;
+two concurrent cooperative requests wall 0.428s, max heartbeat gap 0.010s,
+637 heartbeat turns. This demonstrates the local scheduling improvement, not
+a production SLA or complete end-to-end improvement. Driver decode cost per
+batch, unusually large individual records, initial query latency and full
+native-report composition still need deployment-shaped validation.
+
+Expanded attribution recovery suite: 103 PASS / 2 FAIL; both failures reproduced
+unchanged in detached baseline c1f730e7a21bdc75efd231f51728d0768a2c6a4a:
+`test_salla_live_source_details_shape_resolves_exact_snapchat_campaign` expects
+no promoted utm_content; `test_bounded_sync_recovery_loads_full_order_attribution`
+expects a save absent in the baseline. No attribution/sync implementation was
+changed; those failures are not silently added to this feature's CI selection.
+
+Continuity: previous remote checkpoint c97aaaf4c2ba9ca6f37294fe0ce4e172d7f67975
+on codex/snap-profit-cache-checkpoint-20261027 matches local c1f730 tree. GitHub
+Issue1006 comment write was rejected with403 because commenting is disabled
+above2500comments; fetch-all returned Transport closed. This task document is
+the fallback handoff. No PR, merge, release lease, provider write or Production
+change. Next safe step: independently review this opt-in loader and composed
+report cancellation; validate actual Motor cursor behavior before release.
+No atomic database snapshot, upstream freshness certificate or cache reuse is
+asserted. Remains WIP pending review and production-shaped validation.

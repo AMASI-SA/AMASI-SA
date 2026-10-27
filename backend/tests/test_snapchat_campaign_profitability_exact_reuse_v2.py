@@ -810,3 +810,58 @@ async def test_salla_aggregation_yields_and_cancellation_discards_partial_result
     assert len(partial.get(("a", "c"), [])) <= 128
     result = await salla.salla_campaign_outcomes(object(), "u", **kwargs)
     assert result[0][("a", "c")]["orders"] == 20000
+
+
+@pytest.mark.asyncio
+async def test_report_with_real_cooperative_loader_and_guard(runtime_report, monkeypatch):
+    import dashboard_v2_routes as dashboard
+    from types import SimpleNamespace
+    install, legacy_calls = runtime_report
+    # exact adapter retains the original exported loader; fixture only replaced
+    # the dashboard attribute, so restore it for this end-to-end composition.
+    monkeypatch.setattr(dashboard, '_filtered_orders', module._filtered_orders)
+    async def settings(*args):
+        return {'report_included_statuses': []}
+    monkeypatch.setattr(dashboard, 'ensure_user_settings', settings)
+    class Cursor:
+        def __init__(self, rows):
+            self.rows, self.i, self.closed = rows, 0, False
+        def batch_size(self, size):
+            assert size == 128
+            return self
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            if self.i == len(self.rows):
+                raise StopAsyncIteration
+            row = self.rows[self.i]
+            self.i += 1
+            return row
+        async def close(self):
+            self.closed = True
+    class Orders:
+        def __init__(self):
+            self.cursors = []
+            self.rows = [{'order_number': str(i), 'currency': 'SAR', 'utm_campaign': 'c',
+                'source': 'snapchat', 'total_amount': 100, 'order_date': '2026-10-25',
+                'products': [{'quantity': 1, 'cost': 40}]} for i in range(20000)]
+        def find(self, query, projection):
+            cursor = Cursor(self.rows if projection == {'_id': 0, 'raw_by_source': 0} else [])
+            self.cursors.append(cursor)
+            return cursor
+    report = install()
+    limiter = module._work_limiter()
+    async def request(user):
+        db = SimpleNamespace(unified_orders=Orders())
+        result = await report(db, user, result_source='salla')
+        assert all(c.closed for c in db.unified_orders.cursors)
+        return result
+    first, second = await asyncio.gather(request('first'), request('second'))
+    for result in (first, second):
+        campaign = result['campaigns'][0]
+        assert campaign['salla_results']['orders'] == 20000
+        assert campaign['profitability']['sales_sar'] == 2000000
+        assert campaign['profitability']['product_cost_sar'] == 800000
+        assert result['source']['campaign_profitability']['cache_reuse_enabled'] is False
+    assert legacy_calls == [] and limiter._value == 2
+    assert module._MATCHED_ORDERS.get() is None
