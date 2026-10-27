@@ -46,3 +46,24 @@ Consumer review found the base presentation layer's policy flags and profitabili
 The runtime-composition regression failed before this change because a sentinel detected the redundant legacy calculation. After correction the sentinel is never reached, including repeated compositions and overlapping reports. Added report-level failure/cancellation tests prove ContextVar restoration, continued usability on the next request and restoration of the same admission semaphore to two slots. Semaphore release itself is synchronous and has no cancellable await; repeated cancellation waits for the running calculation worker before freeing admission.
 
 A 20,000-order report-composition harness using the real matching and line-cost functions, with in-memory dependency reads, measured wall time **1.605 seconds**, maximum heartbeat gap **0.247 seconds**, 133 heartbeat samples and **zero legacy calculation calls**. This reveals the remaining synchronous Salla first-cohort matching/aggregation path. Mongo/provider latency and actual production behavior were not measured. Despite 61 passing related tests, this checkpoint is explicitly **WIP / not release-ready** pending that responsiveness gap and further review. It must not be merged or published as a completed performance fix. Production remains unchanged.
+
+### WIP follow-up: cooperative Salla aggregation
+
+The two same-query outcome producers now yield before every 128-order batch.
+Matching, rounding, capture and accumulation stay in the request task: no DB
+object or mutable accumulator is passed to a worker. A 20,000-order regression
+verifies at least 150 heartbeat turns, at most 128 additional captured orders
+between turns, identical totals, prompt cancellation, and a fresh subsequent
+request. Removing the yields reproduces failure (zero heartbeat turns). This is
+a scheduling assertion, not a production latency SLA. Related suites: 62 pass.
+
+Still WIP, not release ready: dashboard_v2_routes._filtered_orders materializes
+up to 100,000 rows twice and synchronously calls hydrate_order_currency_fields,
+attach_projected_salla_attribution, then a filter comprehension. These shared
+dashboard operations precede guarded profit work and cooperative matching.
+Motor decoding/materialization and currency/attribution work have not been
+measured against production-shaped records; the previous synthetic 0.247s
+whole-report gap cannot yet be described as fully resolved. Changing this
+shared loader requires independent dashboard contract coverage and bounded
+cancellation/resource handling. Cache reuse remains disabled and no commerce
+freshness proof is enabled by this follow-up.

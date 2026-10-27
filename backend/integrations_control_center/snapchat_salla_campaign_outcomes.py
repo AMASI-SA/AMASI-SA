@@ -7,6 +7,7 @@ invented campaign attribution.
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from functools import wraps
 from typing import Any
@@ -85,7 +86,11 @@ async def salla_campaign_outcomes(
     unmatched_snapchat = 0
     unmatched_snapchat_sales_sar = 0.0
 
-    for order in orders:
+    for index, order in enumerate(orders):
+        # Bound uninterrupted matching work without moving DB or mutable report
+        # state to threads. Cancellation discards this request-local cohort.
+        if index % 128 == 0:
+            await asyncio.sleep(0)
         key, match_kind = _match_order_campaign(
             order,
             id_lookup=id_lookup,

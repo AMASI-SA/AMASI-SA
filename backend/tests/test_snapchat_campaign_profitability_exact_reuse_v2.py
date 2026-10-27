@@ -771,3 +771,42 @@ async def test_report_cancellation_retains_worker_slot_and_restores_capture(runt
     result = await report(object(), "second", result_source="salla")
     assert result["campaigns"][0]["profitability"]["sales_sar"] == 200
     assert legacy_calls == []
+
+
+@pytest.mark.asyncio
+async def test_salla_aggregation_yields_and_cancellation_discards_partial_result(monkeypatch):
+    import dashboard_v2_routes
+    from integrations_control_center import snapchat_salla_campaign_outcomes as salla
+    orders = [{"utm_campaign": "c", "source": "snapchat", "total_amount": 10,
+               "order_date": "2026-10-25"} for _ in range(20000)]
+    async def filtered(*args, **kwargs):
+        return orders
+    monkeypatch.setattr(dashboard_v2_routes, "_filtered_orders", filtered)
+    kwargs = dict(date_from="2026-10-25", date_to="2026-10-25",
+                  identities=[{"account_id": "a", "campaign_id": "c"}])
+    capture, ticks = {}, []
+    stop = asyncio.Event()
+    async def heartbeat():
+        while not stop.is_set():
+            ticks.append(len(capture.get(("a", "c"), [])))
+            await asyncio.sleep(0)
+    beat = asyncio.create_task(heartbeat())
+    try:
+        result = await salla.salla_campaign_outcomes(object(), "u", matched_orders_out=capture, **kwargs)
+    finally:
+        stop.set()
+        await beat
+    assert result[0][("a", "c")] == {"orders": 20000, "sales_sar": 200000.0}
+    assert len(capture[("a", "c")]) == 20000
+    assert len(ticks) >= 150
+    assert max(b - a for a, b in zip(ticks, ticks[1:])) <= 128
+    partial = {}
+    task = asyncio.create_task(salla.salla_campaign_outcomes(object(), "u", matched_orders_out=partial, **kwargs))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(partial.get(("a", "c"), [])) <= 128
+    result = await salla.salla_campaign_outcomes(object(), "u", **kwargs)
+    assert result[0][("a", "c")]["orders"] == 20000
