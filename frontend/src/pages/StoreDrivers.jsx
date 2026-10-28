@@ -36,7 +36,7 @@ function DriverForm({ initial, onClose, onSaved }) {
       onSaved();
     } catch (error) {
       const code = error?.response?.data?.detail?.code || error?.response?.data?.detail || "store_driver_save_failed";
-      toast.error(code === "store_driver_phone_exists" ? "رقم الجوال مستخدم لموصل آخر" : String(code));
+      toast.error(code === "store_driver_phone_exists" ? "رقم الجوال مستخدم لموصل آخر" : code === "store_driver_version_conflict" ? "بيانات الموصل تغيرت. أغلق النموذج وحدّث الصفحة ثم أعد المحاولة." : typeof code === "string" ? code : code?.message || code?.code || "تعذر تحديث الموصل");
     } finally { setBusy(false); }
   }
   const input = "mt-1 h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500";
@@ -69,7 +69,7 @@ function DriverAccountModal({ driver, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   async function submit(event) {
     event.preventDefault();
-    if (password.length < 12) return toast.error("كلمة المرور يجب أن تكون 12 حرفًا على الأقل");
+    if (!/^[0-9]{6}$/.test(password)) return toast.error("رمز دخول الموصل يجب أن يتكون من 6 أرقام إنجليزية فقط");
     if (!linked && !email.trim()) return toast.error("البريد مطلوب");
     setBusy(true);
     try {
@@ -83,7 +83,7 @@ function DriverAccountModal({ driver, onClose, onSaved }) {
       onSaved();
     } catch (error) {
       const code = error?.response?.data?.detail?.code || error?.response?.data?.detail || "store_driver_account_failed";
-      toast.error(String(code));
+      toast.error(typeof code === "string" ? code : code?.message || code?.code || "تعذر تحديث حساب الموصل");
     } finally { setBusy(false); }
   }
   async function disable() {
@@ -102,7 +102,7 @@ function DriverAccountModal({ driver, onClose, onSaved }) {
         <div className="flex items-center justify-between"><div><h2 className="text-lg font-black">حساب توصيل أماسي</h2><p className="mt-1 text-xs font-bold text-slate-500">{driver.name}</p></div><button type="button" onClick={onClose} className="rounded-xl border px-3 py-2 text-xs font-black">إغلاق</button></div>
         <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold leading-6 text-emerald-950"><ShieldCheck className="ml-1 inline" />هذا الحساب دوره ثابت <span dir="ltr">store_driver</span> وبدون أي صلاحيات لوحة ميزان. وصوله محصور بواجهات تطبيق التوصيل.</div>
         {!linked && <label className="mt-4 block text-xs font-black text-slate-600">بريد تسجيل الدخول<input type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 h-11 w-full rounded-xl border px-3" required /></label>}
-        <label className="mt-4 block text-xs font-black text-slate-600">{linked ? "كلمة المرور الجديدة" : "كلمة المرور"}<input type="password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} className="mt-1 h-11 w-full rounded-xl border px-3" required /></label>
+        <label className="mt-4 block text-xs font-black text-slate-600">{linked ? "كلمة المرور الجديدة" : "كلمة المرور"}<input type="password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={6} inputMode="numeric" pattern="[0-9]{6}" autoComplete="new-password" className="mt-1 h-11 w-full rounded-xl border px-3" required /></label>
         <button disabled={busy} className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 font-black text-white disabled:opacity-50">{busy ? "جارٍ الحفظ…" : linked ? "تغيير كلمة المرور" : "إنشاء حساب الموصل"}</button>
         {linked && <button type="button" onClick={disable} disabled={busy} className="mt-2 w-full rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 font-black text-rose-800 disabled:opacity-50">إيقاف وفصل الحساب</button>}
       </form>

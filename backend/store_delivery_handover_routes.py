@@ -396,38 +396,6 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
                 if getattr(instruction_result, "upserted_id", None) is not None:
                     inserted_instruction_ids.append(instruction_id)
 
-            order_filter = _assignment_order_filter(user_id, row)
-            prior = await db[ORDERS].find_one(
-                order_filter,
-                {
-                    "_id": 0,
-                    "order_id": 1,
-                    "order_number": 1,
-                    "store_delivery_assignment_id": 1,
-                    "store_delivery_driver_id": 1,
-                    "store_delivery_driver_name": 1,
-                    "store_delivery_fee_snapshot": 1,
-                    "store_delivery_status": 1,
-                    "store_delivery_assigned_at": 1,
-                    "store_delivery_updated_at": 1,
-                },
-            )
-            if not prior:
-                raise RuntimeError("canonical_order_not_found_during_handover_confirm")
-            order_patch = {
-                "store_delivery_assignment_id": row["id"],
-                "store_delivery_driver_id": row["driver_id"],
-                "store_delivery_driver_name": row.get("driver_name_snapshot"),
-                "store_delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
-                "store_delivery_status": "assigned",
-                "store_delivery_assigned_at": now,
-                "store_delivery_updated_at": now,
-            }
-            order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
-            if order_result.matched_count != 1:
-                raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
-            updated_orders.append((prior, order_patch))
-
             workflow_patch = {
                 "delivery_flow": "store_courier",
                 "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
@@ -483,6 +451,38 @@ async def confirm_session_service(db: Any, *, actor: dict, user_id: str, session
             if workflow_result.modified_count != 1:
                 raise HTTPException(status_code=409, detail={"code": "store_courier_assignment_conflict", "order_number": row.get("order_number")})
             updated_workflows.append((workflow, workflow_patch))
+            order_filter = _assignment_order_filter(user_id, row)
+            prior = await db[ORDERS].find_one(
+                order_filter,
+                {
+                    "_id": 0,
+                    "order_id": 1,
+                    "order_number": 1,
+                    "store_delivery_assignment_id": 1,
+                    "store_delivery_driver_id": 1,
+                    "store_delivery_driver_name": 1,
+                    "store_delivery_fee_snapshot": 1,
+                    "store_delivery_status": 1,
+                    "store_delivery_assigned_at": 1,
+                    "store_delivery_updated_at": 1,
+                },
+            )
+            if not prior:
+                raise RuntimeError("canonical_order_not_found_during_handover_confirm")
+            order_patch = {
+                "store_delivery_assignment_id": row["id"],
+                "store_delivery_driver_id": row["driver_id"],
+                "store_delivery_driver_name": row.get("driver_name_snapshot"),
+                "store_delivery_fee_snapshot": row.get("delivery_fee_snapshot"),
+                "store_delivery_status": "assigned",
+                "store_delivery_assigned_at": now,
+                "store_delivery_updated_at": now,
+            }
+            order_result = await db[ORDERS].update_one(order_filter, {"$set": order_patch})
+            if order_result.matched_count != 1:
+                raise RuntimeError("canonical_order_update_conflict_during_handover_confirm")
+            updated_orders.append((prior, order_patch))
+
     except Exception:
         if inserted_ids:
             await db[ASSIGNMENTS].delete_many({"user_id": user_id, "id": {"$in": inserted_ids}})
