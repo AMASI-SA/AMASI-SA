@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-REFRESH-CAS-RELEASE-20261029",
-  "state": "SOURCE CANDIDATE WIP; fresh CI infrastructure failure diagnosed; dedicated replica runner compatibility fix awaiting new-source CI; not deployed",
+  "state": "Source candidate with fresh140test proof; coordinator repaired two CI-only Mongo runner startup failures; full integrated CI pending",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-refresh-cas-release-20261029",
   "base_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
@@ -20,7 +20,16 @@
     "git_diff_check": "Passed",
     "local_unit_tests": "Pending local dependency bootstrap: current Python lacks pytest",
     "local_mongo": "Previous disposable binary removed by environment cleanup; no local mongod/docker found; no existing DB paths adopted",
-    "exact_source_ci": "Pending remote candidate and Draft PR: dedicated workflow requires actual disposable Mongo replica, at least69 tests including21 actual Mongo cases, zero failures/errors/skips; existing Google compatibility suite follows",
+    "exact_source_ci": {
+      "source": "d44200217d933104045760e6d1157d032705d1cc",
+      "run": 40893283106,
+      "job": 123515496073,
+      "focused_passed": 69,
+      "actual_replica_passed": 21,
+      "compatibility_passed": 71,
+      "skips": 0,
+      "root_logs_verified": true
+    },
     "independent_review": "Pending coordinator review of current-base source",
     "first_remote_source": "fb39919266916d65dc7fa7c3a2189be4ca36467a",
     "first_dedicated_ci": {
@@ -38,7 +47,8 @@
     "runner_compatibility": {
       "error": "MongoDB fatal12257600: Linux kernel6.19+ known incompatibility; SERVER-121912 / kernel detection SERVER-131779",
       "primary_source": "https://github.com/actions/runner-images/issues/15005#issuecomment-6294443549",
-      "action": "Dedicated CAS workflow now uses GitHub-recommended temporary ubuntu-22.04. Mongo remains8.0.26; no production dependency change. Added fail-fast container logs and kernel version evidence. Shared workflow runner fixes remain coordinator-owned."
+      "action": "Dedicated CAS workflow now uses GitHub-recommended temporary ubuntu-22.04. Mongo remains8.0.26; no production dependency change. Added fail-fast container logs and kernel version evidence. Shared workflow runner fixes remain coordinator-owned.",
+      "coordinator_followup": "Root verified identical fatal12257600 before checkout/tests in Google backend job123515493192 and TikTok native-reporting job123515492227. Only these two job runners changed to ubuntu22.04; existing Mongo images, dependencies, assertions and frontend runners unchanged. Official maintainer comment read independently."
     }
   },
   "historical_original_evidence_only": {
@@ -63,9 +73,9 @@
   "live_provider_calls": 0,
   "live_credential_access": false,
   "production_database_access": false,
-  "app_workspace_access": false,
+  "app_workspace_access": "Root authenticated via secure form and read actual guardactivefalse. No/appfiles changed, no lease created.",
   "release_intent_created": false,
   "release_guard_actions": 0,
   "merge_or_publish": false,
-  "next_safe_action": "Persist the candidate branch and create Draft PR, inspect fresh exact-source no-skip replica/compatibility CI and independent review, record full remote SHA and outcomes in PR continuation. Only coordinator owns integration/release intent/actual-host guard/deployment."
+  "next_safe_action": "Inspect fresh full-source CI on new checkpoint; coordinator independently reviews and tests before SourceA/intent-onlyB freeze and actual-host rehearsal. Production/apps/credentials remain outside candidate tests."
 }
