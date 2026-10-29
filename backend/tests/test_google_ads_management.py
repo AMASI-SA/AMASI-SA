@@ -124,7 +124,8 @@ class Provider:
             root, spec = next(iter(operation.items()))
             name = spec.get("remove") or (spec.get("update") or spec.get("create") or {}).get("resourceName")
             if not name:
-                collection = {"campaignLabelOperation": "campaignLabels", "campaignCriterionOperation": "campaignCriteria", "adGroupCriterionOperation": "adGroupCriteria", "adGroupAdOperation": "adGroupAds"}[root]
+                collection = {"campaignLabelOperation": "campaignLabels", "campaignCriterionOperation": "campaignCriteria", "adGroupCriterionOperation": "adGroupCriteria", "adGroupAdOperation": "adGroupAds",
+                              "campaignAssetOperation": "campaignAssets", "assetGroupAssetOperation": "assetGroupAssets", "assetGroupSignalOperation": "assetGroupSignals"}[root]
                 name = f"customers/{ACCOUNT}/{collection}/100~{1000 + index}"
             name = re.sub(r"(?<=[/~])-[0-9]+", str(1000 + index), name)
             responses.append({root.removesuffix("Operation") + "Result": {"resourceName": name}})
