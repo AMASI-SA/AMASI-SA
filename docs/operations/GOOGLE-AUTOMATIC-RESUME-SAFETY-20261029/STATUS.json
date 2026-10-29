@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-automatic-resume-safety-20261029",
   "base": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
-  "state": "WIP source verified locally; exact-source full CI and independent review pending",
+  "state": "Reviewed WIP source; full Google synthetic-merge CI passed. Not a releasable v5 source pair.",
   "scope": "Block all standing automatic resume until complete fresh stop provenance is established; manual owner approvals and future first-launch authority are separate.",
   "production_changed": false,
   "provider_calls": 0,
@@ -37,9 +37,37 @@
     "compatibility": "330 passed in2.80s; campaign builder, manually reviewed AI actions, worker, cycles, PAUSED creation contract; exit0.",
     "local_total": 511,
     "local_skips": 0,
-    "manual_enable_acceptance": "Existing test_google_ads_management.py::test_saved_ai_advice_uses_real_gateway_storage_and_one_approved_dispatch exercises owner-approved enable with actual Mongo. Exact-source CI pending; not claimed locally.",
+    "manual_enable_acceptance": "Existing owner-approved enable acceptance is in full backend suite; fresh synthetic-merge CI passed all 1242 tests without skips using disposable actual Mongo. No production provider calls.",
     "commands": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q [named files]",
-    "diff_check": "passed"
+    "diff_check": "passed",
+    "independent_review": {
+      "agent": "/root/budget_audit",
+      "source_sha": "a7f018fdb588dbf3a20d2aef33cb38f67eaa9e4c",
+      "tree": "7e13a7ad1696e8f4d731a98072f4147051d11c12",
+      "focused": "181 passed, zero skipped, 2.55s, exit 0 with -W error",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_autonomy_planner.py backend/tests/test_google_ads_automation_plan.py backend/tests/test_google_ads_automation_authority.py backend/tests/test_google_ads_automation_gateway.py",
+      "result": "No additional blocker within the conservative scope. Stored enable denied before policy claim; manual gateway runtime unchanged.",
+      "limits": "Does not establish interruption of already-dispatched work or future first launch."
+    },
+    "google_ci": {
+      "run_id": 40915587534,
+      "source_sha": "a7f018fdb588dbf3a20d2aef33cb38f67eaa9e4c",
+      "tested_commit": "ceeb97ef98162274c34d1c7f5d61401799686219",
+      "tested_tree": "526b195f7f7d929396cb97aa3ff4c2f58e53b032",
+      "parents": [
+        "050b3da6ffc9660b2022a111117fd928da07ab51",
+        "a7f018fdb588dbf3a20d2aef33cb38f67eaa9e4c"
+      ],
+      "result": "1242 backend tests with disposable real Mongo, 226 frontend tests, frontend build passed; zero skipped in summary.",
+      "kind": "PR synthetic merge, not exact standalone source tree"
+    },
+    "release_readiness": {
+      "run_id": 40915587351,
+      "backend_preflight": "passed",
+      "frontend_classification": "failed",
+      "reason": "Inherited release intent mismatches changed planner; fallback source classification rejects current production 050b3da6ffc9660b2022a111117fd928da07ab51 not ancestor of source. WIP requires fresh root-created A/B pair.",
+      "deployment_authorized_by_this_result": false
+    }
   },
   "test_changes_explained": [
     "Authority fixture now constructs a saved proposal independently of the current planner, allowing rejected historical enable proposals to be tested without mocking the planner.",
@@ -74,5 +102,8 @@
       "External Google/manual/other-app writes are outside Mongo atomicity; no strict actual-spend cap or no-external-race guarantee is established."
     ]
   },
-  "next_safe_action": "Root reviews exact source/CI, creates fresh direct-current-production release A if base has advanced, then v5 build/intent/merge/publish/live acceptance. Do not change UI policy files owned by diagnostic task. Full first-launch development requires separate coordinated scope."
+  "next_safe_action": "Root integrates reviewed planner/test changes onto freshly fetched production and prepares a new reproducible v5 A/B pair. Do not reuse this WIP branch's inherited intent. Separate first-launch evidence WIP starts from production 050b3da6ffc9660b2022a111117fd928da07ab51 in new files, without runtime activation.",
+  "source_sha": "a7f018fdb588dbf3a20d2aef33cb38f67eaa9e4c",
+  "source_tree": "7e13a7ad1696e8f4d731a98072f4147051d11c12",
+  "pr": 1607
 }
