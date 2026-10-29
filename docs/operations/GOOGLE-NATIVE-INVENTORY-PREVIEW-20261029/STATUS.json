@@ -2,18 +2,36 @@
   "task": "google-native-inventory-preview-20261029",
   "branch": "codex/google-native-inventory-preview-20261029",
   "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-  "state": "confirmed_option_set_fix_frozen_fresh_ci_required",
+  "state": "bounded_backend_review_pass_root_actual_integration_pending",
   "production_changed": false,
   "provider_calls_performed": false,
   "prerequisite": "Exact unchanged accepted1628 google_live_category_proof.py and reader.py copied as buildbase only; source d77306f8af92057d4414413a9900e03bda7b1295. No shared files or writers changed.",
   "implemented": "Pure+reader+standaloneownerPOST. Freshcategoryreproof, canonicalexplicitselectedids/exclusions, ownedstore/credentialrevision across wholeflow and savedplan fullfields/revision guards. Productdetails relevant before-after drift, boundedtwo-pagevariant observations, sourceoptionlabels only, explicitsimpleproduct rawemptyarrays+completeemptyvariantendpoint. Allglobalready/prep/size/mapping/paid authority false/null.",
   "verification": {
-    "local": "34focused-Werror/zero skips; exactsource command unchanged",
-    "actual_mongo": "7collectedcases owner/foreign/stale/4outerbindingraces/productdrift; no localMongo execution",
-    "ci": "Historicald2e CI40945742148 job123700493350 checkout81bfaf2 passed36/7realMongo4.23s; freshoptionfix41/7required"
+    "local": "34focused-Werror/zero skips1.10s",
+    "root": "34focused-Werror/zero skips1.30s;3runtime modules reviewed",
+    "actual_mongo": {
+      "run": 40947688402,
+      "job": 123707254059,
+      "checkout": "2c0e74b syntheticmergec06intoReportsfda86238dda9700806c0d700e9e411c1674c9bad",
+      "result": "41passed4.09s exact41total/7actualMongo/zero-skips gate",
+      "logs_retrieved_independently": true,
+      "provider_transport": "fixtures only, no livegrant/read proof"
+    },
+    "independent_review": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "PASS bounded; no remaining blocker",
+      "local": "34focused-Werror/zero skips1.01s, clean unchangedsource",
+      "additional_probes": "Eight source-only probes including120rowtwopagepositive, duplicate/driftrejection, unresolvedexclusionbeforenativeread, hiddencategoryblocker, strictrequest owner/store/type rejection",
+      "fixes_accepted": [
+        "URL-only category reproof resolvedid check",
+        "Explicitrelated_options conflict/malformed/duplicate labels null withstockretained"
+      ],
+      "ci_logs": "Exact40947688402/123707254059 independentlyinspected"
+    }
   },
   "bounds": "Planned5explicit products,2variantpages<=120rows,45s requestdeadline; officialpage maximum60, existinglocalstockproofcap50 is not provider limit",
-  "next": "DedicatedactualMongo CI, independentreview exactfrozen source, then root/planningagent actualintegration onlatestproduction.",
+  "next": "Root/planintegration agent owns guarded newUI/service and minimal sharedroute attachment on latestproduction, fresh integratedCI/build/site acceptance. SourcePR1631 remains frozen c06; this separate statusbranch changes documentation only. No liveprovider or deployment performed.",
   "route": "POST /google_ads/commercial-plans/{plan_id}/native-inventory-preview bodyexpected_revision/category_id/selected_product_ids; root owns later sharedattachment",
   "source_limits": [
     "Existingclient performs authorizedOAuthmaintenance; no newscopes/directauth",
@@ -24,5 +42,24 @@
     "No liveprovider/grant test; nativefixturesonly; no newwriter/sync/auth/sharedUI/router edit"
   ],
   "own_confirmed_fix": "When savedplan onlyhasexactcategoryURL, newreader reusesunchanged1628 resolver withNone thenchecks resolvedcategoryid equals explicitrequest id; no arbitraryURL fetch or acceptedhelper change.",
-  "option_set_fix": "Explicit variant.related_options conflicting/malformed/duplicate/None cannotlabel source_option_values; source labels null, rawstock observation retained.5regressions redbeforefix. Missingrelated_options maystill exactvalue-map per sourcecontract; no fuzzy inference."
+  "option_set_fix": "Explicit variant.related_options conflicting/malformed/duplicate/None cannotlabel source_option_values; source labels null, rawstock observation retained.5regressions redbeforefix. Missingrelated_options maystill exactvalue-map per sourcecontract; no fuzzy inference.",
+  "status_branch": "codex/google-native-inventory-status-20261029",
+  "source": {
+    "sha": "c06aad50530681ad484d61ce5faaaa216c37903d",
+    "tree": "5d4a51c85036b0a99505e3b4121d825acdd718bb",
+    "pr": 1631,
+    "source_branch": "codex/google-native-inventory-preview-20261029",
+    "local_equivalent": "4552df9c0",
+    "wip_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "runtime_frozen": true
+  },
+  "route_contract": {
+    "attach": "attach_google_native_inventory_routes(router,db,current_user)",
+    "method": "POST",
+    "path": "/google_ads/commercial-plans/{plan_id}/native-inventory-preview",
+    "body": "expected_revision>=1, category_id canonicalnumeric, selected_product_ids unique1..5canonical Salla ids",
+    "errors": "401auth,403owner,404planmissing,409revision/fields/store/category/capabilityunproved,422invalidtypedbody,503boundedsourceunproved",
+    "success": "native_stock_observations_only, sourcebound selectedproducts and parent/variant stock/optionlabel observations, globalready/size/mapping/execution false, prepnull, provider_revisionnull/remote_snapshot_atomicfalse",
+    "simple_product": "Structural observation ONLY explicitemptyrawoptions+skus aliases ANDcompleteemptyvariantendpoint; not merchant mapping or eligibility"
+  }
 }
