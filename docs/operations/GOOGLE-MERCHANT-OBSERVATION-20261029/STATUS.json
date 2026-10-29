@@ -5,7 +5,7 @@
   "date_utc": "2026-10-29",
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "assessment_checkpoint": "5813304637c2873ebebb213009977046fb50edcd",
-  "status": "Observer candidate fixes independently found native int64 range defect; 114 local tests passed; dedicated CI and bound-session helper assigned but not implemented yet",
+  "status": "Observer and additive opaque bound-session helper implemented; local unit/regression evidence pending remote checkpoint; real Mongo and dedicated CI still required",
   "owned_paths": [
     "backend/integrations_control_center/google_merchant_product_observation.py",
     "backend/tests/test_google_merchant_product_observation.py",
@@ -15,7 +15,7 @@
     "backend/integrations_control_center/google_ads_reporting.py (additive bound-session helper only; existing _credential/callers/writers unchanged)",
     "backend/tests/test_google_bound_read_session.py"
   ],
-  "current_changes": "New observer module/test plus contract/status only; no route, auth or existing runtime file changes",
+  "current_changes": "New observer/test plus additive220-line bound-session helper in google_ads_reporting.py and new helper unit tests; existing functions/callers/OAuth writers untouched; no routes attached",
   "missing_shared_interface": "Opaque server-created Merchant/Ads read session binding exact owner, selected accounts, same observed grant and capabilities to transports; existing registration helper is configured-email-specific and bare Ads token plus later epoch is insufficient across relink",
   "route_plan": "Owner-triggered read-only GET /google_ads/merchant-products/observation with explicit account_id and merchant_id, server membership and full native product_link checks before read plus scope/grant recheck before return; no selection mutation or default account",
   "validation": {
@@ -37,12 +37,29 @@
     "Complete traversal is not an atomic provider snapshot"
   ],
   "production_changed": "no",
-  "next": "Complete fresh retail1634 CI handoff first; then additive bound-session helper/new tests/dedicated CI and independent review. No route attachment or live provider calls.",
+  "next": "Save helper WIP; add real disposable Mongo race tests and dedicated CI, then independent review. Root holds retail1634 Source A while foreign Reports release lease is unresolved. No provider or host actions.",
   "observer_contract_notes": [
     "Merchant v1 legacyLocal is retained as local/standard identity; false is not promoted to verified Google Ads ONLINE channel",
     "Protobuf omitted false scalar is accepted only with consistent native resource; no truthy coercion",
     "Optional link absence preserves unknown destination, never verified mapping",
     "No partial rows escape a malformed/incomplete traversal; semantic digest excludes times, token and ordering"
   ],
-  "fixed_review_finding": "versionNumber now accepts only canonical signed int64 strings within -9223372036854775808..9223372036854775807; native metadata is not a timestamp or an independent freshness/authority proof"
+  "fixed_review_finding": "versionNumber now accepts only canonical signed int64 strings within -9223372036854775808..9223372036854775807; native metadata is not a timestamp or an independent freshness/authority proof",
+  "observer_independent_review": {
+    "source": "2f6a6ff7480208dc3a0e874a091f34630ee6e5b3",
+    "tree": "254efddc1ef4073e3561adc1da8b2c461e4822da",
+    "product_acceptance": "Bounded pure-observer PASS;114 independent-Werror0skip1.40s; no authenticated/live/route claim",
+    "root": "Read full277-line observer and independently114-Werror0skip1.23s; bounded pure source PASS"
+  },
+  "helper_validation": {
+    "scope": "same-token private Ads reads/fixed Merchant stream, PRIMARY majority exact BSON snapshot incl absent/null/types, safe repr/errors, no raw client/token/header return",
+    "local_command": "env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_bound_read_session.py backend/tests/test_google_merchant_product_observation.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_credential_refresh_cas.py",
+    "passed": 211,
+    "skipped": 0,
+    "warnings_as_errors": true,
+    "first_attempt": "14 existing reporting tests could not construct HTTPX because host SOCKS proxy optional dependency absent; no provider calls. Rerun removed only proxy environment keys, with no source/test weakening.",
+    "real_mongo": "pending",
+    "independent_helper_review": "pending",
+    "scope_authorization": "Not proved by helper; owner/account/native product_link checks remain separate and unattached"
+  }
 }
