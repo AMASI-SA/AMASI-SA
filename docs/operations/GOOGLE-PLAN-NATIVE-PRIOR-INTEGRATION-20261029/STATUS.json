@@ -1,5 +1,5 @@
 {
-  "status": "WIP_null_optional_category_fixed_locally_verified_successor_CI_review_pending",
+  "status": "WIP_real_auth_page_harness_fixed_full_local_UI_pass_fresh_CI_pending",
   "base": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
   "base_tree": "90f62e85604c5a583434b89546c0791ec688d3f1",
   "sources": {
@@ -319,7 +319,7 @@
   },
   "router_seam": "10 reviewed current-observation/category/linked/live/native attachment lines plus2 prior lines. Existing4 storage lines and retail handlers preserved.",
   "workflow_preservation": "Current full Google workflow test paths are a subset of selected native reviewed workflow; no checks removed. All strict dedicated Mongo workflows copied exactly.",
-  "pending": "Remote coherent WIP/DraftPR, all applicable freshCI including actualMongo/build, independent integration review. Root then creates direct-production release source after storage merge.",
+  "pending": "Immutable harness successor freshCI including saved151/10Mongo/native45/7Mongo/prior129/19Mongo/full backend/UI/build and independent review. WIP Readiness ancestry is expected blocked; new direct-production source only after all feature gates pass and root confirms freshbase.",
   "authority": {
     "advertising_execution": false,
     "new_financial_rights": false,
@@ -1013,6 +1013,10 @@
       "blob": "9b974600d06040f06e5c9938c918417e8769c36e"
     },
     {
+      "path": "frontend/src/pages/MarketingPlatformWorkspace.google.test.jsx",
+      "blob": "828cb48430c1f7ee5adf4361ae2b0affb3325dc6"
+    },
+    {
       "path": "frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json",
       "blob": "3bbf749e0444187692defbded7ba6c026aac0885"
     },
@@ -1034,9 +1038,10 @@
   "tests": {
     "local_backend": "227 passed -W error/zero skips in7.29s on fixed successor worktree",
     "local_ui": "386 passed/16suites in5.292s, including25 realAuthProvider parent cases",
-    "mongo": "Fixed successor fresh151/10Mongo and45/7Mongo CI pending; historical f7b Mongo success does not prove frontend fix.",
+    "mongo": "804 historical saved151/10 actualMongo0skip9.16s and native45/7 actualMongo0skip4.68s passed; successor freshCI pending.",
     "strict_gates": "Saved-fields151 total/10actualMongo (8existing+2parent), native45total/7actualMongo,4 generated fixture parity cases; all prior exact named/zero-skip assertions preserved. Fresh sourceCI pending.",
-    "independent_review": "Reviewer confirmed f7b blocker; fixed successor pending immutable re-review."
+    "independent_review": "804 immutable runtime: independent26 backend -Werror/zero skips2.87s and134UI/6suites3.812s; actual HTTP nullURL/category_ids[] replay preserves all saved fields. Successor page harness review pending.",
+    "local_full_frontend": "329suites/2667tests passed92.284s; full run justified by new AuthProvider hook regression in inherited bare page harness."
   },
   "runtime_parity": "Accepted b3ea model, shared qualifier and prior reader/route exact; accepted d1b child/service/runtime exact; other accepted native runtime exact except approved parentform/router seams. Storage/retail/Reports/Dashboard/CAS/currentintent runtime preserved.",
   "rejected_historical_candidate": {
@@ -1053,5 +1058,25 @@
       "readiness": "40967337599/frontend123775051612 failed source ancestry7a46 notancestor f7b; no bypass"
     }
   },
-  "null_category_fix": "formFrom normalizes only absent/null optional category_url to empty input. commercialPlanPayload returnsnull for absent/null/blank URL; malformed nonstring still errors. Actual writer fixtures cover nullURL prior creation/unrelated-preserve/removal; actualMongo parent asserts savednullURL."
+  "null_category_fix": "formFrom normalizes only absent/null optional category_url to empty input. commercialPlanPayload returnsnull for absent/null/blank URL; malformed nonstring still errors. Actual writer fixtures cover nullURL prior creation/unrelated-preserve/removal; actualMongo parent asserts savednullURL.",
+  "historical_auth_harness_failure": {
+    "source": "804de520f3cbe131101dba70a229af39f1bfbcba",
+    "tree": "e4a10332bb9510cab7dc0e923a0e82acf4b58823",
+    "reason": "Full Google and Security Gate frontend found two existing bare-page test cases without AuthProvider. Actual App.js wraps AppRoutes in AuthProvider and ads-manager with ProtectedRoute/OwnerOnlyRoute; no production auth guard change required.",
+    "full_google": "40968102547/job123777647464:29 suites/557 tests passed,2 tests failed in MarketingPlatformWorkspace.google.test.jsx; build skipped.",
+    "security_full_frontend": "40968102579/job123777648582:328 suites/2663 tests passed, same2 tests failed; downstream audit/build skipped.",
+    "saved_fields": "40968102619/job123777648035:151passed/10actualMongo0skip9.16s",
+    "native": "40968102500/job123777647338:45passed/7actualMongo0skip4.68s",
+    "full_backend": "40968102547/job123777647803:1559passed47.14s",
+    "checkout": "4264ac0c5d004af5c8bf74209f3f74d29ecfdf00 merges804 into7a46; not source tree equality",
+    "readiness": "40968102555/job123777647973 blocked by7a46 notancestor804; no bypass"
+  },
+  "auth_page_harness_fix": {
+    "changed_runtime": false,
+    "path": "frontend/src/pages/MarketingPlatformWorkspace.google.test.jsx",
+    "behavior": "Uses real AuthProvider and coherent /auth/me owner/viewer readiness. Both original campaign and AI assertions retained for both roles. Owner child reads generated actual HTTP-writer initial plan fixture; viewer does not read owner plan. No child/runtime auth stub.",
+    "focused": "4passed/1suite4.498s",
+    "full_frontend": "329suites/2667tests passed, zero failed/skipped,92.284s via governed toolchain full frontend; existing329 suites preserved, original2 pagecases now4 owner/viewer cases.",
+    "workflow": "Existing full Google workflow already contains this page suite; no workflow test paths removed or edited."
+  }
 }
