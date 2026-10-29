@@ -1,5 +1,5 @@
 {
-  "status": "SEALED_SourceA_bounded_review_PASS_21CI_SUCCESS_1conditional_skip_root_release_pending",
+  "status": "SEALED_A_B_pair_PASS_B_CI23SUCCESS_1conditional_skip_normalM_exactB_root_publication_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "base_tree": "7b9d58160619fc16756cf330fde6523b24156e71",
   "reviewed_feature_source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1",
@@ -887,7 +887,7 @@
     "Live category preview is owner-triggered bounded membership only; native inventory preview is explicit at most5 observed nonexcluded products, not ad eligibility or mapping/readiness.",
     "Prior season context is owner-declared with unknown calendar alignment; no inferred dates, automatic selection, budget or launch authority."
   ],
-  "pending": "Root current-head recheck, candidateartifact byte validation, operationalintentB/host/release/live acceptance. SourceA remains immutable; no merge/host/providerwrite by integrationagent.",
+  "pending": "Root shared-host build completion, prepare/publication and liveidentity/owner verification. A/B unchanged; M exactB independently verified. Integration agent no provider/host/merge action.",
   "frozen_source": {
     "sha": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
     "tree": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
@@ -1187,5 +1187,315 @@
       }
     ],
     "conclusions": "All22 workflow records completed:21SUCCESS includingReadiness/Security/CodeQL/OperationalStock,1 conditionalTikTokCreator skip; no failures. Strict replica andUI test gates have zero skipped tests."
+  },
+  "frozen_pair": {
+    "source_A": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+    "source_A_tree": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
+    "base_J": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+    "operational_B": "9f094a0f8c65cdfcea3a80c691229d489357487f",
+    "operational_B_tree": "c4074b70bc63d0bc44759256841319938516af20",
+    "B_sole_parent_A": true,
+    "A_to_B_paths": [
+      "release/release-intent-v5.json"
+    ],
+    "intent_bytes": 967787,
+    "intent_sha256": "51c7468aedbfec2a0ebf3def32ce64e972c9595e7bdd91a5f6889a9aaddd62e7",
+    "runtime_identity": "rg5-079f61e618463aaeddd72d0fdb81ca3491d3d9486e40b650a8c1ddccee9ab8d4",
+    "integration_agent_verification": "Fetched B and independently checked parent, one-path diff and exact intent byte/hash equality. No source worktree changes."
+  },
+  "root_host_A_report": {
+    "comment": 6510795688,
+    "result": "Actual isolated host A doublebuild/freeze matched complete CI intent bytes/hash967787/51c7468…; /app remained08160 trackedclean; root reported inactive guard before work.",
+    "scope": "Root-performed and root-reported; integration agent did not access host. Root owns actual-host B and later publication."
+  },
+  "independent_pair_review": {
+    "reviewer": "budget_audit",
+    "verdict": "PASS",
+    "checks": "B parent A; A parent08160; intent-only A→B and full source history preserves intent; backend1050/control253/frontend1048 source manifests match; reproducibility proof matches; intent hash/runtime identity exact.",
+    "qualification": "Read-only pair validation; B CI and actual-host B remain separate root/integration tracking."
+  },
+  "root_host_B_report": {
+    "result": "PASS",
+    "method": "Normal package yarn build on isolated actual-host detachedB; no bootstrap flags.",
+    "elapsed_seconds": 51.32,
+    "clone": "/tmp/google1655-intent-b-20261030",
+    "health_verified": true,
+    "isolated_verified": true,
+    "isolated_runtime_artifact_verified": true,
+    "runtime_identity": "rg5-079f61e618463aaeddd72d0fdb81ca3491d3d9486e40b650a8c1ddccee9ab8d4",
+    "shared_app_state": "Root reports /app remains08160; unrelated directories untouched; no lease.",
+    "provenance": "Performed/read by root and reported to integration agent; integration agent had no host access."
+  },
+  "B_CI_checkout": {
+    "sha": "510afee4ec53d7244eb8cba6232c4154046284da",
+    "tree": "c4074b70bc63d0bc44759256841319938516af20",
+    "parents": [
+      "08160c883a040f3a9fb49a165dab8074d4ef7309",
+      "9f094a0f8c65cdfcea3a80c691229d489357487f"
+    ],
+    "exact_B_tree": true,
+    "verification": "GitData exact tree and fetched git diff both prove complete B tree equality. Readiness/Security use directB."
+  },
+  "B_CI_evidence": {
+    "saved_fields": {
+      "run": 40972205990,
+      "job": 123791430675,
+      "passed": 151,
+      "actual_mongo": 10,
+      "skipped": 0,
+      "seconds": 8.05
+    },
+    "native": {
+      "run": 40972205919,
+      "job": 123791429842,
+      "passed": 45,
+      "actual_mongo": 7,
+      "skipped": 0,
+      "seconds": 3.3,
+      "ui_job": 123791429401,
+      "ui_passed": 368,
+      "ui_suites": 14,
+      "ui_seconds": 3.247,
+      "build_seconds": 3.88
+    },
+    "prior": {
+      "run": 40972205956,
+      "job": 123791429605,
+      "passed": 129,
+      "actual_mongo": 19,
+      "skipped": 0,
+      "seconds": 5.49
+    },
+    "full_google": {
+      "run": 40972205845,
+      "backend_job": 123791429284,
+      "backend_passed": 1559,
+      "backend_seconds": 47.23,
+      "ui_job": 123791428955,
+      "ui_passed": 561,
+      "ui_suites": 30,
+      "ui_seconds": 15.079,
+      "build_seconds": 5.89
+    },
+    "security": {
+      "run": 40972205808,
+      "frontend_job": 123791429539,
+      "backend_job": 123791429201,
+      "checkout": "9f094a0f8c65cdfcea3a80c691229d489357487f",
+      "ui_passed": 2667,
+      "ui_suites": 329,
+      "ui_seconds": 93.966,
+      "production_dependency_vulnerabilities": 0,
+      "build_seconds": [
+        5.85,
+        6.29
+      ],
+      "backend_security_passed": 57,
+      "backend_security_seconds": 1.8,
+      "both_jobs": "SUCCESS"
+    },
+    "readiness": {
+      "run": 40972205864,
+      "result": "SUCCESS",
+      "frontend_job": 123791429307,
+      "backend_job": 123791429591,
+      "checkout": "9f094a0f8c65cdfcea3a80c691229d489357487f",
+      "source_A": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+      "base_J": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+      "preflight_passed": 156,
+      "preflight_seconds": 4.269,
+      "reproducible_build_seconds": [
+        3.98,
+        3.98
+      ],
+      "source_classification": "reviewed operational B, intent-only from A; retained frontend artifact/intent validation/clean worktree passed"
+    },
+    "clean_clone": {
+      "run": 40972205864,
+      "job": 123792202945,
+      "result": "SUCCESS",
+      "direct_B_checkout": "9f094a0f8c65cdfcea3a80c691229d489357487f",
+      "host_node": "20.20.2",
+      "governed_node": "22.23.2",
+      "yarn": "1.22.22",
+      "configured_package_build": "cd frontend && yarn build",
+      "git_directory_present_during_platform_layout_build": false,
+      "build_seconds": [
+        6.37,
+        6.38
+      ],
+      "health_verified": true,
+      "isolated_verified": true,
+      "isolated_runtime_artifact_verified": true,
+      "runtime_identity": "rg5-079f61e618463aaeddd72d0fdb81ca3491d3d9486e40b650a8c1ddccee9ab8d4",
+      "actual_log_read": true,
+      "assertions": "Source/base/manifest/critical-file/frontend-reproducibility/health identity binding and served JSON bytes/content-type plus immutable asset/no-store shell checks passed.",
+      "qualification": "GitHub CI clean-clone rehearsal, distinct from root's actual-host B51.32s and later live publication."
+    },
+    "workflows": [
+      {
+        "id": 40972882988,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972882948,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205910,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 40972205653,
+        "name": "Production TikTok Native Hierarchy",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205696,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205819,
+        "name": "Google product evidence contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205782,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205990,
+        "name": "Google saved plan fields contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205809,
+        "name": "Google prior season review UI",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205679,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205877,
+        "name": "Google store product observations",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205710,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205707,
+        "name": "Google category membership",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205789,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205956,
+        "name": "Google prior season evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205919,
+        "name": "Google native inventory preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205952,
+        "name": "Google live category preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205840,
+        "name": "Google linked campaign evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205845,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205808,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205753,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205864,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205686,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40972205797,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "conclusions": "Original22 workflow records completed21SUCCESS/1conditionalTikTokCreator skip. Ready-for-review added two Snapchat runs40972882988/40972882948, bothSUCCESS. Latest24records23SUCCESS/1conditionalSkip; no failures and strictMongo/UI test gates zero skipped tests."
+  },
+  "production_merge": {
+    "merge_M": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "tree": "c4074b70bc63d0bc44759256841319938516af20",
+    "parents": [
+      "08160c883a040f3a9fb49a165dab8074d4ef7309",
+      "9f094a0f8c65cdfcea3a80c691229d489357487f"
+    ],
+    "exact_B_tree": true,
+    "normal_merge": true,
+    "verification": "Root performed normal merge; integration agent independently read GitData exact tree and parents.",
+    "root_host_report": "Fresh actual guard inactive before merge; /app fast-forwarded to exactM and normalyarnbuild running. No prepare/publish yet at root report.",
+    "planned_actor": "codex-google-plan-season-20261030",
+    "provenance": "No host/lease/merge action by integration agent."
+  },
+  "evidence_append": {
+    "predecessor": "b75c9f5bf69225676f8f54bb07f5151f15ab4698",
+    "scope": "STATUS-only append for B CI/independent pair/root actualhost/normalM evidence. A/B source commits unchanged."
   }
 }
