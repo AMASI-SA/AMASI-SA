@@ -7,7 +7,7 @@
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "production_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
   "source_reference": "This STATUS-only continuation commit is on a separate status branch and MUST NOT become deployment Source A or follow frozen A on the release branch.",
-  "status": "Immutable M7 Source A accepted after local checks, fresh full CI and bounded independent resourcing review; root owns governed build/deployment.",
+  "status": "Frozen Source A actual-host double-build/freeze PASS; intent-only B pushed, B CI and actual-host adapter running",
   "owned_files": [
     "backend/integrations_control_center/google_ads_ai.py",
     "backend/integrations_control_center/google_ads_management.py",
@@ -168,9 +168,23 @@
   ],
   "production_changed": "no",
   "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "Root completes actual source A governed build and matching intent-only B, required CI and v5 prepublish/publish/three live identity probes plus functional site verification. Never deploy the separate STATUS continuation commit.",
+  "next": "Read host B adapter completion and all B workflows; independent immutable pair review. Then fresh prod and normal merge exact B tree, app materialize, prepare/prepublish/singlepublish/verify3/live. Current live1618 is verified/closed; no newpublishyet.",
   "source_sha": "e16b46f0453776f5bb471ae1e641a083af275c38",
   "source_tree": "ff3360eb7cf9b5eada07aaddeb3516ea93c48e69",
   "pr": 1629,
-  "release_branch": "codex/google-retail-release-m7-20261029"
+  "release_branch": "codex/google-retail-release-m7-20261029",
+  "release": {
+    "source_a": "e16b46f0453776f5bb471ae1e641a083af275c38",
+    "source_tree": "ff3360eb7cf9b5eada07aaddeb3516ea93c48e69",
+    "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "intent_b": "c41772ac69e2f61a9dd49b075139495bf5e9fe08",
+    "b_tree": "5794436ee536ae3a176b63d41796ded2e5555664",
+    "runtime": "rg5-dd1039e63743caf56c49f95b990bfcde8d586cd570378a8c9dec43f7761b7fdd",
+    "intent_sha256": "e8cf4478439f0029da1a81483f1a1370e9c872b725dab101a326157f613335b9",
+    "frontend_artifact": "d16cb651c37df30613db837cda0d7c0fd63feba6543b5f37f0146a22f584f6e0",
+    "actual_host_a": "PASS0, frozeninstall/governedNode22.23.2/Yarn1.22.22/doublebuild12.68s exactwholeCIintent; optionalmissinggeneratedbackendidentity warningexpectedbeforematerialization",
+    "actual_host_b": "running in /tmp/google1629-intent-b-20261029",
+    "lease_active": false,
+    "published": false
+  }
 }
