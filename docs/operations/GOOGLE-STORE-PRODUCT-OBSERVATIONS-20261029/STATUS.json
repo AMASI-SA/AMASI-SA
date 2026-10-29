@@ -1,0 +1,82 @@
+{
+  "task": "GOOGLE-STORE-PRODUCT-OBSERVATIONS-20261029",
+  "branch": "codex/google-store-observations-integration-20261029",
+  "base": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "state": "WIP source wired into actual Google management router and saved owner plan; NOT DEPLOYED; fresh integrated real Mongo/full CI and independent review required",
+  "source_binding_reused_from": "66634b9a7b539f42b8d0017d2e7015f0bb283334; exact helper code plus provenance comment and original helper tests",
+  "scope": "Selectively reapplied14 reviewed source files f6a to direct M4; two actual bindings, their integration tests and dedicated/full Google CI invocations; no writer/accounting/global normalizer/policy changes",
+  "behavior": "Owner saved-plan pinned-minus-excluded product raw-line observations for closed14/previous14/30/90 Riyadh windows; bounded candidate read; no net sales/profit/growth/ranking",
+  "bounds": {
+    "candidate_read": "owner/order_date90days+/-1; exact existing index hint; max1000+sentinel; BSON document<=32768; maxTimeMS3000; route timeout6sec",
+    "identity": "canonicalowner/orderid/ordernumber bound to rawSalla IDs/timestamp; duplicate order IDs/numbers reject all affected docs; duplicate/missing line IDs or conflicting product/parent IDs reject whole order; no name/SKU fallback",
+    "eligibility": "Explicit completed/delivered source status, consistent canonical status/payment and paid marker; known returns/cancel/refund data reject; remaining refunds unreconciled",
+    "currency_account": "Native currency consistency/ISO; currencies separate. Actual native merchant/accountID unavailable: platform_account_id:null, account_scope:owner_store_projection. Internal purecontract ownerprojectionhash is not external account proof",
+    "quantity": "Explicit bounded positive raw quantity only. Counts lower-bound qualifying stored gross-line observations, NOT actual or net sales; empty windows null not zero",
+    "source_quality": "Raw snapshot may be merged/retained. No source coverage watermark, snapshot immutability or freshness guarantee. Date-only, naive and raw timezone-declared date objects rejected by inherited binding. Oversize docs omitted unquantified. Sentinel suppresses all counts",
+    "pure_builder": "Only complete:false/unverified records without monetary/verifiedorder metrics; no completeness bypass. Empty/missing catalog yields no pure context. No platform conversions included"
+  },
+  "synthetic_example": {
+    "as_of": "2026-10-29T12:00:00+00:00",
+    "product_id": "123",
+    "currency": "SAR",
+    "last14": {
+      "observed_orders": 1,
+      "observed_lines": 1,
+      "observed_units": "2"
+    },
+    "previous14": null,
+    "last30_and90": "Each independently2, never summed",
+    "sales_native": null,
+    "profitability": null,
+    "growth_14_days_percent": null,
+    "coverage_complete": false
+  },
+  "verification": {
+    "red": "New module missing import failed collection before implementation",
+    "backend": "59 passed, no skips, 1.20s (new pure/API and inherited source-binding/timestamp suites)",
+    "frontend": "19 passed, no skips, 1.051s using Node22.23.2/read-only existing deps",
+    "real_mongo": "5 authored cases; NOT executed locally. New dedicated Ubuntu22.04/Mongo8.0.26 disposable gStoreObservations replica port27475 workflow enforces realcase count5/min64 total/zero skips; fresh CI pending",
+    "diff_check": "passed"
+  },
+  "production_changed": false,
+  "provider_calls": 0,
+  "next": "Run integrated actual Mongo/full CI and independent review; root owns final source and release. No new intent frozen.",
+  "strict_source_followup": {
+    "finding": "Canonical payment or currency alone cannot replace absent raw proof",
+    "fix": "Explicit raw paid marker and raw ISO currency proof required; canonical fields only consistency checks. Public reader validates owner/product scope before querying.",
+    "red": "New missing-raw-proof regression failed on original d907 source",
+    "fresh_backend": "61 passed, no skips, 1.35s",
+    "ci": "New run required after followup. Original d907 replica/UI run40917869056 successful but not acceptance for changed source."
+  },
+  "independent_review_fix": {
+    "findings": "Known Salla refund_action omitted from projection; canonical actual refunds/item refunded amounts ignored; leading-zero numeric aliases could double observations",
+    "source_evidence": [
+      "salla_integration/webhook_event_capture.py:232 has_refund_amount",
+      "refunds_alert_routes.py:99-107 actual full/partial refund fields",
+      "accounting_order_refunds.py:19 refund_amount"
+    ],
+    "fix": "Canonical positive decimal IDs without leading zero for order/reference/line/product before counting; existing source helpers untouched. Project/refuse nonzero or ambiguous refund_action, full/partial canonical refunds and raw item refund amounts. Explicit zero objects require native currency match; missing refunds stay unreconciled.",
+    "red": "8 of9 new refund/alias regressions failed before fix; product alias already uncounted",
+    "fresh_backend": "76 passed, no skips, 1.41s",
+    "real_mongo": "4 additional projection/alias cases authored; total9. New exact-source CI required; no claim previous64case run validates this fix."
+  },
+  "projection_ambiguity_guard": {
+    "review": "Reviewer requested actual-Mongo probe for dotted projection erasing malformed refund-container type; not established as original failure",
+    "guard": "Before projection, server $type restricts payment_actions and refund_action to missing or object. Scalar/null/array containers omitted explicitly; missing remains unreconciled and incomplete. Does not fetch extra payment fields.",
+    "fresh_backend": "76 passed, no skips, -Werror,1.28s",
+    "actual_mongo": "4 new malformed-container cases; expected13 real replica cases/89 total minimum; latest source CI pending",
+    "prior_ci": "7e45 replica job123606843083 run40919006211 success; not claim current added guard validated until newCI"
+  },
+  "integration": {
+    "reviewed_source": "f6a0b7bd01b5158ed2cfac2a22587a81b75c468c",
+    "base": "dada1def704ae968230d63c3c9885508a2a6653d",
+    "backend_binding": "google_ads_routes.attach_google_ads_management_routes calls attach_google_plan_store_observation_routes preserving existing attachments",
+    "frontend_binding": "GoogleCommercialPlan renders GoogleStoreProductObservations beside pinned review; same saved-plan owner/dirty/busy/conflict/fullfields scope",
+    "tests": "77 backend -Werror passed1.55s including actual management router no-provider-call test;85 UI tests4suites passed1.636s including actual parent explicit read and dirty abort/late discard",
+    "local_build": "Full latest integrated Vite candidate build passed6.02s using Node22.23.2/production backend URL; not governed release/reproducibility/intent proof",
+    "real_mongo": "Added actual full-router ASGI request on own replica with saved plan/catalog/orders, owner scope/exclusion/stale revision/no mutations;14 replica expected/min91total; fresh CI pending",
+    "intent_dependencies": "Unchanged from M4; no prior task release history imported",
+    "production_changed": false,
+    "next": "Remote integration WIP and independent reviewer; exact-source full UI/build plus14case actual Mongo CI; root re-sources on then-current production before release slot"
+  }
+}
