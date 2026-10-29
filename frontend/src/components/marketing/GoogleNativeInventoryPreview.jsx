@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import GoogleProductTestReview from "./GoogleProductTestReview";
+import { useOptionalAuth } from "../../context/AuthContext";
 import { getGoogleNativeInventoryPreview, nativeInventoryOptions } from "../../services/googleNativeInventoryPreview";
 import { isGoogleRequestCancelled } from "../../services/googleAds";
 
@@ -40,23 +42,23 @@ function failureMessage(failure) {
     if (detail?.code === "google_commercial_plan_revision_conflict" || failure?.response?.status === 404) return "تغيرت الخطة أو لم تعد متاحة؛ أعد تحميل الخطة ومعاينة القسم.";
     return "لم تثبت معاينة المخزون ضمن هذا الطلب. أعد معاينة القسم وتحقق من المنتجات المطلوبة؛ لا توجد نتيجة تمنح أهلية الإعلان.";
 }
-function Request({ plan, category, selected }) {
+function Request({ plan, category, selected, externalBusy = false, onBusyChange }) {
     const [result, setResult] = useState(null), [busy, setBusy] = useState(false), [locked, setLocked] = useState(false), [error, setError] = useState("");
     const mounted = useRef(true), request = useRef(null), pending = useRef(false);
-    useEffect(() => { mounted.current = true; return () => { mounted.current = false; request.current?.abort(); }; }, []);
+    useEffect(() => { mounted.current = true; return () => { mounted.current = false; request.current?.abort(); onBusyChange?.(false); }; }, [onBusyChange]);
     async function read() {
-        if (!selected.length || pending.current || locked) return;
-        pending.current = true; setBusy(true); setResult(null); setError(""); request.current = new AbortController();
+        if (!selected.length || pending.current || locked || externalBusy) return;
+        pending.current = true; setBusy(true); onBusyChange?.(true); setResult(null); setError(""); request.current = new AbortController();
         try { const data = await getGoogleNativeInventoryPreview(plan, category, selected, { signal: request.current.signal }); if (mounted.current) setResult(data); }
         catch (failure) { if (mounted.current && !isGoogleRequestCancelled(failure)) {
             setLocked(failure?.response?.status === 404 || failure?.response?.data?.detail?.code === "google_commercial_plan_revision_conflict" || failure?.code === "GOOGLE_NATIVE_INVENTORY_PREVIEW_UNPROVED");
             setError(failureMessage(failure));
-        } } finally { pending.current = false; if (mounted.current) setBusy(false); }
+        } } finally { pending.current = false; if (mounted.current) { setBusy(false); onBusyChange?.(false); } }
     }
-    return <><button type="button" disabled={!selected.length || busy || locked} onClick={read} className="rounded border px-3 py-2 disabled:opacity-40">{busy ? "جارٍ فحص المخزون المرصود…" : "فحص مخزون المنتجات المحددة فقط"}</button>{error && <p role="alert">{error}</p>}{result && <Observations result={result} />}</>;
+    return <><button type="button" disabled={!selected.length || busy || locked || externalBusy} onClick={read} className="rounded border px-3 py-2 disabled:opacity-40">{busy ? "جارٍ فحص المخزون المرصود…" : "فحص مخزون المنتجات المحددة فقط"}</button>{error && <p role="alert">{error}</p>}{result && <Observations result={result} />}</>;
 }
 function Panel({ plan, category, products }) {
-    const [selected, setSelected] = useState([]);
+    const [selected, setSelected] = useState([]), [nativeBusy, setNativeBusy] = useState(false), [reviewBusy, setReviewBusy] = useState(false);
     function toggle(id) { setSelected((old) => old.includes(id) ? old.filter((value) => value !== id) : old.length < 5 ? [...old, id] : old); }
     return <section dir="rtl" aria-label="فحص مخزون المنتجات المرصودة" className="mt-3 rounded border p-3 text-sm leading-7">
         <h3 className="font-bold">فحص مخزون المنتجات المرصودة</h3>
@@ -64,12 +66,15 @@ function Panel({ plan, category, products }) {
         {!products.length && <p>لا توجد منتجات مرصودة يمكن طلب فحصها.</p>}
         <div className="flex flex-wrap gap-3">{products.map((product) => <label key={product.salla_product_id}><input type="checkbox" aria-label={`فحص مخزون المنتج ${product.salla_product_id}`} checked={selected.includes(product.salla_product_id)} disabled={product.excluded || selected.length >= 5 && !selected.includes(product.salla_product_id)} onChange={() => toggle(product.salla_product_id)} /> المنتج {product.salla_product_id}{product.excluded ? " · مستبعد في الخطة" : ""}</label>)}</div>
         <p>المحدد للفحص: {selected.length} من 5.</p>
-        <Request key={JSON.stringify(selected)} plan={plan} category={category} selected={selected} />
+        <Request key={JSON.stringify(selected)} plan={plan} category={category} selected={selected} externalBusy={reviewBusy} onBusyChange={setNativeBusy} />
+        <GoogleProductTestReview plan={plan} category={category} selectedProductIds={selected} isOwner={true} externalBusy={nativeBusy} onBusyChange={setReviewBusy} />
     </section>;
 }
 export default function GoogleNativeInventoryPreview({ plan, category, isOwner, planDirty = false }) {
+    const auth = useOptionalAuth(), generation = useRef({ user: auth?.user, value: 0 });
+    if (generation.current.user !== auth?.user) generation.current = { user: auth?.user, value: generation.current.value + 1 };
     if (isOwner !== true) return null;
     if (planDirty) return <p dir="rtl">احفظ الخطة أو أعد تحميل نسختها ومعاينة القسم قبل فحص المخزون.</p>;
     let products; try { products = nativeInventoryOptions(plan, category); } catch { return <p dir="rtl">راجع معاينة القسم ومعرفات الاستبعاد الرقمية في الخطة قبل فحص المخزون؛ النطاق الحالي غير مثبت.</p>; }
-    return <Panel key={JSON.stringify([plan.plan_id, plan.revision, plan.fields, category])} plan={plan} category={category} products={products} />;
+    return <Panel key={JSON.stringify([generation.current.value, auth?.user?.id, plan.plan_id, plan.revision, plan.fields, category])} plan={plan} category={category} products={products} />;
 }
