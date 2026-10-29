@@ -228,3 +228,18 @@ async def test_actual_meta_tiktok_association_writers_preserve_native_field_gaps
     assert associations['tiktok']['missing']==['persisted_native_currency','persisted_native_timezone']
     assert all(r['feed_mapping_verified'] is False and r['meaning']=='intended_product_association_only' for r in associations.values())
     assert row['decision']=='exploration_test_review' and row['evidence_reasons']==[] and data['campaign_contexts']==[]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation',['preview','state','save'])
+async def test_actual_duplicate_plan_without_unique_index_fails_closed_before_provider_or_review_write(mongo,monkeypatch,operation):
+    native=Native()
+    async with client(app_for(monkeypatch,mongo,native)) as c:
+        assert (await c.put('/google_ads/commercial-plans/winter',json=payload())).status_code==200
+        await mongo[PLANS].drop_index('google_commercial_plan_owner_id')
+        duplicate=await mongo[PLANS].find_one({});duplicate.pop('_id')
+        await mongo[PLANS].insert_one(duplicate)
+        assert await mongo[PLANS].count_documents({'user_id':'owner','plan_id':'winter'})==2
+        response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c)
+    assert response.status_code==409,response.text
+    assert response.json()['detail']['code']=='google_commercial_plan_scope_unproved'
+    assert native.calls==[] and await mongo[REVIEWS].count_documents({})==0

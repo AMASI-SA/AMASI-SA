@@ -55,8 +55,10 @@ async def owner_snapshot(db,user):
 async def capture_scope(db,user,plan_id,revision):
     if not isinstance(plan_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',plan_id):raise problem('google_commercial_plan_id_invalid','معرف الخطة غير صالح.',422)
     owner,owner_row=await owner_snapshot(db,user)
-    row=await db[PLANS].find_one({'user_id':owner,'plan_id':plan_id},PLAN_PROJECTION)
-    if not row:raise problem('google_commercial_plan_not_found','الخطة غير موجودة.',404)
+    rows=await db[PLANS].find({'user_id':owner,'plan_id':plan_id},PLAN_PROJECTION).limit(2).max_time_ms(1000).to_list(length=2)
+    if not rows:raise problem('google_commercial_plan_not_found','الخطة غير موجودة.',404)
+    if len(rows)!=1:raise problem('google_commercial_plan_scope_unproved','تعذر إثبات نسخة خطة واحدة؛ لم تُنفذ المراجعة.',409)
+    row=rows[0]
     if type(row.get('revision')) is not int or row['revision']!=revision:raise problem('google_commercial_plan_revision_conflict','تغيرت الخطة؛ أعد قراءتها.',409)
     fields=CommercialPlanFields.model_validate(row['fields'])
     return {'owner_id':owner,'owner':owner_row,'plan_id':plan_id,'revision':revision,'plan':row,'fields':fields,

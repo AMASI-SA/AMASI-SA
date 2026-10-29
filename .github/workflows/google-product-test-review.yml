@@ -57,7 +57,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('product-test-review-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_product_test_review_mongo')]
-          assert len(cases)==146 and len(replica)==27
+          assert len(cases)==152 and len(replica)==30
           assert sum(c.attrib.get('name','').startswith('test_actual_owner_plan_review_connection_races_reject_output') for c in replica)==9
           assert sum(c.attrib.get('name','').startswith('test_actual_projection_rejected_orders_never_become_positive_demand') for c in replica)==3
           assert any(c.attrib.get('name')=='test_actual_http_writer_fit_and_real_order_projection_support_review_not_profit' for c in replica)
@@ -65,6 +65,7 @@ jobs:
           assert any(c.attrib.get('name')=='test_actual_committed_campaign_writers_keep_two_products_one_context' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_owner_drift_during_final_review_read_never_escapes') for c in replica)==6
           assert any(c.attrib.get('name')=='test_actual_meta_tiktok_association_writers_preserve_native_field_gaps_without_performance_claim' for c in replica)
+          assert sum(c.attrib.get('name','').startswith('test_actual_duplicate_plan_without_unique_index_fails_closed_before_provider_or_review_write') for c in replica)==3
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
           PYGATE

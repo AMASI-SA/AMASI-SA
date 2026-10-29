@@ -38,9 +38,16 @@ class Orders:
     def find(self,query,projection):
         self.queries.append(deepcopy(query));period=query['order_date']
         return OrderCursor([r for r in self.rows if r.get('user_id')==query['user_id'] and period['$gte']<=r['order_date']<=period['$lte']])
+class Plans(Collection):
+    def find(self,query,projection):
+        assert projection["_id"]==0
+        return PlanCursor([r for r in self.rows if all(r.get(k)==v for k,v in query.items())])
+class PlanCursor(Cursor):
+    def limit(self,value):assert value==2;return self
+    def max_time_ms(self,value):assert value==1000;return self
 class DB:
     def __init__(self):
-        self.users=OwnerUsers();self.plans=Collection();self.reviews=Reviews();self.orders=Orders([]);self.salla_integrations=Integration();self.graph=GraphCollection([])
+        self.users=OwnerUsers();self.plans=Plans();self.reviews=Reviews();self.orders=Orders([]);self.salla_integrations=Integration();self.graph=GraphCollection([])
     def __getitem__(self,name):return {PLANS:self.plans,REVIEWS:self.reviews,'unified_orders':self.orders,LINKS:self.graph}[name]
 
 def payload(**changes):return body(category_url=None,category_ids=['8'],pinned_product_ids=['1'],**changes).model_dump(mode='json')
@@ -191,3 +198,14 @@ async def test_owner_drift_during_last_review_read_is_caught_before_response(mon
         response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c,expected_review_revision=1)
     assert response.status_code==403,response.text
     if operation=='save':assert response.json()['detail']['review_may_have_persisted'] is True and db.reviews.rows[0]['revision']==2
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation',['preview','state','save'])
+async def test_duplicate_saved_plan_scope_rejected_before_provider_or_review_write(monkeypatch,operation):
+    db,native=DB(),Native()
+    async with client(app_for(monkeypatch,db,native)) as c:
+        assert (await c.put('/google_ads/commercial-plans/winter',json=payload())).status_code==200
+        db.plans.rows.append(deepcopy(db.plans.rows[0]))
+        response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c)
+    assert response.status_code==409,response.text
+    assert native.calls==[] and db.reviews.rows==[]
