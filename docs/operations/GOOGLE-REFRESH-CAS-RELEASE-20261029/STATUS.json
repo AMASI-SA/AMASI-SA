@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-REFRESH-CAS-RELEASE-20261029",
-  "state": "DEPLOYED: frozen v5 pair, 3 verified live probes and lease closed; native Google live read acceptance in progress",
+  "state": "DEPLOYED AND ACCEPTED:3 verified live probes, lease closed, native Google editor reads and GA4 realtime passed",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-refresh-cas-release-20261029",
   "base_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
@@ -99,10 +99,23 @@
       "checks": 3,
       "guard_active": false,
       "boot_started_at": "2026-10-29T15:55:49.067866+00:00",
-      "frontend_artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee"
+      "frontend_artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+      "functional": {
+        "account": "5052346701",
+        "connection": "connected",
+        "campaigns": 22,
+        "groups": "1 testSearchgroup loaded",
+        "ads": "2 native RSA ads loaded; editor hydrated3headlines/2descriptions/exact productURL without saving",
+        "ga4": "Realtime active users and pages visible after release",
+        "management_policy_revision": 0,
+        "automatic_execution": "disabled",
+        "creation": "disabled",
+        "ad_or_policy_writes": 0,
+        "oauth_relink": false
+      }
     },
     "production_changed": "yes"
   },
   "continuity_status_branch": "codex/google-refresh-cas-status-20261029",
-  "next": "Complete post-release native Google and GA4 read checks; keep budgets, policies and flags unchanged. Then inventoryPR1600 already green and reviewed."
+  "next": "Continue inventoryPR1600 frozen pair and remaining Google roadmap; this snapshot CAS slice is complete, not full funded autonomy."
 }
