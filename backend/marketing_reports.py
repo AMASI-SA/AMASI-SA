@@ -124,7 +124,7 @@ async def snapchat_report(db, user_id, start, end, account_id=None, *, include_c
             native_spend = number(item.get("spend_native"))
             native_sales = number(item.get("purchase_value_native"))
             fx = number(item.get("exchange_rate_to_sar"))
-            if not item.get("source_fact_count") and not salla.get("orders") and str(item.get("status") or "").upper() != "ACTIVE":
+            if include_commerce and not item.get("source_fact_count") and not salla.get("orders") and str(item.get("status") or "").upper() != "ACTIVE":
                 continue
             rows.append({"id": f"snapchat:{aid}:{item['campaign_id']}", "provider": "snapchat",
                 "campaign_id": item["campaign_id"], "name": item["campaign_name"], "account_id": aid,
@@ -393,11 +393,14 @@ def make_marketing_reports_router(db, current_user):
             reconcile_financial_totals(item["totals"], source)
             if item["provider"] in EXTRA_SOURCES:
                 item["totals"].update(cpa_sar=None, roas=None)
+        totals = reconcile_financial_totals(summarize_totals([p["totals"] for p in reports]), source)
+        if provider in EXTRA_SOURCES:
+            totals.update(cpa_sar=None, roas=None)
         return {"provider": provider, "source": source, "currency": "SAR",
                 "reconciliation": reconciliation,
                 "range": {"date_from": start.isoformat(), "date_to": end.isoformat(), "timezone": zone},
                 "reports": reports, "generated_at": datetime.now(timezone.utc).isoformat(),
-                "totals": reconcile_financial_totals(summarize_totals([p["totals"] for p in reports]), source),
+                "totals": totals,
                 "complete": all(p["status"] == "available" and not p.get("warnings") for p in reports),
                 "profit_scope": "after_product_advertising_shipping_payment_before_operating_expenses"}
     return router

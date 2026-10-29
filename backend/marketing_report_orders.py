@@ -33,7 +33,9 @@ def classify_source(order):
     candidates = [" ".join(str(v).casefold().replace("_", " ").split()) for v in order_source_candidates(order)]
     # `store`, `website`, and `salla_direct` identify an ingestion/storefront
     # channel; none proves that the customer arrived directly.
-    return "direct" if any(v in explicit_direct for v in candidates) else "unclassified"
+    ingestion = {"store", "website", "salla direct", "salla", "make", "excel", "custom app", "المتجر"}
+    meaningful = {v for v in candidates if v and v not in ingestion}
+    return "direct" if meaningful and meaningful <= explicit_direct else "unclassified"
 
 
 def unique_orders(orders):

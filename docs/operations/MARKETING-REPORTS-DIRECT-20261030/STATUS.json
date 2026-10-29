@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/reports-direct-unclassified-20261030",
   "base": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
-  "state": "WIP: implementation and focused tests passed; not released",
+  "state": "Implementation reviewed and focused checks passed; release preparation pending",
   "scope": "Direct and unclassified order-source rows and standalone filters; one deduplicated Salla order universe across sources",
   "completed": [
     "Six-source Salla view; direct requires explicit marketing evidence",
@@ -11,18 +11,19 @@
     "Known platform orders without campaign remain in that platform residual row",
     "Riyadh store calendar and common all/report status scope",
     "Synced order count and sales distribution reconciliation; no claim of live Salla comparison",
-    "Frontend source selector, status filter and reconciliation panel"
+    "Frontend source selector, status filter and reconciliation panel",
+    "Compact desktop layout: six rows, responsive column widths, bold readable typography, sticky totals at 100% browser zoom"
   ],
   "validation": [
     {
-      "command": "PYTHONPATH=backend <venv>/python -m pytest backend/tests/test_marketing_report_orders.py backend/tests/test_marketing_reports.py -q",
+      "command": "MEZAN_CGROUP_ROOT=<isolated test cgroup> PYTHONPATH=backend <venv>/python -m pytest tests/test_marketing_report_orders.py tests/test_marketing_reports.py tests/test_tiktok_native_hierarchy.py tests/test_tiktok_native_reporting.py tests/test_snapchat_reporting_v2_period_candidates.py -q",
       "exit": 0,
-      "result": "26 passed; 3 existing warnings"
+      "result": "73 passed, 1 Mongo integration test skipped, 3 existing warnings"
     },
     {
       "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/MarketingReports.test.jsx",
       "exit": 0,
-      "result": "6 passed"
+      "result": "7 passed"
     },
     {
       "command": "git diff --check",
@@ -36,9 +37,12 @@
     "Actual-host rehearsal, authorized publication and exact identity verification",
     "Live Salla same-date/status order count and sales comparison; refresh after sync"
   ],
-  "next": "Inspect source diff and integration behavior; do not claim live totals match Salla until independently compared. Recover code-server reconnect error for actual-host release steps.",
+  "next": "Create governed source A, build reproducibly, freeze intent-only B and run CI/clean-clone rehearsal. Guard status in shared /app was inactive. Publish only the verified pair and reconcile live counts/sales, plus visually check six rows and totals at 100%.",
   "production_changed": false,
   "release_guard": "No lease created by this task",
   "continuity": "Issue #1006 is at its comment limit; task STATUS and draft PR are the checkpoint records",
-  "preserved": "Existing Google retail identity release, TikTok native canonical reader, and all unrelated source. No provider/order writes."
+  "preserved": "Existing Google retail identity release, TikTok native canonical reader, and all unrelated source. No provider/order writes.",
+  "pr": 1639,
+  "broader_regression_note": "The optional attribution-recovery suite has two existing failures, reproduced unchanged on production base 473da65caea094b46fc3ce74bb4daec3ac6d2b00: test_salla_live_source_details_shape_resolves_exact_snapchat_campaign (existing utm_content expectation) and test_bounded_sync_recovery_loads_full_order_attribution (existing sync fake mismatch). No files for those implementations or tests were changed.",
+  "live_reference": "Read all ten Salla API pages for 2026-10-29 in Asia/Riyadh, all statuses; stable pagination, unique identities and SAR amounts retained only in session for post-deployment comparison. Not yet compared to candidate runtime."
 }

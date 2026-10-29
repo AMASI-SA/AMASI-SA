@@ -15,6 +15,7 @@ def test_direct_requires_marketing_evidence_not_ingestion_or_missing_campaign():
     assert classify_source({"utm_source": "snapchat"}) == "snapchat"
     assert classify_source({"utm_source": "whatsapp"}) == "unclassified"
     assert classify_source({"source": "direct", "utm_source": "tiktok"}) == "tiktok"
+    assert classify_source({"source": "direct", "utm_source": "whatsapp"}) == "unclassified"
     assert classify_source({"utm_source": "snapchat", "raw_by_source": {"salla_direct": {"utm_source": "meta"}}}) == "meta"
 
 
@@ -152,5 +153,33 @@ def test_direct_http_uses_salla_without_contacting_ad_readers(setup, monkeypatch
     assert result.json()["source"] == "salla"
     assert result.json()["totals"]["orders"] == 1
     assert result.json()["reports"][0]["totals"]["cpa_sar"] is None
+    assert result.json()["totals"]["cpa_sar"] is None
     assert result.json()["reconciliation"]["outside_selection"] == 1
     read.assert_not_called()
+
+
+def test_unavailable_ad_reader_does_not_hide_orders_or_manufacture_zero_cost(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import marketing_reports as reports
+    monkeypatch.setattr(reports,"other_report",AsyncMock(side_effect=RuntimeError("offline")))
+    app = FastAPI()
+    app.include_router(reports.make_marketing_reports_router(setup([order(1,"tiktok",100)]),lambda:{"id":"owner","role":"owner"}))
+    response = TestClient(app).get("/marketing-reports?provider=tiktok&source=salla&date_from=2026-10-01&date_to=2026-10-01")
+    assert response.status_code == 200
+    assert response.json()["totals"]["orders"] == 1
+    assert response.json()["totals"]["sales_sar"] == 100
+    assert response.json()["totals"]["spend_sar"] is None
+    assert response.json()["totals"]["net_profit_sar"] is None
+
+
+def test_partial_order_read_fails_closed_instead_of_showing_prefix_totals(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import marketing_reports as reports
+    monkeypatch.setattr(reports,"apply_store_orders",AsyncMock(side_effect=ValueError("salla_order_report_truncated")))
+    app = FastAPI()
+    app.include_router(reports.make_marketing_reports_router(object(),lambda:{"id":"owner","role":"owner"}))
+    response=TestClient(app).get("/marketing-reports?provider=unclassified&date_from=2026-10-01&date_to=2026-10-01")
+    assert response.status_code == 503
+    assert "totals" not in response.json()

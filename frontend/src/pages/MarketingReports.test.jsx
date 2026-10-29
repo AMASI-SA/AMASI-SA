@@ -91,3 +91,16 @@ test("all sources show six rows and the synced Salla reconciliation without clai
     expect(host.textContent).toContain("Asia/Riyadh");
     expect(api.get.mock.calls.at(-1)[1].params.status_scope).toBe("all");
 });
+
+test("choosing all platforms selects the real Salla order universe", async () => {
+    api.get.mockImplementation((url,opts)=>Promise.resolve({data:opts.params.provider === "all"
+        ? {...payload("salla"),provider:"all",reports:["snapchat","tiktok","meta","google","direct","unclassified"].map(provider=>({provider,label:provider,status:"available",totals:metrics}))}
+        : payload("platform")}));
+    await act(async () => root.render(<MemoryRouter initialEntries={["/ads-manager/reports?provider=snapchat&source=platform"]}><MarketingReports /></MemoryRouter>));
+    await flush();
+    await act(async () => {const select=host.querySelector("select");select.value="all";select.dispatchEvent(new Event("change",{bubbles:true}));});
+    await flush();
+    expect(api.get.mock.calls.at(-1)[1].params).toMatchObject({provider:"all",source:"salla"});
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(6);
+    expect(host.querySelector("thead").textContent).toContain("عدد الطلبات");
+});
