@@ -1,0 +1,49 @@
+# Source-backed Mezan product to Google offer mapping assessment
+
+Assessment only, 2026-10-29. Production base: `2fba251ab73780d984b2c53a4f991bc98d61c441` (M7). No runtime changes, provider/account calls, credential reads, new OAuth scope, activation or deployment. Retail source `4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d` remains separately reviewed and unchanged.
+
+## Decision
+
+The current manual selection is correctly labelled `owner_selected_unverified`. Google Ads v25 shopping-product inventory cannot establish store-product identity through a landing URL: its resource has no product-page URL field. Merchant API v1 processed products do expose direct product links. A future bounded, authenticated Merchant read can supply useful evidence, but neither SKU/title equality, a manual assertion, nor a common canonical URL proves the exact variant represented by an offer.
+
+First implement only a read-only Merchant observation contract after root review. A later pure matcher may establish a narrowly described, source-backed product-page match for simple products whose absence of variants/options is independently proved. Keep variant identity, catalog eligibility, category membership, destination, stock, attribution and execution authorization separate.
+
+## Repository evidence
+
+* `product_v2_routes.normalize_salla_product` retains owner, native Salla product ID, source revision, sync timestamp and raw source. Normalized absent variants can become zero; this is not proof of a simple product. SKU/barcode normalization is not a unique feed mapping.
+* `product_v2_details_routes._details_patch` retains authenticated raw details and inventory evidence. Normalized variants can receive an array-index ID when the native ID is absent. Such an ID must never become a mapping key. Reuse `product_inventory_proof` rather than duplicating stock/explicit-variant evidence.
+* M7 `google_product_catalog_reader` now projects immutable details stock evidence, but explicitly does not prove remote variant coverage, category membership, landing URL or authority to advertise. It has no Merchant mapping or source URL projection.
+* Existing AI/creation URL extraction prefers editable top-level fields, then raw `urls.product` or `url`. A trusted reader must use documented authenticated detail fields, including Salla `urls.customer`, retain provenance and reject conflicts. The image-only URL deduplication helper in `product_v2_source_authority` strips query/fragment; it is unsuitable for variant/product matching.
+* `salla_integration/service.py` stores authenticated store ID/domain. No live freshness or binding was inspected. Future reads need a narrow projection excluding credentials, not a caller-supplied domain string.
+* `product_google_taxonomy_merchant_feed` already reads Merchant products v1 using the existing content scope. Its current matcher compares SKU/native product ID to offer ID, including casefold fallback, and deduplicates offer ID globally. A pure synthetic probe confirmed it accepts a SKU match with an unrelated link and collapses duplicate-feed offers. This helper is not campaign mapping proof. Its bounded pagination lacks an explicit complete/truncated result and repeated-token defense; do not silently reuse it as authoritative inventory.
+* Merchant account discovery/registration proves neither selected-account product access nor store-to-offer identity. The internal scope alias `content.readonly` maps to Google's actual `https://www.googleapis.com/auth/content` grant, which is broader; no new grant is proposed and no actual grant was observed.
+
+## Official native contracts
+
+1. [Google Ads v25 ShoppingProduct](https://developers.google.com/google-ads/api/reference/rpc/v25/ShoppingProduct) and [GAQL fields](https://developers.google.com/google-ads/api/fields/v25/shopping_product): identity is customer + Merchant account + channel + language + feed label + item ID. `product_image_uri` is an image, not a landing URL. Custom attributes are merchant strings, not independently attested Mezan IDs.
+2. [Merchant v1 processed Product](https://developers.google.com/merchant/api/reference/rest/products_v1/accounts.products): explicit identity includes account resource, offer ID, language, feed label, data source and local/online distinction. Processed products incorporate source/rule/supplemental inputs and are distinct from ProductInput. Do not assume the older v1beta resource-name form.
+3. [ProductAttributes](https://developers.google.com/merchant/api/reference/rest/products_v1/ProductAttributes): `link` is the product page; `canonicalLink` may be common across variants; `itemGroupId` groups variants; `mobileLink` and `adsRedirect` affect destination interpretation. No universal Mezan product key exists.
+4. [Get](https://developers.google.com/merchant/api/reference/rest/products_v1/accounts.products/get): IDs with `/`, `%` or `~` require base64url encoding. Preserve explicit fields and validated native resources; do not split or construct IDs from store SKUs.
+5. [List](https://developers.google.com/merchant/api/reference/rest/products_v1/accounts.products/list): page size is at most 1000, short pages can still have a next token, and request parameters must remain consistent. No atomic point-in-time snapshot or external-writer exclusion was established from this contract.
+6. [Merchant homepage](https://developers.google.com/merchant/api/reference/rest/accounts_v1/accounts.homepage): `uri` and `claimed` can inform scope; `claimed=true` also covers inherited claims/exempt accounts. This Boolean alone is not direct ownership proof. Read-only access must not claim or update a homepage.
+7. [Salla product details](https://docs.salla.dev/product/product-details), [documented detail response](https://docs.salla.dev/5394173e0), and [native variants](https://docs.salla.dev/product-variants/list): authenticated native product/variant IDs and customer page URLs are usable source inputs. No universally available exact variant-specific URL was established; do not invent one.
+
+Installed schema probe: `google-ads 33.0.0`, v25 `ShoppingProduct`, `protobuf 7.36.2`, `proto-plus 1.29.0`. Descriptor inspection found no landing URL. Strict protobuf parsing rejected each of `link`, `product_link`, `final_url`, `landing_page_url`, `canonical_url`. These are local schema probes, not provider acceptance tests.
+
+## Proposed first module, not yet authorized implementation
+
+`backend/integrations_control_center/google_merchant_product_observation.py`, with focused unit/transport-contract tests, should accept an already authorized, injected read transport and server-established owner/store/selected Merchant/linked Ads customer scope. It should expose only a bounded, typed observation of processed native products from fixed official endpoints. It must not obtain tokens, discover an arbitrary configured account, fetch landing pages, write to Google, or authorize execution.
+
+Preserve the full native identity, native resource and data source; whitelist link/canonical/mobile/redirect and variant grouping fields. Enforce row/page/byte/time limits, unique identities, valid row shapes and consistent account scope. A malformed row, cap, repeated token, duplicate or partial source returns incomplete/unproved; never silently drop it. Keep observed timestamps/freshness separate from semantic digests. Complete pagination still does not prove one atomic external snapshot.
+
+Subsequent `google_product_offer_mapping.py` would accept only trusted server observations bound to owner, store, source revision and native IDs. Its first positive case should require a proven simple product, exact owned HTTPS product-page match, unique page/native identity within the relevant feed/language and consistent destinations. Query differences, case-sensitive path differences, conflicting raw URLs or shared parent URLs must not disappear through permissive normalization. A common canonical link or item group cannot prove a variant.
+
+Variants require an authenticated native variant-to-export receipt or authoritative variant-specific page binding. No such immutable export ledger was found. Custom feed labels become evidence only under an actual trusted exporter contract, not because a string resembles a Mezan ID.
+
+An output such as `source_backed_product_page_match` should retain source references/digests and explicit `variant_mapping_verified:false`, `category_membership_verified:false`, `attribution_verified:false`, `execution_authorized:false`. An owner section URL may be a suitable campaign landing page, but cannot establish item identity or section membership. The catalog item destination must remain the product actually represented. Do not relax the reviewed retail gate's conservative duplicate-offer refusal in this slice.
+
+## Acceptance and unresolved inputs
+
+Require negative cases for manual/SKU/title-only assertions, unknown URL, duplicate product pages, account/feed/language mismatch, query-specific variants, canonical parent collapse, stale revision, mismatched owner/domain, inherited/exempt claim, untrusted stamps, malformed pagination and encoded native IDs. A positive page-match test must use independently scoped source observations and explicit simple-product evidence, not a caller-provided `verified:true`. Source changes invalidate the match without deleting the owner's draft.
+
+Actual Merchant grant/access, linked-account scope, homepage evidence, real Salla URL shapes, real processed feed links and compatibility remain unobserved. No authoritative variant export receipt or variant URL contract was found. Even a future valid match would not prove ad delivery, profitable performance, attribution, current stock or permission to spend. Root should review this first reader contract before implementation and separately assign any existing-account capability wiring.

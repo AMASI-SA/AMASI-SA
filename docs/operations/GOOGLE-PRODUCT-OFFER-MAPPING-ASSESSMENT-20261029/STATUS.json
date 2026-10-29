@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task": "google-product-offer-mapping-assessment",
+  "date_utc": "2026-10-29",
+  "branch": "codex/google-product-offer-mapping-assessment-20261029",
+  "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "production_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
+  "status": "read-only assessment complete; implementation not started or authorized",
+  "changed_files": [
+    "docs/operations/GOOGLE-PRODUCT-OFFER-MAPPING-ASSESSMENT-20261029/ASSESSMENT.md",
+    "docs/operations/GOOGLE-PRODUCT-OFFER-MAPPING-ASSESSMENT-20261029/STATUS.json"
+  ],
+  "evidence": {
+    "official_documentation": "Google Ads v25, Merchant products/accounts v1, official Salla product and variant contracts; URLs in ASSESSMENT.md",
+    "local_schema": "google-ads33.0.0/v25, protobuf7.36.2, proto-plus1.29.0; no ShoppingProduct landing URL; five guessed URL fields rejected by strict parser",
+    "pure_legacy_matcher_probe": "synthetic SKU match accepted unrelated destination; duplicate feed rows collapsed to one offer; casefold accepted. No DB/provider calls.",
+    "tests": "No runtime edits; local descriptor and pure function probes only, not live/provider acceptance",
+    "m7_inventory_bridge": "reviewed; stored details evidence is not remote variant coverage or URL/mapping proof"
+  },
+  "proposal": "First a bounded read-only google_merchant_product_observation.py using preauthorized injected transport and complete full-identity observations. Later narrow exact owned product-page matching for independently proved simple products. Root review required before implementation.",
+  "limits": [
+    "Manual association remains owner_selected_unverified",
+    "No variant mapping, category membership, attribution or spend authority proved",
+    "Actual existing Merchant access, linked account, homepage/store binding and feed URLs unobserved",
+    "No immutable Mezan-to-native variant export receipt found",
+    "Complete pagination is not an atomic provider snapshot"
+  ],
+  "production_changed": "no",
+  "provider_calls": false,
+  "credential_reads": false,
+  "runtime_writes": false,
+  "deployment": "not applicable; docs-only task",
+  "next": "Root reviews proposed reader interface. Priority next is fresh retail Source A directly on current M7, exact 11 accepted runtime/test blobs plus new release STATUS, without touching host or intent."
+}
