@@ -75,7 +75,7 @@ jobs:
           test "$primary" -eq 1
       - name: Verify diagnostic and unchanged policy contracts
         run: |
-          python -m pytest --noconftest -q -W error --junitxml=storage-readiness.xml \
+          python -m pytest --noconftest -q -s --durations=5 -W error --junitxml=storage-readiness.xml \
             backend/tests/test_google_ads_budget_storage_readiness.py \
             backend/tests/test_google_ads_budget_storage_readiness_mongo.py \
             backend/tests/test_google_ads_automation_policy.py \

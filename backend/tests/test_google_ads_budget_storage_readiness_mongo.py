@@ -1,10 +1,14 @@
 """Disposable CI replica proof. Never reads application environment or DBs."""
 import os
+import asyncio
+import time
+import json
 import uuid
 
 from motor.motor_asyncio import AsyncIOMotorClient
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, APIRouter
+import httpx
 from pymongo.monitoring import CommandListener
 
 from integrations_control_center import google_ads_budget_storage_readiness as readiness
@@ -61,10 +65,40 @@ async def test_actual_abort_command_error_or_unknown_response_never_returns_succ
         await db[readiness.PROBE_COLLECTION].insert_one({'_id':'foreign-existing'})
         await client.admin.command({'configureFailPoint':'failCommand', 'mode':{'times':1},
             'data':{'failCommands':['abortTransaction'], **fault}})
-        with pytest.raises(HTTPException) as error:
-            await readiness.verify_budget_storage(db)
-        assert error.value.status_code == 503
-        assert error.value.detail['code'] == 'google_budget_storage_unverified'
+        await db.users.insert_one({'id':'owner', 'role':'owner'})
+        app, router = FastAPI(), APIRouter()
+        async def current_user(): return {'id':'owner'}
+        readiness.attach_google_ads_budget_storage_readiness_routes(router, db, current_user)
+        app.include_router(router)
+        ticks = [time.monotonic()]
+        stop = asyncio.Event()
+        async def heartbeat():
+            while not stop.is_set():
+                await asyncio.sleep(.05)
+                ticks.append(time.monotonic())
+        pulse = asyncio.create_task(heartbeat())
+        started = time.monotonic()
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as http:
+                response = await http.post('/google_ads/automation/storage-readiness')
+            response_seconds = time.monotonic() - started
+            assert response.status_code == 503
+            assert response.json()['detail']['code'] == 'google_budget_storage_unverified'
+            assert response_seconds <= 12, 'HTTP response exceeded diagnostic deadline allowance'
+        finally:
+            stop.set()
+            await pulse
+        largest_gap = max(b-a for a,b in zip(ticks,ticks[1:]))
+        assert largest_gap < 1.5, 'HTTP probe blocked event-loop heartbeat'
+        cleanup_started = time.monotonic()
+        retained = readiness._active_probe
+        if retained is not None:
+            await asyncio.wait_for(asyncio.gather(asyncio.shield(retained), return_exceptions=True), timeout=30)
+        await asyncio.sleep(0)
+        assert readiness._active_probe is None
+        print(json.dumps({'fault':next(iter(fault)), 'http_response_seconds':round(response_seconds,3),
+            'cleanup_after_response_seconds':round(time.monotonic()-cleanup_started,3),
+            'event_loop_max_gap_seconds':round(largest_gap,3), 'status':response.status_code}))
         # Later successful driver cleanup cannot upgrade the failed diagnostic.
         assert await db[readiness.PROBE_COLLECTION].find({}).to_list(None) == [{'_id':'foreign-existing'}]
     finally:

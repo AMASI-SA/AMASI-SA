@@ -16,7 +16,7 @@
     ]
   },
   "verification": {
-    "backend": "110 passed in 2.67s with -W error; includes raw abort network/server/missing/writeConcern errors fail closed despite later cleanup, cancellation-suppressing cleanup retained and subsequent probe denied until released/completed.",
+    "backend": "110 passed2.58s -Werror for timing-test checkpoint (runtime unchanged).",
     "frontend": "19 passed in 1.29s with governed Node22.23.2/Yarn1.22.22",
     "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base",
     "actual_mongo_previous_sha": {
@@ -25,7 +25,14 @@
       "conclusion": "success",
       "result": "107 passed in 4.36s; failures/errors/skips0; includes actual disposable replica write+abort proof preserving foreign data and existing policy"
     },
-    "actual_mongo_pending": "Three tests in dedicated CI: successful raw command monitored for same lsid/txnNumber/autocommit/admin/majority and snapshot insert; server failCommand error91; connection-close uncertain abort response. No local Mongo."
+    "actual_mongo_pending": "Three tests in dedicated CI: successful raw command monitored for same lsid/txnNumber/autocommit/admin/majority and snapshot insert; server failCommand error91; connection-close uncertain abort response. No local Mongo.",
+    "ack_replica_ci": {
+      "source": "cdddbfa9872421b44a54d73e5bf15aa0c279de8c",
+      "run": 40911092616,
+      "job": 123578939047,
+      "result": "113passed89.87s, failures/errors/skips0, -Werror"
+    },
+    "timing_ci_pending": "Actual ASGI owner HTTP503 response <=12s under both failpoint faults; concurrent event-loop heartbeat maxgap<1.5s; retained task separately awaited/cleanupduration printed. Dedicated CI includes -s --durations=5. No inference from previous suite duration."
   },
   "next_safe_action": "Run actual disposable replica CI including failpoints; request independent review of exact checkpoint before root creates direct-child release source. Parent owns release/productionprobe.",
   "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
@@ -34,7 +41,7 @@
   "cleanup_contract": "At most one pending diagnostic task per process, held by strong reference until its original task closes session/CSOT. HTTP deadline remains8s; unfinished cleanup rejects subsequent probes503; no retries or unbounded cleanup await in HTTP handler.",
   "motor_assessment": {
     "evidence": "Motor3.7.1 AsyncIOMotorClientSession.__aexit__ calls synchronous delegate.__exit__. PyMongo4.18.3 ClientSession.abort_transaction swallows OperationFailure/ConnectionFailure per spec. Source inspected locally; no live fault injection.",
-    "limitation": "Normal abort helper completion alone does not prove server abort acknowledgement. Existing result claim needs bounded command-ack proof or revised diagnostic contract before release. Unit fake context warning is not evidence of production driver failure.",
+    "limitation": "Raw command response now proves abort ACK; pending timing tests separately assess actual HTTP responsiveness and retained cleanup. No production failure inferred from original fake warning or whole-suite duration.",
     "production_claim": "No production Mongo capability, abort acknowledgement, funding readiness or majority commit durability proved.",
     "resolution": "Use supported public client.admin.command abortTransaction, inspecting actual reply instead of driver abort helper. Explicit async end_session only; cleanup result never overrides diagnostic failure. CSOT remains inside original retained task. No private driver state, no manual retries.",
     "official_reference": "https://www.mongodb.com/docs/v8.0/reference/command/aborttransaction/"
