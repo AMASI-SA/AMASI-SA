@@ -3,7 +3,7 @@
   "task": "google-merchant-owner-observation",
   "branch": "codex/google-merchant-owner-observation-20261029",
   "parent": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
-  "status": "Bounded independent source PASS with exact350-case Mongo CI; broader synthetic CI pending",
+  "status": "Bounded independent source PASS; source and synthetic350 Mongo plus full Google regressions passed; release readiness blocked by intentional old source base",
   "contract_checkpoint": "5eb3c331e3643f4d445a51b7dacdfbdb7037fcef",
   "production_changed": "no",
   "runtime_available": false,
@@ -52,12 +52,134 @@
       "logs_read": true
     },
     "broader_ci": {
-      "state": "queued/in progress",
-      "dedicated_pr": 40961508060,
-      "full_google": 40961508068,
-      "readiness": 40961508129,
       "synthetic_merge": "ee92f5571ad90509f36ee1d279fc7cb4723dd2ce",
-      "base": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24"
+      "synthetic_tree": "19081fddc22dd163c75b6cfb75fa931f43aba0d2",
+      "parents": [
+        "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+        "69919f5045ec399492f391cef844cc97af005432"
+      ],
+      "dedicated": {
+        "run": 40961508060,
+        "job": 123755165686,
+        "passed": 350,
+        "skipped": 0,
+        "actual_mongo": 52,
+        "seconds": 13.16
+      },
+      "full_google": {
+        "run": 40961508068,
+        "backend_job": 123755165747,
+        "backend_passed": 1307,
+        "backend_seconds": 36.5,
+        "frontend_job": 123755166242,
+        "frontend_passed": 261,
+        "frontend_suites": 18,
+        "build_seconds": 6.42
+      },
+      "readiness": {
+        "run": 40961508129,
+        "backend_job": 123755166800,
+        "backend_preflight": 156,
+        "backend_seconds": 2.413,
+        "frontend_job": 123755167085,
+        "conclusion": "failure",
+        "reason": "Candidate resolver requires current PR base0bf to be ancestor of699; source intentionally descends from frozen ca564/M7. Tracked old release intent also lacks new Merchant modules. This is a source-handoff ancestry/manifest boundary, not an infrastructure failure.",
+        "retry": false,
+        "host_or_deployment_proof": false
+      },
+      "workflows": [
+        {
+          "id": 40961508083,
+          "name": "Snapchat Direct Active Publication",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508183,
+          "name": "Qoyod Payment Freshness",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508012,
+          "name": "Production Dashboard Four Platform Spend V1",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508060,
+          "name": "Google Merchant owner observation",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508068,
+          "name": "Google Ads full management",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508078,
+          "name": "CodeQL",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 40961508020,
+          "name": "Google credential refresh CAS",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508160,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508176,
+          "name": "MZ2 advertising V2 native accounting",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508159,
+          "name": "Google Merchant bounded observation",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508098,
+          "name": "Operational Balance Web",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508129,
+          "name": "Mezan Release Readiness",
+          "status": "completed",
+          "conclusion": "failure"
+        },
+        {
+          "id": 40961507987,
+          "name": "G47 Focused Integration",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508050,
+          "name": "Operational Stock Eligibility",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508371,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "qualification": "Synthetic merge preserves current production including retail and foreign Reports; it differs from exact source tree. Root must create fresh integration SourceA, reviewed A/B intent and actual deployment; this source is not deploy-ready."
     }
   },
   "limits": [
@@ -68,7 +190,7 @@
     "Parent is old-base helper ca564; root must preserve latest production when integrating",
     "256KiB projected BSON size is checked after rows materialize, not a peak-memory guarantee"
   ],
-  "next": "Await independent source seal and broader synthetic CI; keep runtime source frozen. Root owns explicit attachment, fresh production integration and Release Guard deployment.",
+  "next": "Root reads final module and CI, explicitly attaches reviewed GET route on fresh production integration with accepted helper/observer, then runs fresh full CI and Release Guard. Do not merge/deploy this old-base WIP or status continuation directly.",
   "rejected_predecessor": {
     "source": "a2377b80137c00a5ff73edbe361de068755dc46b",
     "tree": "55bed939e99bbec423ecebfb998f5e27ffe29f87",
@@ -85,5 +207,6 @@
   "source_sha": "69919f5045ec399492f391cef844cc97af005432",
   "source_tree": "0ebafad6d8ab3c822101d61719597390a54bec75",
   "pr": 1643,
-  "checkpoint_branch": "codex/google-merchant-owner-observation-status-20261029"
+  "checkpoint_branch": "codex/google-merchant-owner-observation-status-20261029",
+  "root_review": "Root read full route/fix and exact350/52Mongo logs; its own route/observer subset running at last handoff. Root alone owns attachment/integration."
 }
