@@ -1,0 +1,123 @@
+{
+  "base_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "method": "AST-extracted unchanged pure function bodies; synthetic inputs; no module imports or provider/database calls. Native problem factory replaced only to capture error codes; synthetic MAX_ROWS=2000; every fixture has at most two rows. Not an endpoint/CI test.",
+  "assertions": 10,
+  "all_passed": true,
+  "cases": [
+    {
+      "case": "legacy_duplicate_sku_first_row_wins",
+      "observed": [
+        {
+          "id": "DUP",
+          "google_product_category": "111"
+        }
+      ],
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "legacy_duplicate_sku_reversing_rows_changes_classification",
+      "observed": [
+        {
+          "id": "DUP",
+          "google_product_category": "222"
+        }
+      ],
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "legacy_collapses_same_offer_across_feed_and_language",
+      "observed": [
+        {
+          "id": "DUP",
+          "google_product_category": "111"
+        }
+      ],
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "legacy_casefold_without_exact_identity",
+      "observed": [
+        {
+          "id": "DUP",
+          "google_product_category": "111"
+        }
+      ],
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "legacy_numeric_salla_id_equality_without_cross_provider_proof",
+      "observed": [
+        {
+          "id": "101",
+          "google_product_category": "111"
+        }
+      ],
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "native_unique_eligible_identity_still_not_salla_mapping",
+      "observed": {
+        "mapping_status": "owner_selected_unverified",
+        "eligibility_scope": "account_inventory"
+      },
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "native_same_offer_ineligible_other_feed_still_ambiguous",
+      "observed": {
+        "refused": "google_ads_product_identity_ambiguous"
+      },
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "native_incomplete_inventory_refused",
+      "observed": {
+        "refused": "google_ads_product_inventory_incomplete"
+      },
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "native_preorder_refused",
+      "observed": {
+        "refused": "google_ads_product_offer_not_eligible"
+      },
+      "expected_assertion_passed": true
+    },
+    {
+      "case": "native_resource_channel_disagreement_refused",
+      "observed": {
+        "refused": "google_ads_product_identity_unproved"
+      },
+      "expected_assertion_passed": true
+    }
+  ],
+  "native_MAX_ROWS_verified_from_source": 2000,
+  "fixture_inputs": {
+    "catalog_a": {
+      "salla_product_id": "101",
+      "sku": "DUP",
+      "google_category_id": "111"
+    },
+    "catalog_b": {
+      "salla_product_id": "102",
+      "sku": "DUP",
+      "google_category_id": "222"
+    },
+    "merchant_offer": "DUP",
+    "collision_resources": [
+      "accounts/42/products/en~SA~DUP",
+      "accounts/42/products/ar~AE~DUP"
+    ],
+    "native_base": {
+      "offer_id": "DUP",
+      "merchant_id": "42",
+      "resource_name": "customers/9/shoppingProducts/42~ONLINE~en~SA~DUP",
+      "channel": "ONLINE",
+      "language_code": "en",
+      "feed_label": "SA",
+      "status": "ELIGIBLE",
+      "availability": "IN_STOCK"
+    },
+    "all_ids_fictional": true
+  }
+}

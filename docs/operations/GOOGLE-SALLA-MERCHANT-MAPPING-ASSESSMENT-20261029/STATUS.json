@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "status": "docs_only_assessment_complete_no_runtime_authority",
+  "production_base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "production_tree": "c4074b70bc63d0bc44759256841319938516af20",
+  "accepted_merchant_source": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+  "accepted_merchant_tree": "25445dad74066d5bcc08e433712575e93752d5af",
+  "branch": "codex/google-salla-merchant-mapping-assessment-20261029",
+  "scope": "Read-only source and official-doc assessment; three new documentation files only. No provider/database calls, runtime/test/workflow/intent edits, host/lease operations, plan writes, advertising or financial authorization.",
+  "decision": "Owner-triggered candidate-evidence review first; cross-provider mapping remains false until a trusted native export/binding record is established. Separate PMax destination-control contract before exclusive URL claims.",
+  "source_manifest": [
+    {
+      "id": "S01",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/product_v2_routes.py",
+      "git_blob_sha": "60a55307272ca6001a400357c5580f5eaaccc6a2",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/product_v2_routes.py"
+    },
+    {
+      "id": "S02",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_product_catalog_reader.py",
+      "git_blob_sha": "4628a60e62a1ccb75ca2dd6f9f7965dfbbe46cdf",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_product_catalog_reader.py"
+    },
+    {
+      "id": "S03",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_live_category_reader.py",
+      "git_blob_sha": "9e034e4dbb4e5d7dc2e677018e57b9bc6afc37be",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_live_category_reader.py"
+    },
+    {
+      "id": "S04",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_native_inventory_reader.py",
+      "git_blob_sha": "43dc3e33dd4b09dcbe1618489b99a2e094a1755d",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_native_inventory_reader.py"
+    },
+    {
+      "id": "S05",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_native_inventory_proof.py",
+      "git_blob_sha": "f5eb0316ed507478eb439447df845127c30430bc",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_native_inventory_proof.py"
+    },
+    {
+      "id": "S06",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_live_category_proof.py",
+      "git_blob_sha": "a1627d07c425107d033a996a3abd12756a027e5b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_live_category_proof.py"
+    },
+    {
+      "id": "S07",
+      "commit": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+      "path": "backend/integrations_control_center/google_merchant_product_observation.py",
+      "git_blob_sha": "38f86c9554d76b288828ec2b69ca0cce3b61a634",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/3bbe11247b10c69a610b88bc87ba008e674924e4/backend/integrations_control_center/google_merchant_product_observation.py"
+    },
+    {
+      "id": "S08",
+      "commit": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+      "path": "backend/integrations_control_center/google_merchant_observation_routes.py",
+      "git_blob_sha": "41aae137a8ea3ef03cb258decc4ea72a495acedf",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/3bbe11247b10c69a610b88bc87ba008e674924e4/backend/integrations_control_center/google_merchant_observation_routes.py"
+    },
+    {
+      "id": "S09",
+      "commit": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+      "path": "backend/integrations_control_center/google_ads_reporting.py",
+      "git_blob_sha": "d3ccdc5a961ec6dd0037d880e8e0de0b6ad3cd1b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/3bbe11247b10c69a610b88bc87ba008e674924e4/backend/integrations_control_center/google_ads_reporting.py"
+    },
+    {
+      "id": "S10",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_retail_identity.py",
+      "git_blob_sha": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_retail_identity.py"
+    },
+    {
+      "id": "S11",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_workspace.py",
+      "git_blob_sha": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_workspace.py"
+    },
+    {
+      "id": "S12",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_client.py",
+      "git_blob_sha": "f1337f2d9baf2df57c555065960c0078ad8c5a06",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_client.py"
+    },
+    {
+      "id": "S13",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_management.py",
+      "git_blob_sha": "582253c9914847b1e7d82a407c4d68e89fcbb4b3",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_management.py"
+    },
+    {
+      "id": "S14",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_ai.py",
+      "git_blob_sha": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_ai.py"
+    },
+    {
+      "id": "S15",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_routes.py",
+      "git_blob_sha": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_routes.py"
+    },
+    {
+      "id": "S16",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/catalog.py",
+      "git_blob_sha": "d2438ec4c8ba60dbfbef578109a4100aa06d39e3",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/catalog.py"
+    },
+    {
+      "id": "S17",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/models.py",
+      "git_blob_sha": "13cce47b380ade07bcb7fcbe6292e7bb18a1727c",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/models.py"
+    },
+    {
+      "id": "S18",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/campaign_product_associations.py",
+      "git_blob_sha": "0f4ed006c8437fd43a13a1d48534376b7cd9ae66",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/campaign_product_associations.py"
+    },
+    {
+      "id": "S19",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/product_google_taxonomy_merchant_feed.py",
+      "git_blob_sha": "a68225a05fd4776892a3e3f623ebbd1c050ab788",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/product_google_taxonomy_merchant_feed.py"
+    },
+    {
+      "id": "S20",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_campaign_contract.py",
+      "git_blob_sha": "07237d4c39ab94ab4a72e2c09b2b307dc5c20ede",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_campaign_contract.py"
+    },
+    {
+      "id": "S21",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_campaign_builder.py",
+      "git_blob_sha": "27e44bf4145c7815c1e075bd7c46a4915a4da09c",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_campaign_builder.py"
+    },
+    {
+      "id": "S22",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_automation_creation_contract.py",
+      "git_blob_sha": "bb82556fb6e1736b88a0ec597e68679d4828b5da",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_automation_creation_contract.py"
+    },
+    {
+      "id": "S23",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_ads_automation_creation_plan.py",
+      "git_blob_sha": "f08a85556a4021935b48c20e39b29d1dbd766844",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_ads_automation_creation_plan.py"
+    },
+    {
+      "id": "S24",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_merchant_registration.py",
+      "git_blob_sha": "080a7f0c322ed9ec60887abab4270f7df3a1ab4a",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_merchant_registration.py"
+    },
+    {
+      "id": "S25",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_commercial_plan.py",
+      "git_blob_sha": "9650ba13a75ceef831f0e6b7ccdfdc84fb1349d8",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_commercial_plan.py"
+    },
+    {
+      "id": "S26",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_native_inventory_routes.py",
+      "git_blob_sha": "a9dd1c01e4f0109211ca8c59b4097d8227f3258e",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_native_inventory_routes.py"
+    }
+  ],
+  "validation": {
+    "synthetic_source_function_assertions": 10,
+    "all_passed": true,
+    "method": "See PROBES.json; AST extraction of unchanged pure function bodies. Not endpoint or integration CI.",
+    "docs_json_and_source_manifest": "validated locally",
+    "runtime_ci": "not run for this docs-only assessment",
+    "live_provider_verification": "not performed",
+    "independent_review": "not requested by this assessment; root review pending"
+  },
+  "preservation": {
+    "runtime_unchanged": true,
+    "release_intent_unchanged": true,
+    "source_1655_status_branch_not_touched": true,
+    "source_1658_duplicate_review": "cancelled by root after budget_audit preservation PASS; fresh CI remains with google_launch"
+  },
+  "continuation": {
+    "next_callable_slice": "POST /google_ads/commercial-plans/{plan_id}/merchant-mapping-review; proposed only",
+    "positive_mapping_dependency": "Trusted owner/store/Salla-parent-or-variant \u2194 full Merchant identity/data-source export or provider binding; no SKU/title/URL-only promotion.",
+    "explicit_exclusions": [
+      "provider/feed writes",
+      "automatic selection",
+      "automatic plan save",
+      "all-campaign automatic creation",
+      "profit/order attribution",
+      "launch/budget authority",
+      "unreviewed provider adapter"
+    ],
+    "root_owns_release": true
+  },
+  "official_sources": [
+    {
+      "id": "G1",
+      "url": "https://developers.google.com/merchant/api/reference/rest/products_v1/accounts.products"
+    },
+    {
+      "id": "G2",
+      "url": "https://developers.google.com/google-ads/api/reference/rpc/v25/ShoppingProduct"
+    },
+    {
+      "id": "G3",
+      "url": "https://developers.google.com/google-ads/api/docs/assets/asset-automation-settings"
+    },
+    {
+      "id": "G4",
+      "url": "https://developers.google.com/google-ads/api/performance-max/optimizations"
+    },
+    {
+      "id": "G5",
+      "url": "https://developers.google.com/google-ads/api/docs/shopping-ads/reporting"
+    },
+    {
+      "id": "SallaProduct",
+      "url": "https://docs.salla.dev/product/product-details"
+    },
+    {
+      "id": "SallaVariants",
+      "url": "https://docs.salla.dev/product-variants/list"
+    }
+  ]
+}
