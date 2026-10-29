@@ -1,0 +1,47 @@
+{
+  "task": "GOOGLE-PLAN-EVIDENCE-INTEGRATION-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-plan-evidence-integration-20261029",
+  "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "state": "WIP_SELECTIVE_CURRENT_PRODUCTION_INTEGRATION_FOCUSED_LOCAL_PASSED_FULL_CI_PENDING",
+  "reviewed_sources": {
+    "store_observations": {
+      "pr": 1611,
+      "source": "71e6f57d988e57396d0eaaa72dfa1fdc3970c537",
+      "tree": "298af1e73b8475604ef6da7cb2b547000acabde6"
+    },
+    "category_membership_including_observations": {
+      "pr": 1614,
+      "source": "6122252144e67642394ef2f9994ef549fa38066e",
+      "tree": "264b989d7690e1a5742e2b3984243a66917825de"
+    }
+  },
+  "integration": {
+    "source_parity": "All 27 reviewed runtime/test/workflow blobs exactly match source 6122252144e67642394ef2f9994ef549fa38066e; two historical source STATUS files remain recoverable on their branches and are not copied here.",
+    "changed_paths": "27 source/test/workflow paths plus this combined STATUS; no overlapping paths between reviewed base dada1def704ae968230d63c3c9885508a2a6653d and production base e51f5b88b68905460417a01fb9ceb3704706c168.",
+    "router": "Exactly four added lines: two imports and two calls attaching observations and category reads. Current production router preserved.",
+    "owner_plan": "Both explicit reads are beside pinned catalog review; existing season suggestions remain unchanged. Saved revision/full fields and dirty/busy/conflict cancellation fences preserved.",
+    "preserved": "Reports, automatic resume protection, production release intent, all pending peer branches and all other platforms/collectors. No old release history imported."
+  },
+  "contract": {
+    "observations": "Partial qualifying stored gross-line observations only; closed current14/previous14/30/90 Asia/Riyadh windows and separate currencies. No complete/net sales, profit, growth or winner ranking. Owner store projection is not native account identity. Refund, timestamp, source identity, duplicate, bound and sentinel guards unchanged.",
+    "categories": "Positive membership for saved pinned-minus-excluded products and explicit category IDs from current raw_salla categories/category only, with canonical identities, writer revision and fresh BSON source timestamps. No old details fallback, inferred URL, remote completeness or platform offer mapping.",
+    "authority": "Read-only provider/source writes zero. Ad eligibility and execution_authorized remain false. No owner plan saved, budget approved, paid launch, provider call, merge or deployment."
+  },
+  "verification": {
+    "backend_command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -W error backend/tests/test_google_category_membership.py backend/tests/test_google_category_membership_routes.py backend/tests/test_google_store_product_observations.py backend/tests/test_google_plan_store_observations.py backend/tests/test_google_order_timestamp_evidence.py backend/tests/test_google_order_source_binding.py",
+    "backend_result": "exit 0; 106 passed in 2.72s; zero skips",
+    "frontend_command": "CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GoogleCategoryMembershipReview.test.jsx src/components/marketing/GoogleStoreProductObservations.test.jsx src/components/marketing/GoogleCommercialPlan.test.jsx src/components/marketing/GooglePinnedCatalogReview.test.jsx src/services/googleCommercialPlanSuggestion.test.js",
+    "frontend_result": "exit 0; 108 passed in 5 suites, 2.282s; zero skips",
+    "diff_check": "git diff --check exit 0",
+    "real_mongo": "Not available locally. Dedicated CI retains exact strict gates: observations minimum91/exact14 Mongo cases, category minimum38/exact9 Mongo cases, required actual-router/writer cases and zero failures/errors/skips.",
+    "full_ci": "Required on the new immutable integrated source: both dedicated workflows, full Google backend/UI/build and applicable repository checks. Prior source results are not acceptance for this source."
+  },
+  "continuity": {
+    "issue_1006": "Read-only confirmed 2500-comment cap; latest bounded comments predate this task. Do not append or alter old comments.",
+    "canonical_ledger": "codex/google-ai-action-loop-status-20261025:docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/STATUS.json continuation_20261029 read; root owns its update.",
+    "handoff": "Draft PR must record exact source SHA/tree and fresh CI. Root reviews and selectively re-sources on then-current production if needed; no source/intent pair frozen here."
+  },
+  "production_changed": false,
+  "next": "Push WIP source, create Draft PR, verify exact-source real Mongo/full CI, then hand immutable source/tree and logs to root for review and any separately governed release."
+}
