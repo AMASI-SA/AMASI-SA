@@ -1,0 +1,126 @@
+{
+  "task": "google-product-test-review-ui-integration-20261029",
+  "branch": "codex/google-product-test-review-ui-integration-20261029",
+  "state": "CONTRACT_ONLY_BEFORE_IMPLEMENTATION_ROOT_REVIEW_REQUIRED",
+  "base": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+  "base_meaning": "Accepted1655SourceA with native/category/prior UI already present; frozen1655/1657 worktrees untouched",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "backend_acceptance": {
+    "source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+    "tree": "9c6814c7d93e60545042819521dd318105297977",
+    "independent": "budget_audit42-Werror tests + exactPUSH40972181263/job123791347843152/30Mongo0skip9.84s finalPASS",
+    "root": "Full4modules+42own-Werror1.44s; exactCIread",
+    "separate_status": "371c31d2684270aee9059c776f4fe1c930fdf594 oncodex/google-product-test-review-unique-plan-status-20261029"
+  },
+  "exact_copy_manifest": [
+    {
+      "path": ".github/workflows/google-product-test-review.yml",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "f374a2e8c2ebcd5e81bb5a56950fb82006bbab3c",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/integrations_control_center/google_product_season_review.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "37988d716d4476c22a5b24324d848f546bdb93ef",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/integrations_control_center/google_product_test_review.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "92716ed623abbdd035e1be1a126e9c70c22e2324",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/integrations_control_center/google_product_test_review_reader.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "4ce49e1353b0c43e7f46f17f5b354e5df3c96e04",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/integrations_control_center/google_product_test_review_routes.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "a50373b8e8ba75664d43449739eb7a509ce28602",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/tests/test_google_product_test_review.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "758910808d0075d702a147f8f8e53a7fc5286ebe",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/tests/test_google_product_test_review_admission.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "91f528a973967b6a09c38fb9213499c2cc594ba6",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/tests/test_google_product_test_review_mongo.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "3a3f541f0388cf5b24d73c68cc27ee818519b5d4",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    },
+    {
+      "path": "backend/tests/test_google_product_test_review_routes.py",
+      "accepted_source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+      "accepted_blob": "cfdb388bbb7fbba1d19bb4fa4e6b945afc10762a",
+      "absent_in_base": true,
+      "integration": "copy exactblob; no modification proposed"
+    }
+  ],
+  "new_owned_paths": [
+    "frontend/src/components/marketing/GoogleProductTestReview.jsx",
+    "frontend/src/components/marketing/GoogleProductTestReview.test.jsx",
+    "frontend/src/services/googleProductTestReview.js",
+    "frontend/src/services/googleProductTestReview.test.js",
+    "frontend/src/components/marketing/GoogleProductTestReviewNativeSelectionIntegration.test.jsx",
+    "backend/tests/google_product_test_review_ui_fixture.py",
+    "backend/tests/test_google_product_test_review_ui_fixture.py",
+    "frontend/src/services/__fixtures__/googleProductTestReview.json",
+    ".github/workflows/google-product-test-review-ui.yml",
+    "docs/operations/GOOGLE-PRODUCT-TEST-REVIEW-UI-INTEGRATION-20261029/STATUS.json"
+  ],
+  "controlled_existing_seams": [
+    {
+      "path": "frontend/src/components/marketing/GoogleNativeInventoryPreview.jsx",
+      "change": "Import/render newchild using SAMEexistingselected array/category/plan; no newproductselector or automaticread. Coordinate existingnative Request busy with childbusy via narrowcontrolled onBusyChange/externalBusy props, to prevent accidental concurrentnative+candidate buttons. Preserve existingstockread/selection/statusrender logic. Newchild usesactualAuthContext owner/id/passwordrevision itself; no identity fromplan.updated_by."
+    },
+    {
+      "path": ".github/workflows/google-ads-full-management.yml",
+      "change": "Append NEW nonMongoUI/backendfixture/newtest modules only, preserving every existingtest/env/gate/build path. Exactaccepted newbackend dedicated152/30workflowcopied unchanged; newchild dedicatedworkflow runsnewtest exactcounts/frozen governedinstall/build andactualwriterfixture parity."
+    },
+    {
+      "path": "backend/integrations_control_center/google_ads_routes.py",
+      "change": "OPTIONAL afterrootcontractreview only2additive lines import+attach_google_product_test_review_routes next tocurrentnative/prior attachments; preserveallcurrentroot5595content. google_launch ownsotherMerchant/Workspace/routerhunks initsseparateWIP; do notcopythose or edits1655/1657."
+    }
+  ],
+  "component_contract": {
+    "props": "GoogleProductTestReview({plan,category,selectedProductIds,isOwner,planDirty=false,externalBusy=false,onBusyChange})",
+    "authentication": "useOptionalAuth actualcontext must authStatus authenticated, userrole owner, stableuser.id. Ownerid/passwordrevision/role plusfullplanfields/revision/id, fullcategoryproof and orderedselection form cancellationkey; missingAuthprovider producesnosurface/requests, no prop-onlyowner fallback.",
+    "selection": "Reuse existingNativeInventoryPreview checkboxes1..5; validation existingnativeInventoryOptions(plan,category), exactobserved membership/exclusions andcanonicalIDs. Parentchangesunmount/invalidate. CategoryresponseclientonlyUIcontext, neverpassedassourceproof toserver.",
+    "mount": "No autoGET/POST/providerreads onmount/selection/render. Explicit Readfitstates GET; explicitperproductCASsave PUT with trimmednonblankreason, selecteddecision andseparateexacttrueownerreviewack; explicit Reviewtestcandidates POST. No spending/budget/ROI inputs.",
+    "fit_state": "GET returnsrevision even whenoldpassword-bound fitunknown, enabling explicitrereview. Unknown is not suitable/new. Existingcurrentreviewreason mayprefill; anyedit clearslocalack andcandidate result. Unsaveddrafts oruncertainsave blockcandidate/saveuntil explicitreload/discard asappropriate.",
+    "saving": "One in-flight childrequest acrossGET/PUT/POST pluscontrolledparentbusy. No automaticPUTretry/read-after-lostack. Onnetworkerror/409/anymay_have_persisted require explicitfitGET beforeanysaveattempt; thatGET mayremainbusywhile servercleanupholds admission. Successfulsave updatesreviewrevision, clearsack, invalidatescandidate; noautoPOST.",
+    "cancellation": "Abortandlate-token guard onunmount/auth/planrevision/fullfields/category/selection/dirty change. No late response canpopulate newowner/scope. 403/stale/unproved responsewithholdsdecisionmetrics; no rawprivateerrors.",
+    "output": "Onecompact decision table (supportedtestreview/explorationreview/needsfit/needsstock/blocked) with explicitreasons andmissingevidence. Current14/previous14/30/90 andexplicitprior remainseparate nativecurrency windows, rawgrossunits/no growth/netprofit/total. Campaigncontexts shownonce byfullprovider/account/campaign/currency/TZ/attribution/date, productsreferencethem; Meta/TikTok associationsshow sourcegaps notmetrics. Cost/size/preptime/coverage unknown prominent; paidlaunchfalse/separateownerapprovedtestbudget required.",
+    "no_new_product_inference": "Exploration meansnoqualifiedhistoricalobservations, notnewproduct orzero demand. No Hijrishift/referenceverification orprofit score."
+  },
+  "strict_service_contract": "Buildscope fromactualsavedplan+verifiedUIcategory+selectedIDs; no callerverifiedflags/actor/metrics accepted. GET/PUT/POST endpoint/params matchaccepted backend exactly. Validate plan/category/productIDs/revisions/fitmeaning/changedrevision, allfalse/nullauthority/attribution/profit flags, sameorderedproductpartition, eachlaneexactonce, exactfourcurrentwindows/serverRiyadhclosedday andsavedpriorintervalunknownalignment, uniquecontextIDs/references/associationmeaning, nativecurrency/account/TZ/windowpartitions andtruncation withheldcounts. No sums orcoerciondefaults.",
+  "actual_writer_fixture_strategy": {
+    "source": "NEW uniquegenerator/test only; neverpatchsharedexistingfixtures. Actualnormalmanagementrouter withrealHTTPcommercialplanPUT andactualauth dependency (syntheticJWTonly), ownedinmemoryDB/users plusfixedGETnative testcaller injected at serverconstruction-time. No fakeactor or acceptedverifiedrequestpayload.",
+    "scenarios": "PUT plan(withnulloptionalcategoryURL+categoryIDs andoptionalprior)→GETlivecategory→GETfitstate0→PUTownerfitCAS1→POSTcandidate; secondproduct remainsunknown, explicitnot_suitable/needs_review edits, ownerfitpasswordstale→GETunknownrevision→explicitCASrereview. Includecurrent/prior raworders andrealexistinggraph/Snapcommitted-writerfixtures whereuseful; no customerdata.",
+    "fixture": "JSONcontainsactualsavedplan/observedcategory/fitstatebefore/saveafter/fitstateafter/candidate responses, syntheticowneridrole, andsourcegenerationmarker. Storedfields verifiednoack/expectedrevision; parity test regeneratesfromactualHTTPanddeepcompares exactfixturebytes/JSON.",
+    "frontend": "UseactualAuthProvider withsynthetic/auth/me fixture, notmockownerhook. Newtests explicitzeroauto requests, state/fit/CAS/lostack/manualreload sequence, sharedexistingcheckboxselection, status/currency/window/contextseparation andlate-owner/fields/category/selection cancellation. Existingnative/parent suites rerununchanged; backendnew152/30gate andnewUIbuildCI freshbeforeindependentreview."
+  },
+  "next": "Rootreviews concretecontract/9blobmanifest andcontrolledseams beforeimplementation. No runtimecopied/modified yet; sourceAPIaccepted immutableadf preserved; no intent/oldSTATUS/globalreaders/launchWorkspace/Merchant code imported."
+}
