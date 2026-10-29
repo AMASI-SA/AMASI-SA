@@ -10,7 +10,7 @@ from tests.test_google_live_category_reader import setup
 def fields():
     return {"instruction": "هدايا الشتاء", "season": "شتاء", "starts_on": "2026-10-01", "ends_on": "2026-12-31",
             "market": "SA", "audience": "الباحثون عن هدية", "message": "هدايا", "category_ids": ["8"],
-            "pinned_product_ids": [], "excluded_product_ids": ["1"], "acknowledge_review": True}
+            "pinned_product_ids": [], "excluded_product_ids": ["1"]}
 
 
 class Plan:

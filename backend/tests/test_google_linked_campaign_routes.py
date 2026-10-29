@@ -12,7 +12,7 @@ from tests.test_google_linked_campaign_reader import Collection, database, NOW
 def fields():
     return {"instruction": "هدايا الشتاء", "season": "شتاء", "starts_on": "2026-10-01", "ends_on": "2026-12-31",
             "market": "SA", "audience": "الباحثون عن هدية", "message": "هدايا", "pinned_product_ids": ["product"],
-            "excluded_product_ids": [], "acknowledge_review": True}
+            "excluded_product_ids": []}
 
 
 def app_and_db(user=None):

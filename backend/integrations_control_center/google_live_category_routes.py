@@ -6,7 +6,7 @@ from salla_integration.service import call_salla
 
 from .google_ads_client import problem
 from .google_ads_management import principal
-from .google_commercial_plan import PLANS, CommercialPlanInput
+from .google_commercial_plan import PLANS, CommercialPlanFields
 from .google_live_category_reader import preview_live_category, CategoryProofUnavailable
 
 
@@ -31,7 +31,7 @@ def attach_google_live_category_routes(router, db, current_user, *, caller=call_
                     raise problem("google_commercial_plan_not_found", "الخطة غير موجودة.", 404)
                 if type(plan.get("revision")) is not int or plan["revision"] != expected_revision:
                     raise problem("google_commercial_plan_revision_conflict", "تغيرت الخطة؛ أعد قراءتها.", 409)
-                fields = CommercialPlanInput.model_validate({**plan["fields"], "expected_revision": expected_revision})
+                fields = CommercialPlanFields.model_validate(plan["fields"])
                 result = await preview_live_category(db, owner_id=actor["user_id"], fields=fields.model_dump(),
                                                     category_id=category_id, caller=caller)
                 latest = await db[PLANS].find_one(scope, projection)

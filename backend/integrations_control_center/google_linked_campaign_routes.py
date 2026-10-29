@@ -9,7 +9,7 @@ from fastapi import Depends, Query
 
 from .google_ads_client import problem
 from .google_ads_management import principal
-from .google_commercial_plan import PLANS, CommercialPlanInput
+from .google_commercial_plan import PLANS, CommercialPlanFields
 from .google_linked_campaign_reader import _bounded, linked_campaign_evidence
 
 
@@ -33,7 +33,7 @@ def attach_google_linked_campaign_routes(router, db, current_user, *, clock=None
                 plan = rows[0]
                 if type(plan.get("revision")) is not int or plan["revision"] != expected_revision:
                     raise problem("google_commercial_plan_revision_conflict", "تغيرت الخطة؛ أعد قراءتها.", 409)
-                fields = CommercialPlanInput.model_validate({**plan["fields"], "expected_revision": expected_revision})
+                fields = CommercialPlanFields.model_validate(plan["fields"])
                 excluded = set(fields.excluded_product_ids)
                 selected = [p for p in fields.pinned_product_ids if p not in excluded]
                 result = await linked_campaign_evidence(db, owner_id=actor["user_id"], product_ids=selected,
