@@ -96,6 +96,10 @@ async def owner(db, user):
 
 
 def attach_google_ads_management_routes(router, db, current_user, *, client_factory=GoogleAdsClient, ai_client_factory=None):
+    from .google_merchant_observation_choices import attach_google_merchant_observation_choices
+    attach_google_merchant_observation_choices(router, db, current_user)
+    from .google_merchant_observation_routes import attach_google_merchant_observation_routes
+    attach_google_merchant_observation_routes(router, db, current_user)
     root = "/google_ads"
     from .google_commercial_plan import attach_google_commercial_plan_routes
     attach_google_commercial_plan_routes(router, db, current_user)
