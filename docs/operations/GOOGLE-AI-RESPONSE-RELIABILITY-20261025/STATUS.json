@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T20:21:19.848Z",
+  "updated_at": "2026-10-29T20:23:04.329Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -89,7 +89,8 @@
   "blockers": [
     "No approved owner monetary policy verified; no funded activation permitted from general commercial instruction.",
     "Shared budget guard migration still WIP: current native/legacy/namespace/productioncommit proof and pausedcreationreservationmigration incomplete; externalGooglewriters cannotbe atomicallyserialized.",
-    "Complete firstlaunch authority/gateway/worker, full sales/refund/cost/season evidence, fullsection/variantcoverage andsupportedcatalogliveacceptance still incomplete."
+    "Complete firstlaunch authority/gateway/worker, full sales/refund/cost/season evidence, fullsection/variantcoverage andsupportedcatalogliveacceptance still incomplete.",
+    "Unpublished plan evidence readers require write-only review flag absent in actual saved fields; release hold on1627/1630/1631 until model split and actual save→read Mongo acceptance."
   ],
   "remaining": [
     "Deploy reviewed retail1629, storage diagnostics1621 and saved-plan/category/linked evidence1627/1630 through fresh current-production v5 pairs.",
@@ -2050,7 +2051,7 @@
       "source": "03a181de981dfa22c04831230f3ef1911d42126e",
       "tree": "fb813337f4c07e1c55e64ea78c1bd5d108c5d9b2",
       "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-      "state": "REVIEWED_ALL14CI_PASSED_NOT_DEPLOYED",
+      "state": "RELEASE_HOLD_CONFIRMED_ACTUAL_SAVED_PLAN_FIELDS_VALIDATION_FAILURE",
       "local": "58backend-Werror0skip/160UI7suites",
       "ci": 40940566347,
       "full_ci": 40940566087,
@@ -2099,7 +2100,7 @@
       "pr": 1630,
       "source": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
       "checkpoint": "603923517956e16838b034f31a1814191e09df68",
-      "state": "INDEPENDENT_PASS_ALL15CI_ROOT_REVIEW_PENDING",
+      "state": "RELEASE_HOLD_CONFIRMED_ACTUAL_SAVED_PLAN_FIELDS_VALIDATION_FAILURE",
       "full": "1426backend391UI",
       "focused": "48incl8actualMongo0skip227UI",
       "root_review": true,
@@ -2109,7 +2110,7 @@
       "pr": 1631,
       "branch": "codex/google-native-inventory-preview-20261029",
       "source": "c06aad50530681ad484d61ce5faaaa216c37903d",
-      "state": "BOUNDED_BACKEND_ROOT_INDEPENDENT_PASS_41_7_REALMONGO_UNATTACHED",
+      "state": "RELEASE_HOLD_CONFIRMED_ACTUAL_SAVED_PLAN_FIELDS_VALIDATION_FAILURE",
       "limits": "Explicit1..5products/nativecategoryreproof/boundedvariants; no atomicstock/size/preptime/mapping/eligibilityproof",
       "tree": "5d4a51c85036b0a99505e3b4121d825acdd718bb",
       "checkpoint": "940c84ed9101aaae9b850b9f954c3197e6a49890",
@@ -2150,6 +2151,25 @@
         "catalog": 40948016611
       },
       "host": "Notstarted;foreignReports1632deployunderway"
+    },
+    "saved_plan_reader_contract_bug": {
+      "confirmed_by": [
+        "google_seasons",
+        "root",
+        "google_product_acceptance"
+      ],
+      "affected_prs": [
+        1627,
+        1628,
+        1630,
+        1631
+      ],
+      "evidence": "ActualPUT200 writer storesfields withoutwriteonlyacknowledge_review; linked/live/native routesconstructCommercialPlanInput requiringack. Actualwriter→nativepreview503beforeprovidercall independentlyreproduced; fixturesincorrectlyincludedack.",
+      "production_impact": "Affectedreadroutes notyetdeployed; retail1634/storage1621/currentcatalog1618unaffected",
+      "owner": "google_seasons",
+      "assigned": "Exclusivecommercialplan.py Fields/Inputmodelsplit preservingwriteschema;3readroutesvalidateStoredFields/no syntheticack; actualsave→readrealMongo regressions, false/missingackwritestillrejected",
+      "review": "Priorreachable-integrationPASSwithdrawn; source/UIboundcontractsremainhistoricalevidence. No affectedpublishuntilsuccessoraccepted.",
+      "state": "WIP_FIX_ASSIGNED_NEW_ISOLATED_COHERENT_BRANCH"
     }
   }
 }
