@@ -1,5 +1,5 @@
 {
-  "status": "PUBLISHING_ONCE_OWN_V5_LEASE_AWAIT_NEWER_FINISH",
+  "status": "PUBLISHED_V5_VERIFIED_THREE_LEASE_CLOSED_LIVE_OWNER_PROBES_NEXT",
   "production_base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
   "production_base_tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -74,7 +74,7 @@
     "advertising_execution_authorized": false,
     "budget_authorized": false,
     "live_calls_performed": false,
-    "deployment_performed": false
+    "deployment_performed": true
   },
   "tests": {
     "local": {
@@ -225,7 +225,7 @@
     "general_gates": "All actual successful job logs read. Security full frontend2370 tests/318 suites; balance618+16 backend/187UI; G47 327backend/119UI zero-skip gates; stock875 zero-skip gate; catalog34; payments141; both CodeQL uploads complete. Scoped unrelated Snap and host/manual jobs were skipped by existing workflow logic, not disabled.",
     "root_review": "Root accepted unchanged runtime/shared seams, independently133backend-Werror/29UI on e398, reviewed final4ca0e sourceCI126/9Mongo,117/6Mongo,1307backend,261UI/build4.03s and all13 workflows success."
   },
-  "next": "Wait explicit newer Deployment finished; own guard verify three identity/JSON probes closes matching lease; confirm inactive; perform owner live namespaceGET/technicalPOSTonce/receiptGET; remote checkpoint.",
+  "next": "OwnerGoogleliveUI namespaceGET; technicalcommitPOSTonce; receiptGET, no retryofunknown; persistactualresultsandscreenshot.",
   "prior_historical_checkpoint": {
     "source": "e3984c28be8890dda03b37154347079685aa6038",
     "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
@@ -451,8 +451,8 @@
       "exact_source_runtime": true,
       "expected_pre_materialization_warning": "Ignored backend/release_identity.json absent before adapter materialization; final verification succeeded."
     },
-    "lease": true,
-    "published": false,
+    "lease": false,
+    "published": true,
     "independent_pair": "budget_audit fullhistory A/B/directbase/intentonly and1032backend245control1020frontend/proof/e05663/fullruntime PASS.",
     "merge": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
     "merge_tree_matches_B": true,
@@ -472,6 +472,17 @@
     "prepublish": "PASS",
     "publish_clicked_once": true,
     "publish_started_utc": "2026-10-29T22:38:40.725Z",
-    "newer_finish_seen": false
+    "newer_finish_seen": true,
+    "finish": "Oct30 01:47 Riyadh",
+    "emergent_version": "bc0855d",
+    "live_guard": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
+      "deployment_git_sha": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
+      "release_id": "rg5-baa395b92f4ffaeeae5f41cd6000863cc10c2bf759acb9e010250f295c2b4297",
+      "boot_started_at": "2026-10-29T22:47:18.891752+00:00",
+      "final_active": false
+    }
   }
 }
