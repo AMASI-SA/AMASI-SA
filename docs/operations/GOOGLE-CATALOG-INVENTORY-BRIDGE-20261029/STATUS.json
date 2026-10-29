@@ -144,6 +144,6 @@
     "catalog_review": "Correctly unavailable until genuine saved plan and numeric pinned Salla product IDs exist",
     "positive_product_inventory_review": "Not exercised on live: no genuine owner plan/pins. Unit, replica and UI contracts passed; no fabricated business plan persisted.",
     "writes": "No plan/policy/campaign/provider writes",
-    "screenshot": "/workspace/scratch/google1618-live-plan-20261029.jpg"
+    "screenshot": "docs/operations/GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029/google1618-live-plan-20261029.jpg"
   }
 }
