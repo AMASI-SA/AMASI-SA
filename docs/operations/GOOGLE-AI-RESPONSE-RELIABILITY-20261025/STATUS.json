@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T19:39:56.828Z",
+  "updated_at": "2026-10-29T19:49:41.409Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -32,10 +32,13 @@
     "current_verified_source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
     "current_verified_runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
     "latest_deployed_pr": 1609,
-    "current_git_head": "e51f5b88b68905460417a01fb9ceb3704706c168",
+    "current_git_head": "2fba251ab73780d984b2c53a4f991bc98d61c441",
     "active_release_lease": {
-      "active": false,
-      "observed_by": "root actual /app guard status after Reports owner closure"
+      "active": true,
+      "actor": "codex-google-catalog-stock-review-20261029",
+      "deployment": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "source": "31d582f6fddacef63f758c82f6b80e7583025516",
+      "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91"
     }
   },
   "budget_semantics": {
@@ -98,7 +101,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Complete1618actualhostA+exactCIintent, intent-onlyB/allCI/independentreview/hostadapter, freshprodnormalmerge/appmaterialize/prepare/prepublish/singlepublish/newfinish/3verify/closedlease/live. Continue1625/1621/1627freshsources sequentially and pausedcreationguardWIP; no paidactivitywithoutownerlimits.",
+  "next_safe_action": "Waitnewer1618finishthan22:21Riyadh; doNOTrepeatpublish; verify3exactidentity/closedlease+liveGooglecatalogUI. Duringlease onlyisolatedGitHub/localwork: preparefreshretailAonM7, planUI/category andpausedcreationguardWIP. No fundedactivitywithoutownerlimits.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1580,7 +1583,7 @@
         "tree": "69e128a20531149d53a62ee32b0445ca7d6daba2",
         "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
         "branch": "codex/google-catalog-stock-review-source2-20261029",
-        "state": "FROZEN_PAIR_HOST_A_B_REVIEW_PASSED_LAST_B_CI_PENDING",
+        "state": "PUBLISHING_SINGLE_CLICK_DO_NOT_REPEAT",
         "selective_diff": "Exact9reviewedruntime/test/workflowblobs from878;newSTATUSonly;zeropathoverlapReportsM5→M6",
         "prior_attempt": "Frozeninstallfailedregistry.yarnpkg502(data-view-byte-offset1.0.1);noB/nolease/nopublish. Source1616closed superseded preserved.",
         "ci": {
@@ -1603,7 +1606,7 @@
         "intent_sha256": "75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c",
         "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
         "status_branch": "codex/google-catalog-stock-review-status2-20261029",
-        "status_checkpoint": "499fad3d292cacc93487375d1f643e0ef976997f",
+        "status_checkpoint": "04a75710ebe421b670e0cff8ac79d261bcafacc8",
         "actual_host": {
           "first": "FrozeninstallPASS18.76s, build refused oldreviewedintent because bootstrap flag omitted; no source/intent mutation andno lease",
           "recovery": "Running designated MEZAN_RELEASE_BOOTSTRAP_INTENT=1 candidate doublebuild at exactA31d inisolatedworktree, thenfreeze+exactCIhashcompare"
@@ -1624,7 +1627,17 @@
           "actual_mongo": 6,
           "skips": 0,
           "rootlogs": true,
-          "remaining": "CodeQLpython stillinprogress; no merge/prepare/publish yet"
+          "remaining": "All11workflowsSUCCESS;TikTokCreatorintentionallyskipped; CodeQLcompletedbeforemerge"
+        },
+        "merge": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+        "app_materialization": "PASS61.05s afterpreserved2oldpycoutsidepackage/guardinactive/no sourcechange",
+        "guard": "ownedprepare/prepublishPASS;activewaitingverify",
+        "publication": {
+          "started": "2026-10-29 22:47 Asia/Riyadh",
+          "publish_changes_clicks": 1,
+          "baseline_finish": "2026-10-29 22:21 Asia/Riyadh",
+          "state": "Building your website...",
+          "do_not_repeat": true
         }
       },
       "prior_clean_source": {
@@ -2011,16 +2024,24 @@
     "next_category_enumeration_assessment": {
       "owner": "google_seasons",
       "branch": "codex/google-category-enumeration-20261029",
-      "checkpoint": "42b7ecb869196796360e9e7e52a18341fbecfb32",
-      "state": "FIRSTSLICE_CODE_REVIEW_FIX_NEW_CI_PENDING_UNATTACHED",
+      "checkpoint": "4fc862d55e7331e98634bdf244a464da5e4eac6a",
+      "state": "BOUNDED_BACKEND_REVIEWED_CI_PASSED_UI_INTEGRATION_RUNNING",
       "scope": "ExplicitownerfixednativeGETpreview/ownedstore/strictpagination/optionalexactproviderURL; storedscopesdeclaredorunknown; no arbitraryURLfetch/scopeexpansion/collectorwrite. Existingroutinecredentialrefreshreused; no authority.",
       "pr": 1628,
-      "source": "234d974d7d738db05d8996c455710018dddbe451",
-      "tree": "cff350a67983dad236b01f668a3de880b3a8ed21",
-      "root": "Read3modules/sharedmetadata and31tests1.12s priorfix; newsizefixnotyetaccepted",
+      "source": "d77306f8af92057d4414413a9900e03bda7b1295",
+      "tree": "f764ce31422c0dcbf0ee20879878352dbc7e15bb",
+      "root": "Full3modules/fixdiff/sharedmetadata read;35-Werror1.40s,exactCIlogs42incl7actualMongo0skip",
       "finding": "Independentoversizedstore/categorydetailresponse bypassedpostdecodepage-onlyguard; common_nativepostdecodedguardaddedwith2redgreenregressions",
       "tests": "33-Werror1.06s;newCI40/7actualMongopending",
-      "limits": "Membershipenumerationonly; allinventory/adeligibilityfalse; no transport/peakmemoryguarantee orlivegrantproof"
+      "limits": "Membershipenumerationonly; allinventory/adeligibilityfalse; no transport/peakmemoryguarantee orlivegrantproof",
+      "independent": "35-Werror1.18s, exact42/7CI/defaulttransport4fixedGET andscope401probe",
+      "ci": 40942323966,
+      "job": 123688630848,
+      "fixes": [
+        "Commonpostdecode512KiBguardallnativeresponses",
+        "httpx.RequestError sanitization/refusewithoutfollowupreads"
+      ],
+      "ui_owner": "google_plan_integration newcoherentM7branch, accepted1627staysfrozen"
     },
     "linked_campaign_ui_integration": {
       "pr": 1627,
