@@ -1,5 +1,5 @@
 {
-  "status": "WIP_standing_floor_unit_green_actual_replica_CI_pending",
+  "status": "WIP_standing_floor_reviewed_actual_replica_verified_production_prerequisites_remain",
   "base_tested_source": "12da1d13bd263aeba8d408f5bf1da718478ce8b2",
   "base_tree": "77b2437eeb08b577eae0160c505c5927b09f0a47",
   "runtime_available": false,
@@ -12,13 +12,40 @@
   ],
   "preserved": "Creation floor and frozenPR1635 unchanged; no automaticresume/fundedlaunch/sharedmetadatawriter scope",
   "contract": "One commonTX rechecks enabled/revision/activation/expiry/current dispatchclaim/allocation/native-resource and proposal/analysis/operations/fence; proposal submitted+dispatchmarker and guardepoch commit together. Fresh precommit and noawait postACK clockchecks. Unknown ACK noHTTP/noresend/noquota refund; retainhold/fence.",
-  "next": "Push exact tests/workflows checkpoint and Draft PR, inspect actual replica/fullCI; independent reviewer finaldelta acceptance. Keep runtimefalse and production prerequisites.",
+  "next": "Root reviewexacttestedsource/logs and actual storage/namespace/legacy/native prerequisite evidence; preserve latestforeignReports/retail on eventual fresh SourceA. RemainWIP/runtimefalse.",
   "implementation": "Typed standing floor and narrow management seam implemented. Current claim binds digest of actual native bundle and saved analysis; floor reloads policy/claim/ledger/allocation/resource/budget/native/proposal/analysis/operations and writes native fence marker/proposal submitted/common epoch in one rawcommit. No creation authority changes.",
   "tests": {
     "focused_unit": "190 passed3.64s -Werror; includes13newstandingfloor and unchangedcreationfloor regression",
     "legacy_hooks": "All7local fault-hook failures migrated to actual standing helper/rawcommit; original assertions retained. Three existing realMongo hooks migrated likewise.",
-    "replica": "9 new cases added: actual2-client revoke beforewrite/afterACK; separate cancellation proposalwrite race; all3expiryphases; server91/close/ACKloss-after-realcommit +newclient consumedreceipt check. LocalMongo unavailable; CIpending, not claimed proof.",
-    "CI_contract": "focused175minimum/53actualMongo zero-skips; full exact9standingfloor+7creationfloor+8paused+9legacycreation counts/allrequiredmodules"
+    "replica": "9new actual replica cases passed exacttestedsource:2client revoke beforewrite/afterACK; independentproposal cancellationwrite; all3expiryphases;91/close/positivecommitACKloss+freshclientreplaydenial. Old fault hooks migrated, no weakened assertions.",
+    "CI_contract": "focused175minimum/53actualMongo zero-skips; full exact9standingfloor+7creationfloor+8paused+9legacycreation counts/allrequiredmodules",
+    "adjacent_unit": "327passed5.15s-Werror guard/reservations/settlement/workers/policies/activation in a separate selected run;190focused source tests also pass.",
+    "actual_replica": {
+      "focused_run": 40960584642,
+      "job": 123751984983,
+      "result": "175passed131.08s; proofJSON53actualMongo/0failure-error-skip",
+      "full_run": 40960584893,
+      "backend_job": 123751986924,
+      "backend": "1508passed107.41s; exact9standingfloor+7creationfloor+8paused+9legacycreation and requiredmodules/zero skips",
+      "frontend_job": 123751986609,
+      "frontend": "261passed18suites/buildsuccess",
+      "standing_floor_helper_seconds": {
+        "server91": 9.951,
+        "connection_close": 0.449,
+        "positive_commit_ack_loss": 0.038
+      },
+      "fault_contract": "onefloorcommit wire attempt each;zeroHTTP/held22reservation+nativefence; newclient rejects consumedfloorreceipt"
+    }
   },
-  "independent_review": "budget_audit preliminary3a2c runtime read: creationfloorunchanged, no proved blocker; final tests/actualMongo required."
+  "independent_review": "budget_audit reviewedce222 runtime/testdelta;13floorunits independentlypassed-Werror. No furtherfinding within boundedWIP. Reviewer independentlyverified successful exacthead CI metadata; root agent read citedCI logs. No productionpermissions/topology/sharedmetadata/externalGooglewriter proof.",
+  "tested_source": "ce2223f37cceed8f12b9a15f734945b96c69473e",
+  "tested_tree": "08f0f4dea2253255cdfbce826a89c48cb3432c35",
+  "rollout_ready": false,
+  "compatibility": "New standing claims bind actual nativebundle and savedanalysis digests. Old unsubmitted claims missing these bindings cannot crossnewfloor; no fallback/adoption. Original terminal settlement/legacy recovery remains separate verified-proof path. Creationauthority file byteidenticaltested12da; existing creationfloor and noautomaticresume behavior retained.",
+  "remaining": [
+    "Actual production commit+businessnamespacepermissions/index/legacy/nativeinventory prerequisite evidence before mandatorysixhandlers deployment",
+    "Shared owner/product/OAuth/analysis metadata writers and external Google writers remain unserialized beyond snapshot checks",
+    "No fundedfirstlaunch/enable/resume/Shopping/PMax authority or runtimeenablement in this slice",
+    "Root owns latestproduction selectiveintegration/freshCI/release; no host/provider/productionwrites performed"
+  ]
 }
