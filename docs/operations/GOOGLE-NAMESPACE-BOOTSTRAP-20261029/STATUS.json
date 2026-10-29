@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "additional_guard_race_capability_probe_pending",
+  "status": "twenty_actual_engine_cases_passed_runtime_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -46,8 +46,17 @@
       "logs_read_by": "google_product_acceptance"
     },
     "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server.",
-    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending."
+    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending.",
+    "guard_race_CI": {
+      "run": 40972826009,
+      "job": 123793501584,
+      "source": "0b418ea8aad5164592970ffb72db505147f5abb6",
+      "tree": "c562ab14824135d603c5f7c4d1de4a85b040f486",
+      "result": "20 passed in 3.62s; exact20 actual authenticated Mongo8.0.26, zero skips, all steps success",
+      "guard_race": "raw create inside local transaction rejects same-options existing guard with exact NamespaceExists code48, no new-index command involved; outside transaction create is a separate no-op success case",
+      "logs_read_by": "google_product_acceptance"
+    }
   },
-  "next": "Inspect new actual guard-specific race test before implementing runtime DDL fence. Historical19 engine pass remains source ad5 only; no new20-case pass claimed.",
+  "next": "Implement separate prepare and single-use execute plus receipt GET in NEW unattached module, using proven transactional create NamespaceExists fence. No new createIndex requirement for guard/probe. Add public-seam/real-Mongo fault/restart/race tests and independent review.",
   "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288"
 }
