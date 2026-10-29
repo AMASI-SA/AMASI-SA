@@ -36,7 +36,8 @@ async def verify_budget_storage(db):
             "يوجد تحقق تخزين لم ينتهِ تنظيف جلسته بعد؛ لم يبدأ تحقق جديد.", 503)
 
     async def probe():
-        async with await db.client.start_session() as session:
+        session = await db.client.start_session()
+        try:
             hello = await db.command("hello", session=session)
             if (not isinstance(hello, dict)
                 or not (hello.get("setName") or hello.get("msg") == "isdbgrid")
@@ -44,13 +45,25 @@ async def verify_budget_storage(db):
                 raise ValueError("unsupported topology")
             session.start_transaction(read_concern=ReadConcern("snapshot"),
                 write_concern=WriteConcern("majority"), max_commit_time_ms=4000)
-            try:
-                result = await db[PROBE_COLLECTION].insert_one(
-                    {"_id": "storage_probe_" + uuid.uuid4().hex, "probe_only": True}, session=session)
-                if result.acknowledged is not True:
-                    raise ValueError("unacknowledged probe")
-            finally:
-                await session.abort_transaction()
+            result = await db[PROBE_COLLECTION].insert_one(
+                {"_id": "storage_probe_" + uuid.uuid4().hex, "probe_only": True}, session=session)
+            if result.acknowledged is not True:
+                raise ValueError("unacknowledged probe")
+            # Generic command preserves the server response instead of the
+            # driver's abort helper, which intentionally suppresses some errors.
+            # Public session machinery adds the same lsid/txnNumber/autocommit.
+            reply = await db.client.admin.command(
+                {"abortTransaction": 1, "writeConcern": {"w": "majority", "wtimeout": 4000}},
+                session=session)
+            if (not isinstance(reply, dict) or type(reply.get("ok")) not in (int, float)
+                or reply["ok"] != 1 or "writeConcernError" in reply or "writeErrors" in reply):
+                raise ValueError("abort acknowledgement unproved")
+        finally:
+            # Motor's async context __aexit__ delegates synchronously. Its public
+            # async end_session instead runs driver cleanup off the event loop.
+            # Cleanup may safely abort our own transaction again; it never turns
+            # a failed/unknown explicit abort response into diagnostic success.
+            await session.end_session()
         return _result(True)
     async def bounded_probe():
         with timeout(TIMEOUT_SECONDS):

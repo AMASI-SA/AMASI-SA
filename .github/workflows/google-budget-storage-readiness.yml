@@ -42,7 +42,7 @@ jobs:
           uname -r
           docker run -d --name google-budget-guard-rs \
             -p 127.0.0.1:27472:27472 mongo:8.0.26 \
-            --port 27472 --replSet gBudgetGuard --bind_ip_all
+            --port 27472 --replSet gBudgetGuard --bind_ip_all --setParameter enableTestCommands=1
           ready=0
           for attempt in $(seq 1 60); do
             if [ "$(docker inspect -f '{{.State.Running}}' google-budget-guard-rs)" != true ]; then
@@ -75,7 +75,7 @@ jobs:
           test "$primary" -eq 1
       - name: Verify diagnostic and unchanged policy contracts
         run: |
-          python -m pytest --noconftest -q --junitxml=storage-readiness.xml \
+          python -m pytest --noconftest -q -W error --junitxml=storage-readiness.xml \
             backend/tests/test_google_ads_budget_storage_readiness.py \
             backend/tests/test_google_ads_budget_storage_readiness_mongo.py \
             backend/tests/test_google_ads_automation_policy.py \
@@ -84,7 +84,7 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse('storage-readiness.xml').getroot()
           cases = root.findall('.//testcase')
-          assert len(cases) >= 107
+          assert len(cases) >= 113
           assert not root.findall('.//skipped') and not root.findall('.//failure') and not root.findall('.//error')
           assert any('readiness_mongo' in case.get('classname','') for case in cases)
           print({'tests':len(cases),'failures_errors_skips':0})

@@ -13,8 +13,10 @@ from tests.test_google_ads_automation_policy import DB as OwnerDB
 
 class Session:
     def __init__(self, db): self.db = db; self.active = False
-    async def __aenter__(self): return self
-    async def __aexit__(self, *args):
+    async def __aenter__(self): raise AssertionError("Motor async context must not be used")
+    async def __aexit__(self, *args): raise AssertionError("synchronous delegate cleanup forbidden")
+    async def end_session(self):
+        self.db.ended += 1
         if self.active: await self.abort_transaction()
     def start_transaction(self, **kwargs):
         assert kwargs['read_concern'].level == 'snapshot'
@@ -37,9 +39,22 @@ class ProbeDB:
     def __init__(self, failure=None):
         self.owner = OwnerDB(); self.users = self.owner.users
         self.users.rows.append({"id":"staff", "role":"staff", "owner_id":"owner"})
-        self.failure = failure; self.started = self.aborted = self.writes = 0
+        self.failure = failure; self.started = self.aborted = self.writes = self.ended = 0
         self.abort_entered = asyncio.Event(); self.release_abort = asyncio.Event(); self.cancellation_seen = asyncio.Event()
-        self.documents = []; self.client = SimpleNamespace(start_session=self.session)
+        self.raw_aborts = 0
+        self.documents = []; self.client = SimpleNamespace(start_session=self.session, admin=SimpleNamespace(command=self.abort_command))
+    async def abort_command(self, command, *, session):
+        assert session.active
+        assert command == {'abortTransaction':1, 'writeConcern':{'w':'majority', 'wtimeout':4000}}
+        self.raw_aborts += 1
+        if self.failure == 'abort_network': raise ConnectionError('private-db-name')
+        if self.failure == 'abort_reply': return {'ok':0}
+        if self.failure == 'abort_wc': return {'ok':1, 'writeConcernError':{'code':64}}
+        if self.failure == 'abort_unknown': return None
+        # Command failure/unknown cases must remain failure even when end_session succeeds.
+        if self.failure not in ('abort_timeout','abort'): session.active = False
+        return {'ok':1}
+
     async def session(self): return Session(self)
     async def command(self, name, *, session):
         assert name == 'hello'
@@ -72,7 +87,7 @@ async def test_owner_success_proves_write_then_abort_without_grant_or_saved_data
     assert result.json() == {'scope':'budget_storage_transaction_only', 'storage_verified':True,
         'snapshot_majority_write_aborted':True, 'execution_authorized':False, 'funding_ready':False,
         'policy_changed':False, 'provider_writes':0}
-    assert (db.started, db.writes, db.aborted) == (1, 1, 1)
+    assert (db.started, db.writes, db.raw_aborts, db.ended) == (1, 1, 1, 1)
     assert set(db.documents[0]) == {'_id', 'probe_only'}
 
 
@@ -87,7 +102,7 @@ async def test_auth_failure_never_starts_database_probe(user,status):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure', ['standalone','write','abort','unacknowledged','timeout'])
+@pytest.mark.parametrize('failure', ['standalone','write','abort','unacknowledged','timeout','abort_network','abort_reply','abort_wc','abort_unknown'])
 async def test_fail_closed_sanitized_bounded_probe(monkeypatch,failure):
     db = ProbeDB(failure)
     monkeypatch.setattr(readiness, 'TIMEOUT_SECONDS', .02)
@@ -102,7 +117,8 @@ async def test_fail_closed_sanitized_bounded_probe(monkeypatch,failure):
         if task is not None:
             await asyncio.gather(task, return_exceptions=True)
         await asyncio.sleep(0)
-        assert db.aborted >= 1
+        assert db.ended == 1
+        if failure != "abort_reply": assert db.aborted >= 1
 
 
 @pytest.mark.asyncio
@@ -110,7 +126,7 @@ async def test_probes_never_reuse_document_or_session():
     db = ProbeDB()
     await readiness.verify_budget_storage(db); await readiness.verify_budget_storage(db)
     assert db.documents[0]['_id'] != db.documents[1]['_id']
-    assert db.started == db.writes == db.aborted == 2
+    assert db.started == db.writes == db.raw_aborts == db.ended == 2
 
 
 @pytest.mark.asyncio
@@ -139,7 +155,7 @@ async def test_delayed_abort_is_retained_bounds_concurrency_and_finishes_in_own_
         assert result['storage_verified'] is True  # result discarded by expired HTTP request
         await asyncio.sleep(0)  # consume callback releases the slot
     assert readiness._active_probe is None
-    assert (db.started, db.writes, db.aborted) == (1, 1, 1)
+    assert (db.started, db.writes, db.raw_aborts, db.ended) == (1, 1, 1, 1)
     assert (await readiness.verify_budget_storage(second))['storage_verified'] is True
     await asyncio.sleep(0)
     assert readiness._active_probe is None
