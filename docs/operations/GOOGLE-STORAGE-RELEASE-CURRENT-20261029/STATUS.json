@@ -1,5 +1,5 @@
 {
-  "status": "source_A_locally_verified_pending_fresh_CI_and_independent_review",
+  "status": "historical_source_A_all_13_CI_success_bounded_review_pass_base_superseded",
   "production_base": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
   "production_base_tree": "af10b5f9bdef3e78fa8b96d1d1b4c90a2482f301",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -82,8 +82,156 @@
       "frontend": "29 passed / 4 suites in 3.182s; includes actual workspace integration and no automatic diagnostic calls",
       "preservation": "All 15 new reviewed blob hashes exact. Only existing tracked changes are 4 additive router lines + 6 additive workspace lines. Foreign dashboard/mobile/intent and all other production paths untouched."
     },
-    "fresh_source_ci": "pending",
-    "independent_review": "pending"
+    "independent_review": "Root reported independent bounded PASS with 87 backend and 14 UI tests; root acceptance message is the integration handoff evidence.",
+    "source_ci": {
+      "namespace": {
+        "run": 40960928076,
+        "backend_job": 123753152426,
+        "result": "126 passed in 5.54s, including 9 actual authenticated Mongo tests; zero failures/errors/skips; warnings as errors",
+        "frontend_job": 123753152115,
+        "frontend": "23 UI tests / 3 suites; build 5.28s; exact Source A checkout"
+      },
+      "commit": {
+        "run": 40960927752,
+        "backend_job": 123753151047,
+        "result": "117 passed in 14.80s, including 6 actual replica Mongo tests; zero failures/errors/skips; warnings as errors",
+        "frontend_job": 123753150694,
+        "frontend": "21 UI tests / 2 suites; build 6.26s; exact Source A checkout"
+      },
+      "full_management": {
+        "run": 40960927978,
+        "backend_job": 123753151804,
+        "result": "1307 backend passed in 37.61s",
+        "frontend_job": 123753152144,
+        "frontend": "261 UI tests / 18 suites; build 6.40s",
+        "checkout": "ad11b24274dd15e6443149984174f510a350a99c; tree identical to Source A verified through Git API"
+      },
+      "release_readiness": {
+        "run": 40960928043,
+        "frontend_job": 123753152419,
+        "backend_job": 123753153060,
+        "result": "success; backend protocol tests 156 OK; source-candidate frontend success; host adapter/manual jobs scoped skipped for Source A"
+      }
+    },
+    "root_review": "Root reviewed exact 15 blobs and four-router/six-workspace-line seams, accepted bounded scope; independently 133 backend -W error in 2.75s and 29 UI / 4 suites in 1.448s passed.",
+    "all_workflows": [
+      {
+        "id": 40960927924,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928024,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960927972,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960927978,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928092,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960927752,
+        "name": "Google storage commit preflight",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928076,
+        "name": "Google namespace prerequisite audit",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928043,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928414,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960927858,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928008,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928149,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40960928287,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
   },
-  "next": "Freeze exact remote Source A and Draft PR, complete all source CI including disposable real Mongo, independent review, then hand off. Root owns release intent B, production merge, host and publishing. A moving production base requires a fresh source before release."
+  "next": "Create separate direct61da source carrying only exact reviewed15 blobs plus minimal shared seams and freshSTATUS, then freshCI. Preserve e398 historical source. Root owns production and host actions.",
+  "tested_source": "e3984c28be8890dda03b37154347079685aa6038",
+  "tested_tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
+  "pull_request": 1645,
+  "source_branch": "codex/google-storage-release-source-current-20261029",
+  "ci_merge": {
+    "sha": "ad11b24274dd15e6443149984174f510a350a99c",
+    "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
+    "parents": [
+      "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+      "e3984c28be8890dda03b37154347079685aa6038"
+    ]
+  },
+  "candidate_artifact": {
+    "id": 12935258315,
+    "node_id": "MDg6QXJ0aWZhY3QxMjkzNTI1ODMxNQ==",
+    "name": "release-v5-reviewed-intent-candidate",
+    "size_in_bytes": 265356,
+    "url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/12935258315",
+    "archive_download_url": "https://api.github.com/repos/AMASI-SA/AMASI-SA/actions/artifacts/12935258315/zip",
+    "expired": false,
+    "digest": "sha256:64649f8f75a1497b9c05683732ad7a7bb7b4377c06b5878158b38943f48a05f1",
+    "created_at": "2026-10-29T21:51:50Z",
+    "updated_at": "2026-10-29T21:51:50Z",
+    "expires_at": "2026-10-31T21:51:49Z",
+    "workflow_run": {
+      "id": 40960928043,
+      "repository_id": 1250664189,
+      "head_repository_id": 1250664189,
+      "head_branch": "codex/google-storage-release-source-current-20261029",
+      "head_sha": "e3984c28be8890dda03b37154347079685aa6038"
+    }
+  },
+  "candidate_artifact_note": "Actions metadata read; digest is artifact ZIP digest. Contents not downloaded by integration agent. Root owns verification and later operational B.",
+  "superseded_by_production": {
+    "sha": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
+    "tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
+    "reason": "Foreign Reports1642 merged after Source A. This source and candidate are historical only; do not freeze B or deploy this old base."
+  }
 }
