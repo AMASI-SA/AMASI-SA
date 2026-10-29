@@ -111,6 +111,8 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     attach_google_live_category_routes(router, db, current_user)
     from .google_native_inventory_routes import attach_google_native_inventory_routes
     attach_google_native_inventory_routes(router, db, current_user)
+    from .google_product_test_review_routes import attach_google_product_test_review_routes
+    attach_google_product_test_review_routes(router, db, current_user)
     from .google_prior_season_routes import attach_google_prior_season_routes
     attach_google_prior_season_routes(router, db, current_user)
     from .google_ads_storage_commit_readiness import attach_google_ads_storage_commit_readiness_routes

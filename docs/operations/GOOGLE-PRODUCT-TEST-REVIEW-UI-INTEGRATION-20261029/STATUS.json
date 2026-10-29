@@ -1,7 +1,7 @@
 {
   "task": "google-product-test-review-ui-integration-20261029",
   "branch": "codex/google-product-test-review-ui-integration-20261029",
-  "state": "CONTRACT_ONLY_BEFORE_IMPLEMENTATION_ROOT_REVIEW_REQUIRED",
+  "state": "EARLY_WIP_EXACT_BACKEND_AND_ACTUAL_MANAGEMENT_FIXTURE_SERVICE_VERIFIED_CHILD_PENDING",
   "base": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
   "base_meaning": "Accepted1655SourceA with native/category/prior UI already present; frozen1655/1657 worktrees untouched",
   "production_changed": false,
@@ -122,5 +122,11 @@
     "fixture": "JSONcontainsactualsavedplan/observedcategory/fitstatebefore/saveafter/fitstateafter/candidate responses, syntheticowneridrole, andsourcegenerationmarker. Storedfields verifiednoack/expectedrevision; parity test regeneratesfromactualHTTPanddeepcompares exactfixturebytes/JSON.",
     "frontend": "UseactualAuthProvider withsynthetic/auth/me fixture, notmockownerhook. Newtests explicitzeroauto requests, state/fit/CAS/lostack/manualreload sequence, sharedexistingcheckboxselection, status/currency/window/contextseparation andlate-owner/fields/category/selection cancellation. Existingnative/parent suites rerununchanged; backendnew152/30gate andnewUIbuildCI freshbeforeindependentreview."
   },
-  "next": "Rootreviews concretecontract/9blobmanifest andcontrolledseams beforeimplementation. No runtimecopied/modified yet; sourceAPIaccepted immutableadf preserved; no intent/oldSTATUS/globalreaders/launchWorkspace/Merchant code imported."
+  "next": "Implement newchild/service/actualHTTPfixtures, narrowNativebusy seam, appendfullworkflowtests; freshCI and independentreview. No existingreader/globalnormalizer/launchWorkspace/Merchant changes.",
+  "auth_generation_requirement": "Mandatory invalidation on ANY actualAuthContext userobject replacement, including identicalpublicid/role/shape; auth/me mayomitpasswordstamp. EachpendingGET/PUT/POST mustabort/ignorelate andclearresults; noautomaticrefresh or PUTresubmit. RealAuthProvider identical-shape refresh regressionrequired.",
+  "verification": {
+    "backend": "43-Werror/zero skips1.73s:42newbackend +1actualmanagementHTTPfixtureparity",
+    "frontend_service": "35tests/1suite PASS1.148s; actualwriterHTTPfixture used; noUIcomponent yet",
+    "ci": "Not yet; no releaseclaim"
+  }
 }
