@@ -8,7 +8,8 @@ function rowStatus(row, proof) {
     if (row.verification !== "verified") return "صف الكتالوج غير مثبت";
     if (row.status === "hidden") return "مخفي في الكتالوج · لا يُرشّح للإعلان";
     if (row.status === "out_of_stock") return "نفاد مخزون مسجل · لا يُرشّح للإعلان";
-    if (row.status === "available" && proof?.state === "available") return `مخزون مثبت من تفاصيل محفوظة بتاريخ ${proof.observed_at} · لقطة محدودة حتى 50 متغيرًا؛ اكتمال التغطية البعيدة غير مثبت`;
+    if (proof?.state === "available") return `تظهر إتاحة مخزون في لقطة التفاصيل المحفوظة بتاريخ ${proof.observed_at} · حتى 50 متغيرًا؛ لا تثبت إتاحة كل المقاسات أو اكتمال التغطية البعيدة` ;
+    if (proof?.state === "unavailable") return `لا يظهر مخزون متاح في لقطة التفاصيل المحفوظة بتاريخ ${proof.observed_at} · لا يثبت ذلك نفاد مخزون المنتج الكامل؛ اكتمال التغطية البعيدة غير مثبت`;
     return "هوية صف الكتالوج مثبتة؛ التوفر القابل للشراء غير مثبت";
 }
 

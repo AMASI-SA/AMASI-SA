@@ -61,15 +61,17 @@ async def test_hidden_wins_even_when_details_stock_proof_is_available():
     assert out['inventory_reviews'][0]['state']=='available'
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('quantities,expected', [([0,2],'available'),([0,0],'out_of_stock'),([None,2],'unknown')])
+@pytest.mark.parametrize('quantities,expected', [([0,2],'unknown'),([0,0],'unknown'),([None,2],'unknown')])
 async def test_variant_stock_uses_all_bounded_rows_not_parent_alone(quantities,expected):
     from product_inventory_proof import build_inventory_evidence
     variants=[{'id':str(i+1),'quantity':q,'unlimited_quantity':False} for i,q in enumerate(quantities)]
     value=proved();value.update(variants=variants,variants_count=len(variants))
     value['inventory_evidence_v1']=build_inventory_evidence({'quantity':3,'unlimited_quantity':False,'variants':variants,'options':[]},value)
-    assert (await read([value]))['products'][0].status==expected
+    result=await read([value]);product=result['products'][0]
+    assert product.status==expected and product.available_quantity is None and product.unlimited_quantity is False
+    assert result['inventory_reviews'][0]['state']==('unproved' if None in quantities else 'available' if any(quantities) else 'unavailable')
 
 @pytest.mark.asyncio
 async def test_explicit_zero_and_unlimited_proofs_are_not_truthiness():
-    assert (await read([proved(quantity=0)]))['products'][0].status=='out_of_stock'
+    assert (await read([proved(quantity=0)]))['products'][0].status=='unknown'
     assert (await read([proved(quantity=None, unlimited_quantity=True)]))['products'][0].status=='available'

@@ -86,12 +86,13 @@ async def read_catalog_products(db, *, owner_id, product_ids, as_of, max_age_sec
             'remote_variant_coverage_complete': False,
             'size_suitability_verified': False, 'preparation_time_verified': False})
         if status == 'unknown' and raw_status == 'active' and row.get('archived') is False:
-            if state == 'available':
+            if state == 'available' and row.get('variants_count') == 0:
                 status = 'available'
                 unlimited = row['unlimited_quantity']
                 quantity = str(row['quantity']) if row.get('quantity') is not None else None
-            elif state == 'unavailable':
-                status = 'out_of_stock'
+            # Variant parent stock is not purchasable variant quantity.
+            # A bounded unavailable details snapshot never proves remote
+            # whole-product stockout; preserve unknown unless raw status says so.
         ref = 'catalog-v2:' + hashlib.sha256((owner_id+'\0'+pid+'\0'+revision+'\0'+observed.isoformat()).encode()).hexdigest()
         output.append(ProductSource(product_id=pid, mezan_product_id='mpv2_'+pid,
             observed_at=observed, evidence_ref=ref, verification='verified', status=status,

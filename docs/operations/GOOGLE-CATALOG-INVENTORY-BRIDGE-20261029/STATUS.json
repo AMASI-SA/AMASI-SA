@@ -20,5 +20,12 @@
   },
   "production_changed": false,
   "provider_writes": 0,
-  "next": "Independent budget audit; full CI including real Mongo; coordinator integrates current production before release; no intent frozen"
+  "next": "Independent budget audit; full CI including real Mongo; coordinator integrates current production before release; no intent frozen",
+  "review_fix": {
+    "finding": "Bounded unavailable variant snapshot must not become whole-product stockout; parent quantity is not purchasable variant quantity",
+    "behavior": "Unavailable details evidence leaves product unknown unless raw status explicitly out_of_stock. Available variant snapshots likewise leave product unknown with no available_quantity/unlimited claim. UI describes only saved snapshot availability and disclaims full product stockout/all sizes.",
+    "backend": "141 passed, no skips, 1.45s",
+    "frontend": "25 passed, no skips; see current PR checkpoint result",
+    "independent_review": "Requested from budget_audit; pending"
+  }
 }
