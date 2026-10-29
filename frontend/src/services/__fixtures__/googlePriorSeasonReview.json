@@ -1,0 +1,183 @@
+{
+  "plan": {
+    "plan_id": "winter",
+    "revision": 1,
+    "fields": {
+      "instruction": "ركز على هدايا الشتاء بالسعودية",
+      "season": "هدايا الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "هدية الشتاء",
+      "category_url": null,
+      "category_ids": [],
+      "pinned_product_ids": [
+        "123"
+      ],
+      "excluded_product_ids": [
+        "456"
+      ],
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "prior_season_context": {
+        "date_from": "2025-11-01",
+        "date_to": "2025-12-31",
+        "season_label": "شتاء العام السابق",
+        "alignment_note": "فترة اختارها المالك للمراجعة",
+        "calendar_reference_text": "مرجع المالك"
+      },
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "owner_declared_context_only",
+        "calendar": "gregorian",
+        "alignment_verification": "unknown",
+        "interval": {
+          "date_from": "2025-11-01",
+          "date_to": "2025-12-31",
+          "season_label": "شتاء العام السابق",
+          "alignment_note": "فترة اختارها المالك للمراجعة",
+          "calendar_reference_text": "مرجع المالك"
+        },
+        "source": "owner_declared_interval_not_independently_verified"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
+  },
+  "response": {
+    "plan_id": "winter",
+    "plan_revision": 1,
+    "status": "owner_declared_context_only",
+    "prior_season_context": {
+      "date_from": "2025-11-01",
+      "date_to": "2025-12-31",
+      "season_label": "شتاء العام السابق",
+      "alignment_note": "فترة اختارها المالك للمراجعة",
+      "calendar_reference_text": "مرجع المالك"
+    },
+    "calendar_alignment_verification": "unknown",
+    "owner_review_provenance": {
+      "reviewed_by": "owner",
+      "reviewed_at": "2026-10-29T12:00:00+00:00",
+      "plan_revision": 1,
+      "meaning": "owner_declared_context_not_independent_calendar_verification"
+    },
+    "product_ids_reviewed": [
+      "123"
+    ],
+    "observations": {
+      "mode": "stored_prior_season_line_observations",
+      "as_of": "2026-10-29T12:00:00+00:00",
+      "windows": {
+        "owner_reviewed_prior_season": {
+          "from": "2025-11-01",
+          "to": "2025-12-31",
+          "timezone": "Asia/Riyadh"
+        }
+      },
+      "products": [
+        {
+          "product_id": "123",
+          "currency_groups": [
+            {
+              "currency_code": "SAR",
+              "account_scope": "owner_store_projection",
+              "platform_account_id": null,
+              "windows": {
+                "owner_reviewed_prior_season": {
+                  "observed_orders": 1,
+                  "observed_lines": 1,
+                  "observed_units": "2"
+                }
+              }
+            }
+          ],
+          "sales_native": null,
+          "profitability": null,
+          "growth_14_days_percent": null,
+          "success_classification": "not_established"
+        }
+      ],
+      "diagnostics": {
+        "observed_documents": 1,
+        "duplicate_order_documents": 0,
+        "rejected_documents": 0,
+        "unmatched_lines": 0
+      },
+      "truncated": false,
+      "coverage_complete": false,
+      "snapshot_consistent": false,
+      "refunds_reconciled": false,
+      "source_snapshot_immutable": false,
+      "platform_conversions_added": false,
+      "metric_basis": "lower_bound_on_qualifying_saved_gross_line_observations_not_sales",
+      "limitations": [
+        "mutable_merged_raw_snapshot",
+        "missing_source_orders_and_unmatched_ids",
+        "no_source_coverage_watermark",
+        "gross_not_net_returns_unreconciled",
+        "timezone_declarations_not_supported_by_binding",
+        "native_platform_store_account_unverified",
+        "historical_cost_unknown",
+        "no_platform_order_attribution",
+        "no_ranking_or_execution",
+        "normalized_date_plus_minus_one_is_candidate_discovery_only",
+        "oversized_documents_excluded_unquantified",
+        "malformed_refund_containers_excluded_before_projection",
+        "index_required_no_fallback",
+        "owner_calendar_alignment_unverified"
+      ],
+      "source_writes": 0,
+      "provider_writes": 0,
+      "execution_authorized": false
+    },
+    "growth": null,
+    "profitability": null,
+    "provider_writes": 0,
+    "source_writes": 0,
+    "execution_authorized": false
+  },
+  "origin": "synthetic actual HTTP PUT then GET; no provider or customer data"
+}

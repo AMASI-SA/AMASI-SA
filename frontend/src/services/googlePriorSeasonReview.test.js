@@ -1,0 +1,63 @@
+import api from "../lib/api";
+import fixture from "./__fixtures__/googlePriorSeasonReview.json";
+import { getGooglePriorSeasonReview, priorSeasonReviewScope } from "./googlePriorSeasonReview";
+jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn() } }));
+const copy = (value) => JSON.parse(JSON.stringify(value));
+beforeEach(() => { api.get.mockReset(); api.get.mockResolvedValue({ data: copy(fixture.response) }); });
+test("actual HTTP writer fixture omits write consent and accepts matching prior read", async () => {
+    expect(fixture.plan.fields.acknowledge_review).toBeUndefined();
+    expect(fixture.plan.fields.expected_revision).toBeUndefined();
+    const signal = new AbortController().signal;
+    const result = await getGooglePriorSeasonReview(fixture.plan, { ownerId: "owner", signal });
+    expect(result.observations.products[0].currency_groups[0].windows.owner_reviewed_prior_season.observed_units).toBe("2");
+    expect(api.get).toHaveBeenCalledWith("/integrations-v2/google_ads/commercial-plans/winter/prior-season-observations", { params: { expected_revision: 1 }, signal });
+});
+test.each(["owner", "date", "overlap", "long", "reference", "forged", "revision", "missing"])("invalid saved scope %s never calls API", async (kind) => {
+    const plan = copy(fixture.plan); let ownerId = "owner";
+    if (kind === "owner") ownerId = "";
+    if (kind === "date") plan.fields.prior_season_context.date_to = "2025-02-30";
+    if (kind === "overlap") plan.fields.prior_season_context.date_to = plan.fields.starts_on;
+    if (kind === "long") plan.fields.prior_season_context.date_from = "2020-01-01";
+    if (kind === "reference") plan.fields.prior_season_context.calendar_reference_text = " ";
+    if (kind === "forged") plan.fields.prior_season_context.alignment_verification = "verified";
+    if (kind === "revision") plan.revision = true;
+    if (kind === "missing") plan.fields.prior_season_context = null;
+    await expect(getGooglePriorSeasonReview(plan, { ownerId })).rejects.toMatchObject({ code: "GOOGLE_PRIOR_SEASON_UNPROVED" });
+    expect(api.get).not.toHaveBeenCalled();
+});
+test.each(["revision", "context", "owner", "provenance", "alignment", "growth", "profit", "authority", "coverage", "attribution", "period", "current_day", "currency", "account", "product", "duplicate", "zero", "truncation", "sourcewrites", "nullunits"])("invalid response %s is withheld", async (kind) => {
+    const data = copy(fixture.response), out = data.observations, product = out.products[0], group = product.currency_groups[0], row = group.windows.owner_reviewed_prior_season;
+    if (kind === "revision") data.plan_revision = 2;
+    if (kind === "context") data.prior_season_context.alignment_note = "other";
+    if (kind === "owner") data.owner_review_provenance.reviewed_by = "foreign";
+    if (kind === "provenance") data.owner_review_provenance.reviewed_at = "2099-01-01T00:00:00Z";
+    if (kind === "alignment") data.calendar_alignment_verification = "verified";
+    if (kind === "growth") data.growth = 10;
+    if (kind === "profit") product.profitability = 1;
+    if (kind === "authority") data.execution_authorized = true;
+    if (kind === "coverage") out.coverage_complete = true;
+    if (kind === "attribution") out.platform_conversions_added = true;
+    if (kind === "period") out.windows.owner_reviewed_prior_season.from = "2025-01-01";
+    if (kind === "current_day") out.as_of = "2025-12-31T12:00:00Z";
+    if (kind === "currency") product.currency_groups.push(copy(group));
+    if (kind === "account") group.platform_account_id = "inferred";
+    if (kind === "product") product.product_id = "456";
+    if (kind === "duplicate") out.products.push(copy(product));
+    if (kind === "zero") row.observed_orders = 0;
+    if (kind === "truncation") out.truncated = true;
+    if (kind === "sourcewrites") out.source_writes = 1;
+    if (kind === "nullunits") row.observed_units = null;
+    api.get.mockResolvedValue({ data });
+    await expect(getGooglePriorSeasonReview(fixture.plan, { ownerId: "owner" })).rejects.toMatchObject({ code: "GOOGLE_PRIOR_SEASON_UNPROVED" });
+});
+test("separate currencies are retained without arithmetic; absent observations remain null", async () => {
+    const data = copy(fixture.response), other = copy(data.observations.products[0].currency_groups[0]);
+    other.currency_code = "USD"; other.windows.owner_reviewed_prior_season = { observed_orders: null, observed_lines: null, observed_units: null };
+    data.observations.products[0].currency_groups.push(other); api.get.mockResolvedValue({ data });
+    const result = await getGooglePriorSeasonReview(fixture.plan, { ownerId: "owner" });
+    expect(result.observations.products[0].currency_groups.map((g) => g.currency_code)).toEqual(["SAR", "USD"]);
+});
+test("scope copies saved prior context before request", () => {
+    const plan = copy(fixture.plan), scope = priorSeasonReviewScope(plan, "owner"); plan.fields.prior_season_context.season_label = "changed";
+    expect(scope.prior.season_label).not.toBe("changed");
+});
