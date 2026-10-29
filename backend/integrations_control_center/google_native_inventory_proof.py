@@ -68,12 +68,15 @@ def product_observations(before, after, variants, traversal_complete):
                     raise ValueError("option_value_identity_unproved")
                 labels[value_id] = {"option_id": option_id, "value_id": value_id,
                     "option_label": option.get("name") if isinstance(option.get("name"), str) else None,
-                    "value_label": value.get("name") if isinstance(value.get("name"), str) else None}
+                    "value_label": value.get("name") if isinstance(value.get("name"), str) else None,
+                    "is_out_of_stock": value.get("is_out_of_stock") if type(value.get("is_out_of_stock")) is bool else None}
     observed, ids = [], set()
     for row in variants:
         if not isinstance(row, dict):
             raise ValueError("variant_source_unproved")
         variant_id = canonical_id(row.get("id"))
+        if row.get("product_id") is not None and canonical_id(row["product_id"]) != identity:
+            raise ValueError("variant_product_identity_changed")
         if variant_id in ids:
             raise ValueError("duplicate_variant")
         ids.add(variant_id)
@@ -92,6 +95,8 @@ def product_observations(before, after, variants, traversal_complete):
     blockers = ["global_stock_unproved", "preparation_time_unproved", "size_coverage_unproved", "paid_authority_absent"]
     if status != "sale" or availability is not True:
         blockers.append("native_visibility_or_availability_blocked_or_unknown")
+    if any(label["is_out_of_stock"] is True for row in observed for label in (row["source_option_labels"] or [])):
+        blockers.append("native_option_value_out_of_stock")
     return {"salla_product_id": identity, "status": status, "is_available": availability,
         "parent_stock": stock(before), "variants": observed, "variant_traversal_complete": traversal_complete,
         "simple_product_observed": options == [] and embedded == [] and traversal_complete and variants == [],

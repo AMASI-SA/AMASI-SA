@@ -38,3 +38,20 @@ def test_ambiguous_raw_variant_facts_never_normalize_into_evidence(variant):
     value = raw()
     with pytest.raises(ValueError):
         product_observations(value, deepcopy(value), [variant], True)
+
+
+def test_option_label_requires_exact_ownership_and_exposes_source_stock_flag_only():
+    value = raw()
+    value["options"] = [{"id": 8, "name": "Size", "values": [{"id": 9, "option_id": 8, "name": "Large", "is_out_of_stock": True}]}]
+    result = product_observations(value, deepcopy(value), [{"id": 7, "stock_quantity": 2, "related_option_values": [9]}], True)
+    assert result["variants"][0]["source_option_labels"][0]["value_label"] == "Large"
+    assert "native_option_value_out_of_stock" in result["blocking_reasons"]
+    assert result["size_coverage_verified"] is False
+
+
+@pytest.mark.parametrize("status", ["hidden", "out", None])
+def test_hidden_out_or_missing_status_never_becomes_ready_with_positive_variant(status):
+    value = raw() | {"status": status}
+    result = product_observations(value, deepcopy(value), [{"id": 7, "stock_quantity": 2}], True)
+    assert "native_visibility_or_availability_blocked_or_unknown" in result["blocking_reasons"]
+    assert result["eligible_for_ad_selection"] is False
