@@ -178,6 +178,26 @@ async def _release_fence(db, row):
     await db[FENCES].update_one(scope, {"$set": {"status": "released", "released_at": now().isoformat()}})
 
 
+async def _retail_offer_evidence(client, draft):
+    if not draft.shopping:
+        return []
+    from .google_ads_workspace import google_lookup
+    from .google_ads_retail_identity import selected_native_products
+    merchants = await google_lookup(client, "merchants")
+    if not merchants["complete"] or draft.shopping.merchant_id not in {row.get("merchant_id") for row in merchants["items"]}:
+        raise problem("google_ads_product_merchant_unproved", "لم يثبت ربط Merchant Center لهذا الحساب.", 422)
+    selected = {offer for group in draft.groups for offer in group.product_offer_ids}
+    if not selected:
+        # An explicitly reviewed generic all-feed draft carries no selected
+        # product identity proof; do not upgrade it into such a claim.
+        return []
+    if any(not group.product_offer_ids for group in draft.groups):
+        raise problem("google_ads_product_feed_scope_unproved", "احصر منتجات كل مجموعة؛ لا تخلط اختيار منتجات محددة مع كامل التغذية.", 422)
+    inventory = await google_lookup(client, "products", merchant_id=draft.shopping.merchant_id)
+    return selected_native_products(inventory, account_id=draft.account_id,
+        merchant_id=draft.shopping.merchant_id, offer_ids=selected, feed_label=draft.shopping.feed_label)
+
+
 async def preview_google_action(db, actor, body, *, client_factory=GoogleAdsClient, prepared_asset=None, ai_source=None):
     if actor.get("actor_id") == "mezan_google_automation_v1":
         raise problem("google_automation_gateway_required", "استخدم بوابة التفويض الآلي المستقلة.", 403)
@@ -235,15 +255,7 @@ async def _preview_google_action(db, actor, body, *, client_factory=GoogleAdsCli
                     selected = {offer for group in draft.groups for offer in group.product_offer_ids}
                     if {selection.product_id for selection in mappings} != set(draft.product_ids) or any(selection.merchant_id != draft.shopping.merchant_id for selection in mappings) or selected != expected or any(not group.product_offer_ids for group in draft.groups):
                         raise problem("google_ads_product_feed_scope_unproved", "حدد منتج جوجل المقابل لكل منتج ميزان، وحصر منتجات كل مجموعة قبل المعاينة.", 422)
-                    from .google_ads_workspace import google_lookup
-                    merchants = await google_lookup(client, "merchants")
-                    if not merchants["complete"] or draft.shopping.merchant_id not in {row.get("merchant_id") for row in merchants["items"]}:
-                        raise problem("google_ads_product_merchant_unproved", "لم يثبت ربط Merchant Center لهذا الحساب.", 422)
-                    inventory = await google_lookup(client, "products", merchant_id=draft.shopping.merchant_id)
-                    eligible = {row.get("offer_id") for row in inventory["items"] if row.get("approved") is True and row.get("availability") != "OUT_OF_STOCK"}
-                    if not inventory["complete"] or expected - eligible:
-                        raise problem("google_ads_product_offer_not_eligible", "قائمة منتجات جوجل المختارة غير مثبتة أو غير مؤهّلة بالكامل.", 422)
-                    verified_offers = [{"offer_id": offer["offer_id"], "merchant_id": draft.shopping.merchant_id, "name": offer.get("title") or offer.get("name") or "منتج جوجل"} for offer in inventory["items"] if offer["offer_id"] in expected]
+            verified_offers = await _retail_offer_evidence(client, draft)
             operations = build_campaign_operations(draft, account_id)
             planned = draft.model_dump(mode="json")
             if draft.campaign_type == "SEARCH":
@@ -393,6 +405,12 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
             fresh = await client.campaign_snapshot(row["campaign_id"], children=True, **({"duplicate_controls": True} if row["action"] == "duplicate" else {}))
             if digest(fresh) != row["before_digest"]:
                 raise problem("google_ads_provider_drift", "إعدادات جوجل تغيرت منذ المعاينة؛ راجع التغيير الجديد.")
+        if row["action"] in {"create_campaign", "duplicate"} and (row.get("planned") or {}).get("shopping"):
+            planned = row["planned"]
+            retail_draft = GoogleCampaignDraft.model_validate({key: value for key, value in planned.items() if key in GoogleCampaignDraft.model_fields})
+            offers = await _retail_offer_evidence(client, retail_draft)
+            if offers != planned.get("product_offers", []):
+                raise problem("google_ads_product_identity_changed", "تغير دليل منتجات جوجل أو لم يكن مثبتًا في المعاينة؛ أنشئ معاينة جديدة.", 409)
         await record_event(db, row, "approved", expected_status="executing", approved_at=now().isoformat(), approved_by=actor["actor_id"])
         if automation:
             automation_authority_entered = True

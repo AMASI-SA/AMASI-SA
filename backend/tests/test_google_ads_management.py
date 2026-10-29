@@ -366,6 +366,55 @@ async def test_selected_product_retail_cannot_fall_back_to_all_feed(db, provider
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["SHOPPING", "PERFORMANCE_MAX"])
+@pytest.mark.parametrize("case", ["unique", "collision", "unknown", "merchant", "account", "incomplete", "wrong_feed", "stock_drift", "identity_drift", "legacy_preview"])
+async def test_retail_preview_checks_native_identity_before_provider_validation(db, provider, monkeypatch, family, case):
+    from tests.test_google_ads_workspace import retail_inventory
+    from tests.test_google_ads_campaign_builder import draft_for
+    from integrations_control_center import google_ads_workspace
+    value = draft_for(family)
+    value.update(product_ids=["1"], product_offer_selections=[{"product_id": "1", "merchant_id": "123", "offer_id": "SKU1"}],
+                 shopping={"merchant_id": "123", "feed_label": "QA" if case in {"collision", "wrong_feed"} else "SA"})
+    value["groups"][0]["product_offer_ids"] = ["SKU1"]
+    inventory = retail_inventory(account=ACCOUNT)
+    if case == "collision": inventory["items"] += retail_inventory(account=ACCOUNT, feed="QA", status="NOT_ELIGIBLE", availability="OUT_OF_STOCK")["items"]
+    if case == "unknown": inventory["items"][0]["availability"] = None
+    if case == "merchant": inventory["items"][0]["merchant_id"] = "999"
+    if case == "account": inventory["items"][0]["resource_name"] = inventory["items"][0]["resource_name"].replace(ACCOUNT, "777")
+    if case == "incomplete": inventory["complete"] = False
+    async def lookup(client, kind, **kwargs):
+        assert client is provider
+        if kind == "merchants": return {"items": [{"merchant_id": "123"}], "complete": True}
+        assert kind == "products"
+        return inventory
+    monkeypatch.setattr(google_ads_workspace, "google_lookup", lookup)
+    await db.mezan_products_v2.insert_one({"user_id": "owner-a", "salla_product_id": "1", "name": "منتج"})
+    saved = await save_draft(db, OWNER, DraftCreate(draft=GoogleCampaignDraft.model_validate(value), idempotency_key="retail-save"))
+    body = GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="retail-preview")
+    if case in {"unique", "stock_drift", "identity_drift", "legacy_preview"}:
+        result = await gateway.preview_google_action(db, OWNER, body)
+        assert result["planned"]["initial_status"] == "PAUSED" and provider.preflights == 1
+        assert result["planned"]["product_offers"][0]["mapping_status"] == "owner_selected_unverified"
+        if case == "stock_drift": inventory["items"][0]["availability"] = "OUT_OF_STOCK"
+        if case == "identity_drift": inventory["items"] = retail_inventory(account=ACCOUNT, language="en")["items"]
+        if case == "legacy_preview":
+            stored = await db[gateway.PROPOSALS].find_one({"proposal_id": result["proposal_id"]})
+            stored["planned"]["product_offers"] = [{"offer_id": "SKU1", "merchant_id": "123", "name": "منتج جوجل"}]
+            stored["confirmation_digest"] = gateway.digest(gateway.immutable(stored))
+            await db[gateway.PROPOSALS].replace_one({"proposal_id": result["proposal_id"]}, stored)
+            result["confirmation_digest"] = stored["confirmation_digest"]
+        if case != "unique":
+            with pytest.raises(HTTPException):
+                await gateway.execute_google_proposal(db, OWNER, result["proposal_id"], result["confirmation_digest"])
+            assert provider.preflights == 1
+    else:
+        with pytest.raises(HTTPException): await gateway.preview_google_action(db, OWNER, body)
+        assert provider.preflights == 0
+        assert await db[gateway.PROPOSALS].count_documents({}) == 0
+    assert provider.writes == 0
+
+
+@pytest.mark.asyncio
 async def test_product_picker_reads_only_owned_v2_catalog_without_provider_calls(db, provider):
     await db.mezan_products_v2.insert_many([{"user_id": "owner-a", "salla_product_id": "1", "name": "منتج ظاهر", "archived": False}, {"user_id": "owner-b", "salla_product_id": "2", "name": "منتج خاص", "archived": False}])
     async def current_user():
