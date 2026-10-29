@@ -7,17 +7,30 @@ current demand, complete orders or physical stock. No provider attribution.
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from decimal import Decimal
-import hashlib
-import json
 import re
 from zoneinfo import ZoneInfo
 
 from accounting_currency import CURRENCY_CODES
-from .google_order_source_binding import bound_salla_order_date, _id
+from .google_order_source_binding import bound_salla_order_date
 
 WINDOW_DAYS={'last_14_days':(13,0),'previous_14_days':(27,14),'last_30_days':(29,0),'last_90_days':(89,0)}
 _ALLOWED={'completed','delivered'}
 _QUANTITY=re.compile(r'^[0-9]{1,12}(?:\.[0-9]{1,6})?$')
+
+
+def _id(value):
+    # Keep inherited source binding unchanged, but forbid numeric aliases in
+    # this adapter's order/reference/line/product identity and dedup domain.
+    if type(value) is int:value=str(value)
+    return value if isinstance(value,str) and re.fullmatch(r'[1-9][0-9]{0,29}',value) else None
+
+
+def _zero(value,currency):
+    if isinstance(value,dict):
+        if set(value)!={'amount','currency'} or value['currency']!=currency:return False
+        value=value['amount']
+    if type(value) not in (str,int,float) or not re.fullmatch(r'[0-9]{1,18}(?:\.[0-9]{1,6})?',str(value)):return False
+    return Decimal(str(value))==0
 
 
 def windows(as_of):
@@ -32,18 +45,29 @@ def _slug(value):
     return value if isinstance(value,str) else None
 
 
-def _refund_marker(row,raw):
+def _refund_marker(row,raw,currency):
     # Absence is NOT proof of no returns. Any supplied nonzero/ambiguous
     # return information makes this order ineligible even for gross observation.
     for source in (row,raw):
-        for key in ('cancelled_at','canceled_at','refunded_at','refunds','returns','refunded_amount','refund_amount','returned_quantity'):
+        for key in ('actual_refund_amount','actual_partial_refund_amount','refunded_amount','refund_amount'):
+            if key in source and not _zero(source[key],currency):return True
+        for key in ('cancelled_at','canceled_at','refunded_at','refunds','returns','returned_quantity'):
             if key in source and source[key] not in (None,False,0,'0',[],{}):return True
+    if 'payment_actions' in raw:
+        actions=raw['payment_actions']
+        if not isinstance(actions,dict):return True
+        if 'refund_action' in actions:
+            action=actions['refund_action']
+            if not isinstance(action,dict):return True
+            if 'has_refund_amount' in action and action['has_refund_amount'] is not False:return True
+            for key in ('refund_amount','refunded_amount','pending_refund_amount'):
+                if key in action and not _zero(action[key],currency):return True
     return False
 
 
-def _eligible(row,raw):
+def _eligible(row,raw,currency):
     source_status=_slug(raw.get('status'))
-    if source_status not in _ALLOWED:return False
+    if not isinstance(source_status,str) or source_status not in _ALLOWED:return False
     if row.get('order_status_slug') is not None and row['order_status_slug'] != source_status:return False
     if row.get('order_status') is not None:
         display=raw.get('status')
@@ -56,7 +80,7 @@ def _eligible(row,raw):
     nested=nested.get('status') if isinstance(nested,dict) else None
     raw_values=[v for v in (payment,nested) if v is not None]
     values=[*raw_values,*([row['payment_status']] if row.get('payment_status') is not None else [])]
-    return bool(raw_values) and all(v=='paid' for v in values) and not _refund_marker(row,raw)
+    return bool(raw_values) and all(v=='paid' for v in values) and not _refund_marker(row,raw,currency)
 
 
 def _currency(row,raw):
@@ -86,6 +110,7 @@ def _lines(raw):
         if identity is None or identity in seen:return None
         seen.add(identity)
         product=item.get('product')
+        if 'product' in item and not isinstance(product,dict):return None
         nested=product.get('id') if isinstance(product,dict) else None
         ids=[_id(v) for v in (nested,item.get('product_id')) if v is not None]
         if not ids or any(v is None for v in ids) or len(set(ids))!=1:return None
@@ -96,6 +121,11 @@ def _lines(raw):
         quantity=Decimal(str(quantity))
         if quantity<=0:return None
         if any(key in item and item[key] not in (None,False,0,'0',[],{}) for key in ('refunds','returns','refunded_quantity','returned_quantity')):return None
+        currency=_currency({},raw)
+        if any(key in item and not _zero(item[key],currency) for key in ('refunded_amount','refund_amount')):return None
+        amounts=item.get('amounts')
+        if 'amounts' in item and not isinstance(amounts,dict):return None
+        if isinstance(amounts,dict) and any(key in amounts and not _zero(amounts[key],currency) for key in ('refund','refunded','refund_amount','refunded_amount')):return None
         result.append((identity,ids[0],quantity))
     return result
 
@@ -123,13 +153,15 @@ def observe_product_lines(rows,*,owner_id,product_ids,as_of,truncated=False):
             if not isinstance(row,dict):diagnostics['rejected_documents']+=1;continue
             if id_counts[_id(row.get('order_id'))]>1 or number_counts[_id(row.get('order_number'))]>1:
                 diagnostics['duplicate_order_documents']+=1;continue
+            if _id(row.get('order_id')) is None or _id(row.get('order_number')) is None:
+                diagnostics['rejected_documents']+=1;continue
             bound=bound_salla_order_date(row,owner_id=owner_id)
             sources=row.get('raw_by_source')
             raw=sources.get('salla_direct') if isinstance(sources,dict) else None
             if bound['status']!='observed_bound_source_instant' or not isinstance(raw,dict):
                 diagnostics['rejected_documents']+=1;continue
             currency=_currency(row,raw);lines=_lines(raw)
-            if currency is None or lines is None or not _eligible(row,raw):
+            if currency is None or lines is None or not _eligible(row,raw,currency):
                 diagnostics['rejected_documents']+=1;continue
             day=bound['business_date_riyadh']
             if not periods['last_90_days']['from']<=day<=periods['last_90_days']['to']:

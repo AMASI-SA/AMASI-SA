@@ -90,3 +90,32 @@ def test_canonical_payment_or_currency_alone_cannot_replace_missing_raw_proof():
         row=order();raw=row['raw_by_source']['salla_direct']
         raw.pop('payment_status' if missing=='payment' else 'currency')
         assert run([row])['products'][0]['currency_groups']==[]
+
+@pytest.mark.parametrize('place',['raw_action','canonical_full','canonical_partial','line_amount','line_nested'])
+def test_existing_known_refund_sources_reject_before_observations(place):
+    row=order();raw=row['raw_by_source']['salla_direct']
+    if place=='raw_action':raw['payment_actions']={'refund_action':{'has_refund_amount':True,'pending_refund_amount':1,'refund_amount':{'amount':20,'currency':'SAR'}}}
+    elif place=='canonical_full':row['actual_refund_amount']=20
+    elif place=='canonical_partial':row['actual_partial_refund_amount']=20
+    elif place=='line_nested':raw['items'][0]['amounts']={'refund':{'amount':20,'currency':'SAR'}}
+    else:raw['items'][0]['refunded_amount']=20
+    assert run([row])['products'][0]['currency_groups']==[]
+
+@pytest.mark.parametrize('field',['order_id','order_number','line_id','product_id'])
+def test_noncanonical_numeric_aliases_never_add_second_observation(field):
+    a=order();b=deepcopy(a);b.update(order_id='11',order_number='21');raw=b['raw_by_source']['salla_direct'];raw.update(id=11,reference_id=21)
+    if field=='order_id':b['order_id']='011';raw['id']='011'
+    elif field=='order_number':b['order_number']='021';raw['reference_id']='021'
+    elif field=='line_id':raw['items'][0]['id']='030'
+    else:raw['items'][0]['product']['id']='0123'
+    assert group(run([a,b]))['windows']['last_14_days']['observed_units']=='2'
+
+@pytest.mark.parametrize('value',[None,'bad',True,-1,{'amount':0,'currency':'USD'}])
+def test_ambiguous_supplied_refund_action_is_not_treated_as_absence(value):
+    row=order();row['raw_by_source']['salla_direct']['payment_actions']={'refund_action':{'refund_amount':value}}
+    assert run([row])['products'][0]['currency_groups']==[]
+
+def test_explicit_zero_refund_action_does_not_invent_returns_reconciliation():
+    row=order();row['raw_by_source']['salla_direct']['payment_actions']={'refund_action':{'has_refund_amount':False,'refund_amount':{'amount':0,'currency':'SAR'},'pending_refund_amount':'0'}}
+    out=run([row]);assert group(out)['windows']['last_14_days']['observed_units']=='2'
+    assert out['refunds_reconciled'] is False

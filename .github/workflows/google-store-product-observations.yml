@@ -65,7 +65,9 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('store-observation-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_store_product_observations_mongo')]
-          assert len(cases) >= 66 and len(replica) == 5
+          assert len(cases) >= 85 and len(replica) == 9
+          assert any(c.attrib.get('name') == 'test_real_leading_zero_alias_cannot_add_second_observation' for c in replica)
+          assert sum(c.attrib.get('name','').startswith('test_real_refund_projection_rejects_known_or_ambiguous_refund') for c in replica) == 3
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
           PY

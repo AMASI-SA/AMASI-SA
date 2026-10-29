@@ -47,5 +47,17 @@
     "red": "New missing-raw-proof regression failed on original d907 source",
     "fresh_backend": "61 passed, no skips, 1.35s",
     "ci": "New run required after followup. Original d907 replica/UI run40917869056 successful but not acceptance for changed source."
+  },
+  "independent_review_fix": {
+    "findings": "Known Salla refund_action omitted from projection; canonical actual refunds/item refunded amounts ignored; leading-zero numeric aliases could double observations",
+    "source_evidence": [
+      "salla_integration/webhook_event_capture.py:232 has_refund_amount",
+      "refunds_alert_routes.py:99-107 actual full/partial refund fields",
+      "accounting_order_refunds.py:19 refund_amount"
+    ],
+    "fix": "Canonical positive decimal IDs without leading zero for order/reference/line/product before counting; existing source helpers untouched. Project/refuse nonzero or ambiguous refund_action, full/partial canonical refunds and raw item refund amounts. Explicit zero objects require native currency match; missing refunds stay unreconciled.",
+    "red": "8 of9 new refund/alias regressions failed before fix; product alias already uncounted",
+    "fresh_backend": "76 passed, no skips, 1.41s",
+    "real_mongo": "4 additional projection/alias cases authored; total9. New exact-source CI required; no claim previous64case run validates this fix."
   }
 }

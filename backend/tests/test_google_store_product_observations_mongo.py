@@ -64,3 +64,20 @@ async def test_real_duplicates_refunds_and_unmatched_ids_never_become_sales(mong
     await mongo.unified_orders.delete_many({})
     a=order();a['raw_by_source']['salla_direct']['items'][0]['product']['id']=999;await mongo.unified_orders.insert_one(a)
     out=await read(mongo);assert out['diagnostics']['unmatched_lines']==1 and out['products'][0]['currency_groups']==[]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source',['refund_action','canonical_actual','line_amount'])
+async def test_real_refund_projection_rejects_known_or_ambiguous_refund(mongo,source):
+    value=order();raw=value['raw_by_source']['salla_direct']
+    if source=='refund_action':raw['payment_actions']={'refund_action':{'has_refund_amount':True,'pending_refund_amount':1,'refund_amount':{'amount':20,'currency':'SAR'}}}
+    elif source=='canonical_actual':value['actual_partial_refund_amount']=20
+    else:raw['items'][0]['refunded_amount']=20
+    await mongo.unified_orders.insert_one(value)
+    out=await read(mongo);assert out['products'][0]['currency_groups']==[]
+    assert out['refunds_reconciled'] is False
+
+@pytest.mark.asyncio
+async def test_real_leading_zero_alias_cannot_add_second_observation(mongo):
+    a=order();b=deepcopy(a);b.update(order_id='010',order_number='020');b['raw_by_source']['salla_direct'].update(id='010',reference_id='020')
+    await mongo.unified_orders.insert_many([a,b]);out=await read(mongo)
+    assert out['products'][0]['currency_groups'][0]['windows']['last_14_days']['observed_units']=='2'

@@ -12,14 +12,15 @@ from .google_ads_management import principal
 from .google_commercial_plan import PLANS
 from .google_product_catalog_reader import read_catalog_products
 from .google_product_evidence import ProductEvidenceRequest, ProductSourceRecord, build_product_evidence
-from .google_store_product_observations import observe_product_lines, windows
+from .google_store_product_observations import observe_product_lines
 
 MAX_DOCUMENTS=1000
 PROJECTION={'_id':0,'user_id':1,'order_id':1,'order_number':1,'order_date':1,
  'order_status_slug':1,'order_status':1,'payment_status':1,'currency':1,'original_currency':1,
- 'cancelled_at':1,'canceled_at':1,'refunded_at':1,'refunds':1,'returns':1,'refunded_amount':1,'refund_amount':1,'returned_quantity':1}
+ 'cancelled_at':1,'canceled_at':1,'refunded_at':1,'refunds':1,'returns':1,'refunded_amount':1,'refund_amount':1,'returned_quantity':1,'actual_refund_amount':1,'actual_partial_refund_amount':1}
 for field in ('id','reference_id','date','created_at','status','payment_status','payment.status','currency','original_currency','amounts.total.currency',
               'cancelled_at','canceled_at','refunded_at','refunds','returns','refunded_amount','refund_amount','returned_quantity',
+              'payment_actions.refund_action','items.refunded_amount','items.refund_amount','items.amounts.refund','items.amounts.refunded','items.amounts.refund_amount','items.amounts.refunded_amount',
               'items.id','items.product.id','items.product.parent_id','items.product_id','items.parent_product_id','items.quantity','items.refunds','items.returns','items.refunded_quantity','items.returned_quantity'):
     PROJECTION['raw_by_source.salla_direct.'+field]=1
 
