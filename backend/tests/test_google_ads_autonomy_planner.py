@@ -35,7 +35,7 @@ def inputs(action="PAUSE_CAMPAIGN"):
         history=dict(complete=True, user_id="owner", account_id="123", items=[]))
 
 
-@pytest.mark.parametrize("action,native", [("PAUSE_CAMPAIGN","pause"),("RESUME_CAMPAIGN","enable"),("CHANGE_BUDGET","set_budget")])
+@pytest.mark.parametrize("action,native", [("PAUSE_CAMPAIGN","pause"),("CHANGE_BUDGET","set_budget")])
 def test_valid_candidate_is_only_a_stable_preview_plan_and_inputs_are_unchanged(action, native):
     data=inputs(action); before=deepcopy(data)
     result=plan_google_autonomy(**data)
@@ -88,6 +88,28 @@ def test_unsafe_recommendation_is_reported_as_blocked(change, code):
 def history_row(**changes):
     return {"user_id":"owner","account_id":"123","campaign_id":"456","status":"completed","verified":True,"action":"pause",
                 "executed_at":(NOW-timedelta(minutes=30)).isoformat(), **changes}
+
+
+@pytest.mark.parametrize("origin", ["owner", "unknown", "mezan_pause", "external_intervening_unknown"])
+def test_automatic_resume_never_overrides_an_unproved_owner_stop(origin):
+    data = inputs("RESUME_CAMPAIGN")
+    if origin != "unknown":
+        row = history_row(executed_at=(NOW-timedelta(hours=2)).isoformat(),
+            actor_id="owner" if origin == "owner" else "mezan_google_automation_v1",
+            automation_source=None if origin == "owner" else {"kind": "standing_policy"})
+        data["history"]["items"] = [row]
+    if origin == "external_intervening_unknown":
+        # A saved Mezan pause and current PAUSED status cannot exclude a later
+        # external enable followed by a manual pause. Caller claims add no proof.
+        data["workspace"]["campaigns"][0].update(pause_origin="mezan", manual_stop=False)
+        data["analysis"]["result"]["recommendations"][0]["resume_authorized"] = True
+    result = plan_google_autonomy(**data)
+    assert result["blockers"] == []
+    candidate = result["candidates"][0]
+    assert candidate["decision"] == "blocked"
+    assert candidate["blockers"] == ["automatic_resume_provenance_unproved"]
+    assert "idempotency_key" not in candidate and "changes" not in candidate
+    assert result["executable"] is False and result["provider_writes"] == 0
 
 
 def test_uncertain_provider_outcome_blocks_whole_account_and_completed_campaign_observes_cooldown():
@@ -149,12 +171,21 @@ def test_unexecuted_pause_does_not_free_budget_for_a_new_enable():
     assert planned[1]["blockers"] == ["account_budget_limit"]
 
 
-def test_two_enable_candidates_reserve_total_budget_within_batch():
-    data=inputs("RESUME_CAMPAIGN");data["policy"]["max_account_daily_budget_native"]="30"
-    add_candidate(data,"789","RESUME_CAMPAIGN")
+def test_two_budget_increases_reserve_total_budget_within_batch():
+    data=inputs("CHANGE_BUDGET");data["policy"]["max_account_daily_budget_native"]="43"
+    add_candidate(data,"789","CHANGE_BUDGET",target="22")
     planned=plan_google_autonomy(**data)["candidates"]
     assert planned[0]["decision"] == "eligible_for_preview"
     assert planned[1]["blockers"] == ["account_budget_limit"]
+
+
+def test_blocked_resume_consumes_neither_preview_quota_nor_budget_for_other_actions():
+    data=inputs("RESUME_CAMPAIGN");data["policy"]["max_actions_per_day"]=1
+    add_candidate(data,"789","CHANGE_BUDGET",target="22")
+    candidates=plan_google_autonomy(**data)["candidates"]
+    assert candidates[0]["blockers"] == ["automatic_resume_provenance_unproved"]
+    assert candidates[1]["decision"] == "eligible_for_preview"
+    assert candidates[1]["changes"] == {"budget_native":"22"}
 
 
 def test_policy_revision_and_target_are_part_of_idempotency_and_sensitive_bodies_are_not_returned():

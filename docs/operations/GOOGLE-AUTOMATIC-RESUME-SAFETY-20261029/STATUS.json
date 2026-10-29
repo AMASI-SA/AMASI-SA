@@ -1,0 +1,78 @@
+{
+  "task_id": "GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-automatic-resume-safety-20261029",
+  "base": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+  "state": "WIP source verified locally; exact-source full CI and independent review pending",
+  "scope": "Block all standing automatic resume until complete fresh stop provenance is established; manual owner approvals and future first-launch authority are separate.",
+  "production_changed": false,
+  "provider_calls": 0,
+  "operational_flags_changed": false,
+  "files": [
+    "backend/integrations_control_center/google_ads_autonomy_planner.py",
+    "backend/tests/test_google_ads_autonomy_planner.py",
+    "backend/tests/test_google_ads_automation_authority.py",
+    "backend/tests/test_google_ads_automation_plan.py",
+    "backend/tests/test_google_ads_automation_gateway.py",
+    "docs/operations/GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029/STATUS.json"
+  ],
+  "finding": {
+    "reproduction": "RESUME_CAMPAIGN + current PAUSED + completed owner pause2h earlier + policy cooldown1h returned eligible_for_preview with no blockers.",
+    "runtime_context": "Execution flags remain disabled. This is a latent violation before runtime activation, not an observed paid production write.",
+    "cause": "Standing planner only considers status/cooldown/budget, and local history cannot exclude external enable/pause changes. Latest Mezan pause is not proof of no subsequent manual stop."
+  },
+  "behavior": {
+    "blocker": "automatic_resume_provenance_unproved",
+    "all_automatic_resume_blocked": true,
+    "existing_more_specific_blockers_preserved": true,
+    "new_preview_blocked": true,
+    "old_saved_enable_proposal_claim_blocked": true,
+    "pause_and_budget_actions_preserved": true,
+    "manual_native_gateway_unchanged": true,
+    "first_launch_not_implemented": true
+  },
+  "verification": {
+    "regression_red": "4 owner/unknown/Mezan-pause/external-intervening-unknown cases failed on prior planner with eligible_for_preview; exit1.",
+    "focused": "181 passed in2.30s; planner, route, authority, gateway; exit0.",
+    "compatibility": "330 passed in2.80s; campaign builder, manually reviewed AI actions, worker, cycles, PAUSED creation contract; exit0.",
+    "local_total": 511,
+    "local_skips": 0,
+    "manual_enable_acceptance": "Existing test_google_ads_management.py::test_saved_ai_advice_uses_real_gateway_storage_and_one_approved_dispatch exercises owner-approved enable with actual Mongo. Exact-source CI pending; not claimed locally.",
+    "commands": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q [named files]",
+    "diff_check": "passed"
+  },
+  "test_changes_explained": [
+    "Authority fixture now constructs a saved proposal independently of the current planner, allowing rejected historical enable proposals to be tested without mocking the planner.",
+    "Two-raise account commitment test uses budget increases rather than unsupported automatic enable, preserving the no-double-spend expectation.",
+    "Quota-union test uses a budget action after a prior pause; no quota logic or runtime code changed."
+  ],
+  "first_launch_audit": {
+    "inspected_production": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+    "inspected_budget_wip": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
+    "inspected_old_launch": "aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06",
+    "baseline_verification": "223 existing budget/creation contract/authority/worker tests passed2.73s on budget WIP; no provider or actual Mongo calls.",
+    "reuse": [
+      "Original private creation intent, ledger and original completed proposal proof reject manual-campaign adoption.",
+      "Common native gateway owns proposal CAS/account fence/durable submission floor/independent readback/unknown-result retention.",
+      "Mandatory budget guard standing reservation and legacy settlement WIP are existing work; do not duplicate."
+    ],
+    "missing": [
+      "Old pure launch contract is absent from PR1602 and is explicitly nonexecutable. Its fresh native configuration flags have no reader wired.",
+      "LaunchAllocation storage command validates shape and uniqueness but does not independently validate activated current creation revision, current product/stock/URL, original creation ownership, native settings or funding caps; cannot be dispatch authority.",
+      "Launch reservation needs common-transaction policy/guard epoch and independent current commitments plus unresolved positive pending deltas, with durable consumed creation identity and no uncertain budget release/retry.",
+      "Native core only routes standing_policy and standing_creation. New first-launch gateway kind, dispatch proof/last no-await freshness check and launch settlement/recovery are absent.",
+      "Current creation save/activate routes reject auto_enable_new; creation claim and worker reject true. Enabling UI alone would break PAUSED creation or bypass missing authority.",
+      "Current composition only schedules creation and standing management; no first-launch cycle or verified ownership-based management handoff exists.",
+      "Resume provenance must exclude intervening manual/external stops; local latest pause plus current PAUSED is insufficient.",
+      "Old pure launch revalidation compares entire intent while before_digest includes timestamped native/launch-state snapshots; new observation times need a deliberately designed semantic binding versus freshness validation contract."
+    ],
+    "external_gates": [
+      "Actual production transaction/database capability, legacy claims/allocations/fences and known terminal recovery remain unproved.",
+      "The mandatory budget guard probe still uses old abort_transaction/wait_for/session-cleanup semantics. The separate diagnostic fix does not automatically harden this runtime capability probe.",
+      "Owner-approved current monetary limits are absent; no paid activation authorized.",
+      "Native unshared budget resource/reference-count and full Google configuration/permissions must be proved on intended account.",
+      "External Google/manual/other-app writes are outside Mongo atomicity; no strict actual-spend cap or no-external-race guarantee is established."
+    ]
+  },
+  "next_safe_action": "Root reviews exact source/CI, creates fresh direct-current-production release A if base has advanced, then v5 build/intent/merge/publish/live acceptance. Do not change UI policy files owned by diagnostic task. Full first-launch development requires separate coordinated scope."
+}
