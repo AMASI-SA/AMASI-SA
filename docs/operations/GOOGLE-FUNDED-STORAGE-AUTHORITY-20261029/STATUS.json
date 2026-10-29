@@ -24,6 +24,23 @@
   "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned.",
   "owner_read_bound": "Exact owner projection uses server limit(2), max_time_ms(2000), including through SessionDatabase; dedicated collaborator asserts session and both bounds.",
   "google_scope_boundary": "Reservation/floor snapshot re-reads canonical connected/api_connection integration and exact account membership plus account_client credential epoch projection after native awaits. Adversarial relink/disconnect/account-removal between prepare and TX reject and retain reservation/fence. No provider/OAuth call in transaction. Snapshot reads do not serialize later OAuth writers; future gateway lifecycle remains required.",
-  "replica_test_preparation": "35 actualMongo cases collected; newest3 place independent disable/role/password update on wire after floor users marker while TX owns that document, then prove acknowledged floor precedes completed foreign writer and no continuation replay. Earlier32 include owner pre-capture/snapshot-marker, validator, reserve/floor faults, revoke/cancel ordering, three expiries, Google scope drift, receipt settlement and OAuth-independent safety paths. Dedicated53newunits+35newMongo+53oldMongo, zero errors/skips. Actual execution pending.",
-  "confirmed_blocker": "Original absent-RUNS reservation retry gap addressed in source by required private initiation ACK burned before first await and prepared\u2192reserved only. No application issuer exists; fixture-only acknowledged future preparation is explicitly not activation authority. Actual91/close/ACKloss acceptance remains pending."
+  "replica_test_preparation": "36 actualMongo cases collected. Latest added controlled independent-client funded15 versus standing40\u219244 reservation race with separate registry keys and both snapshot reads held before writes; exactly one commit/epoch, total70 or59 <=72, loser known precommit policy_changed. Latest dedicated gate53newunits+36newMongo+53oldMongo zero failures/errors/skips. Await latest actual execution/review; no OS-process or all-interleaving claim.",
+  "confirmed_blocker": "Original absent-RUNS reservation retry gap addressed in source by required private initiation ACK burned before first await and prepared\u2192reserved only. No application issuer exists; fixture-only acknowledged future preparation is explicitly not activation authority. Actual91/close/ACKloss acceptance remains pending.",
+  "actual_ci_8438": {
+    "run_id": 40975470321,
+    "job_id": 123802292387,
+    "source": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+    "result": "254passed168.48s;49newunit/30newactualMongo/53oldMongo;0failure/error/skip; personally read checkout and full summary",
+    "reserve_unknown_seconds": {
+      "server91": 9.75,
+      "connection_close": 0.287,
+      "ack_loss_after_commit": 0.035
+    },
+    "floor_unknown_seconds": {
+      "server91": 9.814,
+      "connection_close": 0.123,
+      "ack_loss_after_commit": 0.031
+    },
+    "claim": "bounded storage acceptance only; not latest36 cases/provisioning/activation/provider authorization"
+  }
 }

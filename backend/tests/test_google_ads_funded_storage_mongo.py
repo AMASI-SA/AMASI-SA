@@ -360,3 +360,73 @@ async def test_replica_owner_writer_after_floor_user_marker_orders_after_transac
     finally:
         if writers:await asyncio.wait_for(asyncio.gather(*writers,return_exceptions=True),timeout=10)
         other.close()
+
+@pytest.mark.asyncio
+async def test_replica_two_clients_funded_and_standing_share_one_financial_epoch(monkeypatch,actual_db,automation_mongo_uri):
+    from integrations_control_center import google_ads_automation_authority as standing
+    from integrations_control_center.google_ads_paused_creation_budget import account_exposure
+    db,capture=actual_db;db,provider,key,row=await setup(monkeypatch,db,cap='72')
+    await db[guard.AUTOMATION_POLICIES].update_one({'account_id':'123'},{'$set':{'max_campaign_daily_budget_native':'60'}})
+    policy=await db[guard.AUTOMATION_POLICIES].find_one({'account_id':'123'},{'_id':0})
+    creation=await db[guard.CREATION_POLICIES].find_one({'account_id':'123'},{'_id':0})
+    await db[grants.GRANTS].update_one({'grant_key':key},{'$set':{
+        'activation_policy_binding':authority.policy_binding(guard.BudgetGuardSnapshot('owner','123',{},policy,creation))}})
+    prepared=await authority._prepare(db,scope={'user_id':'owner','account_id':'123'},grant_key=key)
+    inventory=deepcopy(prepared.payload['inventory'])
+    claim={'claim_id':'standing_cross_claim','execution_claim_id':'standing_cross_claim','proposal_id':'standing_cross_proposal',
+        'campaign_id':'40','action':'set_budget','policy_revision':policy['revision'],
+        'policy_digest':standing.policy_authorization_digest(policy),'native_inventory_digest':management.digest(inventory),
+        'campaign_budget_before_native':'40','campaign_budget_target_native':'44','budget_increase_reserved_native':'4',
+        'budget_semantics':'average_daily_budget','authorized_at':NOW.isoformat(),'time_zone':'Asia/Riyadh',
+        'confirmation_digest':'a'*64,'operations_digest':'b'*64}
+    other=AsyncIOMotorClient(automation_mongo_uri,serverSelectionTimeoutMS=2000,retryWrites=True,event_listeners=[capture])
+    worker=other[db.name];assert worker is not db and worker.client is not db.client
+    row['_initiation_ack']=await seed_future_preparation(worker,key,row)
+    capability=await guard.probe_google_budget_guard_transactions(db)
+    original_run,original_read=guard._run,guard._read_policy
+    start=asyncio.Event();funded_ready=asyncio.Event();standing_ready=asyncio.Event();both_read=asyncio.Event();readers=set()
+    async def delayed(*args,**kwargs):
+        if kwargs['operation_id'].startswith('funded_reserve_'):funded_ready.set()
+        elif kwargs['operation_id']=='standing_funded_competitor':standing_ready.set()
+        await start.wait();return await original_run(*args,**kwargs)
+    async def overlap(database,scope,kind,session):
+        result=await original_read(database,scope,kind,session)
+        if kind=='creation':
+            readers.add(id(database))
+            if len(readers)==2:both_read.set()
+            await asyncio.wait_for(both_read.wait(),5)
+        return result
+    monkeypatch.setattr(guard,'_run',delayed);monkeypatch.setattr(guard,'_read_policy',overlap)
+    baseline=capture.names.count('commitTransaction')
+    funded_task=asyncio.create_task(reserve(worker,key,row));standing_task=None
+    try:
+        await asyncio.wait_for(funded_ready.wait(),5)
+        standing_task=asyncio.create_task(guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
+            operation_id='standing_funded_competitor',capability=capability,
+            planner=lambda snapshot:guard.StandingBudgetReservation('standing_funded_claim',policy['revision'],claim,inventory)))
+        await asyncio.wait_for(standing_ready.wait(),5)
+        pending=[k for k,v in guard._pending_operations.items() if k[0] in {id(db),id(worker)} and v['kind']=='write']
+        assert len(pending)==2 and len({k[0] for k in pending})==2
+        start.set();results=await asyncio.gather(funded_task,standing_task,return_exceptions=True)
+        assert len(readers)==2
+        assert sum(isinstance(r,dict) and r.get('committed') is True for r in results)==1
+        failed=[r for r in results if isinstance(r,HTTPException)]
+        assert len(failed)==1 and failed[0].detail['code']=='google_budget_guard_policy_changed'
+        assert failed[0].detail['commit_attempted'] is False and failed[0].detail['preserve_execution_fence'] is True
+        state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+        assert state['epoch']==2 and len(state['allocations'])==1 and state['active_claim']
+        record=await db[grants.GRANTS].find_one({'grant_key':key})
+        snapshot=guard.BudgetGuardSnapshot('owner','123',state,policy,creation)
+        exposure=account_exposure(snapshot,inventory,record['grant'],NOW,funded_grant=record['grant'])
+        kind=next(iter(state['allocations'].values()))['kind']
+        assert str(exposure['total'])==('70' if kind=='funded_new_creation' else '59')
+        assert exposure['total']<=exposure['limit'] and str(exposure['limit'])=='72'
+        assert capture.names.count('commitTransaction')==baseline+1 and provider.writes==0
+        assert row['_initiation_ack'].used
+    finally:
+        start.set()
+        await asyncio.gather(*[t for t in (funded_task,standing_task) if t is not None],return_exceptions=True)
+        tasks=[v['task'] for k,v in guard._pending_operations.items() if k[0]==id(worker)]
+        if tasks:
+            _,pending=await asyncio.wait(tasks,timeout=20);assert not pending
+        other.close()
