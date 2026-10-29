@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-CHOICES-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-choices-20261029",
-  "state": "candidate_unattached_local_choices_and_manual_selector",
+  "state": "successor_auth_context_invalidation_and_driver_boundary_tests_pending_ci",
   "parent_source_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
   "assessment_sha": "2c2516ede2d33c8757d659a431c36039034a3c87",
   "runtime_attached": false,
@@ -12,19 +12,36 @@
   "deploy_ready": false,
   "verification": {
     "unit": "348 passed3.56s,-W error,0skip;50 new local-choice +81 owner-route +217 inherited observer/helper/reporting/CAS cases",
-    "frontend": "114 passed4 suites1.736s,0skip;22 new selector +31 new service +55 frozen child +6 existing API cases; governedNode22.23.2/Yarn1.22.22",
+    "frontend": "122 passed4 suites1.685s,0skip;30 selector +31 service +55 frozen child +6 API",
     "fixtures": "Actual local backend HTTP result and actual699 route/helper/observer empty-product response generated with synthetic DB/transports and consumed by new UI tests; real AuthProvider bootstrap and actual API401 no-replay exercised",
-    "mongo": "18 new real replica tests written; corrected dedicated CI now requires418 total including70 actualMongo; pending",
+    "mongo": "22 new replica cases collected, including4 real failCommand deadline/cancel/heartbeat/drain cases; fresh dedicatedCI requires422 total/74 actualMongo, pending",
     "first_ci_failure": "Exact372 run40967987627/job123777256712 ran319 tests successfully then expected-count assertion failed because workflow command omitted81 owner unit +18 new Mongo cases. This is a test-selection defect, not infra and not accepted realMongo coverage; corrected in successor with both files included.",
-    "source_scope": "Ten new files only relative7e686; no existing source/router/workspace/helper/child changed."
+    "source_scope": "Ten new files only relative7e686; no existing source/router/workspace/helper/child changed.",
+    "red_green": "Two actual AuthProvider same-public-shape refresh cases fail on40c0 runtime because list/child signals remain unaborted; targeted redrun2failed/28filtered. Fixed runtime full122/0skip green. Private field test initially had a test-call index typo, fixed before green."
   },
   "remaining": [
-    "Fresh exact-source dedicated418/70Mongo and114UI/build CI pending.",
+    "Fresh exact-source422/74Mongo and122UI/build CI pending.",
     "Independent review pending.",
     "Shared parent/router attachment and current production integration remain root-owned.",
     "No live owner accounts, native grant/link, product mapping, inventory or eligibility/authority verified."
   ],
   "next_safe_action": "Freeze successor source, inspect exact PUSH CI and request independent review; save final STATUS separately without changing accepted source. Root re-sources on current production for attachment.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1653",
-  "first_checkpoint_sha": "37273bae059ac4f82314d7fdd3eccd6ceee87897"
+  "first_checkpoint_sha": "37273bae059ac4f82314d7fdd3eccd6ceee87897",
+  "superseded_source_sha": "40c0a0806b423e53581d14158287c82b1c772a17",
+  "historical_exact_ci": {
+    "source": "40c0a0806b423e53581d14158287c82b1c772a17",
+    "run": 40968669311,
+    "backend_job": 123779570033,
+    "backend": "418 passed21.36s,70 actualMongo,0skip",
+    "frontend_job": 123779569627,
+    "frontend": "114/4suites2.197s,build5.95s",
+    "qualification": "Independently read by budget_audit/backend and by implementer. Historical only: source rejected for same-owner context replacement invalidation gap."
+  },
+  "review": {
+    "reviewer": "budget_audit",
+    "state": "successor_review_pending",
+    "confirmed_finding": "Same-owner AuthContext revalidation did not unmount list/child; actual auth/me omits private password/status fields. Successor invalidates on any user-object replacement plus exact available AUTH_FIELDS presence/type key, without exposing fields or changing auth API.",
+    "qualification": "No global request-admission/concurrency guarantee; driver boundary tests only cover their finite failpoint cases."
+  }
 }

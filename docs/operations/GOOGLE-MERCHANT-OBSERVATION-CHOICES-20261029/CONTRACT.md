@@ -59,3 +59,32 @@ asserted418 count failed because81 existing owner unit and18 new Mongo cases
 were absent from the command. The successor adds those two files; no weakened
 assertions or skipped Mongo acceptance. Dedicated CI must prove418 total and70
 actual Mongo cases, plus114 frontend tests and a governed CI build.
+
+## Auth revalidation correction and bounded driver evidence
+
+Independent review rejected40c0 despite its418/70Mongo and114UI/build success:
+keying only by owner ID could retain old state after same-owner revalidation.
+Actual `/auth/me` deliberately omits password_updated_at/disabled/is_active/
+deleted_at, so a hidden-field key alone cannot solve the real case. Successor
+clears on any AuthContext user-object replacement (including an identical public
+shape from actual refreshUser), plus exact presence/null/type of available auth
+fields for in-place changes. Keys remain private React state, not displayed or
+sent. No private auth field is added to the API. Two actual AuthProvider red
+cases fail against40c0 and pass in the new full122-case suite. This handles
+observed context changes, not unobserved server revocation or all open tabs.
+
+Per-request deadlines are not global admission control. Four new replica cases
+use test-only Mongo failCommand on find/commitTransaction, with a1.2-second
+block,0.5-second accelerated route deadline or explicit cancellation, heartbeat,
+actual command-monitoring drain and a successful subsequent read. FreshCI must
+execute these cases before claiming even that bounded behavior. There is no
+claim that cancelling a Motor await instantly stops its worker, that all possible
+cleanup failures are bounded, or that a global concurrency cap exists. No
+application retry is added; native driver transaction behavior is unchanged.
+
+Only the disposable loopback Mongo container enables test commands. Sources:
+https://github.com/mongodb/mongo/wiki/The-failCommand-fail-point and
+https://www.mongodb.com/docs/languages/python/pymongo-driver/current/connect/connection-options/csot/ .
+The current workflow requires422 tests including74 actual Mongo cases and122UI
+tests/build. Historical first372 selection error and40c0 UI rejection remain
+recorded separately; passing previous tests does not accept either source.

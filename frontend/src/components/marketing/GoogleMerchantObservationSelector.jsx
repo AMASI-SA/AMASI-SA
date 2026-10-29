@@ -5,6 +5,21 @@ import GoogleMerchantObservation from "./GoogleMerchantObservation";
 
 const BUTTON = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40";
 const SELECT = "mt-1 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm";
+const AUTH_FIELDS = ["id", "role", "disabled", "is_active", "deleted_at", "password_updated_at"];
+
+function authKey(user) {
+    const fields = [];
+    for (const field of AUTH_FIELDS) {
+        if (!Object.prototype.hasOwnProperty.call(user, field)) { fields.push([field, "absent"]); continue; }
+        const value = user[field], kind = value === null ? "null" : typeof value;
+        if (!["null", "undefined", "string", "boolean", "number"].includes(kind)
+            || kind === "number" && !Number.isFinite(value)
+            || kind === "string" && value.length > 256) return null;
+        fields.push([field, kind, value]);
+    }
+    // React-only scope key; never rendered, transmitted or used as authority.
+    return JSON.stringify(fields);
+}
 
 function OwnerSelector({ ownerId }) {
     const [choices, setChoices] = useState(null), [accountId, setAccountId] = useState(""), [merchantId, setMerchantId] = useState("");
@@ -62,9 +77,16 @@ function OwnerSelector({ ownerId }) {
 
 export default function GoogleMerchantObservationSelector() {
     const { user, authStatus } = useAuth();
+    const contextRevision = useRef({ user, revision: 0 });
+    if (contextRevision.current.user !== user) {
+        contextRevision.current = { user, revision: contextRevision.current.revision + 1 };
+    }
     if (authStatus !== "authenticated" || !user || typeof user.id !== "string" || !user.id || user.id.length > 128
         || /[\u0000-\u001f\u007f]/u.test(user.id) || typeof user.role !== "string" || user.role.toLowerCase() !== "owner"
         || user.disabled != null && user.disabled !== false || user.is_active != null && user.is_active !== true
         || user.deleted_at != null && user.deleted_at !== "") return null;
-    return <OwnerSelector key={user.id} ownerId={user.id} />;
+    const key = authKey(user);
+    // /auth/me omits private password-revision fields. A known revalidation
+    // replacing the context user therefore invalidates even identical public fields.
+    return key === null ? null : <OwnerSelector key={JSON.stringify([contextRevision.current.revision, key])} ownerId={user.id} />;
 }

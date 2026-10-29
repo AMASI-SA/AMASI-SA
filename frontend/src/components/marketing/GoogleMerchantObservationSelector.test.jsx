@@ -112,6 +112,58 @@ test("owner change rejects late old list and requires fresh explicit selection",
     const next = body(); next.owner_id = "second-owner"; api.get.mockResolvedValueOnce({ data: next });
     await click(); expect([...container.querySelectorAll("select")].every((row) => row.value === "")).toBe(true);
 });
+test.each(["password_updated_at", "disabled", "is_active", "deleted_at"])("same-owner auth field %s change aborts old list and requires a new explicit action", async (field) => {
+    const old = pending(); api.get.mockReturnValueOnce(old.promise); await render(); await click();
+    const signal = api.get.mock.calls[0][1].signal;
+    currentAuth = { ...currentAuth, user: { ...USER, [field]: field === "password_updated_at" ? "2026-10-30T00:00:00Z" : null } };
+    await render(); expect(signal.aborted).toBe(true);
+    await act(async () => old.resolve({ data: body() }));
+    expect(container.querySelectorAll("select")).toHaveLength(0); expect(api.get).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("2026-10-30T00:00:00Z");
+    await click(); expect([...container.querySelectorAll("select")].map((row) => row.value)).toEqual(["", ""]);
+});
+test("same-owner password revision clears old child evidence and discards late child success", async () => {
+    currentAuth = { ...currentAuth, user: { ...USER, password_updated_at: "2026-10-29T00:00:00Z" } };
+    await render(); await click(); await selected();
+    api.get.mockResolvedValueOnce({ data: EMPTY_OBSERVED }); await click("قراءة منتجات Merchant Center");
+    expect(container.textContent).toContain("لم تُرجع القراءة منتجات");
+    const old = pending(); api.get.mockReturnValueOnce(old.promise); await click("قراءة منتجات Merchant Center");
+    const signal = api.get.mock.calls.at(-1)[1].signal;
+    currentAuth = { ...currentAuth, user: { ...USER, password_updated_at: "2026-10-30T00:00:00Z" } }; await render();
+    expect(signal.aborted).toBe(true); expect(container.querySelectorAll("select")).toHaveLength(0);
+    await act(async () => old.resolve({ data: EMPTY_OBSERVED }));
+    expect(container.textContent).not.toContain("لم تُرجع القراءة منتجات");
+    expect(button("قراءة منتجات Merchant Center")).toBeUndefined(); noWrites();
+});
+test("same auth-field values keep scope while absent-null-type transitions invalidate it", async () => {
+    currentAuth = { ...currentAuth, user: { ...USER, password_updated_at: 0 } };
+    await render(); await click(); await selected();
+    currentAuth.user.name = "اسم جديد"; await render();
+    expect(button("قراءة منتجات Merchant Center")).toBeDefined();
+    currentAuth.user.password_updated_at = "0"; await render();
+    expect(container.querySelectorAll("select")).toHaveLength(0);
+});
+test.each(["list", "child"])("actual AuthProvider same-public-shape refresh invalidates pending %s and late success", async (kind) => {
+    authSpy.mockRestore(); api.get.mockResolvedValueOnce({ data: { ...USER } });
+    function Harness() {
+        const { refreshUser } = auth.useAuth();
+        return <><button onClick={() => refreshUser()}>تحديث الجلسة للاختبار</button><GoogleMerchantObservationSelector /></>;
+    }
+    await act(async () => root.render(<auth.AuthProvider><Harness /></auth.AuthProvider>));
+    const old = pending();
+    if (kind === "child") {
+        api.get.mockResolvedValueOnce({ data: body() }); await click(); await selected();
+        api.get.mockReturnValueOnce(old.promise); await click("قراءة منتجات Merchant Center");
+    } else { api.get.mockReturnValueOnce(old.promise); await click(); }
+    const signal = api.get.mock.calls.at(-1)[1].signal;
+    api.get.mockResolvedValueOnce({ data: { ...USER } }); await click("تحديث الجلسة للاختبار");
+    expect(signal.aborted).toBe(true); expect(container.querySelectorAll("select")).toHaveLength(0);
+    await act(async () => old.resolve({ data: kind === "child" ? EMPTY_OBSERVED : body() }));
+    expect(container.querySelectorAll("select")).toHaveLength(0);
+    expect(container.textContent).not.toContain("لم تُرجع القراءة منتجات");
+    expect(api.get.mock.calls.filter((args) => args[0].endsWith("/choices"))).toHaveLength(1);
+    noWrites();
+});
 test("cancelled old success cannot overwrite a later list or clear its busy state", async () => {
     const old = pending(), next = pending(); api.get.mockReturnValueOnce(old.promise).mockReturnValueOnce(next.promise);
     await render(); await click(); await click("إلغاء تحديث القائمة"); await click();

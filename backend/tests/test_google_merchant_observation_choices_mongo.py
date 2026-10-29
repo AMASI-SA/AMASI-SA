@@ -2,8 +2,12 @@
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
+import threading
+import time
 
 from fastapi import HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import monitoring
 import pytest
 
 from integrations_control_center import google_merchant_observation_choices as choices
@@ -112,3 +116,65 @@ async def test_real_auth_timestamp_binding_and_fresh_dependency_shape(owner_db):
     user = await owner_db.users.find_one({"id": OWNER}, {"_id": 0})
     user.update(_session_client=None, _review_session=None)
     assert (await call(owner_db, user=user)).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["find", "commitTransaction"])
+@pytest.mark.parametrize("ending", ["deadline", "cancel"])
+async def test_real_blocked_driver_command_keeps_loop_responsive_and_drains(monkeypatch, owner_db, command, ending):
+    # Only the disposable loopback CI replica enables test commands. This
+    # measures one bounded case, not a global concurrency/admission guarantee.
+    active, lock = set(), threading.Lock()
+    class Commands(monitoring.CommandListener):
+        def started(self, event):
+            with lock: active.add(event.request_id)
+        def succeeded(self, event):
+            with lock: active.discard(event.request_id)
+        def failed(self, event):
+            with lock: active.discard(event.request_id)
+    address = owner_db.client.address
+    assert address[0] in {"127.0.0.1", "localhost"}
+    client = AsyncIOMotorClient(address[0], address[1], appname="merchant-choice-boundary-test",
+        event_listeners=[Commands()], serverSelectionTimeoutMS=1000, socketTimeoutMS=4000, retryWrites=False)
+    db = client[owner_db.name]
+    await client.admin.command("ping")
+    admin = owner_db.client.admin
+    point = await admin.command({"configureFailPoint": "failCommand", "mode": {"times": 1},
+        "data": {"failCommands": [command], "appName": "merchant-choice-boundary-test",
+            "blockConnection": True, "blockTimeMS": 1200}})
+    ticks, stop = 0, asyncio.Event()
+    async def heartbeat():
+        nonlocal ticks
+        while not stop.is_set():
+            ticks += 1
+            await asyncio.sleep(.01)
+    pulse = asyncio.create_task(heartbeat())
+    monkeypatch.setattr(choices, "ROUTE_SECONDS", .5 if ending == "deadline" else 15)
+    task = asyncio.create_task(call(db))
+    started = time.monotonic()
+    try:
+        await admin.command({"waitForFailPoint": "failCommand", "timesEntered": point["count"] + 1, "maxTimeMS": 2000})
+        if ending == "cancel": task.cancel()
+        if ending == "cancel":
+            with pytest.raises(asyncio.CancelledError): await asyncio.wait_for(task, 3)
+        else:
+            response = await asyncio.wait_for(task, 3)
+            assert response.status_code == 409 and "ads_accounts" not in response.json()
+        assert time.monotonic() - started < 3 and ticks >= 2
+        # Cancellation of an await does not prove a Motor worker stopped.
+        # Observe actual command completion explicitly before finishing the case.
+        async with asyncio.timeout(6):
+            while True:
+                with lock: pending = bool(active)
+                if not pending: break
+                await asyncio.sleep(.01)
+        assert time.monotonic() - started < 6
+        monkeypatch.setattr(choices, "ROUTE_SECONDS", 15)
+        assert (await call(db)).status_code == 200
+    finally:
+        if not task.done():
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError): await task
+        stop.set(); await pulse
+        await admin.command({"configureFailPoint": "failCommand", "mode": "off"})
+        client.close()
