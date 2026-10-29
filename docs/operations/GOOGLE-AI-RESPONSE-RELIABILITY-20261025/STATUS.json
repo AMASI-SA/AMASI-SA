@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T23:28:05.820Z",
+  "updated_at": "2026-10-29T23:30:13.171Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -32,8 +32,12 @@
     "current_verified_runtime": "rg5-f0663e033649e1da330bb6d90ebbfff2b6593b2ecc3cd8f68ca108514732bbf8",
     "latest_deployed_pr": 1642,
     "current_git_head": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
-    "active_release_lease": false,
-    "active_lease": false
+    "active_release_lease": {
+      "actor": "codex-google-plan-season-20261030",
+      "deployment": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "owned_by_this_conversation": true
+    },
+    "active_lease": true
   },
   "budget_semantics": {
     "pr": 1509,
@@ -95,7 +99,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Finish1655 /appnormalbuild, prepare actorcodex-google-plan-season-20261030/prepublish/ONEpublish, newerexplicitfinish/own3identityprobes/leaseclosed/liveUI. Branchmerged butlive1655notyetpublished. MerchantnewreleaseSourceAparallelwithout host. No fundedexecution.",
+  "next_safe_action": "1655 publication in progress; DO NOT REPEAT CLICK or mutate/app. Waitnewerexplicitfinish thanOct30 02:05, thenownv5 verify (internally3probes), statusinactive, liveGooglebehavior/screenshot andremotestatus. ParallelMerchantfreshA/UI/funded/bootstrap WIPcontinuewithout host.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -2510,9 +2514,9 @@
       "tree": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
       "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
       "branch": "codex/google-plan-native-prior-release-current-20261029",
-      "checkpoint": "b75c9f5bf69225676f8f54bb07f5151f15ab4698",
+      "checkpoint": "409ad27d099d9b8a14dc5377250761f015d6c76e",
       "status_branch": "codex/google-plan-native-prior-release-status-20261029",
-      "state": "MERGED_EXACT_B_TREE_APP_NORMAL_BUILD_RUNNING",
+      "state": "PUBLISHING_SINGLE_CLICK_WAIT_NEWER_FINISH",
       "root_ci": "22 completed:21 success/1conditionalTikTokskip; root read exact fullGoogle1559backend/561UI and sourceReadiness candidate",
       "ci_full": 40970499731,
       "ci_readiness": 40970499873,
@@ -2521,7 +2525,7 @@
       "runtime": "rg5-079f61e618463aaeddd72d0fdb81ca3491d3d9486e40b650a8c1ddccee9ab8d4",
       "root_candidate": "ExactA loader1050backend253control PASS",
       "host": "Actualguardinactive,/app08160 trackedclean two unrelateduntrackeddirspreserved, guardblobbc03cc exact. Isolated/tmp/google1655-source-a-20261030 doublebuild/freeze running",
-      "publish": false,
+      "publish": true,
       "financial_changes": false,
       "B": "9f094a0f8c65cdfcea3a80c691229d489357487f",
       "B_tree": "c4074b70bc63d0bc44759256841319938516af20",
@@ -2532,8 +2536,13 @@
       "B_CI": "All24recordscompleted23success1conditionalTikTokskip;21distinctsuccessfulworkflows plus2readySnapduplicates; full1559backend561UI, Security2667UI,Readiness156protocol+hostcleanclone64.72s",
       "B_readiness": 40972205864,
       "B_full": 40972205845,
-      "prepare": false,
-      "actor": "codex-google-plan-season-20261030"
+      "prepare": "PASS",
+      "actor": "codex-google-plan-season-20261030",
+      "prepublish": "readytrue exactA/M/runtime",
+      "app_build": "62.01sexit0",
+      "publish_clicks": 1,
+      "live_verified": false,
+      "baseline_finish": "Oct30 02:05Riyadh/8ee00b1"
     },
     "merchant1657": {
       "pr": 1657,
