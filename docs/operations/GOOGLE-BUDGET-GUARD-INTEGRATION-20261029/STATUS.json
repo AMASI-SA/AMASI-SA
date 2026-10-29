@@ -18,11 +18,15 @@
     "CI retains currentM6dependency pins, mandatoryreplica execution, andM6suggestionbackend/UI testselection",
     "Old1606/frozenstoragehelper andallcurrentroutes/reporting/CAS untouched"
   ],
-  "tests": "Checkpoint beforefreshlocal/actualreplicaCI; historicalWIPproof notnewsourceproof.",
+  "tests": {
+    "local": "627passed7.56s-Werror; guard/probe/lifecycle/reservation/settlement, policies/activation, standing/creationauthorities/gateways/workers, planner/plan/currentinventory",
+    "actualreplica": "CIpending; no localMongoorproductioncalls"
+  },
   "production_blockers": [
     "Actual1621 explicit owner commit/readback andnamespacepermission/legacyresult",
     "Complete validnativebudgetresource/currency/timezone/inventory evidence plusunresolvedlegacycommitment reconciliation",
     "Creationcommonallocation migration remainsseparate bounded design andtests; no externalwriter fencing orfirstlaunchprovenance claim"
   ],
-  "next": "Fresh localregression plusrealreplicaCI andindependentreview, persist remote; no release/intent orpolicy/providerwrites."
+  "next": "Fresh localregression plusrealreplicaCI andindependentreview, persist remote; no release/intent orpolicy/providerwrites.",
+  "fixture_resolution": "M6 doublecountregression previously usedpause→budget on sameenablednative snapshot; mandatoryguard correctly rejects missingpause reflection. Test nowverifiedbudgetedit→pause with exact22nativebudget reflected, preserving2proposalunionassertion andfailclosedresume."
 }

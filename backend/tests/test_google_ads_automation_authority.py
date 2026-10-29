@@ -398,14 +398,23 @@ async def test_reserved_daily_slot_is_not_reset_by_cancel_or_policy_revisions():
 
 @pytest.mark.asyncio
 async def test_history_and_existing_reservation_are_unioned_without_double_counting(monkeypatch):
-    docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=2
+    docs,native=case_documents("CHANGE_BUDGET");configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=2
     row=docs[PROPOSALS][0]
     row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
     row["confirmation_digest"]=authority.automation_confirmation_digest(row)
     db=DB(docs);await authorize(db,native)
     db[PROPOSALS].rows[0].update(status="completed",verified=True,submission_started=True,submitted_at=NOW.isoformat(),executed_at=NOW.isoformat())
     await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
-    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="CHANGE_BUDGET")
+    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="PAUSE_CAMPAIGN")
+    # Native evidence must reflect the first verified budget edit before the
+    # next pause. A stale pre-edit budget must not satisfy guard reflection.
+    fresh["inventory"]["campaigns"][0]["budget_native"]="22"
+    fresh["campaign_snapshot"]["campaign_budget"]["amountMicros"]="22000000"
+    proposal=db[PROPOSALS].rows[-1]
+    proposal["before_snapshot"]=deepcopy(fresh["campaign_snapshot"])
+    proposal["before_digest"]=digest(proposal["before_snapshot"])
+    proposal["operations"]=build_update_operations("pause","123",proposal["before_snapshot"],{})
+    proposal["confirmation_digest"]=authority.automation_confirmation_digest(proposal)
     freeze_guard_clock(monkeypatch,later)
     result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
     assert result["authorized"] is True
