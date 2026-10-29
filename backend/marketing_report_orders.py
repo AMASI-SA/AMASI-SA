@@ -5,7 +5,7 @@ deduce direct traffic from the absence of a campaign, or add provider-reported
 conversions to real orders. No order/customer payload is returned to the UI.
 """
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
@@ -76,6 +76,22 @@ def _cents(amount):
     return int((Decimal(str(amount)) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
+def _store_order_day(order, zone):
+    from snapchat_v2.salla_outcomes import _localized_order_period_date
+    # The merchant's Salla order register uses this explicitly provider-owned
+    # calendar field. An advertising-account timestamp or refreshed raw
+    # snapshot must not move those orders to another store reporting day.
+    sources = order.get("field_sources") or {}
+    day = order.get("order_date")
+    if sources.get("order_date") == "salla_direct" and not order.get("order_date_inferred"):
+        try:
+            if isinstance(day, str) and date.fromisoformat(day).isoformat() == day:
+                return day
+        except ValueError:
+            pass
+    return _localized_order_period_date(order, zone=zone)[0]
+
+
 def _residual(provider):
     return {"id": f"{provider}:store-unassigned", "provider": provider,
         "name": EXTRA_SOURCES.get(provider, "طلبات المنصة بدون حملة محددة"),
@@ -85,7 +101,7 @@ def _residual(provider):
 
 
 async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="all", account_id=None):
-    from snapchat_v2.salla_outcomes import ORDER_PROJECTION, REPORT_COST_PROJECTION, _localized_order_period_date, _matches_any
+    from snapchat_v2.salla_outcomes import ORDER_PROJECTION, REPORT_COST_PROJECTION, _matches_any
     from snapchat_v2.period_candidates import bounded_period_cursor, period_candidate_query
     from integrations_control_center.snapchat_campaign_profitability import (
         _load_cost_context, _new_campaign_bucket, _order_cost_and_products, _add_order_to_campaign, _finalize_campaign)
@@ -100,6 +116,7 @@ async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="
         {"source": {"$in": ["salla", "salla_direct"]}}, {"salla_order_id": {"$exists": True}}]}]
     projection = {**ORDER_PROJECTION, **REPORT_COST_PROJECTION,
         "salla_order_id": 1, "raw_by_source.salla_direct.id": 1,
+        "field_sources.order_date": 1,
         "utm_source": 1, "marketing_source": 1, "ad_platform_source": 1,
         "traffic_source": 1, "source_details": 1}
     orders = await bounded_period_cursor(db.unified_orders, query, projection, MAX_ORDERS).to_list(length=MAX_ORDERS + 1)
@@ -125,7 +142,7 @@ async def apply_store_orders(db, user_id, start, end, reports, *, status_scope="
     assigned_count, assigned_cents, outside_selection = 0, 0, 0
     zone = ZoneInfo(STORE_ZONE)
     for order in orders:
-        day, _, _ = _localized_order_period_date(order, zone=zone)
+        day = _store_order_day(order, zone)
         if not day or not start.isoformat() <= day <= end.isoformat():
             continue
         if statuses and (not order.get("order_status") or not _matches_any(order["order_status"], statuses)):

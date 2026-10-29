@@ -95,6 +95,33 @@ async def test_one_store_timezone_and_same_status_scope_for_counts_and_sales(set
 
 
 @pytest.mark.asyncio
+async def test_salla_store_calendar_matches_order_register_despite_other_timestamps(setup):
+    # The store register uses the provider-normalized calendar, not a timestamp
+    # from an imported/refreshed snapshot or the advertising-account date helper.
+    entries = [
+        order(1, "snapchat", 100, field_sources={"order_date": "salla_direct"},
+              created_at="2026-10-02T10:00:00Z"),
+        order(2, "tiktok", 200, order_date="2026-09-30",
+              field_sources={"order_date": "salla_direct"},
+              raw_by_source={"salla_direct": {"date": {
+                  "date": "2026-10-01 12:00:00", "timezone": "Asia/Riyadh"}}}),
+        order(3, "direct", 50, field_sources={"order_date": "salla_direct"},
+              raw_by_source={"salla_direct": {"date": {
+                  "date": "2026-09-30 12:00:00", "timezone": "Asia/Riyadh"}}}),
+        order(4, None, 80, order_date_inferred=True,
+              field_sources={"order_date": "salla_direct"},
+              created_at="2026-10-02T10:00:00Z"),
+    ]
+    data = providers()
+    proof = await apply_store_orders(setup(entries), "owner", date(2026,10,1), date(2026,10,1), data)
+    assert proof["orders"] == 2
+    assert proof["sales_sar"] == 150
+    assert proof["order_delta"] == proof["sales_delta_sar"] == 0
+    assert {p["provider"]: sum(r["salla"]["orders"] for r in p["rows"]) for p in data} == {
+        "snapchat": 1, "tiktok": 0, "meta": 0, "google": 0, "direct": 1, "unclassified": 0}
+
+
+@pytest.mark.asyncio
 async def test_missing_currency_is_not_zero_and_no_orders_is_proven_zero(setup):
     data = providers()
     proof = await apply_store_orders(setup([order(1,"direct",10,currency="XYZ")]),"owner",date(2026,10,1),date(2026,10,1),data)
