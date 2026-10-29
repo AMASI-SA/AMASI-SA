@@ -85,7 +85,8 @@ def test_snapchat_route_uses_canonical_account_totals_not_visible_rows(monkeypat
     assert response.status_code == 200
     assert response.json()["totals"]["orders"] == 68
     assert response.json()["totals"]["spend_sar"] == 6402.41
-    read.assert_awaited_once_with(object() if False else read.await_args.args[0], "owner", date(2026,10,1), date(2026,10,1), "owned")
+    assert read.await_count == 1
+    assert read.await_args.args[1:] == ("owner", date(2026,10,1), date(2026,10,1), "owned")
 
 
 @pytest.mark.asyncio

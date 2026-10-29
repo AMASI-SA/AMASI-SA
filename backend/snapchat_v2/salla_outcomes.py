@@ -83,6 +83,7 @@ REPORT_COST_PROJECTION = {
     "payment_fee_status": 1, "actual_payment_fee": 1,
     "original_currency": 1, "currency": 1, "total_amount_sar": 1,
     "original_total_amount": 1, "exchange_rate": 1, "currency_conversion_status": 1,
+    "accounting_currency": 1, "exchange_rate_to_sar": 1,
 }
 
 
@@ -352,6 +353,7 @@ async def load_salla_campaign_outcomes(
     if include_report_costs:
         from shipping_cost_ssot import get_company_configs
         from marketing_report_costs import order_costs, add_order_report_costs, finalize_report_costs
+        from order_currency import order_total_sar
         report_company_configs = await get_company_configs(db, str(user_id))
         settings.update(await db.settings.find_one({"user_id": str(user_id)}, {"_id": 0, "payment_methods": 1}) or {})
     query = period_candidate_query(
@@ -424,7 +426,8 @@ async def load_salla_campaign_outcomes(
         salla_order_date = _text(order.get("order_date"))[:10]
         legacy_account_date = salla_order_date or local_date
         financial = _matches_any(order.get("order_status"), included_statuses)
-        amount = _number(order.get("total_amount") or order.get("total"))
+        resolved_sar = order_total_sar(order) if include_report_costs else None
+        amount = (resolved_sar or 0) if include_report_costs else _number(order.get("total_amount") or order.get("total"))
         source_platform = canonical_ad_platform(order)
         key, match_method = _match_order_campaign(
             order,
@@ -489,7 +492,10 @@ async def load_salla_campaign_outcomes(
                 counters["campaign_matched_financial_orders"] += 1
                 by_campaign[key]["sales_sar"] += amount
                 if cost_context is not None:
-                    order_result = _order_cost_and_products(order, cost_context)
+                    cost_order = {**order, "total_amount": resolved_sar or 0} if include_report_costs else order
+                    order_result = _order_cost_and_products(cost_order, cost_context)
+                    if include_report_costs and resolved_sar is None:
+                        profitability_raw[key]["unknown_currency"] = True
                     _add_order_to_campaign(profitability_raw[key], order_result)
                     if include_report_costs:
                         add_order_report_costs(profitability_raw[key], order_result,
@@ -626,6 +632,11 @@ async def load_salla_campaign_outcomes(
             if include_report_costs:
                 finalize_report_costs(profitability, profitability_raw[(row_account_id, campaign_id)],
                                       spend_by_campaign.get(campaign_id))
+                if profitability_raw[(row_account_id, campaign_id)].get("unknown_currency"):
+                    profitability.update(sales_sar=None, net_profit_sar=None, net_margin_pct=None, net_profit_available=False)
+                    value["sales_sar"] = None
+                    for product in profitability["products"]:
+                        product.update(sales_sar=None, net_profit_sar=None, net_margin_pct=None, net_profit_available=False)
             value["profitability"] = profitability
     return {
         "provider": "snapchat_ads",

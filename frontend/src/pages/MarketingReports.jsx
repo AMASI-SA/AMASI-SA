@@ -79,6 +79,7 @@ export default function MarketingReports() {
     const from = params.get("from") || "", to = params.get("to") || "";
     const [data, setData] = useState(null), [busy, setBusy] = useState(true), [error, setError] = useState("");
     const [syncing, setSyncing] = useState(false), [notice, setNotice] = useState("");
+    const [sallaSyncing, setSallaSyncing] = useState(false);
     const [query, setQuery] = useState(""), [activeOnly, setActiveOnly] = useState(false), [activityOnly, setActivityOnly] = useState(true);
     const [sort, setSort] = useState({ key: "spend_sar", asc: false }), [dialogId, setDialogId] = useState(null);
     const [draftFrom, setDraftFrom] = useState(from), [draftTo, setDraftTo] = useState(to);
@@ -96,7 +97,7 @@ export default function MarketingReports() {
             if (epoch !== request.current) return;
             setData(result.data);
             setDraftFrom(result.data.range.date_from); setDraftTo(result.data.range.date_to);
-        } catch (e) { if (epoch === request.current && e.code !== "ERR_CANCELED") setError("تعذر تحديث التقرير. أعد المحاولة؛ لن نعرض بيانات قديمة على أنها محدثة."); }
+        } catch (e) { if (epoch === request.current && e.code !== "ERR_CANCELED") setError("تعذر تحديث التقرير. أعد المحاولة؛ لن نعرض القراءة السابقة ليست تحديثًا ناجحًا."); }
         finally { if (epoch === request.current) { inFlight.current = false; setBusy(false); } }
     }, [provider, source, accountId, from, to]);
     useEffect(() => { load(); return () => { request.current++; controller.current?.abort(); inFlight.current = false; }; }, [load]);
@@ -132,6 +133,18 @@ export default function MarketingReports() {
         } catch { setNotice("تعذرت المزامنة المباشرة. يمكن إعادة تحديث القراءة من آخر بيانات محفوظة."); }
         finally { setSyncing(false); }
     }
+    async function syncSalla() {
+        if (!data || sallaSyncing) return;
+        setSallaSyncing(true); setNotice("");
+        try {
+            const first = new Date(`${data.range.date_from}T00:00:00Z`); first.setUTCDate(first.getUTCDate() - 1);
+            const last = new Date(`${data.range.date_to}T00:00:00Z`); last.setUTCDate(last.getUTCDate() + 1);
+            const response = await api.post("/salla/sync/orders", { from_date: first.toISOString().slice(0,10), to_date: last.toISOString().slice(0,10) });
+            setNotice(response.data?.already_running ? "مزامنة طلبات سلة قيد التشغيل؛ ستُقرأ النتائج تلقائيًا كل دقيقة." : "بدأت مزامنة طلبات سلة في الخلفية؛ ستُقرأ النتائج تلقائيًا كل دقيقة.");
+            await load({background:true});
+        } catch { setNotice("تعذر بدء مزامنة سلة. أعد المحاولة أو راجع اتصال سلة."); }
+        finally { setSallaSyncing(false); }
+    }
     return <main className="marketing-reports" dir="rtl" data-testid="marketing-reports-page">
         <header className="reports-heading"><div><p>التسويق</p><h1>التقارير</h1><small>{provider === "all" ? "إجماليات المنصات الإعلانية" : `الحملات الإعلانية · ${LABELS[provider]}`}</small></div><SourceSwitch provider={provider} source={source} onChange={v => change({source:v})} /></header>
         <section className="reports-filters" aria-label="فلاتر التقارير"><label>المنصة<select value={provider} onChange={e => { close(); change({ provider:e.target.value, account_id:"" }); }}>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
@@ -139,9 +152,11 @@ export default function MarketingReports() {
             <label>من<input type="date" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} /></label><label>إلى<input type="date" value={draftTo} min={draftFrom} onChange={e => setDraftTo(e.target.value)} /></label>
             <button type="button" className="report-primary" disabled={!draftFrom || !draftTo || draftTo < draftFrom} onClick={() => change({from:draftFrom,to:draftTo})}>تطبيق الفترة</button>
             <button type="button" disabled={busy || syncing} onClick={() => load({background:true})}><ArrowsClockwise size={17} />تحديث النتائج</button>
+            <button type="button" disabled={busy || sallaSyncing} onClick={syncSalla}><ArrowsClockwise size={17} />{sallaSyncing ? "جارٍ طلب المزامنة" : "مزامنة سلة الآن"}</button>
             {provider === "snapchat" && <button type="button" disabled={busy || syncing || currentReport?.selected_account_id === "all"} onClick={sync}><ArrowsClockwise size={17} className={syncing ? "report-spin" : ""} />{syncing ? "جارٍ مزامنة سناب" : "مزامنة سناب الآن"}</button>}
         </section>
         <div className="report-context"><span>النتائج: <b>{source === "salla" ? "طلبات سلة المطابقة للحملات" : "تحويلات المنصة"}</b> · الفترة بتوقيت {provider === "all" || accountId === "all" ? "كل حساب كما في مصدره" : currentReport?.rows?.[0]?.timezone || data?.range?.timezone || "الحساب"}</span><span>تحديث تلقائي كل دقيقة · آخر قراءة {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString("ar-SA") : "—"}</span></div>
+        {data?.reports?.some(r => r.last_sync_at) && <p className="report-footnote">آخر مزامنة للمصدر: {data.reports.filter(r => r.last_sync_at).map(r => `${r.label}: ${new Date(r.last_sync_at).toLocaleString("ar-SA")}`).join(" · ")}</p>}
         {(error || notice) && <p className={error ? "report-alert" : "report-explanation"} role="status">{error || notice}</p>}
         {data?.reports?.some(r => r.status !== "available") && <p className="report-alert" role="status">بعض بيانات المنصات غير متاحة أو غير مرتبطة. لا تُحسب البيانات الناقصة كصفر.</p>}
         <section className="reports-table-panel"><div className="reports-toolbar"><span>جميع المبالغ بالريال السعودي</span><div><input aria-label="بحث في التقرير" placeholder={provider === "all" ? "بحث بالمنصة" : "بحث باسم الحملة أو المعرّف"} value={query} onChange={e => setQuery(e.target.value)} />{provider !== "all" && <><label><input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />النشطة فقط</label><label><input type="checkbox" checked={activityOnly} onChange={e => setActivityOnly(e.target.checked)} />إخفاء الحملات بلا نشاط</label></>}<button type="button" disabled={!displayed.length} onClick={() => downloadCsv(displayed, `reports-${provider}-${data?.range.date_from}.csv`)}><DownloadSimple size={19} />تنزيل</button></div></div>

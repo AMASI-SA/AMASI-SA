@@ -5,9 +5,27 @@
   "state": "WIP implementation, not release ready",
   "scope": "Unified marketing Reports page, same Snapchat V2 account-period reader, separate Salla/provider results, full direct costs and product modal opening new tabs",
   "observed_cause": "Legacy campaigns selected Salla results (49) while V2 account screenshot selected Snapchat conversions (68); legacy and V2 commerce date/read paths differ.",
-  "completed": ["Reports route and Arabic UI scaffold", "Canonical V2 reader reuse", "Optional Salla shipping/payment cost calculation", "Exact-halalah cost allocation", "Initial regression tests"],
-  "validation": ["Python compilation passed", "Initial pytest blocked by unavailable openpyxl in reused test environment; no test pass claim"],
-  "remaining": ["Finish provider readers and coverage review", "Run backend/frontend tests and build", "Verify UI and synchronization", "Source A CI, intent B, governed rehearsal and publish", "Production comparison and release verification"],
+  "completed": [
+    "Reports route and Arabic UI scaffold",
+    "Canonical V2 reader reuse",
+    "Optional Salla shipping/payment cost calculation",
+    "Exact-halalah cost allocation",
+    "Initial regression tests"
+  ],
+  "validation": [
+    "Python compilation passed",
+    "Focused backend regression and existing Snapchat suites: 36 passed",
+    "Focused UI source switching/modal/all-platform/race tests: 4 passed"
+  ],
+  "remaining": [
+    "Finish provider readers and coverage review",
+    "Run backend/frontend tests and build",
+    "Verify UI and synchronization",
+    "Source A CI, intent B, governed rehearsal and publish",
+    "Production comparison and release verification"
+  ],
   "production_changed": false,
-  "next": "Complete isolated test dependencies and execute focused regression tests; review API coverage and data completeness before release."
+  "next": "Complete source review, CI and governed build. Recheck actual shared lease before any deployment action.",
+  "release_blocker": "Shared Emergent guard active=true owned by codex-google-budget-storage-20261029, deployment dada1def704ae968230d63c3c9885508a2a6653d. Do not touch /app or lease until owner closes.",
+  "continuity_note": "Issue1006 refuses comments because it reached GitHub 2500-comment limit. Task STATUS and Draft PR are durable handoff."
 }

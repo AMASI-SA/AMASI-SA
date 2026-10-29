@@ -79,18 +79,23 @@ async def snapchat_report(db, user_id, start, end, account_id=None):
         native_rows = performance["rows"]
         native_total = dict(performance["totals"])
         await _add_sar_spend(db, user_id=user_id, account=account, rows=native_rows, totals=native_total)
-        commerce = await load_salla_campaign_outcomes(db, user_id, account_id=aid,
-            date_from=start, date_to=end, timezone_name=zone,
-            identities=[{"account_id": aid, "campaign_id": r["campaign_id"], "campaign_name": r["campaign_name"]} for r in native_rows],
-            platform_purchases=int(native_total.get("purchases") or 0),
-            campaign_spend_sar={r["campaign_id"]: r.get("spend_sar") for r in native_rows},
-            include_report_costs=True)
+        try:
+            commerce = await load_salla_campaign_outcomes(db, user_id, account_id=aid,
+                date_from=start, date_to=end, timezone_name=zone,
+                identities=[{"account_id": aid, "campaign_id": r["campaign_id"], "campaign_name": r["campaign_name"]} for r in native_rows],
+                platform_purchases=int(native_total.get("purchases") or 0),
+                campaign_spend_sar={r["campaign_id"]: r.get("spend_sar") for r in native_rows},
+                include_report_costs=True)
+            commerce_available = True
+        except Exception:
+            commerce_available = False
+            commerce = {"by_campaign": {}, "summary": {}}
         currency = account.get("currency")
         for item in native_rows:
-            salla = commerce["by_campaign"].get(item["campaign_id"], {"orders": 0, "sales_sar": 0})
+            salla = commerce["by_campaign"].get(item["campaign_id"], {"orders": 0, "sales_sar": 0}) if commerce_available else {"orders": None, "sales_sar": None}
             spend = number(item.get("spend_sar"))
             profit = salla.get("profitability")
-            if profit is None and not salla.get("orders"):
+            if commerce_available and profit is None and not salla.get("orders"):
                 raw = _new_campaign_bucket()
                 profit = finalize_report_costs(_finalize_campaign(raw, spend_sar=spend or 0), raw, spend)
             # Use the source's exact native money/ROAS to derive the SAR value;
@@ -112,7 +117,7 @@ async def snapchat_report(db, user_id, start, end, account_id=None):
         totals.append({"account_id": aid, "purchases": native_total.get("purchases"),
                        "spend_native": native_total.get("spend_native"), "spend_sar": native_total.get("spend_sar"), "currency": currency,
                        "sales_sar": round(native_total["purchase_value_native"] * native_total["exchange_rate_to_sar"], 2) if native_total.get("purchase_value_native") is not None and native_total.get("exchange_rate_to_sar") else None,
-                       "salla_orders": commerce["summary"].get("snapchat_attributed_orders"),
+                       "salla_available": commerce_available, "salla_orders": commerce["summary"].get("snapchat_attributed_orders"),
                        "unmatched_salla_orders": commerce["summary"].get("snapchat_attribution_gap_orders"),
                        "performance_sync_status": performance.get("performance_sync_status")})
         if account.get("last_sync_at"):
@@ -140,11 +145,15 @@ async def other_report(db, user_id, provider, start, end):
         "currency": r.get("spend_currency"), "platform": {"orders": number(r.get("purchases")),
         "sales_sar": number(r.get("revenue_sar_equivalent"))}, "salla": {}, "profitability": None,
         "impressions": r.get("impressions"), "clicks": r.get("clicks")} for r in campaigns]
-    await attach_commerce(db, user_id, provider, start, end, rows)
+    try:
+        await attach_commerce(db, user_id, provider, start, end, rows)
+        commerce_available = True
+    except Exception:
+        commerce_available = False
     summary = next((p for p in data.get("providers", []) if p.get("provider") == provider), {})
     return {"provider": provider, "rows": rows, "accounts": [], "source": "ads_manager_provider_readers",
             "last_sync_at": summary.get("last_sync_at"), "status": "available" if rows else "unavailable",
-            "source_totals": summary.get("metrics") or {}, "coverage": summary.get("performance_coverage") or {}}
+            "commerce_available": commerce_available, "source_totals": summary.get("metrics") or {}, "coverage": summary.get("performance_coverage") or {}}
 
 
 async def attach_commerce(db, user_id, provider, start, end, rows):
