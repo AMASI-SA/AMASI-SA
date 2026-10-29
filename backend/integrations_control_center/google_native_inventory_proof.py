@@ -88,6 +88,16 @@ def product_observations(before, after, variants, traversal_complete):
                 raise ValueError("duplicate_related_value")
             if all(v in labels for v in related_ids):
                 matched = [labels[v] for v in related_ids]
+        if matched is not None and "related_options" in row:
+            explicit = row["related_options"]
+            try:
+                if not isinstance(explicit, list):
+                    raise ValueError("option_set_unproved")
+                option_set = [canonical_id(v) for v in explicit]
+                if len(set(option_set)) != len(option_set) or set(option_set) != {v["option_id"] for v in matched}:
+                    matched = None
+            except ValueError:
+                matched = None
         observed.append({"variant_id": variant_id, "stock": stock(row), "source_option_labels": matched,
                          "size_coverage_verified": False, "purchasability_verified": False})
     status = before.get("status") if before.get("status") in {"sale", "out", "hidden"} else "unknown"

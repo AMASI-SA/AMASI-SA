@@ -43,10 +43,20 @@ def test_ambiguous_raw_variant_facts_never_normalize_into_evidence(variant):
 def test_option_label_requires_exact_ownership_and_exposes_source_stock_flag_only():
     value = raw()
     value["options"] = [{"id": 8, "name": "Size", "values": [{"id": 9, "option_id": 8, "name": "Large", "is_out_of_stock": True}]}]
-    result = product_observations(value, deepcopy(value), [{"id": 7, "stock_quantity": 2, "related_option_values": [9]}], True)
+    result = product_observations(value, deepcopy(value), [{"id": 7, "stock_quantity": 2, "related_option_values": [9], "related_options": [8]}], True)
     assert result["variants"][0]["source_option_labels"][0]["value_label"] == "Large"
     assert "native_option_value_out_of_stock" in result["blocking_reasons"]
     assert result["size_coverage_verified"] is False
+
+
+@pytest.mark.parametrize("related_options", [[10], [8, 8], "8", [], None])
+def test_conflicting_or_malformed_explicit_option_set_cannot_label_variant(related_options):
+    value = raw()
+    value["options"] = [{"id": 8, "name": "Size", "values": [{"id": 9, "option_id": 8, "name": "Large"}]}]
+    result = product_observations(value, deepcopy(value), [{"id": 7, "stock_quantity": 2,
+        "related_option_values": [9], "related_options": related_options}], True)
+    assert result["variants"][0]["source_option_labels"] is None
+    assert result["variants"][0]["stock"]["state"] == "positive"
 
 
 @pytest.mark.parametrize("status", ["hidden", "out", None])
