@@ -1,0 +1,28 @@
+{
+  "status": "WIP_selective_integration_not_deployable",
+  "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "reviewed_runtime": "5ba648258d1bec0fad55c0695429e74d22a7ceb8",
+  "reviewed_final_checkpoint": "9f20b5c425b65b1bbf1cc08b47c3883ed2b8bbad",
+  "scope": "7reviewedruntimefiles selected frominventoryA8b832 differential; existingM6 resume planner and tests preserved; Reports/CAS/nativecurrenthandlers unchanged except5owned policy/standing mutation modules.",
+  "runtime_available": false,
+  "operational_flags_changed": false,
+  "live_calls": false,
+  "new_limits_invented": false,
+  "external_writer_fence_proven": false,
+  "six_policy_mutations": "Mandatory Mongo transaction/epoch; ownerrevoke has no OAuth dependency but requires supportedstorage. No non-atomicfallback. Cannotdeploy before actual production storage/namespace/legacy proof.",
+  "standing": "Shared standing enable/budgetedit/pause reservation and original-proof settlement;100allocations,500nativecampaigns; unknownsend/commit retainsfence andbudget; quota notrefunded. Currentautomaticresume remainsfailclosed; no provenance invented.",
+  "confirmed_gap": "Existing PAUSED creation authorization/settlement is policy-local, not wired to sharedguard. LaunchAllocation remainsstorage-only/unwired and notfundedfirstlaunch authority. This slice cannot be called allpaths-covered; runtimeFalse prevents dispatch via standing.execution_enabled.",
+  "future_retail_overlap": "Retailidentity work touches management/planner/routes plus authority/gatewaytests; no7ownedruntime overlap. Preserve newerproofs on future selective integration; do not transplant retail wholemodules.",
+  "integration_resolutions": [
+    "RetainedM6 saved-enable-preview denial and gatewayno-nativewrite regression; merged transactionalfixture/guardclock changes",
+    "CI retains currentM6dependency pins, mandatoryreplica execution, andM6suggestionbackend/UI testselection",
+    "Old1606/frozenstoragehelper andallcurrentroutes/reporting/CAS untouched"
+  ],
+  "tests": "Checkpoint beforefreshlocal/actualreplicaCI; historicalWIPproof notnewsourceproof.",
+  "production_blockers": [
+    "Actual1621 explicit owner commit/readback andnamespacepermission/legacyresult",
+    "Complete validnativebudgetresource/currency/timezone/inventory evidence plusunresolvedlegacycommitment reconciliation",
+    "Creationcommonallocation migration remainsseparate bounded design andtests; no externalwriter fencing orfirstlaunchprovenance claim"
+  ],
+  "next": "Fresh localregression plusrealreplicaCI andindependentreview, persist remote; no release/intent orpolicy/providerwrites."
+}

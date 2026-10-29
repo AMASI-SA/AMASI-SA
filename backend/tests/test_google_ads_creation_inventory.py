@@ -186,6 +186,10 @@ async def test_owner_activation_rejects_changed_positive_variant_even_with_same_
 @pytest.mark.asyncio
 @pytest.mark.parametrize("changed", [False, True])
 async def test_final_claim_rechecks_variant_fingerprint_before_reserving(monkeypatch, changed):
+    # Explicit test-only capability so this still reaches inventory validation
+    # after the mandatory guard migration; production remains literal false.
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, "budget_guard_runtime_available", lambda: True)
     values = prepared_case()
     values["product"] = detailed(raw_product(variants=[variant()]))
     # The fixture projection supports top-level canonical URLs as in real rows.
@@ -195,7 +199,9 @@ async def test_final_claim_rechecks_variant_fingerprint_before_reserving(monkeyp
     docs, native, _ = claim_fixture.documents(); db = claim_fixture.DB(docs)
     if changed:
         db[claim_fixture.PRODUCT_COLLECTION].rows[0]["variants"][0]["quantity"] = 0
-        with pytest.raises(HTTPException): await claim_fixture.authorize(db, native)
+        with pytest.raises(HTTPException) as error:
+            await claim_fixture.authorize(db, native)
+        assert error.value.detail["code"] != "google_creation_execution_disabled"
         assert not db[claim_fixture.CREATION_POLICIES].updates
     else:
         reply = await claim_fixture.authorize(db, native)

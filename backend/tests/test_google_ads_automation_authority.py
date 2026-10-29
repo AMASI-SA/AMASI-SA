@@ -26,9 +26,14 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
     for fact in analysis["result"]["recommendations"][0]["evidence"]:
         fact["observed_at"] = current.isoformat()
     inventory = data["workspace"]
+    inventory["source"] = "google_ads_api"
     inventory["observed_at"] = current.isoformat()
     for campaign in inventory["campaigns"]:
         campaign["observed_at"] = current.isoformat()
+    for campaign in inventory["campaigns"]:
+        campaign.update(budget_resource=f"customers/123/campaignBudgets/{campaign['campaign_id']}",shared_budget=False)
+        if campaign['campaign_id'] == '456':
+            campaign['budget_resource'] = 'customers/123/campaignBudgets/999'
     snapshot = {"campaign": {"id":"456", "resourceName":"customers/123/campaigns/456", "status":"PAUSED" if action == "RESUME_CAMPAIGN" else "ENABLED",
         "advertisingChannelType":"SEARCH", "campaignBudget":"customers/123/campaignBudgets/999"},
         "campaign_budget":{"resourceName":"customers/123/campaignBudgets/999", "period":"DAILY", "amountMicros":"20000000", "explicitlyShared":False, "referenceCount":1}, "groups":[],"ads":[]}
@@ -56,6 +61,34 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
         "mezan_integrations_v2":[{"user_id":"owner","provider":"google_ads","connection_status":"connected","connection_provenance":"api_connection"}],
         "mezan_integration_accounts_v2":[{"user_id":"owner","provider":"google_ads","ad_account_id":"123","connection_status":"connected","connection_provenance":"api_connection","mezan_selected":True}]}
     return docs, native
+
+
+@pytest.mark.parametrize("change", ["inventory_resource", "campaign_resource", "snapshot_resource",
+    "shared", "missing_shared", "reference_count", "missing_reference_count"])
+def test_native_proof_rejects_different_or_unproved_budget_identity(change):
+    docs, evidence = case_documents("CHANGE_BUDGET")
+    row = docs[PROPOSALS][0]
+    policy = docs[AUTOMATION_POLICIES][0]
+    target = next(c for c in evidence["inventory"]["campaigns"] if c["campaign_id"] == "456")
+    snapshot = evidence["campaign_snapshot"]
+    if change == "inventory_resource": target["budget_resource"] = "customers/123/campaignBudgets/1000"
+    elif change == "campaign_resource": snapshot["campaign"]["campaignBudget"] = "customers/123/campaignBudgets/1000"
+    elif change == "snapshot_resource": snapshot["campaign_budget"]["resourceName"] = "customers/123/campaignBudgets/1000"
+    elif change == "shared": snapshot["campaign_budget"]["explicitlyShared"] = True
+    elif change == "missing_shared": snapshot["campaign_budget"].pop("explicitlyShared")
+    elif change == "reference_count": snapshot["campaign_budget"]["referenceCount"] = 2
+    else: snapshot["campaign_budget"].pop("referenceCount")
+    # The before digest may legitimately match the same individual read; that
+    # alone cannot prove it is the budget used by the independently read inventory.
+    row["before_digest"] = digest(snapshot)
+    with pytest.raises(HTTPException) as error:
+        authority._native_proof(row, evidence, policy, NOW)
+    assert error.value.detail["code"] == "google_automation_native_evidence_invalid"
+
+
+def test_native_proof_accepts_same_unshared_budget_across_both_reads():
+    docs, evidence = case_documents("CHANGE_BUDGET")
+    authority._native_proof(docs[PROPOSALS][0], evidence, docs[AUTOMATION_POLICIES][0], NOW)
 
 
 def matches(row, query):
@@ -88,7 +121,9 @@ class Collection:
         return deepcopy(row)
     def find(self,scope,projection=None):
         rows=[r for r in self.rows if matches(r,scope)]
-        if projection:rows=[{k:deepcopy(v) for k,v in r.items() if projection.get(k)==1} for r in rows]
+        if projection:
+            rows=[{k:deepcopy(v) for k,v in row.items() if projection.get(k)==1} if any(value==1 for value in projection.values())
+                else {k:deepcopy(v) for k,v in row.items() if projection.get(k)!=0} for row in rows]
         return Cursor(rows)
     async def create_index(self,*args,**kwargs): return "index"
     async def update_one(self,scope,update):
@@ -101,9 +136,14 @@ class Collection:
         return SimpleNamespace(matched_count=1)
 
 
-class DB:
-    def __init__(self,documents): self.collections={k:Collection(v) for k,v in documents.items()};self.users=self["users"]
-    def __getitem__(self,key):return self.collections[key]
+from tests.google_ads_transactional_fake import TransactionalDBMixin
+
+
+class DB(TransactionalDBMixin):
+    def __init__(self,documents):
+        self._tx_setup({key:Collection(rows) for key,rows in documents.items()})
+        self.collections=self._tx_collections;self.users=self['users']
+    def __getitem__(self,key):return self._tx_get(key)
     def __getattr__(self,key):return self[key]
 
 
@@ -111,8 +151,20 @@ async def authorize(db,native,**kwargs):
     return await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal1",execution_claim_id="claim1",native_evidence=native,current=NOW,**kwargs)
 
 
+def freeze_guard_clock(monkeypatch, current):
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):return current
+    monkeypatch.setattr(guard,'datetime',Clock)
+
+
 @pytest.fixture(autouse=True)
-def feature_on(monkeypatch):monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED","true")
+def feature_on(monkeypatch):
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    freeze_guard_clock(monkeypatch,NOW)
+    monkeypatch.setattr(guard,'budget_guard_runtime_available',lambda:True)
+    monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED","true")
 
 
 @pytest.mark.asyncio
@@ -122,6 +174,26 @@ async def test_default_off_creates_no_claim_or_database_writes(monkeypatch):
     with pytest.raises(HTTPException) as error:await authorize(db,native)
     assert error.value.detail["code"] == "google_automation_execution_disabled"
     assert not db[AUTOMATION_POLICIES].updates
+
+
+@pytest.mark.asyncio
+async def test_unresolved_legacy_claim_without_common_allocation_stays_held_for_proven_terminal_recovery():
+    from integrations_control_center.google_ads_automation_budget_guard import BUDGET_GUARDS
+    docs,native=case_documents();db=DB(docs)
+    await authorize(db,native)
+    # An unresolved pre-migration claim has no safe terminal proof. No
+    # common allocation may be invented to bypass the uncertain outcome.
+    db[BUDGET_GUARDS].rows=[]
+    db[PROPOSALS].rows[0].update(status='uncertain',submission_started=True)
+    held=deepcopy(db[AUTOMATION_POLICIES].rows[0])
+    with pytest.raises(HTTPException) as error:
+        await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id='claim1',current=NOW)
+    assert error.value.detail['code']=='google_budget_guard_settlement_unproved'
+    assert error.value.detail['preserve_execution_fence'] is True
+    assert error.value.detail['automatic_retry_allowed'] is False
+    assert db[AUTOMATION_POLICIES].rows[0]==held
+    assert db[BUDGET_GUARDS].rows==[]
+    assert db[FENCES].rows[0]['status']=='claimed'
 
 
 @pytest.mark.asyncio
@@ -188,20 +260,17 @@ async def test_revoke_winning_policy_cas_prevents_authorization():
     def revoke(collection):collection.rows[0].update(enabled=False,revision=4)
     db[AUTOMATION_POLICIES].before_update=revoke
     with pytest.raises(HTTPException) as error:await authorize(db,native)
-    assert error.value.detail["code"] == "google_automation_policy_claim_changed"
+    assert error.value.detail["code"] == "google_budget_guard_policy_changed"
     assert "_dispatch_claim" not in db[AUTOMATION_POLICIES].rows[0]
 
 
 @pytest.mark.asyncio
 async def test_ambiguous_policy_cas_acknowledgement_is_not_authorization():
     docs,native=case_documents();db=DB(docs)
-    original=db[AUTOMATION_POLICIES].update_one
-    async def lost_ack(*args,**kwargs):
-        await original(*args,**kwargs)
-        raise RuntimeError("private transport failure")
-    db[AUTOMATION_POLICIES].update_one=lost_ack
+    async def lost_ack():raise RuntimeError("private transport failure")
+    db.after_commit=lost_ack
     with pytest.raises(HTTPException) as error:await authorize(db,native)
-    assert error.value.detail["code"] == "google_automation_authorization_unconfirmed"
+    assert error.value.detail["code"] == "google_budget_guard_commit_unconfirmed"
     assert "private" not in str(error.value.detail)
     assert error.value.detail["authorization_cas_attempted"] is True
     assert error.value.detail["preserve_execution_fence"] is True
@@ -216,7 +285,7 @@ async def test_uncertain_claim_survives_disabled_policy_and_cannot_be_released_b
     db[PROPOSALS].rows[0].update(status="uncertain",submission_started=True)
     with pytest.raises(HTTPException) as error:
         await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW+timedelta(days=2))
-    assert error.value.detail["code"] == "google_automation_settlement_unproved"
+    assert error.value.detail["code"] == "google_budget_guard_settlement_unproved"
     assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]
 
 
@@ -259,11 +328,9 @@ async def test_cancellation_after_policy_commit_retains_claim_and_classifies_fen
     import asyncio
     docs,native=case_documents();db=DB(docs)
     committed=asyncio.Event();never=asyncio.Event()
-    original=authority._linearize_claim
-    async def commit_then_pause(*args,**kwargs):
-        await original(*args,**kwargs)
+    async def commit_then_pause():
         committed.set();await never.wait()
-    monkeypatch.setattr(authority,"_linearize_claim",commit_then_pause)
+    db.after_commit=commit_then_pause
     task=asyncio.create_task(authorize(db,native))
     await asyncio.wait_for(committed.wait(),1)
     task.cancel()
@@ -278,12 +345,9 @@ async def test_cancellation_after_policy_commit_retains_claim_and_classifies_fen
 @pytest.mark.asyncio
 async def test_global_write_switch_disabled_during_cas_prevents_a_permission_return(monkeypatch):
     docs,native=case_documents();db=DB(docs)
-    original=authority._linearize_claim
-    async def commit_then_disable(*args,**kwargs):
-        result=await original(*args,**kwargs)
+    async def commit_then_disable():
         monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED","false")
-        return result
-    monkeypatch.setattr(authority,"_linearize_claim",commit_then_disable)
+    db.after_commit=commit_then_disable
     with pytest.raises(HTTPException) as error:await authorize(db,native)
     assert error.value.detail["code"] == "google_automation_execution_disabled"
     assert error.value.detail["preserve_execution_fence"] is True
@@ -333,7 +397,7 @@ async def test_reserved_daily_slot_is_not_reset_by_cancel_or_policy_revisions():
 
 
 @pytest.mark.asyncio
-async def test_history_and_existing_reservation_are_unioned_without_double_counting():
+async def test_history_and_existing_reservation_are_unioned_without_double_counting(monkeypatch):
     docs,native=case_documents();configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=2
     row=docs[PROPOSALS][0]
     row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
@@ -342,14 +406,16 @@ async def test_history_and_existing_reservation_are_unioned_without_double_count
     db[PROPOSALS].rows[0].update(status="completed",verified=True,submission_started=True,submitted_at=NOW.isoformat(),executed_at=NOW.isoformat())
     await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
     later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="CHANGE_BUDGET")
+    freeze_guard_clock(monkeypatch,later)
     result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
     assert result["authorized"] is True
     assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"][0]["proposal_ids"] == ["proposal1","proposal2"]
 
 
 @pytest.mark.asyncio
-async def test_quota_rollover_uses_account_local_midnight_with_unchanged_utc_date():
+async def test_quota_rollover_uses_account_local_midnight_with_unchanged_utc_date(monkeypatch):
     before=datetime(2026,10,25,20,59,tzinfo=timezone.utc);after=before+timedelta(minutes=2)
+    freeze_guard_clock(monkeypatch,before)
     docs,native=case_documents(current=before);configured=docs[AUTOMATION_POLICIES][0];configured["max_actions_per_day"]=1
     row=docs[PROPOSALS][0]
     row["automation_source"]=authority.make_automation_source(configured,analysis_id="analysis1",recommendation_id="rec1")
@@ -359,6 +425,7 @@ async def test_quota_rollover_uses_account_local_midnight_with_unchanged_utc_dat
     db[PROPOSALS].rows[0].update(status="failed",submission_started=False,safe_error="execution_cancelled_before_dispatch")
     await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=before)
     fresh=next_attempt(db,after)
+    freeze_guard_clock(monkeypatch,after)
     result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=after)
     assert result["authorized"] is True and before.date() == after.date()
     assert [b["date"] for b in db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"]] == ["2026-10-25","2026-10-26"]
@@ -519,7 +586,7 @@ async def test_unproved_unknown_or_wrong_claim_stop_marker_cannot_settle(change)
     stopped=acknowledged_floor_stop_row(db[PROPOSALS].rows[0]);change(stopped);db[PROPOSALS].rows[0]=stopped
     with pytest.raises(HTTPException) as error:
         await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
-    assert error.value.detail["code"] == "google_automation_settlement_unproved"
+    assert error.value.detail["code"] == "google_budget_guard_settlement_unproved"
     assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]
 
 
@@ -530,4 +597,4 @@ async def test_stop_marker_time_cannot_predate_its_policy_claim():
     db[AUTOMATION_POLICIES].rows[0]["_dispatch_claim"]["authorized_at"]=(NOW+timedelta(seconds=1)).isoformat()
     with pytest.raises(HTTPException) as error:
         await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
-    assert error.value.detail["code"] == "google_automation_settlement_unproved"
+    assert error.value.detail["code"] == "google_budget_guard_settlement_unproved"

@@ -5,6 +5,15 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def accepted_guard_in_unit_scope(monkeypatch):
+    # Simulate an accepted code migration only for unit contract checks. This is
+    # not transaction, replica, provider or production activation evidence.
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
+
 from fastapi import HTTPException
 
 from integrations_control_center import google_ads_automation_creation_authority as authority
