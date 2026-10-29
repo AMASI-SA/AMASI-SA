@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "implementation_wip_standalone_unattached",
+  "state": "standalone_backend_wip_actual_replica_ci_pending",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -76,8 +76,15 @@
     "Source digest is local response content hash, never provider revision; source observation interval explicit, no snapshot immutability",
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
-  "verification": "23focusedlocal -Werror tests passed0.96s; initialmissingmodule red observed. Route/Mongo/CI tests pending; no actualproviderbehavior claim.",
-  "next": "Add standaloneAPI and actualMongo owner/revision/connection race tests plus dedicatedCI; independentreview before rootattachment.",
+  "verification": {
+    "local": "31focused-Werror passed1.01s, zero skips; initialmissingmodule red observed",
+    "actual_mongo": "7collectedcases owner/same-revisionfields/planrevision/connectionrevision/storeidentity/staff gates; no localMongo execution",
+    "ci": "dedicated38total/7actualMongo/zero-skips gate pending remotecheckpoint"
+  },
+  "next": "Run dedicated actualMongo CI, independent source review; root later attaches guarded route/UI on latest production. No liveprovider call or publish.",
   "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
-  "implemented": "New purevalidation, boundedfixedGETreader, standaloneownerroute. Membership enumeration only; allinventoryunproved, no adselection. Missingstoredscope allowednativeprobe; exactendpoint403 permission_unproved. NativeperPage60 acceptedandvalidated; declaredoversize stopsbeforeexpansion. No sharedfiles or providercalls."
+  "implemented": "Membership enumeration only, not live inventorydetails. New3modules, pure/reader/API/Mongo tests and dedicatedUbuntu22.04/Mongo8.0.26 CI. Allinventoryunproved/adselectionfalse; Salla ids only, Mezanmappingunproved and unresolvednonnumericexclusions explicit.",
+  "first_slice_permission": "Only fixed storeinfo/category/categoryproducts GETs; nativecategories read success proves currentendpoint capability. No products/variants endpoint called or productspermission claimed until futureinventory slice.",
+  "transport_bound_limit": "Existing shared call_salla loads JSON before new512KiB decodedresponse guard; guard prevents pagination expansion, not a transport/peakmemory cap. No providerETag or transactional snapshot claim.",
+  "source_limit": "URL-only discovery matches top-level provider category rows, not arbitrary descendants/slug inference. Storedstatus/scope are not capability truth; nativeerrors explicit. No liveaccount/grant validation performed."
 }

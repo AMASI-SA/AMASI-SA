@@ -113,6 +113,8 @@ async def preview_live_category(db, *, owner_id, fields, category_id=None, calle
         "source": "salla_owned_category_products_fixed_get", "provider_revision": None, "remote_snapshot_atomic": False,
         "pagination_traversal_complete": complete, "pages_read": pages, "products_observed": len(rows),
         "response_digest": digest(category_hashes + hashes), "stored_scope_authority": "declared_or_unknown",
+        "unresolved_exclusion_ids": sorted(v for v in excluded if not isinstance(v, str) or not re.fullmatch(r"[1-9][0-9]{0,29}", v)),
+        "mezan_product_mapping_verified": False,
         "inventory_verified": False, "execution_authorized": False,
         "products": [{"salla_product_id": canonical_id(r["id"]), "membership": "observed_category_endpoint",
             "excluded": canonical_id(r["id"]) in excluded, "category_hidden": category_status == "hidden",

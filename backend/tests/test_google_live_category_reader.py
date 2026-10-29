@@ -102,3 +102,29 @@ async def test_bound_does_not_expand_declared_oversized_category_or_follow_next_
     result = await preview_live_category(db, owner_id="owner", fields=fields, caller=caller)
     assert result["products_observed"] == 60 and result["pagination_traversal_complete"] is False
     assert len([p for p, _ in caller.calls if p.endswith("/products")]) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["total_drift", "duplicate", "repeated_page"])
+async def test_multi_page_drift_and_duplicate_membership_do_not_claim_complete(failure):
+    db, caller, fields = setup()
+    original = caller.__call__
+    async def multiple(db, owner, method, path, *, params):
+        if path.endswith("/products"):
+            page = params["page"]
+            return paged([{"id": 1 if failure == "duplicate" else page}], perPage=1,
+                total=3 if failure == "total_drift" and page == 2 else 2,
+                totalPages=3 if failure == "total_drift" and page == 2 else 2,
+                currentPage=1 if failure == "repeated_page" else page)
+        return await original(db, owner, method, path, params=params)
+    with pytest.raises(ValueError):
+        await preview_live_category(db, owner_id="owner", fields=fields, caller=multiple)
+
+
+@pytest.mark.asyncio
+async def test_missing_category_visibility_is_unknown_never_defaults_active():
+    db, caller, fields = setup()
+    caller.responses["/categories/8"]["data"].pop("status")
+    result = await preview_live_category(db, owner_id="owner", fields=fields, caller=caller)
+    assert result["category_status"] == "unknown"
+    assert all(p["eligible_for_ad_selection"] is False for p in result["products"])
