@@ -1,13 +1,19 @@
 {
-  "status": "WIP_selective_guard_reintegration_floor_not_implemented",
+  "status": "WIP_atomic_creation_floor_implemented_actual_replica_CI_pending",
   "base": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
   "reviewed_source": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
   "scope": "Typed atomic PAUSED creation-only submission floor; preserve all retail/source integration files. runtime remains false.",
   "path_overlap": "No overlap between reviewed M6-relative guard runtime/test/workflow patch and M6-to-retail source changes; applied exact patch successfully. No release intent copied.",
   "production_changed": false,
-  "next": "Implement typed floor transaction and narrow management branch; unit and real Mongo race/ambiguous commit acceptance plus independent review required.",
+  "next": "Push source and Draft PR; inspect actual41Mongo/full CI; independent budget_audit review. Preserve runtimefalse, production prerequisites, metadata/externalwriter limitations.",
   "limitations": [
     "No shared metadata/product/external Google writer serialization",
     "Not deployable; production prerequisites and floor acceptance pending"
-  ]
+  ],
+  "runtime_available": false,
+  "tests": {
+    "focused_unit": "134 passed3.79s -Werror; floor6+authority/gateway/guard",
+    "replica": "4 new cases collected only; no localMongo. DedicatedCI requires41 actualMongo and143total; full requires4floor+8paused+9oldcreation exactcounts."
+  },
+  "floor_contract": "Typed commonTX reloads current policy rev/enabled/digest, exact claim+ledger+allocation, original intent/proposal operation binding and native fence. Proposal submitted/claim/marker and guard epoch committed in one raw command. Revocation/cancellation before boundary blocks; positiveACK means inflight. Unknown floor ACK yields no HTTP and retains hold/fence; no retry or cleanup inference."
 }

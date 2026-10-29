@@ -303,12 +303,13 @@ async def test_active55_reserves_paused15_within_explicit100_cap_without_enable(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('flag',['GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','GOOGLE_ADS_AUTOMATION_WORKER_ENABLED','GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED'])
 async def test_stop_after_acked_floor_never_http_and_preserves_floor(monkeypatch,flag):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def stop(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv(flag,'false')
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def stop(database,proposal):
+        result=await original(database,proposal)
+        monkeypatch.setenv(flag,'false')
         return result
-    monkeypatch.setattr(management,'record_event',stop)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',stop)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])
@@ -322,12 +323,16 @@ async def test_stop_after_acked_floor_never_http_and_preserves_floor(monkeypatch
 
 @pytest.mark.asyncio
 async def test_floor_ack_loss_has_no_http_or_no_http_marker_and_retains_reservation(monkeypatch):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def lose(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('lost floor ACK')
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=guard._commit_once
+    calls=0
+    async def lose(*args):
+        nonlocal calls
+        calls+=1
+        result=await original(*args)
+        if calls==2:raise TimeoutError('lost floor ACK')
         return result
-    monkeypatch.setattr(management,'record_event',lose)
+    monkeypatch.setattr(guard,'_commit_once',lose)
     result=await execute(db,row)
     assert result['status']=='uncertain' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])
@@ -509,20 +514,18 @@ async def test_committed_claim_cancellation_stays_held_then_stale_cancel_settles
 @pytest.mark.asyncio
 async def test_terminal_cancel_wins_before_old_floor_without_resurrection(monkeypatch):
     from integrations_control_center import google_ads_automation_creation_authority as authority
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def cancel(database,proposal,status,**kwargs):
-        if status=='submitted':
-            await database[management.PROPOSALS].update_one({'proposal_id':proposal['proposal_id'],
-                'execution_claim_id':proposal['execution_claim_id'],'status':'approved','submission_started':False},
-                {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch'}})
-            await authority.settle_google_creation_claim(database,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
-            await management._release_fence(database,proposal)
-        return await original(database,proposal,status,**kwargs)
-    monkeypatch.setattr(management,'record_event',cancel)
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def cancel(database,proposal):
+        await database[management.PROPOSALS].update_one({'proposal_id':proposal['proposal_id'],
+            'execution_claim_id':proposal['execution_claim_id'],'status':'approved','submission_started':False},
+            {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch'}})
+        await authority.settle_google_creation_claim(database,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
+        await management._release_fence(database,proposal)
+        return await original(database,proposal)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',cancel)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is False and provider.writes==0
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='released'
-
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('tamper',['identity','ownership','missing_policy'])
@@ -558,12 +561,13 @@ async def test_claim_ack_for_wrong_creation_identity_cannot_reach_native_floor(m
 
 @pytest.mark.asyncio
 async def test_native_proof_expiring_during_acked_floor_never_reaches_http(monkeypatch):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def slow_floor(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':advance(monkeypatch,NOW+timedelta(seconds=91))
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def slow_floor(database,proposal):
+        result=await original(database,proposal)
+        advance(monkeypatch,NOW+timedelta(seconds=91))
         return result
-    monkeypatch.setattr(management,'record_event',slow_floor)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',slow_floor)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])

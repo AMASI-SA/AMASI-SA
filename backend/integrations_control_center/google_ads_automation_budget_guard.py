@@ -104,6 +104,14 @@ class PausedCreationReservation:
 
 
 @dataclass(frozen=True)
+class PausedCreationDispatchFloor:
+    proposal_id: str
+    execution_claim_id: str
+    confirmation_digest: str
+    operations_digest: str
+
+
+@dataclass(frozen=True)
 class PausedCreationSettlement:
     execution_claim_id: str
 
@@ -360,6 +368,13 @@ def _validate_guard(row, scope):
 
 
 def _command(command):
+    if isinstance(command, PausedCreationDispatchFloor):
+        if (any(not isinstance(value, str) or not _ID.fullmatch(value)
+                for value in (command.proposal_id, command.execution_claim_id))
+            or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value)
+                for value in (command.confirmation_digest, command.operations_digest))):
+            _fail('google_budget_guard_command_invalid')
+        return command
     if isinstance(command, PausedCreationReservation):
         if (any(not isinstance(value, str) or not _ID.fullmatch(value)
                 for value in (command.proposal_id, command.execution_claim_id))
@@ -749,7 +764,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             update.update(allocations=old['allocations'], active_claim=None)
             result = {'kind': 'standing_settlement', 'allocation_id': command.allocation_id,
                 'quota_refunded': False,'legacy_recovered':legacy}
-        elif isinstance(command, (PausedCreationReservation, PausedCreationSettlement)):
+        elif isinstance(command, (PausedCreationReservation, PausedCreationSettlement, PausedCreationDispatchFloor)):
             from .google_ads_automation_creation_authority import _guard_paused_creation_command
             allocations, active_claim, result = await _guard_paused_creation_command(db, session=session,
                 snapshot=snapshot, command=command, operation_id=operation_id, current=datetime.fromisoformat(stamp))

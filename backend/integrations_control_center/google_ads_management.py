@@ -426,7 +426,11 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         submitted = True
         # The durable dispatch floor has no blocking audit call between its
         # acknowledgement and provider dispatch. Events remain in the proposal.
-        await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
+        if automation and kind == "standing_creation":
+            from .google_ads_automation_creation_authority import acknowledge_paused_creation_dispatch_floor
+            await acknowledge_paused_creation_dispatch_floor(db, row)
+        else:
+            await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
         if automation:
             # No await between this kill-switch observation and the HTTP call.
             # The acknowledged floor remains durable when dispatch is stopped.

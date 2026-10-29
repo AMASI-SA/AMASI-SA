@@ -503,7 +503,7 @@ async def _settle(db, *, user_id, account_id, claim_id, current):
 
 async def _guard_paused_creation_command(db, *, session, snapshot, command, operation_id, current):
     """Internal same-session boundary; never called by an HTTP owner payload."""
-    from .google_ads_automation_budget_guard import (PausedCreationReservation, MAX_ALLOCATIONS,
+    from .google_ads_automation_budget_guard import (PausedCreationReservation, PausedCreationDispatchFloor, MAX_ALLOCATIONS,
         thaw_snapshot, _fail as guard_fail)
     from .google_ads_paused_creation_budget import SessionDatabase, account_exposure, allocation_id
     scope = {'user_id': snapshot.user_id, 'account_id': snapshot.account_id}
@@ -513,6 +513,65 @@ async def _guard_paused_creation_command(db, *, session, snapshot, command, oper
         guard_fail('google_budget_guard_creation_policy_missing')
     ledger, _ = _policy_ledger(policy)
     view = SessionDatabase(db, session)
+    if isinstance(command, PausedCreationDispatchFloor):
+        # The common guard epoch conflicts with all mandatory policy mutations;
+        # this proposal write also conflicts with owner cancellation. Metadata,
+        # product and external Google writers are not serialized by this floor.
+        entry = policy.get('_creation_claim')
+        if (not isinstance(entry, dict) or entry.get('state') != 'reserved'
+            or entry.get('execution_claim_id') != command.execution_claim_id
+            or entry.get('proposal_id') != command.proposal_id
+            or ledger.get(entry.get('creation_identity')) != entry):
+            guard_fail('google_budget_guard_creation_binding_unproved')
+        typed = contract.GoogleAutomationCreationPolicy.model_validate(creation_policy_snapshot(policy))
+        if (not typed.enabled or policy.get('updated_by') != snapshot.user_id
+            or policy.get('configuration_blockers') or policy['revision'] != entry['policy_revision']
+            or contract._digest(typed.model_dump(mode='json')) != entry['policy_digest']):
+            guard_fail('google_budget_guard_policy_changed')
+        row = await view[management.PROPOSALS].find_one({**scope, 'proposal_id': command.proposal_id,
+            'execution_claim_id': command.execution_claim_id, 'status': 'approved',
+            'submission_started': False}, {'_id': 0})
+        if not row or not await view[management.FENCES].find_one({**scope,
+            'proposal_id': command.proposal_id, 'execution_claim_id': command.execution_claim_id,
+            'status': 'claimed'}, {'_id': 0}):
+            guard_fail('google_budget_guard_creation_binding_unproved')
+        saved = await _saved_intent(view, scope, entry['creation_identity'])
+        _bound(row, saved['intent'])
+        if (row['confirmation_digest'] != command.confirmation_digest
+            or row['confirmation_digest'] != entry['confirmation_digest']
+            or management.digest(row['operations']) != command.operations_digest
+            or command.operations_digest != entry['operations_digest']):
+            guard_fail('google_budget_guard_creation_binding_unproved')
+        key = allocation_id(entry['creation_identity'], command.execution_claim_id)
+        allocation = old['allocations'].get(key)
+        active = old.get('active_claim')
+        if (not isinstance(allocation, dict) or allocation.get('kind') != 'paused_creation'
+            or allocation.get('state') != 'reserved' or allocation.get('dispatch_marker') is not None
+            or allocation.get('creation_entry_digest') != management.digest(entry)
+            or allocation.get('proposal_id') != command.proposal_id
+            or allocation.get('execution_claim_id') != command.execution_claim_id
+            or not isinstance(active, dict) or active.get('allocation_id') != key
+            or active.get('execution_claim_id') != command.execution_claim_id):
+            guard_fail('google_budget_guard_creation_binding_unproved')
+        stamp = current.isoformat()
+        marker = {'operation_id': operation_id, 'proposal_id': command.proposal_id,
+            'execution_claim_id': command.execution_claim_id, 'submitted_at': stamp,
+            'policy_revision': policy['revision'], 'confirmation_digest': command.confirmation_digest,
+            'operations_digest': command.operations_digest}
+        changed = await view[management.PROPOSALS].update_one({**scope,
+            'proposal_id': command.proposal_id, 'execution_claim_id': command.execution_claim_id,
+            'status': 'approved', 'submission_started': False,
+            'confirmation_digest': command.confirmation_digest, 'operations': row['operations']},
+            {'$set': {'status': 'submitted', 'submission_started': True, 'submitted_at': stamp,
+                'updated_at': stamp, 'reconcile_after': (current + timedelta(seconds=30)).isoformat(),
+                'creation_dispatch_marker': marker},
+             '$push': {'events': {'$each': [{'status': 'submitted', 'at': stamp}], '$slice': -100}}})
+        if changed.matched_count != 1:
+            guard_fail('google_budget_guard_policy_changed')
+        return {**old['allocations'], key: {**allocation, 'dispatch_marker': marker}}, active, {
+            'kind': 'paused_creation_dispatch_floor', 'submission_started': True,
+            'submitted_at': stamp, 'reconcile_after': (current + timedelta(seconds=30)).isoformat(),
+            'creation_dispatch_marker': marker, 'metadata_writers_serialized': False}
     if isinstance(command, PausedCreationReservation):
         if (old['active_claim'] is not None or len(old['allocations']) >= MAX_ALLOCATIONS
             or (snapshot.standing_policy or {}).get('_dispatch_claim') is not None):
@@ -727,3 +786,24 @@ async def revalidate_committed_google_creation_claim(db, *, user_id, account_id,
         if isinstance(exc.detail, dict):
             exc.detail.update(preserve_execution_fence=True, automatic_retry_allowed=False)
         raise exc from None
+
+
+async def acknowledge_paused_creation_dispatch_floor(db, row):
+    """Only a positive one-attempt common transaction ACK crosses the floor.
+
+    Unknown ACK never returns permission, never retries and retains the account
+    fence/reservation. A later revoke may mark this acknowledged floor in flight.
+    """
+    from . import google_ads_automation_budget_guard as guard
+    claim = row['execution_claim_id']
+    command = guard.PausedCreationDispatchFloor(row['proposal_id'], claim,
+        row['confirmation_digest'], management.digest(row['operations']))
+    capability = await guard.probe_google_budget_guard_transactions(db)
+    result = await guard.run_google_budget_guard_transaction(db, user_id=row['user_id'],
+        account_id=row['account_id'], capability=capability, operation_id='paused_floor_' + management.digest({
+            'proposal_id': row['proposal_id'], 'execution_claim_id': claim}), planner=lambda snapshot: command)
+    if result.get('committed') is not True or result.get('kind') != 'paused_creation_dispatch_floor':
+        _fail('google_creation_dispatch_floor_unconfirmed')
+    row.update(status='submitted', submission_started=True,
+        **{key: result[key] for key in ('submitted_at', 'reconcile_after', 'creation_dispatch_marker')})
+    return result
