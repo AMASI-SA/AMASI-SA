@@ -1,0 +1,891 @@
+{
+  "status": "fresh_direct_production_SourceA_locally_verified_remote_CI_pending",
+  "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+  "base_tree": "7b9d58160619fc16756cf330fde6523b24156e71",
+  "reviewed_feature_source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1",
+  "reviewed_feature_tree": "51e3063eedc97fa1d70ee508285421b7c2ab5321",
+  "sealed_evidence": "77dbd97127c70ecb8749c6b32415b498592a19cf",
+  "sources": {
+    "native": "e51b76393c517f7875d447ed242ec5af054ac918",
+    "saved_fields_fix": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
+    "prior_backend": "b3ea651cced66b6171ba379806b955879409a3b3",
+    "prior_child": "d1b0d65c422cef4fa36f59405270a877bf3d7c27"
+  },
+  "selected_nondocument_paths": 96,
+  "feature_manifest": [
+    {
+      "path": ".github/workflows/google-ads-full-management.yml",
+      "reviewed_blob": "5423845a1ea6fa4128055b914de140e45b95dc4d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-category-membership.yml",
+      "reviewed_blob": "72e767877fa61fbfdfa59dfa0a395cac58ceb951",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-linked-campaign-evidence.yml",
+      "reviewed_blob": "f2f03389924b1798f0f45741626ee00467af1180",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-live-category-preview.yml",
+      "reviewed_blob": "60d203230bb1606665a834c945a73713d723af09",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-native-inventory-preview.yml",
+      "reviewed_blob": "54d019c2f3ef0446cff1b0daecbc2440b5b2f71d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-prior-season-evidence.yml",
+      "reviewed_blob": "0aec8ed3f7a6c300c92092d89b8ab25d7f137611",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-prior-season-review-ui.yml",
+      "reviewed_blob": "6d79d765b2cde89dbdf5c4f031c4c718d0d21790",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-saved-plan-fields-contract.yml",
+      "reviewed_blob": "7b8336073bfd7b6383a7474d092b76eae3ce9c93",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": ".github/workflows/google-store-product-observations.yml",
+      "reviewed_blob": "8675e024dacb14f5f38167f2fc8f74ce9e33beec",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_ads_routes.py",
+      "reviewed_blob": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_category_membership.py",
+      "reviewed_blob": "b3e17da5798adc3366ff8592f95599b4fcd0fcc2",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_category_membership_reader.py",
+      "reviewed_blob": "7e02a330c147c9a2bb5699a56b40ae80d6257f16",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_category_membership_routes.py",
+      "reviewed_blob": "29d95dfda7fe9d0ec50428c5fb5352f565ac137a",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_commercial_plan.py",
+      "reviewed_blob": "9650ba13a75ceef831f0e6b7ccdfdc84fb1349d8",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_linked_campaign_evidence.py",
+      "reviewed_blob": "e8005b5c478254de73027f6237f51d8765599fb9",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_linked_campaign_reader.py",
+      "reviewed_blob": "84e1c7c5c5bd0bc4d029ee27fc7a3f8f8ddd9040",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_linked_campaign_routes.py",
+      "reviewed_blob": "7bb41e0fd209fe4793519f2d3e22cbf52122cea1",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_live_category_proof.py",
+      "reviewed_blob": "a1627d07c425107d033a996a3abd12756a027e5b",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_live_category_reader.py",
+      "reviewed_blob": "9e034e4dbb4e5d7dc2e677018e57b9bc6afc37be",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_live_category_routes.py",
+      "reviewed_blob": "fc5b87ca26d409c10e1398dc8215360351bb5aea",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_native_inventory_proof.py",
+      "reviewed_blob": "f5eb0316ed507478eb439447df845127c30430bc",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_native_inventory_reader.py",
+      "reviewed_blob": "43dc3e33dd4b09dcbe1618489b99a2e094a1755d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_native_inventory_routes.py",
+      "reviewed_blob": "a9dd1c01e4f0109211ca8c59b4097d8227f3258e",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_order_source_binding.py",
+      "reviewed_blob": "d804746da1feba88245ca2fc92e836044b4c76bc",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_order_timestamp_evidence.py",
+      "reviewed_blob": "57a58206fe432aa1ed262e34b08a63a7f975080d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_plan_store_observations.py",
+      "reviewed_blob": "30d42103ec11e6443551ff1f0726e30856693741",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_prior_season_reader.py",
+      "reviewed_blob": "669c2be1b87a6fb5c10b1ab4be69e528506f9834",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_prior_season_routes.py",
+      "reviewed_blob": "4efb259788eae67f59ecd6323bcfb0ed34cf23b5",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/integrations_control_center/google_store_product_observations.py",
+      "reviewed_blob": "192949bac430a79de550dba4867e6e057f5c7a5c",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/google_prior_season_review_fixture.py",
+      "reviewed_blob": "b023eedd6e45f4d0aec7afeb34038ec835280046",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_category_membership.py",
+      "reviewed_blob": "c4473ffd28e7333ae40a4d5a7ced34d83e639ce2",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_category_membership_mongo.py",
+      "reviewed_blob": "387c9065ded34dcfc173d8b1fd17d7082c3cb27c",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_category_membership_routes.py",
+      "reviewed_blob": "e49cf2428024d8cf773fcc5169ce4b471dd9b046",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_evidence.py",
+      "reviewed_blob": "2c625ae6e40f8794ba71238e271d027d4091da07",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_integration.py",
+      "reviewed_blob": "fc92b47637fe21f8a19e08a2c9e93997e9bfa4ea",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_integration_mongo.py",
+      "reviewed_blob": "678ddce5bbbea9604fd87cc64fff43d99f453c23",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_mongo.py",
+      "reviewed_blob": "f90d7b89f96a536f7f5ae41504ff785a94321d6d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_reader.py",
+      "reviewed_blob": "fc3175bf2f5c09ab46b903347a0c43b4c71fe27f",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_linked_campaign_routes.py",
+      "reviewed_blob": "4aab20f7cc097a85756579aa4425da9ead8ae69f",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_integration.py",
+      "reviewed_blob": "6703c9f5176cfec0ca11e8f63eba338d1c14c0af",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_integration_mongo.py",
+      "reviewed_blob": "6d1662fe7171f074da7ed19d145a227adeac9bdd",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_mongo.py",
+      "reviewed_blob": "c060fdbc74ca2e53df1bacc8748afc87ba37af53",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_proof.py",
+      "reviewed_blob": "f52306036a84b4085ffa47083c776db46edb38a6",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_reader.py",
+      "reviewed_blob": "5c2101f5a08d28b3aa4cc9b71b867fc915b73380",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_live_category_routes.py",
+      "reviewed_blob": "856034e07e4c584422fe00ae964caf6f1b5458c6",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_native_inventory_mongo.py",
+      "reviewed_blob": "38f0d5ae980ef5148794b5b566bc78270bf503fb",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_native_inventory_proof.py",
+      "reviewed_blob": "98193a7a8bc4b90686dacfcd481d1bf0d239e6ef",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_native_inventory_reader.py",
+      "reviewed_blob": "3b41633f5205e7a49d7ac120d522045257b719bf",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_native_inventory_routes.py",
+      "reviewed_blob": "c37b794ae4c11d92c6b29e7887b3b1b9dfa9e271",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_order_source_binding.py",
+      "reviewed_blob": "049c8b806533260c962743bf90e2fc61e4246a15",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_order_timestamp_evidence.py",
+      "reviewed_blob": "6cfc057d08225f7b609e4b26cf012170ddf8d32d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_plan_store_observations.py",
+      "reviewed_blob": "8ae42bbb1a13b0138f291b576e9ff0787d6edac8",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_plan_ui_writer_fixtures.py",
+      "reviewed_blob": "18b6f95b8f3b27988516dbebaeb2ea6af16c5284",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_plan_ui_writer_mongo.py",
+      "reviewed_blob": "23099d407c56f7e45835daab760a85011ef08f9d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_prior_season_context.py",
+      "reviewed_blob": "d9d4ddfa5917155c56b662e5ac83460801d8f347",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_prior_season_mongo.py",
+      "reviewed_blob": "0341cc554796ce52da3b4c0b3f1820f01e5fcd15",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_prior_season_observations.py",
+      "reviewed_blob": "3279162a146c923a321c80f6cb80084821a40a2d",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_prior_season_review_fixture.py",
+      "reviewed_blob": "106b67ad545d659e3303217d26c2c5e2f3f44ef3",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_prior_season_routes.py",
+      "reviewed_blob": "4396308584c59397305d520729995cbbe046932a",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_saved_plan_fields_contract.py",
+      "reviewed_blob": "cf82dd4b2bfa3f62e80d077f1c907d49ceca21bf",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_saved_plan_fields_contract_mongo.py",
+      "reviewed_blob": "c2b6416f24ed1af203f4e52f39575556be88a094",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_store_product_observations.py",
+      "reviewed_blob": "d1e731ee7fc0d3e27ef519539afb80358970b2f4",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "backend/tests/test_google_store_product_observations_mongo.py",
+      "reviewed_blob": "56b0e10135f7ec722504398be68e9fe399ea0281",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleAdsWorkspace.test.jsx",
+      "reviewed_blob": "a8bb8046987cc79398a465a1ed504bd80639703f",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCategoryMembershipReview.jsx",
+      "reviewed_blob": "7dc86d6aa8dd46fc191100f679e598648f5597b9",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCategoryMembershipReview.test.jsx",
+      "reviewed_blob": "64e9e92040af88e000c8683f3b6c1828c1627f79",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlan.jsx",
+      "reviewed_blob": "e3ad061452e0f1fc5f9d82d2a1bbcaa194ba19d7",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlan.test.jsx",
+      "reviewed_blob": "45f68ce0fbd042626dbbdaf07ea06de06c498db7",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlanPriorIntegration.test.jsx",
+      "reviewed_blob": "9dab636daf6234855b002553acafd36f5d593e11",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleLinkedCampaignEvidence.jsx",
+      "reviewed_blob": "0d7fcc1f53d0bc2b2702a3c847def44311de2a83",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleLinkedCampaignEvidence.test.jsx",
+      "reviewed_blob": "004b9b9ab923b22a97251e53f71fb619b05e3bd7",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleLiveCategoryPreview.jsx",
+      "reviewed_blob": "0a82c7653682aca6164c4f555219cfa599071ac7",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleLiveCategoryPreview.test.jsx",
+      "reviewed_blob": "faf84df8f010c579043dc5bd40e979506a9baae6",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleNativeInventoryPreview.jsx",
+      "reviewed_blob": "f36bb6b29b99d6f36be364becf401933d2891a89",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleNativeInventoryPreview.test.jsx",
+      "reviewed_blob": "bfc90c07f4f7a4ef8a41e1b556cb22c20aa4a848",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GooglePriorSeasonReview.jsx",
+      "reviewed_blob": "41b9c7122cfcaf4286c072232199a8928e83e50e",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GooglePriorSeasonReview.test.jsx",
+      "reviewed_blob": "4b436b9348df8c184d49876eb8263cbe22f2e8d5",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
+      "reviewed_blob": "9b974600d06040f06e5c9938c918417e8769c36e",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStoreProductObservations.jsx",
+      "reviewed_blob": "de3955cf1742815c7083e41f165db233f0d7f47c",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStoreProductObservations.test.jsx",
+      "reviewed_blob": "49c1206d7e1e3e46226b6dce8b318a91e347b882",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/pages/MarketingPlatformWorkspace.google.test.jsx",
+      "reviewed_blob": "828cb48430c1f7ee5adf4361ae2b0affb3325dc6",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json",
+      "reviewed_blob": "3bbf749e0444187692defbded7ba6c026aac0885",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json",
+      "reviewed_blob": "16aacf94fa9a2986bef25d0c37e8995767427621",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleLiveCategoryPreview.json",
+      "reviewed_blob": "0186b40184afb35d61ef18b67e43b4f755332ab8",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleNativeInventoryPreview.json",
+      "reviewed_blob": "bdc7aebb78b83e160755339272920f3b2b837016",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googlePriorSeasonReview.json",
+      "reviewed_blob": "f00fc219743aed764a294c9f69abf67a3fec2ceb",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleCategoryMembershipReview.js",
+      "reviewed_blob": "d2203429965233b25bdc2746afeb10cf79fedce8",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleLinkedCampaignEvidence.js",
+      "reviewed_blob": "ff52b2469b5d117b91ae587a9c7873d18c9ead21",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleLinkedCampaignEvidence.test.js",
+      "reviewed_blob": "6f0291ed985b2a7d72a55adf59058b9bf55e9c37",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleLiveCategoryPreview.js",
+      "reviewed_blob": "65b5627a0a2df9e681403a25ae910f4e9c771cf8",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleLiveCategoryPreview.test.js",
+      "reviewed_blob": "8e9276e780407694246d5ea56c21e17bfd3e548e",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleNativeInventoryPreview.js",
+      "reviewed_blob": "edbfe837066ae8325df9245016fb18a971da965c",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleNativeInventoryPreview.test.js",
+      "reviewed_blob": "02aedb8fd5083d384a429a4d09aa16d6f1d4a04e",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googlePriorSeasonReview.js",
+      "reviewed_blob": "1fb4f04b947a6ab1ae58d27ccd05305201e8c131",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googlePriorSeasonReview.test.js",
+      "reviewed_blob": "0156da0a89798f2bfe8e5718718e61202efd4176",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    },
+    {
+      "path": "frontend/src/services/googleStoreProductObservations.js",
+      "reviewed_blob": "be85062f21c7cd8a8c006a3f1bfd2c1f807bf943",
+      "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+    }
+  ],
+  "protected_current_manifests": {
+    "storage": [
+      {
+        "path": ".github/workflows/google-namespace-prerequisites.yml",
+        "production_blob": "b597efd265483888d22562fb9390be7dcea3c8d1",
+        "source_blob": "b597efd265483888d22562fb9390be7dcea3c8d1",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": ".github/workflows/google-storage-commit-readiness.yml",
+        "production_blob": "f8be97880ba24f88a0d7772deabee0d889bc1c07",
+        "source_blob": "f8be97880ba24f88a0d7772deabee0d889bc1c07",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_namespace_prerequisites.py",
+        "production_blob": "4632dbcfa23d8f9f8dac25467df0cf684e832934",
+        "source_blob": "4632dbcfa23d8f9f8dac25467df0cf684e832934",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_routes.py",
+        "production_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
+        "source_blob": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74",
+        "preserved_exact": false,
+        "approved_exception": "12 additive route attachment lines; removing them restores exact base"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_storage_commit_readiness.py",
+        "production_blob": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2",
+        "source_blob": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_namespace_prerequisites.py",
+        "production_blob": "2f08769df4343c08c0f7d040029e1f108ac3984c",
+        "source_blob": "2f08769df4343c08c0f7d040029e1f108ac3984c",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_namespace_prerequisites_mongo.py",
+        "production_blob": "f0ed87acca1d3f1b5824c24bbb372b62953b71af",
+        "source_blob": "f0ed87acca1d3f1b5824c24bbb372b62953b71af",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_storage_commit_readiness.py",
+        "production_blob": "fa061c8557f8c6193cdbbe3178903f29e68334c3",
+        "source_blob": "fa061c8557f8c6193cdbbe3178903f29e68334c3",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_storage_commit_readiness_mongo.py",
+        "production_blob": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1",
+        "source_blob": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleAdsWorkspace.jsx",
+        "production_blob": "4ecbf0997decaa428201c548f9d7b221b603253e",
+        "source_blob": "4ecbf0997decaa428201c548f9d7b221b603253e",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.jsx",
+        "production_blob": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c",
+        "source_blob": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.test.jsx",
+        "production_blob": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f",
+        "source_blob": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.jsx",
+        "production_blob": "81d3f9d12eb17222039557231d7e7117b9f20000",
+        "source_blob": "81d3f9d12eb17222039557231d7e7117b9f20000",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.test.jsx",
+        "production_blob": "ca8326a2fa801e66c1721b7a7a90a798281b78b3",
+        "source_blob": "ca8326a2fa801e66c1721b7a7a90a798281b78b3",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
+        "production_blob": "ac0f23e343f8d9998c53d84290dbc9eea105fb4b",
+        "source_blob": "9b974600d06040f06e5c9938c918417e8769c36e",
+        "preserved_exact": false,
+        "approved_exception": "One AuthContext owner fixture mock added for existing tests; runtime unchanged."
+      },
+      {
+        "path": "frontend/src/services/googleNamespacePrerequisites.js",
+        "production_blob": "cd24ecc935893087c0b5024c0055a722c8587afb",
+        "source_blob": "cd24ecc935893087c0b5024c0055a722c8587afb",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/services/googleStorageCommitReadiness.js",
+        "production_blob": "80a07537047eb21cb592d834b9e4b0668fc3c696",
+        "source_blob": "80a07537047eb21cb592d834b9e4b0668fc3c696",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "retail": [
+      {
+        "path": "backend/integrations_control_center/google_ads_ai.py",
+        "production_blob": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b",
+        "source_blob": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_management.py",
+        "production_blob": "582253c9914847b1e7d82a407c4d68e89fcbb4b3",
+        "source_blob": "582253c9914847b1e7d82a407c4d68e89fcbb4b3",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_retail_identity.py",
+        "production_blob": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717",
+        "source_blob": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_routes.py",
+        "production_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
+        "source_blob": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74",
+        "preserved_exact": false,
+        "approved_exception": "12 additive route attachment lines; removing them restores exact base"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_workspace.py",
+        "production_blob": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef",
+        "source_blob": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_ai.py",
+        "production_blob": "22c0e9f4af12ab98a69035c7f6ccb52e0e29e51a",
+        "source_blob": "22c0e9f4af12ab98a69035c7f6ccb52e0e29e51a",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_ai_route_context.py",
+        "production_blob": "cedd8f0666dbbd5287fe8d2d08e52670e11af6df",
+        "source_blob": "cedd8f0666dbbd5287fe8d2d08e52670e11af6df",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_management.py",
+        "production_blob": "8b132b35f9bb5c923a40ee849a370e3af8dcce95",
+        "source_blob": "8b132b35f9bb5c923a40ee849a370e3af8dcce95",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_ads_workspace.py",
+        "production_blob": "bfd2eae4a0a8e3f0f75da3d4b98294567bc03502",
+        "source_blob": "bfd2eae4a0a8e3f0f75da3d4b98294567bc03502",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+        "production_blob": "fca72f431db4f8c793e8d228fad3a532e94d39d6",
+        "source_blob": "fca72f431db4f8c793e8d228fad3a532e94d39d6",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+        "production_blob": "d11a955d2faf611b814a9c5a803e26e54fbae748",
+        "source_blob": "d11a955d2faf611b814a9c5a803e26e54fbae748",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "Reports1642": [
+      {
+        "path": ".github/workflows/snapchat-reporting-v2.yml",
+        "production_blob": "3ac0199c0db7ffa2b3e1348e7e352955a83b22c3",
+        "source_blob": "3ac0199c0db7ffa2b3e1348e7e352955a83b22c3",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/marketing_report_orders.py",
+        "production_blob": "0a27782ee51ff55588644b1ca62f8994aa76dd1c",
+        "source_blob": "0a27782ee51ff55588644b1ca62f8994aa76dd1c",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/marketing_reports.py",
+        "production_blob": "d5334f897fd9bcf8e51bbf3238c766914958b386",
+        "source_blob": "d5334f897fd9bcf8e51bbf3238c766914958b386",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_marketing_report_orders.py",
+        "production_blob": "c6ee073aef8c3c5045331435f9e205e670090e3d",
+        "source_blob": "c6ee073aef8c3c5045331435f9e205e670090e3d",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_marketing_reports.py",
+        "production_blob": "0af42334ab72f6fd78d5903384d5686bd6e1babe",
+        "source_blob": "0af42334ab72f6fd78d5903384d5686bd6e1babe",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.css",
+        "production_blob": "b43ec1c31a65a5307abd2b1aa56f9f7f6880c5aa",
+        "source_blob": "b43ec1c31a65a5307abd2b1aa56f9f7f6880c5aa",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.jsx",
+        "production_blob": "51997ce7c89860c002d03a9c9413485db6fa30ef",
+        "source_blob": "51997ce7c89860c002d03a9c9413485db6fa30ef",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.test.jsx",
+        "production_blob": "83b1d10cb885b7fa77f68874a1fc8e0cca63bcd5",
+        "source_blob": "83b1d10cb885b7fa77f68874a1fc8e0cca63bcd5",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "dashboard": [
+      {
+        "path": "frontend/src/pages/AdvancedDashboard.jsx",
+        "production_blob": "377af75da5613f4529487a2545dbf6db281c273d",
+        "source_blob": "377af75da5613f4529487a2545dbf6db281c273d",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "frontend/src/pages/AdvancedDashboard.mobile.test.jsx",
+        "production_blob": "f52014e01f3c07f0975cf7ba5faedd104ba06240",
+        "source_blob": "f52014e01f3c07f0975cf7ba5faedd104ba06240",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "CAS": [
+      {
+        "path": "backend/integrations_control_center/google_credential_refresh_cas.py",
+        "production_blob": "04f95b58646dba5eafca4546f4ba52901857b3f7",
+        "source_blob": "04f95b58646dba5eafca4546f4ba52901857b3f7",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_credential_refresh_cas.py",
+        "production_blob": "e933ac60d8cd7b3b5c8f931bbe9b981d531c2b5b",
+        "source_blob": "e933ac60d8cd7b3b5c8f931bbe9b981d531c2b5b",
+        "preserved_exact": true,
+        "approved_exception": null
+      },
+      {
+        "path": "backend/tests/test_google_credential_refresh_cas_mongo.py",
+        "production_blob": "fbe6aed95f8f51ab2909e6bbc5e714756a47f07d",
+        "source_blob": "fbe6aed95f8f51ab2909e6bbc5e714756a47f07d",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "release_intent": [
+      {
+        "path": "release/release-intent-v5.json",
+        "production_blob": "57fb10a551480237cd5095ac3d8d19f9c4de6cf3",
+        "source_blob": "57fb10a551480237cd5095ac3d8d19f9c4de6cf3",
+        "preserved_exact": true,
+        "approved_exception": null
+      }
+    ],
+    "Reports1651": [
+      {
+        "path": "backend/marketing_report_orders.py",
+        "production_blob": "0a27782ee51ff55588644b1ca62f8994aa76dd1c",
+        "source_blob": "0a27782ee51ff55588644b1ca62f8994aa76dd1c",
+        "preserved_exact": true
+      },
+      {
+        "path": "backend/tests/test_marketing_report_orders.py",
+        "production_blob": "c6ee073aef8c3c5045331435f9e205e670090e3d",
+        "source_blob": "c6ee073aef8c3c5045331435f9e205e670090e3d",
+        "preserved_exact": true
+      },
+      {
+        "path": "docs/operations/MARKETING-REPORTS-DIRECT-20261030/STATUS.json",
+        "production_blob": "ae41146154896ac2aa534e7fb96e03da70ca63c4",
+        "source_blob": "ae41146154896ac2aa534e7fb96e03da70ca63c4",
+        "preserved_exact": true
+      },
+      {
+        "path": "release/release-intent-v5.json",
+        "production_blob": "57fb10a551480237cd5095ac3d8d19f9c4de6cf3",
+        "source_blob": "57fb10a551480237cd5095ac3d8d19f9c4de6cf3",
+        "preserved_exact": true
+      }
+    ]
+  },
+  "exact_selection": true,
+  "router_seam": "12 additive accepted current-observations/category/linked/live/native/prior attach lines; all existing storage/retail handlers preserved.",
+  "workflow_preservation": {
+    "all_current_full_google_test_paths_retained": true,
+    "current_count": 56,
+    "source_count": 90,
+    "strict_replica_gates": "saved151/10actualMongo,native45/7actualMongo,prior129/19actualMongo; named-case and zero-skip assertions unchanged from accepted ddc."
+  },
+  "reviewed_behavior": "Optional5fields explicitly enabled/removed(null); no inferred dates; blank optional reference serializednull; invalid/reversed/>366day/nonprior ranges rejected beforePUT; any edit clears review acknowledgement and makes evidence dirty. useAuth authenticated user.id/owner role gates parent; owner+plan key cancels and discards late loads/saves/all child requests. No owner identity from plan.updated_by.",
+  "writer_fixtures": "All existing linked/category/native fixtures regenerated by actual authenticated management HTTP PUT then reader. Stored fields contain prior_season_context:null and no write-only controls. New parent fixture uses actual PUT→linked/category/native/prior reads and unrelated-preserve/remove/re-enable saves. Standalone prior fixture regenerated and remains byte-identical to accepted d1b.",
+  "null_category_fix": "formFrom normalizes only absent/null optional category_url to empty input. commercialPlanPayload returnsnull for absent/null/blank URL; malformed nonstring still errors. Actual writer fixtures cover nullURL prior creation/unrelated-preserve/removal; actualMongo parent asserts savednullURL.",
+  "auth_page_harness_fix": {
+    "changed_runtime": false,
+    "path": "frontend/src/pages/MarketingPlatformWorkspace.google.test.jsx",
+    "behavior": "Uses real AuthProvider and coherent /auth/me owner/viewer readiness. Both original campaign and AI assertions retained for both roles. Owner child reads generated actual HTTP-writer initial plan fixture; viewer does not read owner plan. No child/runtime auth stub.",
+    "focused": "4passed/1suite4.498s",
+    "full_frontend": "329suites/2667tests passed, zero failed/skipped,92.284s via governed toolchain full frontend; existing329 suites preserved, original2 pagecases now4 owner/viewer cases.",
+    "workflow": "Existing full Google workflow already contains this page suite; no workflow test paths removed or edited."
+  },
+  "prior_source_evidence": {
+    "local_full_ui": "329suites/2667tests92.284s",
+    "direct_source_security": "329suites/2667tests77.722s,0dependency vulnerabilities,builds5.76s/5.69s",
+    "google_CI": "1559backend/561UI,151/10Mongo,45/7Mongo,129/19Mongo,zero skips",
+    "independent": {
+      "verdict": "bounded PASS; no confirmed blocker",
+      "reviewer": "google_product_acceptance",
+      "runtime_scope": "ddc runtime byte-identical to804; prior80426backend-Werror/zero skips2.87s +134UI/6suites3.812s apply only to identical runtime.",
+      "successor_harness": "ddc independent29 actualAuthProvider parent/page tests,2suites2.129s",
+      "null_url_replay": "Actual HTTP writer nullURL +category_ids[] reproduced f7b .trim failure; corrected form payload deep-equals all saved fields/prior/limits plus explicit writer revision/ack. Malformed nonstring remains refused.",
+      "ci_logs": "Reviewer independently read all fresh saved/native/prior Mongo, full Google, Security and exact foreign merge provenance.",
+      "qualification": "Code/integration acceptance only. No release eligibility, live provider proof, production business-plan creation, advertising execution, inventory readiness, profit or attribution authority."
+    },
+    "root": {
+      "verdict": "bounded functional source accepted after independent seal; finalgates/freshA pending",
+      "runtime_review": "Root read prior/form/native code and exact two null-URL runtime normalizations.",
+      "local": "Root4 actualwriter fixtures -Werror2.24s +64parentUI2suites2.515s on804; finalddc pageAuth4cases1.313s.",
+      "CI": "Root read current1559backend43.13s and561UI30suites/build6.10s logs."
+    },
+    "qualification": "These are accepted predecessor runtime/test results, not fresh SourceA CI results."
+  },
+  "fresh_validation": {
+    "backend": "26 passed -Werror/zero skips2.64s:actualwriter fixtures,prior fixture/context/routes",
+    "frontend": "29 actualAuthProvider parent/page tests,2suites7.624s via governed toolchain",
+    "preservation": "All96 feature blobs exact ddc; all current protected paths checked against08160; no overlap with four Reports1651/intent advances; full workflow current56 test paths retained within90 selected paths.",
+    "actualMongo": "Fresh CI pending; no local Mongo attempted."
+  },
+  "authority": {
+    "advertising_execution": false,
+    "new_financial_rights": false,
+    "merchant_integration": false,
+    "host_or_publish_actions": false
+  },
+  "release_intent": "Exact current08160 tracked intent retained. Root owns operational intent B and all host/lease/merge/publish actions.",
+  "limitations": [
+    "Stored order observations remain partial and currency-separated; no net sales, profit, ranking or completeness.",
+    "Linked platform context is historical partial context, not verified product attribution or live freshness.",
+    "Live category preview is owner-triggered bounded membership only; native inventory preview is explicit at most5 observed nonexcluded products, not ad eligibility or mapping/readiness.",
+    "Prior season context is owner-declared with unknown calendar alignment; no inferred dates, automatic selection, budget or launch authority."
+  ],
+  "pending": "RemoteSourceA/DraftPR, all freshCI/actualMongo/build/readiness and independent preservation review. Root production/host acceptance remains separate."
+}
