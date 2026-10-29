@@ -1,0 +1,84 @@
+{
+  "plan": {
+    "plan_id": "winter",
+    "revision": 1,
+    "fields": {
+      "instruction": "هدايا الشتاء",
+      "season": "شتاء",
+      "starts_on": "2026-10-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "الباحثون عن هدية",
+      "message": "هدايا",
+      "category_ids": [
+        "8"
+      ],
+      "pinned_product_ids": [],
+      "excluded_product_ids": [
+        "1",
+        "internal-product"
+      ],
+      "acknowledge_review": true,
+      "category_url": null
+    }
+  },
+  "response": {
+    "plan_id": "winter",
+    "plan_revision": 1,
+    "status": "live_membership_observation_only",
+    "store_id": "9",
+    "category_id": "8",
+    "category_url": "https://store.test/winter",
+    "category_status": "active",
+    "observed_started_at": "2026-10-29T19:49:41.854388+00:00",
+    "observed_finished_at": "2026-10-29T19:49:41.854882+00:00",
+    "source": "salla_owned_category_products_fixed_get",
+    "provider_revision": null,
+    "remote_snapshot_atomic": false,
+    "pagination_traversal_complete": true,
+    "pages_read": 1,
+    "products_observed": 3,
+    "response_digest": "7c1b64acac647f71a60b46ba359453e9114565333fee4e1730ef16c7325cb413",
+    "stored_scope_authority": "declared_or_unknown",
+    "unresolved_exclusion_ids": [
+      "internal-product"
+    ],
+    "mezan_product_mapping_verified": false,
+    "inventory_verified": false,
+    "execution_authorized": false,
+    "products": [
+      {
+        "salla_product_id": "1",
+        "membership": "observed_category_endpoint",
+        "excluded": true,
+        "category_hidden": false,
+        "product_status": "unknown",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "2",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "hidden",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "3",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "out",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      }
+    ],
+    "limitations": [
+      "Membership observation only; inventory, sizes, preparation time and catalog offer mapping unproved",
+      "Completed page traversal is not an atomic category snapshot or campaign readiness",
+      "No automatic selection, ranking, profit inference or funding authority"
+    ]
+  }
+}
