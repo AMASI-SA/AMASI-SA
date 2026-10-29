@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "capability_tests_only_before_runtime_implementation",
+  "status": "capability_engine_evidence_passed_runtime_not_implemented",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -8,7 +8,7 @@
   "production_changed": false,
   "host_or_provider_actions": false,
   "implementation_complete": false,
-  "actual_mongo_ddl_verified": false,
+  "actual_mongo_ddl_verified": true,
   "root_reported_live_prerequisites": {
     "technical_transaction_majority_j_readback_cleanup": "passed by root; historical prerequisite only",
     "target_required_actions_and_policy_create_index": "passed by root; fresh revalidation required",
@@ -33,8 +33,17 @@
     "next_evidence": "19 real authenticated Mongo capability cases planned; no runtime module or route attachment yet",
     "local": "19 capability cases collected successfully with -W error, 0.31s; no actual local Mongo execution",
     "workflow": "google-namespace-bootstrap.yml, exact19/19actualMongo/zero-skips gate, source-head checkout, disposable authenticated Mongo8.0.26 port27483",
-    "CI": "pending initial remote capability checkpoint"
+    "CI": {
+      "run": 40971850976,
+      "job": 123790260212,
+      "source": "ad5dbb127a3be69d6277257ebf93ff0d630e1728",
+      "tree": "69c119c28283330d1933364641cfaa0023861de2",
+      "checkout": "direct exact source",
+      "result": "19 passed in 3.22s; exact19 actual authenticated Mongo8.0.26 cases; zero skips; all setup/test/cleanup steps success",
+      "logs_read_by": "google_product_acceptance"
+    },
+    "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server."
   },
-  "next": "Run exact-source dedicated authenticated Mongo capability CI; inspect positive and negative DDL/permissions/foreign-create/UUID behavior before implementing production module.",
+  "next": "Implement NEW unattached module and actual behavior tests against this proved engine contract. Preserve every existing file. Add request/owner/durable receipt/uncertainty/race coverage and fresh CI; independent review before root integration.",
   "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288"
 }
