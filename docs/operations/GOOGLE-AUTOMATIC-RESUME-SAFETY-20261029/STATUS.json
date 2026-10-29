@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029",
-  "state": "PUBLISHING_SINGLE_CLICK",
+  "state": "DEPLOYED_AND_ACCEPTED_BOUNDED_SCOPE",
   "branch": "codex/google-resume-safety-status-20261029",
   "scope": "Standing automatic resume denied without complete fresh stop provenance; manualapproved actions unchanged",
   "release": {
@@ -46,29 +46,53 @@
       "first": "REFUSED prepackaged bytecode backend/__pycache__, whiletrackedclean. No lease/publish. Two generatedpyc files mtime2026-10-29T17:31:55Z; origin not assumed.",
       "recovery": "Guardactivefalse. Generatedcache preserved by moving to/tmp/google1609-bytecode-quarantine; no sourcechange/foreigndeletion. Retrylog/tmp/google1609-app-materialize-retry1.log running.",
       "retry1": "PASS59.65s; exact source/runtime package proof, trackedclean; two foreigndirs preserved"
+    },
+    "live": {
+      "verified": true,
+      "checks": 3,
+      "boot_started_at": "2026-10-29T18:18:28.294227+00:00",
+      "lease_active": false,
+      "source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
+      "deployment": "15b656131813af54a043c33821e3aa5f69e7703c",
+      "runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
+      "frontend_artifact": "6631a09243c43cdaa2c09e1b9a4fa3bc601dbecf681052b5405bf592c59be96a",
+      "functional": {
+        "google_connection": "connected",
+        "account": "5052346701",
+        "campaign_count": 22,
+        "manual_campaign_editor": "opened existing PAUSED campaign and hydrated existing name; closed without mutation",
+        "management_revision": 0,
+        "approved_limits": "blank",
+        "autonomy": "disabled",
+        "provider_writes": 0,
+        "policy_writes": 0
+      },
+      "screenshot": "docs/operations/GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029/google1609-live-policy-20261029.jpg"
     }
   },
   "publication": {
-    "published": "in progress",
+    "published": true,
     "publish_changes_clicks": 1,
     "republish_clicks": 1,
     "baseline_finish": "2026-10-29 20:39 Asia/Riyadh",
-    "latest_observed": "Publishing…",
-    "do_not_repeat": true
+    "latest_observed": "Deployment finished Oct29 09:19PM",
+    "do_not_repeat": true,
+    "finished": "2026-10-29 21:19 Asia/Riyadh"
   },
   "guard": {
-    "active": true,
+    "active": false,
     "actor": "codex-google-resume-safety-20261029",
     "prepare": "PASS afterfreshrecoveredactivefalse/M5/trackedclean",
-    "prepublish": "ready_to_publish true exactA690/M5/runtime051"
+    "prepublish": "ready_to_publish true exactA690/M5/runtime051",
+    "lease": "closed"
   },
   "production_branch_changed": true,
-  "production_runtime_changed": false,
+  "production_runtime_changed": true,
   "limits": [
     "No firstfundedlaunch/provenanceproof.",
     "Doesnotinterruptalreadydispatched operations.",
     "Runtimeflags andownerlimits unchanged; no paidactivity."
   ],
-  "next_safe_action": "Wait newerexplicitfinish, verify3 expectedA690/M5/runtime051, confirmclosedlease, liveGoogleconnected/policyoff/manualflowregression. Do notrepeatpublish ormodify/app whileownedleaseactive.",
+  "next_safe_action": "Complete clean Source A87812e17 catalog stock review1616 v5 release. No repeat1609 publish. Continue reviewed product/store/category/retail and storage prerequisites; no paid activity without ownerlimits.",
   "host_recovery": "Recovered editor in newtab9 while preserving originaluserUntitled1 tab1. AppHEADM5/trackedclean/backendidentity/frontendmeta persisted; /tmp cleared. Actualguard wasinactive. Freshprepare/prepublish passed."
 }
