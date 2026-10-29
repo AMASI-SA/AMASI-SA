@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
-import { activateGoogleAutomationPolicy, getGoogleAutomationPolicy, revokeGoogleAutomationPolicy, saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
+import { verifyGoogleBudgetStorage, activateGoogleAutomationPolicy, getGoogleAutomationPolicy, revokeGoogleAutomationPolicy, saveGoogleAutomationPolicy } from "../../services/googleAutomationPolicy";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100";
 const BUTTON = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40";
@@ -28,9 +28,11 @@ function PolicyPanel({ accountId }) {
     const [conflict, setConflict] = useState(false), [reload, setReload] = useState(0);
     const [dirty, setDirty] = useState(false), [acknowledged, setAcknowledged] = useState(false);
     const mounted = useRef(true), request = useRef(null), inflight = useRef(false);
+    const [storageBusy, setStorageBusy] = useState(false), [storageNotice, setStorageNotice] = useState("");
+    const storageRequest = useRef(null), storageInflight = useRef(false);
     useEffect(() => {
         mounted.current = true;
-        return () => { mounted.current = false; request.current?.abort(); };
+        return () => { mounted.current = false; request.current?.abort(); storageRequest.current?.abort(); };
     }, []);
     useEffect(() => {
         const controller = new AbortController();
@@ -44,6 +46,24 @@ function PolicyPanel({ accountId }) {
         }).finally(() => { if (active) setBusy(false); });
         return () => { active = false; controller.abort(); };
     }, [accountId, reload]);
+
+    async function verifyStorage() {
+        if (storageInflight.current) return;
+        storageInflight.current = true; setStorageBusy(true); setStorageNotice("");
+        const controller = new AbortController(); storageRequest.current = controller;
+        try {
+            const result = await verifyGoogleBudgetStorage({ signal: controller.signal });
+            if (mounted.current) setStorageNotice(result?.storage_verified === true && result?.snapshot_majority_write_aborted === true
+                && result?.scope === "budget_storage_transaction_only" && result?.execution_authorized === false && result?.funding_ready === false
+                ? "تم التحقق من معاملة التخزين وإلغائها. هذا تحقق للتخزين فقط؛ لم تتغير السياسة ولا يمنح صلاحية تشغيل أو جاهزية إنفاق."
+                : "لم تُثبت جاهزية التخزين. لم تتغير السياسة ولم يُمنح أي تفويض تشغيل.");
+        } catch (failure) {
+            if (mounted.current && !isGoogleRequestCancelled(failure)) setStorageNotice("تعذر إثبات جاهزية التخزين. لم تتغير السياسة ولم يُمنح أي تفويض تشغيل؛ يلزم تحقق تقني.");
+        } finally {
+            storageInflight.current = false;
+            if (mounted.current) setStorageBusy(false);
+        }
+    }
 
     function edit(key, value) { setForm((previous) => ({ ...previous, [key]: value })); setNotice(""); setDirty(true); setAcknowledged(false); }
     async function mutate(kind) {
@@ -93,6 +113,12 @@ function PolicyPanel({ accountId }) {
             <label className="text-sm"><input type="checkbox" checked={policy?.effective_enabled === true} disabled readOnly /> {policy?.effective_enabled ? "الإدارة الآلية مفعّلة ضمن الحدود المعتمدة" : policy?.activation_required && policy?.executor_available ? "يلزم اعتماد جديد من المالك" : policy?.enabled ? "تفويض محفوظ؛ التنفيذ الآلي غير متاح" : "التشغيل الآلي معطّل"}</label>
             <button type="button" className={BUTTON} disabled={busy} onClick={() => setReload((value) => value + 1)}>إعادة تحميل السياسة</button>
         </div>
+        <section className="mt-3 rounded-lg border border-slate-200 p-3" aria-label="تشخيص تخزين حدود جوجل">
+            <p className="text-sm">تحقق من تخزين الحدود فقط بمعاملة مؤقتة تُلغى قبل الحفظ. لا يختبر اتصال جوجل ولا يفعّل الحملات أو التفويض.</p>
+            <button type="button" className={`${BUTTON} mt-2`} disabled={storageBusy} onClick={verifyStorage}>التحقق من تخزين حدود جوجل</button>
+            {storageBusy && <p role="status">جارٍ التحقق من التخزين…</p>}
+            {storageNotice && <p role="status">{storageNotice}</p>}
+        </section>
         {busy && <p role="status" className="mt-3 text-sm">جارٍ قراءة أو حفظ سياسة جوجل…</p>}
         {error && <p role="alert" className="mt-3 text-sm text-red-800">{error}</p>}
         {notice && <p role="status" className="mt-3 text-sm text-emerald-800">{notice}</p>}
