@@ -170,6 +170,74 @@ def _transaction(session):
         read_preference=ReadPreference.PRIMARY, max_commit_time_ms=5000)
 
 
+def _acknowledged(reply):
+    if (not isinstance(reply, dict) or type(reply.get('ok')) not in (int, float)
+        or reply['ok'] != 1 or 'writeConcernError' in reply or 'writeErrors' in reply):
+        raise ValueError('transaction acknowledgement unproved')
+
+
+async def _abort_once(db, session):
+    reply = await db.client.admin.command({'abortTransaction': 1,
+        'writeConcern': {'w': 'majority', 'j': True, 'wtimeout': 5000}}, session=session)
+    _acknowledged(reply)
+
+
+async def _commit_once(db, session):
+    # Generic public command has no commit helper's automatic retry. Public
+    # session machinery attaches lsid/txnNumber/autocommit; never mutate internals.
+    reply = await db.client.admin.command({'commitTransaction': 1,
+        'writeConcern': {'w': 'majority', 'j': True, 'wtimeout': 5000}, 'maxTimeMS': 5000}, session=session)
+    _acknowledged(reply)
+
+
+async def _end_session(session):
+    cleanup = asyncio.ensure_future(session.end_session())
+    cancelled = False
+    while not cleanup.done():
+        try:
+            await asyncio.shield(cleanup)
+        except asyncio.CancelledError:
+            cancelled = True
+    cleanup.result()
+    if cancelled:
+        raise asyncio.CancelledError()
+
+
+# Technical pending-resource limits per process, never financial limits. Reserve
+# read slots so reconciliation remains available while write work is unfinished.
+MAX_PENDING_WRITE_TASKS = 24
+MAX_PENDING_READ_TASKS = 8
+RECOVERY_TIMEOUT_SECONDS = 10
+_pending_operations = {}
+
+
+async def _retained_operation(db, scope, operation_id, kind, work, seconds, phase):
+    key = (id(db), scope['user_id'], scope['account_id'], operation_id, kind)
+    limit = MAX_PENDING_WRITE_TASKS if kind == 'write' else MAX_PENDING_READ_TASKS
+    if key in _pending_operations or sum(item['kind'] == kind for item in _pending_operations.values()) >= limit:
+        raise problem('google_budget_guard_operation_pending', 'عمل تخزين سابق لم ينتهِ؛ لا تعِد الإرسال.', 503)
+    async def original_task():
+        with timeout(seconds):
+            return await work()
+    state = {'kind': kind, 'task': asyncio.create_task(original_task())}
+    _pending_operations[key] = state
+    def consume(done):
+        if not done.cancelled():
+            done.exception()
+        if _pending_operations.get(key) is state:
+            del _pending_operations[key]
+    state['task'].add_done_callback(consume)
+    try:
+        done, _ = await asyncio.wait({state['task']}, timeout=seconds)
+        if not done:
+            phase['stop_requested'] = True
+            raise TimeoutError()
+        return state['task'].result()
+    except asyncio.CancelledError:
+        phase['stop_requested'] = True
+        raise
+
+
 PROBE_TIMEOUT_SECONDS = 10
 _pending_probe = None
 
@@ -203,22 +271,9 @@ async def probe_google_budget_guard_transactions(db):
                         {'_id': 'probe_' + uuid.uuid4().hex, 'probe_only': True}, session=session)
                     if result.acknowledged is not True:
                         raise ValueError('unacknowledged probe')
-                    reply = await db.client.admin.command({'abortTransaction': 1,
-                        'writeConcern': {'w': 'majority', 'j': True, 'wtimeout': 5000}}, session=session)
-                    if (not isinstance(reply, dict) or type(reply.get('ok')) not in (int, float)
-                        or reply['ok'] != 1 or 'writeConcernError' in reply or 'writeErrors' in reply):
-                        raise ValueError('abort acknowledgement unproved')
+                    await _abort_once(db, session)
                 finally:
-                    cleanup = asyncio.ensure_future(session.end_session())
-                    cancelled = False
-                    while not cleanup.done():
-                        try:
-                            await asyncio.shield(cleanup)
-                        except asyncio.CancelledError:
-                            cancelled = True
-                    cleanup.result()
-                    if cancelled:
-                        raise asyncio.CancelledError()
+                    await _end_session(session)
                 return _TransactionCapability(True, db, time.monotonic(), _PROOF)
 
         state['task'] = asyncio.create_task(probe())
@@ -506,7 +561,8 @@ def _allocation(snapshot, command, operation_id, stamp):
 
 async def _run(db, *, scope, operation_id, planner, capability, phase):
     _capability(db, capability)
-    async with await db.client.start_session() as session:
+    session = await db.client.start_session()
+    try:
         _transaction(session)
         row = await db[BUDGET_GUARDS].find_one({'_id': _guard_id(scope)}, session=session)
         if row is None:
@@ -688,11 +744,15 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         changed = await db[BUDGET_GUARDS].update_one({'_id': row['_id'], **scope, 'epoch': row['epoch']}, {'$set': update}, session=session)
         if changed.matched_count != 1:
             _fail('google_budget_guard_epoch_changed')
+        if phase.get('stop_requested'):
+            _fail('google_budget_guard_request_ended_before_commit')
         phase['commit_attempted'] = True
-        await session.commit_transaction()  # Exactly ONE attempt. Never retry callback or commit here.
+        await _commit_once(db, session)  # Exactly one wire command; no automatic commit retry.
         return {**result, 'committed': True, 'guard_epoch': row['epoch'] + 1, 'operation_id': operation_id,
             'provider_dispatch_authorized': False, 'provider_writes': 0, 'runtime_available': False}
 
+    finally:
+        await _end_session(session)
 
 async def run_google_budget_guard_transaction(db, *, user_id, account_id, operation_id, capability=None, planner,
         timeout_seconds=15):
@@ -709,8 +769,9 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
             _fail('google_budget_guard_command_invalid')
         if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 15:
             _fail('google_budget_guard_timeout_invalid')
-        return await asyncio.wait_for(_run(db, scope=scope, operation_id=operation_id, planner=planner,
-            capability=capability, phase=phase), timeout=timeout_seconds)
+        return await _retained_operation(db, scope, operation_id, 'write',
+            lambda: _run(db, scope=scope, operation_id=operation_id, planner=planner,
+                capability=capability, phase=phase), timeout_seconds, phase)
     except asyncio.CancelledError as exc:
         exc.commit_attempted = phase['commit_attempted']
         exc.preserve_execution_fence = True
@@ -742,7 +803,8 @@ async def read_google_budget_guard_commit(db, *, user_id, account_id, operation_
         scope = _scope(user_id, account_id)
         if not isinstance(operation_id, str) or not _ID.fullmatch(operation_id):
             _fail('google_budget_guard_command_invalid')
-        async with await db.client.start_session() as session:
+        session = await db.client.start_session()
+        try:
             _transaction(session)
             row = await db[BUDGET_GUARDS].find_one({'_id': _guard_id(scope)}, session=session)
             if row is not None:
@@ -752,14 +814,17 @@ async def read_google_budget_guard_commit(db, *, user_id, account_id, operation_
                 _fail('google_budget_guard_state_unproved')
             last = (row or {}).get('last_commit')
             exact_last = last if isinstance(last, dict) and last.get('operation_id') == operation_id else None
-            await session.abort_transaction()
+            await _abort_once(db, session)
             return {'storage_outcome': 'committed' if entries or exact_last else 'not_proven',
                 'operation_id': operation_id, 'guard_epoch': row['epoch'] if row is not None else None,
                 'allocation': _plain(entries[0]) if entries else None, 'last_commit': _plain(exact_last),
                 'provider_dispatch_authorized': False, 'provider_writes': 0,
                 'preserve_execution_fence': True, 'automatic_retry_allowed': False}
+        finally:
+            await _end_session(session)
     try:
-        return await asyncio.wait_for(read(), timeout=10)
+        scope = _scope(user_id, account_id)
+        return await _retained_operation(db, scope, operation_id, 'read', read, RECOVERY_TIMEOUT_SECONDS, {})
     except asyncio.CancelledError as exc:
         exc.preserve_execution_fence = True
         exc.automatic_retry_allowed = False

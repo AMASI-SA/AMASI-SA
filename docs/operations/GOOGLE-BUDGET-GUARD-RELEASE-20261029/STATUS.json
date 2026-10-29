@@ -135,7 +135,7 @@
       "scope": "Capabilityprobe latency only, no productionDB/provider authority or commitdurability claim."
     },
     "unchanged": "runtime_available literalFalse; all operationalflags off; no launch/planner/sixpolicyhandler edits; no livepolicy/providerwrites.",
-    "adjacent_blocker": "Actual _run stillasyncsessioncontext at509 and wait_for at712; read_commit745/762 samepattern. Synchronous Motor exit/cancelled executorFuture cleanup safety notresolvedhere; migrationNOTready. commit_attempted+preserve_execution_fence+automatic_retry_allowedFalse unchanged; no budgetrelease/refund changes.",
+    "adjacent_blocker": "Superseded by lifecycle_followup WIP implementation, pending actualMongo+independent acceptance; not productionready.",
     "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged.",
     "code_checkpoint_sha": "74ea76cba2f48dd289c33dfb77c67f3a57c30ca7",
     "full_google_ci": {
@@ -144,5 +144,15 @@
       "backend_result": "1347passed47.61s,zero skips,all12requiredMongo modules; frontend tests passed/buildpending at checkpoint"
     },
     "independent_review": "budget_audit41probe+guard tests independently passed-Werror; no new scopedprobebypass; internalcapability60s existingcontract unchanged."
+  },
+  "lifecycle_followup": {
+    "state": "WIP local593green; independent review/actual wire commit fault CI pending",
+    "base": "90ef34a02b52c59b3a6555a3b9f51928e464e971",
+    "reproduction": "Legacy wait_for cancelled Motor-style executor commit Future despite underlying executor work being unstoppable; installed Motor asynccontext delegates synchronous exit; PyMongo publiccommithelper retries retryablecommit despite retryWritesFalse. Not a liveproductionfailure claim.",
+    "contract": "_run/read use explicitpublicsession lifecycle underoriginalCSOT; independent response wait nevercancels driver Futures. Retain tasks untilwork+asyncshieldedend_sessiondone. Technical perprocess24pendingwrite+8pendingread slots=32, preserving readcapacity forreconciliation; scopeddbobject/user/account/operation/kindduplicatebusy. Caller cancellation/timeout sets precommitstopflag, neverreleasesfence. RawpublicadmincommitTransaction command exactlyonce samepublicsession/majority+j; requirevalidok/noWCE. Any attemptedcommit failure/timeout remainsunknown, preservefence/reservation/noauto. Cleanupcannotupgradeunknownsuccess. RecoveryrawabortACK/storageonly no dispatch/releasepermission.",
+    "local_verification": "593passed7.99s-Werror including6newlifecyclecases; existingpolicy/offlineOAuthrevokes/CAS/inventory retained. Four realMongo ACKfaultmodules migrated from old helperpatch to actual _commit_once seam withoutweakeningcommit/fenceassertions.",
+    "actual_mongo_pending": "Dedicated113expected including22Mongo; new actual retryWritesTrue monitoredwirecommitlen1 forfailCommand server91/connectionclose/writeConcernError; commonaccountfence unchanged, appliedunknownallocationreserved/reconcilecommittedstorageonly, uncommittednot_proven neverrelease.",
+    "scope_limits": "No productionMongo/topologyproof/nativeprovider/externalwriter permission evidence. RuntimeflagliteralFalse/alloperationalflags off. Frozen diagnostic,launch/planner, sixpolicyhandlerimplementations unchanged. No livepolicy/ad/provider writes, Intent, merge or deployment.",
+    "next_safe_action": "Run freshactualreplica CI and fullGoogle suites, independent budget_audit exactsource review; fix evidenced failures before any guard migration. Parentowns integration/release."
   }
 }

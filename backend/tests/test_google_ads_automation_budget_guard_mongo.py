@@ -149,11 +149,11 @@ async def test_real_transaction_abort_does_not_leave_guard_or_policy(mongo_guard
 @pytest.mark.asyncio
 async def test_real_commit_response_loss_retains_allocation_and_never_returns_permission(mongo_guard,monkeypatch):
     db,capability=mongo_guard;await seed(db,capability)
-    original=AsyncIOMotorClientSession.commit_transaction;calls=0
-    async def lost(session):
+    original=guard._commit_once;calls=0
+    async def lost(database,session):
         nonlocal calls
-        calls+=1;await original(session);raise ConnectionError('injected loss after genuine Mongo commit')
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',lost)
+        calls+=1;await original(database,session);raise ConnectionError('injected loss after genuine Mongo commit')
+    monkeypatch.setattr(guard,'_commit_once',lost)
     with pytest.raises(HTTPException) as caught:await run(db,capability,allocation,'unknown_commit')
     assert caught.value.detail['commit_attempted'] and caught.value.detail['preserve_execution_fence']
     assert caught.value.detail['automatic_retry_allowed'] is False and calls==1
@@ -178,9 +178,9 @@ async def test_real_transaction_tenant_scope_and_policy_absence_are_independent(
 @pytest.mark.asyncio
 async def test_real_commit_cancellation_after_commit_retains_allocation(mongo_guard,monkeypatch):
     db,capability=mongo_guard;await seed(db,capability)
-    original=AsyncIOMotorClientSession.commit_transaction
-    async def cancelled(session):await original(session);raise asyncio.CancelledError()
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',cancelled)
+    original=guard._commit_once
+    async def cancelled(database,session):await original(database,session);raise asyncio.CancelledError()
+    monkeypatch.setattr(guard,'_commit_once',cancelled)
     with pytest.raises(asyncio.CancelledError) as caught:await run(db,capability,allocation,'cancel_after_commit')
     assert caught.value.commit_attempted and caught.value.preserve_execution_fence
     assert caught.value.automatic_retry_allowed is False
@@ -191,10 +191,10 @@ async def test_real_commit_cancellation_after_commit_retains_allocation(mongo_gu
 @pytest.mark.asyncio
 async def test_real_commit_timeout_after_commit_is_unknown_not_permission(mongo_guard,monkeypatch):
     db,capability=mongo_guard;await seed(db,capability)
-    original=AsyncIOMotorClientSession.commit_transaction;committed=asyncio.Event()
-    async def delayed_ack(session):
-        await original(session);committed.set();await asyncio.Event().wait()
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',delayed_ack)
+    original=guard._commit_once;committed=asyncio.Event();release=asyncio.Event()
+    async def delayed_ack(database,session):
+        await original(database,session);committed.set();await release.wait()
+    monkeypatch.setattr(guard,'_commit_once',delayed_ack)
     pending=asyncio.create_task(guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
         operation_id='timeout_after_commit',capability=capability,planner=allocation,timeout_seconds=1))
     await asyncio.wait_for(committed.wait(),5)
@@ -202,3 +202,7 @@ async def test_real_commit_timeout_after_commit_is_unknown_not_permission(mongo_
     assert caught.value.detail['commit_attempted'] and caught.value.detail['preserve_execution_fence']
     stored=await db.raw[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
     assert stored['active_claim']['operation_id']=='timeout_after_commit'
+
+    release.set()
+    await asyncio.gather(*(state['task'] for state in list(guard._pending_operations.values())),return_exceptions=True)
+    await asyncio.sleep(0)

@@ -77,13 +77,13 @@ async def test_actual_replica_lost_terminal_recovery_ack_keeps_conservative_comm
     db=legacy_mongo
     await db[PROPOSALS].update_one({'proposal_id':'proposal1'},
         {'$set':{'status':'completed','verified':True,'submission_started':True}})
-    original=AsyncIOMotorClientSession.commit_transaction
+    original=guard._commit_once
     calls=[]
-    async def lost_ack(session):
+    async def lost_ack(database,session):
         calls.append(True)
-        await original(session)
+        await original(database,session)
         raise ConnectionError('test-only lost recovery acknowledgement')
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',lost_ack)
+    monkeypatch.setattr(guard,'_commit_once',lost_ack)
     with pytest.raises(HTTPException) as error:
         await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id='claim1')
     assert error.value.detail['code']=='google_budget_guard_commit_unconfirmed'

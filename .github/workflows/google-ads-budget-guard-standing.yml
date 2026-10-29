@@ -5,6 +5,8 @@ on:
     branches: [codex/google-budget-guard-release-wip-20261029]
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
+      - backend/tests/test_google_ads_budget_guard_lifecycle.py
+      - backend/tests/test_google_ads_budget_guard_lifecycle_mongo.py
       - backend/tests/test_google_ads_budget_guard_probe.py
       - backend/tests/test_google_ads_budget_guard_probe_mongo.py
       - backend/tests/test_google_ads_automation_budget_guard.py
@@ -25,6 +27,8 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
+      - backend/tests/test_google_ads_budget_guard_lifecycle.py
+      - backend/tests/test_google_ads_budget_guard_lifecycle_mongo.py
       - backend/tests/test_google_ads_budget_guard_probe.py
       - backend/tests/test_google_ads_budget_guard_probe_mongo.py
       - backend/tests/test_google_ads_automation_budget_guard.py
@@ -115,6 +119,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/google-budget-guard-proof"
           git rev-parse HEAD > "$RUNNER_TEMP/google-budget-guard-proof/source-sha.txt"
           python -m pytest --noconftest -p no:cacheprovider -q -s --durations=5 -W error --tb=short \
+            backend/tests/test_google_ads_budget_guard_lifecycle.py \
+            backend/tests/test_google_ads_budget_guard_lifecycle_mongo.py \
             backend/tests/test_google_ads_budget_guard_probe.py \
             backend/tests/test_google_ads_budget_guard_probe_mongo.py \
             backend/tests/test_google_ads_automation_budget_guard.py \
@@ -138,15 +144,15 @@ jobs:
           output = Path(os.environ['RUNNER_TEMP']) / 'google-budget-guard-proof'
           root = ET.parse(output / 'junit.xml').getroot()
           cases = list(root.iter('testcase'))
-          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo'))]
+          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo', 'test_google_ads_budget_guard_lifecycle_mongo'))]
           errors = [case for case in cases if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped'))]
           proof = {'tests': len(cases), 'replica_mongo_tests': len(mongo), 'failures_errors_or_skips': len(errors),
                    'source_sha': (output / 'source-sha.txt').read_text().strip(),
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 104
-          assert len(mongo) == 19
+          assert len(cases) >= 113
+          assert len(mongo) == 22
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY
       - name: Preserve bounded Mongo diagnostics

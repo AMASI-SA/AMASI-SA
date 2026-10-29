@@ -158,11 +158,11 @@ async def test_real_claim_before_revoke_is_preserved_and_new_claims_are_denied(m
 @pytest.mark.asyncio
 async def test_real_postcommit_response_loss_is_unconfirmed_and_keeps_claim_and_fence(monkeypatch,authority_db):
     docs,native=rebased_case(NOW);await seed(authority_db,docs)
-    original=AsyncIOMotorClientSession.commit_transaction
-    async def lost_response(session):
-        await original(session)
+    original=guard._commit_once
+    async def lost_response(database,session):
+        await original(database,session)
         raise ConnectionError("private transport response lost after commit")
-    monkeypatch.setattr(AsyncIOMotorClientSession,"commit_transaction",lost_response)
+    monkeypatch.setattr(guard,"_commit_once",lost_response)
     with pytest.raises(HTTPException) as error:await authorize(authority_db,native)
     detail=error.value.detail
     assert detail["code"] == "google_budget_guard_commit_unconfirmed"
@@ -177,7 +177,7 @@ async def test_real_postcommit_response_loss_is_unconfirmed_and_keeps_claim_and_
     fence=await authority_db[management.FENCES].find_one({"user_id":"owner","account_id":"123"})
     row=await authority_db[management.PROPOSALS].find_one({"proposal_id":"proposal1"})
     assert fence["status"] == "claimed" and row["status"] == "approved" and row["submission_started"] is False
-    monkeypatch.setattr(AsyncIOMotorClientSession,"commit_transaction",original)
+    monkeypatch.setattr(guard,"_commit_once",original)
     with pytest.raises(HTTPException) as repeated:await authorize(authority_db,native)
     assert repeated.value.detail["code"] == "google_automation_claim_pending"
     # No automatic retry/resume after the lost authorization acknowledgement.

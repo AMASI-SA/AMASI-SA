@@ -86,17 +86,20 @@ class TransactionalCollection:
 
 
 class Session:
-    def __init__(self, db):self.db=db;self.in_transaction=False;self.commit_calls=0
-    async def __aenter__(self):await self.db._tx_lock.acquire();return self
+    def __init__(self, db):self.db=db;self.in_transaction=False;self.commit_calls=0;self.locked=False
+    async def __aenter__(self):
+        if not self.locked:await self.db._tx_lock.acquire();self.locked=True
+        return self
     async def __aexit__(self,*args):
         if self.in_transaction:await self.abort_transaction()
-        self.db._tx_lock.release()
+        if self.locked:self.db._tx_lock.release();self.locked=False
     def start_transaction(self,**kwargs):
         self.rows={name:deepcopy(collection.rows) for name,collection in self.db._tx_collections.items()}
         self.in_transaction=True
     async def abort_transaction(self):self.in_transaction=False
     async def end_session(self):
         if self.in_transaction: await self.abort_transaction()
+        if self.locked:self.db._tx_lock.release();self.locked=False
     async def commit_transaction(self):
         self.commit_calls+=1
         for name,rows in self.rows.items():self.db._tx_get(name).rows=deepcopy(rows)
@@ -112,12 +115,15 @@ class TransactionalDBMixin:
         if name not in self._tx_collections:self._tx_collections[name]=TransactionalCollection(self,name,BasicCollection())
         return self._tx_collections[name]
     async def start_session(self):
-        session=Session(self);self.sessions.append(session);return session
+        session=Session(self);await self._tx_lock.acquire();session.locked=True;self.sessions.append(session);return session
     async def command(self,name,*,session):
         assert session.db is self
         if isinstance(name, dict):
-            assert name['abortTransaction'] == 1
-            await session.abort_transaction()
+            if 'commitTransaction' in name:
+                await session.commit_transaction()
+            else:
+                assert name['abortTransaction'] == 1
+                await session.abort_transaction()
             return {'ok':1}
         assert name=='hello'
         return {'setName':'unit-only','logicalSessionTimeoutMinutes':30}

@@ -69,8 +69,11 @@ class DB:
     async def command(self,name,*,session):
         assert session is not None
         if isinstance(name, dict):
-            assert name['abortTransaction'] == 1
-            await session.abort_transaction()
+            if 'commitTransaction' in name:
+                await session.commit_transaction()
+            else:
+                assert name['abortTransaction'] == 1
+                await session.abort_transaction()
             return {'ok':1}
         return {'setName':'test','logicalSessionTimeoutMinutes':30} if self.transactional else {}
     async def start_session(self):
@@ -170,13 +173,17 @@ async def test_commit_ack_loss_never_returns_positive_permission_or_retries():
 @pytest.mark.asyncio
 async def test_timeout_during_commit_preserves_unknown_and_never_retries(monkeypatch):
     db=DB();capability=await supported(db)
-    async def blocked():await asyncio.Event().wait()
+    release=asyncio.Event()
+    async def blocked():await release.wait()
     db.commit_gate=blocked
     with pytest.raises(HTTPException) as caught:
         await guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',operation_id='op1',
             capability=capability,planner=mutation,timeout_seconds=.01)
     assert caught.value.detail['commit_attempted'] and caught.value.detail['preserve_execution_fence']
     assert db.sessions[-1].commit_calls==1
+    release.set()
+    await asyncio.gather(*(state['task'] for state in list(guard._pending_operations.values())),return_exceptions=True)
+    await asyncio.sleep(0)
 
 
 def allocation(snapshot):

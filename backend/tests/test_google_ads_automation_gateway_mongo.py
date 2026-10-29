@@ -89,11 +89,11 @@ async def test_real_shared_account_fence_serializes_manual_and_automation(monkey
 @pytest.mark.asyncio
 async def test_real_authority_postcommit_ack_loss_holds_then_terminally_cancels_without_http(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db)
-    original=AsyncIOMotorClientSession.commit_transaction
-    async def lose_ack(session):
-        await original(session)
+    original=guard._commit_once
+    async def lose_ack(database,session):
+        await original(database,session)
         raise TimeoutError('test-only budget transaction committed but response lost')
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',lose_ack)
+    monkeypatch.setattr(guard,'_commit_once',lose_ack)
     result=await execute(authority_db,row)
     assert result['status']=='uncertain' and result['submission_started'] is False and provider.writes==0
     configured=await authority_db[gateway.AUTOMATION_POLICIES].find_one({'user_id':'owner','account_id':'123'})
@@ -102,7 +102,7 @@ async def test_real_authority_postcommit_ack_loss_holds_then_terminally_cancels_
     allocation=budget['allocations'][budget['active_claim']['allocation_id']]
     assert allocation['state']=='reserved' and allocation['proposal_id']==row['proposal_id']
     assert (await authority_db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
-    monkeypatch.setattr(AsyncIOMotorClientSession,'commit_transaction',original)
+    monkeypatch.setattr(guard,'_commit_once',original)
     monkeypatch.setattr(management,'now',lambda:NOW+timedelta(minutes=6))
     monkeypatch.delenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED')
     result=await gateway.reconcile_google_automation_proposal(authority_db,user_id='owner',account_id='123',proposal_id=row['proposal_id'])
