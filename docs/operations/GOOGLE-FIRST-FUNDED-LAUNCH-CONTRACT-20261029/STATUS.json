@@ -1,0 +1,25 @@
+{
+  "status": "SEALED_READONLY_PROPOSED_CONTRACT_NOT_IMPLEMENTED",
+  "branch": "codex/google-first-funded-launch-contract-20261029",
+  "base": "f37d615a63d9650743bd2fc07ed9b5129a6009c1",
+  "tested_runtime": "ce2223f37cceed8f12b9a15f734945b96c69473e",
+  "scope": "Docs-only first funded launch/owner grant/gateway/worker assessment; no runtime changes",
+  "design": "DESIGN.md",
+  "reused_evidence": [
+    "PR1644 standing/creation floors and commonMAXholds",
+    "PR1610 reviewed26b10be native/product/configuration reader including actualBSON fix",
+    "Historical launchSTATUSaac9af1 and allwrites auditbaa941, whose standingfloor blocker is now addressed by1644"
+  ],
+  "recommended_next_vertical": "Preferred atomic brand-new ENABLED approvedSearch/RSA creation+ownergrant+commonreservation/floor+originalgraphreadback/gateway/worker; no existingPAUSED enable. OwnerUI can be implemented inactive/withoutinventedamounts; livefunding remainsblocked.",
+  "blocked_funded_acceptance": [
+    "No actualownerfinanciallimits saved",
+    "Production storage/newgrantandfundedjournalnamespacepermissions/index/legacy/nativeinventory evidence required",
+    "NewENABLEDgraph account/providersemanticvalidate-only permission/configuration proof required before paidsend",
+    "ExistingPAUSED automaticenable/history remainsseparatelyblocked; newresource atomiccreate avoids that priorhistoryproblem"
+  ],
+  "runtime_available": false,
+  "production_changed": false,
+  "verification": "Read-only exactsource callpath/status/design audit; official GoogleChangeEvent docs reviewed. No new runtime/test proof claimed. Docs whitespace/JSON validation only.",
+  "next": "Root reviews preferrednewresource atomiccreate contract and exactscope/fileownership before runtime/UI/guard edits. Preservefrozen1635/1644 andforeignproductionwork.",
+  "alternative_evidence": "Officialv25 GoogleAdsService.Mutate atomicity/tempresources docs reviewed. Memory-only fullofficialMutateGoogleAdsRequest oracle accepted copied7operationSearchgraph withcampaigncreateENABLED/partialfailurefalse; groups/RSA alreadyENABLED; originalbuilderPAUSED unchanged; providercalls0. Includesownnewtempcampaignconversiongoalupdate needing exactallowlist/providersemanticvalidation."
+}
