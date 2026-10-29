@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "backend_exact_fix_actual_replica_green_independent_verdict_pending",
+  "state": "bounded_backend_review_pass_root_integration_pending",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -44,7 +44,7 @@
     },
     "ci": "Dedicated exact-fixed-source replica SUCCESS. FullGoogle integrated CI, UI and live acceptance not claimed."
   },
-  "next": "Fresh exactfix actualMongo CI then independent reviewer verdict; notify planningagent schema unchanged/accurate association counts",
+  "next": "Root/planningagent integrate accepted sourceedb9 with guarded newUI/service and small route attachment on latest production; full integrated CI/build/live acceptance remain separate.",
   "known_source_limits": [
     "Canonical Snapchat _number(None) normalizes missing raw metric to zero; reader returns stored zero as unknown with metric provenance, never confirmedzero",
     "Read-only review route exported but not attached; no UI change",
@@ -102,7 +102,16 @@
       "Late variant event sameproduct inherited observed_context_days and metricstatus from earlier association; counts now require proof.event_id+product_id",
       "associated_product_count counted variant links rather than distinctproductids; now distinctproducts"
     ],
-    "regression": "Latevariant puretest failed1beforefix;33tests nowgreen; newactualwriterMongo regression collected"
+    "regression": "Latevariant puretest failed1beforefix;33tests nowgreen; newactualwriterMongo regression collected",
+    "verdict": "PASS bounded sourceedb9/treec60c; no confirmed blocker",
+    "local": "33passed/-Werror/zero skips1.19s with same clean HEAD before/after",
+    "additional_probes": "Native day offsets0/13/14/27/28/29/89/90 in Riyadh/NewYork/Kiritimati; DST25hour day passes",
+    "ci": "Reviewer independently retrieved40937859851/123673084251 exact43total/10actualMongo/zero skips",
+    "qualifications": [
+      "Trusted canonical graph writer chronology; not arbitrary legacy schema certification",
+      "4MiB aggregate source total check occurs after materializing up to95 snapshots each<=512KiB; no4MiB peakmemory claim",
+      "No concurrency loadtest; no shared route attachment/UI/live acceptance/deployment"
+    ]
   },
   "ui_handoff": {
     "agent": "google_plan_integration",
