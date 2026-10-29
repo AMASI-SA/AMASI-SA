@@ -1,0 +1,55 @@
+{
+  "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
+  "state": "SOURCE_A_REVIEWED_SELECTIVE_INTEGRATION_FRESH_CI_PENDING",
+  "branch": "codex/google-catalog-stock-review-source2-20261029",
+  "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
+  "integrated_from": {
+    "pr": 1605,
+    "checkpoint": "be417fdc88451304801a8fe38395a9c04a8891c7",
+    "runtime": "88a861ce83bad02cf880f7baaadb80073712ff4a"
+  },
+  "root_review": "Reviewed runtime/UI/proof validation and tests. M2→M5 overlap only catalogworkflow runner already22.04; preservecurrentcomment, strengthen34/6/no-skip gate. All other9files unchangedbyinterveningproductionfeatures. M5→M6 PR1615 changes have zero path overlap with all10selectedpaths. Exact9reviewedblobs preserved, freshSTATUSonly; unifiedReports untouched.",
+  "verification": {
+    "root": "28passed1.06s -Werror0skip; whitespacepassed",
+    "independent": "28reader/routes and separate source review; overclaimfixes accepted",
+    "prior_replica_ci": {
+      "run": 40915129669,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0,
+      "root_log_verified": true
+    },
+    "prior_full_ci": {
+      "run": 40915129818,
+      "backend": 1208,
+      "frontend": 198,
+      "suites": 17,
+      "build": "passed",
+      "root_log_verified": true
+    },
+    "current_source_ci": "pending",
+    "prior_source_a": {
+      "pr": 1616,
+      "source": "87812e17f4218b9bde05d5d4f73eed81f98d6161",
+      "ci_google": 40926093313,
+      "backend": 1242,
+      "frontend": 237,
+      "ci_replica": 40926093560,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0,
+      "intent": "6a69bdc306559ca66562e118447e58f6129d2c439ffeaa82220ea3c03973954f",
+      "host_attempt": "Frozentoolchaininstall stopped on registry.yarnpkg.com502 data-view-byte-offset1.0.1; no B/lease/publish. MeanwhileReportsM6 advanced, freshArequired."
+    }
+  },
+  "limits": [
+    "Raw hidden/out_of_stock statuswins.",
+    "Variant availability doesnot useparentquantity; boundedunavailability neverproveswholeproductstockout.",
+    "Global legacy variant_availability_verified staysfalse; perproductinventory_reviews explicit additiveproof.",
+    "Inventory50bound/source_revision/digest/date verified; remote pagination, size suitability/preparation/season/profit not proved.",
+    "No policy, campaign or provider writes."
+  ],
+  "production_changed": false,
+  "next_safe_action": "Fresh exactsourceCI andindependentreview. Wait foreign codex-marketing-reports-20261029 leaseclosure beforeactualhostbuild. Rootonly v5A/B/merge/publish/verify3. No budgets/policy/adwrites."
+}

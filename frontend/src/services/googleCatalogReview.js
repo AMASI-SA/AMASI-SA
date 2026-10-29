@@ -36,6 +36,27 @@ export function validateGoogleCatalogReview(result, scope) {
         if (typeof id !== "string" || !scope.productIds.includes(id) || seen.has(id)) throw unproven();
         seen.add(id);
     }
+    // Optional additive proof: old servers remain unknown, never upgraded.
+    if (catalog.inventory_reviews !== undefined) {
+        if (!Array.isArray(catalog.inventory_reviews) || catalog.inventory_reviews.length !== catalog.products.length) throw unproven();
+        const proofs = new Set();
+        for (const proof of catalog.inventory_reviews) {
+            const row = catalog.products.find((item) => item.product_id === proof?.product_id);
+            if (!row || proofs.has(proof.product_id) || !["available", "unavailable", "unproved"].includes(proof.state)
+                || proof.scope !== "stored_details_snapshot" || proof.maximum_supported_variants !== 50
+                || proof.remote_variant_coverage_complete !== false || proof.size_suitability_verified !== false
+                || proof.preparation_time_verified !== false) throw unproven();
+            proofs.add(proof.product_id);
+            if (proof.state === "unproved") {
+                if (proof.observed_at !== null || proof.stock_digest !== null || row.status === "available") throw unproven();
+            } else {
+                if (typeof proof.observed_at !== "string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(proof.observed_at)
+                    || !Number.isFinite(Date.parse(proof.observed_at)) || typeof proof.stock_digest !== "string"
+                    || !/^[a-f0-9]{64}$/.test(proof.stock_digest)
+                    || (row.status === "available" && proof.state !== "available")) throw unproven();
+            }
+        }
+    }
     if (seen.size !== scope.productIds.length) throw unproven();
     return result;
 }
