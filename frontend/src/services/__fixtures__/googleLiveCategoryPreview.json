@@ -1,0 +1,264 @@
+{
+  "generated_by": "actual_management_http_put_then_read",
+  "plan": {
+    "plan_id": "category-winter",
+    "revision": 1,
+    "fields": {
+      "instruction": "ركز على هدايا الشتاء بالسعودية",
+      "season": "هدايا الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "هدية الشتاء",
+      "category_url": null,
+      "category_ids": [
+        "8"
+      ],
+      "pinned_product_ids": [
+        "123"
+      ],
+      "excluded_product_ids": [
+        "1",
+        "internal-product"
+      ],
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "prior_season_context": null,
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "not_collected",
+        "calendar": "gregorian"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
+  },
+  "response": {
+    "plan_id": "category-winter",
+    "plan_revision": 1,
+    "status": "live_membership_observation_only",
+    "store_id": "9",
+    "category_id": "8",
+    "category_url": "https://store.test/winter",
+    "category_status": "active",
+    "observed_started_at": "2026-10-29T12:00:00+00:00",
+    "observed_finished_at": "2026-10-29T12:00:00+00:00",
+    "source": "salla_owned_category_products_fixed_get",
+    "provider_revision": null,
+    "remote_snapshot_atomic": false,
+    "pagination_traversal_complete": true,
+    "pages_read": 1,
+    "products_observed": 3,
+    "response_digest": "7c1b64acac647f71a60b46ba359453e9114565333fee4e1730ef16c7325cb413",
+    "stored_scope_authority": "declared_or_unknown",
+    "unresolved_exclusion_ids": [
+      "internal-product"
+    ],
+    "mezan_product_mapping_verified": false,
+    "inventory_verified": false,
+    "execution_authorized": false,
+    "products": [
+      {
+        "salla_product_id": "1",
+        "membership": "observed_category_endpoint",
+        "excluded": true,
+        "category_hidden": false,
+        "product_status": "unknown",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "2",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "hidden",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "3",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "out",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      }
+    ],
+    "limitations": [
+      "Membership observation only; inventory, sizes, preparation time and catalog offer mapping unproved",
+      "Completed page traversal is not an atomic category snapshot or campaign readiness",
+      "No automatic selection, ranking, profit inference or funding authority"
+    ]
+  },
+  "parent_plan": {
+    "plan_id": "seasonal-focus",
+    "revision": 3,
+    "fields": {
+      "instruction": "ركز على هدايا الشتاء",
+      "season": "الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "دفء الشتاء",
+      "category_url": "https://amasi-sa.com/shawls",
+      "category_ids": [],
+      "pinned_product_ids": [
+        "123"
+      ],
+      "excluded_product_ids": [],
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "prior_season_context": null,
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "not_collected",
+        "calendar": "gregorian"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
+  },
+  "parent_response": {
+    "plan_id": "seasonal-focus",
+    "plan_revision": 3,
+    "status": "live_membership_observation_only",
+    "store_id": "9",
+    "category_id": "8",
+    "category_url": "https://amasi-sa.com/shawls",
+    "category_status": "active",
+    "observed_started_at": "2026-10-29T12:00:00+00:00",
+    "observed_finished_at": "2026-10-29T12:00:00+00:00",
+    "source": "salla_owned_category_products_fixed_get",
+    "provider_revision": null,
+    "remote_snapshot_atomic": false,
+    "pagination_traversal_complete": true,
+    "pages_read": 1,
+    "products_observed": 3,
+    "response_digest": "7dc4180ad1d5ae488951b434a7d0112683184f672db3116d5dadbbac934c07e1",
+    "stored_scope_authority": "declared_or_unknown",
+    "unresolved_exclusion_ids": [],
+    "mezan_product_mapping_verified": false,
+    "inventory_verified": false,
+    "execution_authorized": false,
+    "products": [
+      {
+        "salla_product_id": "1",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "unknown",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "2",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "hidden",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "3",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "out",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      }
+    ],
+    "limitations": [
+      "Membership observation only; inventory, sizes, preparation time and catalog offer mapping unproved",
+      "Completed page traversal is not an atomic category snapshot or campaign readiness",
+      "No automatic selection, ranking, profit inference or funding authority"
+    ]
+  }
+}

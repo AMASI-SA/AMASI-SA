@@ -1,0 +1,81 @@
+name: Google saved plan fields contract
+on:
+  push:
+    branches: [codex/google-saved-plan-fields-contract-fix-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_commercial_plan.py
+      - backend/integrations_control_center/google_linked_campaign_routes.py
+      - backend/integrations_control_center/google_live_category_routes.py
+      - backend/integrations_control_center/google_native_inventory_*.py
+      - backend/tests/test_google_saved_plan_fields_contract*.py
+      - backend/tests/test_google_plan_ui_writer*.py
+      - frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json
+      - frontend/src/services/__fixtures__/google*Preview.json
+      - frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json
+      - backend/tests/test_google_*campaign_routes.py
+      - backend/tests/test_google_*category_routes.py
+      - backend/tests/test_google_native_inventory_*.py
+      - .github/workflows/google-saved-plan-fields-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replica:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1 cryptography==50.0.2
+          python-multipart==0.0.32 PyJWT==2.15.1 bcrypt==4.1.3
+          python-dotenv==1.2.4 pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Start disposable loopback replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name google-saved-fields-rs -p 127.0.0.1:27480:27480 mongo:8.0.26 --port 27480 --replSet gSavedPlanFields --bind_ip_all
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-saved-fields-rs mongosh --port 27480 --quiet --eval 'if(db.adminCommand({ping:1}).ok !== 1) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec google-saved-fields-rs mongosh --port 27480 --quiet --eval 'if(rs.initiate({_id:"gSavedPlanFields",members:[{_id:0,host:"127.0.0.1:27480"}]}).ok !== 1) quit(1)'
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-saved-fields-rs mongosh --port 27480 --quiet --eval 'const h=db.hello(); if(h.setName !== "gSavedPlanFields" || h.isWritablePrimary !== true || !Number.isInteger(h.logicalSessionTimeoutMinutes)) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+      - name: Test saved plan fields contract against replica
+        env:
+          GOOGLE_SAVED_PLAN_FIELDS_TEST_MONGO_URI: mongodb://127.0.0.1:27480/
+          PYTHONPATH: backend
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -q -Werror --junitxml=saved-plan-fields-results.xml backend/tests/test_google_saved_plan_fields_contract.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py backend/tests/test_google_linked_campaign_integration.py backend/tests/test_google_live_category_proof.py backend/tests/test_google_live_category_reader.py backend/tests/test_google_live_category_routes.py backend/tests/test_google_live_category_integration.py backend/tests/test_google_native_inventory_proof.py backend/tests/test_google_native_inventory_reader.py backend/tests/test_google_native_inventory_routes.py backend/tests/test_google_saved_plan_fields_contract_mongo.py backend/tests/test_google_plan_ui_writer_fixtures.py backend/tests/test_google_plan_ui_writer_mongo.py
+          python - <<'PYGATE'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('saved-plan-fields-results.xml').getroot().findall('.//testcase')
+          replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_saved_plan_fields_contract_mongo')]
+          integrated=[c for c in cases if c.attrib.get('classname','').endswith('test_google_plan_ui_writer_mongo')]
+          assert len(cases) == 151 and len(replica) == 8 and len(integrated) == 2
+          assert {c.attrib.get('name') for c in integrated} == {'test_actual_parent_mongo_put_then_category_and_native_read_preserves_saved_fields_and_scope', 'test_actual_authenticated_parent_put_then_all_readers_preserves_optional_prior_context'}
+          assert sum(c.attrib.get('name','').startswith('test_checked_ui_fixture_equals_actual_management_writer_then_reader') for c in cases) == 4
+          assert sum(c.attrib.get('name','').startswith('test_actual_mongo_put_then_each_reader_accepts_writer_saved_fields_without_synthesized_ack') for c in replica) == 3
+          assert sum(c.attrib.get('name','').startswith('test_actual_mongo_write_missing_or_false_review_ack_is_rejected_without_plan') for c in replica) == 2
+          assert sum(c.attrib.get('name','').startswith('test_actual_mongo_invalid_saved_business_fields_still_fail_before_provider') for c in replica) == 3
+          assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
+          print('Verified',len(cases),'tests including',len(replica)+len(integrated),'real Mongo replica tests, zero skips')
+          PYGATE
+      - name: Remove disposable replica
+        if: always()
+        run: docker rm -f google-saved-fields-rs

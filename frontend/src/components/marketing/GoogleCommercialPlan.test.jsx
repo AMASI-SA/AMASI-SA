@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import GoogleCommercialPlan from "./GoogleCommercialPlan";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
+import nativeFixture from "../../services/__fixtures__/googleNativeInventoryPreview.json";
+import categoryFixture from "../../services/__fixtures__/googleLiveCategoryPreview.json";
+import linkedFixture from "../../services/__fixtures__/googleLinkedCampaignEvidence.json";
 
+jest.mock("../../context/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner", role: "owner" }, authStatus: "authenticated" }) }));
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
-const fields = { instruction: "ركز على هدايا الشتاء", season: "الشتاء", starts_on: "2026-11-01", ends_on: "2026-12-31", market: "SA",
-    audience: "رجال يبحثون عن هدية", message: "دفء الشتاء", category_url: "https://amasi-sa.com/shawls", category_ids: [],
-    pinned_product_ids: ["123"], excluded_product_ids: [], exclusions: [], selection_mode: "pinned_only", calendar: "gregorian", limits: null };
-const saved = { plan_id: "seasonal-focus", revision: 3, fields, execution_authorized: false };
+const saved = categoryFixture.parent_plan;
+const fields = saved.fields;
 let container, root;
 beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,7 +40,8 @@ test("loads saved owner context without default budgets or granting execution", 
     expect(element("هدف العائد الاختياري ROAS").value).toBe("");
     expect(element("توجيه المالك").value).toBe(fields.instruction);
     expect(container.textContent).toContain("لا يمنح تفويض تشغيل أو إنفاق");
-    expect(container.textContent).toContain("الأدلة لم تُجمع بعد");
+    expect(container.textContent).toContain("اكتمالها غير مثبت");
+    expect(container.textContent).toContain("المشاهدات الجزئية لا تثبت صافي المبيعات أو نموها");
     expect(container.textContent).toContain("الربحية غير مثبتة عند نقص التكاليف");
     expect(api.put).not.toHaveBeenCalled();
 });
@@ -212,4 +215,144 @@ test("plan switch aborts late read before it can overwrite the new form", async 
     await render({ planId: "summer" }); expect(signal.aborted).toBe(true);
     await act(async () => finish({ data: saved }));
     expect(element("الموسم").value).toBe("الصيف"); expect(container.textContent).toContain("النسخة المحفوظة: 9");
+});
+
+function observedStoreResponse(revision = 3) {
+    const windows = { last_14_days: ["2026-10-15", "2026-10-28"], previous_14_days: ["2026-10-01", "2026-10-14"], last_30_days: ["2026-09-29", "2026-10-28"], last_90_days: ["2026-07-31", "2026-10-28"] };
+    return { plan_id: saved.plan_id, plan_revision: revision, product_ids_reviewed: ["123"], catalog_missing_or_unverified_ids: [], provider_writes: 0, execution_authorized: false,
+        observations: { mode: "stored_product_line_observations", metric_basis: "lower_bound_on_qualifying_saved_gross_line_observations_not_sales", as_of: "2026-10-29T12:00:00+00:00",
+            windows: Object.fromEntries(Object.entries(windows).map(([key, [from, to]]) => [key, { from, to, timezone: "Asia/Riyadh" }])),
+            coverage_complete: false, refunds_reconciled: false, snapshot_consistent: false, source_snapshot_immutable: false, platform_conversions_added: false,
+            execution_authorized: false, provider_writes: 0, source_writes: 0, truncated: false,
+            products: [{ product_id: "123", currency_groups: [], sales_native: null, profitability: null, growth_14_days_percent: null, success_classification: "not_established" }] } };
+}
+
+test("actual saved plan exposes explicit observations read beside catalog review without automatic requests", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/store-observations") ? observedStoreResponse() : saved }));
+    await render(); expect(api.get).toHaveBeenCalledTimes(1);
+    expect(button("قراءة منتجات الخطة المحفوظة")).not.toBeUndefined();
+    await act(async () => button("قراءة مشاهدات منتجات الخطة").click());
+    expect(api.get.mock.calls[1][0]).toBe("/integrations-v2/google_ads/commercial-plans/seasonal-focus/store-observations");
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.textContent).toContain("لا يعني ذلك عدم وجود مبيعات");
+    expect(api.put).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+
+test("editing actual parent form aborts and removes late saved-plan observations", async () => {
+    let finish; api.get.mockImplementation((url) => url.endsWith("/store-observations") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: saved }));
+    await render(); await act(async () => button("قراءة مشاهدات منتجات الخطة").click());
+    const signal = api.get.mock.calls[1][1].signal;
+    await input("الموسم", "الصيف"); expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: observedStoreResponse() }));
+    expect(button("قراءة مشاهدات منتجات الخطة")).toBeUndefined();
+    expect(container.textContent).not.toContain("وقت القراءة الثابت");
+    expect(api.put).not.toHaveBeenCalled();
+});
+
+function categoryParentResponse() {
+    return { plan_id: saved.plan_id, plan_revision: 3, observed_at: "2026-10-29T12:00:00+00:00", product_ids_reviewed: ["123"], provider_writes: 0, execution_authorized: false,
+        review: { scope: "pinned_products_current_stored_category_membership", category_ids_reviewed: ["8"], category_url: null, remote_category_coverage_complete: false, platform_catalog_mapping_verified: false, source_writes: 0, provider_writes: 0, execution_authorized: false,
+            products: [{ product_id: "123", salla_product_id: "123", mezan_product_id: "mpv2_123", membership: "observed_in_stored_source", matched_category_ids: ["8"], observed_at: "2026-10-29T12:00:00+00:00", source_ref: `category-observation:${"a".repeat(64)}`, category_url_status: "not_requested", category_url_matched_ids: [], catalog_visibility: "active", eligible_for_ad_selection: false, remote_category_coverage_complete: false, source_snapshot_immutable: false, platform_catalog_mapping_verified: false, execution_authorized: false }] } };
+}
+
+test("saved owner plan wires category review beside observations without automatic read", async () => {
+    const current = { ...saved, fields: { ...fields, category_ids: ["8"], category_url: null } };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/category-review") ? categoryParentResponse() : current })); await render();
+    expect(api.get).toHaveBeenCalledTimes(1); expect(button("مراجعة أقسام منتجات الخطة")).not.toBeUndefined(); expect(button("قراءة مشاهدات منتجات الخطة")).not.toBeUndefined();
+    await act(async () => button("مراجعة أقسام منتجات الخطة").click());
+    expect(api.get.mock.calls[1][0]).toBe("/integrations-v2/google_ads/commercial-plans/seasonal-focus/category-review");
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.textContent).toContain("mpv2_123");
+    expect(api.put).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+
+test("editing actual parent category field aborts late category request", async () => {
+    let finish; const current = { ...saved, fields: { ...fields, category_ids: ["8"], category_url: null } };
+    api.get.mockImplementation((url) => url.endsWith("/category-review") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: current }));
+    await render(); await act(async () => button("مراجعة أقسام منتجات الخطة").click()); const signal = api.get.mock.calls[1][1].signal;
+    await input("معرفات الأقسام", "9"); expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: categoryParentResponse() })); expect(container.textContent).not.toContain("mpv2_123"); expect(button("مراجعة أقسام منتجات الخطة")).toBeUndefined();
+    expect(api.put).not.toHaveBeenCalled();
+});
+
+function linkedParentResponse() { return JSON.parse(JSON.stringify(linkedFixture.parent_response)); }
+
+test("actual saved owner plan exposes linked context alongside existing evidence without automatic requests or writes", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/linked-campaign-evidence") ? linkedParentResponse() : saved }));
+    await render(); expect(api.get).toHaveBeenCalledTimes(1);
+    for (const text of ["قراءة منتجات الخطة المحفوظة", "قراءة مشاهدات منتجات الخطة", "مراجعة أقسام منتجات الخطة", "قراءة سياق الحملات المرتبطة"]) expect(button(text)).not.toBeUndefined();
+    await act(async () => button("قراءة سياق الحملات المرتبطة").click());
+    expect(api.get.mock.calls[1][0]).toBe("/integrations-v2/google_ads/commercial-plans/seasonal-focus/linked-campaign-evidence");
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.querySelectorAll("[data-context-id]")).toHaveLength(1);
+    expect(element("حد الميزانية اليومي الاختياري").value).toBe("");
+    expect(api.put).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+
+test.each(["edit", "reload", "save"])("actual parent %s aborts and discards pending linked campaign context", async (kind) => {
+    let finish; api.get.mockImplementation((url) => url.endsWith("/linked-campaign-evidence") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: saved }));
+    await render(); await act(async () => button("قراءة سياق الحملات المرتبطة").click()); const signal = api.get.mock.calls[1][1].signal;
+    if (kind === "edit") await input("الموسم", "الصيف");
+    else if (kind === "reload") await act(async () => button("إعادة تحميل خطة الموسم").click());
+    else { await acknowledge(); await save(); }
+    expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: linkedParentResponse() }));
+    expect(container.querySelector("[data-context-id]")).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+function categoryPreviewResponse() { return JSON.parse(JSON.stringify(categoryFixture.parent_response)); }
+
+test("actual owner plan attaches explicit saved-URL live preview alongside existing reviews", async () => {
+    await render(); expect(api.get).toHaveBeenCalledTimes(1);
+    api.get.mockResolvedValueOnce({ data: categoryPreviewResponse() });
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click());
+    expect(api.get.mock.calls[1][0]).toBe("/integrations-v2/google_ads/commercial-plans/seasonal-focus/live-category-preview");
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.querySelectorAll("[data-salla-product-id]")).toHaveLength(3);
+    for (const text of ["قراءة منتجات الخطة المحفوظة", "قراءة مشاهدات منتجات الخطة", "مراجعة أقسام منتجات الخطة", "قراءة سياق الحملات المرتبطة"]) expect(button(text)).not.toBeUndefined();
+    expect(api.put).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+test.each(["edit", "reload", "save"])("actual parent %s aborts and discards pending live category preview", async (kind) => {
+    let finish; await render(); api.get.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click()); const signal = api.get.mock.calls[1][1].signal;
+    if (kind === "edit") await input("الجمهور المستهدف", "جمهور جديد");
+    else if (kind === "reload") await act(async () => button("إعادة تحميل خطة الموسم").click());
+    else { await acknowledge(); await save(); }
+    expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: categoryPreviewResponse() })); expect(container.querySelector("[data-live-category-result]")).toBeNull();
+    expect(api.post).not.toHaveBeenCalled(); expect(api.put).toHaveBeenCalledTimes(kind === "save" ? 1 : 0);
+});
+
+test("parent evidence fixtures are bound to actual HTTP writer fields without write controls", () => {
+    expect(saved).toEqual(linkedFixture.parent_plan);
+    for (const plan of [saved, linkedFixture.plan, categoryFixture.plan]) {
+        expect(plan.fields).not.toHaveProperty("acknowledge_review"); expect(plan.fields).not.toHaveProperty("expected_revision");
+    }
+    expect(linkedParentResponse().plan_id).toBe(saved.plan_id); expect(categoryPreviewResponse().plan_revision).toBe(saved.revision);
+});
+
+test("actual parent uses writer-produced category and native inventory fixtures without automatic POST or plan mutation", async () => {
+    await render(); api.get.mockResolvedValueOnce({ data: nativeFixture.category });
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click()); expect(api.post).not.toHaveBeenCalled();
+    for (const id of ["1", "2", "3"]) await act(async () => element(`فحص مخزون المنتج ${id}`).click());
+    expect(api.post).not.toHaveBeenCalled(); api.post.mockResolvedValueOnce({ data: nativeFixture.response });
+    await act(async () => button("فحص مخزون المنتجات المحددة فقط").click());
+    expect(api.post.mock.calls[0][1]).toEqual({ expected_revision: 3, category_id: "8", selected_product_ids: ["1", "2", "3"] });
+    expect(container.querySelectorAll("[data-native-product-id]")).toHaveLength(3); expect(api.put).not.toHaveBeenCalled();
+    expect(nativeFixture.plan).toEqual(saved);
+});
+test.each(["edit", "save", "reload", "category-refresh", "owner"])("actual parent %s cancels native inventory and rejects a late response", async (kind) => {
+    await render(); api.get.mockResolvedValueOnce({ data: nativeFixture.category });
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click());
+    for (const id of ["1", "2", "3"]) await act(async () => element(`فحص مخزون المنتج ${id}`).click());
+    let finish; api.post.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => button("فحص مخزون المنتجات المحددة فقط").click()); const signal = api.post.mock.calls[0][2].signal;
+    if (kind === "edit") await input("الموسم", "موسم جديد");
+    else if (kind === "save") { await acknowledge(); await save(); }
+    else if (kind === "reload") await act(async () => button("إعادة تحميل خطة الموسم").click());
+    else if (kind === "category-refresh") { api.get.mockResolvedValueOnce({ data: nativeFixture.category }); await act(async () => button("معاينة عضوية قسم سلة الآن").click()); }
+    else await render({ isOwner: false });
+    expect(signal.aborted).toBe(true); await act(async () => finish({ data: nativeFixture.response }));
+    expect(container.querySelector("[data-native-inventory-result]")).toBeNull(); expect(api.put).toHaveBeenCalledTimes(kind === "save" ? 1 : 0);
 });
