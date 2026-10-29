@@ -1,0 +1,13 @@
+{
+  "status": "WIP_selective_guard_reintegration_floor_not_implemented",
+  "base": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+  "reviewed_source": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
+  "scope": "Typed atomic PAUSED creation-only submission floor; preserve all retail/source integration files. runtime remains false.",
+  "path_overlap": "No overlap between reviewed M6-relative guard runtime/test/workflow patch and M6-to-retail source changes; applied exact patch successfully. No release intent copied.",
+  "production_changed": false,
+  "next": "Implement typed floor transaction and narrow management branch; unit and real Mongo race/ambiguous commit acceptance plus independent review required.",
+  "limitations": [
+    "No shared metadata/product/external Google writer serialization",
+    "Not deployable; production prerequisites and floor acceptance pending"
+  ]
+}

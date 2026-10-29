@@ -193,6 +193,10 @@ async def _authorize_dispatch(db,row,client,metadata,epoch,snapshot,*,read_start
         or reply.get('creation_identity')!=row['automation_source']['creation_identity']
         or reply.get('submission_floor_required') is not True):
         raise problem('google_creation_authorization_unconfirmed','لم يثبت إقرار حجز الإنشاء؛ تحقق دون إعادة إرسال.',503)
+    from .google_ads_automation_creation_authority import revalidate_committed_google_creation_claim
+    await revalidate_committed_google_creation_claim(db,user_id=row['user_id'],account_id=row['account_id'],
+        proposal_id=row['proposal_id'],execution_claim_id=row['execution_claim_id'],
+        native_evidence={'metadata':metadata,'auth_epoch':epoch,'native_context':native,'observed_at':read_started_at})
     return reply
 
 
