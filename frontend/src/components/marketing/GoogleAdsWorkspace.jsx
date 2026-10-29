@@ -1,3 +1,5 @@
+import GoogleStorageCommitReadiness from "./GoogleStorageCommitReadiness";
+import GoogleNamespacePrerequisites from "./GoogleNamespacePrerequisites";
 import { useEffect, useMemo, useRef, useState } from "react";
 import GoogleAnalysisAttempts from "./GoogleAnalysisAttempts";
 import GoogleAutomationPolicy from "./GoogleAutomationPolicy";
@@ -305,6 +307,10 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         {permissions.owner === true && account && <GoogleDelegationPanel key={accountId} account={account} onUpdated={() => setRevision((value) => value + 1)} />}
         {permissions.owner === true && account && <GoogleAutomationPolicy accountId={accountId} isOwner={permissions.owner} />}
         {permissions.owner === true && account && <GoogleCreationPolicy accountId={accountId} isOwner={permissions.owner} />}
+        {permissions.owner === true && <details className="rounded-2xl border bg-white p-4 text-sm leading-7" aria-label="فحوص حفظ حدود جوجل"><summary className="cursor-pointer font-bold">فحوص حفظ حدود جوجل</summary>
+            <GoogleStorageCommitReadiness isOwner={permissions.owner} />
+            <GoogleNamespacePrerequisites isOwner={permissions.owner} />
+        </details>}
         <GoogleCommercialPlan isOwner={permissions.owner} />
         {listLoading && <p role="status" className="text-center text-sm text-slate-500">جارٍ تحميل القائمة…</p>}
         {drafts && <section className="space-y-2 rounded-2xl border bg-white p-4" aria-label="مسودات جوجل المحفوظة"><h3 className="font-black">المسودات المحفوظة</h3>{drafts.map((record) => <button type="button" key={record.draft_id || record.id} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-right text-sm" onClick={() => openComposer({ mode: "create", accountId, accountName: accountNameOf(account || {}), currency: accountCurrency, draftId: record.draft_id || record.id })}><span className="font-bold">{record.draft?.name || record.name || "مسودة حملة"}</span><span className="text-xs text-slate-500">{GOOGLE_CAMPAIGN_LABELS[record.draft?.campaign_type || record.campaign_type] || "حملة"} · النسخة {record.revision}</span><span className="font-bold text-emerald-700">استكمال المسودة</span></button>)}{!drafts.length && <p className="p-3 text-sm text-slate-500">لا توجد مسودات محفوظة للحساب المختار.</p>}</section>}
