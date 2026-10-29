@@ -1,0 +1,19 @@
+{
+  "task": "google-prior-season-review-ui-20261029",
+  "branch": "codex/google-prior-season-review-ui-20261029",
+  "base": "b3ea651cced66b6171ba379806b955879409a3b3",
+  "state": "WIP_child_ui_locally_verified_unattached_pending_independent_review_and_ci",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "ownership": "Four NEW child/service/test paths plus unique actualwriter generator/JSON/paritytest and this STATUS only. No shared form/service/router or frozen backend changes.",
+  "contract": "GooglePriorSeasonReview({plan,isOwner,ownerId,planDirty=false}) renders saved prior interval and owner-declared reference only. No request until explicit button; invalid/missing prior and dirty/non-owner scopes cannot request. GET /google_ads/commercial-plans/{id}/prior-season-observations with expected_revision. Strict response validates savedcontext, owner provenance, unknowncalendar/growth/profit/coverage/authority, exact interval/closedRiyadhday, selected products, unique native currency groups and bounded raw gross line observations. No sums, ranking, monetary target, inferred Hijri dates, source write or consent save.",
+  "cancellation": "Abort/unmount and full ownerId/planId/revision/fullfields key invalidate late responses. One in-flight request; reread masks previous data; sanitized errors.",
+  "actual_writer_fixture": "backend/tests/google_prior_season_review_fixture.py generates frontend/src/services/__fixtures__/googlePriorSeasonReview.json from actual HTTP PUT then prior GET with synthetic in-memory owner/orders. No handcrafted consent-bearing saved fields. Run from backend: PYTHONPATH=. /tmp/mezan-google29-venv/bin/python -m tests.google_prior_season_review_fixture. Parity backend test asserts exact current writer/read output.",
+  "verification": {
+    "frontend": "52tests/2suites PASS1.083s via governed Node22.23.2/Yarn1.22.22, no skips; host UNDICI experimental warning only",
+    "fixture": "1backend actualHTTP fixture parity test passed-Werror0skip0.84s",
+    "whitespace": "git diff --check passed",
+    "ci": "Dedicated google-prior-season-review-ui.yml added: exact52UI/2suites zero skipped/pending/todo, exact1actualHTTPwriter fixture parity, governed frozen install/currentCI build; remote run pending. Existing shared fullworkflow unchanged."
+  },
+  "next": "Remotecheckpoint and root/independent review; integrationowner adds editableprior save fields/actualfixture regeneration, parent component attachment and backend router attachment on fresh production source. No release intent/merge/publish by this branch."
+}
