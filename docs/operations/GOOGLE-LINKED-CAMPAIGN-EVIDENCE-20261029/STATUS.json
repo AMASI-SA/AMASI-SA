@@ -33,9 +33,9 @@
   ],
   "verification": {
     "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
-    "result": "31 passed, zero skips, 1.10s; initial missingmodule red observed",
-    "actual_mongo": "9 collected actual writer/replica cases, not executed locally; dedicated CI required, zero-skips gate40total/9actual",
-    "ci": "new dedicated google-linked-campaign-evidence.yml pending remote checkpoint"
+    "result": "32 passed, zero skips, 1.17s -Werror; variant duplicate-reference regression failed before dedup fix",
+    "actual_mongo": "9 cases collected; dedicated replica41total/9actual gate pending",
+    "ci": "prior source52581004 PR run40934125506 pending; fresh source CI required"
   },
   "next": "Obtain dedicated actual-Mongo CI40/9 with zero skips, independent review exact source; parent owns later small shared attachment/UI.",
   "known_source_limits": [
@@ -56,5 +56,13 @@
     "meta": "Persist native timezone with immutable complete campaign-day snapshot and producing completedrun reference; do not infer from current account metadata.",
     "tiktok": "Persist native currency and timezone with existing complete entity-day snapshot; define per-field presence instead of defaulted zero.",
     "snapchat": "Optional future per-field provider-presence provenance would distinguish explicitzero from missingrawmetric; current slice treats storedzero asunknown."
-  }
+  },
+  "completed_wip": [
+    "Owner-only standalone route saved revision/fullfields race check; no shared attach",
+    "Verified effective history frozen per campaign; current future evidence guard, historical recording+observation beforeday, interior detach invalidates",
+    "Native exact closed Snap day +complete producingrun; no legacyfallback; zero metrics unknown",
+    "Shared campaign context once across product/variant references; nativecurrency/attribution/window separated",
+    "Explicit four windows with missingdates/contextreferences, no metric sum or growth inference",
+    "Meta/TikTok associations and exact missing source fields only"
+  ]
 }

@@ -71,6 +71,16 @@ async def test_multiproduct_campaign_context_is_emitted_once_no_allocated_metric
     assert "metrics" not in first and "metrics" not in second
     assert result["source_coverage_complete"] is False
     assert result["campaign_contexts"][0]["window_ids"] == ["last14", "last30", "last90"]
+    windows = {w["window_id"]: w for w in result["campaign_windows"]}
+    assert windows["last14"]["observed_context_days"] == 1 and len(windows["last14"]["missing_dates"]) == 13
+    assert windows["previous14"]["observed_context_days"] == 0 and len(windows["previous14"]["missing_dates"]) == 14
+    assert windows["last90"]["metrics_aggregated"] is False
+
+
+@pytest.mark.asyncio
+async def test_two_verified_variant_associations_do_not_duplicate_product_context_reference():
+    result = await read(database([event(), event(event_id="variant", association_key="variant", product_variant_id="size")]))
+    assert len(result["products"][0]["context_refs"]) == 1
 
 
 @pytest.mark.asyncio

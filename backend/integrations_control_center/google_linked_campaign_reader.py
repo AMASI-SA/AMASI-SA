@@ -70,7 +70,7 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
             or len(set(product_ids)) != len(product_ids)):
         raise ValueError("selection_invalid")
     output = {"as_of": now.isoformat(), "products": [{"product_id": p, "associations": [], "context_refs": []} for p in product_ids],
-              "campaign_contexts": [], "source_coverage_complete": False, "product_attribution_verified": False,
+              "campaign_contexts": [], "campaign_windows": [], "source_coverage_complete": False, "product_attribution_verified": False,
               "independent_store_orders": None, "profitability": None, "execution_authorized": False,
               "rule": "Campaign metrics are shared context, never allocated product results or independent store orders.",
               "limitations": ["No product ranking or Google success inference", "No approved test budget or launch authority", "Native days and attribution settings remain separate"]}
@@ -91,7 +91,8 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
             event_id, key = event.get("event_id"), event.get("association_key")
             if (not isinstance(event_id, str) or not event_id.strip() or event_id in event_ids
                     or not isinstance(key, str) or not key.strip() or event.get("state") not in {"active", "inactive"}
-                    or _instant(event.get("recorded_at")) > now):
+                    or _instant(event.get("recorded_at")) > now
+                    or _instant((event.get("evidence") or {}).get("observed_at")) > now):
                 raise ValueError("association_history_unproved")
             event_ids.add(event_id)
             _instant(event.get("valid_from"))
@@ -165,7 +166,7 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
         contexts = [c for c in contexts if (c["date"], c["timezone"], c["attribution_key"]) not in duplicate]
         for link in linked:
             entry = next(a for a in products[link["product_id"]]["associations"] if
-                (a["provider"], a["account_id"], a["campaign_id"]) == (provider, account, campaign))
+                a["event_id"] == link["event_id"])
             entry.update(observed_context_days=sum(any(p["product_id"] == link["product_id"] for p in c["association_proofs"]) for c in contexts),
                          rejected_source_snapshots=rejected, source_coverage_complete=False,
                          missing=["complete_period_product_attribution", "independent_store_order_matching", "historical_product_costs"],
@@ -173,5 +174,27 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
         output["campaign_contexts"].extend(contexts)
         for context in contexts:
             for proof in context["association_proofs"]:
-                products[proof["product_id"]]["context_refs"].append(context["context_id"])
+                refs = products[proof["product_id"]]["context_refs"]
+                if context["context_id"] not in refs:
+                    refs.append(context["context_id"])
+    for product in output["products"]:
+        product["status"] = "partial_saved_campaign_context" if product["context_refs"] else "verified_association_only" if product["associations"] else "no_verified_current_campaign_association"
+    groups = {}
+    for context in output["campaign_contexts"]:
+        scope = tuple(context[k] for k in ("provider", "account_id", "campaign_id", "currency", "timezone", "attribution_key"))
+        groups.setdefault(scope, []).append(context)
+    for scope, contexts in sorted(groups.items()):
+        provider, account, campaign, currency, zone, attribution = scope
+        last = now.astimezone(ZoneInfo(zone)).date() - timedelta(days=1)
+        for name, days, offset in (("last14", 14, 0), ("previous14", 14, 14), ("last30", 30, 0), ("last90", 90, 0)):
+            end = last - timedelta(days=offset)
+            start = end - timedelta(days=days - 1)
+            expected = {(start + timedelta(days=i)).isoformat() for i in range(days)}
+            selected = [c for c in contexts if c["date"] in expected]
+            output["campaign_windows"].append({"provider": provider, "account_id": account, "campaign_id": campaign,
+                "currency": currency, "timezone": zone, "attribution_key": attribution, "window_id": name,
+                "date_from": start.isoformat(), "date_to": end.isoformat(), "context_refs": [c["context_id"] for c in selected],
+                "observed_context_days": len(selected), "expected_days": days,
+                "missing_dates": sorted(expected - {c["date"] for c in selected}), "source_coverage_complete": False,
+                "metrics_aggregated": False, "comparison_status": "partial_context_only_no_growth_inference"})
     return output
