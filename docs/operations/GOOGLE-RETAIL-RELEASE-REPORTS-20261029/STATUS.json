@@ -218,5 +218,14 @@
     "prepared": "2026-10-29T20:19:10.368984+00:00",
     "started_ui": "2026-10-29 23:19 Asia/Riyadh",
     "preserved": true
+  },
+  "host_rehearsal": {
+    "state": "A_REBUILD_IN_PROGRESS_AFTER_PREVIEW_IDLE_RESTART",
+    "root_observed_guard_active": false,
+    "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+    "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
+    "directory": "/tmp/google1634-source-a-resumed-20261029",
+    "recovery": "Initialhostdisconnected502thenPreviewUnavailableinactive; resumedviaResumePreview no chat. /tmp priorintent/logbothmissing, appHEADfdaandtrackedclean. unrelated.emergent/testing anddeployer-agent-docspreserved.",
+    "next": "ReadcurrentactualAlog/frozenintent; requirefullSHA256match3daf beforeB; no lease/publishyet"
   }
 }
