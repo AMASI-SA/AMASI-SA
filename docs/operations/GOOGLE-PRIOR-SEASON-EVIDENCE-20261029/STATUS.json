@@ -2,7 +2,7 @@
   "task": "google-prior-season-evidence-20261029",
   "branch": "codex/google-prior-season-evidence-20261029",
   "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
-  "state": "successor_frozen_owner_and_bson_fence_ci_review_pending",
+  "state": "SEALED_BOUNDED_BACKEND_PASS_UNATTACHED_RELEASE_HOLD",
   "production_changed": false,
   "provider_calls_performed": false,
   "ownership": "Assigned CommercialPlanFields optionalprior context+review_context, internal strictstorequalifier factoring, newpriorreader/route/tests/workflow. No sharedrouter/UI or sourcewriter/normalizer edits. Planningagent retains UI ownership.",
@@ -11,11 +11,17 @@
     "red": "ActualHTTP ownerPUT prior context failed422 extra_forbidden beforeimplementation",
     "local": "110focused/-Werror/zero skips2.31s including7actualauth writer races; unchangedcurrentgoldendigest",
     "unchanged_current": "Characterization digest captured fromimmutable8dc beforefactoring: empty/valid/duplicate/truncated currentresponses af8875a23d4868f15cf835e6863239b251c0fec8d59b1429bc4c6ed39ce583eb stillmatches",
-    "actual_mongo": "19collected; successor requires129total/19actual/zero-skips CI (not executed locally)",
-    "ci": "Historical4eb prior40954079047115/12; current4095407915091/14; savedFields40954079451145/8; full409540792261491backend415UI/build. Successor freshCI pending",
+    "actual_mongo": "40961344908/job123754600124:129pass8.18s; exact19actualMongo/zero skips setup/test/cleanup successful",
+    "ci": {
+      "checkout": "a487b44 synthetic merge b3ea into0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24, not source-identical checkout claim",
+      "prior": "40961344908:129/19Mongo",
+      "current": "40961344956/job123754600314:91pass5.54s/14Mongo/zero skips",
+      "saved_fields": "40961344751/job123754599701:145pass9.21s/8Mongo/zero skips",
+      "full": "40961344816 backend1491pass28.94s; frontend415/24suites+build6.00s"
+    },
     "red_successor": "5 regressions failed200 before fix"
   },
-  "next": "Freeze finalsuccessor remote and independent review; fresh129/19 and preservedcurrent/savedFields/full management CI. No router/UI attachment or release.",
+  "next": "Root owns fresh release source and router attachment. New isolated prior-season child UI/service assignment starts acceptedb3ea; no edits to frozen backend/shared UI.",
   "route_contract": {
     "attach": "attach_google_prior_season_routes(router,db,current_user)",
     "method": "GET",
@@ -26,5 +32,20 @@
     "authority": "alignmentunknown/growthnull/profitabilitynull/executionfalse; partialrawlineobservations notnetsales"
   },
   "rejected_checkpoint": "4ebf67fd3a51786689a407c9d3ee54d8ef782f6b: confirmed mid-read owner disabled/role/deletion and bool/float revision aliases returned observations; preserved historical checkpoint, acceptance withheld",
-  "successor_fix": "New route only fresh bounded unique owner DB gate before/after (not captured principal), strict final revision type plus exact BSON snapshot of projected plan fields/revision/provenance. No global auth/principal mutation. Real auth HTTP writer races added for all5 cases; realMongo owner seeded. Authenticated dependency password_updated_at binds initialDB owner and finalDB; exact BSON owner snapshot before/after. No password/hash reads."
+  "successor_fix": "New route only fresh bounded unique owner DB gate before/after (not captured principal), strict final revision type plus exact BSON snapshot of projected plan fields/revision/provenance. No global auth/principal mutation. Real auth HTTP writer races added for all5 cases; realMongo owner seeded. Authenticated dependency password_updated_at binds initialDB owner and finalDB; exact BSON owner snapshot before/after. No password/hash reads.",
+  "accepted_source": {
+    "sha": "b3ea651cced66b6171ba379806b955879409a3b3",
+    "tree": "dfc361eb247da69b650da6164c390799d1c0f224",
+    "local_equivalent": "08d873751fbe393a91b40f2ab943e7ae65af5103"
+  },
+  "independent_review": {
+    "verdict": "bounded PASS",
+    "reviewer": "google_product_acceptance",
+    "local": "110fresh-Werror/zero skips2.02s",
+    "extra_probes": "9actualauth/writer probes: original5 defects denied; duplicate owner/passwordduring403; stableactualauth/no-prior200",
+    "current_windows": "Independently executed immutable8dc vs4eb four fullresponses same digestaf8875a23d4868f15cf835e6863239b251c0fec8d59b1429bc4c6ed39ce583eb",
+    "actual_mongo": "Reviewer independently read129/19 exactfinalCIlogs"
+  },
+  "release_hold": "Historical stacked8dc source requires root fresh production re-source; no router/UI attachment, deployment, live acceptance or verifiedcalendar/coverage/profit/growth claim. Preserve frozen b3ea; this separate status checkpoint does not alter runtime source."
 }
+
