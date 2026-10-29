@@ -121,6 +121,8 @@ def enabled(monkeypatch):
     for key in ('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','GOOGLE_ADS_AUTOMATION_WORKER_ENABLED','GOOGLE_ADS_AUTOMATION_CREATION_ENABLED'):
         monkeypatch.setenv(key,'true')
     monkeypatch.setattr(authority,'now',lambda current=None: current or NOW)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,NOW)
 
 
 async def authorize(db,native):

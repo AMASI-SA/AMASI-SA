@@ -602,3 +602,128 @@ async def _guard_paused_creation_command(db, *, session, snapshot, command, oper
     else:
         guard_fail('google_budget_guard_creation_binding_unproved')
     return {**old['allocations'], key: allocation}, None, result
+
+
+async def revalidate_committed_google_creation_claim(db, *, user_id, account_id, proposal_id,
+        execution_claim_id, native_evidence):
+    """Fresh majority reads after reservation, before the native submission floor.
+
+    These reads detect intervening drift; they do NOT serialize canonical-product,
+    owner, OAuth or external Google writers after the final read. The shared
+    policy-epoch/native-floor migration remains a separate required boundary.
+    """
+    from pymongo import ReadPreference
+    from pymongo.read_concern import ReadConcern
+    from . import google_ads_automation_budget_guard as guard
+    from .google_ads_paused_creation_budget import SessionDatabase, account_exposure, allocation_id
+    scope = {'user_id': user_id, 'account_id': identifier(account_id)}
+    phase = {'commit_attempted': False}
+
+    async def read_current():
+        session = await db.client.start_session()
+        try:
+            live = db.with_options(read_preference=ReadPreference.PRIMARY, read_concern=ReadConcern('majority'))
+            view = SessionDatabase(live, session)
+            await standing._require_active_owner(view, user_id)
+            if not creation_execution_enabled():
+                _fail('google_creation_execution_disabled')
+            policy = await view[CREATION_POLICIES].find_one(scope, {'_id': 0})
+            if not policy:
+                _fail('google_creation_policy_changed')
+            ledger, _ = _policy_ledger(policy)
+            entry = policy.get('_creation_claim')
+            if (not isinstance(entry, dict) or entry.get('state') != 'reserved'
+                or entry.get('execution_claim_id') != execution_claim_id or entry.get('proposal_id') != proposal_id
+                or ledger.get(entry.get('creation_identity')) != entry):
+                _fail('google_creation_execution_claim_unproved')
+            row = await view[management.PROPOSALS].find_one({**scope, 'proposal_id': proposal_id,
+                'execution_claim_id': execution_claim_id, 'status': 'approved', 'submission_started': False}, {'_id': 0})
+            if not row or not await view[management.FENCES].find_one({**scope, 'proposal_id': proposal_id,
+                'execution_claim_id': execution_claim_id, 'status': 'claimed'}, {'_id': 0}):
+                _fail('google_creation_execution_claim_unproved')
+            saved = await _saved_intent(view, scope, entry['creation_identity'])
+            _bound(row, saved['intent'])
+            typed = contract.GoogleAutomationCreationPolicy.model_validate(creation_policy_snapshot(policy))
+            if (row['confirmation_digest'] != entry.get('confirmation_digest')
+                or management.digest(row['operations']) != entry.get('operations_digest')
+                or policy.get('updated_by') != user_id or policy.get('configuration_blockers')
+                or policy['revision'] != entry['policy_revision']
+                or contract._digest(typed.model_dump(mode='json')) != entry['policy_digest']):
+                _fail('google_creation_policy_changed')
+            native = _native_proof(row, native_evidence, typed, now())
+            if (management.digest(native) != entry.get('native_inventory_digest')
+                or native.get('observed_at') != entry.get('native_observed_at')):
+                _fail('google_creation_native_context_unproved')
+            products = await view[PRODUCT_COLLECTION].find({'user_id': user_id, '$or': [
+                {'salla_product_id': saved['choice']['product_id']},
+                {'mezan_product_id': saved['choice']['product_id']}]}, PRODUCT_PROJECTION).to_list(length=2)
+            draft = await view[management.DRAFTS].find_one({'user_id': user_id,
+                'draft_id': row['draft_id'], 'revision': row['draft_revision']}, {'_id': 0})
+            if len(products) != 1 or not draft or draft.get('draft') != saved['intent']['draft']:
+                _fail('google_creation_draft_changed')
+            state = await read_google_creation_state(view, **scope, native_context=native, current=now(),
+                exclude_proposal_id=proposal_id, execution_claim_id=execution_claim_id)
+            rows = await view[management.PROPOSALS].find(scope, {'_id': 0, 'proposal_id': 1,
+                'execution_claim_id': 1, 'status': 1}).to_list(length=_MAX_HISTORY + 1)
+            fences = await view[management.FENCES].find({**scope, 'status': 'claimed'}, {'_id': 0}).to_list(length=2)
+            if (len(rows) > _MAX_HISTORY or len(fences) != 1
+                or fences[0].get('proposal_id') != proposal_id or fences[0].get('execution_claim_id') != execution_claim_id
+                or any(item.get('status') in _PENDING and (item.get('proposal_id') != proposal_id
+                    or item.get('execution_claim_id') != execution_claim_id) for item in rows)):
+                _fail('google_creation_history_unproved')
+            # Revalidate this already-reserved identity, not an additional quota
+            # slot. Only its exact proved claim is subtracted from current state.
+            today = now().astimezone(ZoneInfo(typed.time_zone)).date()
+            state.update(pending_write=False, total_created=state['total_created']-1,
+                paused_created=state['paused_created']-1,
+                created_today=state['created_today']-(_entry_time(entry).astimezone(ZoneInfo(typed.time_zone)).date()==today))
+            contract.revalidate_google_creation_intent(saved['intent'], policy=creation_policy_snapshot(policy),
+                template=policy.get('template'), product=products[0], native_context=native,
+                creation_state=state, choice=saved['choice'], current=now())
+            record = await view[guard.BUDGET_GUARDS].find_one({'_id': guard._guard_id(scope)}, {'_id': 1,
+                **{key: 1 for key in ('user_id','account_id','protocol_version','epoch','allocations','active_claim')} })
+            if not record:
+                _fail('google_creation_execution_claim_unproved')
+            guard._validate_guard(record, scope)
+            key = allocation_id(entry['creation_identity'], execution_claim_id)
+            active = record.get('active_claim')
+            allocation = record['allocations'].get(key)
+            if (not isinstance(active, dict) or active.get('allocation_id') != key
+                or active.get('execution_claim_id') != execution_claim_id or not isinstance(allocation, dict)
+                or allocation.get('creation_entry_digest') != management.digest(entry)):
+                _fail('google_creation_execution_claim_unproved')
+            standing_policy = await view[guard.AUTOMATION_POLICIES].find(scope, {'_id': 0}).to_list(length=2)
+            if len(standing_policy) > 1:
+                _fail('google_creation_policy_changed')
+            snapshot = guard.BudgetGuardSnapshot(user_id, scope['account_id'], record,
+                standing_policy[0] if standing_policy else None, policy)
+            exposure = account_exposure(snapshot, native, policy, now())
+            if exposure['total'] > exposure['limit']:
+                _fail('google_creation_account_budget_changed')
+            connection = await view.mezan_integrations_v2.find_one({**{'user_id':user_id}, 'provider':'google_ads',
+                'connection_status':'connected','connection_provenance':'api_connection'}, {'_id':0,'provider':1})
+            if not connection or scope['account_id'] not in {item['account_id'] for item in await management.available_accounts(view,user_id)}:
+                _fail('google_creation_account_unavailable')
+            await standing._require_active_owner(view, user_id)
+            _native_proof(row, native_evidence, typed, now())
+            if not creation_execution_enabled():
+                _fail('google_creation_execution_disabled')
+            return {'revalidated': True, 'claim_id': execution_claim_id, 'provider_writes': 0,
+                'shared_metadata_writers_serialized': False, 'submission_floor_serialized': False}
+        finally:
+            await guard._end_session(session)
+
+    try:
+        return await guard._retained_operation(db, scope,
+            'paused_revalidate_' + management.digest({'proposal_id': proposal_id, 'claim_id': execution_claim_id}),
+            'read', read_current, guard.RECOVERY_TIMEOUT_SECONDS, phase)
+    except asyncio.CancelledError as exc:
+        exc.preserve_execution_fence = True
+        exc.automatic_retry_allowed = False
+        raise
+    except Exception as exc:
+        if not isinstance(exc, HTTPException):
+            exc = problem('google_creation_dispatch_revalidation_unconfirmed', 'تعذر تأكيد بيانات الإنشاء قبل الإرسال؛ يبقى الحجز للتحقق.', 503)
+        if isinstance(exc.detail, dict):
+            exc.detail.update(preserve_execution_fence=True, automatic_retry_allowed=False)
+        raise exc from None

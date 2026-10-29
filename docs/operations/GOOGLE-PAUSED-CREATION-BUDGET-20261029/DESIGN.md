@@ -115,3 +115,22 @@ revocation; commit-close/server errors and one-wire commit; unknown provider
 receipt/dispatch retention; cancellation barrier and no quota refunds. Use real
 replica tests with controlled concurrency and fault injection, plus independent
 review before acceptance. No production call is part of fixture verification.
+
+
+## Postcommit drift gate and remaining floor seam
+
+A retained bounded primary-majority read session revalidates current owner,
+policy, intent, draft, canonical product, common allocation/claim and earliest
+native fingerprint after reservation commit, before returning to native floor.
+Unit races change owner/product after transaction reads and after commit; no
+provider call or floor occurs, while the reservation/fence remain. Snapshot
+reads themselves do not conflict with those document writers. The unit fake
+commits only its write-set, so it cannot hide this race by overwriting a changed
+read document. Actual Mongo race evidence remains required.
+
+The current shared native floor is still a separate proposal CAS, followed by
+flag/age checks. This follow-up does not claim that readonly revalidation makes
+policy revocation and submission atomic. A bounded common-epoch floor seam on
+the fresh post-retail production source is a separate required migration, under
+root ownership. After that boundary, a provider result can still be unknown;
+no cleanup/timeout/session-end may release a hold by inference.

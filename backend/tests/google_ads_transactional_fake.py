@@ -67,7 +67,8 @@ class TransactionalCollection:
     def __getattr__(self, key): return getattr(self.original,key)
     def _target(self,session):
         if session is None:return self.original
-        assert session.db is self.db and session.in_transaction
+        assert session.db is self.db
+        if not session.in_transaction:return self.original
         target=copy(self.original)
         target.rows=session.rows.setdefault(self.name,deepcopy(self.original.rows))
         return target
@@ -77,11 +78,17 @@ class TransactionalCollection:
         if hasattr(target,'find'):return target.find(query,projection)
         return Cursor([row for row in target.rows if matches(row,query)])
     async def insert_one(self,*args,session=None,**kwargs):
+        if session is not None:assert session.in_transaction
         result = await self._target(session).insert_one(*args,**kwargs)
+        if session is not None:session.written.add(self.name)
         if result is None: result = SimpleNamespace()
         result.acknowledged = True
         return result
-    async def update_one(self,*args,session=None,**kwargs):return await self._target(session).update_one(*args,**kwargs)
+    async def update_one(self,*args,session=None,**kwargs):
+        if session is not None:assert session.in_transaction
+        result=await self._target(session).update_one(*args,**kwargs)
+        if session is not None:session.written.add(self.name)
+        return result
     async def create_index(self,*args,**kwargs):return await self.original.create_index(*args,**kwargs)
 
 
@@ -95,6 +102,7 @@ class Session:
         if self.locked:self.db._tx_lock.release();self.locked=False
     def start_transaction(self,**kwargs):
         self.rows={name:deepcopy(collection.rows) for name,collection in self.db._tx_collections.items()}
+        self.written=set()
         self.in_transaction=True
     async def abort_transaction(self):self.in_transaction=False
     async def end_session(self):
@@ -102,7 +110,7 @@ class Session:
         if self.locked:self.db._tx_lock.release();self.locked=False
     async def commit_transaction(self):
         self.commit_calls+=1
-        for name,rows in self.rows.items():self.db._tx_get(name).rows=deepcopy(rows)
+        for name in self.written:self.db._tx_get(name).rows=deepcopy(self.rows[name])
         self.in_transaction=False
         if self.db.after_commit:await self.db.after_commit()
 
@@ -114,6 +122,9 @@ class TransactionalDBMixin:
     def _tx_get(self,name):
         if name not in self._tx_collections:self._tx_collections[name]=TransactionalCollection(self,name,BasicCollection())
         return self._tx_collections[name]
+    def with_options(self, *, read_preference, read_concern):
+        assert read_preference.mode == 0 and read_concern.document == {'level':'majority'}
+        return self
     async def start_session(self):
         session=Session(self);await self._tx_lock.acquire();session.locked=True;self.sessions.append(session);return session
     async def command(self,name,*,session):

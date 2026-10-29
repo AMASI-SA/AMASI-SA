@@ -164,10 +164,21 @@ class Collection:
         return SimpleNamespace(matched_count=0 if inserted else 1,upserted_id='test' if inserted else None)
 
 
-class DB:
-    def __init__(self,docs):self.collections={k:Collection(v) for k,v in docs.items()}
-    def __getitem__(self,key):return self.collections.setdefault(key,Collection())
-    def __getattr__(self,key):return self[key]
+from tests.google_ads_transactional_fake import TransactionalDBMixin, TransactionalCollection
+
+
+class DB(TransactionalDBMixin):
+    def __init__(self,docs):
+        self.collections={k:Collection(v) for k,v in docs.items()}
+        self._tx_setup(self.collections)
+    def _tx_get(self,key):
+        if key not in self._tx_collections:
+            self._tx_collections[key]=TransactionalCollection(self,key,Collection())
+        return self._tx_collections[key]
+    def __getitem__(self,key):return self._tx_get(key)
+    def __getattr__(self,key):
+        if key.startswith("_"):raise AttributeError(key)
+        return self[key]
 
 
 class NativeCreationProvider(NativeReads):
@@ -221,6 +232,10 @@ class NativeCreationProvider(NativeReads):
 async def setup(monkeypatch,db=None):
     from integrations_control_center import google_ads_automation_creation_authority as authority
     values=prepared_case();docs,_=case_documents(current=NOW)
+    # Explicit owner limits in this controlled fixture admit the55 native+15
+    # PAUSED hold; these are never production budget recommendations.
+    values['policy']['max_account_daily_budget_native']='100'
+    docs['mezan_google_ads_automation_policies_v1'][0]['max_account_daily_budget_native']='100'
     docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     docs[gateway.CREATION_POLICIES]=[{**values['policy'],'template':values['template'],'updated_by':'owner'}]
     docs[gateway.PRODUCT_COLLECTION]=[values['product']]
@@ -233,6 +248,8 @@ async def setup(monkeypatch,db=None):
         monkeypatch.setenv(name,'true')
     monkeypatch.setattr(management,'now',lambda:NOW)
     monkeypatch.setattr(authority,'now',lambda current=None:current or NOW)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,NOW)
     async def client(database,user_id,account_id,**kwargs):return provider,'test-epoch'
     monkeypatch.setattr(management,'account_client',client)
     return db,provider,values
@@ -270,7 +287,7 @@ async def test_native_creation_floor_readback_owned_ledger_and_no_replay(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_active55_allows_only_paused15_and_no_executable_enable(monkeypatch):
+async def test_active55_reserves_paused15_within_explicit100_cap_without_enable(monkeypatch):
     db,provider,values=await setup(monkeypatch);row=await preview(db,values)
     intent=(await db[gateway.CREATION_INTENTS].find_one({'account_id':'123'}))['intent']
     assert intent['enable_readiness']['enabled_and_reserved_average_budget_native']=='55'
@@ -396,6 +413,8 @@ def advance(monkeypatch,later):
     from integrations_control_center import google_ads_automation_creation_authority as authority
     monkeypatch.setattr(management,'now',lambda:later)
     monkeypatch.setattr(authority,'now',lambda current=None:current or later)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,later)
 
 
 @pytest.mark.asyncio
@@ -590,3 +609,31 @@ async def test_unclaimed_catalog_rejection_stale_cancellation_durably_unblocks_a
     assert cancelled['reservation_native']=='0' and cancelled.get('authorized_at') is None
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='released'
     assert (await gateway.reconcile_google_automation_creation(db,user_id='owner',account_id='123',proposal_id=row['proposal_id']))['status']=='failed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target',['owner','canonical_product'])
+@pytest.mark.parametrize('stage',['after_tx_reads_before_commit','after_commit'])
+async def test_postcommit_live_revalidation_blocks_nonconflicting_document_drift(monkeypatch,target,stage):
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values)
+    def drift():
+        if target=='owner':db.users.rows[0]['disabled']=True
+        else:db[gateway.PRODUCT_COLLECTION].rows[0]['quantity']=0
+    if stage=='after_commit':
+        async def changed():drift()
+        db.after_commit=changed
+    else:
+        original=authority._linearize_creation_claim
+        async def changed(*args):
+            result=await original(*args);drift();return result
+        monkeypatch.setattr(authority,'_linearize_creation_claim',changed)
+    result=await execute(db,row)
+    assert result['status']=='uncertain' and result['submission_started'] is False and provider.writes==0
+    policy=await db[gateway.CREATION_POLICIES].find_one({'user_id':'owner','account_id':'123'})
+    budget=await db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    assert policy['_creation_claim'] and budget['active_claim']
+    assert budget['epoch']==1 and next(iter(budget['allocations'].values()))['state']=='reserved'
+    assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    assert sum(session.commit_calls for session in db.sessions)==1
