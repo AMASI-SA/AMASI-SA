@@ -2,8 +2,8 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-RELEASE-M622-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-release-m622-20261029",
-  "state": "fresh_focused_pass_remote_source_ci_pending",
-  "source_identity": "This commit is the new source checkpoint; status-only successors will record its exact SHA.",
+  "state": "fresh_source_full_ci_pass_independent_preservation_pass_general_pr_checks_pending",
+  "source_identity": "Immutable reviewed release source7f214. This separate status branch records evidence without modifying runtime source.",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "parent_production_tree": "c4074b70bc63d0bc44759256841319938516af20",
   "accepted_source_sha": "3bbe11247b10c69a610b88bc87ba008e674924e4",
@@ -68,8 +68,30 @@
       "parity": "24 exact accepted non-doc blobs;2 workflows differ only added release branch trigger;current production intent15a28cb68a5b9b4be653596bd16922f325b5cd69 preserved;diffcheckpass",
       "test_invocation_correction": "Initial frontend command used a nonexistent page filename as a pattern;21 tests in2suites passed. Corrected to existing MarketingPlatformWorkspace.google.test.jsx and strict --runTestsByPath, yielding25/3. No source change."
     },
-    "fresh_ci": "pending",
-    "fresh_review": "pending"
+    "fresh_ci": {
+      "exact_checkout": "7f214a76ea98500d17b239d3577b43e542801374",
+      "logs_read": true,
+      "full_google": {
+        "run": 40973613183,
+        "backend_job": 123796156451,
+        "backend": "1855 passed55.59s,no skips reported",
+        "frontend_job": 123796156073,
+        "frontend": "689 passed35suites10.844s,build4.05s"
+      },
+      "dedicated": {
+        "run": 40973613180,
+        "backend_job": 123796156351,
+        "backend": "422 passed23.00s;74 actualMongo8.0.26 loopback;strict0skip",
+        "frontend_job": 123796155995,
+        "frontend": "122 passed4suites2.312s;strict0skip;build6.13s"
+      }
+    },
+    "fresh_review": {
+      "reviewer": "budget_audit",
+      "state": "bounded_preservation_pass",
+      "evidence": "Direct622c parent/tree verified,24exact3bbe blobs,2workflowbranch-only additions;5595→622c intent-only and currentintent15a28cb preserved. No source integration finding.",
+      "qualification": "No repeated broad tests needed for identical runtime; freshCI logs initially read by implementer, independent freshCI seal pending."
+    }
   },
   "production_changed_by_this_task": false,
   "host_actions": 0,
@@ -77,11 +99,217 @@
   "paid_writes": 0,
   "deploy_ready": false,
   "remaining": [
-    "Fresh source CI and independent manifest/integration review.",
-    "Root must finish1655 publication, verify live identity3times and close its lease before any new host action.",
-    "Root owns actual host build, intent-only B, v5 release and explicit live behavior acceptance.",
-    "No store-offer mapping, stock/eligibility/continuous authorization or automatic paid launch claim."
+    "General PR checks still running; no failure at this checkpoint. Read final results before release.",
+    "Independent fresh CI seal and root source/CI acceptance pending; inherited3bbe bounded review already accepted.",
+    "Root must finish1655 publication,3 live identities and lease closure before starting new host work.",
+    "Root owns original hostA build, intent-onlyB, prepare/prepublish/singlepublish and live owner behavior acceptance.",
+    "No mapping, inventory, Ads eligibility, continuous auth or funded launch proved; all limits retained."
   ],
-  "next_safe_action": "Open fresh immutable SourceA DraftPR and inspect exact-source full Google and dedicated actual Mongo/UI/build CI. Root owns host/v5/live after1655 closes.",
-  "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe"
+  "next_safe_action": "Preserve frozen7f214, inspect final general PR checks and independent CI verdict; update status branch only. Root owns host/deployment and must re-check production before intentB.",
+  "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "runtime_source_sha": "7f214a76ea98500d17b239d3577b43e542801374",
+  "runtime_tree_sha": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1658",
+  "status_branch": "codex/google-merchant-observation-release-m622-status-20261029",
+  "release_readiness": {
+    "run": 40973646956,
+    "conclusion": "success",
+    "backend_job": 123796267627,
+    "frontend_job": 123796267791,
+    "source": "7f214a76ea98500d17b239d3577b43e542801374",
+    "source_base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "frontend_reproducible_builds_seconds": [
+      5.95,
+      6.29
+    ],
+    "artifact_id": 12941855881,
+    "artifact_zip_sha256": "367f9d49e7b04a3b229af14483e9bf08ac98997b364949f36a2d820a22935d71",
+    "qualification": "CI candidate only; no actual host, intentB, v5 or live claim by this task."
+  },
+  "synthetic": {
+    "sha": "ee3f781369015e709d83d29b794029be57eba3c5",
+    "tree": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
+    "parents": [
+      "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "7f214a76ea98500d17b239d3577b43e542801374"
+    ],
+    "same_tree_as_source": true
+  },
+  "ci_snapshot": [
+    {
+      "id": 40973647185,
+      "name": "Snapchat Direct Active Publication",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647044,
+      "name": "Security Gate",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647273,
+      "name": "CodeQL",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647175,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973646978,
+      "name": "Google Merchant bounded observation",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647088,
+      "name": "Qoyod Payment Freshness",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647068,
+      "name": "Google category membership",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973646956,
+      "name": "Mezan Release Readiness",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647123,
+      "name": "Google store product observations",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647218,
+      "name": "Google Merchant observation UI",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647214,
+      "name": "G47 Focused Integration",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647243,
+      "name": "MZ2 advertising V2 native accounting",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647130,
+      "name": "Google Ads full management",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647188,
+      "name": "Google linked campaign evidence",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647255,
+      "name": "Snapchat Settings Management V2",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647100,
+      "name": "Operational Balance Web",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647250,
+      "name": "Operational Stock Eligibility",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647102,
+      "name": "Google Merchant local choices",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647200,
+      "name": "Google live category preview",
+      "event": "pull_request",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 40973647149,
+      "name": "Google catalog review replica",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647161,
+      "name": "Google credential refresh CAS",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647305,
+      "name": "Google Merchant owner observation",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647271,
+      "name": "Google native inventory preview",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973613183,
+      "name": "Google Ads full management",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973613180,
+      "name": "Google Merchant local choices",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
 }
