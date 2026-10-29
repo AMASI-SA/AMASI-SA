@@ -11,11 +11,13 @@ import pytest
 
 import auth
 from integrations_control_center import google_namespace_bootstrap as bootstrap
-from tests.test_google_namespace_bootstrap_capabilities_mongo import fixture, NAMES, INDEX_NAMES, RECEIPTS, SLOT, target_metadata
+from integrations_control_center import google_ads_storage_commit_readiness as diagnostic
+from tests.test_google_namespace_bootstrap_capabilities_mongo import fixture, NAMES, INDEX_NAMES, RECEIPTS, target_metadata
 
 
 PREFIX = '/google_ads/automation/namespace-bootstrap'
 NONCE = 'a' * 32
+SLOT = bootstrap.SLOT_ID
 
 
 class Admin:
@@ -49,6 +51,7 @@ def mounted(db, module=bootstrap):
     app, router = FastAPI(), APIRouter()
     async def current(request: Request): return await auth.get_current_user_from_db(request, db)
     module.attach_google_namespace_bootstrap_routes(router, db, current)
+    diagnostic.attach_google_ads_storage_commit_readiness_routes(router, db, current)
     app.include_router(router)
     return app
 
@@ -59,6 +62,7 @@ async def owner_case(monkeypatch):
     monkeypatch.setattr(auth.jwt, 'decode', lambda token, *a, **k: {
         'sub': token, 'type': 'access', 'mfa': True, 'iat': 2000000000})
     bootstrap._active = None
+    diagnostic._active = None
     async with fixture(with_owner=True) as (_, raw, _, db, capture, foreign):
         observed = ObservedDB(db)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(mounted(observed)),
@@ -93,6 +97,8 @@ async def create_existing(raw, index, *, complete=True):
 @pytest.mark.asyncio
 async def test_real_auth_prepare_has_no_ddl_execute_is_single_use_and_keeps_diagnostic_receipts(monkeypatch):
     async with owner_case(monkeypatch) as (raw, _, api, capture, foreign):
+        old_get = await api.get('/google_ads/automation/storage-commit-readiness')
+        assert old_get.status_code == 200 and old_get.json()['status'] == 'historical_completed_receipt'
         body = await prepare(api)
         assert ddl_count(capture) == 0 and await target_metadata(raw) == {}
         response = await api.post(PREFIX + '/execute', json=body)
@@ -110,6 +116,7 @@ async def test_real_auth_prepare_has_no_ddl_execute_is_single_use_and_keeps_diag
         assert duplicate.json()['status'] == 'historical_completed_receipt'
         assert duplicate.json()['namespace_contract_verified'] is False
         assert (await api.get(PREFIX + '/receipt')).json()['status'] == 'historical_completed_receipt'
+        assert (await api.get('/google_ads/automation/storage-commit-readiness')).json() == old_get.json()
         assert ddl_count(capture) == 6 and await target_metadata(raw) == before
 
 
@@ -352,3 +359,22 @@ async def test_real_legacy_shaped_global_record_is_not_overwritten(monkeypatch):
         response = await api.post(PREFIX + '/prepare', json={'request_nonce': NONCE, 'acknowledge_preparation_only': True})
         assert response.status_code == 503 and response.json()['detail']['code'].endswith('receipt_unproved')
         assert await raw[RECEIPTS].find_one({'_id': SLOT}) == legacy and ddl_count(capture) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('missing', ['listCollections', 'listIndexes', 'engine_find', 'receipt_update'])
+async def test_real_missing_metadata_or_receipt_privilege_never_guesses_absence(monkeypatch, missing):
+    async with owner_case(monkeypatch) as (raw, _, api, capture, foreign):
+        grants = (await raw.command({'rolesInfo': 'bounded_bootstrap', 'showPrivileges': True}))['roles'][0]['privileges']
+        for grant in grants:
+            target = grant['resource']['collection']
+            action = missing
+            applies = target == '' and missing in ('listCollections', 'listIndexes')
+            if missing == 'engine_find': action, applies = 'find', target == NAMES[3]
+            if missing == 'receipt_update': action, applies = 'update', target == RECEIPTS
+            if applies and action in grant['actions']: grant['actions'].remove(action)
+        await raw.command({'updateRole': 'bounded_bootstrap', 'privileges': [g for g in grants if g['actions']], 'roles': []})
+        response = await api.post(PREFIX + '/prepare', json={'request_nonce': NONCE, 'acknowledge_preparation_only': True})
+        assert response.status_code == 503
+        assert ddl_count(capture) == 0 and await target_metadata(raw) == {}
+        assert await raw[RECEIPTS].find({}).to_list(length=2) == [foreign]

@@ -36,6 +36,8 @@ jobs:
           python -m pip install motor==3.7.1 pymongo==4.18.3 dnspython==2.9.0
           fastapi==0.140.0 starlette==1.3.1 pydantic==2.13.4 httpx==0.28.1
           PyJWT==2.15.0 bcrypt==4.1.3 python-dotenv==1.2.2
+          cryptography==50.0.0 pillow==13.0.0 python-multipart==0.0.31
+          openai==1.99.9 google-ads==33.0.0
           pytest==9.0.3 pytest-asyncio==1.4.0
       - name: Start disposable authenticated loopback replica
         shell: bash
@@ -87,10 +89,10 @@ jobs:
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root=ET.parse('namespace-bootstrap.xml').getroot();cases=root.findall('.//testcase')
-          assert len(cases)==93, len(cases)
+          assert len(cases)==100, len(cases)
           engine=[c for c in cases if 'bootstrap_capabilities_mongo' in c.get('classname','')]
           runtime=[c for c in cases if c.get('classname','').endswith('test_google_namespace_bootstrap_mongo')]
-          assert len(engine)==20 and len(runtime)==33, (len(engine),len(runtime))
+          assert len(engine)==20 and len(runtime)==37, (len(engine),len(runtime))
           assert not root.findall('.//failure') and not root.findall('.//error') and not root.findall('.//skipped')
           required={
               'test_real_local_transaction_creates_all_four_with_required_restricted_privileges',
@@ -112,7 +114,7 @@ jobs:
               'test_real_foreign_create_after_consumed_fence_is_rejected_without_adoption',
               'test_real_existing_uuid_replacement_after_consumption_aborts_new_names'
           } <= {c.get('name','').split('[')[0] for c in runtime}
-          print('Verified 93 tests including20 engine and33 bootstrap actual authenticated Mongo cases; zero skips')
+          print('Verified 100 tests including20 engine and37 bootstrap actual authenticated Mongo cases; zero skips')
           PYCODE
       - name: Remove disposable replica
         if: always()

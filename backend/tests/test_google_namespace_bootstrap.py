@@ -1,4 +1,5 @@
 """Typed local boundary tests; persistence guarantees are real-Mongo tests."""
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
@@ -121,3 +122,72 @@ async def test_public_requests_cannot_smuggle_names_or_financial_flags(path, bod
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url='http://test') as client:
         response = await client.post('/google_ads/automation/namespace-bootstrap/' + path, json=body)
     assert response.status_code == 422  # object() would fail any DB access.
+
+
+@pytest.mark.asyncio
+async def test_deadline_retains_original_task_and_blocks_overlap_until_it_finishes(monkeypatch):
+    monkeypatch.setattr(bootstrap, 'TIMEOUT_SECONDS', .02)
+    bootstrap._active = None
+    release = asyncio.Event()
+    async def work(db, user, state):
+        await release.wait()
+        assert state['stop'] is True
+        return bootstrap._result('late')
+    try:
+        with pytest.raises(HTTPException) as error: await bootstrap._run(None, {}, work)
+        assert error.value.detail['code'].endswith('deadline')
+        original = bootstrap._active['task']
+        assert not original.done()
+        with pytest.raises(HTTPException) as busy: await bootstrap._run(None, {}, work)
+        assert busy.value.detail['code'].endswith('busy')
+        release.set(); await original; await asyncio.sleep(0)
+        assert bootstrap._active is None
+    finally:
+        release.set()
+        if bootstrap._active: await bootstrap._active['task']
+        bootstrap._active = None
+
+
+@pytest.mark.asyncio
+async def test_caller_cancellation_does_not_discard_original_operation_ownership():
+    bootstrap._active = None
+    started, release = asyncio.Event(), asyncio.Event()
+    async def work(db, user, state):
+        started.set(); await release.wait()
+        assert state['stop'] is True
+        return bootstrap._result('late')
+    outer = asyncio.create_task(bootstrap._run(None, {}, work))
+    try:
+        await started.wait(); original = bootstrap._active['task']; outer.cancel()
+        with pytest.raises(asyncio.CancelledError): await outer
+        assert not original.done() and not original.cancelled()
+        with pytest.raises(HTTPException) as busy: await bootstrap._run(None, {}, work)
+        assert busy.value.detail['code'].endswith('busy')
+        release.set(); await original; await asyncio.sleep(0)
+        assert bootstrap._active is None
+    finally:
+        release.set()
+        if bootstrap._active: await bootstrap._active['task']
+        bootstrap._active = None
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_session_cleanup_remains_process_blocker_even_after_work_returns(monkeypatch):
+    monkeypatch.setattr(bootstrap, 'CLEANUP_SECONDS', .01)
+    bootstrap._active = None
+    release, closed = asyncio.Event(), asyncio.Event()
+    class Session:
+        async def end_session(self):
+            await release.wait(); closed.set()
+    async def work(db, user, state):
+        await bootstrap._end(Session(), state)
+    try:
+        with pytest.raises(HTTPException) as error: await bootstrap._run(None, {}, work)
+        assert error.value.detail['code'].endswith('session_cleanup_unconfirmed')
+        assert bootstrap._active['task'].done() and bootstrap._active['resource_unconfirmed'] is True
+        with pytest.raises(HTTPException) as busy: await bootstrap._run(None, {}, work)
+        assert busy.value.detail['code'].endswith('busy')
+        release.set(); await closed.wait()
+        assert bootstrap._active['resource_unconfirmed'] is True
+    finally:
+        release.set(); await closed.wait(); bootstrap._active = None

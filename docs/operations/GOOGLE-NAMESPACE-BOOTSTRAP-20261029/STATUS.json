@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "unattached_runtime_wip_first_actual_behavior_ci_pending",
+  "status": "unattached_runtime_wip_fresh_actual_behavior_ci_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -32,10 +32,10 @@
   "verification": {
     "contract_primary_sources": "MongoDB official v8.0 transactions/create/privilege actions plus catalog command documentation read; constraints also independently confirmed by root",
     "live_mongo_experiments": "none",
-    "source_changes": "documentation only",
-    "next_evidence": "19 real authenticated Mongo capability cases planned; no runtime module or route attachment yet",
+    "source_changes": "NEW unattached module, unit and actual-Mongo tests, dedicated workflow, contract and status; existing production files unchanged",
+    "next_evidence": "Fresh100-case gate:43unit+20engine+37actual bootstrap cases; runtime CI not yet passed",
     "local": "19 capability cases collected successfully with -W error, 0.31s; no actual local Mongo execution",
-    "workflow": "google-namespace-bootstrap.yml, exact19/19actualMongo/zero-skips gate, source-head checkout, disposable authenticated Mongo8.0.26 port27483",
+    "workflow": "google-namespace-bootstrap.yml, exact100/57actualMongo/zero-skips gate, source-head checkout, disposable authenticated Mongo8.0.26 port27483",
     "CI": {
       "run": 40971850976,
       "job": 123790260212,
@@ -56,16 +56,24 @@
       "guard_race": "raw create inside local transaction rejects same-options existing guard with exact NamespaceExists code48, no new-index command involved; outside transaction create is a separate no-op success case",
       "logs_read_by": "google_product_acceptance"
     },
-    "runtime_local": "40 unit/typed-boundary cases passed;93 collected total =40local+20engine+33actual bootstrap cases; actual behavior CI pending",
-    "runtime_changes": "NEW google_namespace_bootstrap.py and two new test modules; no existing production module/route/UI changes. Existing capability fixture gains optional real auth owner setup."
+    "runtime_local": "43 unit/typed/lifecycle cases passed in1.30s;100 collected total in1.37s; git diff --check passed",
+    "runtime_changes": "Runtime module unchanged since717 checkpoint; adds original diagnostic GET compatibility, four restricted-role cases and three retained-task lifecycle unit cases. No existing production module/route/UI changes.",
+    "first_runtime_CI": {
+      "run": 40974558579,
+      "job": 123799265538,
+      "source": "717d536e4b9eaf865a0fa2dc197368ed6571b932",
+      "tree": "e85d53e4ad0380b170a2baf9d17cb74bd623aa48",
+      "result": "Collection failed: missing cryptography dependency via package initializer. No runtime test passed or failed. Owned workflow dependencies corrected in successor.",
+      "logs_read_by": "google_product_acceptance"
+    }
   },
-  "next": "Inspect first93-case actual behavior CI; fix confirmed behavior failures, then add remaining lifecycle/restricted-role/old diagnostic compatibility cases before independent acceptance. Keep all existing production files unchanged.",
+  "next": "Inspect fresh100-case actual behavior CI; fix confirmed behavior failures and finish real timeout/cancellation boundaries before independent acceptance. No production attachment or namespace writes.",
   "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288",
   "limitations": [
     "Unattached WIP; no current production or provider/DB actions.",
     "Catalog observations are bounded PRIMARY observations, not an atomic catalog snapshot.",
     "New UUID continuity between commit and first catalog observation is unproved and explicitly false.",
     "No-record preparation/claim boundary is explicitly qualified; no automatic retry.",
-    "Pending broader timeout/cancellation/privilege and original diagnostic GET compatibility acceptance before independent review."
+    "Pending actual bootstrap Mongo execution and broader timeout/cancellation acceptance; lifecycle unit evidence alone is not DB outcome proof."
   ]
 }
