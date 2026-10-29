@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "implementation_wip_mongo_ci_pending_independent_review_required",
+  "state": "backend_frozen_actual_replica_green_independent_review_pending",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -34,10 +34,16 @@
   "verification": {
     "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
     "result": "32 passed, zero skips, 1.17s -Werror; variant duplicate-reference regression failed before dedup fix",
-    "actual_mongo": "9 cases collected; dedicated replica41total/9actual gate pending",
-    "ci": "prior source52581004 PR run40934125506 pending; fresh source CI required"
+    "actual_mongo": {
+      "run": 40934459598,
+      "job": 123661202492,
+      "checkout": "a60b573 (merge5bdintoM6e51f)",
+      "result": "41 passed in3.65s;9actualMongo/zero skips",
+      "logs_retrieved_independently": true
+    },
+    "ci": "Dedicated exact-source replica job SUCCESS; no claim fullGoogle CI or deployment"
   },
-  "next": "Obtain dedicated actual-Mongo CI40/9 with zero skips, independent review exact source; parent owns later small shared attachment/UI.",
+  "next": "Independent exact-source review; planning agent implements guarded owner UI/service in separate branch. Root later integrates reviewed attachment and re-sources latest production. No deployment authorization exercised.",
   "known_source_limits": [
     "Canonical Snapchat _number(None) normalizes missing raw metric to zero; reader returns stored zero as unknown with metric provenance, never confirmedzero",
     "Read-only review route exported but not attached; no UI change",
@@ -64,5 +70,29 @@
     "Shared campaign context once across product/variant references; nativecurrency/attribution/window separated",
     "Explicit four windows with missingdates/contextreferences, no metric sum or growth inference",
     "Meta/TikTok associations and exact missing source fields only"
-  ]
+  ],
+  "source": {
+    "sha": "5bd0e524938461099950cd64d8a17e0652560d02",
+    "tree": "d508b3bea57ad8e1f6968fdfbb4397dfe2935467",
+    "pr": 1623,
+    "local_equivalent": "64580e908",
+    "base": "e51f5b88b68905460417a01fb9ceb3704706c168"
+  },
+  "route_contract": {
+    "attach": "attach_google_linked_campaign_routes(router,db,current_user)",
+    "method": "GET",
+    "path": "/google_ads/commercial-plans/{plan_id}/linked-campaign-evidence?expected_revision=INTEGER>=1",
+    "scope": "Owner only; server saved pinned ids minus exclusions; no caller account/provider/date overrides",
+    "errors": {
+      "401": "authentication required",
+      "403": "owner required",
+      "404": "saved plan not found",
+      "409": "revision or fullfields changed before/during read",
+      "422": "invalid planid/query",
+      "503": "source/size/history limit or timeout cannot prove bounded context"
+    },
+    "response": "Plan identity/revision/asof; perproduct associations and unique contextrefs; shared daily campaigncontexts and four native scoped window reference sets withmissingdates; no aggregated metrics or growth",
+    "authority": "All responses execution_authorized:false, source_coverage_complete:false, product_attribution_verified:false; independent_store_orders:null, profitability:null",
+    "integration_owner": "google_plan_integration owns newUI/service and CommercialPlan render; root merges shared route attach. Backend code held frozen except confirmed finding."
+  }
 }
