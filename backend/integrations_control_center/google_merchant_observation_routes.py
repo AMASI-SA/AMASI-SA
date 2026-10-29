@@ -36,8 +36,8 @@ LINK_QUERY = (
     "product_link.product_link_id, product_link.type, product_link.merchant_center.merchant_center_id "
     "FROM product_link WHERE product_link.type = 'MERCHANT_CENTER' LIMIT 201"
 )
-OWNER_FIELDS = dict.fromkeys(("_id", "id", "role", "disabled", "is_active", "deleted_at",
-    "updated_at", "created_by", "auth_tokens_valid_after"), 1)
+AUTH_FIELDS = ("id", "role", "disabled", "is_active", "deleted_at", "password_updated_at")
+OWNER_FIELDS = dict.fromkeys(("_id", *AUTH_FIELDS, "updated_at", "created_by"), 1)
 PROVIDER_FIELDS = dict.fromkeys(("_id", "user_id", "provider", "connection_status", "connection_provenance",
     "source_mode", "permission_observation_id", "permissions_observed", "updated_at", "created_at",
     "checked_at", "capability_evidence"), 1)
@@ -78,6 +78,7 @@ def _encoded(rows):
 @dataclass(frozen=True, repr=False)
 class _Membership:
     owner: tuple
+    authenticated_owner: tuple
     providers: tuple
     accounts: tuple
     ads_account: dict
@@ -133,7 +134,8 @@ async def _membership(db, owner_id, account_id, merchant_id):
         ads = selected[ADS]
         if ads.get("login_customer_id") is not None:
             _id(ads["login_customer_id"])
-        return _Membership(_encoded(owner_rows), _encoded(provider_rows), _encoded(account_rows),
+        return _Membership(_encoded(owner_rows), _encoded([{key: owner[key] for key in AUTH_FIELDS if key in owner}]),
+            _encoded(provider_rows), _encoded(account_rows),
             {key: ads[key] for key in ("ad_account_id", "external_account_id", "login_customer_id") if key in ads})
     except HTTPException:
         raise
@@ -191,6 +193,11 @@ async def read_owner_merchant_observation(db, user, *, account_id, merchant_id):
     try:
         async with asyncio.timeout(ROUTE_SECONDS):
             before = await _membership(db, owner_id, account_id, merchant_id)
+            # current_user already verified the session against this owner
+            # document. Reject revocation between that read and this snapshot,
+            # even when two later local snapshots would agree with each other.
+            if before.authenticated_owner != _encoded([{key: user[key] for key in AUTH_FIELDS if key in user}]):
+                _refuse("google_merchant_owner_changed", 403)
             async with google_bound_read_session(db, owner_id, ads_account=before.ads_account, merchant_id=merchant_id) as bound:
                 await _same_membership(db, before, owner_id, account_id, merchant_id)
                 native_before = await _native_evidence(bound, account_id, merchant_id)

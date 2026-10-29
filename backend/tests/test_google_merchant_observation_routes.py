@@ -345,3 +345,44 @@ async def test_explicit_unowned_selection_cannot_use_existing_default(monkeypatc
 async def test_unproved_native_account_metadata_refuses_before_links_and_merchant(monkeypatch, metadata):
     calls = providers(monkeypatch, metadata=metadata)
     assert (await call(DB())).status_code == 409 and calls["links"] == calls["merchant"] == 0
+
+
+@pytest.mark.asyncio
+async def test_password_revocation_between_authentication_and_initial_snapshot_refuses(monkeypatch):
+    db = DB()
+    db.rows["users"][0]["password_updated_at"] = datetime.now(timezone.utc).isoformat()
+    calls = providers(monkeypatch)
+    response = await call(db, user=deepcopy(USER))
+    assert response.status_code == 403
+    assert calls["constructed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_password_revocation_during_provider_read_discards_result(monkeypatch):
+    db = DB()
+    def effect(stage, count):
+        if stage == "merchant": db.rows["users"][0]["password_updated_at"] = datetime.now(timezone.utc).isoformat()
+    providers(monkeypatch, effect=effect)
+    response = await call(db)
+    assert response.status_code == 409 and "SKU1" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_current_authenticated_dependency_shape_after_password_change_is_allowed(monkeypatch):
+    db = DB()
+    db.rows["users"][0].update(password_updated_at="2026-10-28T12:00:00+00:00", disabled=False, is_active=True)
+    user = {k: deepcopy(v) for k, v in db.rows["users"][0].items() if k != "_id"}
+    user.update(_session_client=None, _review_session=None, email="synthetic@example.invalid")
+    providers(monkeypatch)
+    assert (await call(db, user=user)).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("old,new", [("absent", None), (None, "2026-10-28T12:00:00+00:00"),
+    ("2026-10-28T12:00:00+00:00", datetime(2026, 10, 28, 12, tzinfo=timezone.utc))])
+async def test_initial_auth_binding_preserves_timestamp_absence_null_and_type(monkeypatch, old, new):
+    db = DB(); db.rows["users"][0]["password_updated_at"] = new
+    user = deepcopy(USER)
+    if old != "absent": user["password_updated_at"] = old
+    calls = providers(monkeypatch)
+    assert (await call(db, user=user)).status_code == 403 and calls["constructed"] == 0

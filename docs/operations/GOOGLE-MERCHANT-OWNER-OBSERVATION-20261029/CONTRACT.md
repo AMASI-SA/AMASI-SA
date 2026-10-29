@@ -14,6 +14,10 @@ Merchant Center. The selected rows must each be unique, connected and have
 providers, incomplete sets or unavailable snapshot transactions refuse the read.
 Relevant projected BSON fields, including absence/null and document identity,
 are compared again after credential acquisition and after provider reads.
+The first owner snapshot must also match the authenticated dependency's owner
+auth-state, including the actual `password_updated_at` revocation timestamp.
+This prevents accepting a revoked session when both later snapshots agree on
+the changed owner. Only non-secret auth fields are compared; no password hash.
 No fallback, account selection update, connection repair or projection write.
 
 Use only the reviewed opaque same-token session. Query all Merchant Center
@@ -34,6 +38,9 @@ successful Merchant GET are separate observations. A connection may change
 after the final check; the response never authorizes a later advertising action.
 Merchant traversal remains non-atomic. No store/feed product mapping, variant,
 category, landing destination, inventory, Ads eligibility or attribution claim.
+The 256KiB projected-snapshot size check applies after database rows materialize;
+it is not a 256KiB peak-memory guarantee. Row count, projection, database request
+deadline, query maxTimeMS and overall operation deadlines remain bounded.
 
 Acceptance covers owner/staff/disabled boundaries; forged account/merchant and
 ambiguous rows; missing/null projection changes; full set additions/removals;

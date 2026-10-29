@@ -57,7 +57,7 @@ async def test_real_owner_snapshot_and_actual_credential_reader_allow_bounded_ob
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["owner_disabled", "owner_role", "owner_deleted", "account_add", "account_delete",
     "account_duplicate", "account_replaced", "provider_error", "provider_duplicate", "scope_revoke", "relink",
-    "credential_delete", "absent_to_null", "null_to_absent"])
+    "credential_delete", "absent_to_null", "null_to_absent", "password_revoked"])
 async def test_real_changes_while_google_read_is_suspended_discard_result(monkeypatch, owner_db, change):
     if change == "null_to_absent":
         await owner_db[ACCOUNTS].update_one({"_id": "ads"}, {"$set": {"login_customer_id": None}})
@@ -92,6 +92,7 @@ async def test_real_changes_while_google_read_is_suspended_discard_result(monkey
         elif change == "scope_revoke": await owner_db[CREDS].update_one({"user_id": OWNER}, {"$set": {"scope": ["https://www.googleapis.com/auth/adwords"]}})
         elif change == "relink": await owner_db[CREDS].update_one({"user_id": OWNER}, {"$set": {"access_token_ciphertext": "new-ciphertext", "google_subject": "new-subject"}})
         elif change == "credential_delete": await owner_db[CREDS].delete_one({"user_id": OWNER})
+        elif change == "password_revoked": await owner_db.users.update_one({"id": OWNER}, {"$set": {"password_updated_at": "2026-10-29T23:00:00+00:00"}})
         elif change == "absent_to_null": await owner_db[ACCOUNTS].update_one({"_id": "ads"}, {"$set": {"login_customer_id": None}})
         elif change == "null_to_absent": await owner_db[ACCOUNTS].update_one({"_id": "ads"}, {"$unset": {"login_customer_id": ""}})
         proceed.set()
@@ -160,3 +161,23 @@ async def test_real_membership_change_after_token_acquisition_before_first_googl
     assert response.status_code == 409
     assert providers_calls["metadata"] == providers_calls["links"] == providers_calls["merchant"] == 0
     assert providers_calls["close"] == 1
+
+
+@pytest.mark.asyncio
+async def test_real_password_revocation_between_authenticated_user_and_initial_snapshot(monkeypatch, owner_db):
+    await owner_db.users.update_one({"id": OWNER}, {"$set": {"password_updated_at": "2026-10-29T23:00:00+00:00"}})
+    calls = providers(monkeypatch)
+    response = await call(owner_db, user=deepcopy(USER))
+    assert response.status_code == 403 and response.json()["detail"]["code"] == "google_merchant_owner_changed"
+    assert calls["constructed"] == calls["merchant"] == 0
+
+
+@pytest.mark.asyncio
+async def test_real_fresh_authenticated_user_with_password_timestamp_is_allowed(monkeypatch, owner_db):
+    from datetime import datetime, timezone
+    await owner_db.users.update_one({"id": OWNER}, {"$set": {
+        "password_updated_at": datetime(2026, 10, 28, 12, tzinfo=timezone.utc), "disabled": False, "is_active": True}})
+    user = await owner_db.users.find_one({"id": OWNER}, {"_id": 0})
+    user.update(_session_client=None, _review_session=None)
+    providers(monkeypatch)
+    assert (await call(owner_db, user=user)).status_code == 200

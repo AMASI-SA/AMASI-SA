@@ -3,7 +3,7 @@
   "task": "google-merchant-owner-observation",
   "branch": "codex/google-merchant-owner-observation-20261029",
   "parent": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
-  "status": "Unattached implementation candidate;292 local tests pass, real Mongo CI and independent review pending",
+  "status": "Immutable auth-binding fix candidate;298 local tests pass,350-case actual Mongo CI and successor review pending",
   "contract_checkpoint": "5eb3c331e3643f4d445a51b7dacdfbdb7037fcef",
   "production_changed": "no",
   "runtime_available": false,
@@ -17,15 +17,15 @@
     "docs/operations/GOOGLE-MERCHANT-OWNER-OBSERVATION-20261029/"
   ],
   "verification": {
-    "local_passed": 292,
+    "local_passed": 298,
     "local_skipped": 0,
-    "local_seconds": 3.69,
+    "local_seconds": 3.61,
     "warnings_as_errors": true,
-    "new_route_tests": 75,
+    "new_route_tests": 81,
     "command": "env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_merchant_observation_routes.py backend/tests/test_google_bound_read_session.py backend/tests/test_google_merchant_product_observation.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_credential_refresh_cas.py",
-    "new_real_mongo_cases": 18,
-    "new_real_mongo_state": "Collected, not locally executed; dedicated CI required",
-    "dedicated_ci_required": "341 total, including18 new owner snapshot races+10 bound-read+21 existing CAS actual Mongo cases; zero skips",
+    "new_real_mongo_cases": 21,
+    "new_real_mongo_state": "21 cases collected, dedicated successor CI required",
+    "dedicated_ci_required": "350 total, including21 new owner snapshot races+10 bound-read+21 existing CAS actual Mongo cases; zero skips",
     "independent_review": "pending"
   },
   "limits": [
@@ -33,7 +33,21 @@
     "Snapshot transactions use PRIMARY/snapshot reads and majority commit; no unavailable-transaction fallback",
     "Bracketing local and native reads do not prove uninterrupted state or exclude external writers",
     "No connection restoration, owner preference changes, store/feed mapping, category, Ads eligibility or execution authorization",
-    "Parent is old-base helper ca564; root must preserve latest production when integrating"
+    "Parent is old-base helper ca564; root must preserve latest production when integrating",
+    "256KiB projected BSON size is checked after rows materialize, not a peak-memory guarantee"
   ],
-  "next": "Save immutable source and Draft PR, inspect actual341-case replica CI and independent reviewer. Root owns attachment and fresh production integration; no live provider or host access."
+  "next": "Inspect exact350-case source and synthetic CI and independent successor review; root owns router attachment/fresh production integration. Preserve frozen accepted helper and observer.",
+  "rejected_predecessor": {
+    "source": "a2377b80137c00a5ff73edbe361de068755dc46b",
+    "tree": "55bed939e99bbec423ecebfb998f5e27ffe29f87",
+    "exact_push_ci": 40960598105,
+    "job": 123752032209,
+    "passed": 341,
+    "skipped": 0,
+    "actual_mongo": 49,
+    "seconds": 13.45,
+    "independent_local": "292 passed0skip-Werror3.58s; review held for self-discovered password binding gap",
+    "red": "Two new password revocation tests fail with HTTP200 on predecessor: authentication-to-first-snapshot race and revocation during provider read",
+    "fix": "Project actual password_updated_at, match initial auth-state with authenticated dependency owner row including absence/null/type, then preserve later full membership fences. Existing helper/observer unchanged."
+  }
 }

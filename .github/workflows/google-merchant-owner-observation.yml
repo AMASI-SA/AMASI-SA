@@ -62,12 +62,12 @@ jobs:
           cases=ET.parse('merchant-owner-results.xml').getroot().findall('.//testcase')
           def suite(name): return [c for c in cases if c.attrib.get('classname','').endswith(name)]
           owners=suite('test_google_merchant_observation_routes_mongo')
-          assert len(cases) == 341 and len(owners) == 18
+          assert len(cases) == 350 and len(owners) == 21
           assert len(suite('test_google_bound_read_session_mongo')) == 10
           assert len(suite('test_google_credential_refresh_cas_mongo')) == 21
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           assert any(c.attrib.get('name') == 'test_real_transaction_reads_consistent_snapshot_across_collections' for c in owners)
-          print('Verified341 tests including18 owner snapshot,10 bound-read and21 refresh CAS actual Mongo cases; zero skips')
+          print('Verified350 tests including21 owner snapshot,10 bound-read and21 refresh CAS actual Mongo cases; zero skips')
           PY
       - name: Remove disposable replica
         if: always()
