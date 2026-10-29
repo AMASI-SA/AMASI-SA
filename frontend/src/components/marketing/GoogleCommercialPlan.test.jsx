@@ -38,7 +38,8 @@ test("loads saved owner context without default budgets or granting execution", 
     expect(element("هدف العائد الاختياري ROAS").value).toBe("");
     expect(element("توجيه المالك").value).toBe(fields.instruction);
     expect(container.textContent).toContain("لا يمنح تفويض تشغيل أو إنفاق");
-    expect(container.textContent).toContain("الأدلة لم تُجمع بعد");
+    expect(container.textContent).toContain("اكتمالها غير مثبت");
+    expect(container.textContent).toContain("المشاهدات الجزئية لا تثبت صافي المبيعات أو نموها");
     expect(container.textContent).toContain("الربحية غير مثبتة عند نقص التكاليف");
     expect(api.put).not.toHaveBeenCalled();
 });
@@ -212,4 +213,36 @@ test("plan switch aborts late read before it can overwrite the new form", async 
     await render({ planId: "summer" }); expect(signal.aborted).toBe(true);
     await act(async () => finish({ data: saved }));
     expect(element("الموسم").value).toBe("الصيف"); expect(container.textContent).toContain("النسخة المحفوظة: 9");
+});
+
+function observedStoreResponse(revision = 3) {
+    const windows = { last_14_days: ["2026-10-15", "2026-10-28"], previous_14_days: ["2026-10-01", "2026-10-14"], last_30_days: ["2026-09-29", "2026-10-28"], last_90_days: ["2026-07-31", "2026-10-28"] };
+    return { plan_id: saved.plan_id, plan_revision: revision, product_ids_reviewed: ["123"], catalog_missing_or_unverified_ids: [], provider_writes: 0, execution_authorized: false,
+        observations: { mode: "stored_product_line_observations", metric_basis: "lower_bound_on_qualifying_saved_gross_line_observations_not_sales", as_of: "2026-10-29T12:00:00+00:00",
+            windows: Object.fromEntries(Object.entries(windows).map(([key, [from, to]]) => [key, { from, to, timezone: "Asia/Riyadh" }])),
+            coverage_complete: false, refunds_reconciled: false, snapshot_consistent: false, source_snapshot_immutable: false, platform_conversions_added: false,
+            execution_authorized: false, provider_writes: 0, source_writes: 0, truncated: false,
+            products: [{ product_id: "123", currency_groups: [], sales_native: null, profitability: null, growth_14_days_percent: null, success_classification: "not_established" }] } };
+}
+
+test("actual saved plan exposes explicit observations read beside catalog review without automatic requests", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/store-observations") ? observedStoreResponse() : saved }));
+    await render(); expect(api.get).toHaveBeenCalledTimes(1);
+    expect(button("قراءة منتجات الخطة المحفوظة")).not.toBeUndefined();
+    await act(async () => button("قراءة مشاهدات منتجات الخطة").click());
+    expect(api.get.mock.calls[1][0]).toBe("/integrations-v2/google_ads/commercial-plans/seasonal-focus/store-observations");
+    expect(api.get.mock.calls[1][1].params).toEqual({ expected_revision: 3 });
+    expect(container.textContent).toContain("لا يعني ذلك عدم وجود مبيعات");
+    expect(api.put).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
+});
+
+test("editing actual parent form aborts and removes late saved-plan observations", async () => {
+    let finish; api.get.mockImplementation((url) => url.endsWith("/store-observations") ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve({ data: saved }));
+    await render(); await act(async () => button("قراءة مشاهدات منتجات الخطة").click());
+    const signal = api.get.mock.calls[1][1].signal;
+    await input("الموسم", "الصيف"); expect(signal.aborted).toBe(true);
+    await act(async () => finish({ data: observedStoreResponse() }));
+    expect(button("قراءة مشاهدات منتجات الخطة")).toBeUndefined();
+    expect(container.textContent).not.toContain("وقت القراءة الثابت");
+    expect(api.put).not.toHaveBeenCalled();
 });

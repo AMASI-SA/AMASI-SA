@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
 import GooglePinnedCatalogReview from "./GooglePinnedCatalogReview";
+import GoogleStoreProductObservations from "./GoogleStoreProductObservations";
 import GoogleCommercialPlanSuggestion from "./GoogleCommercialPlanSuggestion";
 import { applyGoogleSuggestionToEmptyFields } from "../../services/googleCommercialPlanSuggestion";
 
@@ -102,9 +103,10 @@ function PlanPanel({ planId }) {
             </fieldset>
         </form>}
         {plan && form && <GooglePinnedCatalogReview plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
+        {plan && form && <GoogleStoreProductObservations plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
         {!plan && form && <p role="status" className="mt-3 text-sm text-slate-600">احفظ خطة ومعرفات منتجات سلة الرقمية أولًا لإتاحة مراجعة المنتجات المثبتة في الكتالوج.</p>}
         <section aria-label="جاهزية أدلة خطة الموسم" className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-7">
-            <p>المبيعات: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — الأدلة لم تُجمع بعد.</p>
+            <p>المبيعات المكتملة: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — اكتمالها غير مثبت. المشاهدات الجزئية لا تثبت صافي المبيعات أو نموها.</p>
             <p>الربحية غير مثبتة عند نقص التكاليف. المخزون والمقاسات ووقت التجهيز وربط الكتالوج تحتاج التحقق.</p>
             <p>نتائج سناب وتيك توك وميتا ترشح اختبارًا على جوجل؛ لا تضمن النجاح. تبقى نتائج كل منصة وحساب وعملة وفترة منفصلة، ولا تُجمع تحويلاتها كطلبات متجر.</p>
         </section>
