@@ -1,8 +1,8 @@
 {
   "backend_runtime_source": {
-    "added_count": 1,
+    "added_count": 2,
     "deleted_count": 0,
-    "file_count": 1022,
+    "file_count": 1024,
     "files": [
       {
         "bytes": 15126,
@@ -3253,39 +3253,39 @@
         "sha256": "907f04da515cd80ccf556299dce158423f5c8d7a2797d47150ace0dab8f2d3a5"
       },
       {
-        "bytes": 30478,
-        "git_blob": "996bf2a16448554a68c9a78c536c4eb2c4b19aef",
+        "bytes": 30520,
+        "git_blob": "68fffc9867301473e862fd2407e50d4bfa6efa41",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_automation_creation_authority.py",
-        "sha256": "3ead5203af191ba9a195de1761cf8ac3e07fcce4f65b8e773838bd3af57068d2"
+        "sha256": "7a10250868389dbc513e58af3516a10cd6ad4bc2884ce74c31b48d5c6167d1fa"
       },
       {
-        "bytes": 26840,
-        "git_blob": "d512ad351dba5bf4c1fdd45748cec39d99ba09ed",
+        "bytes": 27208,
+        "git_blob": "bb82556fb6e1736b88a0ec597e68679d4828b5da",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_automation_creation_contract.py",
-        "sha256": "1c3609729325293b50c6709f00da8be67de8b273ce111db9ca6688d84138478d"
+        "sha256": "1626c336207247dfea5c78c23890fe4c4acf8a951b695ba05b6ec61d253580a0"
       },
       {
-        "bytes": 16066,
-        "git_blob": "5295cacd7acb20ac855b620066fa2583997dc88c",
+        "bytes": 16108,
+        "git_blob": "54964de908e45b172c8ff8cd2c544759272c617d",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_automation_creation_gateway.py",
-        "sha256": "dd312d97d940fea2a8245a71d5b3c22ca527ba08da3adcbbac5e7f6a82e5abe5"
+        "sha256": "cfe6e0c59ec3a03c123ee3ab1eec9ebf583690c9513f0e40d60d584bff668f51"
       },
       {
-        "bytes": 14540,
-        "git_blob": "35976f199582020dcc49f96bff6f1f1092075a0d",
+        "bytes": 14582,
+        "git_blob": "f08a85556a4021935b48c20e39b29d1dbd766844",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_automation_creation_plan.py",
-        "sha256": "99f25539f29e95e1bbe31e7ba190495278130634cc5d6b6a3041aa78895c45b5"
+        "sha256": "3c3f2994e38adcc8ea6d4c415ab1bcb879acc833b0758a41d36dd808cfd4da70"
       },
       {
-        "bytes": 25056,
-        "git_blob": "7e484d6c91790d67c56772f589d5fbf78837abbd",
+        "bytes": 25570,
+        "git_blob": "ba6f21f802d0d199421d16a4ae704f11a4bfc9a3",
         "mode": "100644",
         "path": "integrations_control_center/google_ads_automation_creation_policy.py",
-        "sha256": "81085525d2e0b876c21e624f2e7be36d00b78ad41c4e73b5a27d8ed7e9de91ff"
+        "sha256": "40d97ce74693b00f2d8f0d6a5f8307e4c032a2e90f6f6960402d23c26073d97d"
       },
       {
         "bytes": 15495,
@@ -3349,6 +3349,13 @@
         "mode": "100644",
         "path": "integrations_control_center/google_ads_client.py",
         "sha256": "d43bd74475ea074f801613de57df12dc5dfaab95a161ba0648a93732e7f1582c"
+      },
+      {
+        "bytes": 386,
+        "git_blob": "7683511e93f205ac49882db001b47c2ecc8d6f11",
+        "mode": "100644",
+        "path": "integrations_control_center/google_ads_creation_inventory.py",
+        "sha256": "da519d1e155d4eb2bed105ab6b8e504cd5ca1f99577838ee46c4e54eb5c67340"
       },
       {
         "bytes": 52029,
@@ -5416,6 +5423,13 @@
         "sha256": "3955d0d966d877cae9ccfadb66e66587d796196403b16f1e92d509f0d0716bc2"
       },
       {
+        "bytes": 7246,
+        "git_blob": "dddb3bda9bcb1474b2d29184c63362fd55caf4b6",
+        "mode": "100644",
+        "path": "product_inventory_proof.py",
+        "sha256": "50667b2625b1de654a8208d3af59a650650c78bb695020b31bdcbbbc6cbe1721"
+      },
+      {
         "bytes": 34839,
         "git_blob": "a97b9382a03d09636b2f98aec3262974e81f7310",
         "mode": "100644",
@@ -5521,11 +5535,11 @@
         "sha256": "ade830d0d2aebb19e0672251ccd5caf9afec15133eba390bbbdb207dce64dd4b"
       },
       {
-        "bytes": 21304,
-        "git_blob": "5a9312ff0819b2ecaf8530e21ced534bad1345d5",
+        "bytes": 21476,
+        "git_blob": "2f251ffac1942868f6969527e73371cadfe7df2b",
         "mode": "100644",
         "path": "product_v2_details_routes.py",
-        "sha256": "e678dca91e0d697e61a38397c351ec05872015ecea3ccdb9c2e0c5cfb6083c1b"
+        "sha256": "eebe207c6dfc711b91c3bcddcad7d3582b45e4111c0d9fd963050d19d6ac213a"
       },
       {
         "bytes": 4375,
@@ -7159,20 +7173,20 @@
         "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
       }
     ],
-    "manifest_sha256": "63a1cf9e0293d1ff2ed4559e294e6b0a09dc6b734ee0f786431f303667f5f66e",
-    "modified_count": 4,
-    "projection_tree_oid": "b9087a3e54b8c2a109bc82ad38479c691afc5457",
+    "manifest_sha256": "298d43e890c7dfca4a3290ecce73664721146158f1e9b38aad1d44b8ef9f7ebb",
+    "modified_count": 6,
+    "projection_tree_oid": "76422374787170f61c104785a4b11f0513505d85",
     "scope": "backend_runtime_package_v1",
-    "scope_tree_oid": "6939645f9afe42aa56786cc009fea216ee749e77",
-    "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-    "source_base_root_tree_oid": "11e829f3a7f336db0839dad80a8ed4a4aa44ac8b",
-    "source_base_scope_tree_oid": "bd050483b23448a662682f5e56b7ace303f29056",
-    "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
-    "source_root_tree_oid": "5e4f846698ff28514c07c8a4a53d186d25de9b4b",
+    "scope_tree_oid": "7b2202bfee7069d926eaa31cce074c1e57c08e4c",
+    "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+    "source_base_root_tree_oid": "ef230e44c417bae86cef3bee380fbac8804ccb46",
+    "source_base_scope_tree_oid": "6939645f9afe42aa56786cc009fea216ee749e77",
+    "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+    "source_root_tree_oid": "823f75c9af0886dc28f27063a9cabf28beda7294",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "ac370c725977d5660533c60c21c6ab0110d6e950506679dc39080eeeb6370efd"
+    "tree_sha256": "37de3273eaecc8b4fa7d2bab725f4b492c119e6bb95add3c712dec935d95e315"
   },
   "branch": "hotfix/prod-snap-meta-final",
   "client_environment": {
@@ -7190,27 +7204,27 @@
     "server.py": "a56a29ff35e2da5627cbb70285dfcc3786fb2c9dea2aea937c758e6fd462c264"
   },
   "frontend_build": {
-    "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+    "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
     "assets": [
       {
         "bytes": 19125,
-        "path": "assets/ChartDashboard-DexHMw_Y.js",
-        "sha256": "9245f45ca27d0880ce124cc772af003994e0abedb4650b091eb8abc361bcaf22"
+        "path": "assets/ChartDashboard-VlO5tbJP.js",
+        "sha256": "e3ba2d7f3e95ecbf2f919a84a0b459c8b21329a883593930c06f8a6fc8e3ec3f"
       },
       {
         "bytes": 14550,
-        "path": "assets/CustomerExchanges-rVmCNzM5.js",
-        "sha256": "85704d66cbb4b7a0dee0f5dff20060753f8df6d779375d4f24375e585bccdd74"
+        "path": "assets/CustomerExchanges-Dn0rtuNq.js",
+        "sha256": "64577997c70f97b24591c31c9b7b765613b3f80544b56b92e2efb926a1961f0b"
       },
       {
         "bytes": 11314,
-        "path": "assets/CustomerReturns-DyOvRiTn.js",
-        "sha256": "3eeaef4b0983348f7b4ef33e4ded2bb98c188caf5fec9bbfa4c31fda817b8c46"
+        "path": "assets/CustomerReturns-BetY3Cmb.js",
+        "sha256": "5c61599d9fd7831852a288948f097dfba81649768ff912c55848c09ec2ea20d2"
       },
       {
         "bytes": 17012,
-        "path": "assets/OpeningBalances-CUouPC0X.js",
-        "sha256": "701998d225898dbdb4188fcd9805a4607a38634e1872e064ff88dc41857d6c99"
+        "path": "assets/OpeningBalances-5dWdcooT.js",
+        "sha256": "cedf55abb9893a281e8af79885d45cfee12ddb5a8294749139ff2129a4a37fed"
       },
       {
         "bytes": 6251,
@@ -7219,8 +7233,8 @@
       },
       {
         "bytes": 94819,
-        "path": "assets/OperationalBalances-CJaD5BaX.js",
-        "sha256": "a00666a32cf218be8ca04e6b5cc3fb3a96eb3938bf74e3e1101a4b0c487bff0e"
+        "path": "assets/OperationalBalances-1M1sFC0r.js",
+        "sha256": "a53b1565d848804d39d037879b0e23e2d1aaa35c1ed699c7c6afea0c5082ac62"
       },
       {
         "bytes": 435694,
@@ -7233,9 +7247,9 @@
         "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
       },
       {
-        "bytes": 7278473,
-        "path": "assets/index-DEbqgdrj.js",
-        "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+        "bytes": 7278617,
+        "path": "assets/index-BNlwJ4xF.js",
+        "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
       },
       {
         "bytes": 8947,
@@ -7246,7 +7260,7 @@
     "build_meta": {
       "bytes": 286684,
       "path": "build-meta.json",
-      "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+      "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
     },
     "entrypoints": [
       {
@@ -7255,9 +7269,9 @@
         "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
       },
       {
-        "bytes": 7278473,
-        "path": "assets/index-DEbqgdrj.js",
-        "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+        "bytes": 7278617,
+        "path": "assets/index-BNlwJ4xF.js",
+        "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
       }
     ],
     "environment": {
@@ -7277,11 +7291,11 @@
         }
       }
     },
-    "git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+    "git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
     "index": {
       "bytes": 3359,
       "path": "index.html",
-      "sha256": "250a9c73c6297a15b4df8c0493d117a0e4ad90972e6fb4b54390f9d236260b20"
+      "sha256": "45050ab474a5d3e066dad8bc2ce6a9cf77b27a42919cbabb943aa188554fd755"
     },
     "public_files": [
       {
@@ -7296,23 +7310,23 @@
       },
       {
         "bytes": 19125,
-        "path": "assets/ChartDashboard-DexHMw_Y.js",
-        "sha256": "9245f45ca27d0880ce124cc772af003994e0abedb4650b091eb8abc361bcaf22"
+        "path": "assets/ChartDashboard-VlO5tbJP.js",
+        "sha256": "e3ba2d7f3e95ecbf2f919a84a0b459c8b21329a883593930c06f8a6fc8e3ec3f"
       },
       {
         "bytes": 14550,
-        "path": "assets/CustomerExchanges-rVmCNzM5.js",
-        "sha256": "85704d66cbb4b7a0dee0f5dff20060753f8df6d779375d4f24375e585bccdd74"
+        "path": "assets/CustomerExchanges-Dn0rtuNq.js",
+        "sha256": "64577997c70f97b24591c31c9b7b765613b3f80544b56b92e2efb926a1961f0b"
       },
       {
         "bytes": 11314,
-        "path": "assets/CustomerReturns-DyOvRiTn.js",
-        "sha256": "3eeaef4b0983348f7b4ef33e4ded2bb98c188caf5fec9bbfa4c31fda817b8c46"
+        "path": "assets/CustomerReturns-BetY3Cmb.js",
+        "sha256": "5c61599d9fd7831852a288948f097dfba81649768ff912c55848c09ec2ea20d2"
       },
       {
         "bytes": 17012,
-        "path": "assets/OpeningBalances-CUouPC0X.js",
-        "sha256": "701998d225898dbdb4188fcd9805a4607a38634e1872e064ff88dc41857d6c99"
+        "path": "assets/OpeningBalances-5dWdcooT.js",
+        "sha256": "cedf55abb9893a281e8af79885d45cfee12ddb5a8294749139ff2129a4a37fed"
       },
       {
         "bytes": 6251,
@@ -7321,8 +7335,8 @@
       },
       {
         "bytes": 94819,
-        "path": "assets/OperationalBalances-CJaD5BaX.js",
-        "sha256": "a00666a32cf218be8ca04e6b5cc3fb3a96eb3938bf74e3e1101a4b0c487bff0e"
+        "path": "assets/OperationalBalances-1M1sFC0r.js",
+        "sha256": "a53b1565d848804d39d037879b0e23e2d1aaa35c1ed699c7c6afea0c5082ac62"
       },
       {
         "bytes": 435694,
@@ -7335,9 +7349,9 @@
         "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
       },
       {
-        "bytes": 7278473,
-        "path": "assets/index-DEbqgdrj.js",
-        "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+        "bytes": 7278617,
+        "path": "assets/index-BNlwJ4xF.js",
+        "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
       },
       {
         "bytes": 8947,
@@ -7352,7 +7366,7 @@
       {
         "bytes": 3359,
         "path": "index.html",
-        "sha256": "250a9c73c6297a15b4df8c0493d117a0e4ad90972e6fb4b54390f9d236260b20"
+        "sha256": "45050ab474a5d3e066dad8bc2ce6a9cf77b27a42919cbabb943aa188554fd755"
       },
       {
         "bytes": 1234,
@@ -7373,9 +7387,9 @@
     "schema_version": 1,
     "source": {
       "file_count": 1007,
-      "git_tree_oid": "ddb48e39bb3b5f8b5438bfac2fa683945889c1c9",
+      "git_tree_oid": "8328793a30802a7c931df06936654f61be50ce23",
       "scope": "git_head_frontend_tree_v1",
-      "tree_sha256": "8adb85d9a4015538106905cac80033cb38c4a204e762e7ec22dcf1cb89384095"
+      "tree_sha256": "4e7beee01a1c118c1b21ffc7d13fc12093506f54638942c5f97eeb37988c3ef5"
     },
     "toolchain": {
       "node": "22.23.2",
@@ -7401,24 +7415,24 @@
         }
       }
     },
-    "git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+    "git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
     "kind": "frontend_two_clean_builds_v1",
     "passes": [
       {
-        "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+        "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
         "build_meta": {
           "bytes": 286684,
           "path": "build-meta.json",
-          "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+          "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
         },
         "ordinal": 1
       },
       {
-        "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+        "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
         "build_meta": {
           "bytes": 286684,
           "path": "build-meta.json",
-          "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+          "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
         },
         "ordinal": 2
       }
@@ -7426,15 +7440,15 @@
     "proof_file": {
       "bytes": 1521,
       "path": "frontend/.release/reproducible-build.json",
-      "sha256": "97c3f446984b899b564e673f3b71ec50752e3265f4cd8068f5a5956879f4c8bc"
+      "sha256": "f3105d5cd6a9c7759755675eb7501ca81aa9dca242e602d32d790a8e3399da9e"
     },
     "retained_pass": 2,
     "schema_version": 1,
     "source": {
       "file_count": 1007,
-      "git_tree_oid": "ddb48e39bb3b5f8b5438bfac2fa683945889c1c9",
+      "git_tree_oid": "8328793a30802a7c931df06936654f61be50ce23",
       "scope": "git_head_frontend_tree_v1",
-      "tree_sha256": "8adb85d9a4015538106905cac80033cb38c4a204e762e7ec22dcf1cb89384095"
+      "tree_sha256": "4e7beee01a1c118c1b21ffc7d13fc12093506f54638942c5f97eeb37988c3ef5"
     },
     "toolchain": {
       "node": "22.23.2",
@@ -9231,11 +9245,11 @@
         "sha256": "7ea04d9c937a2f02969ff93763a9fdc35452897cc842290080e5d6d369f6e244"
       },
       {
-        "bytes": 20686,
-        "git_blob": "e90bdb1af169c951fd14d70fa7c454a2730ec402",
+        "bytes": 20832,
+        "git_blob": "455fb3b81bcc4d843e430e05e1a72bb512e576f8",
         "mode": "100644",
         "path": "src/components/marketing/GoogleCreationPolicy.jsx",
-        "sha256": "f6d9d5d5a7ec9283135e1ef727efe42eb7aee4416b58aa8937f42589eb6f5dfd"
+        "sha256": "b6d44eb7fe010c6cbddfa789e244ec62b28a5a3810f1613aef3b4a52c1d2f4da"
       },
       {
         "bytes": 13457,
@@ -14495,14 +14509,14 @@
         "sha256": "1bfa215ae3fb98df72a4c934fa0de33c9f11038ccede9affde4dab0a2cae5d4a"
       }
     ],
-    "git_tree_oid": "ddb48e39bb3b5f8b5438bfac2fa683945889c1c9",
+    "git_tree_oid": "8328793a30802a7c931df06936654f61be50ce23",
     "scope": "git_head_frontend_tree_v1",
-    "tree_sha256": "8adb85d9a4015538106905cac80033cb38c4a204e762e7ec22dcf1cb89384095"
+    "tree_sha256": "4e7beee01a1c118c1b21ffc7d13fc12093506f54638942c5f97eeb37988c3ef5"
   },
   "kind": "mezan_emergent_release_intent_v1",
   "protocol_version": 5,
   "release_control_source": {
-    "added_count": 1,
+    "added_count": 0,
     "deleted_count": 0,
     "file_count": 242,
     "files": [
@@ -14675,11 +14689,11 @@
         "sha256": "ef18fda00ea958d83683efc2255cbfff76b3d3306e1092e5f20fc5c8d9a463ec"
       },
       {
-        "bytes": 6563,
-        "git_blob": "7729b82336c92fb1181c8a1d1c584c5fe3fc2b47",
+        "bytes": 6785,
+        "git_blob": "b69475b22592cb02f88b4f7cf195e2fa993e250e",
         "mode": "100644",
         "path": ".github/workflows/google-ads-full-management.yml",
-        "sha256": "cd8d3f27c01ac7d8501fc2d8e9f1b57065109c6085bb758714133983cbeeade7"
+        "sha256": "320b326524853cd0765fb7aaea9a59a28a125f13d0386e243243d929eea4461b"
       },
       {
         "bytes": 3354,
@@ -16201,26 +16215,26 @@
         "sha256": "723c124a8a8351bc81a95c62507ad6bd0e26c8e39170e91c5891f0c693dc547f"
       }
     ],
-    "manifest_sha256": "fedfefe682fd042b726dbb9baf4806ad3498d08c2a5d6c0867f16f8f1b5e89f6",
-    "modified_count": 2,
-    "projection_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
+    "manifest_sha256": "822b2951a2ff2c8e7835544e09eb011632cbbfacc96dd25d49317f6e9b7898bb",
+    "modified_count": 1,
+    "projection_tree_oid": "98f2c64be8a698c2fd3b3c5a145d27cc2fa6fe25",
     "scope": "release_control_source_v1",
-    "scope_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
-    "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-    "source_base_root_tree_oid": "11e829f3a7f336db0839dad80a8ed4a4aa44ac8b",
-    "source_base_scope_tree_oid": "14d7ec75451e2652ea6365448508fe017a1206db",
-    "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
-    "source_root_tree_oid": "5e4f846698ff28514c07c8a4a53d186d25de9b4b",
+    "scope_tree_oid": "98f2c64be8a698c2fd3b3c5a145d27cc2fa6fe25",
+    "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+    "source_base_root_tree_oid": "ef230e44c417bae86cef3bee380fbac8804ccb46",
+    "source_base_scope_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
+    "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+    "source_root_tree_oid": "823f75c9af0886dc28f27063a9cabf28beda7294",
     "tombstone_count": 0,
     "tombstones": [],
     "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "tree_sha256": "2472c1668df9103b080edfcb76958fae77f2b7e4b1123aab210a85b505e4cace"
+    "tree_sha256": "3fa32dbc19643a1691458793d36524e3666f00c600c5c41d7c28ce8458f8c405"
   },
   "runtime_identity": {
     "backend_runtime_source": {
-      "added_count": 1,
+      "added_count": 2,
       "deleted_count": 0,
-      "file_count": 1022,
+      "file_count": 1024,
       "files": [
         {
           "bytes": 15126,
@@ -19471,39 +19485,39 @@
           "sha256": "907f04da515cd80ccf556299dce158423f5c8d7a2797d47150ace0dab8f2d3a5"
         },
         {
-          "bytes": 30478,
-          "git_blob": "996bf2a16448554a68c9a78c536c4eb2c4b19aef",
+          "bytes": 30520,
+          "git_blob": "68fffc9867301473e862fd2407e50d4bfa6efa41",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_automation_creation_authority.py",
-          "sha256": "3ead5203af191ba9a195de1761cf8ac3e07fcce4f65b8e773838bd3af57068d2"
+          "sha256": "7a10250868389dbc513e58af3516a10cd6ad4bc2884ce74c31b48d5c6167d1fa"
         },
         {
-          "bytes": 26840,
-          "git_blob": "d512ad351dba5bf4c1fdd45748cec39d99ba09ed",
+          "bytes": 27208,
+          "git_blob": "bb82556fb6e1736b88a0ec597e68679d4828b5da",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_automation_creation_contract.py",
-          "sha256": "1c3609729325293b50c6709f00da8be67de8b273ce111db9ca6688d84138478d"
+          "sha256": "1626c336207247dfea5c78c23890fe4c4acf8a951b695ba05b6ec61d253580a0"
         },
         {
-          "bytes": 16066,
-          "git_blob": "5295cacd7acb20ac855b620066fa2583997dc88c",
+          "bytes": 16108,
+          "git_blob": "54964de908e45b172c8ff8cd2c544759272c617d",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_automation_creation_gateway.py",
-          "sha256": "dd312d97d940fea2a8245a71d5b3c22ca527ba08da3adcbbac5e7f6a82e5abe5"
+          "sha256": "cfe6e0c59ec3a03c123ee3ab1eec9ebf583690c9513f0e40d60d584bff668f51"
         },
         {
-          "bytes": 14540,
-          "git_blob": "35976f199582020dcc49f96bff6f1f1092075a0d",
+          "bytes": 14582,
+          "git_blob": "f08a85556a4021935b48c20e39b29d1dbd766844",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_automation_creation_plan.py",
-          "sha256": "99f25539f29e95e1bbe31e7ba190495278130634cc5d6b6a3041aa78895c45b5"
+          "sha256": "3c3f2994e38adcc8ea6d4c415ab1bcb879acc833b0758a41d36dd808cfd4da70"
         },
         {
-          "bytes": 25056,
-          "git_blob": "7e484d6c91790d67c56772f589d5fbf78837abbd",
+          "bytes": 25570,
+          "git_blob": "ba6f21f802d0d199421d16a4ae704f11a4bfc9a3",
           "mode": "100644",
           "path": "integrations_control_center/google_ads_automation_creation_policy.py",
-          "sha256": "81085525d2e0b876c21e624f2e7be36d00b78ad41c4e73b5a27d8ed7e9de91ff"
+          "sha256": "40d97ce74693b00f2d8f0d6a5f8307e4c032a2e90f6f6960402d23c26073d97d"
         },
         {
           "bytes": 15495,
@@ -19567,6 +19581,13 @@
           "mode": "100644",
           "path": "integrations_control_center/google_ads_client.py",
           "sha256": "d43bd74475ea074f801613de57df12dc5dfaab95a161ba0648a93732e7f1582c"
+        },
+        {
+          "bytes": 386,
+          "git_blob": "7683511e93f205ac49882db001b47c2ecc8d6f11",
+          "mode": "100644",
+          "path": "integrations_control_center/google_ads_creation_inventory.py",
+          "sha256": "da519d1e155d4eb2bed105ab6b8e504cd5ca1f99577838ee46c4e54eb5c67340"
         },
         {
           "bytes": 52029,
@@ -21634,6 +21655,13 @@
           "sha256": "3955d0d966d877cae9ccfadb66e66587d796196403b16f1e92d509f0d0716bc2"
         },
         {
+          "bytes": 7246,
+          "git_blob": "dddb3bda9bcb1474b2d29184c63362fd55caf4b6",
+          "mode": "100644",
+          "path": "product_inventory_proof.py",
+          "sha256": "50667b2625b1de654a8208d3af59a650650c78bb695020b31bdcbbbc6cbe1721"
+        },
+        {
           "bytes": 34839,
           "git_blob": "a97b9382a03d09636b2f98aec3262974e81f7310",
           "mode": "100644",
@@ -21739,11 +21767,11 @@
           "sha256": "ade830d0d2aebb19e0672251ccd5caf9afec15133eba390bbbdb207dce64dd4b"
         },
         {
-          "bytes": 21304,
-          "git_blob": "5a9312ff0819b2ecaf8530e21ced534bad1345d5",
+          "bytes": 21476,
+          "git_blob": "2f251ffac1942868f6969527e73371cadfe7df2b",
           "mode": "100644",
           "path": "product_v2_details_routes.py",
-          "sha256": "e678dca91e0d697e61a38397c351ec05872015ecea3ccdb9c2e0c5cfb6083c1b"
+          "sha256": "eebe207c6dfc711b91c3bcddcad7d3582b45e4111c0d9fd963050d19d6ac213a"
         },
         {
           "bytes": 4375,
@@ -23377,20 +23405,20 @@
           "sha256": "67eb563ce5ecd1f7a686a77baa5de187541deefcf85ed29625ca10a9bf8c4001"
         }
       ],
-      "manifest_sha256": "63a1cf9e0293d1ff2ed4559e294e6b0a09dc6b734ee0f786431f303667f5f66e",
-      "modified_count": 4,
-      "projection_tree_oid": "b9087a3e54b8c2a109bc82ad38479c691afc5457",
+      "manifest_sha256": "298d43e890c7dfca4a3290ecce73664721146158f1e9b38aad1d44b8ef9f7ebb",
+      "modified_count": 6,
+      "projection_tree_oid": "76422374787170f61c104785a4b11f0513505d85",
       "scope": "backend_runtime_package_v1",
-      "scope_tree_oid": "6939645f9afe42aa56786cc009fea216ee749e77",
-      "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-      "source_base_root_tree_oid": "11e829f3a7f336db0839dad80a8ed4a4aa44ac8b",
-      "source_base_scope_tree_oid": "bd050483b23448a662682f5e56b7ace303f29056",
-      "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
-      "source_root_tree_oid": "5e4f846698ff28514c07c8a4a53d186d25de9b4b",
+      "scope_tree_oid": "7b2202bfee7069d926eaa31cce074c1e57c08e4c",
+      "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+      "source_base_root_tree_oid": "ef230e44c417bae86cef3bee380fbac8804ccb46",
+      "source_base_scope_tree_oid": "6939645f9afe42aa56786cc009fea216ee749e77",
+      "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+      "source_root_tree_oid": "823f75c9af0886dc28f27063a9cabf28beda7294",
       "tombstone_count": 0,
       "tombstones": [],
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "ac370c725977d5660533c60c21c6ab0110d6e950506679dc39080eeeb6370efd"
+      "tree_sha256": "37de3273eaecc8b4fa7d2bab725f4b492c119e6bb95add3c712dec935d95e315"
     },
     "branch": "hotfix/prod-snap-meta-final",
     "critical_file_hashes": {
@@ -23402,27 +23430,27 @@
       "server.py": "a56a29ff35e2da5627cbb70285dfcc3786fb2c9dea2aea937c758e6fd462c264"
     },
     "frontend_build": {
-      "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+      "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
       "assets": [
         {
           "bytes": 19125,
-          "path": "assets/ChartDashboard-DexHMw_Y.js",
-          "sha256": "9245f45ca27d0880ce124cc772af003994e0abedb4650b091eb8abc361bcaf22"
+          "path": "assets/ChartDashboard-VlO5tbJP.js",
+          "sha256": "e3ba2d7f3e95ecbf2f919a84a0b459c8b21329a883593930c06f8a6fc8e3ec3f"
         },
         {
           "bytes": 14550,
-          "path": "assets/CustomerExchanges-rVmCNzM5.js",
-          "sha256": "85704d66cbb4b7a0dee0f5dff20060753f8df6d779375d4f24375e585bccdd74"
+          "path": "assets/CustomerExchanges-Dn0rtuNq.js",
+          "sha256": "64577997c70f97b24591c31c9b7b765613b3f80544b56b92e2efb926a1961f0b"
         },
         {
           "bytes": 11314,
-          "path": "assets/CustomerReturns-DyOvRiTn.js",
-          "sha256": "3eeaef4b0983348f7b4ef33e4ded2bb98c188caf5fec9bbfa4c31fda817b8c46"
+          "path": "assets/CustomerReturns-BetY3Cmb.js",
+          "sha256": "5c61599d9fd7831852a288948f097dfba81649768ff912c55848c09ec2ea20d2"
         },
         {
           "bytes": 17012,
-          "path": "assets/OpeningBalances-CUouPC0X.js",
-          "sha256": "701998d225898dbdb4188fcd9805a4607a38634e1872e064ff88dc41857d6c99"
+          "path": "assets/OpeningBalances-5dWdcooT.js",
+          "sha256": "cedf55abb9893a281e8af79885d45cfee12ddb5a8294749139ff2129a4a37fed"
         },
         {
           "bytes": 6251,
@@ -23431,8 +23459,8 @@
         },
         {
           "bytes": 94819,
-          "path": "assets/OperationalBalances-CJaD5BaX.js",
-          "sha256": "a00666a32cf218be8ca04e6b5cc3fb3a96eb3938bf74e3e1101a4b0c487bff0e"
+          "path": "assets/OperationalBalances-1M1sFC0r.js",
+          "sha256": "a53b1565d848804d39d037879b0e23e2d1aaa35c1ed699c7c6afea0c5082ac62"
         },
         {
           "bytes": 435694,
@@ -23445,9 +23473,9 @@
           "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
         },
         {
-          "bytes": 7278473,
-          "path": "assets/index-DEbqgdrj.js",
-          "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+          "bytes": 7278617,
+          "path": "assets/index-BNlwJ4xF.js",
+          "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
         },
         {
           "bytes": 8947,
@@ -23458,7 +23486,7 @@
       "build_meta": {
         "bytes": 286684,
         "path": "build-meta.json",
-        "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+        "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
       },
       "entrypoints": [
         {
@@ -23467,9 +23495,9 @@
           "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
         },
         {
-          "bytes": 7278473,
-          "path": "assets/index-DEbqgdrj.js",
-          "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+          "bytes": 7278617,
+          "path": "assets/index-BNlwJ4xF.js",
+          "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
         }
       ],
       "environment": {
@@ -23489,11 +23517,11 @@
           }
         }
       },
-      "git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+      "git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
       "index": {
         "bytes": 3359,
         "path": "index.html",
-        "sha256": "250a9c73c6297a15b4df8c0493d117a0e4ad90972e6fb4b54390f9d236260b20"
+        "sha256": "45050ab474a5d3e066dad8bc2ce6a9cf77b27a42919cbabb943aa188554fd755"
       },
       "public_files": [
         {
@@ -23508,23 +23536,23 @@
         },
         {
           "bytes": 19125,
-          "path": "assets/ChartDashboard-DexHMw_Y.js",
-          "sha256": "9245f45ca27d0880ce124cc772af003994e0abedb4650b091eb8abc361bcaf22"
+          "path": "assets/ChartDashboard-VlO5tbJP.js",
+          "sha256": "e3ba2d7f3e95ecbf2f919a84a0b459c8b21329a883593930c06f8a6fc8e3ec3f"
         },
         {
           "bytes": 14550,
-          "path": "assets/CustomerExchanges-rVmCNzM5.js",
-          "sha256": "85704d66cbb4b7a0dee0f5dff20060753f8df6d779375d4f24375e585bccdd74"
+          "path": "assets/CustomerExchanges-Dn0rtuNq.js",
+          "sha256": "64577997c70f97b24591c31c9b7b765613b3f80544b56b92e2efb926a1961f0b"
         },
         {
           "bytes": 11314,
-          "path": "assets/CustomerReturns-DyOvRiTn.js",
-          "sha256": "3eeaef4b0983348f7b4ef33e4ded2bb98c188caf5fec9bbfa4c31fda817b8c46"
+          "path": "assets/CustomerReturns-BetY3Cmb.js",
+          "sha256": "5c61599d9fd7831852a288948f097dfba81649768ff912c55848c09ec2ea20d2"
         },
         {
           "bytes": 17012,
-          "path": "assets/OpeningBalances-CUouPC0X.js",
-          "sha256": "701998d225898dbdb4188fcd9805a4607a38634e1872e064ff88dc41857d6c99"
+          "path": "assets/OpeningBalances-5dWdcooT.js",
+          "sha256": "cedf55abb9893a281e8af79885d45cfee12ddb5a8294749139ff2129a4a37fed"
         },
         {
           "bytes": 6251,
@@ -23533,8 +23561,8 @@
         },
         {
           "bytes": 94819,
-          "path": "assets/OperationalBalances-CJaD5BaX.js",
-          "sha256": "a00666a32cf218be8ca04e6b5cc3fb3a96eb3938bf74e3e1101a4b0c487bff0e"
+          "path": "assets/OperationalBalances-1M1sFC0r.js",
+          "sha256": "a53b1565d848804d39d037879b0e23e2d1aaa35c1ed699c7c6afea0c5082ac62"
         },
         {
           "bytes": 435694,
@@ -23547,9 +23575,9 @@
           "sha256": "85d5fd057d9ec597ae62ddae4055e0b6046f3636d06f3966e8a79b92fcbc5d74"
         },
         {
-          "bytes": 7278473,
-          "path": "assets/index-DEbqgdrj.js",
-          "sha256": "b5a0585825d33ac4de94e24aeb5529e6f45cf015e2c2f2f0a331d0bf0812470c"
+          "bytes": 7278617,
+          "path": "assets/index-BNlwJ4xF.js",
+          "sha256": "4c74fe3c7dcaf5199bd1299645df94a8e02bc91abe7d192d9f481c7f1bb9be66"
         },
         {
           "bytes": 8947,
@@ -23564,7 +23592,7 @@
         {
           "bytes": 3359,
           "path": "index.html",
-          "sha256": "250a9c73c6297a15b4df8c0493d117a0e4ad90972e6fb4b54390f9d236260b20"
+          "sha256": "45050ab474a5d3e066dad8bc2ce6a9cf77b27a42919cbabb943aa188554fd755"
         },
         {
           "bytes": 1234,
@@ -23585,9 +23613,9 @@
       "schema_version": 1,
       "source": {
         "file_count": 1007,
-        "git_tree_oid": "ddb48e39bb3b5f8b5438bfac2fa683945889c1c9",
+        "git_tree_oid": "8328793a30802a7c931df06936654f61be50ce23",
         "scope": "git_head_frontend_tree_v1",
-        "tree_sha256": "8adb85d9a4015538106905cac80033cb38c4a204e762e7ec22dcf1cb89384095"
+        "tree_sha256": "4e7beee01a1c118c1b21ffc7d13fc12093506f54638942c5f97eeb37988c3ef5"
       },
       "toolchain": {
         "node": "22.23.2",
@@ -23613,24 +23641,24 @@
           }
         }
       },
-      "git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+      "git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
       "kind": "frontend_two_clean_builds_v1",
       "passes": [
         {
-          "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+          "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
           "build_meta": {
             "bytes": 286684,
             "path": "build-meta.json",
-            "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+            "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
           },
           "ordinal": 1
         },
         {
-          "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+          "artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
           "build_meta": {
             "bytes": 286684,
             "path": "build-meta.json",
-            "sha256": "05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5"
+            "sha256": "bad1ec6c612db0ca5e7741b4f80d9a557201e5546f7c754406da25281408503b"
           },
           "ordinal": 2
         }
@@ -23638,15 +23666,15 @@
       "proof_file": {
         "bytes": 1521,
         "path": "frontend/.release/reproducible-build.json",
-        "sha256": "97c3f446984b899b564e673f3b71ec50752e3265f4cd8068f5a5956879f4c8bc"
+        "sha256": "f3105d5cd6a9c7759755675eb7501ca81aa9dca242e602d32d790a8e3399da9e"
       },
       "retained_pass": 2,
       "schema_version": 1,
       "source": {
         "file_count": 1007,
-        "git_tree_oid": "ddb48e39bb3b5f8b5438bfac2fa683945889c1c9",
+        "git_tree_oid": "8328793a30802a7c931df06936654f61be50ce23",
         "scope": "git_head_frontend_tree_v1",
-        "tree_sha256": "8adb85d9a4015538106905cac80033cb38c4a204e762e7ec22dcf1cb89384095"
+        "tree_sha256": "4e7beee01a1c118c1b21ffc7d13fc12093506f54638942c5f97eeb37988c3ef5"
       },
       "toolchain": {
         "node": "22.23.2",
@@ -23657,29 +23685,29 @@
     "kind": "mezan_runtime_release_identity_v5",
     "protocol_version": 5,
     "release_control_source": {
-      "added_count": 1,
+      "added_count": 0,
       "deleted_count": 0,
       "file_count": 242,
-      "manifest_sha256": "fedfefe682fd042b726dbb9baf4806ad3498d08c2a5d6c0867f16f8f1b5e89f6",
-      "modified_count": 2,
-      "projection_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
+      "manifest_sha256": "822b2951a2ff2c8e7835544e09eb011632cbbfacc96dd25d49317f6e9b7898bb",
+      "modified_count": 1,
+      "projection_tree_oid": "98f2c64be8a698c2fd3b3c5a145d27cc2fa6fe25",
       "scope": "release_control_source_v1",
-      "scope_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
-      "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-      "source_base_root_tree_oid": "11e829f3a7f336db0839dad80a8ed4a4aa44ac8b",
-      "source_base_scope_tree_oid": "14d7ec75451e2652ea6365448508fe017a1206db",
-      "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
-      "source_root_tree_oid": "5e4f846698ff28514c07c8a4a53d186d25de9b4b",
+      "scope_tree_oid": "98f2c64be8a698c2fd3b3c5a145d27cc2fa6fe25",
+      "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+      "source_base_root_tree_oid": "ef230e44c417bae86cef3bee380fbac8804ccb46",
+      "source_base_scope_tree_oid": "bfa2da8ee6449d54f2009e198490402299e45ea4",
+      "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+      "source_root_tree_oid": "823f75c9af0886dc28f27063a9cabf28beda7294",
       "tombstone_count": 0,
       "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "tree_sha256": "2472c1668df9103b080edfcb76958fae77f2b7e4b1123aab210a85b505e4cace"
+      "tree_sha256": "3fa32dbc19643a1691458793d36524e3666f00c600c5c41d7c28ce8458f8c405"
     },
-    "release_id": "rg5-3debafb4d26cbeb5266a86af45d1f20e56e03d21b7f9ef27cac161e100e79b3d",
+    "release_id": "rg5-74850b8727dfa76bfef242d53621c8377dd349d13a89700dcc95330ea8607aa0",
     "schema_version": 2,
-    "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-    "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a"
+    "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+    "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5"
   },
   "schema_version": 2,
-  "source_base_git_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
-  "source_git_sha": "f64152d34aed7ff4d75408c7d8f657bc474e052a"
+  "source_base_git_sha": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+  "source_git_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5"
 }

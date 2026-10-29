@@ -138,6 +138,8 @@ async def test_ledger_selection_chooses_next_explicit_product_without_model_or_c
     row["_creation_ledger"]={first["intent"]["creation_identity"]:{"status":"failed"}}
     row["product_scopes"].append({"product_id":"2","final_url":"https://amasi-sa.com/p2"})
     product=deepcopy(case["product"]);product.update(salla_product_id="2",mezan_product_id="mp2",canonical_url="https://amasi-sa.com/p2",source_revision="b"*64)
+    from tests.test_google_ads_automation_creation_contract import prove_inventory
+    prove_inventory(product)
     db[PRODUCT_COLLECTION].rows.append(product)
     result=await plan.build_google_creation_plan(db,user_id="owner",account_id="123",current=NOW,state_reader=state)
     assert result["choice"]=={"product_id":"2","template_id":row["template_id"],"template_version":row["template_version"]}
