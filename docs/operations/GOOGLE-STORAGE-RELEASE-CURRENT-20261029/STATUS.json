@@ -1,0 +1,89 @@
+{
+  "status": "source_A_locally_verified_pending_fresh_CI_and_independent_review",
+  "production_base": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+  "production_base_tree": "af10b5f9bdef3e78fa8b96d1d1b4c90a2482f301",
+  "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
+  "reviewed_source_tree": "27440fcb515e825959ccb6a594f5d4d88d0eb44b",
+  "scope": "Exact 15 reviewed new blobs; router four attachment lines and workspace two imports plus owner-only collapsed diagnostics. No budget migration or policy changes.",
+  "reviewed_blob_parity": [
+    {
+      "path": ".github/workflows/google-namespace-prerequisites.yml",
+      "sha": "b597efd265483888d22562fb9390be7dcea3c8d1"
+    },
+    {
+      "path": ".github/workflows/google-storage-commit-readiness.yml",
+      "sha": "f8be97880ba24f88a0d7772deabee0d889bc1c07"
+    },
+    {
+      "path": "backend/integrations_control_center/google_ads_namespace_prerequisites.py",
+      "sha": "4632dbcfa23d8f9f8dac25467df0cf684e832934"
+    },
+    {
+      "path": "backend/integrations_control_center/google_ads_storage_commit_readiness.py",
+      "sha": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2"
+    },
+    {
+      "path": "backend/tests/test_google_ads_namespace_prerequisites.py",
+      "sha": "2f08769df4343c08c0f7d040029e1f108ac3984c"
+    },
+    {
+      "path": "backend/tests/test_google_ads_namespace_prerequisites_mongo.py",
+      "sha": "f0ed87acca1d3f1b5824c24bbb372b62953b71af"
+    },
+    {
+      "path": "backend/tests/test_google_ads_storage_commit_readiness.py",
+      "sha": "fa061c8557f8c6193cdbbe3178903f29e68334c3"
+    },
+    {
+      "path": "backend/tests/test_google_ads_storage_commit_readiness_mongo.py",
+      "sha": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.jsx",
+      "sha": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.test.jsx",
+      "sha": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.jsx",
+      "sha": "81d3f9d12eb17222039557231d7e7117b9f20000"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.test.jsx",
+      "sha": "ca8326a2fa801e66c1721b7a7a90a798281b78b3"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
+      "sha": "ac0f23e343f8d9998c53d84290dbc9eea105fb4b"
+    },
+    {
+      "path": "frontend/src/services/googleNamespacePrerequisites.js",
+      "sha": "cd24ecc935893087c0b5024c0055a722c8587afb"
+    },
+    {
+      "path": "frontend/src/services/googleStorageCommitReadiness.js",
+      "sha": "80a07537047eb21cb592d834b9e4b0668fc3c696"
+    }
+  ],
+  "preservation": "All current production content preserved except the stated two additive seams. Retail 1634, inventory 1618, CAS, Reports, resume controls, existing six policy handlers, dashboard 1640 and current release intent retained.",
+  "operations": {
+    "namespace": "Explicit owner GET read-only namespace inventory. No automatic mount/open request.",
+    "commit_readback": "Explicit owner POST performs technical diagnostic receipt/payload transaction, majority+journal commit acknowledgement, separate fresh majority readback and exact payload cleanup; GET reads historical receipt. No business/provider writes.",
+    "advertising_execution_authorized": false,
+    "budget_authorized": false,
+    "live_calls_performed": false,
+    "deployment_performed": false
+  },
+  "tests": {
+    "local": {
+      "backend": "133 passed in 2.85s; -W error; zero skips; new diagnostics plus existing policy/creation handlers",
+      "frontend": "29 passed / 4 suites in 3.182s; includes actual workspace integration and no automatic diagnostic calls",
+      "preservation": "All 15 new reviewed blob hashes exact. Only existing tracked changes are 4 additive router lines + 6 additive workspace lines. Foreign dashboard/mobile/intent and all other production paths untouched."
+    },
+    "fresh_source_ci": "pending",
+    "independent_review": "pending"
+  },
+  "next": "Freeze exact remote Source A and Draft PR, complete all source CI including disposable real Mongo, independent review, then hand off. Root owns release intent B, production merge, host and publishing. A moving production base requires a fresh source before release."
+}
