@@ -12,6 +12,7 @@ on:
       - frontend/src/services/googleNativeInventoryPreview*
       - frontend/src/services/__fixtures__/google*Preview.json
       - frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json
+      - frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json
       - frontend/src/components/marketing/GoogleNativeInventoryPreview*
       - frontend/src/components/marketing/GoogleLiveCategoryPreview*
       - frontend/src/components/marketing/GoogleCommercialPlan*
@@ -66,8 +67,8 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('native-inventory-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_native_inventory_mongo')]
-          assert len(cases) == 44 and len(replica) == 7
-          assert sum(c.attrib.get('name','').startswith('test_checked_ui_fixture_equals_actual_management_writer_then_reader') for c in cases) == 3
+          assert len(cases) == 45 and len(replica) == 7
+          assert sum(c.attrib.get('name','').startswith('test_checked_ui_fixture_equals_actual_management_writer_then_reader') for c in cases) == 4
           assert any(c.attrib.get('name') == 'test_actual_owner_read_observations_without_db_mutation_or_native_writes' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_outer_binding_covers_category_and_selected_product_flow') for c in replica) == 4
           assert any(c.attrib.get('name') == 'test_actual_standalone_route_detects_before_after_product_drift' for c in replica)
@@ -103,6 +104,9 @@ jobs:
           src/services/googleLinkedCampaignEvidence.test.js
           src/components/marketing/GoogleLinkedCampaignEvidence.test.jsx
           src/components/marketing/GoogleCommercialPlan.test.jsx
+          src/components/marketing/GoogleCommercialPlanPriorIntegration.test.jsx
+          src/components/marketing/GooglePriorSeasonReview.test.jsx
+          src/services/googlePriorSeasonReview.test.js
           src/components/marketing/GoogleCategoryMembershipReview.test.jsx
           src/components/marketing/GoogleStoreProductObservations.test.jsx
           src/components/marketing/GooglePinnedCatalogReview.test.jsx

@@ -7,6 +7,7 @@ import nativeFixture from "../../services/__fixtures__/googleNativeInventoryPrev
 import categoryFixture from "../../services/__fixtures__/googleLiveCategoryPreview.json";
 import linkedFixture from "../../services/__fixtures__/googleLinkedCampaignEvidence.json";
 
+jest.mock("../../context/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner", role: "owner" }, authStatus: "authenticated" }) }));
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
 const saved = categoryFixture.parent_plan;
 const fields = saved.fields;

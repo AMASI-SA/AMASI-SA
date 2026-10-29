@@ -1,5 +1,5 @@
 {
-  "status": "WIP_reviewed_baseline_checkpoint_before_form_edits_not_release_source",
+  "status": "WIP_coherent_native_prior_form_locally_verified_pending_CI_independent_review",
   "base": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
   "base_tree": "90f62e85604c5a583434b89546c0791ec688d3f1",
   "sources": {
@@ -9,7 +9,330 @@
     "prior_child": "d1b0d65c422cef4fa36f59405270a877bf3d7c27"
   },
   "selected_nondocument_paths": 91,
-  "reviewed_path_manifest": [
+  "protected_current_manifests": {
+    "storage": [
+      {
+        "path": ".github/workflows/google-namespace-prerequisites.yml",
+        "base_blob": "b597efd265483888d22562fb9390be7dcea3c8d1",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "b597efd265483888d22562fb9390be7dcea3c8d1"
+      },
+      {
+        "path": ".github/workflows/google-storage-commit-readiness.yml",
+        "base_blob": "f8be97880ba24f88a0d7772deabee0d889bc1c07",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "f8be97880ba24f88a0d7772deabee0d889bc1c07"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_namespace_prerequisites.py",
+        "base_blob": "4632dbcfa23d8f9f8dac25467df0cf684e832934",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "4632dbcfa23d8f9f8dac25467df0cf684e832934"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_routes.py",
+        "base_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
+        "unchanged": false,
+        "exception": "12 additive route attachment lines; removing them restores exact base",
+        "final_blob": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_storage_commit_readiness.py",
+        "base_blob": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2"
+      },
+      {
+        "path": "backend/tests/test_google_ads_namespace_prerequisites.py",
+        "base_blob": "2f08769df4343c08c0f7d040029e1f108ac3984c",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "2f08769df4343c08c0f7d040029e1f108ac3984c"
+      },
+      {
+        "path": "backend/tests/test_google_ads_namespace_prerequisites_mongo.py",
+        "base_blob": "f0ed87acca1d3f1b5824c24bbb372b62953b71af",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "f0ed87acca1d3f1b5824c24bbb372b62953b71af"
+      },
+      {
+        "path": "backend/tests/test_google_ads_storage_commit_readiness.py",
+        "base_blob": "fa061c8557f8c6193cdbbe3178903f29e68334c3",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "fa061c8557f8c6193cdbbe3178903f29e68334c3"
+      },
+      {
+        "path": "backend/tests/test_google_ads_storage_commit_readiness_mongo.py",
+        "base_blob": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleAdsWorkspace.jsx",
+        "base_blob": "4ecbf0997decaa428201c548f9d7b221b603253e",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "4ecbf0997decaa428201c548f9d7b221b603253e"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.jsx",
+        "base_blob": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.test.jsx",
+        "base_blob": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.jsx",
+        "base_blob": "81d3f9d12eb17222039557231d7e7117b9f20000",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "81d3f9d12eb17222039557231d7e7117b9f20000"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.test.jsx",
+        "base_blob": "ca8326a2fa801e66c1721b7a7a90a798281b78b3",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "ca8326a2fa801e66c1721b7a7a90a798281b78b3"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
+        "base_blob": "ac0f23e343f8d9998c53d84290dbc9eea105fb4b",
+        "unchanged": false,
+        "exception": "One AuthContext owner fixture mock added for existing tests; runtime unchanged.",
+        "final_blob": "9b974600d06040f06e5c9938c918417e8769c36e"
+      },
+      {
+        "path": "frontend/src/services/googleNamespacePrerequisites.js",
+        "base_blob": "cd24ecc935893087c0b5024c0055a722c8587afb",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "cd24ecc935893087c0b5024c0055a722c8587afb"
+      },
+      {
+        "path": "frontend/src/services/googleStorageCommitReadiness.js",
+        "base_blob": "80a07537047eb21cb592d834b9e4b0668fc3c696",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "80a07537047eb21cb592d834b9e4b0668fc3c696"
+      }
+    ],
+    "retail": [
+      {
+        "path": "backend/integrations_control_center/google_ads_ai.py",
+        "base_blob": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_management.py",
+        "base_blob": "582253c9914847b1e7d82a407c4d68e89fcbb4b3",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "582253c9914847b1e7d82a407c4d68e89fcbb4b3"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_retail_identity.py",
+        "base_blob": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_routes.py",
+        "base_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
+        "unchanged": false,
+        "exception": "12 additive route attachment lines; removing them restores exact base",
+        "final_blob": "df4d986248d90d2a8e9e14ce27ac8ddb19f68a74"
+      },
+      {
+        "path": "backend/integrations_control_center/google_ads_workspace.py",
+        "base_blob": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef"
+      },
+      {
+        "path": "backend/tests/test_google_ads_ai.py",
+        "base_blob": "22c0e9f4af12ab98a69035c7f6ccb52e0e29e51a",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "22c0e9f4af12ab98a69035c7f6ccb52e0e29e51a"
+      },
+      {
+        "path": "backend/tests/test_google_ads_ai_route_context.py",
+        "base_blob": "cedd8f0666dbbd5287fe8d2d08e52670e11af6df",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "cedd8f0666dbbd5287fe8d2d08e52670e11af6df"
+      },
+      {
+        "path": "backend/tests/test_google_ads_management.py",
+        "base_blob": "8b132b35f9bb5c923a40ee849a370e3af8dcce95",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "8b132b35f9bb5c923a40ee849a370e3af8dcce95"
+      },
+      {
+        "path": "backend/tests/test_google_ads_workspace.py",
+        "base_blob": "bfd2eae4a0a8e3f0f75da3d4b98294567bc03502",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "bfd2eae4a0a8e3f0f75da3d4b98294567bc03502"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+        "base_blob": "fca72f431db4f8c793e8d228fad3a532e94d39d6",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "fca72f431db4f8c793e8d228fad3a532e94d39d6"
+      },
+      {
+        "path": "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+        "base_blob": "d11a955d2faf611b814a9c5a803e26e54fbae748",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "d11a955d2faf611b814a9c5a803e26e54fbae748"
+      }
+    ],
+    "Reports1642": [
+      {
+        "path": ".github/workflows/snapchat-reporting-v2.yml",
+        "base_blob": "3ac0199c0db7ffa2b3e1348e7e352955a83b22c3",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "3ac0199c0db7ffa2b3e1348e7e352955a83b22c3"
+      },
+      {
+        "path": "backend/marketing_report_orders.py",
+        "base_blob": "65d68b4ad8538fe5504fed8caf70b85798be6ac8",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "65d68b4ad8538fe5504fed8caf70b85798be6ac8"
+      },
+      {
+        "path": "backend/marketing_reports.py",
+        "base_blob": "d5334f897fd9bcf8e51bbf3238c766914958b386",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "d5334f897fd9bcf8e51bbf3238c766914958b386"
+      },
+      {
+        "path": "backend/tests/test_marketing_report_orders.py",
+        "base_blob": "80521c1713c4fe8d5d729319050071040af874ea",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "80521c1713c4fe8d5d729319050071040af874ea"
+      },
+      {
+        "path": "backend/tests/test_marketing_reports.py",
+        "base_blob": "0af42334ab72f6fd78d5903384d5686bd6e1babe",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "0af42334ab72f6fd78d5903384d5686bd6e1babe"
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.css",
+        "base_blob": "b43ec1c31a65a5307abd2b1aa56f9f7f6880c5aa",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "b43ec1c31a65a5307abd2b1aa56f9f7f6880c5aa"
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.jsx",
+        "base_blob": "51997ce7c89860c002d03a9c9413485db6fa30ef",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "51997ce7c89860c002d03a9c9413485db6fa30ef"
+      },
+      {
+        "path": "frontend/src/pages/MarketingReports.test.jsx",
+        "base_blob": "83b1d10cb885b7fa77f68874a1fc8e0cca63bcd5",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "83b1d10cb885b7fa77f68874a1fc8e0cca63bcd5"
+      }
+    ],
+    "dashboard": [
+      {
+        "path": "frontend/src/pages/AdvancedDashboard.jsx",
+        "base_blob": "377af75da5613f4529487a2545dbf6db281c273d",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "377af75da5613f4529487a2545dbf6db281c273d"
+      },
+      {
+        "path": "frontend/src/pages/AdvancedDashboard.mobile.test.jsx",
+        "base_blob": "f52014e01f3c07f0975cf7ba5faedd104ba06240",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "f52014e01f3c07f0975cf7ba5faedd104ba06240"
+      }
+    ],
+    "CAS": [
+      {
+        "path": "backend/integrations_control_center/google_credential_refresh_cas.py",
+        "base_blob": "04f95b58646dba5eafca4546f4ba52901857b3f7",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "04f95b58646dba5eafca4546f4ba52901857b3f7"
+      },
+      {
+        "path": "backend/tests/test_google_credential_refresh_cas.py",
+        "base_blob": "e933ac60d8cd7b3b5c8f931bbe9b981d531c2b5b",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "e933ac60d8cd7b3b5c8f931bbe9b981d531c2b5b"
+      },
+      {
+        "path": "backend/tests/test_google_credential_refresh_cas_mongo.py",
+        "base_blob": "fbe6aed95f8f51ab2909e6bbc5e714756a47f07d",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "fbe6aed95f8f51ab2909e6bbc5e714756a47f07d"
+      }
+    ],
+    "release_intent": [
+      {
+        "path": "release/release-intent-v5.json",
+        "base_blob": "0728be3e2a33c786793b3fc4e49484e8865dfc2e",
+        "unchanged": true,
+        "exception": null,
+        "final_blob": "0728be3e2a33c786793b3fc4e49484e8865dfc2e"
+      }
+    ]
+  },
+  "router_seam": "10 reviewed current-observation/category/linked/live/native attachment lines plus2 prior lines. Existing4 storage lines and retail handlers preserved.",
+  "workflow_preservation": "Current full Google workflow test paths are a subset of selected native reviewed workflow; no checks removed. All strict dedicated Mongo workflows copied exactly.",
+  "pending": "Remote coherent WIP/DraftPR, all applicable freshCI including actualMongo/build, independent integration review. Root then creates direct-production release source after storage merge.",
+  "authority": {
+    "advertising_execution": false,
+    "new_financial_rights": false,
+    "merchant_integration": false,
+    "host_or_publish_actions": false
+  },
+  "release_requirement": "WIP on storage SourceA only. After storage production merge, create a new direct-production release SourceA; root owns any operational pair.",
+  "baseline_checkpoint": {
+    "source": "4966f7cbeceb48ce322ebe20b4f6816f31c4a34d",
+    "tree": "62deed55201105119bc8a8cb1e3d0f79c0077307",
+    "purpose": "Remote reviewed91path manifest frozen before form behavior changes"
+  },
+  "baseline_reviewed_path_manifest": [
     {
       "path": ".github/workflows/google-ads-full-management.yml",
       "reviewed_source": "e51b76393c517f7875d447ed242ec5af054ac918",
@@ -648,280 +971,72 @@
       "exact_reviewed_blob": true
     }
   ],
-  "protected_current_manifests": {
-    "storage": [
-      {
-        "path": ".github/workflows/google-namespace-prerequisites.yml",
-        "base_blob": "b597efd265483888d22562fb9390be7dcea3c8d1",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": ".github/workflows/google-storage-commit-readiness.yml",
-        "base_blob": "f8be97880ba24f88a0d7772deabee0d889bc1c07",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_namespace_prerequisites.py",
-        "base_blob": "4632dbcfa23d8f9f8dac25467df0cf684e832934",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_routes.py",
-        "base_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
-        "unchanged": false,
-        "exception": "12 additive route attachment lines; removing them restores exact base"
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_storage_commit_readiness.py",
-        "base_blob": "c72ad04253cc98775ec495f2695b66bb8a7ac5a2",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_namespace_prerequisites.py",
-        "base_blob": "2f08769df4343c08c0f7d040029e1f108ac3984c",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_namespace_prerequisites_mongo.py",
-        "base_blob": "f0ed87acca1d3f1b5824c24bbb372b62953b71af",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_storage_commit_readiness.py",
-        "base_blob": "fa061c8557f8c6193cdbbe3178903f29e68334c3",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_storage_commit_readiness_mongo.py",
-        "base_blob": "0d3c95451ac28b6b51dbcf7a2145261ba4cfa7e1",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleAdsWorkspace.jsx",
-        "base_blob": "4ecbf0997decaa428201c548f9d7b221b603253e",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.jsx",
-        "base_blob": "30cd9784ae95bb0b2b8d6ed977975ae8a1bb767c",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleNamespacePrerequisites.test.jsx",
-        "base_blob": "e08b1dbaa7e6b8fd1f37471de7258ac45155a69f",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.jsx",
-        "base_blob": "81d3f9d12eb17222039557231d7e7117b9f20000",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleStorageCommitReadiness.test.jsx",
-        "base_blob": "ca8326a2fa801e66c1721b7a7a90a798281b78b3",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
-        "base_blob": "ac0f23e343f8d9998c53d84290dbc9eea105fb4b",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/services/googleNamespacePrerequisites.js",
-        "base_blob": "cd24ecc935893087c0b5024c0055a722c8587afb",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/services/googleStorageCommitReadiness.js",
-        "base_blob": "80a07537047eb21cb592d834b9e4b0668fc3c696",
-        "unchanged": true,
-        "exception": null
-      }
-    ],
-    "retail": [
-      {
-        "path": "backend/integrations_control_center/google_ads_ai.py",
-        "base_blob": "3a84d748b924594b10540d8b5856d4d8f7d2ad5b",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_management.py",
-        "base_blob": "582253c9914847b1e7d82a407c4d68e89fcbb4b3",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_retail_identity.py",
-        "base_blob": "bf39365a5d230b9b4ca165b9d65cd2ab4020b717",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_routes.py",
-        "base_blob": "74b721bfad174ed86dfe4a2d0c61c007b7ae0864",
-        "unchanged": false,
-        "exception": "12 additive route attachment lines; removing them restores exact base"
-      },
-      {
-        "path": "backend/integrations_control_center/google_ads_workspace.py",
-        "base_blob": "5bfe33379675c1ce149926b548d6e6bb52f7e2ef",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_ai.py",
-        "base_blob": "22c0e9f4af12ab98a69035c7f6ccb52e0e29e51a",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_ai_route_context.py",
-        "base_blob": "cedd8f0666dbbd5287fe8d2d08e52670e11af6df",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_management.py",
-        "base_blob": "8b132b35f9bb5c923a40ee849a370e3af8dcce95",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_ads_workspace.py",
-        "base_blob": "bfd2eae4a0a8e3f0f75da3d4b98294567bc03502",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
-        "base_blob": "fca72f431db4f8c793e8d228fad3a532e94d39d6",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
-        "base_blob": "d11a955d2faf611b814a9c5a803e26e54fbae748",
-        "unchanged": true,
-        "exception": null
-      }
-    ],
-    "Reports1642": [
-      {
-        "path": ".github/workflows/snapchat-reporting-v2.yml",
-        "base_blob": "3ac0199c0db7ffa2b3e1348e7e352955a83b22c3",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/marketing_report_orders.py",
-        "base_blob": "65d68b4ad8538fe5504fed8caf70b85798be6ac8",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/marketing_reports.py",
-        "base_blob": "d5334f897fd9bcf8e51bbf3238c766914958b386",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_marketing_report_orders.py",
-        "base_blob": "80521c1713c4fe8d5d729319050071040af874ea",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_marketing_reports.py",
-        "base_blob": "0af42334ab72f6fd78d5903384d5686bd6e1babe",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/pages/MarketingReports.css",
-        "base_blob": "b43ec1c31a65a5307abd2b1aa56f9f7f6880c5aa",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/pages/MarketingReports.jsx",
-        "base_blob": "51997ce7c89860c002d03a9c9413485db6fa30ef",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/pages/MarketingReports.test.jsx",
-        "base_blob": "83b1d10cb885b7fa77f68874a1fc8e0cca63bcd5",
-        "unchanged": true,
-        "exception": null
-      }
-    ],
-    "dashboard": [
-      {
-        "path": "frontend/src/pages/AdvancedDashboard.jsx",
-        "base_blob": "377af75da5613f4529487a2545dbf6db281c273d",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "frontend/src/pages/AdvancedDashboard.mobile.test.jsx",
-        "base_blob": "f52014e01f3c07f0975cf7ba5faedd104ba06240",
-        "unchanged": true,
-        "exception": null
-      }
-    ],
-    "CAS": [
-      {
-        "path": "backend/integrations_control_center/google_credential_refresh_cas.py",
-        "base_blob": "04f95b58646dba5eafca4546f4ba52901857b3f7",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_credential_refresh_cas.py",
-        "base_blob": "e933ac60d8cd7b3b5c8f931bbe9b981d531c2b5b",
-        "unchanged": true,
-        "exception": null
-      },
-      {
-        "path": "backend/tests/test_google_credential_refresh_cas_mongo.py",
-        "base_blob": "fbe6aed95f8f51ab2909e6bbc5e714756a47f07d",
-        "unchanged": true,
-        "exception": null
-      }
-    ],
-    "release_intent": [
-      {
-        "path": "release/release-intent-v5.json",
-        "base_blob": "0728be3e2a33c786793b3fc4e49484e8865dfc2e",
-        "unchanged": true,
-        "exception": null
-      }
-    ]
+  "integration_delta_from_baseline": [
+    {
+      "path": ".github/workflows/google-ads-full-management.yml",
+      "blob": "5423845a1ea6fa4128055b914de140e45b95dc4d"
+    },
+    {
+      "path": ".github/workflows/google-native-inventory-preview.yml",
+      "blob": "54d019c2f3ef0446cff1b0daecbc2440b5b2f71d"
+    },
+    {
+      "path": ".github/workflows/google-saved-plan-fields-contract.yml",
+      "blob": "7b8336073bfd7b6383a7474d092b76eae3ce9c93"
+    },
+    {
+      "path": "backend/tests/test_google_plan_ui_writer_fixtures.py",
+      "blob": "19c70ba70bb2eb96ffbd353ef6ba6d8daf160dcc"
+    },
+    {
+      "path": "backend/tests/test_google_plan_ui_writer_mongo.py",
+      "blob": "94eb11c3437bffe4e8f0b780436575f318bdc12a"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleAdsWorkspace.test.jsx",
+      "blob": "a8bb8046987cc79398a465a1ed504bd80639703f"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlan.jsx",
+      "blob": "e381e24553e1447f9a54ddc2bc49163868910e89"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlan.test.jsx",
+      "blob": "45f68ce0fbd042626dbbdaf07ea06de06c498db7"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleCommercialPlanPriorIntegration.test.jsx",
+      "blob": "1372acd6238c8808ac77019f8b01c0f305cf8437"
+    },
+    {
+      "path": "frontend/src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx",
+      "blob": "9b974600d06040f06e5c9938c918417e8769c36e"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json",
+      "blob": "f0548115a856a622644d8caf0586c648d2841e59"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json",
+      "blob": "16aacf94fa9a2986bef25d0c37e8995767427621"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleLiveCategoryPreview.json",
+      "blob": "0186b40184afb35d61ef18b67e43b4f755332ab8"
+    },
+    {
+      "path": "frontend/src/services/__fixtures__/googleNativeInventoryPreview.json",
+      "blob": "bdc7aebb78b83e160755339272920f3b2b837016"
+    }
+  ],
+  "form_behavior": "Optional5fields explicitly enabled/removed(null); no inferred dates; blank optional reference serializednull; invalid/reversed/>366day/nonprior ranges rejected beforePUT; any edit clears review acknowledgement and makes evidence dirty. useAuth authenticated user.id/owner role gates parent; owner+plan key cancels and discards late loads/saves/all child requests. No owner identity from plan.updated_by.",
+  "writer_fixtures": "All existing linked/category/native fixtures regenerated by actual authenticated management HTTP PUT then reader. Stored fields contain prior_season_context:null and no write-only controls. New parent fixture uses actual PUT→linked/category/native/prior reads and unrelated-preserve/remove/re-enable saves. Standalone prior fixture regenerated and remains byte-identical to accepted d1b.",
+  "tests": {
+    "local_backend": "227 passed -W error/zero skips in7.07s; saved-fields/prior/current qualification and actual writer fixture parity",
+    "local_ui": "382 passed across16 suites in5.233s, including21 actual AuthProvider parent cases and unchanged child/service suites",
+    "mongo": "New full-management actual authenticated PUT→all4readers→preserve/remove case collected; execution requires disposable CI Mongo, not run locally",
+    "strict_gates": "Saved-fields151 total/10actualMongo (8existing+2parent), native45total/7actualMongo,4 generated fixture parity cases; all prior exact named/zero-skip assertions preserved. Fresh sourceCI pending.",
+    "independent_review": "pending coherent integration review"
   },
-  "router_seam": "10 reviewed current-observation/category/linked/live/native attachment lines plus2 prior lines. Existing4 storage lines and retail handlers preserved.",
-  "workflow_preservation": "Current full Google workflow test paths are a subset of selected native reviewed workflow; no checks removed. All strict dedicated Mongo workflows copied exactly.",
-  "pending": "Owner form5fields/useAuth scope and accepted prior child attachment, regenerate all actual-writer fixtures, full parent PUT/read tests and freshCI/independent review. Model/readers remain exact accepted sources.",
-  "authority": {
-    "advertising_execution": false,
-    "new_financial_rights": false,
-    "merchant_integration": false,
-    "host_or_publish_actions": false
-  },
-  "release_requirement": "WIP on storage SourceA only. After storage production merge, create a new direct-production release SourceA; root owns any operational pair."
+  "runtime_parity": "Accepted b3ea model, shared qualifier and prior reader/route exact; accepted d1b child/service/runtime exact; other accepted native runtime exact except approved parentform/router seams. Storage/retail/Reports/Dashboard/CAS/currentintent runtime preserved."
 }

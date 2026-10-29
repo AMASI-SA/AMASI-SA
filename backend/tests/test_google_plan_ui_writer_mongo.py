@@ -52,3 +52,51 @@ async def test_actual_parent_mongo_put_then_category_and_native_read_preserves_s
         assert (await client.post(path + "/native-inventory-preview", json=payload)).status_code == 403
         assert native.calls == []
     assert before == {name: await mongo[name].find({}).to_list(100) for name in before}
+
+
+@pytest.mark.asyncio
+async def test_actual_authenticated_parent_put_then_all_readers_preserves_optional_prior_context(mongo, monkeypatch):
+    from tests.test_google_plan_ui_writer_fixtures import app_for
+    from tests.test_google_prior_season_context import context
+    from tests.test_google_prior_season_observations import prior_order
+    native = Native()
+    await mongo.users.insert_one({"id": "owner", "role": "owner"})
+    await mongo.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
+    await mongo.unified_orders.insert_one(prior_order())
+    app = app_for(monkeypatch, mongo, native)
+    path = "/integrations-v2/google_ads/commercial-plans/winter"
+    payload = request_body() | {"pinned_product_ids": ["123"]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
+        initial = await client.put(path, json=payload)
+        assert initial.status_code == 200, initial.text
+        assert initial.json()["fields"]["prior_season_context"] is None
+        empty = await client.get(path + "/prior-season-observations?expected_revision=1")
+        assert empty.status_code == 200 and empty.json()["status"] == "prior_season_not_configured"
+        payload.update(expected_revision=1, prior_season_context=context(calendar_reference_text=None))
+        saved = await client.put(path, json=payload)
+        assert saved.status_code == 200, saved.text
+        fields = saved.json()["fields"]
+        assert "acknowledge_review" not in fields and "expected_revision" not in fields
+        before = {name: deepcopy(await mongo[name].find({}).to_list(100)) for name in (PLANS, "salla_integrations", "unified_orders")}
+        linked = await client.get(path + "/linked-campaign-evidence?expected_revision=2")
+        category = await client.get(path + "/live-category-preview?expected_revision=2&category_id=8")
+        inventory = await client.post(path + "/native-inventory-preview", json={"expected_revision": 2, "category_id": "8", "selected_product_ids": ["1"]})
+        previous = await client.get(path + "/prior-season-observations?expected_revision=2")
+        for response in (linked, category, inventory, previous):
+            assert response.status_code == 200, response.text
+            assert response.json()["plan_revision"] == 2 and response.json()["execution_authorized"] is False
+        assert previous.json()["owner_review_provenance"]["reviewed_by"] == "owner"
+        assert previous.json()["observations"]["products"][0]["currency_groups"][0]["windows"]["owner_reviewed_prior_season"]["observed_units"] == "2"
+        assert before == {name: await mongo[name].find({}).to_list(100) for name in before}
+        edited = await client.put(path, json={**fields, "instruction": "تعديل آخر مع حفظ الفترة", "expected_revision": 2, "acknowledge_review": True})
+        assert edited.status_code == 200 and edited.json()["fields"]["prior_season_context"] == fields["prior_season_context"]
+        removed = await client.put(path, json={**edited.json()["fields"], "prior_season_context": None, "expected_revision": 3, "acknowledge_review": True})
+        assert removed.status_code == 200 and removed.json()["fields"]["prior_season_context"] is None
+        previous = await client.get(path + "/prior-season-observations?expected_revision=4")
+        assert previous.status_code == 200 and previous.json()["observations"] is None
+        assert (await client.get(path + "/prior-season-observations?expected_revision=2")).status_code == 409
+        row = await mongo[PLANS].find_one({"user_id": "owner", "plan_id": "winter"})
+        assert "acknowledge_review" not in row["fields"] and "expected_revision" not in row["fields"]
+        invalid = await client.put(path, json={**row["fields"], "prior_season_context": context(date_to=row["fields"]["starts_on"]), "expected_revision": 4, "acknowledge_review": True})
+        assert invalid.status_code == 422
+        assert await mongo[PLANS].find_one({"user_id": "owner", "plan_id": "winter"}) == row

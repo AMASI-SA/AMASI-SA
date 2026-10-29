@@ -20,6 +20,7 @@
       "exclusions": [],
       "selection_mode": "pinned_only",
       "calendar": "gregorian",
+      "prior_season_context": null,
       "limits": null
     },
     "review_context": {

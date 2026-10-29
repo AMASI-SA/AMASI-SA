@@ -7,6 +7,11 @@ on:
       - "backend/integrations_control_center/google_ads*"
       - "backend/integrations_control_center/google_commercial_plan.py"
       - "backend/tests/test_google_plan_ui_writer_fixtures.py"
+      - "backend/integrations_control_center/google_prior_season_*.py"
+      - "backend/tests/test_google_prior_season*.py"
+      - "frontend/src/services/googlePriorSeasonReview*"
+      - "frontend/src/services/__fixtures__/googlePriorSeasonReview.json"
+      - "frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json"
       - "backend/integrations_control_center/google_native_inventory_*.py"
       - "frontend/src/services/googleNativeInventoryPreview*"
       - "frontend/src/services/__fixtures__/googleNativeInventoryPreview.json"
@@ -118,6 +123,10 @@ jobs:
           backend/tests/test_google_ads_reporting_v1.py
           backend/tests/test_google_commercial_plan.py
           backend/tests/test_google_plan_ui_writer_fixtures.py
+          backend/tests/test_google_prior_season_context.py
+          backend/tests/test_google_prior_season_observations.py
+          backend/tests/test_google_prior_season_routes.py
+          backend/tests/test_google_prior_season_review_fixture.py
           backend/tests/test_google_native_inventory_proof.py
           backend/tests/test_google_native_inventory_reader.py
           backend/tests/test_google_native_inventory_routes.py
@@ -166,6 +175,10 @@ jobs:
           src/components/marketing/GoogleAutomationPolicy.test.jsx
           src/components/marketing/GoogleCreationPolicy.test.jsx
           src/components/marketing/GoogleCommercialPlan.test.jsx src/services/googleCommercialPlanSuggestion.test.js
+          src/components/marketing/GoogleCommercialPlanPriorIntegration.test.jsx
+          src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx
+          src/components/marketing/GooglePriorSeasonReview.test.jsx
+          src/services/googlePriorSeasonReview.test.js
           src/components/marketing/GooglePinnedCatalogReview.test.jsx
           src/components/marketing/GoogleCategoryMembershipReview.test.jsx
           src/components/marketing/GoogleStoreProductObservations.test.jsx

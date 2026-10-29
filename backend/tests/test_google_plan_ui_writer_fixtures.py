@@ -10,9 +10,9 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 
-from integrations_control_center import google_commercial_plan, google_linked_campaign_routes, google_live_category_reader, google_native_inventory_reader
+from integrations_control_center import google_commercial_plan, google_linked_campaign_routes, google_live_category_reader, google_native_inventory_reader, google_prior_season_routes
 from integrations_control_center.google_ads_routes import attach_google_ads_management_routes
 from integrations_control_center.google_live_category_routes import attach_google_live_category_routes
 from integrations_control_center.google_native_inventory_routes import attach_google_native_inventory_routes
@@ -21,6 +21,10 @@ from tests.test_google_saved_plan_fields_contract import Plans
 from tests.test_google_linked_campaign_reader import database, event, NOW
 from tests.test_google_live_category_reader import Integration, Native as CategoryNative, envelope, paged
 from tests.test_google_commercial_plan import body
+from tests.test_google_prior_season_routes import OwnerUsers
+from tests.test_google_plan_store_observations import Orders
+from tests.test_google_prior_season_observations import prior_order
+from tests.test_google_prior_season_context import context
 
 FIXTURES = Path(__file__).resolve().parents[2] / "frontend/src/services/__fixtures__"
 PARENT_FIELDS = dict(instruction="ركز على هدايا الشتاء", season="الشتاء", starts_on="2026-11-01", ends_on="2026-12-31",
@@ -35,6 +39,8 @@ class DB(dict):
             valid_from=late, recorded_at=late, evidence={"source": "manual", "verification_status": "verified", "observed_at": late})]))
         self[PLANS] = Plans()
         self.salla_integrations = Integration()
+        self.users = OwnerUsers()
+        self["unified_orders"] = Orders([prior_order()])
 
 
 def app_for(monkeypatch, db, native):
@@ -42,26 +48,35 @@ def app_for(monkeypatch, db, native):
         @classmethod
         def now(cls, tz=None):
             return NOW
-    for module in (google_commercial_plan, google_linked_campaign_routes, google_live_category_reader, google_native_inventory_reader):
+    for module in (google_commercial_plan, google_linked_campaign_routes, google_live_category_reader, google_native_inventory_reader, google_prior_season_routes):
         monkeypatch.setattr(module, "datetime", FixedDatetime)
     monkeypatch.setitem(attach_google_live_category_routes.__kwdefaults__, "caller", native)
     monkeypatch.setitem(attach_google_native_inventory_routes.__kwdefaults__, "caller", native)
-    async def current():
-        return {"id": "owner", "role": "owner"}
+    import auth
+    monkeypatch.setattr(auth, "get_jwt_secret", lambda: "synthetic-only")
+    monkeypatch.setattr(auth.jwt, "decode", lambda *args, **kwargs: {"sub": "owner", "type": "access", "mfa": True})
+    async def current(request: Request):
+        return await auth.get_current_user_from_db(request, db)
     class NoAdsProvider:
         def __init__(self, *args, **kwargs):
             raise AssertionError("ads provider must not be constructed")
     app, router = FastAPI(), APIRouter(prefix="/integrations-v2")
     attach_google_ads_management_routes(router, db, current, client_factory=NoAdsProvider, ai_client_factory=NoAdsProvider)
     assert sum(route.path.endswith("/native-inventory-preview") for route in router.routes) == 1
+    assert sum(route.path.endswith("/prior-season-observations") for route in router.routes) == 1
     app.include_router(router)
     return app
 
 
 async def save(client, db, plan_id, fields, revision):
     for expected in range(revision):
-        response = await client.put(f"/integrations-v2/google_ads/commercial-plans/{plan_id}", json={**fields, "expected_revision": expected, "acknowledge_review": True})
-        assert response.status_code == 200, response.text
+        saved = await put(client, db, plan_id, fields, expected)
+    return saved
+
+
+async def put(client, db, plan_id, fields, expected):
+    response = await client.put(f"/integrations-v2/google_ads/commercial-plans/{plan_id}", json={**fields, "expected_revision": expected, "acknowledge_review": True})
+    assert response.status_code == 200, response.text
     saved = response.json()
     assert "acknowledge_review" not in saved["fields"] and "expected_revision" not in saved["fields"]
     assert saved["fields"] == (await db[PLANS].find_one({"user_id": "owner", "plan_id": plan_id}))["fields"]
@@ -71,7 +86,7 @@ async def save(client, db, plan_id, fields, revision):
 async def generate(monkeypatch):
     db, native = DB(), CategoryNative()
     app = app_for(monkeypatch, db, native)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
         async def get(plan, suffix, query=""):
             before = deepcopy(db[PLANS].rows)
             response = await client.get(f"/integrations-v2/google_ads/commercial-plans/{plan['plan_id']}/{suffix}?expected_revision={plan['revision']}" + query)
@@ -101,11 +116,27 @@ async def generate(monkeypatch):
         assert response.status_code == 200, response.text
         assert db[PLANS].rows == before
         inventory = {"generated_by": "actual_management_http_put_category_get_inventory_post", "plan": parent, "category": category["parent_response"], "response": response.json()}
-    return {"googleLinkedCampaignEvidence.json": linked, "googleLiveCategoryPreview.json": category, "googleNativeInventoryPreview.json": inventory}
+        prior_parent = await put(client, db, parent["plan_id"], {**PARENT_FIELDS, "prior_season_context": context(calendar_reference_text=None)}, 3)
+        prior = {"generated_by": "actual_authenticated_management_http_put_then_linked_category_native_prior", "initial_plan": parent,
+            "plan": prior_parent, "response": await get(prior_parent, "prior-season-observations"),
+            "linked_response": await get(prior_parent, "linked-campaign-evidence"), "category_response": await get(prior_parent, "live-category-preview")}
+        before = deepcopy(db[PLANS].rows)
+        response = await client.post("/integrations-v2/google_ads/commercial-plans/seasonal-focus/native-inventory-preview", json={"expected_revision": 4, "category_id": "8", "selected_product_ids": ["1"]})
+        assert response.status_code == 200, response.text
+        assert db[PLANS].rows == before
+        prior["native_response"] = response.json()
+        prior["unrelated_plan"] = await put(client, db, parent["plan_id"], {**prior_parent["fields"], "instruction": "راجع موسم الهدايا"}, 4)
+        assert prior["unrelated_plan"]["fields"]["prior_season_context"] == prior_parent["fields"]["prior_season_context"]
+        prior["removed_plan"] = await put(client, db, parent["plan_id"], {**prior["unrelated_plan"]["fields"], "prior_season_context": None}, 5)
+        db["unified_orders"].query = None
+        prior["removed_response"] = await get(prior["removed_plan"], "prior-season-observations")
+        assert db["unified_orders"].query is None
+        prior["reference_plan"] = await put(client, db, parent["plan_id"], {**prior["removed_plan"]["fields"], "prior_season_context": context()}, 6)
+    return {"googleLinkedCampaignEvidence.json": linked, "googleLiveCategoryPreview.json": category, "googleNativeInventoryPreview.json": inventory, "googleCommercialPlanPriorContext.json": prior}
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("filename", ["googleLinkedCampaignEvidence.json", "googleLiveCategoryPreview.json", "googleNativeInventoryPreview.json"])
+@pytest.mark.parametrize("filename", ["googleLinkedCampaignEvidence.json", "googleLiveCategoryPreview.json", "googleNativeInventoryPreview.json", "googleCommercialPlanPriorContext.json"])
 async def test_checked_ui_fixture_equals_actual_management_writer_then_reader(monkeypatch, filename):
     generated = await generate(monkeypatch)
     assert json.loads((FIXTURES / filename).read_text()) == generated[filename]
