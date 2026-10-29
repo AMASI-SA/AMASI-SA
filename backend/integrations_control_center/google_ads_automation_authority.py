@@ -374,7 +374,8 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         "analysis_id": source["analysis_id"], "recommendation_id": source["recommendation_id"],
         "campaign_id": row["campaign_id"], "action": row["action"], "authorized_at": cas_time.isoformat(),
         "account_local_date": today.isoformat(), "time_zone": policy["time_zone"],
-        "native_inventory_digest": digest(inventory), **_budget_reservation(inventory, target, candidate)}
+        "native_inventory_digest": digest(inventory), "native_evidence_digest": digest(native_evidence),
+        "analysis_digest": digest(analysis), **_budget_reservation(inventory, target, candidate)}
     # All six owner mutations and all standing budget writers share this epoch.
     # Native reads stay outside Mongo, but current policy/claim/quota are reloaded
     # and the budget reservation commits atomically with the private claim.
@@ -395,7 +396,7 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         raise problem("google_automation_execution_disabled", "التنفيذ الآلي لجوجل غير مفعّل.", 503)
     return {"authorized": True, "authorization_kind": "standing_policy", "claim_id": execution_claim_id,
         "proposal_id": proposal_id, "policy_revision": source["policy_revision"], "submission_floor_required": True,
-        "provider_writes": 0}
+        "provider_writes": 0, "native_evidence": native_evidence}
 
 
 def stopped_before_http_proven(row, current=None):
@@ -455,3 +456,105 @@ async def _settle(db, *, user_id, account_id, claim_id, current):
     if result.get("committed") is not True:
         _fail("google_automation_settlement_unproved")
     return {"released": True, "claim_id": claim_id, "provider_writes": 0, "quota_refunded": False}
+
+
+async def _guard_standing_dispatch_floor(db, *, session, snapshot, command, operation_id, current):
+    """Internal synchronous-policy boundary; no provider or metadata writer lock."""
+    from zoneinfo import ZoneInfo
+    from . import google_ads_management as management
+    from .google_ads_automation_budget_guard import thaw_snapshot, _fail as guard_fail
+    from .google_ads_paused_creation_budget import SessionDatabase, standing_lineage
+    scope = {'user_id': snapshot.user_id, 'account_id': snapshot.account_id}
+    policy, old = thaw_snapshot(snapshot.standing_policy), thaw_snapshot(snapshot.guard)
+    if (not policy or policy.get('enabled') is not True or policy.get('updated_by') != snapshot.user_id
+        or not activation_proof_valid(policy, current)):
+        guard_fail('google_budget_guard_policy_changed')
+    ZoneInfo(policy['time_zone'])
+    claim = policy.get('_dispatch_claim')
+    key = 'standing_' + command.execution_claim_id
+    allocation, active = old['allocations'].get(key), old.get('active_claim')
+    if (not isinstance(claim, dict) or claim.get('claim_id') != command.execution_claim_id
+        or claim.get('execution_claim_id') != command.execution_claim_id or claim.get('proposal_id') != command.proposal_id
+        or policy['revision'] != claim.get('policy_revision') or policy_authorization_digest(policy) != claim.get('policy_digest')
+        or not isinstance(allocation, dict) or allocation.get('kind') != 'standing' or allocation.get('state') != 'reserved'
+        or allocation.get('dispatch_marker') is not None or allocation.get('claim_digest') != digest(claim)
+        or allocation.get('reservation_lineage_digest') != standing_lineage(allocation)
+        or allocation.get('proposal_id') != command.proposal_id or allocation.get('execution_claim_id') != command.execution_claim_id
+        or allocation.get('budget_native') != claim.get('campaign_budget_target_native')
+        or allocation.get('currency_code') != policy['currency_code']
+        or allocation.get('campaign_id') != claim.get('campaign_id') or allocation.get('action') != claim.get('action')
+        or not isinstance(active, dict) or active.get('allocation_id') != key
+        or active.get('proposal_id') != command.proposal_id or active.get('execution_claim_id') != command.execution_claim_id
+        or active.get('operation_id') != allocation.get('operation_id')):
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    view = SessionDatabase(db, session)
+    row = await view[PROPOSALS].find_one({**scope, 'proposal_id': command.proposal_id,
+        'execution_claim_id': command.execution_claim_id, 'status': 'approved', 'submission_started': False}, {'_id': 0})
+    if not row or not await view[FENCES].find_one({**scope, 'proposal_id': command.proposal_id,
+        'execution_claim_id': command.execution_claim_id, 'status': 'claimed'}, {'_id': 0}):
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    source = _bound_proposal(row)
+    if (source['policy_revision'] != policy['revision'] or source['policy_digest'] != claim['policy_digest']
+        or source['analysis_id'] != claim.get('analysis_id') or source['recommendation_id'] != claim.get('recommendation_id')
+        or row.get('confirmation_digest') != command.confirmation_digest or command.confirmation_digest != claim.get('confirmation_digest')
+        or digest(row.get('operations')) != command.operations_digest or command.operations_digest != claim.get('operations_digest')
+        or row.get('campaign_id') != claim['campaign_id'] or row.get('action') != claim['action']
+        or row['action'] not in {'pause','set_budget'} or row['action'] not in policy.get('allowed_actions',[])
+        or row['campaign_id'] not in policy.get('campaign_ids',[]) or policy['currency_code'] != row.get('currency')
+        or policy['time_zone'] != row.get('time_zone')):
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    analysis = await view[ANALYSES].find_one({**scope, 'analysis_id': source['analysis_id']}, {'_id': 0})
+    evidence = command.native_evidence
+    if (not analysis or digest(analysis) != claim.get('analysis_digest')
+        or digest(evidence) != claim.get('native_evidence_digest')):
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    inventory, target = _native_proof(row, evidence, policy, current)
+    if (digest(inventory) != claim.get('native_inventory_digest')
+        or target['budget_resource'] != allocation.get('budget_resource')
+        or Decimal(target['budget_native']) != Decimal(claim['campaign_budget_before_native'])):
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    planned = row.get('planned')
+    operations = build_update_operations(row['action'], snapshot.account_id, evidence['campaign_snapshot'],
+        {key: value for key,value in planned.items() if key != 'action'} if isinstance(planned,dict) else {})
+    if digest(operations) != command.operations_digest:
+        guard_fail('google_budget_guard_standing_binding_unproved')
+    expiry, proposal_expiry = _instant(policy.get('expires_at')), _instant(row.get('expires_at'))
+    if expiry is None or proposal_expiry is None or min(expiry,proposal_expiry) <= current:
+        guard_fail('google_budget_guard_standing_authority_expired')
+    stamp=current.isoformat()
+    marker={'operation_id': operation_id, 'proposal_id': command.proposal_id,
+        'execution_claim_id': command.execution_claim_id, 'submitted_at': stamp,
+        'policy_revision': policy['revision'], 'confirmation_digest': command.confirmation_digest,
+        'operations_digest': command.operations_digest, 'budget_resource': allocation['budget_resource']}
+    changed=await view[PROPOSALS].update_one({**scope,'proposal_id':command.proposal_id,
+        'execution_claim_id':command.execution_claim_id,'status':'approved','submission_started':False,
+        'confirmation_digest':command.confirmation_digest,'operations':row['operations']},
+        {'$set':{'status':'submitted','submission_started':True,'submitted_at':stamp,'updated_at':stamp,
+            'reconcile_after':(current+timedelta(seconds=30)).isoformat(),'standing_dispatch_marker':marker},
+         '$push':{'events':{'$each':[{'status':'submitted','at':stamp}],'$slice':-100}}})
+    if changed.matched_count != 1:guard_fail('google_budget_guard_policy_changed')
+    fenced=await view[FENCES].update_one({**scope,'proposal_id':command.proposal_id,
+        'execution_claim_id':command.execution_claim_id,'status':'claimed'},
+        {'$set':{'_standing_dispatch_operation_id':operation_id,'_standing_dispatch_observed_at':stamp}})
+    if fenced.matched_count != 1:guard_fail('google_budget_guard_standing_binding_unproved')
+    return {**old['allocations'],key:{**allocation,'dispatch_marker':marker}},active,{
+        'kind':'standing_dispatch_floor','submission_started':True,'submitted_at':stamp,
+        'reconcile_after':(current+timedelta(seconds=30)).isoformat(),'standing_dispatch_marker':marker,
+        'authority_valid_from':_instant(policy['activated_at']).isoformat(),
+        'authority_valid_until':min(expiry,proposal_expiry).isoformat(),'metadata_writers_serialized':False}
+
+
+async def acknowledge_standing_dispatch_floor(db,row,*,native_evidence):
+    """Positive common TX ACK only; consumed/unknown receipts never resend."""
+    from . import google_ads_automation_budget_guard as guard
+    command=guard.StandingDispatchFloor(row['proposal_id'],row['execution_claim_id'],
+        row['confirmation_digest'],digest(row['operations']),native_evidence)
+    capability=await guard.probe_google_budget_guard_transactions(db)
+    result=await guard.run_google_budget_guard_transaction(db,user_id=row['user_id'],account_id=row['account_id'],
+        capability=capability,operation_id='standing_floor_'+digest({'proposal_id':row['proposal_id'],
+            'execution_claim_id':row['execution_claim_id']}),planner=lambda snapshot:command)
+    if result.get('committed') is not True or result.get('kind')!='standing_dispatch_floor':
+        _fail('google_automation_dispatch_floor_unconfirmed')
+    row.update(status='submitted',submission_started=True,
+        **{key:result[key] for key in ('submitted_at','reconcile_after','standing_dispatch_marker')})
+    return result

@@ -85,6 +85,15 @@ class StandingBudgetReservation:
 
 
 @dataclass(frozen=True)
+class StandingDispatchFloor:
+    proposal_id: str
+    execution_claim_id: str
+    confirmation_digest: str
+    operations_digest: str
+    native_evidence: Mapping
+
+
+@dataclass(frozen=True)
 class BudgetReservationSettlement:
     """Terminal proof is reloaded from PROPOSALS in this same transaction."""
     allocation_id: str
@@ -368,6 +377,15 @@ def _validate_guard(row, scope):
 
 
 def _command(command):
+    if isinstance(command, StandingDispatchFloor):
+        if (any(not isinstance(value, str) or not _ID.fullmatch(value)
+                for value in (command.proposal_id, command.execution_claim_id))
+            or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value)
+                for value in (command.confirmation_digest, command.operations_digest))
+            or not isinstance(command.native_evidence, Mapping)):
+            _fail('google_budget_guard_command_invalid')
+        return StandingDispatchFloor(command.proposal_id, command.execution_claim_id,
+            command.confirmation_digest, command.operations_digest, _plain(command.native_evidence))
     if isinstance(command, PausedCreationDispatchFloor):
         if (any(not isinstance(value, str) or not _ID.fullmatch(value)
                 for value in (command.proposal_id, command.execution_claim_id))
@@ -642,6 +660,11 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                 active_claim={'allocation_id': command.allocation_id, 'operation_id': operation_id,
                     'proposal_id': claim['proposal_id'], 'execution_claim_id': claim['execution_claim_id']})
             result = {'kind': 'standing_reservation', 'allocation_id': command.allocation_id, **commitment}
+        elif isinstance(command, StandingDispatchFloor):
+            from .google_ads_automation_authority import _guard_standing_dispatch_floor
+            allocations, active_claim, result = await _guard_standing_dispatch_floor(db, session=session,
+                snapshot=snapshot, command=command, operation_id=operation_id, current=datetime.fromisoformat(stamp))
+            update.update(allocations=allocations, active_claim=active_claim)
         elif isinstance(command, BudgetReservationSettlement):
             from .google_ads_management import PROPOSALS, FENCES, digest
             from .google_ads_automation_authority import _bound_proposal, stopped_before_http_proven
@@ -778,7 +801,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             _fail('google_budget_guard_epoch_changed')
         if phase.get('stop_requested') or _operation_clock() >= phase['deadline']:
             _fail('google_budget_guard_request_ended_before_commit')
-        if (isinstance(command, PausedCreationDispatchFloor)
+        if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor))
             and datetime.now(timezone.utc) >= datetime.fromisoformat(result['authority_valid_until'])):
             _fail('google_budget_guard_creation_authority_expired')
         phase['commit_attempted'] = True
