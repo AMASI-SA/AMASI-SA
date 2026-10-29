@@ -147,7 +147,9 @@ export function validateProductTestReview(data, scope, fitState) { try { return 
 const endpoint = (scope) => `${GOOGLE_ADS_ROOT}/commercial-plans/${scope.planId}`;
 export async function getProductFitState(plan, category, ids, { signal } = {}) {
     const scope = productTestReviewScope(plan, category, ids);
-    return validateProductFitState((await api.get(endpoint(scope) + "/product-season-reviews", { params: { expected_revision: scope.revision, category_id: scope.categoryId, product_ids: scope.selectedIds }, signal })).data, scope);
+    const params = new URLSearchParams({ expected_revision: String(scope.revision), category_id: scope.categoryId });
+    scope.selectedIds.forEach((id) => params.append("product_ids", id));
+    return validateProductFitState((await api.get(endpoint(scope) + "/product-season-reviews", { params, signal })).data, scope);
 }
 export async function saveProductFit(plan, category, ids, productId, revision, decision, reason, ack, { signal } = {}) {
     const scope = productTestReviewScope(plan, category, ids), body = productFitPayload(scope, productId, revision, decision, reason, ack);

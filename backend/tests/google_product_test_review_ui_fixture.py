@@ -11,6 +11,7 @@ from integrations_control_center.google_ads_routes import attach_google_ads_mana
 from integrations_control_center import google_commercial_plan as plans,google_native_inventory_reader as native_reader,google_live_category_reader as category_reader
 from integrations_control_center.google_product_test_review_routes import attach_google_product_test_review_routes
 from integrations_control_center.google_live_category_routes import attach_google_live_category_routes
+from integrations_control_center.google_native_inventory_routes import attach_google_native_inventory_routes
 from integrations_control_center.google_product_test_review_reader import ReviewAdmission
 from tests.test_google_product_test_review_routes import DB,Native,payload,fit,NOW,Orders
 from tests.test_google_product_test_review_mongo import source
@@ -34,6 +35,7 @@ def app_for(patches,db,native):
     patches.setitem(attach_google_product_test_review_routes.__kwdefaults__,'clock',lambda:NOW)
     patches.setitem(attach_google_product_test_review_routes.__kwdefaults__,'admission',ReviewAdmission())
     patches.setitem(attach_google_live_category_routes.__kwdefaults__,'caller',native)
+    patches.setitem(attach_google_native_inventory_routes.__kwdefaults__,'caller',native)
     patches.setattr(auth,'get_jwt_secret',lambda:'synthetic-only')
     patches.setattr(auth.jwt,'decode',lambda *args,**kwargs:{'sub':'owner','type':'access','mfa':True,'iat':int(NOW.timestamp())})
     async def current(request:Request):return await auth.get_current_user_from_db(request,db)
@@ -66,6 +68,7 @@ async def generate():
             assert plan['fields']==db.plans.rows[0]['fields'] and plan['fields']['category_url'] is None
             category=await okay('get',path+'/live-category-preview',params={'expected_revision':1,'category_id':'8'})
             query=[('expected_revision',1),('category_id','8'),('product_ids','1'),('product_ids','2')]
+            native_response=await okay('post',path+'/native-inventory-preview',json={'expected_revision':1,'category_id':'8','selected_product_ids':['1','2']})
             initial=await okay('get',path+'/product-season-reviews',params=query)
             preview={'expected_revision':1,'category_id':'8','selected_product_ids':['1','2']}
             before=deepcopy(db.orders.rows)
@@ -82,7 +85,7 @@ async def generate():
             rereview_state=await okay('get',path+'/product-season-reviews',params=query)
             assert db.orders.rows==before
         return {'generated_by':'actual_authenticated_management_HTTP_planPUT_categoryGET_fitGET_CASPUT_candidatePOST','auth_user':{'id':'owner','role':'owner'},
-            'plan':plan,'category':category,'selected_product_ids':['1','2'],'initial_fit_state':initial,'no_fit_candidate':no_fit,
+            'plan':plan,'category':category,'native_response':native_response,'selected_product_ids':['1','2'],'initial_fit_state':initial,'no_fit_candidate':no_fit,
             'fit_saved':saved,'fit_state':after,'candidate':candidate,'blocked_fit_saved':blocked_save,'blocked_fit_state':blocked_state,
             'blocked_candidate':blocked_candidate,'password_stale_fit_state':stale,'rereview_saved':rereview,'rereview_fit_state':rereview_state}
     finally:patches.undo()

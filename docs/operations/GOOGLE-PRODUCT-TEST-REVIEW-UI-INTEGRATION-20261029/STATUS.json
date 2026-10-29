@@ -1,7 +1,7 @@
 {
   "task": "google-product-test-review-ui-integration-20261029",
   "branch": "codex/google-product-test-review-ui-integration-20261029",
-  "state": "EARLY_WIP_EXACT_BACKEND_AND_ACTUAL_MANAGEMENT_FIXTURE_SERVICE_VERIFIED_CHILD_PENDING",
+  "state": "COHERENT_CANDIDATE_FROZEN_LOCAL_GREEN_FRESH_CI_REVIEW_PENDING",
   "base": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
   "base_meaning": "Accepted1655SourceA with native/category/prior UI already present; frozen1655/1657 worktrees untouched",
   "production_changed": false,
@@ -106,7 +106,7 @@
   ],
   "component_contract": {
     "props": "GoogleProductTestReview({plan,category,selectedProductIds,isOwner,planDirty=false,externalBusy=false,onBusyChange})",
-    "authentication": "useOptionalAuth actualcontext must authStatus authenticated, userrole owner, stableuser.id. Ownerid/passwordrevision/role plusfullplanfields/revision/id, fullcategoryproof and orderedselection form cancellationkey; missingAuthprovider producesnosurface/requests, no prop-onlyowner fallback.",
+    "authentication": "ActualAuthProvider/useOptionalAuth role+id gates; ANY userobjectreference replacement incrementsgeneration, evenidenticalpublicshape. Bothnewchild andcontrolledNativeparent keygeneration abort/ignorelate,clearfit/results andsharedselection. No reliance onpublicpasswordstamp (may beomitted).",
     "selection": "Reuse existingNativeInventoryPreview checkboxes1..5; validation existingnativeInventoryOptions(plan,category), exactobserved membership/exclusions andcanonicalIDs. Parentchangesunmount/invalidate. CategoryresponseclientonlyUIcontext, neverpassedassourceproof toserver.",
     "mount": "No autoGET/POST/providerreads onmount/selection/render. Explicit Readfitstates GET; explicitperproductCASsave PUT with trimmednonblankreason, selecteddecision andseparateexacttrueownerreviewack; explicit Reviewtestcandidates POST. No spending/budget/ROI inputs.",
     "fit_state": "GET returnsrevision even whenoldpassword-bound fitunknown, enabling explicitrereview. Unknown is not suitable/new. Existingcurrentreviewreason mayprefill; anyedit clearslocalack andcandidate result. Unsaveddrafts oruncertainsave blockcandidate/saveuntil explicitreload/discard asappropriate.",
@@ -122,11 +122,21 @@
     "fixture": "JSONcontainsactualsavedplan/observedcategory/fitstatebefore/saveafter/fitstateafter/candidate responses, syntheticowneridrole, andsourcegenerationmarker. Storedfields verifiednoack/expectedrevision; parity test regeneratesfromactualHTTPanddeepcompares exactfixturebytes/JSON.",
     "frontend": "UseactualAuthProvider withsynthetic/auth/me fixture, notmockownerhook. Newtests explicitzeroauto requests, state/fit/CAS/lostack/manualreload sequence, sharedexistingcheckboxselection, status/currency/window/contextseparation andlate-owner/fields/category/selection cancellation. Existingnative/parent suites rerununchanged; backendnew152/30gate andnewUIbuildCI freshbeforeindependentreview."
   },
-  "next": "Implement newchild/service/actualHTTPfixtures, narrowNativebusy seam, appendfullworkflowtests; freshCI and independentreview. No existingreader/globalnormalizer/launchWorkspace/Merchant changes.",
+  "next": "Remoteimmutablecheckpoint/DraftPR; freshdedicated/fullCIactualcounts/build andindependent review. No releaseintent/host/providercalls/publication. Rootcomposeswithgoogle_launch after1657.",
   "auth_generation_requirement": "Mandatory invalidation on ANY actualAuthContext userobject replacement, including identicalpublicid/role/shape; auth/me mayomitpasswordstamp. EachpendingGET/PUT/POST mustabort/ignorelate andclearresults; noautomaticrefresh or PUTresubmit. RealAuthProvider identical-shape refresh regressionrequired.",
   "verification": {
-    "backend": "43-Werror/zero skips1.73s:42newbackend +1actualmanagementHTTPfixtureparity",
-    "frontend_service": "35tests/1suite PASS1.148s; actualwriterHTTPfixture used; noUIcomponent yet",
-    "ci": "Not yet; no releaseclaim"
+    "backend": "43-Werror/zero skips1.68s including42new+1actualmanagementHTTPfixtureparity",
+    "frontend": "202tests/9suites PASS3.931s includingoldparent/workspace/storage/native tests, actualAuthProvider generation/lostack/reselection tests andstrictservice. Earlierfocused120/5suites PASS1.705s. Host UNDICIexperimentalwarning only.",
+    "preservation": "9acceptedblobs exact; removing2routerlines restoresbase5595exact; removing1testmockspread restoresbaseexact; sharedfullworkflow13additions0deletions; nointent/oldSTATUS/globalreaders/costwriters/Workspace/Merchant edits.",
+    "ci": "Freshdedicated153/30replica+202UI/build andfullGoogleCI pendingremotefinalcheckpoint; historicalbackendadf152/30 doesnotprovecoherentintegration.",
+    "independent_review": "Roottoassignonceimmutablecandidatepublished; none claimedforcurrentUI."
+  },
+  "implemented_changes": {
+    "backend": "All9acceptedadf runtime/test/workflowblobs EXACT; only2line managementrouterattachment; actualnormalHTTPfixture parity asserts realplanwriterackexcluded/noadsproviderconstruction.",
+    "child": "ExplicitfitGET/CASPUT/reviewPOST onexistingselected1..5; noauto requests. Onebusyflow synchronizedwitholdNativebutton; unsavedfitdraftoruncertainPUTblocksretry/candidate untilmanualread.",
+    "auth_generation": "realAuthProvider identicalpublicshaperefresh testedwhileGET/PUT/POSTpending; NativeoldPOSTalsoabortedandselectioncleared. Unmount/fullfields/planrevision/category/selection/dirty guards rejectlate data.",
+    "service": "URLSearchParams repeatedproduct_ids verifiedthroughrealAxios.getUri; strictsavedfit/state/CASnextrevision, rawstorecurrency+exactserverfrozenRiyadh4windows/prior, nativeclockinterval, contextnativezone/localday/attribution/windowmissingdatepartitions andsourceproductproofrefs. No clientclockassumption/sums/paidclaim.",
+    "existing_test_exception": "ExactlyoneapprovedGoogleCommercialPlan.test.jsx AuthContextmock spreadjest.requireActual to preserveoptionalhooknullwithoutprovider; previous7failures nowgreen. No productionfallback/nootheroldtestchanges.",
+    "workflow": "SharedfullGoogleworkflow13additions0deletions onlynewtrigger/testargs; dedicatedUI153backend/30Mongo exactnamednoskip and202frontend/9suites0skip+build. Originalacceptedbackendworkflowunchanged."
   }
 }

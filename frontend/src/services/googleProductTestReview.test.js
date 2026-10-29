@@ -1,4 +1,5 @@
 import api from "../lib/api";
+import axios from "axios";
 import fixture from "./__fixtures__/googleProductTestReview.json";
 import { productTestReviewScope, validateProductTestReview, getProductFitState, saveProductFit, getProductTestReview } from "./googleProductTestReview";
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
@@ -9,7 +10,9 @@ test("actual authenticated management writer fixture matches strict GET CAS PUT 
     expect(fixture.plan.fields.acknowledge_review).toBeUndefined(); expect(fixture.plan.fields.expected_revision).toBeUndefined();
     const signal = new AbortController().signal;
     expect(await getProductFitState(fixture.plan, fixture.category, ids, { signal })).toEqual(fixture.fit_state);
-    expect(api.get).toHaveBeenCalledWith(root + "/product-season-reviews", { params: { expected_revision: 1, category_id: "8", product_ids: ids }, signal });
+    expect(api.get.mock.calls[0][0]).toBe(root + "/product-season-reviews"); expect(api.get.mock.calls[0][1].signal).toBe(signal);
+    const uri = axios.getUri({ url: "https://example.test" + root + "/product-season-reviews", ...api.get.mock.calls[0][1] });
+    expect(new URL(uri).searchParams.getAll("product_ids")).toEqual(ids); expect(new URL(uri).searchParams.getAll("product_ids[]")).toEqual([]);
     const saved = await saveProductFit(fixture.plan, fixture.category, ids, "1", 0, "suitable_for_test", fixture.fit_saved.reason, true, { signal });
     expect(saved.review_revision).toBe(1); expect(api.put.mock.calls[0][1]).toEqual({ expected_plan_revision: 1, expected_review_revision: 0, category_id: "8", decision: "suitable_for_test", reason: fixture.fit_saved.reason, acknowledge_owner_review: true });
     expect(await getProductTestReview(fixture.plan, fixture.category, ids, fixture.fit_state, { signal })).toEqual(fixture.candidate);

@@ -6,6 +6,12 @@ on:
     paths:
       - "backend/integrations_control_center/google_ads*"
       - "backend/integrations_control_center/google_commercial_plan.py"
+      - "backend/integrations_control_center/google_product_season_review.py"
+      - "backend/integrations_control_center/google_product_test_review*.py"
+      - "backend/tests/test_google_product_test_review*.py"
+      - "backend/tests/google_product_test_review_ui_fixture.py"
+      - "frontend/src/services/googleProductTestReview*"
+      - "frontend/src/services/__fixtures__/googleProductTestReview.json"
       - "backend/tests/test_google_plan_ui_writer_fixtures.py"
       - "backend/integrations_control_center/google_prior_season_*.py"
       - "backend/tests/test_google_prior_season*.py"
@@ -127,6 +133,10 @@ jobs:
           backend/tests/test_google_prior_season_observations.py
           backend/tests/test_google_prior_season_routes.py
           backend/tests/test_google_prior_season_review_fixture.py
+          backend/tests/test_google_product_test_review.py
+          backend/tests/test_google_product_test_review_routes.py
+          backend/tests/test_google_product_test_review_admission.py
+          backend/tests/test_google_product_test_review_ui_fixture.py
           backend/tests/test_google_native_inventory_proof.py
           backend/tests/test_google_native_inventory_reader.py
           backend/tests/test_google_native_inventory_routes.py
@@ -186,6 +196,9 @@ jobs:
           src/services/googleLinkedCampaignEvidence.test.js
           src/services/googleNativeInventoryPreview.test.js
           src/components/marketing/GoogleNativeInventoryPreview.test.jsx
+          src/components/marketing/GoogleProductTestReview.test.jsx
+          src/components/marketing/GoogleProductTestReviewNativeSelectionIntegration.test.jsx
+          src/services/googleProductTestReview.test.js
           src/services/googleLiveCategoryPreview.test.js
           src/components/marketing/GoogleLiveCategoryPreview.test.jsx
           src/components/marketing/GoogleRecommendationAction.test.jsx
