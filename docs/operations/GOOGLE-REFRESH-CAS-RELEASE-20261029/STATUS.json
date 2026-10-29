@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-REFRESH-CAS-RELEASE-20261029",
-  "state": "Source candidate with fresh140test proof; coordinator repaired two CI-only Mongo runner startup failures; full integrated CI pending",
+  "state": "DEPLOYED: frozen v5 pair, 3 verified live probes and lease closed; native Google live read acceptance in progress",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-refresh-cas-release-20261029",
   "base_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
@@ -77,5 +77,32 @@
   "release_intent_created": false,
   "release_guard_actions": 0,
   "merge_or_publish": false,
-  "next_safe_action": "Inspect fresh full-source CI on new checkpoint; coordinator independently reviews and tests before SourceA/intent-onlyB freeze and actual-host rehearsal. Production/apps/credentials remain outside candidate tests."
+  "next_safe_action": "Inspect fresh full-source CI on new checkpoint; coordinator independently reviews and tests before SourceA/intent-onlyB freeze and actual-host rehearsal. Production/apps/credentials remain outside candidate tests.",
+  "release": {
+    "source_a": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+    "intent_b": "407ef8f2fd4cb33b9a00ca912e92312419d20f44",
+    "merge": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+    "runtime": "rg5-3debafb4d26cbeb5266a86af45d1f20e56e03d21b7f9ef27cac161e100e79b3d",
+    "pr": 1599,
+    "exact_b_ci": "19 success;1 intentionally skipped TikTok creator workflow",
+    "source_ci": {
+      "dedicated": 40897271911,
+      "full_google": 40897272304,
+      "readiness": 40897271968
+    },
+    "b_readiness": 40902880964,
+    "actual_host_builds": "A double-build matches entire CI candidate intent; B clean adapter exit0/76.71s; production-tree adapter exit0/66.37s",
+    "publication": "one Publish changes click; UI finished Oct29 06:54PM Asia/Riyadh",
+    "initial_probe": "Refused old frontend SHA; retained lease and no repeat publish. Subsequent canonical/cache-busted responses matched; second verification passed.",
+    "live": {
+      "verified": true,
+      "checks": 3,
+      "guard_active": false,
+      "boot_started_at": "2026-10-29T15:55:49.067866+00:00",
+      "frontend_artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee"
+    },
+    "production_changed": "yes"
+  },
+  "continuity_status_branch": "codex/google-refresh-cas-status-20261029",
+  "next": "Complete post-release native Google and GA4 read checks; keep budgets, policies and flags unchanged. Then inventoryPR1600 already green and reviewed."
 }
