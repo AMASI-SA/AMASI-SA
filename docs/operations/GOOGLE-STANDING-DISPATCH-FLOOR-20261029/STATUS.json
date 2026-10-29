@@ -1,5 +1,5 @@
 {
-  "status": "WIP_runtime_implemented_legacy_fault_hooks_and_new_acceptance_pending",
+  "status": "WIP_standing_floor_unit_green_actual_replica_CI_pending",
   "base_tested_source": "12da1d13bd263aeba8d408f5bf1da718478ce8b2",
   "base_tree": "77b2437eeb08b577eae0160c505c5927b09f0a47",
   "runtime_available": false,
@@ -12,7 +12,13 @@
   ],
   "preserved": "Creation floor and frozenPR1635 unchanged; no automaticresume/fundedlaunch/sharedmetadatawriter scope",
   "contract": "One commonTX rechecks enabled/revision/activation/expiry/current dispatchclaim/allocation/native-resource and proposal/analysis/operations/fence; proposal submitted+dispatchmarker and guardepoch commit together. Fresh precommit and noawait postACK clockchecks. Unknown ACK noHTTP/noresend/noquota refund; retainhold/fence.",
-  "next": "Implement bounded typed floor, unit and actual replica independent-client revoke/cancel/expiry/fault/restart gates; independent budget_audit review. Actual production storage/namespace/legacy/native prerequisites remain.",
+  "next": "Push exact tests/workflows checkpoint and Draft PR, inspect actual replica/fullCI; independent reviewer finaldelta acceptance. Keep runtimefalse and production prerequisites.",
   "implementation": "Typed standing floor and narrow management seam implemented. Current claim binds digest of actual native bundle and saved analysis; floor reloads policy/claim/ledger/allocation/resource/budget/native/proposal/analysis/operations and writes native fence marker/proposal submitted/common epoch in one rawcommit. No creation authority changes.",
-  "tests": "First focused run170passed7failed3.66s-Werror;7oldfault hooks still targetremovedrecord_event standingfloor and require migration to realhelper/rawcommit. No full acceptance claimed."
+  "tests": {
+    "focused_unit": "190 passed3.64s -Werror; includes13newstandingfloor and unchangedcreationfloor regression",
+    "legacy_hooks": "All7local fault-hook failures migrated to actual standing helper/rawcommit; original assertions retained. Three existing realMongo hooks migrated likewise.",
+    "replica": "9 new cases added: actual2-client revoke beforewrite/afterACK; separate cancellation proposalwrite race; all3expiryphases; server91/close/ACKloss-after-realcommit +newclient consumedreceipt check. LocalMongo unavailable; CIpending, not claimed proof.",
+    "CI_contract": "focused175minimum/53actualMongo zero-skips; full exact9standingfloor+7creationfloor+8paused+9legacycreation counts/allrequiredmodules"
+  },
+  "independent_review": "budget_audit preliminary3a2c runtime read: creationfloorunchanged, no proved blocker; final tests/actualMongo required."
 }

@@ -580,16 +580,15 @@ async def test_standing_policy_native_proof_expiring_after_floor_never_reaches_h
     from tests.test_google_ads_automation_gateway import integration,preview as policy_preview,execute as policy_execute
     from tests.test_google_ads_automation_authority import NOW as POLICY_NOW
     from integrations_control_center import google_ads_automation_authority as authority
-    db,provider=integration.__wrapped__(monkeypatch);row=await policy_preview(db);original=management.record_event
-    async def slow_floor(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':
-            monkeypatch.setattr(management,'now',lambda:POLICY_NOW+timedelta(seconds=91))
-            monkeypatch.setattr(authority,'_now',lambda current=None:current or POLICY_NOW+timedelta(seconds=91))
-            from tests.test_google_ads_automation_authority import freeze_guard_clock
-            freeze_guard_clock(monkeypatch,POLICY_NOW+timedelta(seconds=91))
+    db,provider=integration.__wrapped__(monkeypatch);row=await policy_preview(db);original=authority.acknowledge_standing_dispatch_floor
+    async def slow_floor(database,proposal,**kwargs):
+        result=await original(database,proposal,**kwargs)
+        monkeypatch.setattr(management,'now',lambda:POLICY_NOW+timedelta(seconds=91))
+        monkeypatch.setattr(authority,'_now',lambda current=None:current or POLICY_NOW+timedelta(seconds=91))
+        from tests.test_google_ads_automation_authority import freeze_guard_clock
+        freeze_guard_clock(monkeypatch,POLICY_NOW+timedelta(seconds=91))
         return result
-    monkeypatch.setattr(management,'record_event',slow_floor)
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',slow_floor)
     result=await policy_execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])

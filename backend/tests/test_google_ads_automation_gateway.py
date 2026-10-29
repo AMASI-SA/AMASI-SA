@@ -231,13 +231,10 @@ async def test_execute_never_mutates_when_rest_inventory_budget_proof_changes(in
 @pytest.mark.parametrize('kind',['not_acknowledged','cancel_after_claim','kill_after_claim'])
 async def test_submission_floor_failure_never_calls_google_and_holds_claim(integration,monkeypatch,kind):
     db,provider=integration;row=await preview(db)
-    original_event=management.record_event
-    async def fail_event(db_arg,proposal,status,**kwargs):
-        if status=='submitted':
-            if kind=='cancel_after_claim':raise asyncio.CancelledError()
-            raise TimeoutError('test-only floor acknowledgement lost')
-        return await original_event(db_arg,proposal,status,**kwargs)
-    monkeypatch.setattr(management,'record_event',fail_event)
+    async def fail_floor(db_arg,proposal,**kwargs):
+        if kind=='cancel_after_claim':raise asyncio.CancelledError()
+        raise TimeoutError('test-only floor acknowledgement lost')
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',fail_floor)
     if kind=='cancel_after_claim':
         with pytest.raises(asyncio.CancelledError):await execute(db,row)
     else:
@@ -289,12 +286,14 @@ async def test_operator_kill_after_policy_claim_never_reaches_submission_floor(i
 @pytest.mark.asyncio
 async def test_floor_commit_with_lost_ack_never_dispatches_and_cannot_be_cancelled_as_unsubmitted(integration,monkeypatch):
     db,provider=integration;row=await preview(db);provider.verified=False
-    original=management.record_event
-    async def lose_ack(db_arg,proposal,status,**kwargs):
-        result=await original(db_arg,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('test-only postcommit floor response lost')
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    original=guard._commit_once;calls=0
+    async def lose_ack(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:raise TimeoutError('test-only real floor commit response lost')
         return result
-    monkeypatch.setattr(management,'record_event',lose_ack)
+    monkeypatch.setattr(guard,'_commit_once',lose_ack)
     result=await execute(db,row)
     assert result['submission_started'] is True and result['status']=='uncertain' and provider.writes==0
     monkeypatch.setattr(management,'now',lambda:NOW+__import__('datetime').timedelta(minutes=6))
@@ -333,12 +332,12 @@ async def test_expired_policy_blocks_before_provider_read_or_claim(integration):
 
 @pytest.mark.asyncio
 async def test_operator_kill_after_submission_ack_prevents_http_and_preserves_floor(integration,monkeypatch):
-    db,provider=integration;row=await preview(db);original=management.record_event
-    async def kill_after_floor(db_arg,proposal,status,**kwargs):
-        result=await original(db_arg,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
+    db,provider=integration;row=await preview(db);original=authority.acknowledge_standing_dispatch_floor
+    async def kill_after_floor(db_arg,proposal,**kwargs):
+        result=await original(db_arg,proposal,**kwargs)
+        monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
         return result
-    monkeypatch.setattr(management,'record_event',kill_after_floor)
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',kill_after_floor)
     result=await execute(db,row)
     assert provider.writes==0
     assert result['status']=='failed' and result['submission_started'] is True
@@ -360,11 +359,11 @@ async def test_terminal_cancellation_winning_old_executor_is_never_resurrected(i
         await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id=stored['execution_claim_id'])
         await management._release_fence(db,stored)
     if phase=='before_floor':
-        original=management.record_event
-        async def cancel_before_floor(db_arg,proposal,status,**kwargs):
-            if status=='submitted':await cancel_terminal()
-            return await original(db_arg,proposal,status,**kwargs)
-        monkeypatch.setattr(management,'record_event',cancel_before_floor)
+        original=authority.acknowledge_standing_dispatch_floor
+        async def cancel_before_floor(db_arg,proposal,**kwargs):
+            await cancel_terminal()
+            return await original(db_arg,proposal,**kwargs)
+        monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',cancel_before_floor)
     else:
         original=authority.authorize_google_automation_claim
         async def cancel_then_lose_ack(*args,**kwargs):

@@ -2,7 +2,7 @@ name: Google Ads full management
 
 on:
   push:
-    branches: [codex/google-paused-dispatch-floor-wip-20261029]
+    branches: [codex/google-standing-dispatch-floor-wip-20261029]
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
     paths:
@@ -128,6 +128,8 @@ jobs:
           backend/tests/test_google_ads_automation_creation_plan.py
           backend/tests/test_google_ads_creation_budget_reader.py
           backend/tests/test_google_ads_paused_creation_budget.py
+          backend/tests/test_google_ads_standing_dispatch_floor.py
+          backend/tests/test_google_ads_standing_dispatch_floor_mongo.py
           backend/tests/test_google_ads_paused_dispatch_floor.py
           backend/tests/test_google_ads_paused_dispatch_floor_mongo.py
           backend/tests/test_google_ads_paused_creation_budget_mongo.py
@@ -158,12 +160,13 @@ jobs:
             'test_google_ads_automation_creation_gateway_mongo', 'test_google_ads_automation_creation_worker_mongo',
             'test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo',
             'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_creation_inventory_mongo',
-            'test_google_ads_paused_creation_budget_mongo', 'test_google_ads_paused_dispatch_floor_mongo',
+            'test_google_ads_paused_creation_budget_mongo', 'test_google_ads_paused_dispatch_floor_mongo', 'test_google_ads_standing_dispatch_floor_mongo',
           }
           present={case.attrib.get('classname','').split('.')[-1] for case in cases}
           assert sum(case.attrib.get('classname','').endswith('test_google_ads_paused_creation_budget_mongo') for case in cases)==8
           assert sum(case.attrib.get('classname','').endswith('test_google_ads_automation_creation_authority_mongo') for case in cases)==9
           assert sum(case.attrib.get('classname','').endswith('test_google_ads_paused_dispatch_floor_mongo') for case in cases)==7
+          assert sum(case.attrib.get('classname','').endswith('test_google_ads_standing_dispatch_floor_mongo') for case in cases)==9
           assert len(cases) >= 1000 and required <= present, (len(cases), sorted(required-present))
           assert not [case for case in cases if any(case.find(tag) is not None for tag in ('failure','error','skipped'))]
           print('Verified',len(cases),'backend tests including all required Mongo modules; zero skips')

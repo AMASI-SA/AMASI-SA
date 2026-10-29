@@ -2,10 +2,12 @@ name: Google Ads future budget guard transactions
 
 on:
   push:
-    branches: [codex/google-paused-dispatch-floor-wip-20261029]
+    branches: [codex/google-standing-dispatch-floor-wip-20261029]
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
       - backend/integrations_control_center/google_ads_paused_creation_budget.py
+      - backend/tests/test_google_ads_standing_dispatch_floor.py
+      - backend/tests/test_google_ads_standing_dispatch_floor_mongo.py
       - backend/tests/test_google_ads_paused_dispatch_floor.py
       - backend/tests/test_google_ads_paused_dispatch_floor_mongo.py
       - backend/integrations_control_center/google_ads_automation_creation_authority.py
@@ -35,6 +37,8 @@ on:
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
       - backend/integrations_control_center/google_ads_paused_creation_budget.py
+      - backend/tests/test_google_ads_standing_dispatch_floor.py
+      - backend/tests/test_google_ads_standing_dispatch_floor_mongo.py
       - backend/tests/test_google_ads_paused_dispatch_floor.py
       - backend/tests/test_google_ads_paused_dispatch_floor_mongo.py
       - backend/integrations_control_center/google_ads_automation_creation_authority.py
@@ -145,6 +149,8 @@ jobs:
             backend/tests/test_google_ads_guard_integration_mongo.py \
             backend/tests/test_google_ads_legacy_budget_settlement.py \
             backend/tests/test_google_ads_legacy_budget_settlement_mongo.py \
+            backend/tests/test_google_ads_standing_dispatch_floor.py \
+            backend/tests/test_google_ads_standing_dispatch_floor_mongo.py \
             backend/tests/test_google_ads_paused_dispatch_floor.py \
             backend/tests/test_google_ads_paused_dispatch_floor_mongo.py \
             backend/tests/test_google_ads_paused_creation_budget_mongo.py \
@@ -162,15 +168,15 @@ jobs:
           output = Path(os.environ['RUNNER_TEMP']) / 'google-budget-guard-proof'
           root = ET.parse(output / 'junit.xml').getroot()
           cases = list(root.iter('testcase'))
-          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo', 'test_google_ads_budget_guard_lifecycle_mongo', 'test_google_ads_automation_authority_mongo', 'test_google_ads_paused_creation_budget_mongo', 'test_google_ads_paused_dispatch_floor_mongo'))]
+          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo', 'test_google_ads_budget_guard_lifecycle_mongo', 'test_google_ads_automation_authority_mongo', 'test_google_ads_paused_creation_budget_mongo', 'test_google_ads_paused_dispatch_floor_mongo', 'test_google_ads_standing_dispatch_floor_mongo'))]
           errors = [case for case in cases if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped'))]
           proof = {'tests': len(cases), 'replica_mongo_tests': len(mongo), 'failures_errors_or_skips': len(errors),
                    'source_sha': (output / 'source-sha.txt').read_text().strip(),
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 153
-          assert len(mongo) == 44
+          assert len(cases) >= 175
+          assert len(mongo) == 53
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY
       - name: Preserve bounded Mongo diagnostics
