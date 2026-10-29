@@ -79,15 +79,15 @@ async def test_real_nonconflicting_metadata_writer_is_caught_before_native_floor
     assert capture.names.count('commitTransaction')==1
 
 @pytest.mark.asyncio
-async def test_real_standing_increase_and_actual_paused_authorizer_share_one_epoch(monkeypatch,actual_db):
+async def test_real_standing_increase_and_actual_paused_authorizer_share_one_epoch(monkeypatch,actual_db,automation_mongo_uri):
     db,capture=actual_db;docs,native,intent=documents()
-    # Explicit controlled owner fixture: standing permits40→44; creation15
-    # permits40+15. Both together59 would exceed the common explicit55 limit.
+    # Explicit controlled owner fixture: individually44 and40+15 fit55;
+    # their combined59 does not. No provider permission is exercised here.
     docs[guard.AUTOMATION_POLICIES][0]['max_campaign_daily_budget_native']='60'
     for name,rows in docs.items():
         if rows:await db[name].insert_many(deepcopy(rows))
-    policy=docs[guard.AUTOMATION_POLICIES][0]
-    inventory=deepcopy(native['native_context'])
+    await db[guard.BUDGET_GUARDS].insert_one(guard._new_guard({'user_id':'owner','account_id':'123'}))
+    policy=docs[guard.AUTOMATION_POLICIES][0];inventory=deepcopy(native['native_context'])
     claim={'claim_id':'stand_claim','execution_claim_id':'stand_claim','proposal_id':'stand_proposal',
         'campaign_id':'456','action':'set_budget','policy_revision':policy['revision'],
         'policy_digest':standing.policy_authorization_digest(policy),'native_inventory_digest':management.digest(inventory),
@@ -95,22 +95,64 @@ async def test_real_standing_increase_and_actual_paused_authorizer_share_one_epo
         'budget_semantics':'average_daily_budget','authorized_at':NOW.isoformat(),'time_zone':'Asia/Riyadh',
         'confirmation_digest':'a'*64,'operations_digest':'b'*64}
     capability=await guard.probe_google_budget_guard_transactions(db)
-    entered=asyncio.Event();release=asyncio.Event();original=guard._commit_once
-    async def blocked(*args):entered.set();await release.wait();return await original(*args)
-    monkeypatch.setattr(guard,'_commit_once',blocked)
-    first=asyncio.create_task(guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
-        operation_id='standing_competitor',capability=capability,planner=lambda snapshot:guard.StandingBudgetReservation('standing_stand_claim',policy['revision'],claim,inventory)))
-    second=asyncio.create_task(creation.authorize_google_creation_claim(db,user_id='owner',account_id='123',
+    other=AsyncIOMotorClient(automation_mongo_uri,serverSelectionTimeoutMS=2000,retryWrites=True,event_listeners=[capture])
+    worker=other[db.name]
+    # Distinct clients/database identities bypass same-object process registry
+    # exclusion. Both real snapshot transactions read epoch0 before either writes.
+    assert worker is not db and worker.client is not db.client
+    prepared=asyncio.Event();standing_prepared=asyncio.Event();start=asyncio.Event();both_read=asyncio.Event();readers=set()
+    original_run,original_read=guard._run,guard._read_policy
+    async def delayed_run(*args,**kwargs):
+        if kwargs['operation_id'].startswith('paused_reserve_'):prepared.set()
+        if kwargs['operation_id']=='standing_competitor':standing_prepared.set()
+        await start.wait()
+        return await original_run(*args,**kwargs)
+    async def overlapping_read(database,scope,kind,session):
+        result=await original_read(database,scope,kind,session)
+        if kind=='creation':
+            readers.add(id(database))
+            if len(readers)==2:both_read.set()
+            await asyncio.wait_for(both_read.wait(),5)
+        return result
+    monkeypatch.setattr(guard,'_run',delayed_run);monkeypatch.setattr(guard,'_read_policy',overlapping_read)
+    creation_task=asyncio.create_task(creation.authorize_google_creation_claim(worker,user_id='owner',account_id='123',
         proposal_id='proposal123',execution_claim_id='claim123',native_evidence=native,current=NOW))
-    try:await asyncio.wait_for(entered.wait(),5)
-    finally:release.set()
-    results=await asyncio.gather(first,second,return_exceptions=True)
-    assert sum(isinstance(result,dict) and result.get('committed') is True for result in results)==1
-    assert sum(isinstance(result,HTTPException) for result in results)==1
-    state=await db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
-    assert state['epoch']==1 and len(state['allocations'])==1 and state['active_claim']
-    assert capture.names.count('commitTransaction')==1
-    assert all(not isinstance(result,dict) or result['provider_dispatch_authorized'] is False for result in results)
+    standing_task=None
+    try:
+        # Let creation finish its outside-transaction index/proof work before
+        # standing can hold collection locks. This is not a fake CAS result.
+        await asyncio.wait_for(prepared.wait(),5)
+        standing_task=asyncio.create_task(guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
+            operation_id='standing_competitor',capability=capability,planner=lambda snapshot:guard.StandingBudgetReservation('standing_stand_claim',policy['revision'],claim,inventory)))
+        await asyncio.wait_for(standing_prepared.wait(),5)
+        pending_keys=[key for key,state in guard._pending_operations.items() if key[0] in {id(db),id(worker)} and state['kind']=='write']
+        assert len(pending_keys)==2 and len({key[0] for key in pending_keys})==2
+        start.set()
+        results=await asyncio.gather(standing_task,creation_task,return_exceptions=True)
+        assert len(readers)==2
+        assert sum(isinstance(result,dict) and result.get('committed') is True for result in results)==1
+        failures=[result for result in results if isinstance(result,HTTPException)]
+        assert len(failures)==1 and failures[0].detail['code']=='google_budget_guard_policy_changed'
+        assert failures[0].detail['commit_attempted'] is False and failures[0].detail['preserve_execution_fence'] is True
+        state=await db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+        assert state['epoch']==1 and len(state['allocations'])==1 and state['active_claim']
+        snapshot=guard.BudgetGuardSnapshot('owner','123',state,
+            await db[guard.AUTOMATION_POLICIES].find_one({'user_id':'owner','account_id':'123'},{'_id':0}),
+            await db[guard.CREATION_POLICIES].find_one({'user_id':'owner','account_id':'123'},{'_id':0}))
+        from integrations_control_center.google_ads_paused_creation_budget import account_exposure
+        exposure=account_exposure(snapshot,inventory,snapshot.creation_policy,NOW)
+        kind=next(iter(state['allocations'].values()))['kind']
+        assert str(exposure['total'])==('55' if kind=='paused_creation' else '44')
+        assert exposure['total']<=exposure['limit'] and capture.names.count('commitTransaction')==1
+        assert all(not isinstance(result,dict) or result['provider_dispatch_authorized'] is False for result in results)
+    finally:
+        start.set()
+        await asyncio.gather(*[task for task in (standing_task,creation_task) if task is not None],return_exceptions=True)
+        retained=[state['task'] for key,state in guard._pending_operations.items() if key[0]==id(worker)]
+        if retained:
+            _,pending=await asyncio.wait(retained,timeout=20)
+            assert not pending
+        other.close()
 
 @pytest.mark.asyncio
 async def test_real_owner_revoke_after_reservation_needs_no_oauth_and_blocks_floor(monkeypatch,actual_db):

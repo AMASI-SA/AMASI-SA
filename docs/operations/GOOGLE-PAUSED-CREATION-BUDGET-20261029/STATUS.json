@@ -1,5 +1,5 @@
 {
-  "status": "WIP_actual_replica_acceptance_cases_added_CI_pending",
+  "status": "WIP_independent_client_Mongo_race_strengthened_CI_pending",
   "parent_guard_checkpoint": "c82ed32a4dee3b470a237fcdfe31de0d25d629b3",
   "guard_tested_source": "0dcb03d9ce4a5778f29584cd4166b923439e8918",
   "runtime_implemented": "Guarded PAUSED claim/ledger/generation/reservation and terminal settlement wired through actual creation authority helpers; retained same-session public-call boundary. Runtime literalFalse.",
@@ -15,7 +15,8 @@
     "realMongo": "Not yet validated for new common-claim source; prior643reader/parent0dcb CI is not proof of this source",
     "broad_unit": "693passed9.39s-Werror; includes4nonconflictingowner/productdriftcases before/aftercommit and actualgateway transport collaborator",
     "actual_replica_cases": "8new collected(notexecutedlocally):4owner/productwriters before/aftercommit; commonstandingincrease44vcreation15 exceedscombined55; ownerrevokeafterreservationofflineOAuth; failCommandcommit91/connection-close one-wire/no-floor/no-send/fenceretention. Existing9creationauthorizerMongo cases migrated to trueguardcommit/generationboundaries.",
-    "actualMongo": "CIpending; local Mongo unavailable; no skipped run represented as proof."
+    "actualMongo": "CIpending; local Mongo unavailable; no skipped run represented as proof.",
+    "old_creation_mongo_gate": "Full workflow explicitly requires exactly9 preexisting creation-authority Mongo cases, separately from37 focused cases."
   },
   "accounting": "One max per verified native campaign+budgetresource across native amount, immutable original creationhold and unreflected standingtarget. Original20/native22/native15 andpending25unitcases preserveonecounter. Legacyunmapped/unknownbinding/currency/resource/shared/absence failclosed.",
   "remaining": [
@@ -28,5 +29,6 @@
   "postcommit_scope": "Retained10smajorityreadsession revalidates currentowner/policy/intent/draft/canonicalproduct/commonclaim/nativeearliestfingerprint before returning to nativefloor. Detects interveningdrift; doesNOTserialize sharedmetadata writers or submissionfloor. Unknown/readfailure retainsoriginalhold/fence.",
   "native_floor_blocker": "Current shared management submissionfloor is not yet part of commonpolicyepoch/revocationtransaction. Root will assign bounded seam on fresh postretailbase; this source explicitly not deployable.",
   "fake_semantics": "Transactionalunitcollaborator commitswrite-setonly; read snapshots do not overwrite concurrentowner/productchanges. Public nontransactionmajorityreads allowed; writeswithsession stillrequireactiveTX.",
-  "independent_review": "budget_audit reviewedreader42units andpostcommitdelta with limitations; full common-claim/accounting runtime and actualreplica acceptance still pending."
+  "independent_review": "budget_audit reviewedreader42units andpostcommitdelta with limitations; full common-claim/accounting runtime and actualreplica acceptance still pending.",
+  "race_test_contract": "Two independent Motor clients/database objects bypass local registry sharing. Explicit barriers require both actual snapshot transactions to read epoch0 before either writes; exactly one commit and one policy_changed rejection, retained fence, and exact winning common exposure (44 or55) are asserted. This is a DB concurrency test with independent clients, not two OS processes."
 }
