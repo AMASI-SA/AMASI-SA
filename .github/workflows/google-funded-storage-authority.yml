@@ -194,8 +194,8 @@ jobs:
           assert len(mongo) == 53
           funded = [case for case in cases if case.get('classname','').endswith(('test_google_ads_funded_creation_grants','test_google_ads_funded_creation_authority'))]
           funded_mongo = [case for case in cases if case.get('classname','').endswith('test_google_ads_funded_storage_mongo')]
-          assert len(funded) == 49
-          assert len(funded_mongo) == 30
+          assert len(funded) == 53
+          assert len(funded_mongo) == 32
           print(json.dumps({'new_funded_units':len(funded),'new_actual_mongo':len(funded_mongo)}))
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY

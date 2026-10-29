@@ -372,3 +372,27 @@ async def test_unknown_reserve_not_applied_never_reuses_initiation(monkeypatch):
     with pytest.raises(HTTPException) as repeated:await reserve(db,key,row)
     assert repeated.value.detail['code']=='google_funded_initiation_ack_unproved'
     assert provider.previews==reads and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status',['ENABLED','PAUSED'])
+@pytest.mark.parametrize('native_amount,expected',[('22','77'),('10','70')])
+async def test_funded_native_pair_counts_max_once_and_retains_original_hold(monkeypatch,status,native_amount,expected):
+    from decimal import Decimal
+    db,provider,key,row=await setup(monkeypatch);await reserve(db,key,row);await floor(db,key,row)
+    receipt=await provider.accept_original(row['operations'])
+    await db[management.PROPOSALS].update_one({'proposal_id':row['proposal_id']},{'$set':{
+        'provider_receipt':receipt,'resource_names':authority.mutation_resource_names(receipt,row['operations'],'123'),'status':'verifying'}})
+    await settle(db,key,row)
+    state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+    run=await db[grants.RUNS].find_one({'grant_key':key});inventory=deepcopy(run['bundle']['inventory'])
+    native=deepcopy(inventory['campaigns'][0]);native.update(campaign_id='777',
+        budget_resource='customers/123/campaignBudgets/1000',status=status,budget_native=native_amount)
+    inventory['campaigns'].append(native)
+    record=await db[grants.GRANTS].find_one({'grant_key':key})
+    snapshot=guard.BudgetGuardSnapshot('owner','123',state,
+        await db[guard.AUTOMATION_POLICIES].find_one({'account_id':'123'}),
+        await db[guard.CREATION_POLICIES].find_one({'account_id':'123'}))
+    result=account_exposure(snapshot,inventory,record['grant'],NOW,funded_grant=record['grant'])
+    assert result['total']==Decimal(expected)
+    assert next(iter(state['allocations'].values()))['budget_native']=='15'
+    assert provider.writes==1 # simulated original acceptance only

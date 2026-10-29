@@ -276,3 +276,44 @@ async def test_replica_unknown_reservation_prepared_or_reserved_cannot_reinitiat
     assert capture.names.count('commitTransaction')==before+1
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
     print({'reserve_fault':fault,'helper_seconds':round(elapsed,3),'wire_commit_attempts':1,'journal_phase':run['phase']})
+
+@pytest.mark.asyncio
+async def test_replica_revoke_and_known_cancel_ignore_oauth_and_users_update_validator(monkeypatch,actual_db):
+    db,capture=actual_db;db,provider,key,row=await setup(monkeypatch,db);await reserve(db,key,row)
+    before=await db.users.find_one({'id':'owner'})
+    # Existing document may retain its marker; any future users write fails.
+    await db.command({'collMod':'users','validator':{'id':{'$eq':'impossible-test-id'}},'validationLevel':'strict'})
+    async def unavailable(*args,**kwargs):raise AssertionError('No OAuth/provider reader permitted on safety path')
+    monkeypatch.setattr(management,'account_client',unavailable)
+    monkeypatch.setattr(guard,'budget_guard_runtime_available',lambda:False)
+    result=await grants.revoke_google_funded_grant(db,user=before,account_id='123',request_key='reviewed_launch_1',expected_revision=1)
+    assert result['state']=='revoked'
+    await db[management.PROPOSALS].update_one({'proposal_id':row['proposal_id']},{'$set':{'status':'failed',
+        'submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch'}})
+    result=await settle(db,key,row)
+    assert result['settled'] is True and result['quota_refunded'] is False and result['native_fence_released'] is False
+    assert await db.users.find_one({'id':'owner'})==before
+    assert (await db[grants.GRANTS].find_one({'grant_key':key}))['consumed'] is True
+    assert (await db[grants.RUNS].find_one({'grant_key':key}))['phase']=='settled'
+    assert provider.writes==0
+
+@pytest.mark.asyncio
+async def test_replica_original_provider_graph_settlement_keeps_positive_native_hold(monkeypatch,actual_db):
+    db,capture=actual_db;db,provider,key,row=await setup(monkeypatch,db);await reserve(db,key,row);await floor(db,key,row)
+    assert provider.writes==0
+    # Simulated ORIGINAL acceptance only; storage helpers never send paid mutate.
+    receipt=await provider.accept_original(row['operations'])
+    names=authority.mutation_resource_names(receipt,row['operations'],'123')
+    await db[management.PROPOSALS].update_one({'proposal_id':row['proposal_id']},{'$set':{
+        'provider_receipt':receipt,'resource_names':names,'status':'verifying'}})
+    result=await settle(db,key,row)
+    assert result['settled'] is True and result['quota_refunded'] is False
+    state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+    allocation=next(iter(state['allocations'].values()))
+    assert state['active_claim'] is None and allocation['state']=='native_enabled'
+    assert allocation['campaign_id']=='777' and allocation['budget_resource']=='customers/123/campaignBudgets/1000'
+    assert allocation['budget_native']=='15' and allocation['settlement_proof_digest']
+    assert (await db[grants.RUNS].find_one({'grant_key':key}))['phase']=='settled'
+    assert (await db[grants.GRANTS].find_one({'grant_key':key}))['consumed'] is True
+    with pytest.raises(HTTPException):await reserve(db,key,row)
+    assert provider.writes==1 # seeded original outcome; zero helper-funded sends
