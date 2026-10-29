@@ -170,7 +170,7 @@
   ],
   "production_changed": "no",
   "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "Root waits for foreign release lease closure, independently completes fresh actual source A governed build and matching intent-only B, required CI and v5 single publish/three live probes plus functional site checks. Never deploy superseded1629 pair or this separate STATUS continuation.",
+  "next": "AwaitnewerexplicitReports1632finish andowner3verification/closedlease; rootreadguardinactive then actualhostA doublebuild/freezeexact3daf... →intent-onlyB/allCI/review/hostBadapter/freshnormalmerge/publishverify3/live. No newhostbuild orleasewhileforeignactive.",
   "superseded_unpublished": {
     "pr": 1629,
     "source": "e16b46f0453776f5bb471ae1e641a083af275c38",
@@ -187,5 +187,36 @@
   "source_sha": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
   "source_tree": "0e3596142bf2266ba72c3443967feb2b844291ed",
   "pr": 1634,
-  "release_branch": "codex/google-retail-release-reports-20261029"
+  "release_branch": "codex/google-retail-release-reports-20261029",
+  "root_validation": {
+    "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+    "tree": "0e3596142bf2266ba72c3443967feb2b844291ed",
+    "direct_base": "fda86238dda9700806c0d700e9e411c1674c9bad",
+    "parity": "Exact11acceptedretailblobs/newSTATUS, allforeignReports/inventory/CAS/resume preserved",
+    "ci_logs": {
+      "google": 40948016906,
+      "backend": 1307,
+      "backend_seconds": 32.8,
+      "frontend": 261,
+      "suites": 18,
+      "build_seconds": 4,
+      "replica": 40948016611,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0
+    },
+    "all_workflows_success": 11,
+    "candidate_artifact": 12930730411,
+    "intent_sha256": "3daf7034acc4d67b17efbcdd145813c5fb6cc627db0c2354dfeeac72f724321d",
+    "runtime": "rg5-1d92cc5150dd80334e499eb4b32c394cbee4c5351596d4091e97d3aecde24ba0",
+    "frontend_artifact": "d16cb651c37df30613db837cda0d7c0fd63feba6543b5f37f0146a22f584f6e0"
+  },
+  "host_blocker": {
+    "actor": "codex-reports-tiktok-20261029",
+    "lease_active": true,
+    "deployment": "fda86238dda9700806c0d700e9e411c1674c9bad",
+    "prepared": "2026-10-29T20:19:10.368984+00:00",
+    "started_ui": "2026-10-29 23:19 Asia/Riyadh",
+    "preserved": true
+  }
 }
