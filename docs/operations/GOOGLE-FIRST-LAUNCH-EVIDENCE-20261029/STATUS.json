@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-first-launch-evidence-wip-20261029",
   "base_sha": "050b3da6ffc9660b2022a111117fd928da07ab51",
-  "state": "WIP BSON storage-clock review fix passed locally; fresh actual-Mongo CI and re-review pending",
+  "state": "Reviewed read-only WIP source; exact-source CI including actual BSON Mongo tests passed; no runtime route or first-launch authority",
   "restored_source": "aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06",
   "scope": "Reuse old pure first-launch preview as a nonauthorizing evidence contract; add trusted bounded read bundle and exact semantic revalidation in new files only.",
   "completed": [
@@ -19,7 +19,13 @@
     "regression_red": "Two new nonauthorizing-output/time-refresh regressions failed on restored old contract.",
     "tests": "152 passed, five actual-Mongo scenarios explicitly deselected locally; zero skips, exit0 with -W error (1.95s).",
     "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_automation_creation_launch_contract.py",
-    "independent_review": "Pending",
+    "independent_review": {
+      "agent": "/root/budget_audit",
+      "source_sha": "26b10be88c3a86804242b9c5c6cc9a91b1330f3a",
+      "unit_tests": 152,
+      "mongo_tests": "Explicitly excluded in independent local run; actual Mongo proven by source CI",
+      "result": "No additional blocking finding in bounded read-only scope after BSON fix. Native provider acceptance and external activation history are unproved."
+    },
     "reused_contracts": "444 passed in5.40s, zero skips, exit0 with -W error: creation contract/plan/inventory, campaign builder, workspace, native verification/client and official schema.",
     "rejected_source_sha": "66a0d5f95b15394876546d9847a440aa01d3d346",
     "review_finding": "Independent budget_audit found real stored BSON datetime rejected by JSON size bound; old actual-Mongo fixture used ISO strings. Source66a0d5f must not be integrated despite green CI.",
@@ -39,7 +45,41 @@
       "reused_elapsed_seconds": 5.79,
       "result": "success"
     },
-    "ci": "Pending new exact-source CI requiring157 cases including five actual-Mongo cases; previous148case CI is insufficient."
+    "ci": {
+      "run_id": 40922802136,
+      "event": "push",
+      "tested_source_sha": "26b10be88c3a86804242b9c5c6cc9a91b1330f3a",
+      "checkout_sha_verified_in_log": true,
+      "new_cases": 157,
+      "real_mongo_cases": 5,
+      "skips": 0,
+      "test_elapsed_seconds": 3.36,
+      "required_casecount_assertion": "passed",
+      "actual_writer_bson_roundtrip": "passed: real _details_patch output stored/read through Motor with naive UTC BSON dates",
+      "reused_contracts": 444,
+      "reused_elapsed_seconds": 7.65,
+      "result": "success"
+    },
+    "full_google_pr_ci": {
+      "run_id": 40922811835,
+      "kind": "synthetic PR merge, not standalone source",
+      "tested_sha": "bdd9beada55e3a7a54aebca3bb4f168618624174",
+      "tree": "01605e1acbb01a35b0b5f5fd069fd42af619b6dd",
+      "parents": [
+        "dada1def704ae968230d63c3c9885508a2a6653d",
+        "26b10be88c3a86804242b9c5c6cc9a91b1330f3a"
+      ],
+      "backend": 1236,
+      "frontend": 228,
+      "frontend_build": "passed",
+      "result": "success"
+    },
+    "release_readiness": {
+      "run_id": 40922811862,
+      "backend_preflight": "passed",
+      "frontend_classification": "failed",
+      "reason": "Current production dada1def704ae968230d63c3c9885508a2a6653d is not ancestor of this WIP. A fresh root-created v5 source/intent pair is required; no readiness or deployment completion claimed."
+    }
   },
   "owned_paths": [
     "backend/integrations_control_center/google_ads_automation_creation_launch_contract.py",
@@ -50,9 +90,9 @@
     ".github/workflows/google-first-launch-evidence.yml"
   ],
   "remaining": [
-    "Independent immutable-source review and findings resolution.",
-    "Root integration/reproducible v5 preparation is separate; do not publish WIP directly.",
-    "Public route/UI, common transactional launch authority, stop provenance, gateway/worker/settlement and flags remain out of scope."
+    "Root decides whether to integrate this completed nonauthorizing foundation into a useful owner-facing read-only surface, then prepares fresh v5 A/B source/intent pair from current production.",
+    "Public route/UI, current owner monetary limits, common transactional launch reservation/authority, stop provenance, gateway/worker/settlement and flags remain out of scope.",
+    "Actual Google account resources/default normalization and live read-only acceptance remain unproved; external writers cannot be excluded by Mongo."
   ],
   "limits": [
     "No API routes, claims, policy writes, native mutation or runtime flags.",
@@ -60,13 +100,14 @@
     "No claim of external writer exclusion, first-funded-launch authority, permission to spend, or actual-spend cap.",
     "No owner money limits supplied; no paid activation permitted.",
     "Search/RSA only; no Shopping or Performance Max launch coverage.",
-    "Current diagnostic inventory conservatively requires every returned campaign budget to be unshared DAILY with a single native reference. Unsupported/shared/removed-resource ambiguity blocks evidence; it is not silently omitted."
+    "Current diagnostic inventory conservatively requires every returned campaign budget to be unshared DAILY with a single native reference. Unsupported/shared/removed-resource ambiguity blocks evidence; it is not silently omitted.",
+    "Lossless rebuilt-operation comparison can conservatively reject provider defaults or native list normalization absent from the original immutable creation. No heuristic relaxation or live Google acceptance is claimed."
   ],
   "production_changed": false,
   "provider_calls": 0,
-  "next_safe_action": "Inspect new157case/fiveMongo/no-skip CI and obtain independent re-review of BSON fix. Do not integrate rejected66a0d5f. Root separately prepares any approved v5 release from current production.",
+  "next_safe_action": "Root uses reviewed source26b10be (never rejected66a0d5f), retains all newer production work and coordinates any shared route/UI/authority files. No paid activation, flag flip, provider mutate, or direct WIP deployment. For further implementation, assign explicit files and preserve created-by-Mezan versus never-launched distinction.",
   "previous_checkpoint": "29585cdc7f8857b4b4fc72677ed2dd3a780da201",
-  "source_sha": "66a0d5f95b15394876546d9847a440aa01d3d346",
-  "source_tree": "9598aab91d84e412fa8de8607e025edf6d164e57",
+  "source_sha": "26b10be88c3a86804242b9c5c6cc9a91b1330f3a",
+  "source_tree": "a09ac3feef804c6a2a984929f14fd47f6a3a46ee",
   "pr": 1610
 }
