@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
-  "state": "SOURCE_A_REVIEWED_CI_PASSED_WAIT_FOREIGN_LEASE",
+  "state": "FROZEN_A_B_HOST_REHEARSAL_AND_B_CI_IN_PROGRESS",
   "branch": "codex/google-catalog-stock-review-status2-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
   "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
@@ -67,7 +67,7 @@
     "No policy, campaign or provider writes."
   ],
   "production_changed": false,
-  "next_safe_action": "Fresh exactsourceCI andindependentreview. Wait foreign codex-marketing-reports-20261029 leaseclosure beforeactualhostbuild. Rootonly v5A/B/merge/publish/verify3. No budgets/policy/adwrites.",
+  "next_safe_action": "Complete BCI/independentpair/actualhostadapter, freshprodhead guardinactive; normalmerge andappmaterialize; prepare/prepublish/singlepublish/newfinish/verify3/closedlease/liveinventoryreview. No adwrites.",
   "source_branch": "codex/google-catalog-stock-review-source2-20261029",
   "release": {
     "pr": 1618,
@@ -77,8 +77,17 @@
     "intent_sha256": "75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c",
     "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
     "frontend_artifact": "29c827dba6192717c8f6eea7a7161648e69a95533d8d7462467a11c927ad92d3",
-    "intent_b": null,
-    "published": false
+    "intent_b": "f1ece7eda0d943f4e48fc9646db5800cf91b765e",
+    "published": false,
+    "b_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
+    "actual_host_a": "PASS; frozeninstall18.76s, designatedcandidatebootstrap two cleanbuilds; wholefrozenintent exactly75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c matchesCI",
+    "first_a_attempt": "buildrefusedoldintent becausecandidatebootstrapflag omitted; correcteddesignatedmode, no sourcechange",
+    "actual_host_b": "running isolated cleanworktree",
+    "b_readiness": 40941089878,
+    "b_google": 40941089973,
+    "b_replica": 40941089912,
+    "lease_created": false
   },
-  "host_blocker": "Foreignactiveleasecodex-marketing-reports-20261029, deploymentM6e51f5b88, untouched. CurrentAhostrehearsal notstarted."
+  "host_blocker": null,
+  "updated_at": "2026-10-29T19:33:54.779Z"
 }
