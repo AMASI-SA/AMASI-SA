@@ -99,10 +99,11 @@ export function googleDefaultDraft(accountId, type = "SEARCH") {
 
 function listItems(response) { return Array.isArray(response) ? response : response?.items || []; }
 function mezanProductId(product) { return String(product.product_id || product.id || "").trim(); }
-function googleOfferBlockReason(product, inventoryComplete) {
+function googleOfferBlockReason(product, inventoryComplete, feedLabel) {
     if (!inventoryComplete) return "لم يكتمل التحقق من قائمة المنتجات.";
     if (product.approved === false || !["ELIGIBLE", "ELIGIBLE_LIMITED"].includes(product.status)) return "أهلية العرض غير مؤكدة.";
     if (product.channel !== "ONLINE") return "العرض غير مثبت للبيع عبر الإنترنت.";
+    if (feedLabel && product.feed_label !== feedLabel) return "العرض لا يطابق تغذية المنتجات المختارة.";
     if (product.availability === "OUT_OF_STOCK") return "غير متوفر حاليًا.";
     if (product.availability !== "IN_STOCK") return "توفر المنتج غير مؤكد.";
     return "";
@@ -347,7 +348,7 @@ export default function GoogleCampaignComposer({ selection, readiness = {}, onCl
     const googleProductOptions = [...new Set(googleProducts.map((item) => item.offer_id).filter(Boolean))].map((offerId) => {
         const matches = googleProducts.filter((item) => item.offer_id === offerId);
         const product = matches[0];
-        const reason = matches.length !== 1 ? "يوجد أكثر من عرض بهذا الاختيار؛ يلزم التحقق." : googleOfferBlockReason(product, lookupState.productInventory?.complete === true);
+        const reason = matches.length !== 1 ? "يوجد أكثر من عرض بهذا الاختيار؛ يلزم التحقق." : googleOfferBlockReason(product, lookupState.productInventory?.complete === true, draft.shopping?.feed_label);
         return { ...product, id: offerId, name: product.title || product.name || "منتج حساب جوجل", eligible: !reason, reason };
     });
     const audienceOptions = lookupState.audiences.filter((item) => !String(item.type).includes("USER_LIST"));

@@ -14,21 +14,23 @@
     "pr": 1617,
     "reviewed_source": "c7a36165f48f433ab3275320187e4d9c5b298020",
     "tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
-    "integration": "path-only UI companion; does not include or modify backend dependency; must release together with c7 gate or verified equivalent"
+    "integration": "path-only UI companion; does not include or modify backend dependency; must release together with c7 gate or verified equivalent",
+    "ui_only_release": "Forbidden: previous production lookup omits channel, so UI without c7 would conservatively disable all new retail selections."
   },
   "behavior": [
     "New pair and group selections require complete current-account/current-merchant inventory, native ELIGIBLE/ELIGIBLE_LIMITED status, ONLINE channel and IN_STOCK availability; approved flag alone is insufficient.",
     "Duplicate offer IDs collapse to a disabled ambiguous choice; backend remains authoritative for full native identity, exact campaign feed, merchant/account ownership and final dispatch freshness.",
+    "If the owner explicitly selects a campaign feed, new offers with a different or unknown feed are disabled in both pickers. Leaving feed blank preserves the AI selection flow; full server validation is still required. Changing feed never removes existing saved offers.",
     "Existing unavailable or missing selections remain visible without automatic edits, stay in saved drafts, and can be explicitly removed by the owner.",
     "Owner-selected product/offer mapping is disclosed as an unverified manual assertion in selection and frozen review; native eligibility does not prove store-to-offer identity.",
     "Account changes clear scoped lookup options; failed or late previous-account lookups cannot restore stale selectable rows.",
     "Generic all-feed option, Search and nonretail PMax remain available. No campaign creation or execution logic changed."
   ],
   "validation": {
-    "focused_composer": "48 cases passed within full suite (27 existing + 21 new)",
+    "focused_composer": "51 cases passed within full suite (27 existing + 24 new)",
     "full_frontend": {
-      "result": "249 passed; 18 suites; 0 skips; exit 0",
-      "seconds": 12.13,
+      "result": "252 passed; 18 suites; 0 skips; exit 0",
+      "seconds": 7.352,
       "toolchain": "governed Node v22.23.2 / Yarn 1.22.22",
       "scope": "same 18 frontend paths as Google Ads full management workflow"
     },
@@ -43,5 +45,19 @@
     "Root integrates reviewed c7 backend plus UI paths onto latest production; run integrated CI and create fresh Source A/Intent B under Release Guard v5.",
     "Root verifies deployed owner flow; this slice does not claim live provider eligibility, independent mapping, automatic first launch or category membership."
   ],
-  "next_action": "Save immutable source checkpoint and draft PR for review; root alone owns release."
+  "next_action": "Save immutable source checkpoint and draft PR for review; root alone owns release.",
+  "previous_checkpoint": {
+    "source_sha": "0e40b85471d6e97eb168933886feb2b6355eed88",
+    "tree_sha": "538fd37d7c68775dd33704b9fefe548666b5f168",
+    "superseded_reason": "Root-requested explicit-feed mismatch UX improvement with three new regression cases",
+    "independent_review": "48 composer cases passed; independent merchant switch and late-response probes passed; final successor review pending",
+    "ci": {
+      "google_full_run": 40933480932,
+      "synthetic_merge": "8d8245a4544bc79c407749f470f53a36b6ab3952",
+      "backend": "1242 passed; 0 skips; 19.12s",
+      "frontend": "249 passed; 18 suites; build 6.41s; independently inspected by product_acceptance",
+      "readiness_run": 40933480809,
+      "readiness": "source candidate classified; reproducible double build and backend preflight passed; not a deployed release"
+    }
+  }
 }

@@ -345,6 +345,38 @@ test("duplicate offer IDs across feeds remain a single ambiguous disabled choice
     expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
 });
 
+test.each(["QA", undefined])("an explicit SA feed blocks new offers from %s in both pickers", async (feedLabel) => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, feed_label: feedLabel }, { ...googleGift, offer_id: "sa-offer", name: "عرض التغذية المختارة", feed_label: "SA" }] } : productLookups(url) }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, shopping: { ...shoppingDraft.shopping, feed_label: "SA" }, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness }); await openProductPicker();
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: عرض التغذية المختارة"]').disabled).toBe(false);
+    expect(container.textContent).toContain("العرض لا يطابق تغذية المنتجات المختارة");
+    await change("تغذية منتجات جوجل", "");
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(false);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(false);
+});
+
+test("choosing another feed preserves a previously selected offer until explicit removal", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, feed_label: "SA" }, { ...googleGift, offer_id: "qa-offer", name: "عرض التغذية الأخرى", feed_label: "QA" }] } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "changed_feed", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness }); await openProductPicker();
+    await change("منتج جوجل المقابل للمنتج 1", "offer-gift");
+    await change("تغذية منتجات جوجل", "QA");
+    const picker = container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]');
+    expect(picker.value).toBe("offer-gift");
+    expect(picker.querySelector('option[value="offer-gift"]').disabled).toBe(true);
+    expect(container.textContent).toContain("الاختيار محفوظ دون إثبات أهليته الحالية");
+    const checkbox = container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]');
+    expect(checkbox.checked).toBe(true); expect(checkbox.disabled).toBe(false);
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft).toMatchObject({ shopping: { feed_label: "QA" }, product_offer_selections: [{ product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" }], groups: [{ product_offer_ids: ["offer-gift"] }] });
+    await act(async () => checkbox.click());
+    expect(checkbox.checked).toBe(false); expect(checkbox.disabled).toBe(true);
+    await change("منتج جوجل المقابل للمنتج 1", "");
+    expect(picker.value).toBe("");
+});
+
 test.each(["unavailable", "missing"])("saved %s offers stay visible and unchanged until the owner removes them", async (state) => {
     const pair = { product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" };
     const savedDraft = { ...shoppingDraft, product_ids: ["owned_gift"], product_offer_selections: [pair], groups: [{ ...shoppingDraft.groups[0], product_offer_ids: ["offer-gift"] }] };
