@@ -1,7 +1,7 @@
 {
   "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
-  "state": "SOURCE_A_REVIEWED_SELECTIVE_INTEGRATION_FRESH_CI_PENDING",
-  "branch": "codex/google-catalog-stock-review-source2-20261029",
+  "state": "SOURCE_A_REVIEWED_CI_PASSED_WAIT_FOREIGN_LEASE",
+  "branch": "codex/google-catalog-stock-review-status2-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
   "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
   "integrated_from": {
@@ -11,8 +11,8 @@
   },
   "root_review": "Reviewed runtime/UI/proof validation and tests. M2→M5 overlap only catalogworkflow runner already22.04; preservecurrentcomment, strengthen34/6/no-skip gate. All other9files unchangedbyinterveningproductionfeatures. M5→M6 PR1615 changes have zero path overlap with all10selectedpaths. Exact9reviewedblobs preserved, freshSTATUSonly; unifiedReports untouched.",
   "verification": {
-    "root": "28passed1.06s -Werror0skip; whitespacepassed",
-    "independent": "28reader/routes and separate source review; overclaimfixes accepted",
+    "root": "28passed1.41s-Werror0skip; clean/diffcheck/strictfullhistory+exactmanifestcandidate1028backend243control",
+    "independent": "28passed-Werror; exact9reviewedblobs and zeroReports pathoverlap",
     "prior_replica_ci": {
       "run": 40915129669,
       "total": 34,
@@ -28,7 +28,23 @@
       "build": "passed",
       "root_log_verified": true
     },
-    "current_source_ci": "pending",
+    "current_source_ci": {
+      "all_workflows_success": 11,
+      "google": 40931996112,
+      "backend": 1242,
+      "frontend": 237,
+      "suites": 18,
+      "build_seconds": 5.97,
+      "replica": 40931995860,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0,
+      "readiness": 40931996398,
+      "artifact": 12921324906,
+      "root_logs_reviewed": true,
+      "checkout": "166cfe932c8c5539cdd7f634c2bdb15d9175fecf",
+      "retry": "Firstfrontendfrozeninstallregistry502; failedjobonlyrerun passedalltests/build, no sourcechange"
+    },
     "prior_source_a": {
       "pr": 1616,
       "source": "87812e17f4218b9bde05d5d4f73eed81f98d6161",
@@ -51,5 +67,18 @@
     "No policy, campaign or provider writes."
   ],
   "production_changed": false,
-  "next_safe_action": "Fresh exactsourceCI andindependentreview. Wait foreign codex-marketing-reports-20261029 leaseclosure beforeactualhostbuild. Rootonly v5A/B/merge/publish/verify3. No budgets/policy/adwrites."
+  "next_safe_action": "Fresh exactsourceCI andindependentreview. Wait foreign codex-marketing-reports-20261029 leaseclosure beforeactualhostbuild. Rootonly v5A/B/merge/publish/verify3. No budgets/policy/adwrites.",
+  "source_branch": "codex/google-catalog-stock-review-source2-20261029",
+  "release": {
+    "pr": 1618,
+    "source_a": "31d582f6fddacef63f758c82f6b80e7583025516",
+    "tree": "69e128a20531149d53a62ee32b0445ca7d6daba2",
+    "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+    "intent_sha256": "75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c",
+    "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+    "frontend_artifact": "29c827dba6192717c8f6eea7a7161648e69a95533d8d7462467a11c927ad92d3",
+    "intent_b": null,
+    "published": false
+  },
+  "host_blocker": "Foreignactiveleasecodex-marketing-reports-20261029, deploymentM6e51f5b88, untouched. CurrentAhostrehearsal notstarted."
 }
