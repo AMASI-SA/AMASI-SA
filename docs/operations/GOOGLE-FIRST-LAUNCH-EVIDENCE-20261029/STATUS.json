@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-first-launch-evidence-wip-20261029",
   "base_sha": "050b3da6ffc9660b2022a111117fd928da07ab51",
-  "state": "WIP evidence reader and pure contract locally verified; actual Mongo CI and independent review pending",
+  "state": "WIP exact-source unit and actual-Mongo CI passed; independent review pending; no runtime route",
   "restored_source": "aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06",
   "scope": "Reuse old pure first-launch preview as a nonauthorizing evidence contract; add trusted bounded read bundle and exact semantic revalidation in new files only.",
   "completed": [
@@ -19,7 +19,20 @@
     "regression_red": "Two new nonauthorizing-output/time-refresh regressions failed on restored old contract.",
     "tests": "144 passed, four actual-Mongo scenarios explicitly deselected locally; zero skips, exit0 with -W error. Actual scenarios run in dedicated CI only.",
     "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_automation_creation_launch_contract.py",
-    "ci": "Dedicated new workflow requires all148 cases, including exact four actual-Mongo scenarios, with zero skips. CI pending.",
+    "ci": {
+      "run_id": 40921050976,
+      "event": "push",
+      "tested_source_sha": "66a0d5f95b15394876546d9847a440aa01d3d346",
+      "checkout_sha_verified_in_log": true,
+      "new_cases": 148,
+      "real_mongo_cases": 4,
+      "skips": 0,
+      "test_elapsed_seconds": 2.8,
+      "required_casecount_assertion": "passed",
+      "reused_contracts": 444,
+      "reused_elapsed_seconds": 5.79,
+      "result": "success"
+    },
     "independent_review": "Pending",
     "reused_contracts": "444 passed in5.40s, zero skips, exit0 with -W error: creation contract/plan/inventory, campaign builder, workspace, native verification/client and official schema."
   },
@@ -32,9 +45,9 @@
     ".github/workflows/google-first-launch-evidence.yml"
   ],
   "remaining": [
-    "Run dedicated exact-source actual Mongo CI and inspect logs.",
-    "Obtain independent review and address findings.",
-    "A public route/UI, common transactional launch authority, stop provenance, gateway/worker/settlement and operational flags remain out of scope."
+    "Independent immutable-source review and findings resolution.",
+    "Root integration/reproducible v5 preparation is separate; do not publish WIP directly.",
+    "Public route/UI, common transactional launch authority, stop provenance, gateway/worker/settlement and flags remain out of scope."
   ],
   "limits": [
     "No API routes, claims, policy writes, native mutation or runtime flags.",
@@ -47,5 +60,8 @@
   "production_changed": false,
   "provider_calls": 0,
   "next_safe_action": "Inspect dedicated branch CI, verify actual148case/fourMongo/no-skip assertions and reused-contract suite, then request independent review of immutable source/tree. Do not merge or publish this WIP directly.",
-  "previous_checkpoint": "5e25fcd1c00b7d9f3e7355607fe683e7e6e2e444"
+  "previous_checkpoint": "5e25fcd1c00b7d9f3e7355607fe683e7e6e2e444",
+  "source_sha": "66a0d5f95b15394876546d9847a440aa01d3d346",
+  "source_tree": "9598aab91d84e412fa8de8607e025edf6d164e57",
+  "pr": 1610
 }
