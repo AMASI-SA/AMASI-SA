@@ -5,6 +5,15 @@ import asyncio
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def accepted_guard_in_unit_scope(monkeypatch):
+    # Simulate an accepted code migration only for unit contract checks. This is
+    # not transaction, replica, provider or production activation evidence.
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
+
+
 from integrations_control_center import google_ads_automation_creation_worker as worker
 from integrations_control_center.google_ads_automation_creation_contract import prepare_google_creation_intent
 from tests.test_google_ads_automation_creation_contract import prepared_case, NOW

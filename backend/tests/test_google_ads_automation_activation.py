@@ -134,6 +134,9 @@ def test_runtime_requires_both_default_off_flags_and_installed_native_gateway(mo
     monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED", "true")
     assert policies.automation_runtime_available() is False
     monkeypatch.setenv("GOOGLE_ADS_AUTOMATION_WORKER_ENABLED", "true")
+    assert policies.automation_runtime_available() is False
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
     assert policies.automation_runtime_available() is True
 
 

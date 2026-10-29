@@ -415,7 +415,7 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         await record_event(db, row, "approved", expected_status="executing", approved_at=now().isoformat(), approved_by=actor["actor_id"])
         if automation:
             automation_authority_entered = True
-            await automation_gateway._authorize_dispatch(db, row, client, metadata, epoch, fresh,
+            automation_ack = await automation_gateway._authorize_dispatch(db, row, client, metadata, epoch, fresh,
                 read_started_at=native_read_started_at)
         else:
             persisted_actor = await db.users.find_one({"id": actor["actor_id"]}, {"_id": 0})
@@ -426,7 +426,14 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
         submitted = True
         # The durable dispatch floor has no blocking audit call between its
         # acknowledgement and provider dispatch. Events remain in the proposal.
-        await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
+        if automation and kind == "standing_creation":
+            from .google_ads_automation_creation_authority import acknowledge_paused_creation_dispatch_floor
+            creation_floor = await acknowledge_paused_creation_dispatch_floor(db, row)
+        elif automation and kind == "standing_policy":
+            from .google_ads_automation_authority import acknowledge_standing_dispatch_floor
+            standing_floor = await acknowledge_standing_dispatch_floor(db, row, native_evidence=automation_ack['native_evidence'])
+        else:
+            await record_event(db, row, "submitted", expected_status="approved", audit=False, submission_started=True, submitted_at=now().isoformat(), reconcile_after=(now() + timedelta(seconds=30)).isoformat())
         if automation:
             # No await between this kill-switch observation and the HTTP call.
             # The acknowledged floor remains durable when dispatch is stopped.
@@ -435,6 +442,20 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
             # bundle. Check its EARLIEST observation again with no await before
             # HTTP, for both kinds of standing authority. Never rewind the floor.
             native_proof_age = now() - datetime.fromisoformat(native_read_started_at)
+            if kind == "standing_policy" and not (
+                datetime.fromisoformat(standing_floor["authority_valid_from"]) <= now()
+                < datetime.fromisoformat(standing_floor["authority_valid_until"])):
+                await record_event(db, row, "uncertain", expected_status="submitted", expected_submission_started=True,
+                    audit=False, safe_error="standing_authority_expired_after_floor")
+                return public_proposal(row)
+            if kind == "standing_creation" and not (
+                datetime.fromisoformat(creation_floor["authority_valid_from"]) <= now()
+                < datetime.fromisoformat(creation_floor["authority_valid_until"])):
+                # ACKed floor is in flight even when authorization expires
+                # during commit. Retain its hold/fence for reconciliation.
+                await record_event(db, row, "uncertain", expected_status="submitted", expected_submission_started=True,
+                    audit=False, safe_error="creation_authority_expired_after_floor")
+                return public_proposal(row)
             if (not execution_enabled() or not timedelta(0) <= native_proof_age < timedelta(seconds=90)
                 or (kind == "standing_creation" and not automation_gateway.creation_dispatch_enabled())):
                 # This branch has an ACKED floor and has not invoked mutate.
