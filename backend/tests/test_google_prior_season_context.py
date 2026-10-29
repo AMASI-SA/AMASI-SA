@@ -43,3 +43,10 @@ async def test_invalid_or_forged_owner_prior_context_is_not_saved(change):
     response, db = await save(context(**change))
     assert response.status_code == 422
     assert db.plans.rows == []
+
+
+@pytest.mark.asyncio
+async def test_actual_owner_can_save_366_inclusive_days_without_claiming_year_alignment():
+    response, _ = await save(context(date_from="2024-01-01", date_to="2024-12-31"))
+    assert response.status_code == 200
+    assert response.json()["review_context"]["prior_season"]["alignment_verification"] == "unknown"

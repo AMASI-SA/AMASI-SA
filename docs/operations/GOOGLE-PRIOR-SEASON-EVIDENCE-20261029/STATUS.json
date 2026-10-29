@@ -2,17 +2,26 @@
   "task": "google-prior-season-evidence-20261029",
   "branch": "codex/google-prior-season-evidence-20261029",
   "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
-  "state": "coherent_standalone_backend_wip_mongo_pending",
+  "state": "backend_candidate_frozen_actual_mongo_ci_and_review_pending",
   "production_changed": false,
   "provider_calls_performed": false,
   "ownership": "Assigned CommercialPlanFields optionalprior context+review_context, internal strictstorequalifier factoring, newpriorreader/route/tests/workflow. No sharedrouter/UI or sourcewriter/normalizer edits. Planningagent retains UI ownership.",
   "implemented": "Strict nullable PriorSeasonContext(date_from/date_to/season_label/alignment_note/calendar_reference_text),1..366inclusive days andpriorend<currentstart. Ownerdeclared interval/reference staysalignment_verification unknown; Input writeack remains required. Shared rawline qualifier internallyfactored; currentfourwindows preserved. Newpurepriorwrapper closedserverdays/exactexplicitinterval only, no354/365shift. Newexplicit savedplan GETprior-season-observations reads exactprior±1band only, samePROJECTION/index/type/size/count guards. ActualHTTPwriter→reader, provenance/revision/fullfields races, no-prior/closedday/truncation/missingindex tests; no provider/catalog/backfill.",
   "verification": {
     "red": "ActualHTTP ownerPUT prior context failed422 extra_forbidden beforeimplementation",
-    "local": "101focused/-Werror/zero skips2.20s including actualHTTPpriorwriter→route andallprior/current/modelcontracts",
+    "local": "103focused/-Werror/zero skips2.27s; existingcurrentgoldendigest unchanged",
     "unchanged_current": "Characterization digest captured fromimmutable8dc beforefactoring: empty/valid/duplicate/truncated currentresponses af8875a23d4868f15cf835e6863239b251c0fec8d59b1429bc4c6ed39ce583eb stillmatches",
-    "actual_mongo": "Nextrequired: actualwriter prior/currentband separation, rawprojection/refund/dedup, races/index/ack/no-context cases",
-    "ci": "Not configured yet"
+    "actual_mongo": "12collected actualwriter→priorread/currentband separation, exactRiyadh offsetdate, duplicates/refund/malformedprojection,3revision/fields/audit races,missingindex,missing/falsewriteack,legacyNone skipread; not executed locally",
+    "ci": "DedicatedUbuntu22.04/Mongo8.0.26 loopback27481/gPriorSeason expected115total/12actual/zero-skips gate pendingremotecheckpoint; fullGoogle CI andexistingcurrentobservations replica required"
   },
-  "next": "ActualMongo/disposableCI thenindependentreview; heldsharedrouter/UI untouched."
+  "next": "Fetchdedicated115/12actualMongo, existingcurrentreplica/fullGoogle CI logs, independentexactsource review. No runtime edit absentconfirmedfailure; root owns later freshsource/sharedattach/UI.",
+  "route_contract": {
+    "attach": "attach_google_prior_season_routes(router,db,current_user)",
+    "method": "GET",
+    "path": "/google_ads/commercial-plans/{plan_id}/prior-season-observations?expected_revision>=1",
+    "source": "SavedFields prior context andserveras_of only; exactpriorquery±1 using existingprojection/strictsourcequalifier, max1001/index/3s/6s",
+    "provenance": "Actualowner save updated_by/aware updated_at<=serveras_of, revision/fullfields/audit reread; metadata proves ownerrecord only, never calendaralignment",
+    "no_prior": "LegacyNone→notconfigured, observationsNone, noorderquery",
+    "authority": "alignmentunknown/growthnull/profitabilitynull/executionfalse; partialrawlineobservations notnetsales"
+  }
 }

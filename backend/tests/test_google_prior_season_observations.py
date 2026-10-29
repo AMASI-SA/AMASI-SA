@@ -53,6 +53,15 @@ def test_366_inclusive_days_supported_without_calendar_shift_or_zero_fill():
     assert result["windows"]["owner_reviewed_prior_season"]["from"] == "2024-01-01"
 
 
+def test_prior_currency_groups_stay_native_and_separate():
+    first, second = prior_order(), prior_order()
+    second.update(order_id="11", order_number="21", currency="USD")
+    second["raw_by_source"]["salla_direct"].update(id=11, reference_id=21, currency="USD")
+    groups = prior([first, second])["products"][0]["currency_groups"]
+    assert [g["currency_code"] for g in groups] == ["SAR", "USD"]
+    assert all(g["platform_account_id"] is None for g in groups)
+
+
 def test_current_four_window_contract_matches_pre_factor_baseline():
     value = order()
     cases = [observe_product_lines(rows, owner_id="owner", product_ids=["123", "456"], as_of=NOW, truncated=truncated)

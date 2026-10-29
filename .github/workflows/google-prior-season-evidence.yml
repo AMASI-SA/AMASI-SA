@@ -1,0 +1,71 @@
+name: Google prior season evidence
+on:
+  push:
+    branches: [codex/google-prior-season-evidence-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_commercial_plan.py
+      - backend/integrations_control_center/google_store_product_observations.py
+      - backend/integrations_control_center/google_prior_season_*.py
+      - backend/tests/test_google_prior_season_*.py
+      - .github/workflows/google-prior-season-evidence.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replica:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1 cryptography==50.0.2
+          python-multipart==0.0.32 PyJWT==2.15.1 bcrypt==4.1.3
+          python-dotenv==1.2.4 pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Start disposable loopback replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name google-prior-season-rs -p 127.0.0.1:27481:27481 mongo:8.0.26 --port 27481 --replSet gPriorSeason --bind_ip_all
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-prior-season-rs mongosh --port 27481 --quiet --eval 'if(db.adminCommand({ping:1}).ok !== 1) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec google-prior-season-rs mongosh --port 27481 --quiet --eval 'if(rs.initiate({_id:"gPriorSeason",members:[{_id:0,host:"127.0.0.1:27481"}]}).ok !== 1) quit(1)'
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-prior-season-rs mongosh --port 27481 --quiet --eval 'const h=db.hello(); if(h.setName !== "gPriorSeason" || h.isWritablePrimary !== true || !Number.isInteger(h.logicalSessionTimeoutMinutes)) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+      - name: Test prior season evidence against replica
+        env:
+          GOOGLE_PRIOR_SEASON_TEST_MONGO_URI: mongodb://127.0.0.1:27481/
+          PYTHONPATH: backend
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -q -Werror --junitxml=prior-season-results.xml backend/tests/test_google_prior_season_context.py backend/tests/test_google_prior_season_observations.py backend/tests/test_google_prior_season_routes.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_store_product_observations.py backend/tests/test_google_plan_store_observations.py backend/tests/test_google_saved_plan_fields_contract.py backend/tests/test_google_prior_season_mongo.py
+          python - <<'PYGATE'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('prior-season-results.xml').getroot().findall('.//testcase')
+          replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_prior_season_mongo')]
+          assert len(cases) == 115 and len(replica) == 12
+          assert any(c.attrib.get('name') == 'test_actual_writer_prior_query_and_current_four_windows_remain_separate' for c in replica)
+          assert sum(c.attrib.get('name','').startswith('test_actual_prior_read_race_invalidates_revision_fields_and_review_provenance') for c in replica) == 3
+          assert sum(c.attrib.get('name','').startswith('test_actual_prior_context_write_still_requires_explicit_review_ack') for c in replica) == 2
+          assert any(c.attrib.get('name') == 'test_actual_prior_missing_index_has_no_unbounded_fallback' for c in replica)
+          assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
+          print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
+          PYGATE
+      - name: Remove disposable replica
+        if: always()
+        run: docker rm -f google-prior-season-rs
