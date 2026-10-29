@@ -124,3 +124,11 @@ async def test_mongos_is_rejected_without_write_or_capability_until_commit_contr
     assert error.value.detail['code']=='google_budget_guard_transactions_unavailable'
     assert not db.rows and not db.calls
     assert db.sessions[0].commit_calls==0 and not db.sessions[0].in_transaction
+
+
+@pytest.mark.asyncio
+async def test_engine_probe_only_writes_allowlisted_technical_namespace():
+    db=DB();capability=await guard.probe_google_budget_guard_transactions(db)
+    assert capability.supported and not db.rows
+    assert db.calls and all(name==guard.TECHNICAL_PROBES for name,session in db.calls)
+    assert all(session.aborted for session in db.sessions)

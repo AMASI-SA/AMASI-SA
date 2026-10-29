@@ -214,5 +214,26 @@
       ]
     },
     "independent_review": "budget_audit independently50guard/probe/lifecycleunits-Werror; deadlinechecks+mongosgateaccepted; controlledsameoperation503racegateacceptedwithoutbroadenederroracceptance/invariantweakening. FinalactualCIgreen."
+  },
+  "technical_engine_probe_followup": {
+    "state": "WIP minimal namespacefix; freshactualstrict-validatorCIpending",
+    "base": "43c56118e579e2aa4cb20f934d3633bd2cfbdad0",
+    "change": "Engine-abortprobe writes only dedicated allowlistedgoogle_ads_budget_guard_engine_probes_v1, never syntheticbusinessbudget/policyrecord. PublicrawabortACK/originaldeadline/coalescing/retainedFuturecleanup/60sinternalengineproof unchanged. No policypermission/validator claim.",
+    "local_tests": "162passed3.33s-Werror affectedprobe/guard/lifecycle/integration/standing+creationpolicy; newunitassertsallprobeoperationsonlytechnicalnamespace.",
+    "actual_ci_pending": "124expectedincl29Mongo; newstrictactualBUDGET_GUARDSvalidator permitsvalidguardrows butrejectsprobe_only/missingrequiredfields. Engineprobe succeedsinTECHNICALnamespace/abortswithoutpersisting; validactualguardTXcommits; tighteningbusinessvalidator thencausesactualguardTXtofailclosed+rollbackpolicy whileengineproofstillpasses. Foreignbusinessrowunchanged.",
+    "namespace_gate_assessment": {
+      "implemented": false,
+      "no_op_limit": "Impossiblequery ormatchedempty-$set+explicitabort mayproveonlycurrentupdate-command authorization/zeroeffect, notinsert/createIndex/datavalidation/uniqueindexes. Mongo8.0.26 update_stage.cpp gatesactualwrite+collectionvalidation ondocWasModified; officialMongo docs separateinsert/upsertprivilege. No upsertTrue/invalidpolicy/syntheticbudgetprobe.",
+      "smallest_candidate": "Boundedcurrentconnectioneffectiveaction/resourceproof +allowlistedread-onlycollectionoptions/indexmetadata/ownerlegacyshape audit; optionalimpossiblequeryupdate upsertFalse/multiFalse, n0/nModified0, maxTimeMS/retainedoriginaldeadline/rawabortACK. No broadmetadataimplementation orusername/role/host/DBname exposure. Unknownrole/schema/indexfacts remainunproved; no disabled-auth emptyprivileges=>allauthorized inference.",
+      "real_evidence_limit": "ExistingrealCIprovesengine/lifecycle, notauthenabledrestricted-role/no-opvalidatorsemantics. No localmongod/dockerfound. Dedicateddisposableauth-enabledmatrix neededbeforeclaiming proposedgate proven; notimplemented."
+    },
+    "rollout_separation": {
+      "before_six_config_handlers": "Actualproductionreplicaset/rawmajority+j/readback proof +exactnamespaceoperationgrants/index/schema/legacyshape compatibility. KeepflagsFalse andsavedrevocation DB-only/noOAuth. No-opupdatealone cannotprovefirstinsert orvalidators.",
+      "before_automatic_budget_increase": "LivecompleteGooglebudgetresource/explicitShared/referenceCount/status/period/amount inventory+identity/currency/timezone/observed<90s; allmanualENABLEDcommitments/pendingprivateclaims/creationledger/proposals/fences/guardallocations completeandbounded. Unknownbindingsblocksnewincrease; no refunds/releasesguess.",
+      "external_writers": "Mongoaccountfence coordinatesMezanwriters only; Googleconsole/otherapps canrace withoutproviderCAS. Nativepreflightnotatomicexternal-writerprotection orhardspendcap. Thisblocksactivation untiloperatingcontract/evidence; notanOAuthrevocationdependency.",
+      "live_flags": "No environment/productionflaginspection inthisassessment. SourceruntimeFalse/defaultoff gatesunchanged; no actualGoogleinventory/providerquery."
+    },
+    "preserved": "Frozen1612/1606helpers,sixhandlers,wiring,planner,resumeUI,providerpathsunchanged; no livebusinesswrites/flags/intent/deployment.",
+    "next_safe_action": "Runfocusedactualstrict-validatorCI+independentbudget_audit; rootseparatelyreview namespacegate/securityscope beforemetadatafeature. Rootlaterselectiveintegrationpreserveslatestprod/resumeguards."
   }
 }

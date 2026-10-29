@@ -39,6 +39,7 @@ from .google_ads_automation_creation_policy import CREATION_POLICIES, PUBLIC_FIE
 from .google_ads_client import problem
 
 BUDGET_GUARDS = 'mezan_google_ads_automation_budget_guards_v1'
+TECHNICAL_PROBES = 'google_ads_budget_guard_engine_probes_v1'
 PROTOCOL_VERSION = 1
 MAX_ALLOCATIONS = 100
 MAX_PAYLOAD_BYTES = 262144
@@ -106,6 +107,7 @@ class BudgetGuardSnapshot:
 
 @dataclass(frozen=True)
 class _TransactionCapability:
+    """Engine/session/abort proof only, not application permissions or validators."""
     supported: bool
     database: object
     probed_monotonic: float
@@ -257,6 +259,8 @@ async def probe_google_budget_guard_transactions(db):
     or cancel executor-backed driver Futures on a caller timeout/cancellation.
     Capability is issued only after explicit server abort ACK and async cleanup.
     Replica sets only: sharded commit/recovery-token semantics are not proved.
+    Writes only TECHNICAL_PROBES, never synthetic policy/budget records. This
+    proves no business-collection privilege, validator or legacy-data contract.
     """
     global _pending_probe
     state = _pending_probe
@@ -277,7 +281,7 @@ async def probe_google_budget_guard_transactions(db):
                         or type(hello.get('logicalSessionTimeoutMinutes')) is not int):
                         _fail('google_budget_guard_transactions_unavailable')
                     _transaction(session)
-                    result = await db[BUDGET_GUARDS].insert_one(
+                    result = await db[TECHNICAL_PROBES].insert_one(
                         {'_id': 'probe_' + uuid.uuid4().hex, 'probe_only': True}, session=session)
                     if result.acknowledged is not True:
                         raise ValueError('unacknowledged probe')

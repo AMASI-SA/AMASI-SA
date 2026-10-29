@@ -154,8 +154,8 @@ jobs:
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 122
-          assert len(mongo) == 28
+          assert len(cases) >= 124
+          assert len(mongo) == 29
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY
       - name: Preserve bounded Mongo diagnostics
