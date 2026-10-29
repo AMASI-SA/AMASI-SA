@@ -1,5 +1,5 @@
 {
-  "status": "fresh_direct_production_SourceA_locally_verified_remote_CI_pending",
+  "status": "SEALED_SourceA_bounded_review_PASS_21CI_SUCCESS_1conditional_skip_root_release_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "base_tree": "7b9d58160619fc16756cf330fde6523b24156e71",
   "reviewed_feature_source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1",
@@ -887,5 +887,305 @@
     "Live category preview is owner-triggered bounded membership only; native inventory preview is explicit at most5 observed nonexcluded products, not ad eligibility or mapping/readiness.",
     "Prior season context is owner-declared with unknown calendar alignment; no inferred dates, automatic selection, budget or launch authority."
   ],
-  "pending": "RemoteSourceA/DraftPR, all freshCI/actualMongo/build/readiness and independent preservation review. Root production/host acceptance remains separate."
+  "pending": "Root current-head recheck, candidateartifact byte validation, operationalintentB/host/release/live acceptance. SourceA remains immutable; no merge/host/providerwrite by integrationagent.",
+  "frozen_source": {
+    "sha": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+    "tree": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
+    "sole_parent": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+    "pr": 1655,
+    "local_equivalent": "d504aa6873a733b1f8a402446f45cb5bfe7deaeb",
+    "source_mutated_after_freeze": false
+  },
+  "independent_preservation_review": {
+    "verdict": "bounded PASS; no confirmed blocker",
+    "reviewer": "google_product_acceptance",
+    "evidence": "Sole08160 parent;96 accepted ddc non-doc blobs exact;97 total paths;43 exact protected records plus approved12 additive router lines/two manifest records and one AuthContext test mock exception; all56 original workflow test paths retained within90; current intent unchanged.",
+    "runtime_tests": "Accepted identical ddc runtime evidence retained; no needless duplicate full local run. Fresh SourceA26backend-Werror0skip and29AuthProviderUI also passed locally.",
+    "ci": "Reviewer independently read fresh151/10,45/7,129/19Mongo0skip;1559backend/561UI/build4.96s; directAReadiness156preflight/two builds and source/CI tree parity.",
+    "qualification": "Bounded source preservation and integration PASS; all sourceCI now complete. Root owns candidate artifact byte validation, operationalA/B/currenthead/host/live acceptance."
+  },
+  "fresh_source_ci": {
+    "checkout": {
+      "sha": "63a8b2b73b8f61efdfe090f5321e8d75931cbdac",
+      "tree": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
+      "parents": [
+        "08160c883a040f3a9fb49a165dab8074d4ef7309",
+        "5595d196a8874d477da7276c47cc9ed7ab5d27a6"
+      ],
+      "exact_source_tree_equality": true,
+      "verification": "GitData tree and fetched git diff both prove no difference. Security and Readiness check out direct5595."
+    },
+    "saved_fields": {
+      "run": 40970499750,
+      "job": 123785751151,
+      "passed": 151,
+      "actual_mongo": 10,
+      "skipped": 0,
+      "seconds": 8.92
+    },
+    "native": {
+      "run": 40970499795,
+      "job": 123785751551,
+      "passed": 45,
+      "actual_mongo": 7,
+      "skipped": 0,
+      "seconds": 5.14,
+      "ui_job": 123785751809,
+      "ui_passed": 368,
+      "ui_suites": 14,
+      "ui_seconds": 2.804,
+      "build_seconds": 3.82
+    },
+    "prior": {
+      "run": 40970499804,
+      "job": 123785751224,
+      "passed": 129,
+      "actual_mongo": 19,
+      "skipped": 0,
+      "seconds": 6.47
+    },
+    "full_google": {
+      "run": 40970499731,
+      "backend_job": 123785753243,
+      "backend_passed": 1559,
+      "backend_seconds": 27.45,
+      "ui_job": 123785752936,
+      "ui_passed": 561,
+      "ui_suites": 30,
+      "ui_seconds": 11.865,
+      "build_seconds": 4.96
+    },
+    "linked": {
+      "run": 40970499783,
+      "job": 123785751600,
+      "passed": 49,
+      "actual_mongo": 11,
+      "skipped": 0,
+      "seconds": 5.88,
+      "ui_job": 123785751385,
+      "ui_passed": 180,
+      "ui_suites": 7,
+      "build_seconds": 6.56
+    },
+    "live_category": {
+      "run": 40970499753,
+      "job": 123785750904,
+      "passed": 48,
+      "actual_mongo": 8,
+      "skipped": 0,
+      "seconds": 4.25,
+      "ui_job": 123785751123,
+      "ui_passed": 234,
+      "ui_suites": 9,
+      "build_seconds": 5.22
+    },
+    "category_membership": {
+      "run": 40970499799,
+      "job": 123785752233,
+      "passed": 38,
+      "actual_mongo": 9,
+      "skipped": 0,
+      "seconds": 3.74,
+      "ui_job": 123785752566,
+      "ui_passed": 132,
+      "ui_suites": 5,
+      "build_seconds": 4.04
+    },
+    "store_observations": {
+      "run": 40970499768,
+      "job": 123785751084,
+      "passed": 91,
+      "actual_mongo": 14,
+      "skipped": 0,
+      "seconds": 5.58,
+      "ui_job": 123785751375,
+      "ui_passed": 111,
+      "ui_suites": 4,
+      "build_seconds": 6.48
+    },
+    "prior_child": {
+      "run": 40970499794,
+      "job": 123785751571,
+      "actual_http_fixture_passed": 1,
+      "ui_passed": 52,
+      "ui_suites": 2,
+      "build_seconds": 6.58
+    },
+    "security": {
+      "run": 40970499756,
+      "frontend_job": 123785751617,
+      "backend_job": 123785751794,
+      "checkout": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+      "ui_passed": 2667,
+      "ui_suites": 329,
+      "ui_seconds": 54.743,
+      "production_dependency_vulnerabilities": 0,
+      "build_seconds": [
+        3.55,
+        3.53
+      ],
+      "backend_security_passed": 57,
+      "backend_security_seconds": 1.23,
+      "both_jobs": "SUCCESS"
+    },
+    "readiness": {
+      "run": 40970499873,
+      "frontend_job": 123785752508,
+      "backend_job": 123785752185,
+      "status": "SUCCESS",
+      "source_classification": "candidate SourceA direct08160",
+      "preflight_passed": 156,
+      "preflight_seconds": 3.066,
+      "reproducible_build_seconds": [
+        6.08,
+        6.53
+      ],
+      "candidate_load_validation": "CI load_candidate_release_intent and clean-worktree proof passed",
+      "host_jobs": "Skipped for candidate SourceA; no host action by this agent"
+    },
+    "candidate_artifact": {
+      "id": 12939308546,
+      "name": "release-v5-reviewed-intent-candidate",
+      "size_in_bytes": 271031,
+      "zip_digest": "sha256:dc28d16475b4404f5078667499556deb2287143e0e4bb14099e24a679504648c",
+      "expires_at": "2026-10-31T23:06:02Z",
+      "source": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+      "verification": "Artifact metadata read and sent root. Root owns download-byte validation/operational B; no claim of local artifact download by integration agent."
+    },
+    "workflows": [
+      {
+        "id": 40970499750,
+        "name": "Google saved plan fields contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499786,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499768,
+        "name": "Google store product observations",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499783,
+        "name": "Google linked campaign evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499771,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499713,
+        "name": "Production TikTok Native Hierarchy",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499753,
+        "name": "Google live category preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499794,
+        "name": "Google prior season review UI",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499799,
+        "name": "Google category membership",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499731,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499756,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499688,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499690,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 40970499739,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499854,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499864,
+        "name": "Google product evidence contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499804,
+        "name": "Google prior season evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499873,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499795,
+        "name": "Google native inventory preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499823,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499766,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40970499723,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "conclusions": "All22 workflow records completed:21SUCCESS includingReadiness/Security/CodeQL/OperationalStock,1 conditionalTikTokCreator skip; no failures. Strict replica andUI test gates have zero skipped tests."
+  }
 }
