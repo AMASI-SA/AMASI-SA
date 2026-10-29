@@ -63,7 +63,19 @@ async def verify_budget_storage(db):
             # async end_session instead runs driver cleanup off the event loop.
             # Cleanup may safely abort our own transaction again; it never turns
             # a failed/unknown explicit abort response into diagnostic success.
-            await session.end_session()
+            cleanup = asyncio.ensure_future(session.end_session())
+            cancelled = False
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    # Cancelling a Motor Future does not stop its executor
+                    # thread. Keep that Future alive/awaitable and retain our
+                    # per-process slot until the actual cleanup completes.
+                    cancelled = True
+            cleanup.result()
+            if cancelled:
+                raise asyncio.CancelledError()
         return _result(True)
     async def bounded_probe():
         with timeout(TIMEOUT_SECONDS):
@@ -73,7 +85,8 @@ async def verify_budget_storage(db):
     _active_probe = task
     # wait_for waits for cancellation cleanup; a stuck abort would then exceed
     # the HTTP deadline. Bound the response independently while the driver-owned
-    # session cleans up only its own transaction. Never retry this probe.
+    # session finishes only its own work/cleanup. Do not cancel driver Futures
+    # on the HTTP deadline: cancellation cannot stop executor threads. Never retry.
     def consume(done):
         global _active_probe
         if not done.cancelled():
@@ -84,11 +97,11 @@ async def verify_budget_storage(db):
     try:
         done, _ = await asyncio.wait({task}, timeout=TIMEOUT_SECONDS)
         if not done:
-            task.cancel()
             raise TimeoutError()
         return task.result()
     except asyncio.CancelledError:
-        task.cancel()
+        # Request cancellation must not cancel executor-backed driver Futures.
+        # The retained probe owns its session until its CSOT work/cleanup ends.
         raise
     except Exception:
         # Do not expose driver messages, connection strings, hosts or DB names.

@@ -66,7 +66,9 @@ class ProbeDB:
         assert session.active
         self.writes += 1; self.documents.append(document)
         if self.failure == 'write': raise RuntimeError('mongodb://secret-host/private-db')
-        if self.failure == 'timeout': await asyncio.Event().wait()
+        if self.failure == 'timeout':
+            await asyncio.sleep(.04)
+            raise TimeoutError('simulated driver deadline')
         return SimpleNamespace(acknowledged=self.failure != 'unacknowledged')
 
 
@@ -140,7 +142,7 @@ async def test_delayed_abort_is_retained_bounds_concurrency_and_finishes_in_own_
     assert time.monotonic() - started < .5
     task = readiness._active_probe
     assert task is not None and not task.done()
-    await asyncio.wait_for(db.cancellation_seen.wait(), timeout=.5)
+    assert db.abort_entered.is_set()
     second = ProbeDB()
     try:
         with pytest.raises(HTTPException) as busy:
@@ -151,11 +153,42 @@ async def test_delayed_abort_is_retained_bounds_concurrency_and_finishes_in_own_
         assert readiness._active_probe is task and not task.done()
     finally:
         db.release_abort.set()
-        result = await asyncio.wait_for(asyncio.shield(task), timeout=.5)
-        assert result['storage_verified'] is True  # result discarded by expired HTTP request
+        result = await asyncio.wait_for(asyncio.gather(asyncio.shield(task), return_exceptions=True), timeout=.5)
+        assert result[0]['storage_verified'] is True  # late result never upgrades expired HTTP response
         await asyncio.sleep(0)  # consume callback releases the slot
     assert readiness._active_probe is None
     assert (db.started, db.writes, db.raw_aborts, db.ended) == (1, 1, 1, 1)
     assert (await readiness.verify_budget_storage(second))['storage_verified'] is True
     await asyncio.sleep(0)
+    assert readiness._active_probe is None
+
+
+@pytest.mark.asyncio
+async def test_http_timeout_does_not_cancel_executor_backed_async_end_session_future(monkeypatch):
+    monkeypatch.setattr(readiness, 'TIMEOUT_SECONDS', .02)
+    db = ProbeDB()
+    cleanup_future = asyncio.get_running_loop().create_future()
+    original_session = db.session
+    async def session():
+        value = await original_session()
+        # Motor's public async end_session returns an executor-backed Future;
+        # cancelling its waiter cannot stop underlying synchronous driver work.
+        def end_session():
+            db.ended += 1
+            return cleanup_future
+        value.end_session = end_session
+        return value
+    db.client.start_session = session
+    with pytest.raises(HTTPException):
+        await readiness.verify_budget_storage(db)
+    try:
+        readiness._active_probe.cancel()  # cancellation while executor cleanup is in flight
+        await asyncio.sleep(0)
+        assert not cleanup_future.cancelled(), 'driver cleanup Future must remain awaitable after HTTP deadline'
+        assert readiness._active_probe is not None and not readiness._active_probe.done()
+    finally:
+        if not cleanup_future.done(): cleanup_future.set_result(None)
+        if readiness._active_probe is not None:
+            await asyncio.gather(readiness._active_probe, return_exceptions=True)
+        await asyncio.sleep(0)
     assert readiness._active_probe is None

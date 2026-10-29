@@ -8,7 +8,7 @@
   "contract": {
     "transaction": "Own session; snapshot read concern/majority write concern. Require acknowledged unique probe insert then explicit admin abortTransaction response numericok1 with no writeConcernError/writeErrors, same public session. Always await public async end_session within retained original task; never Motor async context cleanup, never commit/deleteforeign.",
     "result": "Storage diagnostic only; no reusable capability, execution_authorized=false, funding_ready=false, policy_changed=false, provider_writes=0",
-    "deadline": "8 seconds HTTP and driver operation deadline. On timeout cancel own probe and fail closed; own-session cleanup may continue asynchronously, never retry.",
+    "deadline": "8s HTTP deadline plus PyMongo CSOT in original retained task. Late results cannot upgrade expiredHTTP response; no HTTP-triggered driverFuture cancellation. Resource cap1 until actual driverwork/sessioncleanupdone.",
     "not_proven": [
       "Majority commit durability: probe intentionally aborts, never commits.",
       "Production Mongo capability until deployed diagnostic is explicitly invoked successfully.",
@@ -16,7 +16,7 @@
     ]
   },
   "verification": {
-    "backend": "110 passed2.58s -Werror for timing-test checkpoint (runtime unchanged).",
+    "backend": "111passed2.55s -Werror; includes red\u2192green executor-Future cancellation retention regression.",
     "frontend": "19 passed in 1.29s with governed Node22.23.2/Yarn1.22.22",
     "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base",
     "actual_mongo_previous_sha": {
@@ -32,13 +32,13 @@
       "job": 123578939047,
       "result": "113passed89.87s, failures/errors/skips0, -Werror"
     },
-    "timing_ci_pending": "Actual ASGI owner HTTP503 response <=12s under both failpoint faults; concurrent event-loop heartbeat maxgap<1.5s; retained task separately awaited/cleanupduration printed. Dedicated CI includes -s --durations=5. No inference from previous suite duration."
+    "timing_ci_pending": "Final-runtime CI pending:114expectedtests including actual HTTP <=12s, eventloopmaxgap<1.5s and separatecleanupduration for both failpoints."
   },
   "next_safe_action": "Run actual disposable replica CI including failpoints; request independent review of exact checkpoint before root creates direct-child release source. Parent owns release/productionprobe.",
   "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
   "code_checkpoint_sha": "1a31164cb3e4a5d4125a4aaf708be4ba072b0581",
   "pull_request": 1603,
-  "cleanup_contract": "At most one pending diagnostic task per process, held by strong reference until its original task closes session/CSOT. HTTP deadline remains8s; unfinished cleanup rejects subsequent probes503; no retries or unbounded cleanup await in HTTP handler.",
+  "cleanup_contract": "One strongly retained probe per process. HTTP/request cancellation never cancels executor-backed driver operations; failclosed response deadline8s is independent of original task work+cleanup. Further probes503 until actual taskdone. Public async end_session Future additionally shielded if original task itself cancelled; original CSOT context closes only after cleanup Future completion. No retry/unbounded HTTP cleanup await.",
   "motor_assessment": {
     "evidence": "Motor3.7.1 AsyncIOMotorClientSession.__aexit__ calls synchronous delegate.__exit__. PyMongo4.18.3 ClientSession.abort_transaction swallows OperationFailure/ConnectionFailure per spec. Source inspected locally; no live fault injection.",
     "limitation": "Raw command response now proves abort ACK; pending timing tests separately assess actual HTTP responsiveness and retained cleanup. No production failure inferred from original fake warning or whole-suite duration.",

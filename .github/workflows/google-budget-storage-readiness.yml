@@ -84,7 +84,7 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse('storage-readiness.xml').getroot()
           cases = root.findall('.//testcase')
-          assert len(cases) >= 113
+          assert len(cases) >= 114
           assert not root.findall('.//skipped') and not root.findall('.//failure') and not root.findall('.//error')
           assert any('readiness_mongo' in case.get('classname','') for case in cases)
           print({'tests':len(cases),'failures_errors_skips':0})
