@@ -426,3 +426,26 @@ async def test_real_interrupted_reply_retains_original_task_and_never_replays_dd
         retry = await api.post(PREFIX + '/execute', json=body)
         assert retry.status_code == 409 and retry.json()['detail']['code'].endswith('reconciliation_required')
         assert capture.commands == prior
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['prepare_existing', 'execute_verified', 'receipt'])
+async def test_real_owner_revoked_during_receipt_read_cannot_receive_token_or_history(monkeypatch, action):
+    async with owner_case(monkeypatch) as (raw, db, api, capture, _):
+        body = await prepare(api)
+        if action == 'execute_verified':
+            completed = await api.post(PREFIX + '/execute', json=body)
+            assert completed.status_code == 200, completed.text
+        before = deepcopy(capture.commands)
+        async def revoke(value):
+            if value.get('find') == RECEIPTS and value.get('filter') == {'_id': SLOT}:
+                await raw.users.update_one({'id': 'owner'}, {'$set': {'disabled': True}})
+        db.after = revoke
+        if action == 'prepare_existing':
+            response = await api.post(PREFIX + '/prepare', json={'request_nonce': NONCE, 'acknowledge_preparation_only': True})
+        elif action == 'execute_verified':
+            response = await api.post(PREFIX + '/execute', json=body)
+        else:
+            response = await api.get(PREFIX + '/receipt')
+        assert response.status_code == 403 and response.json()['detail']['code'].endswith('owner_required')
+        assert 'execution_token' not in response.text and capture.commands == before

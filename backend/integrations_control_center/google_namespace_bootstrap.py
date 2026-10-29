@@ -384,7 +384,9 @@ async def _prepare(db, user, body, state):
         await _owner(db, user, session, state)
         await _catalog(db, session, state, (SLOTS,))
         prior = await _receipt(db, session, state)
-        if prior is not None: return _public_receipt(prior, user)
+        if prior is not None:
+            await _owner(db, user, session, state)
+            return _public_receipt(prior, user)
         observation = await _snapshot(db, user, session, state)
         if all(observation['catalog'][name] is not None for name in TARGETS.values()):
             return _result('already_compatible_empty_noop', namespace_contract_verified=True)
@@ -423,7 +425,9 @@ async def _execute(db, user, body, state):
         await _catalog(db, session, state, (SLOTS,))
         row = await _receipt(db, session, state)
         if row is None: _fail('preparation_missing', 409)
-        if row['state'] == 'verified': return _public_receipt(row, user)
+        if row['state'] == 'verified':
+            await _owner(db, user, session, state)
+            return _public_receipt(row, user)
         if row['state'] != 'prepared': _fail('reconciliation_required', 409)
         if (row['owner_id'] != user['id'] or row['auth_digest'] != _auth_digest(user)
             or row['request_nonce'] != body.request_nonce or body.manifest_digest != MANIFEST_DIGEST

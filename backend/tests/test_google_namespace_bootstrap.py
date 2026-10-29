@@ -215,3 +215,37 @@ async def test_cleanup_has_fresh_bounded_mongo_deadline_after_body_expired():
         await asyncio.sleep(.01)
         await bootstrap._end(Session(), {})
     assert len(remaining) == 1 and 0 < remaining[0] <= bootstrap.CLEANUP_SECONDS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['prepare', 'execute'])
+async def test_historical_receipt_fast_path_rechecks_owner_after_read(monkeypatch, action):
+    user = {'id': 'owner', 'role': 'owner'}
+    row = prepared(user)
+    if action == 'execute':
+        row.update(state='verified', attempt_id='c' * 32, verified_at=bootstrap._now(), verified_catalog_digest='d' * 64)
+    class Session:
+        async def end_session(self): pass
+    class Client:
+        async def start_session(self): return Session()
+    class DB:
+        client = Client()
+    read = False
+    async def owner(*args, **kwargs):
+        if read: bootstrap._fail('owner_changed', 403)
+    async def catalog(*args): return {}
+    async def receipt(*args):
+        nonlocal read
+        read = True
+        return row
+    monkeypatch.setattr(bootstrap, '_owner', owner)
+    monkeypatch.setattr(bootstrap, '_catalog', catalog)
+    monkeypatch.setattr(bootstrap, '_receipt', receipt)
+    if action == 'prepare':
+        body = bootstrap.PrepareRequest(request_nonce='a' * 32, acknowledge_preparation_only=True)
+    else:
+        body = bootstrap.ExecuteRequest(request_nonce='a' * 32, execution_token='b' * 64,
+            observation_digest='c' * 64, manifest_digest=bootstrap.MANIFEST_DIGEST, acknowledge_storage_only=True)
+    with pytest.raises(HTTPException) as error:
+        await getattr(bootstrap, '_' + action)(DB(), user, body, {})
+    assert error.value.status_code == 403 and error.value.detail['code'].endswith('owner_changed')
