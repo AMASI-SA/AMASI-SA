@@ -1,5 +1,5 @@
 {
-  "status": "WIP_real_auth_page_harness_fixed_full_local_UI_pass_fresh_CI_pending",
+  "status": "SEALED_bounded_integration_PASS_20CI_success_1conditional_skip_WIP_readiness_ancestry_blocked",
   "base": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
   "base_tree": "90f62e85604c5a583434b89546c0791ec688d3f1",
   "sources": {
@@ -319,7 +319,7 @@
   },
   "router_seam": "10 reviewed current-observation/category/linked/live/native attachment lines plus2 prior lines. Existing4 storage lines and retail handlers preserved.",
   "workflow_preservation": "Current full Google workflow test paths are a subset of selected native reviewed workflow; no checks removed. All strict dedicated Mongo workflows copied exactly.",
-  "pending": "Immutable harness successor freshCI including saved151/10Mongo/native45/7Mongo/prior129/19Mongo/full backend/UI/build and independent review. WIP Readiness ancestry is expected blocked; new direct-production source only after all feature gates pass and root confirms freshbase.",
+  "pending": "New direct-current-production source/current intent and fresh fullCI; root owns operational A/B and host/live acceptance. Frozen ddc unchanged.",
   "authority": {
     "advertising_execution": false,
     "new_financial_rights": false,
@@ -1038,9 +1038,9 @@
   "tests": {
     "local_backend": "227 passed -W error/zero skips in7.29s on fixed successor worktree",
     "local_ui": "386 passed/16suites in5.292s, including25 realAuthProvider parent cases",
-    "mongo": "804 historical saved151/10 actualMongo0skip9.16s and native45/7 actualMongo0skip4.68s passed; successor freshCI pending.",
+    "mongo": "Fresh ddc151/10,45/7,129/19 actualMongo; zero skips; actuallogs read by implementer and reviewer.",
     "strict_gates": "Saved-fields151 total/10actualMongo (8existing+2parent), native45total/7actualMongo,4 generated fixture parity cases; all prior exact named/zero-skip assertions preserved. Fresh sourceCI pending.",
-    "independent_review": "804 immutable runtime: independent26 backend -Werror/zero skips2.87s and134UI/6suites3.812s; actual HTTP nullURL/category_ids[] replay preserves all saved fields. Successor page harness review pending.",
+    "independent_review": "Final ddc bounded PASS; full evidence in final_independent_review/source_ci_evidence.",
     "local_full_frontend": "329suites/2667tests passed92.284s; full run justified by new AuthProvider hook regression in inherited bare page harness."
   },
   "runtime_parity": "Accepted b3ea model, shared qualifier and prior reader/route exact; accepted d1b child/service/runtime exact; other accepted native runtime exact except approved parentform/router seams. Storage/retail/Reports/Dashboard/CAS/currentintent runtime preserved.",
@@ -1078,5 +1078,263 @@
     "focused": "4passed/1suite4.498s",
     "full_frontend": "329suites/2667tests passed, zero failed/skipped,92.284s via governed toolchain full frontend; existing329 suites preserved, original2 pagecases now4 owner/viewer cases.",
     "workflow": "Existing full Google workflow already contains this page suite; no workflow test paths removed or edited."
+  },
+  "frozen_candidate": {
+    "source": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1",
+    "tree": "51e3063eedc97fa1d70ee508285421b7c2ab5321",
+    "pr": 1652,
+    "local_equivalent": "47ea99ff4d4d43ab09e07e628ddc1f999494ca14",
+    "total_paths_over_storage_A": 97,
+    "nondocument_paths": 96
+  },
+  "final_independent_review": {
+    "verdict": "bounded PASS; no confirmed blocker",
+    "reviewer": "google_product_acceptance",
+    "runtime_scope": "ddc runtime byte-identical to804; prior80426backend-Werror/zero skips2.87s +134UI/6suites3.812s apply only to identical runtime.",
+    "successor_harness": "ddc independent29 actualAuthProvider parent/page tests,2suites2.129s",
+    "null_url_replay": "Actual HTTP writer nullURL +category_ids[] reproduced f7b .trim failure; corrected form payload deep-equals all saved fields/prior/limits plus explicit writer revision/ack. Malformed nonstring remains refused.",
+    "ci_logs": "Reviewer independently read all fresh saved/native/prior Mongo, full Google, Security and exact foreign merge provenance.",
+    "qualification": "Code/integration acceptance only. No release eligibility, live provider proof, production business-plan creation, advertising execution, inventory readiness, profit or attribution authority."
+  },
+  "source_ci_evidence": {
+    "saved_fields": {
+      "run": 40969153765,
+      "job": 123781207383,
+      "passed": 151,
+      "actual_mongo": 10,
+      "skipped": 0,
+      "seconds": 7.7
+    },
+    "native": {
+      "run": 40969153993,
+      "job": 123781208265,
+      "passed": 45,
+      "actual_mongo": 7,
+      "skipped": 0,
+      "seconds": 3.97
+    },
+    "prior": {
+      "run": 40969153745,
+      "job": 123781207508,
+      "passed": 129,
+      "actual_mongo": 19,
+      "skipped": 0,
+      "seconds": 8.25
+    },
+    "full_backend": {
+      "run": 40969153885,
+      "job": 123781208408,
+      "passed": 1559,
+      "seconds": 43.13
+    },
+    "full_google_ui": {
+      "run": 40969153885,
+      "job": 123781208199,
+      "passed": 561,
+      "suites": 30,
+      "seconds": 16.97,
+      "build_seconds": 6.1
+    },
+    "native_ui": {
+      "run": 40969153993,
+      "job": 123781208500,
+      "passed": 368,
+      "suites": 14,
+      "seconds": 4.885,
+      "build_seconds": 6.09
+    },
+    "prior_child": {
+      "run": 40969154154,
+      "job": 123781208899,
+      "actual_http_fixture_passed": 1,
+      "ui_passed": 52,
+      "ui_suites": 2,
+      "build_seconds": 4.05
+    },
+    "security": {
+      "run": 40969154030,
+      "frontend_job": 123781209559,
+      "backend_job": 123781208907,
+      "checkout": "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1",
+      "ui_passed": 2667,
+      "ui_suites": 329,
+      "ui_seconds": 77.722,
+      "production_dependency_vulnerabilities": 0,
+      "build_seconds": [
+        5.76,
+        5.69
+      ],
+      "both_jobs": "SUCCESS"
+    },
+    "readiness": {
+      "run": 40969153824,
+      "job": 123781208404,
+      "result": "EXPECTED_WIP_FAILURE_NOT_BYPASSED",
+      "reason": "Source ddc is not descendant of event base7a46. New direct-current-production source with freshCI required; old inherited intent is preserved."
+    },
+    "google_ci_checkout": {
+      "sha": "e4c9164ac59bce1ef9df77d335ca1382567f04e4",
+      "tree": "b8170695a547778f653d51761f5a00c04ff10e27",
+      "parents": [
+        "08160c883a040f3a9fb49a165dab8074d4ef7309",
+        "ddc0df33aec1ac93bd5adf8673f18a4cee60d2b1"
+      ],
+      "not_source_tree_equality": true,
+      "exact_source_diff": [
+        "backend/marketing_report_orders.py",
+        "backend/tests/test_marketing_report_orders.py",
+        "docs/operations/MARKETING-REPORTS-DIRECT-20261030/STATUS.json",
+        "release/release-intent-v5.json"
+      ],
+      "explanation": "All four differences are current production Reports1651/current intent; exact feature blobs preserved. Security instead tested directddc."
+    },
+    "workflows": [
+      {
+        "id": 40969154154,
+        "name": "Google prior season review UI",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969154030,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969154142,
+        "name": "TikTok Creator Release Candidate",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 40969154035,
+        "name": "Google product evidence contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969154081,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969154098,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153947,
+        "name": "Production TikTok Native Hierarchy",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153784,
+        "name": "Google live category preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153824,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      {
+        "id": 40969153897,
+        "name": "Google linked campaign evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153766,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153990,
+        "name": "Google category membership",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153885,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153939,
+        "name": "Google store product observations",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153993,
+        "name": "Google native inventory preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153749,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153834,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153765,
+        "name": "Google saved plan fields contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153745,
+        "name": "Google prior season evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153756,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969154006,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40969153910,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "conclusions": "22 workflows completed:20SUCCESS,1 conditional TikTok Creator skip,1 known WIP ReleaseReadiness ancestry failure. No feature failures and no skipped tests in strict Mongo/UI gates."
+  },
+  "next_release_source": {
+    "root_confirmed_base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+    "recheck_required": true,
+    "plan": "After final CI success, create new isolated source directly from current production. Select96 reviewed non-document blobs, add freshSTATUS, preserve all currentReports1651 andintent. Root owns operational A/B, host, lease, merge and publish.",
+    "foreign_lease": "Reports owner active; no host access by this agent.",
+    "overlap_precheck": "4ca→08160 changes exactly Reports orders runtime/test/STATUS plus intent; none overlaps96 selected feature paths."
+  },
+  "root_review": {
+    "verdict": "bounded functional source accepted after independent seal; finalgates/freshA pending",
+    "runtime_review": "Root read prior/form/native code and exact two null-URL runtime normalizations.",
+    "local": "Root4 actualwriter fixtures -Werror2.24s +64parentUI2suites2.515s on804; finalddc pageAuth4cases1.313s.",
+    "CI": "Root read current1559backend43.13s and561UI30suites/build6.10s logs."
   }
 }
