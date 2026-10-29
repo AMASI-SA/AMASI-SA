@@ -1,0 +1,13 @@
+{
+  "task": "MARKETING-REPORTS-20261029",
+  "branch": "codex/unified-marketing-reports-20261029",
+  "base": "050b3da6f",
+  "state": "WIP implementation, not release ready",
+  "scope": "Unified marketing Reports page, same Snapchat V2 account-period reader, separate Salla/provider results, full direct costs and product modal opening new tabs",
+  "observed_cause": "Legacy campaigns selected Salla results (49) while V2 account screenshot selected Snapchat conversions (68); legacy and V2 commerce date/read paths differ.",
+  "completed": ["Reports route and Arabic UI scaffold", "Canonical V2 reader reuse", "Optional Salla shipping/payment cost calculation", "Exact-halalah cost allocation", "Initial regression tests"],
+  "validation": ["Python compilation passed", "Initial pytest blocked by unavailable openpyxl in reused test environment; no test pass claim"],
+  "remaining": ["Finish provider readers and coverage review", "Run backend/frontend tests and build", "Verify UI and synchronization", "Source A CI, intent B, governed rehearsal and publish", "Production comparison and release verification"],
+  "production_changed": false,
+  "next": "Complete isolated test dependencies and execute focused regression tests; review API coverage and data completeness before release."
+}
