@@ -133,3 +133,19 @@ async def save_product_season_review(db,*,authenticated_user,plan_id,product_id,
     return {'plan_id':plan_id,'plan_revision':scope['revision'],'category_id':category,'product_id':product,'review_revision':row['revision'],
         'decision':row['decision'],'reason':row['reason'],'reviewed_at':row['reviewed_at'],'review_digest':row['review_digest'],
         'meaning':'owner_declared_fit_not_independent_verification','review_writes':1,'provider_writes':0,'execution_authorized':False}
+
+async def read_product_season_review_state(db,*,authenticated_user,plan_id,expected_revision,category_id,selected_ids,clock=lambda:datetime.now(timezone.utc)):
+    category=canonical(category_id)
+    if not isinstance(selected_ids,list) or not 1<=len(selected_ids)<=5 or len(set(selected_ids))!=len(selected_ids):raise ValueError('selected review bound')
+    products=[canonical(p) for p in selected_ids]
+    scope=await capture_scope(db,authenticated_user,plan_id,expected_revision)
+    rows=await read_reviews(db,scope,category,products)
+    await verify_scope(db,authenticated_user,scope)
+    latest=await read_reviews(db,scope,category,products)
+    if BSON.encode({'rows':rows})!=BSON.encode({'rows':latest}):raise ValueError('review changed')
+    current=current_owner_reviews(rows,scope,clock())
+    return {'plan_id':plan_id,'plan_revision':expected_revision,'category_id':category,
+        'products':[{'product_id':p,'review_revision':rows[p]['revision'] if p in rows else 0,
+            'current_owner_review':p in current,'decision':current[p]['decision'] if p in current else 'unknown',
+            'reason':current[p]['reason'] if p in current else None,'meaning':'owner_declared_fit_not_independent_verification'} for p in products],
+        'provider_writes':0,'review_writes':0,'execution_authorized':False}

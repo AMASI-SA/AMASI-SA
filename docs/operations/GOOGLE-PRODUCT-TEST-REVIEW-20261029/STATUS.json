@@ -1,1 +1,14 @@
-{"task":"google-product-test-review-20261029","branch":"codex/google-product-test-review-wip-20261029","base":"b3ea651cced66b6171ba379806b955879409a3b3","state":"EARLY_WIP_FIT_CAS_AND_PURE_LANES_ORCHESTRATION_PENDING","production_changed":false,"provider_calls_performed":false,"ownership":"Newfiles/collection only; no existing readers/router/form/costwriter changes","verification":"5puretests redmissingmodule→green-Werror0skip0.66s; ownerfit DB/race tests notyetexecuted","next":"Implement trustedreader/standalone routes with admission retaining originalcancelledtaskuntilcleanup; actualHTTPwriter+realMongo/race/sourcewindow tests and dedicatedCI, then independentreview. No attachment/release."}
+{
+  "task": "google-product-test-review-20261029",
+  "branch": "codex/google-product-test-review-wip-20261029",
+  "base": "b3ea651cced66b6171ba379806b955879409a3b3",
+  "state": "WIP_TRUSTED_ORCHESTRATION_FIT_CAS_ADMISSION_LOCALLY_VERIFIED_REAL_MONGO_PENDING",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "ownership": "Newfiles/collection only; no existing readers/router/form/costwriter changes",
+  "verification": "112focused-Werror/zero skips2.09s including32newpure/routes/admission tests and unchangedcurrent/prior/model tests. Dedicated132total/20actualMongo collected; not run locally. CI required.",
+  "next": "RemoteWIP/DraftPR, fresh132/20actualMongoCI and independentreview. Preserveonlynewfiles; rootlaterselectivecurrentproduction integration/router/UI.",
+  "implemented": "NEWownerfitstateCAS/stateGET+explicitPUT; candidatePOST calls4trustedreadersdirectly,1..5categoryscope, frozenstoredclock vsnativeoperationclock, before/afterowner/password/plan/review/storecredential fences, puretestreview/exploration lanes. No paidgrant/profit/growth/completecoverage ornewproduct inference.",
+  "admission": "Process-local cap4 andowner1. Originaltaskretained afterresponse deadline or callercancel until actualtaskcleanupdone. Overlap/resourcecaps reject withoutfactorycreation. No crossworker singleflight/hardcleanup/transport/peakmemoryclaim.",
+  "owner_review_write": "Currentfitstate tied exactplanrevision/fields/password/product/category andreason. Reviewstate maypersist beforefinalrace rejection; explicitmay_have_persisted, rereadCASrevision, noauto resubmit. This state is never spend authority."
+}
