@@ -13,6 +13,8 @@ def accepted_guard_in_unit_scope(monkeypatch):
     # not transaction, replica, provider or production activation evidence.
     from integrations_control_center import google_ads_automation_budget_guard as guard
     monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,NOW)
 
 from fastapi import HTTPException
 
@@ -75,14 +77,24 @@ class Collection:
         return SimpleNamespace(matched_count=1)
 
 
-class DB:
-    def __init__(self, docs): self.collections={key:Collection(rows) for key,rows in docs.items()}
-    def __getitem__(self,key): return self.collections.setdefault(key,Collection())
-    def __getattr__(self,key): return self[key]
+from tests.google_ads_transactional_fake import TransactionalDBMixin
 
 
-def documents():
-    values=prepared_case(); intent=contract.prepare_google_creation_intent(**values)
+class DB(TransactionalDBMixin):
+    def __init__(self, docs):
+        self.collections={key:Collection(rows) for key,rows in docs.items()}
+        self._tx_setup(self.collections)
+    def __getitem__(self,key): return self._tx_get(key)
+    def __getattr__(self,key):
+        if key.startswith("_"):raise AttributeError(key)
+        return self[key]
+
+
+def documents(*, budget_native="15", native_amount="40"):
+    values=prepared_case()
+    values["policy"]["budget_native"]=budget_native
+    values["native_context"]["campaigns"][0]["budget_native"]=native_amount
+    intent=contract.prepare_google_creation_intent(**values)
     docs,_=case_documents(current=NOW)
     policy={**values['policy'],'template':values['template'],'updated_by':'owner'}
     row=valid_proposal(intent)
@@ -99,6 +111,8 @@ def documents():
                 'execution_claim_id':'claim123','status':'claimed'}]})
     native={'metadata':{'account_id':'123','identity_verified':True,'currency_code':'SAR','time_zone':'Asia/Riyadh'},
         'auth_epoch':'epoch','observed_at':NOW.isoformat(),'native_context':values['native_context']}
+    for campaign in native['native_context']['campaigns']:
+        campaign.update(budget_resource='customers/123/campaignBudgets/'+campaign['campaign_id'],shared_budget=False)
     return docs,native,intent
 
 
@@ -121,8 +135,8 @@ async def settle(db):
 @pytest.mark.asyncio
 async def test_claim_is_atomic_paused_reservation_and_not_enable_funding():
     docs,native,intent=documents(); db=DB(docs)
-    # Existing active commitments may fully consume55; paused creation spends0.
-    native['native_context']['campaigns'][0]['budget_native']='55'
+    # PAUSED creation spends zero now, but reserves15 against the same55cap
+    # together with the40 of native enabled exposure.
     reply=await authorize(db,native)
     assert reply['authorized'] and reply['submission_floor_required'] and reply['provider_writes']==0
     policy=db[CREATION_POLICIES].rows[0]; entry=policy['_creation_ledger'][intent['creation_identity']]
@@ -172,9 +186,9 @@ async def test_revoke_winning_same_document_cas_blocks_claim():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure',[ConnectionError,asyncio.CancelledError])
 async def test_postcommit_lost_ack_never_grants_or_refunds(monkeypatch,failure):
-    docs,native,intent=documents();db=DB(docs); original=authority._linearize_creation_claim
-    async def lost(*args):await original(*args);raise failure()
-    monkeypatch.setattr(authority,'_linearize_creation_claim',lost)
+    docs,native,intent=documents();db=DB(docs)
+    async def lost():raise failure()
+    db.after_commit=lost
     with pytest.raises((HTTPException,asyncio.CancelledError)) as caught:await authorize(db,native)
     exc=caught.value
     assert (exc.detail if isinstance(exc,HTTPException) else vars(exc))['preserve_execution_fence'] is True
@@ -200,6 +214,7 @@ async def test_original_independent_receipt_or_unique_correlation_owns_without_r
     completed(db,intent,receipt=receipt)
     reply=await settle(db)
     assert reply['settled'] and reply['released'] and reply['verified_ownership'] and reply['quota_refunded'] is False
+    policy=db[CREATION_POLICIES].rows[0]
     entry=policy['_creation_ledger'][intent['creation_identity']]
     assert contract.creation_campaign_ownership_verified(entry,intent=intent,user_id='owner',account_id='123',campaign_id='999',proposal=db[management.PROPOSALS].rows[0])
     assert policy['_creation_claim'] is None and entry['reservation_state']=='paused_created'
@@ -352,9 +367,13 @@ async def test_contradictory_provider_receipt_cannot_release_no_campaign_reserva
 @pytest.mark.asyncio
 async def test_no_claim_cancel_is_same_policy_barrier_against_delayed_authorizer(monkeypatch):
     docs,native,intent=documents();db=DB(docs);entered=asyncio.Event();resume=asyncio.Event()
-    original=authority._linearize_creation_claim
-    async def delayed(*args):entered.set();await resume.wait();return await original(*args)
-    monkeypatch.setattr(authority,'_linearize_creation_claim',delayed)
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    original=guard._run
+    async def delayed(*args,**kwargs):
+        if kwargs['operation_id'].startswith('paused_reserve_'):
+            entered.set();await resume.wait()
+        return await original(*args,**kwargs)
+    monkeypatch.setattr(guard,'_run',delayed)
     pending=asyncio.create_task(authorize(db,native));await entered.wait()
     row=db[management.PROPOSALS].rows[0];row.update(status='failed',safe_error='execution_cancelled_before_dispatch',provider_write_reached=False)
     reply=await settle(db)
@@ -388,24 +407,21 @@ async def test_no_claim_absence_alone_never_unlocks(change):
 async def test_no_claim_barrier_lost_ack_requires_read_proved_idempotent_recovery(monkeypatch):
     docs,_,intent=documents();db=DB(docs)
     db[management.PROPOSALS].rows[0].update(status='failed',safe_error='execution_cancelled_before_dispatch',provider_write_reached=False)
-    original=authority._linearize_creation_settlement
-    async def lost(*args):await original(*args);raise ConnectionError('committed, reply lost')
-    monkeypatch.setattr(authority,'_linearize_creation_settlement',lost)
+    async def lost():raise ConnectionError('committed, reply lost')
+    db.after_commit=lost
     with pytest.raises(HTTPException):await settle(db)
     assert db[CREATION_POLICIES].rows[0]['_creation_ledger'][intent['creation_identity']]['state']=='no_campaign'
     assert db[management.FENCES].rows[0]['status']=='claimed'
-    monkeypatch.setattr(authority,'_linearize_creation_settlement',original)
+    db.after_commit=None
     assert (await settle(db))['settled']
 
 
 @pytest.mark.asyncio
 async def test_global_stop_after_ack_keeps_committed_reservation_without_permission(monkeypatch):
-    docs,native,_=documents();db=DB(docs);original=authority._linearize_creation_claim
-    async def stopped(*args):
-        reply=await original(*args)
+    docs,native,_=documents();db=DB(docs)
+    async def stopped():
         monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','false')
-        return reply
-    monkeypatch.setattr(authority,'_linearize_creation_claim',stopped)
+    db.after_commit=stopped
     with pytest.raises(HTTPException) as caught:await authorize(db,native)
     assert caught.value.detail['authorization_cas_attempted']
     assert db[CREATION_POLICIES].rows[0]['_creation_claim']

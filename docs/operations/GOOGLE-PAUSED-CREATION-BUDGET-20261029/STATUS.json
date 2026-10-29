@@ -1,18 +1,26 @@
 {
-  "status": "WIP_actual_reader_proof_implemented_common_claim_migration_pending",
+  "status": "WIP_common_claim_migration_basic_units_passed_actualMongo_pending",
   "parent_guard_checkpoint": "c82ed32a4dee3b470a237fcdfe31de0d25d629b3",
   "guard_tested_source": "0dcb03d9ce4a5778f29584cd4166b923439e8918",
-  "runtime_implemented": "Bounded real native reader only; common claim/reservation/settlement still pending",
+  "runtime_implemented": "Guarded PAUSED claim/ledger/generation/reservation and terminal settlement wired through actual creation authority helpers; retained same-session public-call boundary. Runtime literalFalse.",
   "runtime_available": false,
   "live_calls": false,
   "owner_limits_invented": false,
   "rollout_ready": false,
   "contract": "DESIGN.md",
-  "next": "Checkpoint reader source and independent review; then implement guarded PAUSED claim/settlement in a separate source commit, actual Mongo cross-policy/fault acceptance; runtimeFalse/no deployment.",
+  "next": "Checkpoint remote before broad tests and real replica CI; fix evidenced regressions, add actual Mongo races/faults, independent review. Do not deploy.",
   "design_review": "budget_audit accepts design direction WIP only; requires native inventory fingerprint/account/currency/timezone/freshness binding, final pre-send check, exactresource/amount/ownership proof, no unknownrelease. Runtime acceptance still pending code/actualMongo review.",
   "tests": {
-    "reader_red": "13failed2passed proved missing actual fields",
-    "reader_green": "42passed2.57s-Werror incl19newSDK/actualreader contract cases+23existingplan cases",
-    "ci": "Pending fresh CI; no live Google query/provider proof, only officialv25schema and real helper with controlled collaborator"
-  }
+    "focused": "231passed4.25s-Werror: actualreader/plan, creationauthority, commonmax/unknownholds, standingauthority/guard/legacysettlement/integration",
+    "realMongo": "Not yet validated for new common-claim source; prior643reader/parent0dcb CI is not proof of this source",
+    "broad_unit": "Pending fixture migration and fresh full CI"
+  },
+  "accounting": "One max per verified native campaign+budgetresource across native amount, immutable original creationhold and unreflected standingtarget. Original20/native22/native15 andpending25unitcases preserveonecounter. Legacyunmapped/unknownbinding/currency/resource/shared/absence failclosed.",
+  "remaining": [
+    "Actual replica cross-policy claim/revoke/fault/unknowncommit and native dispatch proof acceptance",
+    "Independent newruntime review and broader currentfixture regression",
+    "Positive REMOVED release remains unsupported by current nonremoved reader; holds block rather than infer release from absence",
+    "Actual production commit/namespace/legacy/native capability proof before any six-handler rollout",
+    "No externalGooglewriter serialization, firstlaunch/enable authority, automaticresume or runtime enablement"
+  ]
 }

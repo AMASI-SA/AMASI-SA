@@ -127,6 +127,7 @@ jobs:
           backend/tests/test_google_ads_automation_creation_policy_mongo.py
           backend/tests/test_google_ads_automation_creation_plan.py
           backend/tests/test_google_ads_creation_budget_reader.py
+          backend/tests/test_google_ads_paused_creation_budget.py
           backend/tests/test_google_ads_automation_creation_authority.py
           backend/tests/test_google_ads_automation_creation_authority_mongo.py
           backend/tests/test_google_ads_automation_creation_gateway.py

@@ -93,6 +93,22 @@ class BudgetReservationSettlement:
 
 
 @dataclass(frozen=True)
+class PausedCreationReservation:
+    proposal_id: str
+    execution_claim_id: str
+    expected_revision: int
+    expected_generation: int
+    expected_policy_digest: str
+    expected_ledger_digest: str
+    native_evidence: Mapping
+
+
+@dataclass(frozen=True)
+class PausedCreationSettlement:
+    execution_claim_id: str
+
+
+@dataclass(frozen=True)
 class BudgetGuardSnapshot:
     user_id: str
     account_id: str
@@ -339,11 +355,27 @@ def _validate_guard(row, scope):
     for allocation_id, entry in row['allocations'].items():
         if (not isinstance(allocation_id, str) or not _ID.fullmatch(allocation_id) or not isinstance(entry, dict)
             or entry.get('allocation_id') != allocation_id or any(entry.get(key) != value for key, value in scope.items())
-            or entry.get('state') not in {'reserved', 'native_enabled', 'cancelled_before_http', 'settled'}):
+            or entry.get('state') not in {'reserved', 'native_enabled', 'native_paused', 'cancelled_before_http', 'settled'}):
             _fail('google_budget_guard_state_unproved')
 
 
 def _command(command):
+    if isinstance(command, PausedCreationReservation):
+        if (any(not isinstance(value, str) or not _ID.fullmatch(value)
+                for value in (command.proposal_id, command.execution_claim_id))
+            or type(command.expected_revision) is not int or command.expected_revision < 1
+            or type(command.expected_generation) is not int or command.expected_generation < 0
+            or any(not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value)
+                for value in (command.expected_policy_digest, command.expected_ledger_digest))
+            or not isinstance(command.native_evidence, Mapping)):
+            _fail('google_budget_guard_command_invalid')
+        return PausedCreationReservation(command.proposal_id, command.execution_claim_id,
+            command.expected_revision, command.expected_generation, command.expected_policy_digest,
+            command.expected_ledger_digest, _plain(command.native_evidence))
+    if isinstance(command, PausedCreationSettlement):
+        if not isinstance(command.execution_claim_id, str) or not _ID.fullmatch(command.execution_claim_id):
+            _fail('google_budget_guard_command_invalid')
+        return command
     if isinstance(command, StandingBudgetReservation):
         if (not isinstance(command.allocation_id, str) or not _ID.fullmatch(command.allocation_id)
             or type(command.expected_revision) is not int or command.expected_revision < 1
@@ -429,67 +461,12 @@ def standing_commitment(snapshot, command, current):
         or not 0 <= (current - observed).total_seconds() < 90
         or any(inventory.get(key) != policy.get(key) for key in ('currency_code', 'time_zone'))):
         _fail('google_budget_guard_inventory_unproved')
-    caps = [_money(policy.get('max_account_daily_budget_native'))]
-    for other in (snapshot.creation_policy,):
-        if other is None:
-            continue
-        if type(other.get('enabled')) is not bool:
-            _fail('google_budget_guard_policy_unproved')
-        if other['enabled']:
-            expiry = _instant(other.get('expires_at'))
-            if (expiry is None or not activation_proof_valid(thaw_snapshot(other), current)
-                or any(other.get(key) != policy.get(key) for key in ('currency_code', 'time_zone'))):
-                _fail('google_budget_guard_policy_unproved')
-            if expiry > current:
-                caps.append(_money(other.get('max_account_daily_budget_native')))
-    rows = inventory.get('campaigns')
-    if not isinstance(rows, list) or len(rows) > 500:
+    from .google_ads_paused_creation_budget import account_exposure
+    if claim.get('native_inventory_digest') != _digest(inventory):
         _fail('google_budget_guard_inventory_unproved')
-    campaigns, budgets, total = {}, set(), Decimal(0)
-    for row in rows:
-        cid = row.get('campaign_id') if isinstance(row, dict) else None
-        if (not isinstance(cid, str) or not re.fullmatch(r'[0-9]{1,30}', cid) or cid in campaigns
-            or row.get('status') not in {'ENABLED', 'PAUSED', 'REMOVED'}):
-            _fail('google_budget_guard_inventory_unproved')
-        if row['status'] != 'REMOVED':
-            budget = row.get('budget_resource')
-            if (row.get('budget_mode') != 'DAILY' or row.get('shared_budget') is not False
-                or not isinstance(budget, str) or not re.fullmatch(f'customers/{snapshot.account_id}/campaignBudgets/[0-9]+', budget)
-                or budget in budgets):
-                _fail('google_budget_guard_inventory_unproved')
-            budgets.add(budget)
-            _money(row.get('budget_native'))
-        campaigns[cid] = row
-        if row['status'] == 'ENABLED':
-            total += _money(row['budget_native'])
-    targets, reflected = set(), []
-    for allocation_id, entry in snapshot.guard['allocations'].items():
-        if entry['state'] in {'cancelled_before_http', 'settled'}:
-            continue
-        cid = entry.get('campaign_id')
-        native = campaigns.get(cid)
-        if (cid in targets or not native or native['status'] == 'REMOVED'
-            or entry.get('currency_code') != policy.get('currency_code')):
-            _fail('google_budget_guard_pending_unproved')
-        amount = _money(entry.get('budget_native'))
-        if entry.get('state') == 'native_enabled':
-            settled_at = _instant(entry.get('settled_at'))
-            if settled_at is None or observed < settled_at:
-                _fail('google_budget_guard_reflection_unproved')
-            if entry.get('action') == 'pause':
-                if native['status'] != 'PAUSED':
-                    _fail('google_budget_guard_reflection_unproved')
-                reflected.append(allocation_id)
-                continue
-            if native['status'] != 'ENABLED' or _money(native['budget_native']) != amount:
-                _fail('google_budget_guard_reflection_unproved')
-            reflected.append(allocation_id)
-            continue
-        targets.add(cid)
-        if native['status'] == 'ENABLED':
-            total += max(Decimal(0), amount - _money(native['budget_native']))
-        else:
-            total += amount
+    exposure = account_exposure(snapshot, inventory, policy, current)
+    campaigns, total = exposure['campaigns'], exposure['total']
+    targets, reflected = exposure['targeted_campaign_ids'], exposure['reflected_allocation_ids']
     cid, action = claim.get('campaign_id'), claim.get('action')
     target = campaigns.get(cid)
     if (not target or cid in targets or action not in {'enable', 'set_budget', 'pause'}
@@ -505,13 +482,15 @@ def standing_commitment(snapshot, command, current):
         or action == 'pause' and (target['status'] != 'ENABLED' or proposed != prior)
         or action == 'set_budget' and target['status'] != 'ENABLED'):
         _fail('google_budget_guard_claim_unproved')
-    increase = proposed if action == 'enable' else max(proposed - prior, Decimal(0)) if action == 'set_budget' and target['status'] == 'ENABLED' else Decimal(0)
-    if increase > 0 and total + increase > min(caps):
+    increase = (max(proposed - exposure['exposure_by_campaign'].get(cid, Decimal(0)), Decimal(0))
+        if action in {'enable', 'set_budget'} else Decimal(0))
+    if increase > 0 and total + increase > exposure['limit']:
         _fail('google_budget_guard_account_limit')
     return {'current_average_commitment_native': str(total), 'increase_native': str(increase),
-        'resulting_average_commitment_native': str(total + increase), 'limit_native': str(min(caps)),
+        'resulting_average_commitment_native': str(total + increase), 'limit_native': str(exposure['limit']),
         'target_native': str(proposed), 'currency_code': policy['currency_code'],
-        'reflected_allocation_ids': reflected}
+        'reflected_allocation_ids': reflected,
+        'native_amount_drift_campaign_ids': exposure['native_amount_drift_campaign_ids']}
 
 
 async def _read_policy(db, scope, kind, session):
@@ -627,8 +606,11 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                 'kind': 'standing', 'campaign_id': claim['campaign_id'], 'proposal_id': claim['proposal_id'],
                 'execution_claim_id': claim['execution_claim_id'], 'currency_code': commitment['currency_code'],
                 'action': claim['action'],
+                'budget_resource': next(row['budget_resource'] for row in command.inventory['campaigns'] if row['campaign_id'] == claim['campaign_id']),
                 'budget_native': commitment['target_native'], 'state': 'reserved', 'created_at': stamp,
                 'commitment': commitment, 'claim_digest': _digest(claim)}
+            from .google_ads_paused_creation_budget import standing_lineage
+            entry['reservation_lineage_digest'] = standing_lineage(entry)
             policy = snapshot.standing_policy
             generation = policy.get('_dispatch_generation', 0)
             if type(generation) is not int or not 0 <= generation < 2**63 - 2:
@@ -714,6 +696,18 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
                         if entry['action']=='set_budget' else before_amount)):
                     _fail('google_budget_guard_settlement_unproved')
                 entry['currency_code'] = proposal['currency']
+            before = proposal.get('before_snapshot') or {}
+            campaign, budget = before.get('campaign') or {}, before.get('campaign_budget') or {}
+            resource = budget.get('resourceName')
+            if (not isinstance(resource, str) or not re.fullmatch(rf'customers/{scope["account_id"]}/campaignBudgets/[0-9]+', resource)
+                or campaign.get('campaignBudget') != resource or digest(before) != proposal.get('before_digest')
+                or entry.get('budget_resource', resource if legacy else None) != resource):
+                _fail('google_budget_guard_settlement_unproved')
+            entry['budget_resource'] = resource
+            from .google_ads_paused_creation_budget import standing_lineage
+            if not legacy and entry.get('reservation_lineage_digest') != standing_lineage(entry):
+                _fail('google_budget_guard_settlement_unproved')
+            entry['reservation_lineage_digest'] = standing_lineage(entry)
             rejection = proposal.get('rejection') or {}
             completed = proposal.get('status') == 'completed' and proposal.get('verified') is True and proposal.get('submission_started') is True
             cancelled = proposal.get('status') == 'failed' and proposal.get('submission_started') is False and proposal.get('safe_error') == 'execution_cancelled_before_dispatch'
@@ -747,10 +741,19 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             if changed.matched_count != 1:
                 _fail('google_budget_guard_settlement_unproved')
             old['allocations'][command.allocation_id] = {**entry, 'state': 'native_enabled' if completed else 'settled', 'settled_at': stamp,
-                'outcome': 'completed' if completed else 'cancelled_before_http' if cancelled or stopped else 'provider_rejected'}
+                'outcome': 'completed' if completed else 'cancelled_before_http' if cancelled or stopped else 'provider_rejected',
+                'settlement_lineage_digest': digest({'proposal_id': proposal['proposal_id'],
+                    'confirmation_digest': proposal['confirmation_digest'], 'operations_digest': digest(proposal['operations']),
+                    'before_digest': proposal['before_digest'], 'budget_resource': resource,
+                    'verified': proposal.get('verified'), 'verification': proposal.get('verification')})}
             update.update(allocations=old['allocations'], active_claim=None)
             result = {'kind': 'standing_settlement', 'allocation_id': command.allocation_id,
                 'quota_refunded': False,'legacy_recovered':legacy}
+        elif isinstance(command, (PausedCreationReservation, PausedCreationSettlement)):
+            from .google_ads_automation_creation_authority import _guard_paused_creation_command
+            allocations, active_claim, result = await _guard_paused_creation_command(db, session=session,
+                snapshot=snapshot, command=command, operation_id=operation_id, current=datetime.fromisoformat(stamp))
+            update.update(allocations=allocations, active_claim=active_claim)
         else:
             allocations, claim = _allocation(snapshot, command, operation_id, stamp)
             update.update(allocations=allocations, active_claim=claim)
