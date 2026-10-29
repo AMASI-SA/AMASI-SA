@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T20:08:14.296Z",
+  "updated_at": "2026-10-29T20:16:27.618Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -31,9 +31,11 @@
     "current_verified_source": "31d582f6fddacef63f758c82f6b80e7583025516",
     "current_verified_runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
     "latest_deployed_pr": 1618,
-    "current_git_head": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "current_git_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
     "active_release_lease": {
-      "active": false
+      "active": false,
+      "observed_app_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
+      "qualification": "ForeignReports1632 materializing/publishing; this wasstatusatread only. Recheckbeforeanyhostwork."
     }
   },
   "budget_semantics": {
@@ -95,7 +97,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "PR1618 deployed, verified3 and leaseclosed. PR1629 Source Ae16 all11CI/root/independent passed; actualhost doublebuild/freeze running in /tmp/google1629-source-a-20261029. Require exactCIintent e8cf4478...; then intent-onlyB/allCI/hostadapter/normalmerge/prepare/prepublish/singlepublish/verify3/livebehavior. No financial activity without ownerlimits.",
+  "next_safe_action": "Preserve1632Reportsdeployment; no publish1629oldpair. google_launch createsfreshretailA directfda exactreviewedblobs+freshCI. Rootawaitforeignfinish/closedlease beforehostA/Brehearsals. storageagentwaitingfinalretailmerge. Continueisolatedbudget/nativeinventory/Merchantauthwork.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -2077,14 +2079,16 @@
       "tree": "ff3360eb7cf9b5eada07aaddeb3516ea93c48e69",
       "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
       "status_checkpoint": "6e6cdd3401c74c4cc08b57dfef9a22783416d8ed",
-      "state": "ALL11SOURCE_CI_PASSED_ACTUALHOST_A_BUILD_RUNNING",
+      "state": "SUPERSEDED_UNPUBLISHED_FRESH_FDA_SOURCE_ASSIGNED_GOOGLE_LAUNCH",
       "intent": "e8cf4478439f0029da1a81483f1a1370e9c872b725dab101a326157f613335b9",
       "runtime": "rg5-dd1039e63743caf56c49f95b990bfcde8d586cd570378a8c9dec43f7761b7fdd",
       "full_ci": 40943696508,
       "backend": 1307,
       "frontend": 261,
       "root_logs": true,
-      "replica": "34total/6actual0skip"
+      "replica": "34total/6actual0skip",
+      "checkpoint": "6b4cdba74cef33eadd8f04962e1b504ca4b26f64",
+      "intent_b": "c41772ac69e2f61a9dd49b075139495bf5e9fe08"
     },
     "live_category_ui": {
       "pr": 1630,
@@ -2093,7 +2097,8 @@
       "state": "INDEPENDENT_PASS_ALL15CI_ROOT_REVIEW_PENDING",
       "full": "1426backend391UI",
       "focused": "48incl8actualMongo0skip227UI",
-      "root_review": false
+      "root_review": true,
+      "root_checkpoint": "53500cf07b3d9685c876de7cb3a7f27981e3c29e"
     },
     "native_inventory_preview": {
       "pr": 1631,
@@ -2109,6 +2114,14 @@
       "state": "PURE_OBSERVER_WIP_99LOCAL_TESTS_AUTH_SEAM_ASSIGNED",
       "owner": "google_launch",
       "scope": "Newobserver/fixedMerchantv1stream; narrowadditive reporting.py boundreadhelper assigned existingcredential/writersunchanged; no actualproviderread/routeattached"
+    },
+    "foreign_reports_tiktok_release": {
+      "pr": 1632,
+      "source": "a7831b46374a161805d773934d5e1ff7ef1c79c4",
+      "intent": "df25d414d4c75ed6cc636b998332a8b23940bbbb",
+      "merge": "fda86238dda9700806c0d700e9e411c1674c9bad",
+      "state": "MERGED_APP_ADVANCED_NEWLIVE_NOTYETVERIFIED_BY_ROOT",
+      "coordination": "PRcommentawaitownerfinish/closed; rootnohostmutationswhiledeploy"
     }
   }
 }
