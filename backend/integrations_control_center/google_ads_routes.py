@@ -344,8 +344,8 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
                     geo = await google_lookup(client, "geo", query=provider_name)
                     if geo["complete"]:
                         context["geo_targets"] += [row for row in geo["items"] if row.get("target_type") == "Country"]
-            # A selected-product feed mapping must be explicitly proven by the
-            # existing V2 link inventory; all-feed inclusion is never substituted.
+            # Store-to-feed pairs are owner assertions, not independent mapping
+            # evidence. Native inventory must separately prove each offer.
             context["product_offer_associations"] = []
             context["product_offer_ids"] = []
             lookups = [("languages", "language_targets"), ("audiences", "audiences"), ("user_lists", "user_lists"), ("conversion_actions", "conversion_actions"), ("conversion_goals", "conversion_goals")]
@@ -385,14 +385,21 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
                     raise problem("google_ads_product_offer_selection_invalid", "اختر المنتج وحساب Merchant Center من القوائم المثبتة.", 422)
                 if selection.merchant_id not in inventory:
                     result = await google_lookup(client, "products", merchant_id=selection.merchant_id)
-                    if not result["complete"]:
-                        raise problem("google_ads_product_inventory_incomplete", "قائمة منتجات جوجل غير مكتملة؛ ضيّق اختيار التغذية.", 409)
-                    inventory[selection.merchant_id] = {row["offer_id"] for row in result["items"] if row.get("approved") is True and row.get("availability") != "OUT_OF_STOCK"}
-                if selection.offer_id not in inventory[selection.merchant_id]:
-                    raise problem("google_ads_product_offer_not_eligible", "منتج Merchant Center المختار غير مثبت أو غير مؤهّل للحملة.", 422)
-                context["product_offer_associations"].append({**selection.model_dump(), "verification_status": "verified", "source": "explicit_marketer_selection_and_google_inventory"})
+                    inventory[selection.merchant_id] = result
+                from .google_ads_retail_identity import selected_native_products
+                native = selected_native_products(inventory[selection.merchant_id], account_id=request.account_id,
+                    merchant_id=selection.merchant_id, offer_ids=[selection.offer_id], require_feed=False)[0]
+                context["product_offer_associations"].append({**selection.model_dump(), **native,
+                    "verification_status": "provider_eligibility_verified", "source": "explicit_owner_selection_and_account_inventory"})
             context["product_offer_ids"] = sorted({row["offer_id"] for row in context["product_offer_associations"]})
             result = await generate_google_campaign_draft(db, actor["user_id"], request, client_factory=ai_client_factory, account_context=context)
+            generated = result.get("draft") or {}
+            shopping = generated.get("shopping") or {}
+            if request.product_offer_selections and shopping:
+                merchant = shopping.get("merchant_id")
+                selected_native_products(inventory.get(merchant), account_id=request.account_id,
+                    merchant_id=merchant, offer_ids={offer for group in generated.get("groups", []) for offer in group.get("product_offer_ids", [])},
+                    feed_label=shopping.get("feed_label"))
             return result
         finally:
             await client.close()
