@@ -165,13 +165,15 @@ async def test_actual_legacy_null_prior_context_skips_source_reader(mongo, monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision"])
+@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision", "password_updated_at"])
 async def test_actual_owner_or_typed_revision_race_never_returns_observations(mongo, monkeypatch, kind):
     await mongo.unified_orders.insert_one(prior_order())
     original = routes.read_prior_season_observations
     async def changing(*args, **kwargs):
         result = await original(*args, **kwargs)
         if kind == "deleted": await mongo.users.delete_many({"id": "owner"})
+        elif kind == "password_updated_at":
+            await mongo.users.update_one({"id": "owner"}, {"$set": {"password_updated_at": "2026-10-29T00:00:00Z"}})
         elif kind in ("disabled", "staff"):
             await mongo.users.update_one({"id": "owner"}, {"$set": {"disabled": True} if kind == "disabled" else {"role": "staff"}})
         else:
@@ -182,3 +184,19 @@ async def test_actual_owner_or_typed_revision_race_never_returns_observations(mo
         assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
         result = await get(client)
     assert result.status_code == (409 if kind.endswith("revision") else 403)
+
+
+@pytest.mark.asyncio
+async def test_actual_password_change_between_dependency_and_initial_owner_gate_rejects(monkeypatch, mongo):
+    from integrations_control_center import google_prior_season_routes as routes
+
+    original = routes.principal
+    async def changed_after_auth(*args, **kwargs):
+        actor = await original(*args, **kwargs)
+        await mongo.users.update_one({"id": "owner"}, {"$set": {"password_updated_at": "2026-10-29T00:00:00Z"}})
+        return actor
+    monkeypatch.setattr(routes, "principal", changed_after_auth)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(monkeypatch, mongo, actual_auth=True)), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
+        assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
+        result = await get(client)
+    assert result.status_code == 403

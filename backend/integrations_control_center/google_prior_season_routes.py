@@ -19,16 +19,20 @@ def attach_google_prior_season_routes(router, db, current_user, *, clock=None):
         actor = await principal(db, user)
         if not actor["owner"]:
             raise problem("google_ads_owner_required", "مراجعة الموسم السابق متاحة للمالك فقط.", 403)
+        actor["authenticated_password_updated_at"] = user.get("password_updated_at")
         return actor
 
     async def fresh_owner(actor):
         rows = await db.users.find({"id": actor["user_id"]}, {
             "_id": 0, "id": 1, "role": 1, "disabled": 1, "is_active": 1,
-            "deleted_at": 1, "review_access_expires_at": 1,
+            "deleted_at": 1, "review_access_expires_at": 1, "password_updated_at": 1,
         }).limit(2).max_time_ms(1000).to_list(length=2)
         if (len(rows) != 1 or rows[0].get("id") != actor["user_id"]
-                or rows[0].get("role") != "owner" or account_is_disabled(rows[0])):
+                or rows[0].get("role") != "owner" or account_is_disabled(rows[0])
+                or BSON.encode({"stamp": rows[0].get("password_updated_at")})
+                != BSON.encode({"stamp": actor["authenticated_password_updated_at"]})):
             raise problem("google_ads_owner_required", "تعذر إثبات صلاحية المالك الحالية.", 403)
+        return BSON.encode(rows[0])
 
     @router.get("/google_ads/commercial-plans/{plan_id}/prior-season-observations")
     async def review(plan_id: str, expected_revision: int = Query(ge=1), actor=Depends(owner)):
@@ -38,7 +42,7 @@ def attach_google_prior_season_routes(router, db, current_user, *, clock=None):
         projection = {"_id": 0, "revision": 1, "fields": 1, "updated_by": 1, "updated_at": 1}
         try:
             async with asyncio.timeout(6):
-                await fresh_owner(actor)
+                owner_snapshot = await fresh_owner(actor)
                 plan = await db[PLANS].find_one(scope, projection)
                 if not plan:
                     raise problem("google_commercial_plan_not_found", "الخطة غير موجودة.", 404)
@@ -72,7 +76,8 @@ def attach_google_prior_season_routes(router, db, current_user, *, clock=None):
                 if (not latest or type(latest.get("revision")) is not int
                         or latest["revision"] != expected_revision or BSON.encode(latest) != snapshot):
                     raise problem("google_commercial_plan_revision_conflict", "تغيرت الخطة أثناء قراءة الموسم السابق.", 409)
-                await fresh_owner(actor)
+                if await fresh_owner(actor) != owner_snapshot:
+                    raise problem("google_ads_owner_required", "تغيرت صلاحية المالك أثناء القراءة.", 403)
                 return result
         except (ValueError, TypeError, KeyError, TimeoutError):
             raise problem("google_prior_season_observations_unavailable", "تعذر إثبات قراءة محدودة للموسم السابق.", 503) from None

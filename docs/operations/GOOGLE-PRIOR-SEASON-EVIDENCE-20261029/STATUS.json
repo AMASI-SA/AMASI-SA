@@ -9,13 +9,13 @@
   "implemented": "Strict nullable PriorSeasonContext(date_from/date_to/season_label/alignment_note/calendar_reference_text),1..366inclusive days andpriorend<currentstart. Ownerdeclared interval/reference staysalignment_verification unknown; Input writeack remains required. Shared rawline qualifier internallyfactored; currentfourwindows preserved. Newpurepriorwrapper closedserverdays/exactexplicitinterval only, no354/365shift. Newexplicit savedplan GETprior-season-observations reads exactprior\u00b11band only, samePROJECTION/index/type/size/count guards. ActualHTTPwriter\u2192reader, provenance/revision/fullfields races, no-prior/closedday/truncation/missingindex tests; no provider/catalog/backfill.",
   "verification": {
     "red": "ActualHTTP ownerPUT prior context failed422 extra_forbidden beforeimplementation",
-    "local": "108focused/-Werror/zero skips2.15s including5actualauth writer races; unchangedcurrentgoldendigest",
+    "local": "110focused/-Werror/zero skips2.31s including7actualauth writer races; unchangedcurrentgoldendigest",
     "unchanged_current": "Characterization digest captured fromimmutable8dc beforefactoring: empty/valid/duplicate/truncated currentresponses af8875a23d4868f15cf835e6863239b251c0fec8d59b1429bc4c6ed39ce583eb stillmatches",
-    "actual_mongo": "17 collected; successor requires125total/17actual/zero-skips CI (not executed locally)",
+    "actual_mongo": "19collected; successor requires129total/19actual/zero-skips CI (not executed locally)",
     "ci": "Historical4eb prior40954079047115/12; current4095407915091/14; savedFields40954079451145/8; full409540792261491backend415UI/build. Successor freshCI pending",
     "red_successor": "5 regressions failed200 before fix"
   },
-  "next": "Freeze successor remote and independent review; fresh125/17 and preservedcurrent/savedFields/full management CI. No router/UI attachment or release.",
+  "next": "Freeze finalsuccessor remote and independent review; fresh129/19 and preservedcurrent/savedFields/full management CI. No router/UI attachment or release.",
   "route_contract": {
     "attach": "attach_google_prior_season_routes(router,db,current_user)",
     "method": "GET",
@@ -26,5 +26,5 @@
     "authority": "alignmentunknown/growthnull/profitabilitynull/executionfalse; partialrawlineobservations notnetsales"
   },
   "rejected_checkpoint": "4ebf67fd3a51786689a407c9d3ee54d8ef782f6b: confirmed mid-read owner disabled/role/deletion and bool/float revision aliases returned observations; preserved historical checkpoint, acceptance withheld",
-  "successor_fix": "New route only fresh bounded unique owner DB gate before/after (not captured principal), strict final revision type plus exact BSON snapshot of projected plan fields/revision/provenance. No global auth/principal mutation. Real auth HTTP writer races added for all5 cases; realMongo owner seeded."
+  "successor_fix": "New route only fresh bounded unique owner DB gate before/after (not captured principal), strict final revision type plus exact BSON snapshot of projected plan fields/revision/provenance. No global auth/principal mutation. Real auth HTTP writer races added for all5 cases; realMongo owner seeded. Authenticated dependency password_updated_at binds initialDB owner and finalDB; exact BSON owner snapshot before/after. No password/hash reads."
 }

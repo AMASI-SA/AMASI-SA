@@ -156,7 +156,7 @@ async def test_truncated_prior_read_and_missing_index_never_publish_counts(monke
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision"])
+@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision", "password_updated_at"])
 async def test_current_owner_and_exact_revision_race_fail_closed(monkeypatch, kind):
     from integrations_control_center import google_prior_season_routes as routes
     db = DB()
@@ -166,6 +166,7 @@ async def test_current_owner_and_exact_revision_race_fail_closed(monkeypatch, ki
         if kind == "disabled": db.users.rows[0]["disabled"] = True
         elif kind == "staff": db.users.rows[0]["role"] = "staff"
         elif kind == "deleted": db.users.rows.clear()
+        elif kind == "password_updated_at": db.users.rows[0]["password_updated_at"] = "2026-10-29T00:00:00Z"
         else: db.plans.rows[0]["revision"] = True if kind == "bool_revision" else 1.0
         return result
     monkeypatch.setattr(routes, "read_prior_season_observations", changing)
@@ -173,3 +174,19 @@ async def test_current_owner_and_exact_revision_race_fail_closed(monkeypatch, ki
         assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
         result = await get(client)
     assert result.status_code == (409 if kind.endswith("revision") else 403)
+
+
+@pytest.mark.asyncio
+async def test_authenticated_dependency_password_stamp_must_match_initial_database_owner(monkeypatch):
+    from integrations_control_center import google_prior_season_routes as routes
+    db = DB()
+    original = routes.principal
+    async def changed_after_auth(*args, **kwargs):
+        actor = await original(*args, **kwargs)
+        db.users.rows[0]["password_updated_at"] = "2026-10-29T00:00:00Z"
+        return actor
+    monkeypatch.setattr(routes, "principal", changed_after_auth)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(monkeypatch, db, actual_auth=True)), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
+        assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
+        result = await get(client)
+    assert result.status_code == 403 and db.orders.query is None
