@@ -35,7 +35,9 @@ async def read_store_observations(db,*,owner_id,product_ids,as_of):
     lower=(date.fromisoformat(period['from'])-timedelta(days=1)).isoformat()
     upper=(date.fromisoformat(period['to'])+timedelta(days=1)).isoformat()
     if not product_ids:return empty
-    query={'user_id':owner_id,'order_date':{'$gte':lower,'$lte':upper},'$expr':{'$lte':[{'$bsonSize':'$$ROOT'},32768]}}
+    query={'user_id':owner_id,'order_date':{'$gte':lower,'$lte':upper},'$expr':{'$and':[{'$lte':[{'$bsonSize':'$$ROOT'},32768]},
+        {'$in':[{'$type':'$raw_by_source.salla_direct.payment_actions'},['missing','object']]},
+        {'$in':[{'$type':'$raw_by_source.salla_direct.payment_actions.refund_action'},['missing','object']]}]}}
     cursor=(db['unified_orders'].find(query,PROJECTION).hint([('user_id',1),('order_date',-1)])
             .limit(MAX_DOCUMENTS+1).max_time_ms(3000))
     rows=await cursor.to_list(length=MAX_DOCUMENTS+1)
@@ -43,7 +45,7 @@ async def read_store_observations(db,*,owner_id,product_ids,as_of):
            or not lower<=r['order_date']<=upper for r in rows):raise ValueError('read scope unproved')
     result=observe_product_lines(rows,owner_id=owner_id,product_ids=product_ids,as_of=as_of,truncated=len(rows)>MAX_DOCUMENTS)
     if sum(len(p['currency_groups']) for p in result['products'])>200:raise ValueError('output scope limit')
-    result['limitations']+=['normalized_date_plus_minus_one_is_candidate_discovery_only','oversized_documents_excluded_unquantified','index_required_no_fallback']
+    result['limitations']+=['normalized_date_plus_minus_one_is_candidate_discovery_only','oversized_documents_excluded_unquantified','malformed_refund_containers_excluded_before_projection','index_required_no_fallback']
     return result
 
 

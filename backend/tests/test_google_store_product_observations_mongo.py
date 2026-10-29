@@ -81,3 +81,12 @@ async def test_real_leading_zero_alias_cannot_add_second_observation(mongo):
     a=order();b=deepcopy(a);b.update(order_id='010',order_number='020');b['raw_by_source']['salla_direct'].update(id='010',reference_id='020')
     await mongo.unified_orders.insert_many([a,b]);out=await read(mongo)
     assert out['products'][0]['currency_groups'][0]['windows']['last_14_days']['observed_units']=='2'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('actions',['bad',None,[],{'refund_action':'bad'}])
+async def test_real_malformed_refund_containers_cannot_disappear_into_eligible_projection(mongo,actions):
+    value=order();value['raw_by_source']['salla_direct']['payment_actions']=actions
+    await mongo.unified_orders.insert_one(value)
+    out=await read(mongo)
+    assert out['products'][0]['currency_groups']==[] and out['coverage_complete'] is False
+    assert 'malformed_refund_containers_excluded_before_projection' in out['limitations']

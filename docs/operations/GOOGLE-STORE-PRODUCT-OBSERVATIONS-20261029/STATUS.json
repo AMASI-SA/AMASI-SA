@@ -59,5 +59,12 @@
     "red": "8 of9 new refund/alias regressions failed before fix; product alias already uncounted",
     "fresh_backend": "76 passed, no skips, 1.41s",
     "real_mongo": "4 additional projection/alias cases authored; total9. New exact-source CI required; no claim previous64case run validates this fix."
+  },
+  "projection_ambiguity_guard": {
+    "review": "Reviewer requested actual-Mongo probe for dotted projection erasing malformed refund-container type; not established as original failure",
+    "guard": "Before projection, server $type restricts payment_actions and refund_action to missing or object. Scalar/null/array containers omitted explicitly; missing remains unreconciled and incomplete. Does not fetch extra payment fields.",
+    "fresh_backend": "76 passed, no skips, -Werror,1.28s",
+    "actual_mongo": "4 new malformed-container cases; expected13 real replica cases/89 total minimum; latest source CI pending",
+    "prior_ci": "7e45 replica job123606843083 run40919006211 success; not claim current added guard validated until newCI"
   }
 }
