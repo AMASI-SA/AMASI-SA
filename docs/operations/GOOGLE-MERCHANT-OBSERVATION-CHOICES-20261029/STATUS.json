@@ -1,0 +1,24 @@
+{
+  "task_id": "GOOGLE-MERCHANT-OBSERVATION-CHOICES-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-merchant-observation-choices-20261029",
+  "state": "WIP_backend_local_choices_first_checkpoint",
+  "parent_source_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
+  "assessment_sha": "2c2516ede2d33c8757d659a431c36039034a3c87",
+  "runtime_attached": false,
+  "production_changed": false,
+  "provider_calls": 0,
+  "credential_reads": 0,
+  "deploy_ready": false,
+  "verification": {
+    "unit": "50 passed2.19s,-W error,0skip",
+    "mongo": "18 tests written; actual loopback replica CI pending",
+    "workflow": "Dedicated exact push+PR gate requires418 tests including70 actualMongo; not yet run"
+  },
+  "remaining": [
+    "Frontend manual selector/list service not yet implemented.",
+    "Real Mongo CI and independent review pending.",
+    "Root owns final parent/router attachment and fresh production integration."
+  ],
+  "next_safe_action": "Run dedicated remote CI while adding approved new selector/service only; keep frozen699 route and7e686 child unchanged."
+}
