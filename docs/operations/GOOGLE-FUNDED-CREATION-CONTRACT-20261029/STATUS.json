@@ -1,22 +1,38 @@
 {
-  "status": "WIP_PURE_CONTRACT_UNIT_SCHEMA_GREEN_CI_REVIEW_PENDING",
+  "status": "WIP_PURE_CONTRACT_REVIEWED_EXACT_CI_PASSED_NOT_RELEASE_READY",
   "branch": "codex/google-funded-creation-contract-wip-20261029",
   "base": "f37d615a63d9650743bd2fc07ed9b5129a6009c1",
   "scope": "New pure fundedcreation module +dedicatedunit/schema tests/newworkflow/STATUS only. No existingruntime/sharedguard/routes/gateway/worker/PAUSED builder edits.",
   "implemented": "Strict supplied grant-mode/scope/ownerreview/time/currency/explicitmoney/draftdigest; private copy of validated existingSearchRSA graph flips onlynewcampaigncreate toENABLED; exactnewtempresourceallowlist including narrowlybound ownnewcampaign-goalupdate; correlationgraph, onepartialfailurefalse request/hash, distinctfundedidentity. Revalidation rebuilds exactimmutable graph and refuses rehashedtampering/extraauthority. All outputs explicitlyexecutablefalse/funded_dispatch_authorizedfalse.",
   "tests": {
     "local_new": "81passed2.66s-Werror (78pure+3mandatoryofficialv25schema); noMongo/provider/network/credentialcalls",
-    "CI": "Pending exactcandidate; dedicatedworkflow requires78newpure+3schema+originalcreation/builder/protobuf zero failure/error/skip"
+    "CI": {
+      "dedicated_run": 40965837766,
+      "job": 123769985494,
+      "result": "316passed4.94s; actualcheckout8b028; gate78newpure+3mandatoryv25schema/zero failures-errors-skips",
+      "full_management_run": 40965837731,
+      "backend_job": 123769986205,
+      "backend": "1508passed103.06s/allrequiredMongo modules/zero skips; unchangedexistingfullsuite doesnotinclude new81 coveredbydedicatedCI",
+      "frontend_job": 123769985816,
+      "frontend": "261passed18suites/buildsuccess",
+      "readiness_run": 40965837771,
+      "readiness": "Failed inheritedintent/Composer mismatch and61da-not-ancestor8b028; backendpreflightpassed. WIPdirectf37 isnotreleasecandidate. Do not claimallgatespassed or alterfrozenintent/ancestry."
+    },
+    "local_full_pure_regression": "316passed3.16s-Werror;81new inclmandatoryschema plusunchangedPAUSEDcreation/builder/protobuf."
   },
   "prepared_auth_requirement": "Later gateway must finish credential acquisition/refresh and bind verified auth_epoch/account metadata before native validation/reservation/floor; never reacquire account_client, refresh OAuth, rebuild client, run audit/DB/provider preview or await any other operation after positivefloorACK and final synchronous flags/time/nativeage check before the one mutate. Current inspected account_client awaits _credential before constructing GoogleAdsClient; current request uses capturedheaders and oneHTTPstream, no explicitrefreshloop. This observation does not certify any future adapter/transport chain: test actual chosen client with a spy that fails on postfloorrefresh/interveningawait, expiry/relink races and unknownresult/noresend. Do not assume arbitrary client wrappers have prepared-auth behavior.",
   "not_authority": "Pure grant is supplied data, not authenticated/persisted owner authorization. No actualfinanciallimits saved, no authoritytoken/commonreservation/submissionfloor/nativeproof/worker wired. ExistingPAUSED identities not adopted; no paidlaunch orenable permitted.",
   "runtime_available": false,
   "production_changed": false,
-  "next": "Savecandidate/DraftPR and inspect exactCI; budget_audit independent immutable review. Only after purecontract acceptance may root assign ownergrant/commonguard interfaces.",
+  "next": "Root reviews exactpurecode/logs/ledger. Propose persistedownergrant/common-guard interfaces read-only next; no sharedruntimehunks untilassigned. Preserve frozenWIPs/latestforeignproduction; freshSourceA/intent required foranyfuturedeployment.",
   "remaining": [
     "Production storage/newnamespace/legacy/native prerequisites",
     "Real ownerfinancialgrant and explicit activation",
     "Exact ENABLED graph providersemanticvalidate-only and currentproduct/configuration proof",
     "Atomicfunded claim/floor/originalgraphprovenance/reconciliation/worker/preparedauth path"
-  ]
+  ],
+  "tested_source": "8b0283668e2d03427ed2613910c577d3e168737d",
+  "tested_tree": "b01b27513a9029b0e934031ee6966553472aa490",
+  "independent_review": "budget_audit reviewed8b028 purecontract, ran81new-Werror independently withzero skips. Independentlyread dedicatedjob123769985494 checkout8b028/3164.94s/gates78+3/zero andreadiness inheritedintent+ancestryfailure. No materialfinding inlimitedpurecontract; no owner/OAuth/native/reservation/dispatch authority proof.",
+  "account_identity_scope": "Grant account_id uses bounded decimal syntax1..20digits matching existingdraftDigits, including leadingzeros; this isnotGooglecustomeridentity verification. Purecontract compares exact supplieddraftscope and emits native_configuration_verified:false. Current GoogleAdsClient.account_metadata requires str(native customer.id)==captured customer_id, and linkedaccountscope mustmatch, so leadingzeroaliases cannotbe silently treatedasverified nativeaccount. Future grant producer must load canonical native-linkedaccount IDs and reject/normalize UIformat beforegrant storage/hash underreview, not blindly trustpure syntacticacceptance. No sourcechange made."
 }
