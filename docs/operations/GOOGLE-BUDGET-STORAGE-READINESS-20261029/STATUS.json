@@ -1,94 +1,70 @@
 {
   "task": "GOOGLE-BUDGET-STORAGE-READINESS-20261029",
-  "state": "WIP verified storage-only diagnostic; independent final review pending, not deployed",
-  "branch": "codex/google-budget-storage-source-20261029",
-  "base_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
-  "scope": "Owner-only explicit storage transaction diagnostic, no six-handler migration",
-  "production_changed": false,
-  "contract": {
-    "transaction": "Own session; snapshot read concern/majority write concern. Require acknowledged unique probe insert then explicit admin abortTransaction response numericok1 with no writeConcernError/writeErrors, same public session. Always await public async end_session within retained original task; never Motor async context cleanup, never commit/deleteforeign.",
-    "result": "Storage diagnostic only; no reusable capability, execution_authorized=false, funding_ready=false, policy_changed=false, provider_writes=0",
-    "deadline": "8s HTTP deadline plus PyMongo CSOT in original retained task. Late results cannot upgrade expiredHTTP response; no HTTP-triggered driverFuture cancellation. Resource cap1 until actual driverwork/sessioncleanupdone.",
-    "not_proven": [
-      "Majority commit durability: probe intentionally aborts, never commits.",
-      "Production Mongo capability until deployed diagnostic is explicitly invoked successfully.",
-      "Native Google permissions, external writers, budget guard readiness, funding readiness."
-    ]
+  "scope": "Explicit owner-only snapshot write-and-abort storage diagnostic; six policy handlers unchanged",
+  "state": "PUBLISHING_ONE_CLICK_VERIFY_PENDING",
+  "branch": "codex/google-budget-storage-status-20261029",
+  "production_changed": "deployment in progress",
+  "release": {
+    "pr": 1606,
+    "source_a": "67b369887ee254a7cb4cd26c34b7a4cf078cd52a",
+    "intent_b": "2c84abbfa976bb9bb32630c2cf971ab5a6b379fa",
+    "merge": "dada1def704ae968230d63c3c9885508a2a6653d",
+    "base": "050b3da6ffc9660b2022a111117fd928da07ab51",
+    "tree": "3317a1e1c31cae823718275f7ffaf44a20157d43",
+    "runtime": "rg5-713e9eacd735e5d00de26fa837ec160962c5417ddeb1b35e9f84f767d4d82669",
+    "intent_sha256": "d2e8ba58e76dff1aad0bf32993b7cac6d632905678bb7c75223f9d9e976b9090",
+    "frontend_artifact": "6631a09243c43cdaa2c09e1b9a4fa3bc601dbecf681052b5405bf592c59be96a"
   },
   "verification": {
-    "backend": "111passed2.55s -Werror; includes red→green executor-Future cancellation retention regression.",
-    "frontend": "19 passed in 1.29s with governed Node22.23.2/Yarn1.22.22",
-    "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base",
-    "actual_mongo_previous_sha": {
-      "run_id": 40908995457,
-      "job_id": 123571481048,
-      "conclusion": "success",
-      "result": "107 passed in 4.36s; failures/errors/skips0; includes actual disposable replica write+abort proof preserving foreign data and existing policy"
+    "root_focused": "16 passed -Werror1.31s",
+    "independent": "Source integration and full frozen pair PASS;1026backend243control/fullhistory/onlyintentdiff/frontendproof",
+    "source_ci": {
+      "all_success": 12,
+      "full_google": 40916446635,
+      "backend": 1236,
+      "frontend": 228,
+      "suites": 18,
+      "diagnostic": 40916446450,
+      "diagnostic_total": 114,
+      "skips": 0,
+      "catalog": 40916446490,
+      "catalog_total": 21,
+      "actual_catalog_mongo": 5
     },
-    "ack_replica_ci": {
-      "source": "cdddbfa9872421b44a54d73e5bf15aa0c279de8c",
-      "run": 40911092616,
-      "job": 123578939047,
-      "result": "113passed89.87s, failures/errors/skips0, -Werror"
+    "b_ci": {
+      "all_success": 12,
+      "intentional_skip": "TikTok Creator",
+      "readiness": 40918788508,
+      "host20_no_git_job": 123607857707,
+      "host20_seconds": 62.68
     },
-    "timing_replica_ci": {
-      "source": "4edb3564f02b009f12bc54c469a1549d1ec6120e",
-      "run": 40913294044,
-      "job": 123586725490,
-      "result": "114passed89.56s, failures/errors/skips0, -Werror",
-      "actual_http": [
-        {
-          "fault": "server91",
-          "status": 503,
-          "response_seconds": 8.003,
-          "cleanup_after_response_seconds": 0,
-          "event_loop_max_gap_seconds": 0.051
-        },
-        {
-          "fault": "connection-close",
-          "status": 503,
-          "response_seconds": 0.491,
-          "cleanup_after_response_seconds": 0,
-          "event_loop_max_gap_seconds": 0.051
-        }
-      ],
-      "limits": "Both authenticated ASGI requests <=12s; event-loop heartbeat gap<1.5s. Actual faults completed cleanup by response; delayed-retention behavior independently tested with controllable cleanup/executorFuture. Whole suite/test durations include setup/teardown, not request latency."
+    "actual_host": {
+      "a": "Clean two-build frozen whole intent exactly matches CI",
+      "b": "Clean adapter PASS50.53s",
+      "app": "Materialize PASS60.07s exact B tree; foreign directories and usereditor unsavedfile preserved"
     }
   },
-  "next_safe_action": "Complete budget_audit independent review of exact runtime4edb3564; root may then create fresh direct-production source from reviewed final code (do not release WIP ancestry). No production probe performed; parent owns release and subsequent explicit storage verification.",
-  "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
-  "code_checkpoint_sha": "4edb3564f02b009f12bc54c469a1549d1ec6120e",
-  "pull_request": 1603,
-  "cleanup_contract": "One strongly retained probe per process. HTTP/request cancellation never cancels executor-backed driver operations; failclosed response deadline8s is independent of original task work+cleanup. Further probes503 until actual taskdone. Public async end_session Future additionally shielded if original task itself cancelled; original CSOT context closes only after cleanup Future completion. No retry/unbounded HTTP cleanup await.",
-  "motor_assessment": {
-    "evidence": "Motor3.7.1 AsyncIOMotorClientSession.__aexit__ calls synchronous delegate.__exit__. PyMongo4.18.3 ClientSession.abort_transaction swallows OperationFailure/ConnectionFailure per spec. Source inspected locally; no live fault injection.",
-    "limitation": "Raw command response now proves abort ACK; pending timing tests separately assess actual HTTP responsiveness and retained cleanup. No production failure inferred from original fake warning or whole-suite duration.",
-    "production_claim": "No production Mongo capability, abort acknowledgement, funding readiness or majority commit durability proved.",
-    "resolution": "Use supported public client.admin.command abortTransaction, inspecting actual reply instead of driver abort helper. Explicit async end_session only; cleanup result never overrides diagnostic failure. CSOT remains inside original retained task. No private driver state, no manual retries.",
-    "official_reference": "https://www.mongodb.com/docs/v8.0/reference/command/aborttransaction/"
+  "guard": {
+    "actor": "codex-google-budget-storage-20261029",
+    "prepare": "PASS",
+    "prepublish": "PASS ready_to_publish true exact A/M4/runtime",
+    "lease": "owned active pending verify"
   },
-  "production_base": "050b3da6ffc9660b2022a111117fd928da07ab51",
-  "status": "SOURCE_A_CI_PENDING_RUNNER_COMPATIBILITY_FIX",
-  "reintegration": {
-    "previous_wip": "e7a0a37f2084d75d0d672aa257b5656cbbc910af",
-    "tested_runtime": "4edb3564f02b009f12bc54c469a1549d1ec6120e",
-    "actual_mongo_ci": 40913294044,
-    "passed": 114,
-    "skips": 0,
-    "root_tests": "16passed1.24s -Werror",
-    "root_timing_log": "server91HTTP5038.003s;connectionclose5030.491s;eventloopgap0.051s",
-    "root_diff_scope": "8 reviewedfiles plus +2line routerattachment preserving currentproductionroutes; statusadjusted only",
-    "old_wip_ancestry": "notreleased; strictv5sourcehistoryrequiresfreshdirectproductionA",
-    "production_probe": false,
-    "production_changed": false,
-    "initial_clean_source": "46b932061abf545483213980ac33ecd7216bfad7",
-    "catalog_ci_infra": {
-      "run": 40915509838,
-      "job": 123594534510,
-      "result": "Mongo container stopped before test collection; no applicationtestfailure",
-      "change": "Only replica runner24.04→22.04, consistent proven repo workaround; Mongo8.0.26 and5test/no-skip assertions unchanged.",
-      "new_ci": "pending"
-    }
+  "publication": {
+    "publish_changes_clicks": 1,
+    "started": "2026-10-29 20:30 Asia/Riyadh",
+    "baseline_finish": "2026-10-29 20:01 Asia/Riyadh",
+    "latest_observed": "Publishing your website to cloud...",
+    "do_not_repeat": true
   },
-  "next": "Run fresh sourceCI, root and independent integration review; v5 A/B build after preceding suggestions release closes lease. Deploy diagnostic only then explicit owner UI production probe; do not deploy budget migration from this proof alone."
+  "limits": [
+    "Abort-only transaction proof; no majority-commit durability or policy-collection permissions proof.",
+    "No Google account connection or management authorization proof from storage result.",
+    "No budget guard migration, policy activation, paid campaigns or owner limits.",
+    "Per-process one retained task; original driver/session cleanup retained after HTTP deadline/cancellation."
+  ],
+  "production_probe": {
+    "performed": false
+  },
+  "next_safe_action": "Wait newer explicit deployment finish, guard verify3/closedlease, actual owner UI diagnostic; preserve outcome without claiming budget execution ready."
 }
