@@ -232,5 +232,15 @@
     "runner_correction": "FirstUI invocationwrongcwd failedbeforetests; correctedfrontendcwd passed",
     "ci_logs": "Rootread actual48incl8Mongo0skip,227UI/build6.52,full1426backend34.82s+391UI/build4.94; checkout729714a exactsourceM7",
     "limits": "No actualSalla/providerclaim orpositiveownerplan; futurefreshcurrentprodsource/v5release/liveacceptance"
-  }
+  },
+  "release_hold": {
+    "active": true,
+    "reason": "Confirmed actual saved-plan fields contract bug; reachable-flow acceptance withdrawn",
+    "evidence": "save_commercial_plan excludes expected_revision and acknowledge_review; linked/live/native readroutesvalidatewriteInput requiringack. ActualPUT200→read503beforeprovider; syntheticfixtures incorrectlyretainedack.",
+    "fix_owner": "google_seasons",
+    "fix_scope": "Newcoherentbranch CommercialPlanFields/Inputsplit,3routes usepersistedfields, actualsave→readMongo regressions, false/missingackwritesstillrejected",
+    "production": "Affected read routes not deployed",
+    "historical_evidence": "Prior unit/UI/Mongo fixture tests remain historical boundedproof, not realwriter flowacceptance"
+  },
+  "status": "RELEASE_HOLD_ACTUAL_SAVED_PLAN_VALIDATION_FAILURE"
 }
