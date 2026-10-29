@@ -220,7 +220,7 @@
     "preserved": true
   },
   "host_rehearsal": {
-    "state": "SOURCE_A_EXACT_CI_INTENT_PASS_HOST_B_RUNNING",
+    "state": "ACTUAL_HOST_A_AND_B_PASS_INDEPENDENT_PAIR_PASS",
     "root_observed_guard_active": false,
     "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
     "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
@@ -231,8 +231,41 @@
     "source_build_seconds": [
       4.85,
       5.21
-    ]
+    ],
+    "intent_b_seconds": 77.43,
+    "isolated_verified": true,
+    "frontend_isolated_runtime_artifact_verified": true
   },
   "intent_b": "ec1280b0dd7c003423b1cf79a469a5625205057b",
-  "intent_b_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6"
+  "intent_b_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
+  "b_ci": {
+    "google": {
+      "run": 40953098373,
+      "backend_job": 123726079656,
+      "backend": 1307,
+      "seconds": 36.91,
+      "frontend_job": 123726079173,
+      "frontend": 261,
+      "suites": 18,
+      "build_seconds": 5.98
+    },
+    "catalog": {
+      "run": 40953098262,
+      "job": 123726079091,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0
+    },
+    "readiness": {
+      "run": 40953098216,
+      "host_job": 123726608227,
+      "host_seconds": 70.58,
+      "state": "success"
+    },
+    "checkout": "5c0519f914c73e9663a09f1e6dd6ae1348026b75",
+    "tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
+    "root_logs_read": true,
+    "codeql": "onlyremaininginprogress"
+  },
+  "independent_final_pair": "PASS ec128 parentc0ce exactintent-only/fullsha3daf backend1029control243frontend1013; no host/CI claimed byreviewer"
 }
