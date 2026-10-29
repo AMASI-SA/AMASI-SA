@@ -1,0 +1,58 @@
+{
+  "task": "GOOGLE-PLAN-SUGGESTIONS-20261027",
+  "branch": "codex/google-plan-suggestions-release-20261029",
+  "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
+  "state": "WIP backend owner-only quoted suggestions; frontend integration in progress",
+  "scope": "Suggest season, explicit ISO dates, supported country, audience, message and category URL from exact spans of the supplied instruction. No automatic budget, product IDs, exclusions or authorization.",
+  "verification": {
+    "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
+    "exit_code": 0,
+    "passed": 46,
+    "provider_calls": "Synthetic reasoning only; no live model request",
+    "review": "pending"
+  },
+  "production_changed": false,
+  "next": "Validate combined server and owner preview UI, independently review, then prepare Release Guard A/B only after actual-host access and fresh guard status.",
+  "updated_at": "2026-10-27T00:42:33.730Z",
+  "stage": "reviewed_combined_source_ci_pending",
+  "frontend_source": "539d7c1de211b3d3a97bb5874af544b4216f0bee",
+  "backend_checkpoint_validation": {
+    "sha": "9652a7292d580896594c7c1a780ab9ee37714936",
+    "management_run": 40426862964,
+    "backend_passed": 1158,
+    "frontend_passed": 189,
+    "frontend_suites": 17,
+    "frontend_build": "passed",
+    "release_readiness_run": 40426862707,
+    "reproducible_build": "passed"
+  },
+  "combined_validation": {
+    "root_backend": "46 passed in0.90s",
+    "root_frontend": "64 passed,3 suites,1.103s; exact five source/test files match UI checkpoint",
+    "fixture_correction": "Positive audience fixture now contains exact quote; implementation unchanged.",
+    "ci": "New source CI required after this fixture correction.",
+    "independent_review": "Google seasons auditor source review found no blocking issue; backend46 passed."
+  },
+  "live_observation": {
+    "google_account": "5052346701",
+    "connection_label": "connected",
+    "management_refresh": "22 campaigns returned; metrics updated; no ownership error",
+    "paid_mutations": 0,
+    "release_editor": "502 then Preview Unavailable: resting after inactivity. Fresh Emergent home opens then DOM and screenshot protocol timeouts. No /app mutation or guard lease."
+  },
+  "reintegration_20261029": {
+    "base_inventory_source": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+    "reviewed_source": "e343461d7f53c1d55ca6557d6f859538467b0935",
+    "state": "WIP based on unreleased inventory source; not release-ready",
+    "scope": "Original11 files only; preserve CAS/Ubuntu22.04/inventory workflow union and current dependencies/intent.",
+    "fresh_validation": {
+      "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
+      "result": "46 passed, no skips, 1.63s, exit0",
+      "diff_check": "passed",
+      "frontend": "Not run locally; worktree has no node_modules. Fresh CI required."
+    },
+    "next": "Incorporate inventory production merge normally when coordinator supplies it; fresh full CI and independent review; no intent freeze by this agent.",
+    "provider_calls": 0,
+    "production_changed": false
+  }
+}

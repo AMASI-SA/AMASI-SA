@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
 import GooglePinnedCatalogReview from "./GooglePinnedCatalogReview";
+import GoogleCommercialPlanSuggestion from "./GoogleCommercialPlanSuggestion";
+import { applyGoogleSuggestionToEmptyFields } from "../../services/googleCommercialPlanSuggestion";
 
 const INPUT = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100";
 const BUTTON = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40";
@@ -50,6 +52,13 @@ function PlanPanel({ planId }) {
         return () => { active = false; controller.abort(); };
     }, [planId, reload]);
     function edit(key, value) { setForm((prior) => ({ ...prior, [key]: value })); setReviewed(false); setNotice(""); }
+    function applySuggestion(suggestion) {
+        if (busy || conflict || !form) return;
+        try {
+            setForm(applyGoogleSuggestionToEmptyFields(form, suggestion));
+            setReviewed(false); setNotice("عُبئت الحقول الفارغة من الاقتراح. راجع الخطة وحدودها قبل الحفظ."); setError("");
+        } catch (failure) { setError(failure.message); }
+    }
     async function save(event) {
         event.preventDefault();
         if (busy || inflight.current || conflict || !reviewed || !form) return;
@@ -67,7 +76,7 @@ function PlanPanel({ planId }) {
     }
     return <details className="rounded-2xl border border-slate-200 bg-white p-4" aria-label="خطة المواسم والمنتجات لجوجل" dir="rtl">
         <summary className="cursor-pointer font-black">خطة المواسم والمنتجات لجوجل</summary>
-        <p className="mt-3 text-sm leading-7 text-slate-600">اكتب توجيهك بالكلام العادي، ثم أكمل الحقول وراجعها. تحويل التوجيه إلى الحقول واختيار المنتجات تلقائيًا غير متاحين في هذه المرحلة.</p>
+        <p className="mt-3 text-sm leading-7 text-slate-600">اكتب توجيهك بالكلام العادي لاقتراح حقول الموسم والسوق والجمهور والرابط، ثم راجعها وأكمل الحقول الناقصة. اختيار المنتجات تلقائيًا غير متاح في هذه المرحلة.</p>
         <p className="mt-2 text-sm leading-7 text-amber-900">حفظ الخطة والحدود التجارية لا يمنح تفويض تشغيل أو إنفاق؛ التنفيذ يحتاج تفويضًا منفصلًا وحدودًا معتمدة.</p>
         <button type="button" className={`${BUTTON} mt-3`} disabled={busy} onClick={() => setReload((value) => value + 1)}>إعادة تحميل خطة الموسم</button>
         {busy && <p role="status">جارٍ قراءة أو حفظ الخطة…</p>}
@@ -77,6 +86,7 @@ function PlanPanel({ planId }) {
             <p className="text-xs text-slate-500">النسخة المحفوظة: {plan?.revision || 0} · المنتجات والأدلة تحتاج تحققًا مستقلًا</p>
             <fieldset disabled={busy || conflict} className="space-y-4">
                 <label className="block text-sm font-bold">توجيه المالك<textarea required maxLength={6000} aria-label="توجيه المالك" className={INPUT} rows={3} value={form.instruction} onChange={(event) => edit("instruction", event.target.value)} placeholder="ركز على هدايا الشتاء بالسعودية وهذا رابط قسم الشالات…" /></label>
+                <GoogleCommercialPlanSuggestion form={form} reviewed={reviewed} disabled={busy || conflict} onApply={applySuggestion} />
                 <div className="grid gap-3 sm:grid-cols-2">{FIELDS.map(([key, label, type]) => <label className="text-sm font-bold" key={key}>{label}<input required={["season", "starts_on", "ends_on", "market", "audience", "message"].includes(key)} type={type} className={INPUT} aria-label={label} value={form[key] || ""} onChange={(event) => edit(key, event.target.value)} /></label>)}</div>
                 <label className="block text-sm font-bold">الاستبعادات الإضافية<textarea aria-label="الاستبعادات الإضافية" className={INPUT} rows={2} value={form.exclusions} onChange={(event) => edit("exclusions", event.target.value)} placeholder="استبعاد واحد في كل سطر" /></label>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -92,6 +102,7 @@ function PlanPanel({ planId }) {
             </fieldset>
         </form>}
         {plan && form && <GooglePinnedCatalogReview plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
+        {!plan && form && <p role="status" className="mt-3 text-sm text-slate-600">احفظ خطة ومعرفات منتجات سلة الرقمية أولًا لإتاحة مراجعة المنتجات المثبتة في الكتالوج.</p>}
         <section aria-label="جاهزية أدلة خطة الموسم" className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-7">
             <p>المبيعات: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — الأدلة لم تُجمع بعد.</p>
             <p>الربحية غير مثبتة عند نقص التكاليف. المخزون والمقاسات ووقت التجهيز وربط الكتالوج تحتاج التحقق.</p>
