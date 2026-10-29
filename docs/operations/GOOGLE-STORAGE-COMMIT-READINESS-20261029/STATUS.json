@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-STORAGE-COMMIT-READINESS-20261029",
-  "state": "WIP localverticalslice; actualreplica+independentreview pending",
+  "state": "Verified WIP ready for parent review/release preparation; not deployed or run in production",
   "branch": "codex/google-storage-commit-readiness-20261029",
   "base_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
   "production_changed": false,
@@ -17,10 +17,56 @@
     ]
   },
   "verification": {
-    "backend": "127passed3.50s-Werror: new16+oldabort16+standing/creationpolicy95",
+    "backend": "127passed3.50s-Werror: new16+frozenabort16+standing/creationpolicy95",
     "frontend": "21passed1.489s via governed toolchain; explicitownerbutton/noautomaticcalls/account-independentwidget, unknown/historicalresponsesnoauthority",
-    "actual_replica": "Pending dedicatedCI117expected including6actualMongo: success/repeat/foreign, commit91/close/WCE, cleanupACKloss, independentworkerCASrace. RetryWritesTruewirecommitcounter.",
-    "preservation": "Frozen1606 abort-onlyhelper and its tests/6policyhandlers unchanged; onlynewroute2line attach and workspaceimport/render. No releaseintent."
+    "actual_replica": {
+      "source": "952ad70aad222c0be0ed45d2816e1353a14694a2",
+      "run": 40923830565,
+      "backend_job": 123623910095,
+      "result": "117passed14.16s,6actualMongo,failures/errors/skips0,-Werror",
+      "faults": [
+        {
+          "kind": "server91",
+          "response_seconds": 10.007,
+          "cleanup_seconds": 0.002,
+          "event_loop_gap": 0.051,
+          "wire_commits": 1
+        },
+        {
+          "kind": "connection-close",
+          "response_seconds": 0.502,
+          "cleanup_seconds": 0.002,
+          "event_loop_gap": 0.051,
+          "wire_commits": 1
+        },
+        {
+          "kind": "writeConcernError",
+          "response_seconds": 0.011,
+          "cleanup_seconds": 0.003,
+          "event_loop_gap": 0.05,
+          "wire_commits": 1
+        }
+      ],
+      "coverage": "Actualsuccess/freshsessionprimarymajorityreadback/repeatcompletedCAS/foreignpreservation;unknowncommitreceiptheld/no secondcommit;uncertaincleanupheld/no seconddelete;2independentworkerinstancesonlyonecommit underreceiptcontention. retryWritesTrue."
+    },
+    "preservation": "Frozen1606 abort-onlyhelper and its tests/6policyhandlers unchanged; onlynewroute2line attach and workspaceimport/render. No releaseintent.",
+    "dedicated_frontend": {
+      "run": 40923830565,
+      "job": 123623911254,
+      "result": "21tests2suites+buildSUCCESS"
+    },
+    "full_google": {
+      "run": 40923830543,
+      "backend_job": 123623910402,
+      "backend": "1236passed32.64s",
+      "frontend_job": 123623909664,
+      "frontend": "18suites228tests+buildSUCCESS"
+    },
+    "independent_review": "budget_audit independently16unitcases-Werror; no directprotocol blocker incode; actualreplica/productionlimitations explicitly retained.",
+    "release_identity": "backend_runtime_source_path_included returnsTrue forgoogle_ads_routes.py andnewgoogle_ads_storage_commit_readiness.py"
   },
-  "next_safe_action": "Run exactsource actualreplica/frozenfrontend CI and independentbudget_audit; fix reviewfailures before any rootrelease. Rootownsdeployment andliveprobe."
+  "next_safe_action": "Root review/selectively integrate10paths atoplatestproduction, preserving resumeUI/other routeattach; freshSourceA/CI/reproduciblebuild before separateReleaseGuard release. Onlythen explicitownerliveprobe; success isnecessaryengineevidence, notpolicyRBAC/nativeauthorization/funding readiness. No frozen1606 modification or sixhandler migration.",
+  "code_checkpoint_sha": "952ad70aad222c0be0ed45d2816e1353a14694a2",
+  "reviewed_runtime_sha": "9880327b357a3aa179e900d322989b74cd7f7d58",
+  "pull_request": 1612
 }
