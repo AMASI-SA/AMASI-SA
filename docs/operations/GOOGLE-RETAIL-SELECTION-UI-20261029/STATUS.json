@@ -4,7 +4,7 @@
   "date_utc": "2026-10-29",
   "branch": "codex/google-retail-selection-ui-20261029",
   "production_base_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "status": "WIP UI companion; immutable review and CI pending; not deployment-ready",
+  "status": "reviewed and CI verified; ready for combined c7 integration, not standalone deployment",
   "owned_files": [
     "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
     "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
@@ -38,14 +38,74 @@
     "live_google_calls": false,
     "paid_writes": false,
     "deployment": false,
-    "git_diff_check": "passed"
+    "git_diff_check": "passed",
+    "independent_review": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "bounded PASS; no confirmed blocker",
+      "source": "0972717d35582c45371863e833c7ee29464275d7",
+      "tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+      "composer": "51 passed, 3.275s",
+      "full_frontend": "252 passed, 18 suites, 0 skips, 7.128s",
+      "additional_probes": "merchant-switch failure and late old-merchant response passed on0e40; relevant logic unchanged in097",
+      "scope": "source-only UI contract; no live provider or deployment proof"
+    },
+    "ci": {
+      "run": 40934142859,
+      "result": "success after one infrastructure-only frontend retry",
+      "synthetic_merge": "d8d98383fc39a6180c0da7e9dc90d2bce4253dc6",
+      "synthetic_tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+      "parents": [
+        "e51f5b88b68905460417a01fb9ceb3704706c168",
+        "0972717d35582c45371863e833c7ee29464275d7"
+      ],
+      "backend": {
+        "job": 123671963255,
+        "passed": 1242,
+        "skipped": 0,
+        "seconds": 23.27,
+        "actual_mongo": "8.0.26 disposable loopback; fake Google provider"
+      },
+      "frontend": {
+        "job": 123671959845,
+        "passed": 252,
+        "suites": 18,
+        "skipped": 0,
+        "build_seconds": 6.15
+      },
+      "scope": "UI-only branch; c7 backend gate is not included. Synthetic merge has exact reviewed source tree."
+    },
+    "infrastructure_retries": [
+      {
+        "run": 40934142859,
+        "failed_job": 123660087607,
+        "cause": "Yarn registry HTTP502 fetching json-parse-even-better-errors2.3.1 before tests",
+        "retry_count": 1,
+        "retry_job": 123671959845,
+        "result": "success; unchanged source and dependency lock"
+      },
+      {
+        "run": 40934142895,
+        "failed_job": 123660092318,
+        "cause": "Yarn registry HTTP502 fetching @phosphor-icons/react2.1.10 before tests; missing artifact was consequential",
+        "retry_count": 1,
+        "retry_job": 123671945284,
+        "result": "187 tests/14 suites passed; entire Operational Balance Web workflow success"
+      }
+    ],
+    "release_readiness": {
+      "run": 40934142902,
+      "frontend_job": 123660088252,
+      "backend_job": 123660088890,
+      "result": "success; source candidate reproducible build and backend preflight",
+      "deployment": "not performed; root must generate new combined Source A and Intent B"
+    }
   },
   "remaining": [
-    "Finish exact-tree frontend regression and independent review; save source and final evidence remotely.",
-    "Root integrates reviewed c7 backend plus UI paths onto latest production; run integrated CI and create fresh Source A/Intent B under Release Guard v5.",
-    "Root verifies deployed owner flow; this slice does not claim live provider eligibility, independent mapping, automatic first launch or category membership."
+    "Prepare one isolated combined c7 backend plus097 UI source directly on freshly fetched production; preserve concurrent changes.",
+    "Run combined backend/252 UI/build CI and independent integration review.",
+    "Root alone creates final Release Guard v5 A/B, deploys and verifies live owner flow. No independent mapping or paid-launch completion claimed."
   ],
-  "next_action": "Save immutable source checkpoint and draft PR for review; root alone owns release.",
+  "next_action": "Build combined integration under root assignment; do not deploy UI alone.",
   "previous_checkpoint": {
     "source_sha": "0e40b85471d6e97eb168933886feb2b6355eed88",
     "tree_sha": "538fd37d7c68775dd33704b9fefe548666b5f168",
@@ -59,5 +119,12 @@
       "readiness_run": 40933480809,
       "readiness": "source candidate classified; reproducible double build and backend preflight passed; not a deployed release"
     }
+  },
+  "reviewed_source_sha": "0972717d35582c45371863e833c7ee29464275d7",
+  "reviewed_source_tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+  "pull_request": {
+    "number": 1620,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1620",
+    "state": "draft"
   }
 }
