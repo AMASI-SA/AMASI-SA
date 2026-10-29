@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T17:32:02.115Z",
+  "updated_at": "2026-10-29T17:45:43.178Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -77,7 +77,7 @@
     "Prove production storage safely before mandatory budgetmigration1602; no paidlaunch or ownerlimits invented.",
     "Complete launch authority/worker and product season, profit, cross-platform identity/attribution, catalog coverage with evidence."
   ],
-  "next_safe_action": "1606 publishing one click; await newer finish then guard verify3 and owner abort-only storage diagnostic. Do not repeat publish or modify app while own lease active. Continue isolated1609source review/CI.",
+  "next_safe_action": "1606 fully accepted, ownleaseclosed. Finish actualhost1609A reproducibility and intent-onlyB, freshBchecks/review/adapter then normalmerge/v5publish. Continue catalogbridge, wiredstoreobservations, commitreadbackdiagnostic; paidexecution remains disabled.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -698,7 +698,7 @@
       "limitation": "scope unique lock prevents parallel refresh; integration with actual HTTP/writers, durable recovery and multi-doc atomic OAuth incomplete"
     }
   },
-  "last_verified_production_head": "050b3da6ffc9660b2022a111117fd928da07ab51",
+  "last_verified_production_head": "dada1def704ae968230d63c3c9885508a2a6653d",
   "courier_release_coordination": {
     "pr": 1559,
     "production_merge": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -1439,13 +1439,13 @@
           "root_manifest_check": "exact1026backend243control",
           "root_focused_tests": "16passed1.31s -Werror",
           "b": "2c84abbfa976bb9bb32630c2cf971ab5a6b379fa",
-          "published": false,
-          "next": "Wait newer explicit finish, guard verify3/closedlease; owner actual abort-only storage probe, record scope. No six-handler budget migration.",
+          "published": true,
+          "next": "Release1609 automatic resume protection using fresh verified pair, then catalog proof and saved-plan observations. Keep budget migration off until separate commit/readback diagnostic and native commitments/permissions proved; no paid execution without owner limits.",
           "infra_fix": "InitialA catalogMongocontainerexitedbeforetests on24.04; source-only2filefix22.04runner+STATUS no testrelaxation. Fresh21incl5actualcatalogMongo success.",
           "all_A_ci": "12success",
           "actual_host_A": "PASS two cleanbuilds;wholeCIintent exactlyd2e8ba58...",
           "b_tree": "3317a1e1c31cae823718275f7ffaf44a20157d43",
-          "state": "PUBLISHING_SINGLE_CLICK",
+          "state": "DEPLOYED_AND_ACCEPTED_BOUNDED_STORAGE_SCOPE",
           "merge": "dada1def704ae968230d63c3c9885508a2a6653d",
           "actual_host_B": "PASS 50.53s",
           "app_materialization": "PASS 60.07s exact B tree; tracked clean; foreign files preserved",
@@ -1453,16 +1453,43 @@
           "pair_review": "PASS full1026 backend243 control/ancestry/onlyintentdiff/frontendproof",
           "publication": {
             "publish_changes_clicks": 1,
+            "started": "2026-10-29 20:30 Asia/Riyadh",
             "baseline_finish": "2026-10-29 20:01 Asia/Riyadh",
-            "observed": "Publishing…",
-            "do_not_repeat": true
+            "latest_observed": "Deployment finished Oct29 08:39PM",
+            "do_not_repeat": true,
+            "finished": "2026-10-29 20:39 Asia/Riyadh"
           },
           "guard": {
             "actor": "codex-google-budget-storage-20261029",
             "prepare": "PASS",
-            "prepublish": "ready_to_publish true exact A67b/M4dada/runtime713e",
-            "lease": "owned active; verification pending"
-          }
+            "prepublish": "PASS ready_to_publish true exact A/M4/runtime",
+            "lease": "closed; active=false"
+          },
+          "verification": {
+            "verified": true,
+            "checks": 3,
+            "exact_source": "67b369887ee254a7cb4cd26c34b7a4cf078cd52a",
+            "exact_deployment": "dada1def704ae968230d63c3c9885508a2a6653d",
+            "exact_runtime": "rg5-713e9eacd735e5d00de26fa837ec160962c5417ddeb1b35e9f84f767d4d82669",
+            "lease_active": false
+          },
+          "production_probe": {
+            "performed": true,
+            "owner_button_clicks": 1,
+            "result": "storage_verified and snapshot_majority_write_aborted true, as validated by deployedUI result",
+            "message": "تم التحقق من معاملة التخزين وإلغائها. هذا تحقق للتخزين فقط؛ لم تتغير السياسة ولا يمنح صلاحية تشغيل أو جاهزية إنفاق.",
+            "google_account": "5052346701",
+            "google_connection": "connected",
+            "campaigns": 22,
+            "policy_revision": 0,
+            "automatic_management": "disabled",
+            "spending_limits": "blank",
+            "policy_writes": 0,
+            "provider_writes": 0,
+            "screenshot": "docs/operations/GOOGLE-BUDGET-STORAGE-READINESS-20261029/google1606-live-storage-20261029.jpg"
+          },
+          "status_branch": "codex/google-budget-storage-status-20261029",
+          "status_checkpoint": "f3252a8618d3968116050328203ea3a5c4ee42c4"
         }
       },
       "probe_fix": {
@@ -1542,8 +1569,22 @@
         "source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
         "tree": "9a5adcb7cc78b4f03c7c1ea016c3f42df3a93f0f",
         "base": "dada1def704ae968230d63c3c9885508a2a6653d",
-        "ci": "10 workflows success; Google40920770677, readiness40920771219; root exact logs/tests pending",
-        "state": "SOURCE_A_ONLY_NO_B_NO_DEPLOY"
+        "ci": {
+          "all_workflows_success": 10,
+          "google": 40920770677,
+          "backend": 1242,
+          "frontend": 228,
+          "suites": 18,
+          "readiness": 40920771219,
+          "artifact": 12917913169
+        },
+        "state": "SOURCE_A_REVIEWED_CI_PASSED_ACTUALHOST_BUILD_RUNNING",
+        "root_tests": "181passed2.16s -Werror0skip",
+        "independent": "181focused+330compatibility pass -Werror0skip; independent M4-toA redgreen",
+        "root_manifests": "Exact1026backend243control and runtimecompactprojection; strictfullhistoryPASS",
+        "intent_sha256": "4d7a767ab0cd676a0fc7dba9a47c376d8a6981eece943c2dac38edefcb7f9e69",
+        "runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
+        "actual_host_source_build": "Running /tmp/google1609-source-build.log after prior guardactivefalse; noB yet"
       }
     },
     "store_observations": {
@@ -1569,12 +1610,22 @@
     },
     "first_launch_evidence": {
       "branch": "codex/google-first-launch-evidence-wip-20261029",
-      "checkpoint": "29585cdc7f8857b4b4fc72677ed2dd3a780da201",
-      "state": "WIP_REVIEW_BLOCKER_BSON_DATETIME_BOUNDARY_FIX_PENDING",
-      "tests": "148 including4actualMongo +444reused passed but independent review found actual product BSONdate mismatch; no release until fixed/reviewed",
+      "checkpoint": "2813a5fe844c0bd325e72462d19c0dfa48ea8813",
+      "state": "WIP_BSON_FIXED_INDEPENDENT_REVIEW_AND_EXACT_SOURCE_CI_PASSED",
+      "tests": "157incl5actualMongo0skip +444reused exactsourceCI40922802136;152independentunits;1236backend228frontendfullCI40922811835",
       "published": false,
       "pr": 1610,
-      "source": "66a0d5f95b15394876546d9847a440aa01d3d346"
+      "source": "26b10be88c3a86804242b9c5c6cc9a91b1330f3a",
+      "external_limit": "CreatedbyMezan and emptylocalhistory do not prove neverlaunched/manual-stop absence; provider change reports have delay and incomplete coverage, no atomic externalwriter fence. No honest positive launchauthorityyet."
+    },
+    "commit_readback_preflight": {
+      "pr": 1612,
+      "source": "952ad70aad222c0be0ed45d2816e1353a14694a2",
+      "reviewed_runtime": "9880327b357a3aa179e900d322989b74cd7f7d58",
+      "state": "WIP_SEPARATE_TECHNICAL_COMMIT_READBACK_DIAGNOSTIC",
+      "tests": "Independent16unit passed; agentCI40923511708 117incl6actualMongo0skip,21UI+build; workflowmetadatafixnewCI40923830565pending rootlogs",
+      "limits": "Replica only technicalreceipt/payload; no policycollectionpermission or provider/fundingauthority",
+      "published": false
     }
   }
 }
