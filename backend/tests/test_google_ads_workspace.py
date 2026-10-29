@@ -15,6 +15,82 @@ CUSTOMER = "1234567890"
 ACTOR = {"user_id": "owner-1", "actor_id": "marketer-1", "owner": False, "can_draft": True}
 
 
+def retail_inventory(*, account=CUSTOMER, merchant="123", offer="SKU1", feed="SA", language="ar", **changes):
+    row = {"merchant_id": merchant, "offer_id": offer, "feed_label": feed, "language_code": language,
+           "channel": "ONLINE", "status": "ELIGIBLE", "availability": "IN_STOCK", "approved": True,
+           "resource_name": f"customers/{account}/shoppingProducts/{merchant}~2~{language}~{feed}~{offer}"}
+    row.update(changes)
+    return {"items": [row], "complete": True, "source": "google_ads_api", "field_gaps": []}
+
+
+@pytest.mark.parametrize("case", ["feed_collision", "language_collision", "duplicate", "unknown_stock", "missing_stock", "preorder", "ineligible", "wrong_merchant", "wrong_account", "identity_conflict", "missing_language", "missing_feed", "incomplete", "field_gap", "missing_source", "wrong_campaign_feed", "no_campaign_feed"])
+def test_retail_offer_gate_refuses_ambiguous_or_unproved_identity(case):
+    from integrations_control_center.google_ads_retail_identity import selected_native_products
+    value = retail_inventory()
+    row = value["items"][0]
+    feed = "SA"
+    if case == "feed_collision":
+        value["items"] += retail_inventory(feed="QA", status="NOT_ELIGIBLE", availability="OUT_OF_STOCK", approved=False)["items"]
+        feed = "QA"
+    elif case == "language_collision": value["items"] += retail_inventory(language="en")["items"]
+    elif case == "duplicate": value["items"].append(deepcopy(row))
+    elif case == "unknown_stock": row["availability"] = "UNKNOWN"
+    elif case == "missing_stock": row.pop("availability")
+    elif case == "preorder": row["availability"] = "PREORDER"
+    elif case == "ineligible": row["status"] = "NOT_ELIGIBLE"
+    elif case == "wrong_merchant": row["merchant_id"] = "999"
+    elif case == "wrong_account": row["resource_name"] = row["resource_name"].replace(CUSTOMER, "777")
+    elif case == "identity_conflict": row["resource_name"] = row["resource_name"].replace("~SA~", "~QA~")
+    elif case == "missing_language": row.pop("language_code")
+    elif case == "missing_feed": row.pop("feed_label")
+    elif case == "incomplete": value["complete"] = False
+    elif case == "field_gap": value["field_gaps"] = ["shopping_product.language_code"]
+    elif case == "missing_source": value.pop("source")
+    elif case == "wrong_campaign_feed": feed = "QA"
+    elif case == "no_campaign_feed": feed = None
+    with pytest.raises(HTTPException) as error:
+        selected_native_products(value, account_id=CUSTOMER, merchant_id="123", offer_ids=["SKU1"], feed_label=feed)
+    assert error.value.status_code in {409, 422}
+
+
+@pytest.mark.asyncio
+async def test_retail_lookup_preserves_full_official_v25_identity_and_known_stock():
+    from google.protobuf.json_format import MessageToDict, ParseDict
+    from google.ads.googleads.v25.resources.types.shopping_product import ShoppingProduct
+    from integrations_control_center.google_ads_retail_identity import selected_native_products
+    raw = {"resourceName": f"customers/{CUSTOMER}/shoppingProducts/123~2~ar~SA~SKU1", "merchantCenterId": "123",
+           "channel": "ONLINE", "languageCode": "ar", "feedLabel": "SA", "itemId": "SKU1", "status": "ELIGIBLE", "availability": "IN_STOCK"}
+    message = ParseDict(raw, ShoppingProduct.pb(ShoppingProduct()), ignore_unknown_fields=False)
+    client = ReadClient({"shopping_product": [{"shoppingProduct": MessageToDict(message)}]})
+    inventory = await module.google_lookup(client, "products", merchant_id="123")
+    selected = selected_native_products(inventory, account_id=CUSTOMER, merchant_id="123", offer_ids=["SKU1"], feed_label="SA")
+    assert selected[0]["resource_name"] == raw["resourceName"] and selected[0]["language_code"] == "ar"
+    assert selected[0]["mapping_status"] == "owner_selected_unverified"
+    assert selected[0]["eligibility_scope"] == "account_inventory"
+    assert "shopping_product.language_code" in client.queries[0] and "shopping_product.channel" in client.queries[0]
+    assert "shopping_product.merchant_center_id = 123" in client.queries[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["language_code", "channel", "status", "availability", "feed_label"])
+async def test_retail_lookup_cannot_hide_missing_required_native_field(field):
+    client = ReadClient(unavailable_fields={"shopping_product." + field})
+    with pytest.raises(HTTPException) as error:
+        await module.google_lookup(client, "products", merchant_id="123")
+    assert error.value.detail["code"] == "google_ads_read_contract_unavailable" and not client.queries
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("malformed", [{}, {"itemId": "SKU2"}, {"resourceName": "customers/123/shoppingProducts/unknown"}, "invalid"])
+async def test_retail_lookup_cannot_drop_an_unidentified_native_row(malformed):
+    raw = {"resourceName": f"customers/{CUSTOMER}/shoppingProducts/123~2~ar~SA~SKU1", "merchantCenterId": "123",
+           "channel": "ONLINE", "languageCode": "ar", "feedLabel": "SA", "itemId": "SKU1", "status": "ELIGIBLE", "availability": "IN_STOCK"}
+    client = ReadClient({"shopping_product": [{"shoppingProduct": raw}, {"shoppingProduct": malformed}]})
+    with pytest.raises(HTTPException) as error:
+        await module.google_lookup(client, "products", merchant_id="123")
+    assert error.value.detail["code"] == "google_ads_product_identity_unproved"
+
+
 class Collection:
     def __init__(self):
         self.writes = []
