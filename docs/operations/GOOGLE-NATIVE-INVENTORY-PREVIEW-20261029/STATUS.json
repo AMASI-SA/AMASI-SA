@@ -2,7 +2,7 @@
   "task": "google-native-inventory-preview-20261029",
   "branch": "codex/google-native-inventory-preview-20261029",
   "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-  "state": "bounded_backend_review_pass_root_actual_integration_pending",
+  "state": "RELEASE_HOLD_actual_saved_plan_contract_bug",
   "production_changed": false,
   "provider_calls_performed": false,
   "prerequisite": "Exact unchanged accepted1628 google_live_category_proof.py and reader.py copied as buildbase only; source d77306f8af92057d4414413a9900e03bda7b1295. No shared files or writers changed.",
@@ -31,7 +31,7 @@
     }
   },
   "bounds": "Planned5explicit products,2variantpages<=120rows,45s requestdeadline; officialpage maximum60, existinglocalstockproofcap50 is not provider limit",
-  "next": "Root/planintegration agent owns guarded newUI/service and minimal sharedroute attachment on latestproduction, fresh integratedCI/build/site acceptance. SourcePR1631 remains frozen c06; this separate statusbranch changes documentation only. No liveprovider or deployment performed.",
+  "next": "Complete/review coherent saved-plan Fields/Input successor with actualwriter acceptance before any1631integration/release. No historicalruntime edit.",
   "route": "POST /google_ads/commercial-plans/{plan_id}/native-inventory-preview bodyexpected_revision/category_id/selected_product_ids; root owns later sharedattachment",
   "source_limits": [
     "Existingclient performs authorizedOAuthmaintenance; no newscopes/directauth",
@@ -61,5 +61,12 @@
     "errors": "401auth,403owner,404planmissing,409revision/fields/store/category/capabilityunproved,422invalidtypedbody,503boundedsourceunproved",
     "success": "native_stock_observations_only, sourcebound selectedproducts and parent/variant stock/optionlabel observations, globalready/size/mapping/execution false, prepnull, provider_revisionnull/remote_snapshot_atomicfalse",
     "simple_product": "Structural observation ONLY explicitemptyrawoptions+skus aliases ANDcompleteemptyvariantendpoint; not merchant mapping or eligibility"
+  },
+  "release_hold": {
+    "confirmed": "Actualcommercialplan PUT/save excludeswrite-only acknowledge_review. Nativepreview andotherreaders incorrectly parse savedfields usingwriteInput; actualPUT200→nativePOST503 with0nativecalls. Priorfunctionalacceptance withdrawn; pure/guard historicalevidence retained.",
+    "fix_branch": "codex/google-saved-plan-fields-contract-fix-20261029",
+    "fix_base": "1630source6638faf53bc15ccaa304dfaa436aa6bf9c83f904 +exact1631prerequisites",
+    "assigned": "CommercialPlanFields/Input split andall3readroutes; actualwriterMongo positive forall3, missing/falsewriteack rejected",
+    "runtime_immutable": "c06aad50530681ad484d61ce5faaaa216c37903d remainsunchanged, do not releaseasfunctional"
   }
 }
