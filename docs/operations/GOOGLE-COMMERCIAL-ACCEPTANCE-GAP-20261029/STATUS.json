@@ -1,0 +1,85 @@
+{
+  "task": "GOOGLE-COMMERCIAL-ACCEPTANCE-GAP-20261029",
+  "scope": "Read-only repository-backed acceptance gap audit; documentation only; no production change or authority.",
+  "base_production_observed": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "as_of": "2026-10-29",
+  "qualification": "This is a snapshot of reviewed code and supplied CI evidence, not current deployment state. Pending source and exported but unattached routes are not live. CI does not prove external provider or production behavior.",
+  "sources": [
+    {
+      "pr": 1622,
+      "sha": "cb365f34a94e77a34ead8c21bc850654468cb888",
+      "state": "pending integration; independent 85 backend tests passed; full and category CI reported successful, store CI was pending when inspected"
+    },
+    {
+      "pr": 1623,
+      "sha": "52581004af096ad4230a9c0721185f615f757fe2",
+      "state": "draft read-only context; exported route unattached; source CI 40934125506 reported success"
+    },
+    {
+      "pr": 1618,
+      "sha": "31d582f6fddacef63f758c82f6b80e7583025516",
+      "state": "reviewed source; not assumed deployed; source CI frontend registry 502 rerun pending at time of audit"
+    }
+  ],
+  "matrix": [
+    {
+      "requirement": "Season plan and 14/14, 30–90 days, previous season",
+      "evidence": "google_commercial_plan.py stores owner plan; google_store_product_observations.py on pending 1622 returns bounded partial observations; google_product_evidence.py has pure window/evidence construction.",
+      "gap": "Not reconciled net sales or profit; prior-season matching with Hijri date differences unproved. Incomplete coverage must not become growth or ranking."
+    },
+    {
+      "requirement": "Costs, profit, product inventory, size and preparation time",
+      "evidence": "product_inventory_proof.py checks bounded stored evidence, at most 50 variants; pending inventory review exposes stored snapshot only.",
+      "gap": "Full remote variant pagination, sizes and preparation-time completeness unproved; cost provenance and refund reconciliation needed before margin. Do not infer profitability when costs missing."
+    },
+    {
+      "requirement": "Cross-platform campaigns and product identity",
+      "evidence": "campaign_product_associations.py represents scoped associations; pending 1623 offers bounded historical campaign context.",
+      "gap": "Association is not verified attributed order. Preserve platform/account/currency/period separately and prove matching and tracking before attribution; no addition of platform conversions as independent store orders."
+    },
+    {
+      "requirement": "Category and catalogue",
+      "evidence": "google_category_membership_reader.py on pending 1622 checks owner-pinned identifiers and current raw Salla category IDs.",
+      "gap": "It is not complete remote category enumeration or a Merchant/platform mapping. Shopping/PMax feed, language, country, offer identity and native eligibility need independently proven matching."
+    },
+    {
+      "requirement": "Retail identity collision",
+      "evidence": "An earlier manual Shopping/PMax eligibility check collapsed same offer ID across native feed context; corrected server gate c7 independently accepted with 1307 backend/228 frontend CI. UI 097 accepted with 252/51 tests; final frontend CI had a 502 retry pending.",
+      "gap": "Neither fix was deployed at this snapshot; do not claim provider acceptance or exact product-to-offer mapping from the gate."
+    },
+    {
+      "requirement": "New product experiments and autonomous management",
+      "evidence": "Existing policy and paused creation work are limited and separately guarded. No owner-approved experiment budget is supplied here.",
+      "gap": "New products need an explicit owner-approved test allowance; no invented budgets, profitability targets, automatic manual campaign adoption or resume of owner-stopped campaigns. Full first-launch/result/optimization cycle remains unproved."
+    }
+  ],
+  "minimal_next_readiness_contract": {
+    "scope": "One read-only owner-facing readiness view composed from existing persisted plan, category review and partial observation readers after their independent integration/release; no new unused framework or provider writes.",
+    "inputs": [
+      "Persisted owner and exact plan revision and selection",
+      "Owner-pinned product IDs and current raw category membership if available",
+      "Existing bounded inventory evidence and explicit freshness/coverage",
+      "Existing partial per-product store observations with exact window, currency, provenance and missingness",
+      "Existing platform/account-specific campaign associations or observations where available"
+    ],
+    "outputs": [
+      "Per pinned product: evidence available/unavailable/unknown, timestamp, source, exclusions and explicit reason codes",
+      "Show 14 versus previous 14 and 30–90 day windows as observed partial records only, with no sales/profit growth calculation where coverage or refunds are unproved",
+      "Keep each platform, account, currency and period distinct; distinguish associated campaign context from attributed orders",
+      "Show unmet prerequisites and owner inputs as unknown, including costs, season matching, full size/inventory, catalog mapping, spend cap and profitability target",
+      "Invalidate a result if the persisted plan revision or bound evidence changes; authenticate owner and bound read sizes"
+    ],
+    "non_goals": [
+      "No ranking by incomplete observations, sales-only or ROAS-only; no invented profit",
+      "No activation, budget authorization, provider call, policy mutation, or promise of campaign success",
+      "No claim that category snapshot proves all remote members, or that cross-platform conversions are unique orders"
+    ],
+    "acceptance": [
+      "Tests for owner isolation, stale/changed revision, partial/missing/refunded data, separate currency and platform rows, unavailable inventory, unknown mapping, malformed inputs and bounded reads",
+      "Independent source review and exact-source CI; integration attached only after relevant releases and retested on live site under Release Guard v5",
+      "Real external connection, provider catalog permissions, historical completeness and owner financial bounds remain separate prerequisites"
+    ]
+  },
+  "next_action": "Root to sequence reviewed integration/release and assign a focused readiness composition only once actual available sources are attached; audit exact current production and foreign lease before any release.",
+  "production_changed": false
+}
