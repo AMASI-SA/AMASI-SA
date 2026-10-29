@@ -406,6 +406,7 @@ async def _execute_google_proposal(db, actor, proposal_id, confirmation_digest, 
             if digest(fresh) != row["before_digest"]:
                 raise problem("google_ads_provider_drift", "إعدادات جوجل تغيرت منذ المعاينة؛ راجع التغيير الجديد.")
         if row["action"] in {"create_campaign", "duplicate"} and (row.get("planned") or {}).get("shopping"):
+            from .google_ads_campaign_contract import GoogleCampaignDraft
             planned = row["planned"]
             retail_draft = GoogleCampaignDraft.model_validate({key: value for key, value in planned.items() if key in GoogleCampaignDraft.model_fields})
             offers = await _retail_offer_evidence(client, retail_draft)

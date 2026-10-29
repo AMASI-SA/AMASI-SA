@@ -404,14 +404,34 @@ async def test_retail_preview_checks_native_identity_before_provider_validation(
             await db[gateway.PROPOSALS].replace_one({"proposal_id": result["proposal_id"]}, stored)
             result["confirmation_digest"] = stored["confirmation_digest"]
         if case != "unique":
-            with pytest.raises(HTTPException):
+            with pytest.raises(HTTPException) as error:
                 await gateway.execute_google_proposal(db, OWNER, result["proposal_id"], result["confirmation_digest"])
+            assert error.value.detail["code"] == ("google_ads_product_offer_not_eligible" if case == "stock_drift" else "google_ads_product_identity_changed")
             assert provider.preflights == 1
+        else:
+            completed = await gateway.execute_google_proposal(db, OWNER, result["proposal_id"], result["confirmation_digest"])
+            assert completed["verified"] is True and completed["status"] == "completed"
+            assert provider.writes == 1
+            assert all(op["campaignOperation"]["create"]["status"] == "PAUSED" for op in provider.operations if "campaignOperation" in op)
     else:
         with pytest.raises(HTTPException): await gateway.preview_google_action(db, OWNER, body)
         assert provider.preflights == 0
         assert await db[gateway.PROPOSALS].count_documents({}) == 0
-    assert provider.writes == 0
+    assert provider.writes == (1 if case == "unique" else 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["SEARCH", "PERFORMANCE_MAX"])
+async def test_nonretail_creation_preserves_approval_without_catalog_reads(db, provider, monkeypatch, family):
+    from tests.test_google_ads_campaign_builder import draft_for
+    from integrations_control_center import google_ads_workspace
+    async def lookup(*args, **kwargs): raise AssertionError("nonretail draft must not access merchant inventory")
+    monkeypatch.setattr(google_ads_workspace, "google_lookup", lookup)
+    saved = await save_draft(db, OWNER, DraftCreate(draft=GoogleCampaignDraft.model_validate(draft_for(family)), idempotency_key="nonretail-save"))
+    proposal = await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT,
+        draft_id=saved["draft_id"], draft_revision=1, idempotency_key="nonretail-preview"))
+    result = await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert result["verified"] is True and provider.writes == provider.preflights == 1
 
 
 @pytest.mark.asyncio

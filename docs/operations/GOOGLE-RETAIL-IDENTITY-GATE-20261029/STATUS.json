@@ -39,7 +39,7 @@
     "exit_status": 0,
     "duration_seconds": 6.3,
     "coverage": "Existing regressions plus real v25 ShoppingProduct parsing, 17 identity refusal cases, required field-read rejection, 16 AI route cases, explicit mapping disclosure and generated-feed drift.",
-    "real_mongo": "20 added manual preview/dispatch scenarios await existing full CI on actual Mongo. Local Mongo was not substituted or counted.",
+    "real_mongo": "22 added manual scenarios pending revised CI, including positive unique Shopping/PMax PAUSED dispatch, exact typed drift failures, legacy preview rejection and preserved Search/nonretail PMax.",
     "ci": "pending",
     "independent_review": "pending",
     "production": "unchanged"
@@ -57,5 +57,16 @@
     "docs/operations/GOOGLE-RETAIL-IDENTITY-GATE-20261029/STATUS.json"
   ],
   "review_notes": "Only root integrates/releases. Preserve other conversations' route attachment hunks. Source is WIP until real Mongo CI and independent review. No Release Guard lease touched.",
-  "next_safe_action": "Create Draft PR, inspect actual CI results and request independent product_acceptance review of immutable source. Fix review failures before final source checkpoint."
+  "next_safe_action": "Create Draft PR, inspect actual CI results and request independent product_acceptance review of immutable source. Fix review failures before final source checkpoint.",
+  "rejected_checkpoint": {
+    "sha": "6cd806f323548322f90e77003f45663541684237",
+    "reason": "Self-review found draft type scoped only to preview. Negative dispatch tests accepted any HTTPException and therefore did not distinguish generic import failure. Correct scoped import and positive/exact-error tests added.",
+    "historical_ci": {
+      "id": 40927143738,
+      "backend_passed": 1301,
+      "synthetic_merge": "d31309979d990f0470d9baba72d19fbfca8a41c4",
+      "base": "15b656131813af54a043c33821e3aa5f69e7703c",
+      "acceptance": "rejected as final evidence"
+    }
+  }
 }
