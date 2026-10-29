@@ -550,7 +550,22 @@ async def _guard_paused_creation_command(db, *, session, snapshot, command, oper
             or allocation.get('creation_entry_digest') != management.digest(entry)
             or allocation.get('proposal_id') != command.proposal_id
             or allocation.get('execution_claim_id') != command.execution_claim_id
+            or allocation.get('creation_identity') != entry['creation_identity']
+            or allocation.get('original_creation_budget_native') != entry['reservation_native']
+            or allocation.get('budget_native') != entry['reservation_native']
+            or allocation.get('currency_code') != entry['reservation_currency_code']
+            or entry['reservation_native'] != typed.budget_native
+            or entry['reservation_currency_code'] != typed.currency_code
+            or entry.get('native_account_id') != snapshot.account_id
+            or entry.get('native_currency_code') != typed.currency_code
+            or entry.get('native_time_zone') != typed.time_zone
+            or allocation.get('native_inventory_digest') != entry['native_inventory_digest']
+            or allocation.get('native_observed_at') != entry['native_observed_at']
+            or allocation.get('creation_policy_revision') != entry['policy_revision']
+            or allocation.get('creation_policy_digest') != entry['policy_digest']
             or not isinstance(active, dict) or active.get('allocation_id') != key
+            or active.get('proposal_id') != command.proposal_id
+            or active.get('operation_id') != allocation.get('operation_id')
             or active.get('execution_claim_id') != command.execution_claim_id):
             guard_fail('google_budget_guard_creation_binding_unproved')
         activated = contract._instant(typed.activated_at)

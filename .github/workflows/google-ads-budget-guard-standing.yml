@@ -169,7 +169,7 @@ jobs:
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 150
+          assert len(cases) >= 153
           assert len(mongo) == 44
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY

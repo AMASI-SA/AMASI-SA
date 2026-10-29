@@ -38,7 +38,7 @@ async def test_revoke_order_is_serialized_at_common_floor(monkeypatch,timing):
         assert next(iter(state['allocations'].values()))['dispatch_marker']['policy_revision']==2
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('tamper',['operations','confirmation','allocation','fence'])
+@pytest.mark.parametrize('tamper',['operations','confirmation','allocation','fence','allocation_amount','allocation_currency','allocation_native'])
 async def test_floor_reloads_original_binding_and_retains_hold_on_drift(monkeypatch,tamper):
     db,provider,values=await setup(monkeypatch);row=await preview(db,values)
     original=authority.acknowledge_paused_creation_dispatch_floor
@@ -50,7 +50,11 @@ async def test_floor_reloads_original_binding_and_retains_hold_on_drift(monkeypa
             await database[management.FENCES].update_one({'account_id':'123'},{'$set':{'status':'released'}})
         else:
             record=await database[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
-            allocations=deepcopy(record['allocations']);next(iter(allocations.values()))['creation_entry_digest']='0'*64
+            allocations=deepcopy(record['allocations'])
+            target=next(iter(allocations.values()))
+            key,value={'allocation_amount':('budget_native','1'),'allocation_currency':('currency_code','USD'),
+                'allocation_native':('native_inventory_digest','0'*64)}.get(tamper,('creation_entry_digest','0'*64))
+            target[key]=value
             await database[guard.BUDGET_GUARDS].update_one({'account_id':'123'},{'$set':{'allocations':allocations}})
         return await original(database,proposal)
     monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',changed)

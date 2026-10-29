@@ -12,10 +12,13 @@
   ],
   "runtime_available": false,
   "tests": {
-    "focused_unit": "138 passed3.84s -Werror; includes10floor cases, three expiry schedules, restarted storage identity/reconcile no resend",
+    "focused_unit": "141 passed3.71s -Werror;13floor incl original amount/currency/native fingerprint binding",
     "replica": "7 new cases collected only; localMongo unavailable. DedicatedCI requires44Mongo/150total; full exact7floor+8paused+9legacy gates.",
-    "prior_source_189": "FullCI40949561011 failed2 obsolete Mongo hooks (record_event floor removed); migrated hooks to actual floor helper/raw commit, assertions preserved. No claim prior189 accepted."
+    "prior_source_189": "FullCI40949561011 failed2 obsolete Mongo hooks (record_event floor removed); migrated hooks to actual floor helper/raw commit, assertions preserved. No claim prior189 accepted.",
+    "broad_local_environment_limit": "1342 passed,49skipped,14failures due missing socksio in local venv proxy transport before reporting mock; not accepted full-suite proof. Exact GitHub full suite remains acceptance source."
   },
   "floor_contract": "Typed commonTX reloads current policy rev/enabled/digest, exact claim+ledger+allocation, original intent/proposal operation binding and native fence. Proposal submitted/claim/marker and guard epoch committed in one raw command. Revocation/cancellation before boundary blocks; positiveACK means inflight. Unknown floor ACK yields no HTTP and retains hold/fence; no retry or cleanup inference.",
-  "expiry_contract": "Typed owner activation/revision/zone/expiry/proposalexpiry validated from current stored policy insideTX; fresh clock rechecked beforecommit. Result carries stored validity bounds, checked synchronously afterpositiveACK immediatelybefore dispatch. Expiry acrossACK retains submitted uncertain proposal/commonhold/nativefence, noHTTP/noresend."
+  "expiry_contract": "Typed owner activation/revision/zone/expiry/proposalexpiry validated from current stored policy insideTX; fresh clock rechecked beforecommit. Result carries stored validity bounds, checked synchronously afterpositiveACK immediatelybefore dispatch. Expiry acrossACK retains submitted uncertain proposal/commonhold/nativefence, noHTTP/noresend.",
+  "independent_review": "budget_audit reviewed0bcac expiry fix independently:10floor-Werror pass and expiry finding addressed. Additional allocation binding hardening and exactMongo results still require review.",
+  "floor_binding": "Original creation amount/currency/native account/timezone/fingerprint/observation/policy digest+revision and active claim proposal/operation identity are reloaded and compared inside floor; no created native budget resource exists before this PAUSED creation call."
 }
