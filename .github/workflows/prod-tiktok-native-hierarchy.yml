@@ -35,7 +35,9 @@ permissions:
 
 jobs:
   native-reporting-contract:
-    runs-on: ubuntu-24.04
+    # Keep the existing Mongo version; avoid hosted kernel detection failure.
+    # Temporary runner workaround: actions/runner-images#15005.
+    runs-on: ubuntu-22.04
     services:
       mongo:
         image: mongo:8.0

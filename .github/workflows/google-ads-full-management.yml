@@ -29,7 +29,9 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ubuntu-24.04
+    # Mongo 8.x cannot start on the current Ubuntu 24.04 hosted kernel.
+    # Temporary runner workaround: actions/runner-images#15005.
+    runs-on: ubuntu-22.04
     services:
       mongo:
         image: mongo:8.0.26

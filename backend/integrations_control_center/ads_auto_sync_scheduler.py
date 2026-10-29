@@ -1247,8 +1247,9 @@ async def _refresh_google(
                 "retryable": exc.retryable,
             },
         )
-        if exc.code == "google_ads_needs_reauth":
-            await _mark_needs_reauth(db, user_id, GOOGLE_ADS_PROVIDER_ID)
+        # A refresh failure belongs to the credential snapshot used by that
+        # request. It cannot invalidate a newer OAuth relink by tenant alone.
+        # Keep the run/error diagnostic; connection authority is not written here.
         return {
             "provider": GOOGLE_ADS_PROVIDER_ID,
             "run_id": run_id,

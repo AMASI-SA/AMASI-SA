@@ -20,6 +20,11 @@ from .ads_platform_hourly import (
     ensure_platform_hourly_indexes,
     upsert_platform_hour,
 )
+from .google_credential_refresh_cas import (
+    CREDENTIAL_REFRESH_PROJECTION,
+    GoogleRefreshPersistenceError,
+    persist_refreshed_google_credential,
+)
 from .google_oauth_security import (
     GOOGLE_CREDENTIALS_COLLECTION,
     GOOGLE_PROVIDER_IDS,
@@ -173,30 +178,22 @@ async def _refresh_access_token(
             retryable=True,
         )
     expires_in = max(int(payload.get("expires_in") or 3600), 60)
-    await db[GOOGLE_CREDENTIALS_COLLECTION].update_one(
-        {"user_id": str(row.get("user_id") or "")},
-        {
-            "$set": {
-                "access_token_ciphertext": encrypt_google_token(access_token),
-                "expires_at": now + timedelta(seconds=expires_in),
-                "updated_at": now,
-            }
-        },
-    )
+    try:
+        await persist_refreshed_google_credential(
+            db, user_id=str(row.get("user_id") or ""), previous=row,
+            values={"access_token_ciphertext": encrypt_google_token(access_token),
+                    "expires_at": now + timedelta(seconds=expires_in), "updated_at": now})
+    except GoogleRefreshPersistenceError as exc:
+        raise GoogleAdsReportingError(exc.code,
+            "لم يتأكد حفظ جلسة Google الحالية؛ حدّث الاتصال دون إعادة إرسال العملية.",
+            status_code=exc.status_code, retryable=False) from None
     return access_token
 
 
 async def _credential(db: Any, user_id: str, now: datetime) -> str:
     row = await db[GOOGLE_CREDENTIALS_COLLECTION].find_one(
         {"user_id": user_id},
-        {
-            "_id": 0,
-            "user_id": 1,
-            "access_token_ciphertext": 1,
-            "refresh_token_ciphertext": 1,
-            "expires_at": 1,
-            "scope": 1,
-        },
+        CREDENTIAL_REFRESH_PROJECTION,
     )
     scopes = set((row or {}).get("scope") or [])
     if "https://www.googleapis.com/auth/adwords" not in scopes:

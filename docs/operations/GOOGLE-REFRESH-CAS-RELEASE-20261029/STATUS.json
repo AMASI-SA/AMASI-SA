@@ -1,0 +1,81 @@
+{
+  "task_id": "GOOGLE-REFRESH-CAS-RELEASE-20261029",
+  "state": "Source candidate with fresh140test proof; coordinator repaired two CI-only Mongo runner startup failures; full integrated CI pending",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-refresh-cas-release-20261029",
+  "base_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
+  "approved_original_source": "40a54c806081ae7f2ca86f06c84bef7de4279db0",
+  "original_pr": 1588,
+  "integration": "Original nine-file CAS patch cherry-picked cleanly; no conflicts. Only additional changes are focused CI branch/dependency alignment and this continuation status.",
+  "scope": "Legacy-compatible stale-refresh CAS in actual Ads, GA4 and Merchant helpers; Google-only scheduler preserves diagnostics without unfenced global reauth invalidation. No additional runtime scope.",
+  "preserved_dependencies": {
+    "backend_requirements": "Unchanged from production30a13c2a, including dnspython2.9.0 and pymongo4.18.3",
+    "frontend_package_and_yarn_lock": "Unchanged from production30a13c2a",
+    "ci_alignment": "Focused workflow pins adjusted to current production versions: starlette1.3.1, cryptography50.0.0, python-multipart0.0.31, PyJWT2.15.0, python-dotenv1.2.2, pillow13.0.0, pytest9.0.3, dnspython2.9.0; existing fastapi0.140.0/pydantic2.13.4/motor3.7.1/pymongo4.18.3 retained"
+  },
+  "fresh_verification": {
+    "conflict_check": "Clean cherry-pick; unchanged production requirements/frontend package/lock verified by git diff",
+    "runtime_syntax": "All five runtime files ast.parse passed",
+    "release_identity_classifier": "All five runtime paths included by existing backend_runtime_source_path_included; protocol unchanged",
+    "git_diff_check": "Passed",
+    "local_unit_tests": "Pending local dependency bootstrap: current Python lacks pytest",
+    "local_mongo": "Previous disposable binary removed by environment cleanup; no local mongod/docker found; no existing DB paths adopted",
+    "exact_source_ci": {
+      "source": "d44200217d933104045760e6d1157d032705d1cc",
+      "run": 40893283106,
+      "job": 123515496073,
+      "focused_passed": 69,
+      "actual_replica_passed": 21,
+      "compatibility_passed": 71,
+      "skips": 0,
+      "root_logs_verified": true
+    },
+    "independent_review": "Pending coordinator review of current-base source",
+    "first_remote_source": "fb39919266916d65dc7fa7c3a2189be4ca36467a",
+    "first_dedicated_ci": {
+      "run": 40892444962,
+      "job": 123512570291,
+      "outcome": "Dependency install succeeded, Mongo8.0.26 container exited before tests; test steps did not run. No acceptance pass claimed."
+    },
+    "first_full_google_ci": {
+      "run": 40892445186,
+      "frontend_job": 123512570307,
+      "frontend": "Tests and build succeeded; exact counts require log review",
+      "backend_job": 123512571008,
+      "backend": "Mongo service exited before checkout/test, not a CAS test failure"
+    },
+    "runner_compatibility": {
+      "error": "MongoDB fatal12257600: Linux kernel6.19+ known incompatibility; SERVER-121912 / kernel detection SERVER-131779",
+      "primary_source": "https://github.com/actions/runner-images/issues/15005#issuecomment-6294443549",
+      "action": "Dedicated CAS workflow now uses GitHub-recommended temporary ubuntu-22.04. Mongo remains8.0.26; no production dependency change. Added fail-fast container logs and kernel version evidence. Shared workflow runner fixes remain coordinator-owned.",
+      "coordinator_followup": "Root verified identical fatal12257600 before checkout/tests in Google backend job123515493192 and TikTok native-reporting job123515492227. Only these two job runners changed to ubuntu22.04; existing Mongo images, dependencies, assertions and frontend runners unchanged. Official maintainer comment read independently."
+    }
+  },
+  "historical_original_evidence_only": {
+    "source": "40a54c806081ae7f2ca86f06c84bef7de4279db0",
+    "pr1588_body_read": "Original PR still open Draft, never merged. Its current body records root-verified CI and independent review, not fresh tests of this integration.",
+    "dedicated_ci_run": 40427240671,
+    "dedicated_result": "69 focused tests including21 actual Mongo replica cases plus71 compatibility tests, zero skips",
+    "full_google_ci_run": 40427240712,
+    "full_google_result": "1130 backend tests,189 frontend tests across17 suites and build passed",
+    "release_readiness_run": 40427240749,
+    "not_current_acceptance": true
+  },
+  "limitations": [
+    "Narrow snapshot CAS only, not full OAuth recovery, grant-generation migration or ABA proof",
+    "No atomic account projection or complete provider discovery implemented",
+    "No send-once journal integration: concurrent provider refresh requests remain possible; only one storage winner is proved",
+    "Mongo client retryWrites unchanged; application adds no retry and any replay still uses the snapshot predicate",
+    "Relink after readback and before downstream token use remains outside this fix",
+    "Current working live connection is not credited to this candidate"
+  ],
+  "production_changed": false,
+  "live_provider_calls": 0,
+  "live_credential_access": false,
+  "production_database_access": false,
+  "app_workspace_access": "Root authenticated via secure form and read actual guardactivefalse. No/appfiles changed, no lease created.",
+  "release_intent_created": false,
+  "release_guard_actions": 0,
+  "merge_or_publish": false,
+  "next_safe_action": "Inspect fresh full-source CI on new checkpoint; coordinator independently reviews and tests before SourceA/intent-onlyB freeze and actual-host rehearsal. Production/apps/credentials remain outside candidate tests."
+}
