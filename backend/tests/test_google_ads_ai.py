@@ -359,7 +359,7 @@ async def test_missing_product_and_assets_return_editable_incomplete_draft():
 
 
 @pytest.mark.asyncio
-async def test_selected_product_retail_draft_needs_verified_merchant_offer_binding():
+async def test_selected_product_retail_draft_distinguishes_owner_mapping_from_native_eligibility():
     output = draft_output()
     output["draft"].update(campaign_type="SHOPPING", shopping={"merchant_id": "123", "feed_label": "SA"},
                            bidding={"strategy": "MANUAL_CPC", "max_cpc_native": "1"},
@@ -374,7 +374,21 @@ async def test_selected_product_retail_draft_needs_verified_merchant_offer_bindi
     context["product_offer_associations"] = [{"product_id": "1", "offer_id": "offer-1", "merchant_id": "123", "verification_status": "verified"}]
     result = await generate_google_campaign_draft(DraftDB([product()]), OWNER, draft_request(campaign_type="SHOPPING"),
                                                   account_context=context, client_factory=lambda: ModelClient(output))
+    assert any(item["code"] == "merchant_product_offer_mapping_required" for item in result["missing_requirements"])
+    selection = {"product_id": "1", "merchant_id": "123", "offer_id": "offer-1"}
+    context["product_offer_associations"] = [{**selection, "feed_label": "SA", "language_code": "ar", "channel": "ONLINE",
+        "verification_status": "provider_eligibility_verified", "mapping_status": "owner_selected_unverified"}]
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER,
+        draft_request(campaign_type="SHOPPING", product_offer_selections=[selection]),
+        account_context=context, client_factory=lambda: ModelClient(output))
     assert not any(item["code"] == "merchant_product_offer_mapping_required" for item in result["missing_requirements"])
+    assert result["product_offer_associations"][0]["mapping_status"] == "owner_selected_unverified"
+    assert "owner_selected_product_offer_mapping_not_independently_verified" in result["limitations"]
+    output["draft"]["shopping"]["feed_label"] = "QA"
+    result = await generate_google_campaign_draft(DraftDB([product()]), OWNER,
+        draft_request(campaign_type="SHOPPING", product_offer_selections=[selection]),
+        account_context=context, client_factory=lambda: ModelClient(output))
+    assert any(item["code"] == "merchant_product_offer_mapping_required" for item in result["missing_requirements"])
 
 
 @pytest.mark.asyncio
