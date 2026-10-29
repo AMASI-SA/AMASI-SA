@@ -115,6 +115,7 @@ jobs:
           python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath
           src/components/marketing/GoogleNamespacePrerequisites.test.jsx
           src/components/marketing/GoogleAdsWorkspace.test.jsx
+          src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx
       - name: Build current reviewed checkout
         env:
           CI: "false"

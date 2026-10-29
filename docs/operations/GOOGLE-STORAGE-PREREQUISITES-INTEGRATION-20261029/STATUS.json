@@ -9,7 +9,13 @@
   "authority": false,
   "automatic_runs": false,
   "live_calls": false,
-  "tests": "Fresh combined local/CI pending; prior component evidence recorded in copied task STATUS files.",
+  "tests": {
+    "local_backend": "133passed2.75s-Werror (bothnewmodules+95existingpolicytests)",
+    "local_frontend": "29passed4suites3.288s incl3newintegrationcases:owner/noaccount/collapsed/mount-or-open-norequests/separateexplicitoperations/nonowner",
+    "preservation": "Original1606 andsixpolicyhandlersbyte-identicaltoM6 verified",
+    "ci": "freshbothcomponentworkflowsandbroaderCIpending"
+  },
   "limits": "Two separate operations: read-only namespace inventory vs explicit technical durable commit/readback probe. No policy/provider writes or newbudgetauthorization. Namespace result is not enginecommit proof; neither diagnostic grants migration/funding authority.",
-  "next": "Checkpoint remotely before tests; fresh independent combined review andCI before root release."
+  "next": "Checkpoint remotely before tests; fresh independent combined review andCI before root release.",
+  "integration_test_delta": "New isolated frontend integrationtest; namespace workflow includes it. Reviewed runtime/service/component/module/test blobs otherwise exact."
 }
