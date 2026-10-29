@@ -7,7 +7,7 @@
   "production_base": "fda86238dda9700806c0d700e9e411c1674c9bad",
   "production_tree": "91f8f05ca8ab653f788c29282e8797f90af553bf",
   "source_reference": "Separate STATUS-only continuation branch; this commit MUST NOT replace or follow frozen Source A on the release branch.",
-  "status": "Immutable current-Reports Source A passed local checks, all11 fresh CI and independent preservation review; root owns governed build/deployment.",
+  "status": "DEPLOYED_CARRIED_BY_VERIFIED_FOREIGN_1640_WITH_BOUNDED_LIVE_RETAIL_ACCEPTANCE",
   "owned_files": [
     "backend/integrations_control_center/google_ads_ai.py",
     "backend/integrations_control_center/google_ads_management.py",
@@ -168,9 +168,9 @@
     "No automatic first-funded launch or standing resume. No owner money limits inferred.",
     "Actual provider eligibility and deployed behavior are not established by source tests."
   ],
-  "production_changed": "no",
-  "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "Do not republish473da/c0ce orclearforeignlease. Awaitowner1640 exact3probeverify+closedlease; rootindependentlyreadstate andtestGoogleShoppingnativeofferpickers carriedbynewrelease. FreshstorageSourceAmustpreserve0bf.",
+  "production_changed": "yes; code carried by foreign1640, not a standalone root publish",
+  "release_guard": "Foreign1640 owner verified exact runtime three consecutive probes and closed lease; owner final comment6509209235. Root observed explicit Deployment finished00:52 Riyadh and independently tested live retail UI. Subsequently foreignReports1642 owns a new lease; untouched.",
+  "next": "Do not republish1634. Follow fresh storage release rebased by new direct-source creation over Reports61da; preserve foreign active lease and wait owner completion.",
   "superseded_unpublished": {
     "pr": 1629,
     "source": "e16b46f0453776f5bb471ae1e641a083af275c38",
@@ -296,5 +296,25 @@
     "root_publish_clicked": false,
     "reason": "another production release is active",
     "coordination_comment": 6509033978
+  },
+  "live_acceptance": {
+    "observed_date": "2026-10-30 Asia/Riyadh",
+    "url": "https://mezansalla.com/ads-manager?provider=google&tab=campaigns&account=5052346701",
+    "carried_source": "3803ba2a700f33a24bb5614bdae2284a6992e53e",
+    "carried_merge": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+    "carried_runtime": "rg5-6fe0594abb1c10a8b290b46c056cd851e1bab39617c0043d645d9254f3bb5721",
+    "account": "5052346701",
+    "connected": true,
+    "campaigns": 22,
+    "merchant": "626368690",
+    "checks": [
+      "Opened Shopping composer; native Merchant selection loaded product choices.",
+      "Unknown-eligibility products disabled with visible Arabic reason.",
+      "Checked then unchecked one enabled winter-product option, verified states1 then0, closed composer without save/preview/execute.",
+      "Feed all-products and SA options disabled on returned inventory; no positive feed-specific selection or full-identity dispatch claimed."
+    ],
+    "screenshot": "docs/operations/GOOGLE-RETAIL-RELEASE-REPORTS-20261029/google1634-live-retail-20261030.jpg",
+    "writes": "No draft saved; no ads/provider financial writes; no budgets or owner plan created.",
+    "limits": "Existing similarly named native offers remain separate options; no independently verified store mapping, complete inventory, funded launch, full Shopping/PMax automation or direct live dispatch proof inferred."
   }
 }
