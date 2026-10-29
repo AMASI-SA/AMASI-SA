@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-LIVE-CATEGORY-UI-INTEGRATION-20261029",
-  "state": "source_checkpoint_pending_ci_and_independent_review",
+  "state": "source_verified_independent_bounded_pass_root_release_pending",
   "production_parent": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "accepted_plan_source": "03a181de981dfa22c04831230f3ef1911d42126e",
   "accepted_live_category_backend": "d77306f8af92057d4414413a9900e03bda7b1295",
@@ -17,8 +17,75 @@
     "red": "Five actual parent route cases failed before attachment; service suite failed before implementation.",
     "local_backend": "56 passed -Werror, zero skips, 2.48s (35 accepted units + five new parent route + five linked integration +11 category routes)",
     "local_ui": "227 passed / nine suites, 2.299s, includes actual parent cancellation and M7 inventory review",
-    "planned_dedicated_ci": "48 backend including eight actual Mongo (seven preserved + one full router), exact count and zero skips; nine UI suites and build",
-    "full_ci": "Google Ads full management backend/UI/build required on exact remote source"
+    "full_ci": {
+      "run": 40944301481,
+      "backend_job": 123695470960,
+      "backend_passed": 1426,
+      "backend_seconds": 34.82,
+      "frontend_job": 123695471430,
+      "ui_passed": 391,
+      "suites": 24,
+      "build_seconds": 4.94,
+      "conclusion": "success",
+      "actual_logs_read": true
+    },
+    "dedicated_ci": {
+      "run": 40944301309,
+      "replica_job": 123695470669,
+      "backend_passed": 48,
+      "real_mongo": 8,
+      "skips": 0,
+      "backend_seconds": 5.65,
+      "frontend_job": 123695470770,
+      "ui_passed": 227,
+      "suites": 9,
+      "build_seconds": 6.52,
+      "conclusion": "success",
+      "actual_logs_read": true
+    },
+    "preserved_gates": {
+      "linked": {
+        "run": 40944301357,
+        "replica_job": 123695471741,
+        "backend_passed": 49,
+        "real_mongo": 11,
+        "skips": 0,
+        "seconds": 5.89,
+        "frontend_job": 123695472174,
+        "ui_passed": 173,
+        "suites": 7,
+        "build_seconds": 7,
+        "conclusion": "success",
+        "actual_logs_read": true
+      },
+      "observations": {
+        "run": 40944301404,
+        "replica_job": 123695471093,
+        "backend_passed": 91,
+        "real_mongo": 14,
+        "skips": 0,
+        "seconds": 4.99,
+        "frontend_job": 123695471378,
+        "ui_passed": 104,
+        "build_seconds": 5.99
+      },
+      "category": {
+        "run": 40944301389,
+        "attempt": 2,
+        "replica_job": 123696386662,
+        "frontend_job": 123696384769,
+        "backend_passed": 38,
+        "real_mongo": 9,
+        "skips": 0,
+        "conclusion": "success",
+        "retry_reason": "Attempt1 frozen Yarn install failed with registry.yarnpkg.com eslint-plugin-react-hooks5.2.0 tarball502; failed jobs only rerun on unchanged source.",
+        "actual_logs_read": true,
+        "backend_seconds": 4.14,
+        "ui_passed": 125,
+        "suites": 5,
+        "build_seconds": 5.11
+      }
+    }
   },
   "limitations": [
     "Native Salla responses are fixtures in tests; no live provider request performed.",
@@ -27,5 +94,133 @@
     "Inventory, size, preparation time, Mezan product mapping, catalog offer identity, all advertising eligibility and execution remain unproved/false.",
     "No deployment, release intent, lease, paid launch, budgets, or owner plan writes by this task."
   ],
-  "next": "Upload exact source and Draft PR; inspect all exact-source workflow logs and request independent review. Root owns production fresh-base release separately; frozen 1627 remains unchanged."
+  "next": "Root owns final production re-source, merge/deployment and owner-site verification. Preserve frozen source and independent release of PR1627. Positive owner-site preview requires genuine saved owner category scope; do not manufacture or save a business plan.",
+  "source": {
+    "commit": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
+    "tree": "7603302523edd85d033a6919f6c773d0806efd38",
+    "parent": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "local_equivalent": "750491f3b5b92e75878172e422a2896957517470",
+    "pr": 1630,
+    "branch": "codex/google-live-category-ui-integration-20261029",
+    "frozen": true
+  },
+  "ci_checkout": {
+    "commit": "729714aed7502ef393bd2f33279a7531a1129b7a",
+    "tree": "7603302523edd85d033a6919f6c773d0806efd38",
+    "parents": [
+      "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "6638faf53bc15ccaa304dfaa436aa6bf9c83f904"
+    ],
+    "git_api_verified": true
+  },
+  "independent_review": {
+    "agent": "google_product_acceptance",
+    "verdict": "bounded PASS; no blocking findings",
+    "source": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
+    "tree": "7603302523edd85d033a6919f6c773d0806efd38",
+    "backend_passed": 40,
+    "backend_flags": "-W error; zero skips",
+    "backend_seconds": 1.62,
+    "ui_passed": 86,
+    "suites": 3,
+    "ui_seconds": 1.379,
+    "verified": "Seven accepted backend/test blobs exact; M7 preserved; actual two route plus two parent lines; guards and observation-only wording upheld; actual dedicated and full CI logs independently read; no edits or live provider calls"
+  },
+  "workflows": {
+    "all_success": true,
+    "count": 15,
+    "runs": [
+      {
+        "id": 40944301744,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301432,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301497,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301345,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301529,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301309,
+        "name": "Google live category preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301404,
+        "name": "Google store product observations",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301481,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301419,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301641,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301301,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301357,
+        "name": "Google linked campaign evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301389,
+        "name": "Google category membership",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944301511,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40944302242,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "evidence_branch": "codex/google-live-category-ui-status-20261029"
 }
