@@ -32,7 +32,7 @@ class Collection:
     async def insert_one(self,row,*,session):
         rows=self.rows(session)
         assert not any(old.get('_id')==row.get('_id') for old in rows if '_id' in old)
-        rows.append(deepcopy(row));return SimpleNamespace(inserted_id=row.get('_id'))
+        rows.append(deepcopy(row));return SimpleNamespace(inserted_id=row.get('_id'), acknowledged=True)
     async def update_one(self,query,update,*,session):
         rows=self.rows(session);row=next((row for row in rows if matches(row,query)),None)
         if row is None:return SimpleNamespace(matched_count=0)
@@ -52,6 +52,8 @@ class Session:
         assert not self.in_transaction
         self.rows=deepcopy(self.db.rows);self.in_transaction=True;self.options=kwargs
     async def abort_transaction(self):self.aborted=True;self.in_transaction=False
+    async def end_session(self):
+        if self.in_transaction: await self.abort_transaction()
     async def commit_transaction(self):
         self.commit_calls+=1
         if self.db.commit_gate:await self.db.commit_gate()
@@ -61,11 +63,15 @@ class Session:
 
 class DB:
     def __init__(self,rows=None):
-        self.rows=deepcopy(rows or {});self.calls=[];self.sessions=[];self.client=self
+        self.rows=deepcopy(rows or {});self.calls=[];self.sessions=[];self.client=self;self.admin=self
         self.commit_gate=None;self.lose_commit_ack=False;self.transactional=True
     def __getitem__(self,name):return Collection(self,name)
     async def command(self,name,*,session):
         assert session is not None
+        if isinstance(name, dict):
+            assert name['abortTransaction'] == 1
+            await session.abort_transaction()
+            return {'ok':1}
         return {'setName':'test','logicalSessionTimeoutMinutes':30} if self.transactional else {}
     async def start_session(self):
         session=Session(self);self.sessions.append(session);return session

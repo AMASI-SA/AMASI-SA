@@ -29,7 +29,7 @@ from types import MappingProxyType
 import uuid
 
 from fastapi import HTTPException
-from pymongo import ReadPreference
+from pymongo import ReadPreference, timeout
 from pymongo.read_concern import ReadConcern
 from pymongo.write_concern import WriteConcern
 from pymongo.errors import DuplicateKeyError, OperationFailure
@@ -170,31 +170,81 @@ def _transaction(session):
         read_preference=ReadPreference.PRIMARY, max_commit_time_ms=5000)
 
 
-async def probe_google_budget_guard_transactions(db):
-    """Explicit opt-in capability probe: actual write transaction, then ABORT.
+PROBE_TIMEOUT_SECONDS = 10
+_pending_probe = None
 
-    No persistent guard, policy or financial record is created. The caller must
-    explicitly choose the database; no URI, credentials or environment is read.
-    A successful token is bound to this database object for60seconds only.
+
+async def probe_google_budget_guard_transactions(db):
+    """Same-DB callers share one original-deadline, retained storage probe.
+
+    Never cache completed proof, renew a deadline, retry uncertain operations,
+    or cancel executor-backed driver Futures on a caller timeout/cancellation.
+    Capability is issued only after explicit server abort ACK and async cleanup.
     """
-    async def probe():
-        async with await db.client.start_session() as session:
-            hello = await db.command('hello', session=session)
-            if (not isinstance(hello, dict) or not (hello.get('setName') or hello.get('msg') == 'isdbgrid')
-                or type(hello.get('logicalSessionTimeoutMinutes')) is not int):
-                _fail('google_budget_guard_transactions_unavailable')
-            _transaction(session)
-            await db[BUDGET_GUARDS].insert_one({'_id': 'probe_' + uuid.uuid4().hex, 'probe_only': True}, session=session)
-            await session.abort_transaction()
-            return _TransactionCapability(True, db, time.monotonic(), _PROOF)
+    global _pending_probe
+    state = _pending_probe
+    if state is not None and not state['task'].done():
+        if state['db'] is not db or state['expired']:
+            raise problem('google_budget_guard_probe_busy', 'تحقق التخزين السابق لم ينتهِ؛ لم يبدأ تحقق جديد.', 503)
+    else:
+        state = {'db': db, 'deadline': asyncio.get_running_loop().time() + PROBE_TIMEOUT_SECONDS,
+            'expired': False}
+
+        async def probe():
+            with timeout(PROBE_TIMEOUT_SECONDS):
+                session = await db.client.start_session()
+                try:
+                    hello = await db.command('hello', session=session)
+                    if (not isinstance(hello, dict) or not (hello.get('setName') or hello.get('msg') == 'isdbgrid')
+                        or type(hello.get('logicalSessionTimeoutMinutes')) is not int):
+                        _fail('google_budget_guard_transactions_unavailable')
+                    _transaction(session)
+                    result = await db[BUDGET_GUARDS].insert_one(
+                        {'_id': 'probe_' + uuid.uuid4().hex, 'probe_only': True}, session=session)
+                    if result.acknowledged is not True:
+                        raise ValueError('unacknowledged probe')
+                    reply = await db.client.admin.command({'abortTransaction': 1,
+                        'writeConcern': {'w': 'majority', 'j': True, 'wtimeout': 5000}}, session=session)
+                    if (not isinstance(reply, dict) or type(reply.get('ok')) not in (int, float)
+                        or reply['ok'] != 1 or 'writeConcernError' in reply or 'writeErrors' in reply):
+                        raise ValueError('abort acknowledgement unproved')
+                finally:
+                    cleanup = asyncio.ensure_future(session.end_session())
+                    cancelled = False
+                    while not cleanup.done():
+                        try:
+                            await asyncio.shield(cleanup)
+                        except asyncio.CancelledError:
+                            cancelled = True
+                    cleanup.result()
+                    if cancelled:
+                        raise asyncio.CancelledError()
+                return _TransactionCapability(True, db, time.monotonic(), _PROOF)
+
+        state['task'] = asyncio.create_task(probe())
+        _pending_probe = state
+        def consume(done):
+            global _pending_probe
+            if not done.cancelled():
+                done.exception()
+            if _pending_probe is state:
+                _pending_probe = None
+        state['task'].add_done_callback(consume)
     try:
-        return await asyncio.wait_for(probe(), timeout=10)
+        remaining = max(0, state['deadline'] - asyncio.get_running_loop().time())
+        done, _ = await asyncio.wait({state['task']}, timeout=remaining)
+        if not done or state['expired'] or asyncio.get_running_loop().time() > state['deadline']:
+            state['expired'] = True
+            raise TimeoutError()
+        return state['task'].result()
     except asyncio.CancelledError:
+        # One cancelled waiter cannot cancel shared driver work or other waiters.
         raise
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise
-        raise problem('google_budget_guard_transactions_unavailable', 'معاملات تخزين الميزانية غير مثبتة؛ يبقى التنفيذ غير متاح.', 503) from None
+        raise problem('google_budget_guard_transactions_unavailable',
+            'معاملات تخزين الميزانية غير مثبتة؛ يبقى التنفيذ غير متاح.', 503) from None
 
 
 def _capability(db, capability):

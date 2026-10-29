@@ -101,5 +101,16 @@
   "production_db_or_secret_access": false,
   "release_intent_created": false,
   "merge_or_publish": false,
-  "next_safe_action": "Persist this dedicated WIP branch and Draft PR, inspect exact-source replica/full CI, then root supplies current production M for normal non-destructive merge and current-source review. Keep runtime false. Root alone owns release intent, actual-host guard and publication; no automatic paid launch is authorized by this checkpoint."
+  "next_safe_action": "Persist this dedicated WIP branch and Draft PR, inspect exact-source replica/full CI, then root supplies current production M for normal non-destructive merge and current-source review. Keep runtime false. Root alone owns release intent, actual-host guard and publication; no automatic paid launch is authorized by this checkpoint.",
+  "probe_safety_followup": {
+    "state": "WIP; probe fixed, actual Mongo CI pending, broader transaction lifecycle remains migration blocker",
+    "base_remote": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
+    "contract": "One original-deadline retained probe per process; sameDBobject concurrent waiters coalesce, cancellationonewaiter nevercancelsdriver/otherwaiters, expiredattempt cannotreturncapability. DifferentDB/pendingexpiredcleanup busy503. Nevercachecompletedproof/renewdeadline/retry. Require acknowledgedinsert+explicitadminabortACKsamepublicsession majority+j; await shielded publicasyncend_session withinoriginaltask/CSOT. No OAuth/native call.",
+    "reproduction": "Faithful legacy function issuedcapability without serverabortresponse; fixedprobe rejects.",
+    "unit_result": "587passed7.70s -Werror including new10probe cases and existingCAS/inventory/policy/regression suites. AST/YAML/bash/whitespace pass.",
+    "real_mongo": "DedicatedCI adds3actualprobe tests success/server91/connectionclose plus existing16Mongo tests; pending. No localMongo.",
+    "unchanged": "runtime_available literalFalse; all operationalflags off; no launch/planner/sixpolicyhandler edits; no livepolicy/providerwrites.",
+    "adjacent_blocker": "Actual _run stillasyncsessioncontext at509 and wait_for at712; read_commit745/762 samepattern. Synchronous Motor exit/cancelled executorFuture cleanup safety notresolvedhere; migrationNOTready. commit_attempted+preserve_execution_fence+automatic_retry_allowedFalse unchanged; no budgetrelease/refund changes.",
+    "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged."
+  }
 }

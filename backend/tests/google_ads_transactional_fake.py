@@ -76,7 +76,11 @@ class TransactionalCollection:
         target=self._target(session)
         if hasattr(target,'find'):return target.find(query,projection)
         return Cursor([row for row in target.rows if matches(row,query)])
-    async def insert_one(self,*args,session=None,**kwargs):return await self._target(session).insert_one(*args,**kwargs)
+    async def insert_one(self,*args,session=None,**kwargs):
+        result = await self._target(session).insert_one(*args,**kwargs)
+        if result is None: result = SimpleNamespace()
+        result.acknowledged = True
+        return result
     async def update_one(self,*args,session=None,**kwargs):return await self._target(session).update_one(*args,**kwargs)
     async def create_index(self,*args,**kwargs):return await self.original.create_index(*args,**kwargs)
 
@@ -91,6 +95,8 @@ class Session:
         self.rows={name:deepcopy(collection.rows) for name,collection in self.db._tx_collections.items()}
         self.in_transaction=True
     async def abort_transaction(self):self.in_transaction=False
+    async def end_session(self):
+        if self.in_transaction: await self.abort_transaction()
     async def commit_transaction(self):
         self.commit_calls+=1
         for name,rows in self.rows.items():self.db._tx_get(name).rows=deepcopy(rows)
@@ -100,7 +106,7 @@ class Session:
 
 class TransactionalDBMixin:
     def _tx_setup(self,collections):
-        self._tx_lock=asyncio.Lock();self._tx_collections={};self.client=self;self.sessions=[];self.after_commit=None
+        self._tx_lock=asyncio.Lock();self._tx_collections={};self.client=self;self.admin=self;self.sessions=[];self.after_commit=None
         for name,collection in collections.items():self._tx_collections[name]=TransactionalCollection(self,name,collection)
     def _tx_get(self,name):
         if name not in self._tx_collections:self._tx_collections[name]=TransactionalCollection(self,name,BasicCollection())
@@ -108,5 +114,10 @@ class TransactionalDBMixin:
     async def start_session(self):
         session=Session(self);self.sessions.append(session);return session
     async def command(self,name,*,session):
-        assert session.db is self and name=='hello'
+        assert session.db is self
+        if isinstance(name, dict):
+            assert name['abortTransaction'] == 1
+            await session.abort_transaction()
+            return {'ok':1}
+        assert name=='hello'
         return {'setName':'unit-only','logicalSessionTimeoutMinutes':30}
