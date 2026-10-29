@@ -4381,6 +4381,8 @@ api.include_router(make_integrations_control_center_router(db, current_user))
 # ── Unified Ads Manager Phase 1 (owner-only, local reads only) ──────
 from ads_manager import make_ads_manager_router
 api.include_router(make_ads_manager_router(db, current_user))
+from marketing_reports import make_marketing_reports_router
+api.include_router(make_marketing_reports_router(db, current_user))
 
 # ── Customer Intelligence Phase 1 preview + channel-neutral memory core ──
 from customer_intelligence import (

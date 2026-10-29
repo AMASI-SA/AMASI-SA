@@ -253,6 +253,7 @@ test("marketing report and cost routes are separate from app integration routes"
     expect(section?.id).toBe("marketing");
     expect(section.items.map((item) => item.to)).toEqual([
         "/ads-manager",
+        "/ads-manager/reports",
         "/ads-manager/recommendations",
         "/ads-manager/customer-cohorts",
         "/snapchat-accounts",
@@ -276,6 +277,7 @@ test("opening marketing selects a visible secondary rail outside the primary scr
     expect(state.visibleSection?.id).toBe("marketing");
     expect(state.visibleSection.items.map((item) => item.label)).toEqual([
         "جميع المنصات",
+        "التقارير",
         "توصيات الحملات",
         "أفواج العملاء",
         "سناب شات",

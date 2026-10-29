@@ -91,6 +91,7 @@ export const MEZAN_V2_NAV_SECTIONS = [
         Icon: Megaphone,
         items: [
             { to: "/ads-manager", label: "جميع المنصات", exactSearch: true },
+            { to: "/ads-manager/reports", label: "التقارير", exactSearch: true },
             { to: "/ads-manager/recommendations", label: "توصيات الحملات", exactSearch: true },
             { to: "/ads-manager/customer-cohorts", label: "أفواج العملاء", exactSearch: true },
             { to: "/snapchat-accounts", label: "سناب شات", exactSearch: true },
