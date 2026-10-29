@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T15:24:26.805Z",
+  "updated_at": "2026-10-29T16:34:26.022Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -73,11 +73,11 @@
     "Budget guard runtime/production transaction capability/legacy claims and complete product season/cross-platform evidence remain incomplete."
   ],
   "remaining": [
-    "Deploy and live-test reviewed independent source slices PR1588,1584,1590 under current-production Release Guard v5 after shared host is restored.",
-    "Complete shared budget and launch authority, actual production transaction capability and legacy inventory; no non-atomic fallback.",
-    "Complete sales/profit/cross-platform identity/attribution/season evidence and supported catalog campaign coverage. No automatic adoption/reactivation of owner-stopped manual campaigns."
+    "Finish independent inventory live acceptance; deploy owner plan suggestions1604 via v5.",
+    "Prove production storage safely before mandatory budgetmigration1602; no paidlaunch or ownerlimits invented.",
+    "Complete launch authority/worker and product season, profit, cross-platform identity/attribution, catalog coverage with evidence."
   ],
-  "next_safe_action": "Finish reproducible A build and compare to exact CI candidate, freeze intent-only B, fresh Bchecks and actual-host clean-clone adapter, fetch production, normalmerge, guard prepare/prepublish/singlepublish/newfinish/3verify/closedlease/live behavior. Then inventory1590 and owner suggestions1584 rebuilt sequentially. No budget WIP or funded activation.",
+  "next_safe_action": "Actualhost clean A doublebuild and freeze, compare exactCI before intentonlyB. Inventory leaseclosed.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1250,7 +1250,7 @@
         "codeql_run": 40904330816,
         "codeql": "success"
       },
-      "published": false,
+      "published": true,
       "root_tests": "74 inventory cases passed1.60s with --noconftest matching CI; first unrelated shared Excel conftest import failed before tests and is not counted",
       "root_manifest_check": "EXACT backend1024 and control242 from Git source/base",
       "ci_intent_sha256": "b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4",
@@ -1273,23 +1273,43 @@
         "actor": "codex-google-inventory-20261029",
         "prepare": "PASS",
         "prepublish": "ready_to_publish=true",
-        "lease": "ACTIVE_OWNED_DO_NOT_MODIFY_APP"
+        "lease": "closed; active=false"
       },
       "publication": {
-        "state": "PUBLISHING",
+        "state": "DEPLOYED_IDENTITY_VERIFIED_FUNCTIONAL_PENDING",
         "publish_changes_clicks": 1,
         "baseline_finish": "Oct29 06:54PM",
-        "do_not_repeat": true
+        "do_not_repeat": true,
+        "finished": "2026-10-29 19:23 Asia/Riyadh"
+      },
+      "verification": {
+        "verified": true,
+        "checks": 3,
+        "boot_started_at": "2026-10-29T16:23:11.534737+00:00",
+        "frontend_artifact_tree_sha256": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0",
+        "functional": "Product search AMS11549 returns one matching product; details currently loading. Google read regression next."
       }
     },
     "next_suggestions": {
-      "pr": 1601,
-      "branch": "codex/google-plan-suggestions-release-20261029",
-      "source": "712277d165b71767f5560957ce4fcad8cf4aa329",
-      "tree": "0925bbb8539aee25b34b19767f117f651c155790",
-      "base": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
-      "state": "STACKED WIP until inventory production merge;46 fresh backend cases, no fresh frontend proof yet",
-      "next": "Normally merge inventory production M before retarget production; no old intent import or funded authorization."
+      "pr": 1604,
+      "branch": "codex/google-plan-suggestions-source-20261029",
+      "source": "86a1fdaf1c7442883f60b205c3486c3b64c608d8",
+      "tree": "de652d948c45d859c47c43f1afbec627aa5643cb",
+      "base": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+      "state": "SOURCE_A_CI_VERIFIED_NO_B_YET",
+      "ci": {
+        "google_run": 40909813383,
+        "backend_passed": 1236,
+        "frontend_passed": 226,
+        "frontend_suites": 18,
+        "readiness_run": 40909813373,
+        "all_workflows_success": 11,
+        "artifact": 12912108948
+      },
+      "intent_sha256": "d9256640837d65071ca36ca682a2e8f8cbad8e6bd5d5776284b00c411d47083e",
+      "runtime": "rg5-59c349b8311dfa31f5f9eb38baa975a2e3d59eb79f10110d583bc9642ac6b21e",
+      "root_manifests": "Exact1025backend242control",
+      "next": "Actualhost clean A doublebuild and freeze, compare exactCI before intentonlyB. Inventory leaseclosed."
     },
     "budget_reassessment": {
       "source": "0fbc710ddd54c118f1154ca72f38ac8dd3bcab39",
@@ -1307,11 +1327,20 @@
         "source": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
         "tree": "fab129f6424a460bab38d2bd19dcf21990f8d367",
         "parent": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
-        "tests": "577 unit passed, actual replica CI pending",
+        "tests": "577 unit; actual replica CI40906804547:91passed including16replica,0skip",
         "runtime_available": false,
         "published": false
       },
-      "production_gate": "Mandatory guarded revocation still works withoutOAuth ifMongoTXsupports, but unsupportedMongo blocks previousownerrevocation409/503. Do NOT deploy1602 before actual production TX proof. Separate owner-only abort-only storage diagnostic slice in progress; no change to existing sixpolicyhandlers."
+      "production_gate": "Mandatory guarded revocation still works withoutOAuth ifMongoTXsupports, but unsupportedMongo blocks previousownerrevocation409/503. Do NOT deploy1602 before actual production TX proof. Separate owner-only abort-only storage diagnostic slice in progress; no change to existing sixpolicyhandlers.",
+      "storage_diagnostic": {
+        "pr": 1603,
+        "source": "c6de749c28ed7d10201284614180a106b24b458c",
+        "prior_ack_source": "cdddbfa9872421b44a54d73e5bf15aa0c279de8c",
+        "prior_ci": 40911092616,
+        "prior_ci_passed": 113,
+        "state": "Timing-only realHTTP assertions under Mongo failpoints pendingCI; old WIP ancestry not releasable. Fresh direct-production A required.",
+        "published": false
+      }
     },
     "release_history_finding": "Suggestions269c and readiness normalmerge source histories inherit an intent change after M2, violating v5 rev-list full-history gate despite zero netintentdiff. Root preserving WIP branches and preparing new direct-M2 SourceA releases with same reviewedcode; no frozenpair/squash/rebase."
   }
