@@ -1,0 +1,44 @@
+{
+  "task_id": "GOOGLE-FIRST-LAUNCH-EVIDENCE-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-first-launch-evidence-wip-20261029",
+  "base_sha": "050b3da6ffc9660b2022a111117fd928da07ab51",
+  "state": "WIP initial verified checkpoint; native evidence reader and new proof contract incomplete",
+  "restored_source": "aac9af1f43c8e008c7d4bf41e8c3cb7600d33f06",
+  "scope": "Reuse old pure first-launch preview as a nonauthorizing evidence contract; add trusted bounded read bundle and exact semantic revalidation in new files only.",
+  "completed": [
+    "Restored old launch ownership, scope, budget, allocation and consumed-identity diagnostic checks with their existing tests.",
+    "Separated explicit read observation clocks from semantic binding while retaining owner activation and scope acknowledgement times.",
+    "All outputs explicitly refuse enable readiness: launch history remains unproved and atomic launch authority is unimplemented."
+  ],
+  "verification": {
+    "regression_red": "Two new nonauthorizing-output/time-refresh regressions failed on restored old contract.",
+    "tests": "87 passed in 1.93s, zero skipped, exit0 with -W error.",
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_automation_creation_launch_contract.py",
+    "ci": "Not yet wired for these new test files; no CI success claimed.",
+    "independent_review": "Pending"
+  },
+  "owned_paths": [
+    "backend/integrations_control_center/google_ads_automation_creation_launch_contract.py",
+    "backend/integrations_control_center/google_ads_automation_creation_launch_evidence.py",
+    "backend/tests/test_google_ads_automation_creation_launch_contract.py",
+    "backend/tests/test_google_ads_automation_creation_launch_evidence.py",
+    "docs/operations/GOOGLE-FIRST-LAUNCH-EVIDENCE-20261029/STATUS.json"
+  ],
+  "remaining": [
+    "Replace old asserted native configuration flags with an independently derived read-only evidence bundle from original private creation proof, fresh canonical product inventory, same-client identity and complete native resource/configuration reads.",
+    "Compare complete current child resource sets with original resources, reject additions/removals/unsupported controls and bind resource/budget/configuration semantics separately from observation times.",
+    "Add functional tests for stale/mixed/slow reads, product changes, identity ambiguity, exact budget resource/reference counts, false caller assertions, no writes and incomplete native snapshots.",
+    "Independent review and fresh complete CI remain required before root considers a release."
+  ],
+  "limits": [
+    "No API routes, claims, policy writes, native mutation or runtime flags.",
+    "Created-by-Mezan evidence is distinct from never-launched/no-manual-stop evidence. Local consumed-identity absence cannot prove external history.",
+    "No claim of external writer exclusion, first-funded-launch authority, permission to spend, or actual-spend cap.",
+    "No owner money limits supplied; no paid activation permitted.",
+    "Search/RSA only; no Shopping or Performance Max launch coverage."
+  ],
+  "production_changed": false,
+  "provider_calls": 0,
+  "next_safe_action": "Continue only the five approved new files in isolated worktree; implement evidence reader and contract invariants, then save a fresh remote WIP checkpoint. Root alone integrates and deploys after independent review and v5 source/intent preparation."
+}
