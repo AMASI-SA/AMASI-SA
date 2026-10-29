@@ -1,0 +1,62 @@
+name: Google funded creation pure contract
+on:
+  push:
+    branches: [codex/google-funded-creation-contract-wip-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_ads_funded_creation_contract.py
+      - backend/tests/test_google_ads_funded_creation_contract.py
+      - backend/tests/test_google_ads_funded_creation_schema.py
+      - .github/workflows/google-funded-creation-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pure-and-official-schema:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: backend
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install exact production-compatible schema and test dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1
+          python-multipart==0.0.32 cryptography==50.0.2
+          PyJWT==2.15.1 bcrypt==4.1.3 python-dotenv==1.2.4
+          pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Prove pure funded graph and unchanged PAUSED foundation
+        run: >-
+          python -m pytest --noconftest -q --tb=short -W error
+          backend/tests/test_google_ads_funded_creation_contract.py
+          backend/tests/test_google_ads_funded_creation_schema.py
+          backend/tests/test_google_ads_automation_creation_contract.py
+          backend/tests/test_google_ads_campaign_builder.py
+          backend/tests/test_google_ads_protobuf_contract.py
+          --junitxml=funded-contract-proof.xml
+      - name: Require every new test and official schema with zero skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('funded-contract-proof.xml').getroot().findall('.//testcase')
+          count=lambda name:sum(case.attrib.get('classname','').split('.')[-1]==name for case in cases)
+          assert count('test_google_ads_funded_creation_contract')==78
+          assert count('test_google_ads_funded_creation_schema')==3
+          for name in ('test_google_ads_automation_creation_contract','test_google_ads_campaign_builder','test_google_ads_protobuf_contract'):
+              assert count(name)>0,name
+          assert not [case for case in cases if any(case.find(tag) is not None for tag in ('failure','error','skipped'))]
+          print({'tests':len(cases),'new_pure_tests':78,'mandatory_official_schema_tests':3,'failures_errors_or_skips':0})
+          PY
+      - name: Check whitespace
+        run: git diff --check

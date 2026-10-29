@@ -1,0 +1,22 @@
+{
+  "status": "WIP_PURE_CONTRACT_UNIT_SCHEMA_GREEN_CI_REVIEW_PENDING",
+  "branch": "codex/google-funded-creation-contract-wip-20261029",
+  "base": "f37d615a63d9650743bd2fc07ed9b5129a6009c1",
+  "scope": "New pure fundedcreation module +dedicatedunit/schema tests/newworkflow/STATUS only. No existingruntime/sharedguard/routes/gateway/worker/PAUSED builder edits.",
+  "implemented": "Strict supplied grant-mode/scope/ownerreview/time/currency/explicitmoney/draftdigest; private copy of validated existingSearchRSA graph flips onlynewcampaigncreate toENABLED; exactnewtempresourceallowlist including narrowlybound ownnewcampaign-goalupdate; correlationgraph, onepartialfailurefalse request/hash, distinctfundedidentity. Revalidation rebuilds exactimmutable graph and refuses rehashedtampering/extraauthority. All outputs explicitlyexecutablefalse/funded_dispatch_authorizedfalse.",
+  "tests": {
+    "local_new": "81passed2.66s-Werror (78pure+3mandatoryofficialv25schema); noMongo/provider/network/credentialcalls",
+    "CI": "Pending exactcandidate; dedicatedworkflow requires78newpure+3schema+originalcreation/builder/protobuf zero failure/error/skip"
+  },
+  "prepared_auth_requirement": "Later gateway must finish credential acquisition/refresh and bind verified auth_epoch/account metadata before native validation/reservation/floor; never reacquire account_client, refresh OAuth, rebuild client, run audit/DB/provider preview or await any other operation after positivefloorACK and final synchronous flags/time/nativeage check before the one mutate. Current inspected account_client awaits _credential before constructing GoogleAdsClient; current request uses capturedheaders and oneHTTPstream, no explicitrefreshloop. This observation does not certify any future adapter/transport chain: test actual chosen client with a spy that fails on postfloorrefresh/interveningawait, expiry/relink races and unknownresult/noresend. Do not assume arbitrary client wrappers have prepared-auth behavior.",
+  "not_authority": "Pure grant is supplied data, not authenticated/persisted owner authorization. No actualfinanciallimits saved, no authoritytoken/commonreservation/submissionfloor/nativeproof/worker wired. ExistingPAUSED identities not adopted; no paidlaunch orenable permitted.",
+  "runtime_available": false,
+  "production_changed": false,
+  "next": "Savecandidate/DraftPR and inspect exactCI; budget_audit independent immutable review. Only after purecontract acceptance may root assign ownergrant/commonguard interfaces.",
+  "remaining": [
+    "Production storage/newnamespace/legacy/native prerequisites",
+    "Real ownerfinancialgrant and explicit activation",
+    "Exact ENABLED graph providersemanticvalidate-only and currentproduct/configuration proof",
+    "Atomicfunded claim/floor/originalgraphprovenance/reconciliation/worker/preparedauth path"
+  ]
+}
