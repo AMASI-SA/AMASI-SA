@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "capability_engine_evidence_passed_runtime_not_implemented",
+  "status": "capabilities_passed_prepare_execute_contract_amended_before_runtime",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -24,7 +24,10 @@
     "no_nontransactional_ddl_fallback": true,
     "no_legacy_adoption_or_index_repair": true,
     "no_financial_flags_or_provider_writes": true,
-    "funded_grants_runs_separately_owned": "google_connection"
+    "funded_grants_runs_separately_owned": "google_connection",
+    "root_approved_prepare_execute_separation": true,
+    "no_record_boundary": "No durable first preparation or claim attempt cannot be distinguished after total process loss. Prepare never sends DDL; execute never creates missing receipt; DDL requires positive durable consumed-fence proof. No automatic retries, stored consumed/applied states block duplicates.",
+    "private_confirmation_token": "Bound to exact owned prepared receipt/auth/nonce/manifest/metadata; not standalone authority; receipt GET can recover original prepared token state for freshly authenticated owner."
   },
   "verification": {
     "contract_primary_sources": "MongoDB official v8.0 transactions/create/privilege actions plus catalog command documentation read; constraints also independently confirmed by root",

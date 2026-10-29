@@ -32,11 +32,14 @@ The technical reservation is separate from these target namespaces.
 ## Public seam and authorization
 
 Implement a standalone, initially unattached route attachment function in a NEW
-module. Owner review/preflight and execution use explicit POST requests; receipt
+module. Preparation and execution use separate explicit POST requests; receipt
 inspection uses GET. Request models forbid extra fields and never accept database
 names, collection names, indexes, validators, budgets or financial flags. Execution
 binds an explicit acknowledgement, request identity and server-generated manifest
-and observation digest. Preflight is read-only and is not authority by itself.
+and observation digest. Metadata preflight is read-only, but a successful explicit
+prepare POST reserves the technical receipt. Preparation can never perform DDL.
+An acknowledged and freshly read-back reservation yields a bounded execution token;
+the token alone is never authority. Execute never inserts or recreates a reservation.
 
 Validate the authenticated dependency and a bounded unique fresh database owner
 before any reservation, including active/disabled flags, owner role and exact BSON
@@ -83,14 +86,19 @@ existing receipt bytes and old GET/POST contracts. Prove this receipt collection
 and its `_id` contract suitable before writing; do not create or repair it as an
 implicit bootstrap side effect. All DB target names are constants.
 
-Insert an exact reservation with majority+j acknowledgement and majority readback
-before any target DDL. Bind owner/auth state, request nonce, manifest version/digest,
+The prepare POST inserts an exact reservation with majority+j acknowledgement and
+majority readback, with no DDL in that code path. Bind owner/auth state, request nonce, manifest version/digest,
 observed metadata digest, target plan and attempt identity. The database-global
 unique `_id` serializes separate processes and owners. A process-local lock is only
-an additional resource bound. No TTL or elapsed-time release is allowed.
+an additional resource bound. No TTL or elapsed-time release is allowed. The
+separate execute POST requires the exact existing prepared receipt, its token,
+original owner/auth snapshot and unchanged metadata/UUID observations. Before
+starting any target DDL it must durably consume a single-use execution fence,
+receive its acknowledgement and freshly read it back. Any stored consumed,
+attempted or applied state blocks duplicate execution across processes/restarts.
 
 Start one manual transaction with PRIMARY, read concern `local`, majority+j commit
-write concern and bounded commit time. CAS the exact reservation. Create only
+write concern and bounded commit time. CAS the exact consumed receipt. Create only
 targets that the fresh full preflight proved absent, then create the two required
 policy indexes while their collections are new and empty in that transaction.
 Existing exact empty collections receive no DDL. Recheck data and owner before
@@ -119,12 +127,28 @@ Require exact applied identity and all contracts. Only after those pass may an
 exact CAS record verified completion. Read back completion before reporting it.
 No cleanup operation deletes target data or alters indexes. The receipt is retained.
 
-Lost acknowledgement at reservation, DDL, commit or final receipt, timeout,
+Lost acknowledgement at preparation/consumption, DDL, commit or final receipt, timeout,
 cancellation, uncertain cursor/session cleanup or unknown server outcome keeps
 admission blocked. Never resend DDL or a commit to guess the result. GET can
 recognize an exact atomic applied receipt and expose the current bounded metadata
 state; a missing/apparently reserved receipt is not proof of abort. Pending work
 cannot be automatically reopened by another POST or a process restart.
+
+### Explicit no-record boundary (coordinator-approved amendment)
+
+If the first preparation insert never becomes durable and its reply is lost, a
+restarted server cannot distinguish that from no preparation attempt. Therefore
+absence never authorizes execution, and execute never manufactures a missing row.
+No preparation request is automatically retried. A new explicit preparation after
+proved absence is preparation-only and cannot resend target DDL. Receipt GET may
+recover the exact original prepared row/token state for its still-authorized owner.
+
+The same information limit applies to a consumption write which never became
+durable before process loss. No DDL is allowed until its positive ACK/readback,
+so an unchanged prepared row cannot conceal a previously authorized DDL dispatch.
+Do not claim an invisible failed claim attempt remains durably detectable. Tests
+separate claim-applied/lost-ACK from claim-not-applied/no-DDL, and every durable
+consumed token is non-reusable. There is no automatic retry at either boundary.
 
 Use explicit overall and per-command bounds. Preserve ownership of any still
 running task until it actually terminates; no detached overlapping retry. Bound
@@ -164,6 +188,11 @@ Then cover the actual public seam and persistence with:
 - Lost ACK at reservation, each DDL, commit and completion, with simulated process
   restart. Distinguish commit-before-lost-reply and abort-before-lost-reply; neither
   causes application resend or guessed release.
+- Separate prepare/execute: preparation never sends DDL; missing reservation and
+  duplicate consumed token always block execute; lost initial preparation ACK with
+  no durable row never invents a pending row or grants execution; GET may recover
+  only the exact owned prepared row. Exercise both persisted and non-persisted
+  consumption uncertainty, preserving the no-DDL-before-positive-proof rule.
 - Timeout/cancellation/session cleanup behavior, unchanged existing diagnostic
   receipts and original namespace/commit diagnostic regression tests.
 
