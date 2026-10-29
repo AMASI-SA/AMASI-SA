@@ -222,5 +222,15 @@
       }
     ]
   },
-  "evidence_branch": "codex/google-live-category-ui-status-20261029"
+  "evidence_branch": "codex/google-live-category-ui-status-20261029",
+  "root_review": {
+    "state": "BOUNDED_PASS_NOT_DEPLOYED",
+    "source": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
+    "tree": "7603302523edd85d033a6919f6c773d0806efd38",
+    "read": "Fullnewservice/component+actualrouter/parentminimalattach; acceptedbackend1628 reused",
+    "tests": "11integration/routes-Werror0skip1.26s;86UI/3suites1.653s",
+    "runner_correction": "FirstUI invocationwrongcwd failedbeforetests; correctedfrontendcwd passed",
+    "ci_logs": "Rootread actual48incl8Mongo0skip,227UI/build6.52,full1426backend34.82s+391UI/build4.94; checkout729714a exactsourceM7",
+    "limits": "No actualSalla/providerclaim orpositiveownerplan; futurefreshcurrentprodsource/v5release/liveacceptance"
+  }
 }
