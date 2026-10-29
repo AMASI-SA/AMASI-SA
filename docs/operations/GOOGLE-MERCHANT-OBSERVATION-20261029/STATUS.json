@@ -5,17 +5,27 @@
   "date_utc": "2026-10-29",
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "assessment_checkpoint": "5813304637c2873ebebb213009977046fb50edcd",
-  "status": "Concrete route/auth/scope and observer design saved before implementation; shared bound auth-session interface unresolved",
+  "status": "Isolated observer implemented with fake streaming transport; 99 local functional tests passed; real auth/session integration and independent review pending",
   "owned_paths": [
     "backend/integrations_control_center/google_merchant_product_observation.py",
     "backend/tests/test_google_merchant_product_observation.py",
     "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/CONTRACT.md",
     "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/STATUS.json"
   ],
-  "current_changes": "Only CONTRACT.md and STATUS.json; no runtime implementation or router attachment yet",
+  "current_changes": "New observer module/test plus contract/status only; no route, auth or existing runtime file changes",
   "missing_shared_interface": "Opaque server-created Merchant/Ads read session binding exact owner, selected accounts, same observed grant and capabilities to transports; existing registration helper is configured-email-specific and bare Ads token plus later epoch is insufficient across relink",
   "route_plan": "Owner-triggered read-only GET /google_ads/merchant-products/observation with explicit account_id and merchant_id, server membership and full native product_link checks before read plus scope/grant recheck before return; no selection mutation or default account",
-  "validation": "Read current auth/refresh/account/link/inventory source and official Merchant v1 schemas; docs only, no runtime tests claimed",
+  "validation": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_merchant_product_observation.py",
+    "passed": 99,
+    "skipped": 0,
+    "seconds": 1.29,
+    "warnings_as_errors": true,
+    "provider_calls": false,
+    "credential_reads": false,
+    "independent_review": "pending",
+    "ci": "new dedicated workflow ownership proposed to root; not yet added"
+  },
   "retail_source_unchanged": "e16b46f0453776f5bb471ae1e641a083af275c38",
   "scope_limits": [
     "No product mapping or simple/variant proof",
@@ -24,5 +34,11 @@
     "Complete traversal is not an atomic provider snapshot"
   ],
   "production_changed": "no",
-  "next": "Root reviews concrete bound-session seam while isolated bounded observer and fake-stream functional tests proceed; root assigns shared auth interface before any real route/provider wiring. Retail PR1629 CI/review completion remains first priority."
+  "next": "Save immutable observer WIP; request independent bounded review and dedicated CI; root assigns additive bound credential helper before any real route/provider wiring.",
+  "observer_contract_notes": [
+    "Merchant v1 legacyLocal is retained as local/standard identity; false is not promoted to verified Google Ads ONLINE channel",
+    "Protobuf omitted false scalar is accepted only with consistent native resource; no truthy coercion",
+    "Optional link absence preserves unknown destination, never verified mapping",
+    "No partial rows escape a malformed/incomplete traversal; semantic digest excludes times, token and ordering"
+  ]
 }
