@@ -127,4 +127,5 @@ async def test_missing_category_visibility_is_unknown_never_defaults_active():
     caller.responses["/categories/8"]["data"].pop("status")
     result = await preview_live_category(db, owner_id="owner", fields=fields, caller=caller)
     assert result["category_status"] == "unknown"
+    assert all(p["category_hidden"] is None for p in result["products"])
     assert all(p["eligible_for_ad_selection"] is False for p in result["products"])

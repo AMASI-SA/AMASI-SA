@@ -117,7 +117,7 @@ async def preview_live_category(db, *, owner_id, fields, category_id=None, calle
         "mezan_product_mapping_verified": False,
         "inventory_verified": False, "execution_authorized": False,
         "products": [{"salla_product_id": canonical_id(r["id"]), "membership": "observed_category_endpoint",
-            "excluded": canonical_id(r["id"]) in excluded, "category_hidden": category_status == "hidden",
+            "excluded": canonical_id(r["id"]) in excluded, "category_hidden": None if category_status == "unknown" else category_status == "hidden",
             "product_status": r.get("status") if r.get("status") in {"sale", "out", "hidden"} else "unknown",
             "inventory": "unproved", "eligible_for_ad_selection": False} for r in rows],
         "limitations": ["Membership observation only; inventory, sizes, preparation time and catalog offer mapping unproved",
