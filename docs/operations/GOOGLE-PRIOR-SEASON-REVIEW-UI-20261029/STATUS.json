@@ -2,7 +2,7 @@
   "task": "google-prior-season-review-ui-20261029",
   "branch": "codex/google-prior-season-review-ui-20261029",
   "base": "b3ea651cced66b6171ba379806b955879409a3b3",
-  "state": "WIP_child_ui_locally_verified_unattached_pending_independent_review_and_ci",
+  "state": "SEALED_BOUNDED_CHILD_UI_PASS_UNATTACHED_RELEASE_HOLD",
   "production_changed": false,
   "provider_calls_performed": false,
   "ownership": "Four NEW child/service/test paths plus unique actualwriter generator/JSON/paritytest and this STATUS only. No shared form/service/router or frozen backend changes.",
@@ -13,7 +13,29 @@
     "frontend": "52tests/2suites PASS1.083s via governed Node22.23.2/Yarn1.22.22, no skips; host UNDICI experimental warning only",
     "fixture": "1backend actualHTTP fixture parity test passed-Werror0skip0.84s",
     "whitespace": "git diff --check passed",
-    "ci": "Dedicated google-prior-season-review-ui.yml added: exact52UI/2suites zero skipped/pending/todo, exact1actualHTTPwriter fixture parity, governed frozen install/currentCI build; remote run pending. Existing shared fullworkflow unchanged."
+    "ci": {
+      "dedicated": "40963448928/job123761820967 completedSUCCESS:1actualHTTPfixture-Werror0skip1.84s;52UI/2suites exact0skip/pending/todo gate;build5.32s",
+      "full_google": "40963448686 backend1237618205001491pass38.93s;frontend123761821074415/24suites+build4.59s",
+      "checkout": "ebf93ae30138a26d9ae073f32673cc61e216920c syntheticmerge d1b0 into61da14e645e8aec6a5fa33eac8a8f5208c110e5c, not source-identical checkout claim"
+    }
   },
-  "next": "Remotecheckpoint and root/independent review; integrationowner adds editableprior save fields/actualfixture regeneration, parent component attachment and backend router attachment on fresh production source. No release intent/merge/publish by this branch."
+  "next": "Root integration owns parenteditablefields/save/removal, authenticatedownerId wiring, priorrouterattachment, fresh production source and release/live acceptance. Preserve frozen d1b0; this separate status checkpoint changes no runtime. No standalonecompleteusercycle/deployment claim.",
+  "accepted_source": {
+    "sha": "d1b0d65c422cef4fa36f59405270a877bf3d7c27",
+    "tree": "2d3bc6600ceb02e0fc93c446eb142b134e7403ff",
+    "local_equivalent": "b256b7265b"
+  },
+  "independent_review": {
+    "reviewer": "google_product_acceptance",
+    "verdict": "SEALED_BOUNDED_PASS",
+    "local": "52UI/2suites0.654s +1actualHTTPfixture-Werror0skip0.72s",
+    "extra": "5validatorboundaryprobes pass including RiyadhUTC21closedday,366/367leapdays andemptyselection",
+    "ci": "Reviewer independently fetched dedicated finalSUCCESS logs and exact counts/build",
+    "source": "9newfiles only; clean; frozenbackend/sharedparent unchanged; no confirmedblocker"
+  },
+  "parent_seam_assessment": {
+    "existing": "formFrom spreads savedfields; commercialPlanPayload spreads form, so existingpriorcontext survives unrelatedsave but no create/remove controls exist",
+    "proposed": "Integrationowner adds optionalgroup exact5fields, emptyoptionalreference→null/disabledgroup→null; no inferred dates/calendar/reference. Edit clearsreviewed/dirty and invalidates child. Existingtruewriteack onlyexplicitreviewflow. ownerId fromauthenticated user.id, never plan.updated_by substitute. Add actualwriter create→unrelatededit keepsprior, remove→null, invalid/overlap/367day rejection and childscope cancellation tests."
+  }
 }
+
