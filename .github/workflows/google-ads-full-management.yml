@@ -1,10 +1,16 @@
 name: Google Ads full management
 
 on:
+  push:
+    branches: [codex/google-merchant-observation-attachment-20261029, codex/google-merchant-observation-release-m622-20261029]
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - "backend/integrations_control_center/google_ads*"
+      - "backend/integrations_control_center/google_merchant_*.py"
+      - "backend/tests/test_google_merchant_*.py"
+      - "backend/tests/test_google_bound_read_session*.py"
+      - "frontend/src/services/googleMerchantObservationChoices*"
       - "backend/integrations_control_center/google_commercial_plan.py"
       - "backend/tests/test_google_plan_ui_writer_fixtures.py"
       - "backend/integrations_control_center/google_prior_season_*.py"
@@ -121,6 +127,11 @@ jobs:
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py
           backend/tests/test_google_ads_reporting_v1.py
+          backend/tests/test_google_bound_read_session.py
+          backend/tests/test_google_merchant_product_observation.py
+          backend/tests/test_google_merchant_observation_routes.py
+          backend/tests/test_google_merchant_observation_choices.py
+          backend/tests/test_google_merchant_observation_attachment.py
           backend/tests/test_google_commercial_plan.py
           backend/tests/test_google_plan_ui_writer_fixtures.py
           backend/tests/test_google_prior_season_context.py
@@ -171,6 +182,11 @@ jobs:
           src/services/marketingPerformance.test.js
           src/services/adsManager.test.js
           src/components/marketing/GoogleAdsWorkspace.test.jsx
+          src/components/marketing/GoogleMerchantObservation.test.jsx
+          src/components/marketing/GoogleMerchantObservationSelector.test.jsx
+          src/components/marketing/GoogleMerchantObservationAttachment.test.jsx
+          src/services/googleMerchantObservationChoices.test.js
+          src/lib/api.authRefresh.test.js
           src/components/marketing/GoogleAnalysisAttempts.test.jsx
           src/components/marketing/GoogleAutomationPolicy.test.jsx
           src/components/marketing/GoogleCreationPolicy.test.jsx

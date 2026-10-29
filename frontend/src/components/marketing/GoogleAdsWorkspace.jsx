@@ -5,6 +5,7 @@ import GoogleAnalysisAttempts from "./GoogleAnalysisAttempts";
 import GoogleAutomationPolicy from "./GoogleAutomationPolicy";
 import GoogleCreationPolicy from "./GoogleCreationPolicy";
 import GoogleCommercialPlan from "./GoogleCommercialPlan";
+import GoogleMerchantObservationSelector from "./GoogleMerchantObservationSelector";
 import GoogleAdsIntelligenceCard from "./GoogleAdsIntelligenceCard";
 import GoogleRecommendationAction from "./GoogleRecommendationAction";
 import { googleEvidenceDisplay } from "../../services/googleAdsEvidence";
@@ -312,6 +313,7 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
             <GoogleNamespacePrerequisites isOwner={permissions.owner} />
         </details>}
         <GoogleCommercialPlan isOwner={permissions.owner} />
+        <GoogleMerchantObservationSelector />
         {listLoading && <p role="status" className="text-center text-sm text-slate-500">جارٍ تحميل القائمة…</p>}
         {drafts && <section className="space-y-2 rounded-2xl border bg-white p-4" aria-label="مسودات جوجل المحفوظة"><h3 className="font-black">المسودات المحفوظة</h3>{drafts.map((record) => <button type="button" key={record.draft_id || record.id} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-right text-sm" onClick={() => openComposer({ mode: "create", accountId, accountName: accountNameOf(account || {}), currency: accountCurrency, draftId: record.draft_id || record.id })}><span className="font-bold">{record.draft?.name || record.name || "مسودة حملة"}</span><span className="text-xs text-slate-500">{GOOGLE_CAMPAIGN_LABELS[record.draft?.campaign_type || record.campaign_type] || "حملة"} · النسخة {record.revision}</span><span className="font-bold text-emerald-700">استكمال المسودة</span></button>)}{!drafts.length && <p className="p-3 text-sm text-slate-500">لا توجد مسودات محفوظة للحساب المختار.</p>}</section>}
         {history && <section className="space-y-2 rounded-2xl border bg-white p-4" aria-label="تاريخ عمليات جوجل"><h3 className="font-black">سجل التنفيذ والاعتماد</h3>{history.map((proposal) => <button type="button" key={proposal.proposal_id} disabled={listLoading} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-right text-sm" onClick={() => openHistory(proposal)}><span>{proposal.campaign_name || proposal.planned?.name || "عملية مواد أو حملة"}</span><span className="font-bold">{GOOGLE_STATUS_LABELS[proposal.status] || "جارٍ التحقق"}</span><span className="text-xs text-slate-500">{proposal.created_at ? new Date(proposal.created_at).toLocaleString("ar-SA") : ""}</span></button>)}{!history.length && <p className="p-3 text-sm text-slate-500">لا توجد عمليات محفوظة للحساب المختار.</p>}</section>}
