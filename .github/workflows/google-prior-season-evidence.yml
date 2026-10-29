@@ -58,7 +58,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('prior-season-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_prior_season_mongo')]
-          assert len(cases) == 115 and len(replica) == 12
+          assert len(cases) == 125 and len(replica) == 17
           assert any(c.attrib.get('name') == 'test_actual_writer_prior_query_and_current_four_windows_remain_separate' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_prior_read_race_invalidates_revision_fields_and_review_provenance') for c in replica) == 3
           assert sum(c.attrib.get('name','').startswith('test_actual_prior_context_write_still_requires_explicit_review_ack') for c in replica) == 2

@@ -38,6 +38,7 @@ async def mongo():
             await session.abort_transaction()
         assert await db.probe.count_documents({}) == 0
         await db.unified_orders.create_index([("user_id", 1), ("order_date", -1)])
+        await db.users.insert_one({"id": "owner", "role": "owner"})
         yield db
     finally:
         await client.drop_database(name)
@@ -161,3 +162,23 @@ async def test_actual_legacy_null_prior_context_skips_source_reader(mongo, monke
         assert (await client.put("/google_ads/commercial-plans/winter", json=payload(prior=False))).status_code == 200
         result = await get(client)
     assert result.status_code == 200 and result.json()["observations"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision"])
+async def test_actual_owner_or_typed_revision_race_never_returns_observations(mongo, monkeypatch, kind):
+    await mongo.unified_orders.insert_one(prior_order())
+    original = routes.read_prior_season_observations
+    async def changing(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        if kind == "deleted": await mongo.users.delete_many({"id": "owner"})
+        elif kind in ("disabled", "staff"):
+            await mongo.users.update_one({"id": "owner"}, {"$set": {"disabled": True} if kind == "disabled" else {"role": "staff"}})
+        else:
+            await mongo[PLANS].update_one({"user_id": "owner"}, {"$set": {"revision": True if kind == "bool_revision" else 1.0}})
+        return result
+    monkeypatch.setattr(routes, "read_prior_season_observations", changing)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(monkeypatch, mongo, actual_auth=True)), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
+        assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
+        result = await get(client)
+    assert result.status_code == (409 if kind.endswith("revision") else 403)

@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime
 import httpx
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 
 from integrations_control_center.google_commercial_plan import PLANS, attach_google_commercial_plan_routes
 from integrations_control_center.google_prior_season_routes import attach_google_prior_season_routes
@@ -23,14 +23,27 @@ class Plans(Collection):
         return await super().find_one(query, projection)
 
 
+class OwnerCursor:
+    def __init__(self, rows): self.rows = rows
+    def limit(self, value): assert value == 2; return self
+    def max_time_ms(self, value): assert value == 1000; return self
+    async def to_list(self, length): return deepcopy(self.rows[:length])
+
+
+class OwnerUsers:
+    def __init__(self): self.rows = [{"id": "owner", "role": "owner"}]
+    def find(self, query, projection): return OwnerCursor([r for r in self.rows if r.get("id") == query["id"]])
+    async def find_one(self, query, projection=None): return next((deepcopy(r) for r in self.rows if r.get("id") == query.get("id")), None)
+
+
 class DB:
     def __init__(self):
-        self.plans, self.orders, self.users = Plans(), Orders([prior_order()]), Users()
+        self.plans, self.orders, self.users = Plans(), Orders([prior_order()]), OwnerUsers()
     def __getitem__(self, name):
         return {PLANS: self.plans, "unified_orders": self.orders}[name]
 
 
-def app_for(monkeypatch, db, identity=None):
+def app_for(monkeypatch, db, identity=None, *, actual_auth=False):
     from integrations_control_center import google_commercial_plan as module
     class FixedDatetime(datetime):
         @classmethod
@@ -40,6 +53,12 @@ def app_for(monkeypatch, db, identity=None):
     app, router = FastAPI(), APIRouter()
     async def current_user():
         return dict(identity) if identity is not None else {"id": "owner", "role": "owner"}
+    if actual_auth:
+        import auth
+        monkeypatch.setattr(auth, "get_jwt_secret", lambda: "synthetic-only")
+        monkeypatch.setattr(auth.jwt, "decode", lambda *args, **kwargs: {"sub": "owner", "type": "access", "mfa": True})
+        async def current_user(request: Request):
+            return await auth.get_current_user_from_db(request, db)
     attach_google_commercial_plan_routes(router, db, current_user)
     attach_google_prior_season_routes(router, db, current_user, clock=lambda: NOW)
     app.include_router(router)
@@ -111,7 +130,7 @@ async def test_stale_or_foreign_or_unclosed_interval_never_reads_orders(monkeypa
         assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
         assert (await get(client, 2)).status_code == 409
         identity["id"] = "foreign"
-        assert (await get(client)).status_code == 404
+        assert (await get(client)).status_code == 403
         assert db.orders.query is None
         identity["id"] = "owner"
         db.plans.rows[0]["fields"].update(starts_on="2027-01-01", ends_on="2027-02-01",
@@ -134,3 +153,23 @@ async def test_truncated_prior_read_and_missing_index_never_publish_counts(monke
         db.orders.fail = True
         failed = await get(client)
     assert failed.status_code == 503 and "sentinel" not in failed.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["disabled", "staff", "deleted", "bool_revision", "float_revision"])
+async def test_current_owner_and_exact_revision_race_fail_closed(monkeypatch, kind):
+    from integrations_control_center import google_prior_season_routes as routes
+    db = DB()
+    original = routes.read_prior_season_observations
+    async def changing(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        if kind == "disabled": db.users.rows[0]["disabled"] = True
+        elif kind == "staff": db.users.rows[0]["role"] = "staff"
+        elif kind == "deleted": db.users.rows.clear()
+        else: db.plans.rows[0]["revision"] = True if kind == "bool_revision" else 1.0
+        return result
+    monkeypatch.setattr(routes, "read_prior_season_observations", changing)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app_for(monkeypatch, db, actual_auth=True)), base_url="http://test", headers={"Authorization": "Bearer synthetic-token"}) as client:
+        assert (await client.put("/google_ads/commercial-plans/winter", json=payload())).status_code == 200
+        result = await get(client)
+    assert result.status_code == (409 if kind.endswith("revision") else 403)
