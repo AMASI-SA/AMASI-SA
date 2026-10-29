@@ -1,0 +1,20 @@
+{
+  "status": "SEALED_READONLY_NEXT_GRANT_COMMON_GUARD_PROPOSAL",
+  "branch": "codex/google-funded-grant-guard-contract-20261029",
+  "base": "9e83dfbc7488483abe43d6443a80a1ac819476e1",
+  "pure_tested_source": "8b0283668e2d03427ed2613910c577d3e168737d",
+  "scope": "Docs-only proposal; no existing guard/exposure/policy/routes/gateway/worker/source/flag/host/credential/provider edits",
+  "design": "DESIGN.md",
+  "key_contracts": [
+    "Canonical verifiednativeaccount producer; pure1..20digits isnotidentityproof",
+    "Stable grant_key one-shot acrossgrantrevisions +distinct purefundedidentity",
+    "Typedgrantmutation/reservation/floor/settlement shareaccountTXepoch/nativeproposal-fence",
+    "Unboundnewhold thenpositivelymappedcampaign-budget MAXonce; no oldLaunchAllocationguess",
+    "Unknowncommit/request noresend/refund/fence release; freshprecommit and noawait postACKtime/preparedauth path",
+    "OAuthindependentcurrentownerrevoke; activationneedsactualcompleteprerequisites/runtime remainsfalse"
+  ],
+  "verification": "Read-only source/design review and docs JSON/whitespace validation only; no new runtime/test acceptance claimed",
+  "production_changed": false,
+  "financial_limits_saved": false,
+  "next": "Root reviews exactfiles/identities/TX/time/revoke/cap interface before assigning sharedsourcehunks. Preserve all frozenbranches and foreignproductionwork."
+}
