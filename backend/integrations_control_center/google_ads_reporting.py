@@ -215,6 +215,10 @@ async def _credential(db: Any, user_id: str, now: datetime) -> str:
     return await _refresh_access_token(db, row, now)
 
 
+GOOGLE_BOUND_READ_TIMEOUT_SECONDS = 90.0
+GOOGLE_BOUND_READ_CLEANUP_SECONDS = 2.0
+
+
 class GoogleBoundReadError(RuntimeError):
     """A fixed safe code only; never attach credential or driver details."""
 
@@ -265,14 +269,21 @@ def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=No
             snapshot.clear()
             token = ""
             source_bytes = b""
-            for client in (ads, merchant):
-                if client is not None:
-                    try:
+            clients = tuple(client for client in (ads, merchant) if client is not None)
+            ads = merchant = None
+
+            async def close_one(client):
+                try:
+                    async with asyncio.timeout(GOOGLE_BOUND_READ_CLEANUP_SECONDS):
                         close = getattr(client, "close", None) or client.aclose
                         await close()
-                    except Exception:
-                        pass
-            ads = merchant = None
+                except Exception:
+                    pass
+
+            # The outer deadline may already have cancelled the body. Cleanup
+            # owns a separate finite deadline, and gather awaits both closes.
+            # External cancellation propagates through gather to both clients.
+            await asyncio.gather(*(close_one(client) for client in clients))
 
         def exact_snapshot(row):
             # BSON retains scalar types and absent/null fields. Sorting keys
@@ -352,8 +363,11 @@ def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=No
                         ("content-type", "content-encoding") if key in self.__response.headers}
 
                 async def aiter_bytes(self, chunk_size=8192):
-                    async for chunk in self.__response.aiter_bytes(chunk_size=chunk_size):
-                        yield chunk
+                    try:
+                        async for chunk in self.__response.aiter_bytes(chunk_size=chunk_size):
+                            yield chunk
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
 
             class ReadSession:
                 __slots__ = ()
@@ -409,6 +423,9 @@ def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=No
                     except Exception:
                         fail("google_bound_read_provider_unavailable")
 
+        except asyncio.CancelledError:
+            await cleanup()
+            raise
         except GoogleBoundReadError:
             await cleanup()
             raise
@@ -426,7 +443,7 @@ def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=No
     @asynccontextmanager
     async def bounded():
         try:
-            async with asyncio.timeout(90):
+            async with asyncio.timeout(GOOGLE_BOUND_READ_TIMEOUT_SECONDS):
                 async with opened() as session:
                     yield session
         except TimeoutError:

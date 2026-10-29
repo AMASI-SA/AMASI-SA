@@ -1,5 +1,6 @@
 """Synthetic credential session races; no secrets, environment or provider calls."""
 from copy import deepcopy
+import asyncio
 from datetime import datetime, timedelta, timezone
 import traceback
 
@@ -238,3 +239,99 @@ async def test_provider_change_during_merchant_read_discards_observation(monkeyp
         async with session(db) as bound:
             await read_merchant_product_observation(bound, scope=MerchantObservationScope(USER, "5052346701", "123"), clock=lambda: NOW)
     assert "PRIVATE" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.asyncio
+async def test_iterator_sanitizes_before_consumer_can_catch_inside_stream_context(monkeypatch):
+    db = DB(); providers(monkeypatch, db)
+    class BrokenStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"{}"
+            raise RuntimeError("PRIVATE_ITERATOR_SENTINEL")
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, headers={"Content-Type": "application/json"}, stream=BrokenStream()))
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: REAL_HTTPX_ASYNC_CLIENT(transport=transport, **kwargs))
+    async with session(db) as bound:
+        async with bound.stream("GET", "https://merchantapi.googleapis.com/products/v1/accounts/123/products", params={"pageSize": 250}, headers={"Accept-Encoding": "identity"}, follow_redirects=False) as response:
+            with pytest.raises(module.GoogleBoundReadError) as caught:
+                async for _ in response.aiter_bytes(chunk_size=1):
+                    pass
+            assert caught.value.code == "google_bound_read_provider_unavailable"
+            assert "PRIVATE_ITERATOR_SENTINEL" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.asyncio
+async def test_expired_body_deadline_cannot_leave_cleanup_hung_or_background_closer(monkeypatch):
+    db = DB(); providers(monkeypatch, db)
+    closed = asyncio.Event()
+    class HangingClose:
+        def __init__(self, *args):
+            pass
+        async def close(self):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                closed.set()
+    monkeypatch.setattr(ads_module, "GoogleAdsClient", HangingClose)
+    monkeypatch.setattr(module, "GOOGLE_BOUND_READ_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(module, "GOOGLE_BOUND_READ_CLEANUP_SECONDS", 0.01)
+    async def operation():
+        async with session(db):
+            await asyncio.sleep(1)
+    with pytest.raises(module.GoogleBoundReadError, match="timeout"):
+        await asyncio.wait_for(operation(), timeout=0.2)
+    assert closed.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["cancel", "timeout"])
+async def test_initial_current_read_cancellation_is_finite_and_constructs_no_clients(monkeypatch, mode):
+    db = DB(); calls = providers(monkeypatch, db)
+    entered = asyncio.Event()
+    normal_find = db.collection.find
+    count = 0
+    class Blocked(Cursor):
+        async def to_list(self, length):
+            entered.set()
+            await asyncio.Event().wait()
+    def find(*args):
+        nonlocal count
+        count += 1
+        return Blocked([]) if count == 2 else normal_find(*args)
+    monkeypatch.setattr(db.collection, "find", find)
+    if mode == "timeout":
+        monkeypatch.setattr(module, "GOOGLE_BOUND_READ_TIMEOUT_SECONDS", 0.01)
+    async def operation():
+        async with session(db):
+            pytest.fail("blocked credential read escaped")
+    task = asyncio.create_task(operation())
+    await asyncio.wait_for(entered.wait(), timeout=0.2)
+    if mode == "cancel":
+        task.cancel()
+        expected = asyncio.CancelledError
+    else:
+        expected = module.GoogleBoundReadError
+    with pytest.raises(expected):
+        await asyncio.wait_for(task, timeout=0.2)
+    assert task.done() and calls["ads_tokens"] == calls["merchant_tokens"] == []
+
+
+@pytest.mark.asyncio
+async def test_partial_client_construction_failure_closes_existing_client_safely(monkeypatch):
+    db = DB(); calls = providers(monkeypatch, db)
+    def fail_constructor(**kwargs):
+        raise RuntimeError("PRIVATE_CONSTRUCTOR_SENTINEL")
+    monkeypatch.setattr(module.httpx, "AsyncClient", fail_constructor)
+    with pytest.raises(module.GoogleBoundReadError) as caught:
+        async with session(db):
+            pytest.fail("partial construction escaped")
+    assert calls["ads_closed"] == 1
+    assert "PRIVATE_CONSTRUCTOR_SENTINEL" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.asyncio
+async def test_context_exit_refuses_expiry_even_when_credential_document_did_not_change(monkeypatch):
+    db = DB(); providers(monkeypatch, db)
+    now = [NOW]
+    with pytest.raises(module.GoogleBoundReadError, match="expiry_unproved"):
+        async with module.google_bound_read_session(db, USER, ads_account=ACCOUNT, merchant_id="123", clock=lambda: now[0]):
+            now[0] += timedelta(hours=1)
