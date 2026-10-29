@@ -16,7 +16,7 @@
     "backend": "141 passed, no skips, 1.40s; catalog reader/routes + product evidence + creation inventory",
     "frontend": "23 passed, no skips, 1.117s; GooglePinnedCatalogReview suite via Node22.23.2 with existing read-only dependency tree",
     "mongo": "New real Mongo projection/invalidation regression authored; not run locally (no disposable Mongo)",
-    "ci": "Pending PR; catalog replica workflow still Ubuntu24.04/Mongo8.0.26 host-kernel issue requires coordinator decision"
+    "ci": "Pending PR; coordinator-approved catalog replica runner Ubuntu22.04 preserves Mongo8.0.26 and real-replica/no-skips assertions. Infrastructure workaround only."
   },
   "production_changed": false,
   "provider_writes": 0,

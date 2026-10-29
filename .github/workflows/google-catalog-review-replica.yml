@@ -14,7 +14,8 @@ permissions:
   contents: read
 jobs:
   replica:
-    runs-on: ubuntu-24.04
+    # Mongo8 host-kernel startup workaround, matching reviewed Google CI.
+    runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
