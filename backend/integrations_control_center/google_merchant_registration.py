@@ -19,6 +19,11 @@ from typing import Any, Callable
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from .google_credential_refresh_cas import (
+    CREDENTIAL_REFRESH_PROJECTION,
+    GoogleRefreshPersistenceError,
+    persist_refreshed_google_credential,
+)
 from .google_oauth_security import (
     GOOGLE_CAPABILITY_EVIDENCE,
     GOOGLE_CREDENTIALS_COLLECTION,
@@ -96,16 +101,7 @@ def _safe_http_code(prefix: str, status_code: int) -> str:
 async def _fresh_google_context(db: Any, user_id: str) -> dict[str, Any]:
     credentials = await db[GOOGLE_CREDENTIALS_COLLECTION].find_one(
         {"user_id": user_id},
-        {
-            "_id": 0,
-            "access_token_ciphertext": 1,
-            "refresh_token_ciphertext": 1,
-            "expires_at": 1,
-            "scope": 1,
-            "google_subject": 1,
-            "google_email": 1,
-            "token_type": 1,
-        },
+        CREDENTIAL_REFRESH_PROJECTION,
     )
     if not credentials:
         raise HTTPException(
@@ -209,17 +205,18 @@ async def _fresh_google_context(db: Any, user_id: str) -> dict[str, Any]:
         )
     expires_in = max(60, int(payload.get("expires_in") or 3600))
     refreshed_at = _utcnow()
-    await db[GOOGLE_CREDENTIALS_COLLECTION].update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "access_token_ciphertext": encrypt_google_token(access_token),
-                "expires_at": refreshed_at + timedelta(seconds=expires_in),
-                "token_type": str(payload.get("token_type") or "Bearer")[:32],
-                "updated_at": refreshed_at,
-            }
-        },
-    )
+    try:
+        await persist_refreshed_google_credential(
+            db, user_id=user_id, previous=credentials,
+            values={"access_token_ciphertext": encrypt_google_token(access_token),
+                    "expires_at": refreshed_at + timedelta(seconds=expires_in),
+                    "token_type": str(payload.get("token_type") or "Bearer")[:32],
+                    "updated_at": refreshed_at})
+    except GoogleRefreshPersistenceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={
+            "code": exc.code,
+            "message": "لم يتأكد حفظ جلسة Google الحالية؛ حدّث الاتصال دون إعادة إرسال العملية.",
+        }) from None
     return {
         "access_token": access_token,
         "granted_scopes": granted_scopes,

@@ -14,6 +14,11 @@ from typing import Any, Callable
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from .google_credential_refresh_cas import (
+    CREDENTIAL_REFRESH_PROJECTION,
+    GoogleRefreshPersistenceError,
+    persist_refreshed_google_credential,
+)
 from .google_oauth_security import (
     GOOGLE_CREDENTIALS_COLLECTION,
     GOOGLE_SCOPE_BY_PROVIDER,
@@ -113,13 +118,7 @@ async def ensure_ga4_realtime_indexes(db: Any) -> None:
 async def _fresh_google_access_token(db: Any, user_id: str) -> str:
     credentials = await db[GOOGLE_CREDENTIALS_COLLECTION].find_one(
         {"user_id": user_id},
-        {
-            "_id": 0,
-            "access_token_ciphertext": 1,
-            "refresh_token_ciphertext": 1,
-            "expires_at": 1,
-            "scope": 1,
-        },
+        CREDENTIAL_REFRESH_PROJECTION,
     )
     if not credentials:
         raise GA4RealtimeError(
@@ -197,17 +196,17 @@ async def _fresh_google_access_token(db: Any, user_id: str) -> str:
         )
     expires_in = max(60, int(payload.get("expires_in") or 3600))
     refreshed_at = _utcnow()
-    await db[GOOGLE_CREDENTIALS_COLLECTION].update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "access_token_ciphertext": encrypt_google_token(access_token),
-                "expires_at": refreshed_at + timedelta(seconds=expires_in),
-                "token_type": str(payload.get("token_type") or "Bearer")[:32],
-                "updated_at": refreshed_at,
-            }
-        },
-    )
+    try:
+        await persist_refreshed_google_credential(
+            db, user_id=user_id, previous=credentials,
+            values={"access_token_ciphertext": encrypt_google_token(access_token),
+                    "expires_at": refreshed_at + timedelta(seconds=expires_in),
+                    "token_type": str(payload.get("token_type") or "Bearer")[:32],
+                    "updated_at": refreshed_at})
+    except GoogleRefreshPersistenceError as exc:
+        raise GA4RealtimeError(exc.code,
+            "لم يتأكد حفظ جلسة Google الحالية؛ حدّث الاتصال دون إعادة إرسال العملية.",
+            status_code=exc.status_code, retryable=False) from None
     return access_token
 
 
