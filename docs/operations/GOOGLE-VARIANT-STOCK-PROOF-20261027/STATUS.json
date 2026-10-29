@@ -1,11 +1,11 @@
 {
   "task": "GOOGLE-VARIANT-STOCK-PROOF-20261027",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/google-inventory-proof-release-20261029",
+  "branch": "codex/google-inventory-proof-status-20261029",
   "base_sha": "5c3353034be910ab2bde62c12512d1d8ded26faa",
   "previous_checkpoint": "ebafb1de8c545b166361d608860e352a8c55bd69",
-  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1590",
-  "status": "WIP focused and real Mongo acceptance passed; final independent review and CI pending",
+  "pr": 1600,
+  "status": "DEPLOYED_AND_ACCEPTED_BOUNDED_SCOPE",
   "scope": "Source-bound inventory evidence for Google automatic PAUSED Search creation",
   "ownership_extension": "Coordinator explicitly approved additive metadata only in product_v2_details_routes._details_patch, creation-only projection seams in plan/gateway/authority, and supplied the Arabic UI blocker mapping. Shared writers and google_ads_ai projection are unchanged.",
   "contract": "inventory_evidence_v1 binds strict version, source revision, exact canonical stock fingerprint, details observation, bounded variant count and available/unavailable/unproved state. Missing legacy proof, absent/null/conflicting arrays, stale/replaced source, partial canonical rows or changed stock fail closed. Explicit positive numeric SKU IDs required. Saved owner review and intent both bind inventory digest.",
@@ -30,23 +30,54 @@
     "Strict bounded numeric stock strings are supported; boolean quantities and truthy string unlimited flags are unproved.",
     "No funded launch, feature-flag activation or live-provider operation is included."
   ],
-  "next": "Independent review latest immutable checkpoint and CI, then coordinator integration and required release/live validation",
-  "production_changed": "no",
-  "deployment": "not attempted",
+  "next": "Inventory slice complete. Continue suggestions1604 then production storage diagnostic before guarded policy migration. Catalog review proof bridge separately WIP; full remote variant pagination and funded launch not proved.",
+  "production_changed": true,
+  "deployment": {
+    "source_a": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+    "intent_b": "5ba86281237ff193fb14a3ee6eba9d26e33b294c",
+    "merge": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+    "runtime": "rg5-74850b8727dfa76bfef242d53621c8377dd349d13a89700dcc95330ea8607aa0",
+    "intent_sha256": "b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4",
+    "publish_changes_clicks": 1,
+    "finish": "2026-10-29 19:23 Asia/Riyadh",
+    "verified": true,
+    "checks": 3,
+    "lease_active": false,
+    "boot_started_at": "2026-10-29T16:23:11.534737+00:00",
+    "artifact": "013d56ddecb54bcb67f4b4dd717596cf5f417f62624b2c57112649c9b26df6a0"
+  },
   "reintegration_20261029": {
-    "base_cas_intent": "407ef8f2fd4cb33b9a00ca912e92312419d20f44",
-    "reviewed_source": "04032c6fae983db356ee738d74fd7c742771d342",
-    "state": "WIP reapplication; no deployment or intent freeze",
-    "scope": "Original 16 files only; preserve CAS and Ubuntu22.04 workflow additions. No old release intent or dependency changes.",
-    "next": "Incorporate normal CAS production merge; fresh CI including real Mongo and independent review before Source A.",
-    "local_mongo": "Not available after workspace prune; no real Mongo claim.",
-    "fresh_validation": {
-      "python": "/tmp/mezan-google29-venv/bin/python",
-      "focused_result": "377 passed, no skips, 4.50s, exit0",
-      "suites": "inventory; creation contract/policy/authority/plan/gateway/worker",
-      "diff_check": "passed"
+    "source_a": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+    "tests": {
+      "root": 74,
+      "agent": 377,
+      "independent": 218,
+      "ci_backend": 1208,
+      "ci_frontend": 189,
+      "ci_products": 286,
+      "real_mongo_inventory": 4,
+      "mongo_kind": "standalone; not replica proof"
     },
-    "production_merge_incorporated": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
-    "release_intent": "Unchanged from CAS production merge; no new intent frozen"
+    "source_google_ci": 40904330369,
+    "source_products_ci": 40904330354,
+    "b_readiness": 40907601841,
+    "host20_job": 123567074599,
+    "actual_host_source": "two builds; exact whole CI intent",
+    "actual_host_b_adapter": "PASS51.85s",
+    "app_adapter": "PASS61.77s",
+    "independent_pair": "PASS full backend1024/control242 manifests"
+  },
+  "live_acceptance": {
+    "product_search": "AMS11549 one matching product",
+    "product_details": "Product444529388 loaded correct title/SKU/options child1–12/adultS–XXXL/zero independentvariants; firstproduct646396032 details also loaded.",
+    "google_connection": "connected",
+    "google_account": "5052346701",
+    "native_campaign_count": 22,
+    "policy_revision": 0,
+    "automatic_management": "disabled",
+    "creation": "disabled",
+    "provider_mutations": 0,
+    "owner_policy_mutations": 0,
+    "limitation": "Live read regression verified; invalidstock/freshness failclosed acceptance uses deterministic route tests and actual Mongo cases, not fabricated live stock."
   }
 }
