@@ -1,0 +1,18 @@
+{
+  "task": "google-prior-season-evidence-20261029",
+  "branch": "codex/google-prior-season-evidence-20261029",
+  "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
+  "state": "early_backend_wip_context_and_shared_qualifier_only",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "ownership": "Assigned CommercialPlanFields optionalprior context+review_context, internal strictstorequalifier factoring, newpriorreader/route/tests/workflow. No sharedrouter/UI or sourcewriter/normalizer edits. Planningagent retains UI ownership.",
+  "implemented": "Strict nullable PriorSeasonContext(date_from/date_to/season_label/alignment_note/calendar_reference_text),1..366inclusive days andpriorend<currentstart. Ownerdeclared interval/reference staysalignment_verification unknown; Input writeack remains required. Shared rawline qualifier internallyfactored; currentfourwindows preserved. Newpurepriorwrapper closedserverdays/exactexplicitinterval only, no354/365shift.",
+  "verification": {
+    "red": "ActualHTTP ownerPUT prior context failed422 extra_forbidden beforeimplementation",
+    "local": "94focused/-Werror/zero skips1.87s including writercontext, prior/current rawobservations, planstore routes, actualsavedFields contract",
+    "unchanged_current": "Characterization digest captured fromimmutable8dc beforefactoring: empty/valid/duplicate/truncated currentresponses af8875a23d4868f15cf835e6863239b251c0fec8d59b1429bc4c6ed39ce583eb stillmatches",
+    "actual_mongo": "Not yet implemented/run; no readiness claim",
+    "ci": "Not configured yet"
+  },
+  "next": "Implement explicit savedplan priorseason boundedquery±1 only, sourceprovenance/revision guards and usefulpartial output; actualHTTPwriter→route/realMongo andunchangedcurrentwindow regression gates; no routerattachment/UI untilrootreviews."
+}

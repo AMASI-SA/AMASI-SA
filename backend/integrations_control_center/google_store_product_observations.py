@@ -5,7 +5,7 @@ lower bound only on internally consistent saved observations, NOT net sales,
 current demand, complete orders or physical stock. No provider attribution.
 """
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import re
 from zoneinfo import ZoneInfo
@@ -131,7 +131,25 @@ def _lines(raw):
 
 
 def observe_product_lines(rows,*,owner_id,product_ids,as_of,truncated=False):
-    periods=windows(as_of)
+    return _observe_product_lines(rows,owner_id=owner_id,product_ids=product_ids,as_of=as_of,
+        periods=windows(as_of),truncated=truncated)
+
+
+def observe_prior_season_lines(rows,*,owner_id,product_ids,as_of,date_from,date_to,truncated=False):
+    # Validate the same aware server clock as the existing current-window path.
+    current=windows(as_of)
+    if any(not isinstance(v,str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}',v) for v in (date_from,date_to)):
+        raise ValueError('explicit prior dates required')
+    first,last=date.fromisoformat(date_from),date.fromisoformat(date_to)
+    if first>last or (last-first).days>365 or date_to>current['last_14_days']['to']:
+        raise ValueError('bounded closed prior period required')
+    return _observe_product_lines(rows,owner_id=owner_id,product_ids=product_ids,as_of=as_of,
+        periods={'owner_reviewed_prior_season':{'from':date_from,'to':date_to,'timezone':'Asia/Riyadh'}},
+        truncated=truncated,mode='stored_prior_season_line_observations')
+
+
+def _observe_product_lines(rows,*,owner_id,product_ids,as_of,periods,truncated,mode='stored_product_line_observations'):
+    first=min(p['from'] for p in periods.values());last=max(p['to'] for p in periods.values())
     if (not isinstance(owner_id,str) or not owner_id or owner_id!=owner_id.strip()
         or not isinstance(product_ids,list) or len(product_ids)>100 or len(set(product_ids))!=len(product_ids)
         or any(not isinstance(p,str) or _id(p)!=p for p in product_ids)
@@ -164,7 +182,7 @@ def observe_product_lines(rows,*,owner_id,product_ids,as_of,truncated=False):
             if currency is None or lines is None or not _eligible(row,raw,currency):
                 diagnostics['rejected_documents']+=1;continue
             day=bound['business_date_riyadh']
-            if not periods['last_90_days']['from']<=day<=periods['last_90_days']['to']:
+            if not first<=day<=last:
                 diagnostics['rejected_documents']+=1;continue
             by_product=defaultdict(list)
             for identity,pid,quantity in lines:
@@ -183,7 +201,7 @@ def observe_product_lines(rows,*,owner_id,product_ids,as_of,truncated=False):
             'windows':{name:{'observed_orders':w['orders'] if w['orders'] else None,'observed_lines':w['lines'] if w['lines'] else None,
                              'observed_units':format(w['units'],'f') if w['lines'] else None} for name,w in group.items()}} for currency,group in sorted(groups.items())],
             'sales_native':None,'profitability':None,'growth_14_days_percent':None,'success_classification':'not_established'})
-    return {'mode':'stored_product_line_observations','as_of':as_of.isoformat(),'windows':periods,'products':products,
+    return {'mode':mode,'as_of':as_of.isoformat(),'windows':periods,'products':products,
         'diagnostics':diagnostics,'truncated':truncated,'coverage_complete':False,'snapshot_consistent':False,
         'refunds_reconciled':False,'source_snapshot_immutable':False,'platform_conversions_added':False,
         'metric_basis':'lower_bound_on_qualifying_saved_gross_line_observations_not_sales',
