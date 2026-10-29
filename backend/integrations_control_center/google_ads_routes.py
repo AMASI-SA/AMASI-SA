@@ -101,6 +101,8 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     attach_google_commercial_plan_routes(router, db, current_user)
     from .google_product_catalog_routes import attach_google_product_catalog_review_routes
     attach_google_product_catalog_review_routes(router, db, current_user)
+    from .google_ads_namespace_prerequisites import attach_google_ads_namespace_prerequisite_routes
+    attach_google_ads_namespace_prerequisite_routes(router, db, current_user)
     from .google_ads_budget_storage_readiness import attach_google_ads_budget_storage_readiness_routes
     attach_google_ads_budget_storage_readiness_routes(router, db, current_user)
     from .google_ads_automation_policy import attach_google_ads_automation_policy_routes
