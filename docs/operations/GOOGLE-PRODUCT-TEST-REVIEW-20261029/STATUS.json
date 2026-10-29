@@ -2,12 +2,12 @@
   "task": "google-product-test-review-20261029",
   "branch": "codex/google-product-test-review-wip-20261029",
   "base": "b3ea651cced66b6171ba379806b955879409a3b3",
-  "state": "SUCCESSOR_BOUNDED_UNIQUE_PLAN_CAPTURE_CI_REVIEW_PENDING",
+  "state": "SEALED_BOUNDED_BACKEND_ACCEPTED_UNATTACHED_FRESH_INTEGRATION_REQUIRED",
   "production_changed": false,
   "provider_calls_performed": false,
   "ownership": "Newfiles/collection only; no existing readers/router/form/costwriter changes",
-  "verification": "122focused-Werror/zero skips2.20s; duplicateplan preview/state/save regressions red200→green409 beforeprovider/reviewwrite. Dedicated152total/30actualMongo required; newCI pending.",
-  "next": "Freeze newimmutablecandidate; root/independent review+fresh152/30CI; no existingreader/router/form/costwriter edits, no deployment.",
+  "verification": "122focused-Werror/zero skips2.20s. ExactPUSH40972181263/job123791347843 checkoutadf directly:152passed9.84s incl30actualMongo/strictzero skips and3duplicateplanwithoutindex cases; setup/test/cleanup allSUCCESS. No localMongo/provider/productiondata reads.",
+  "next": "RootassignedNEWcoherentchild/integrationWIP direct5595d196a8874d477da7276c47cc9ed7ab5d27a6 (accepted1655SourceA), exact9newbackend/test/workflowblobs only; no oldSTATUS/intent/globalreader copy. ConcreteUIcontract+manifest beforeimplementation. Rootcomposesafter1657; frozenruntimeadf preserved.",
   "implemented": "NEWownerfitstateCAS/stateGET+explicitPUT; candidatePOST calls4trustedreadersdirectly,1..5categoryscope, frozenstoredclock vsnativeoperationclock, before/afterowner/password/plan/review/storecredential fences, puretestreview/exploration lanes. No paidgrant/profit/growth/completecoverage ornewproduct inference.",
   "admission": "Process-local cap4 andowner1. Originaltaskretained afterresponse deadline or callercancel until actualtaskcleanupdone. Overlap/resourcecaps reject withoutfactorycreation. No crossworker singleflight/hardcleanup/transport/peakmemoryclaim.",
   "owner_review_write": "Currentfitstate tied exactplanrevision/fields/password/product/category andreason. Reviewstate maypersist beforefinalrace rejection; explicitmay_have_persisted, rereadCASrevision, noauto resubmit. This state is never spend authority.",
@@ -20,5 +20,19 @@
   "previous_successor": "be6cc0725bdad5ea461c8c518e924a46ffe48f5b exactpushCI40970692127/job123786379860144passed10.48s/26actualMongo/zero skips, historicalonly for latestassociationmetadata addition",
   "association_gap_fix": "Preserve perproduct campaign_associations from existingtrustedlinkedreader, including Meta/TikTok nativecurrency/TZ/completeness gaps. Associations alone never create positive performance or supportedtestreason; contextmetrics remainonce top-level, references only inproducts. Existinggraphwriters/collectors unchanged.",
   "plan_uniqueness_fix": "Rootrequired no reliance on unprovedwriter index: newcapture_scope usesowner+plan boundedfind limit2/maxTime1000;0notfound,2scopeunproved409. Sameproof in finalverification. ActualMongo fixture drops disposablewriter uniqueindex, insertsduplicate, tests3operations denybeforeprovider/reviewwrite. ExistingHTTPwriterpositive path retained.",
-  "historical_33c": "33c2931fe77fd989945f1dd37d01082989c09ad1 CI40971612920/job123789470158146passed10.68s/27Mongo0skip and independent39testboundedPASS; nowhistorical due rootrequirednamespaceuniqueness successor. Separatehistoricalsealfd27f46."
+  "historical_33c": "33c2931fe77fd989945f1dd37d01082989c09ad1 CI40971612920/job123789470158146passed10.68s/27Mongo0skip and independent39testboundedPASS; nowhistorical due rootrequirednamespaceuniqueness successor. Separatehistoricalsealfd27f46.",
+  "accepted_source": {
+    "sha": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
+    "tree": "9c6814c7d93e60545042819521dd318105297977",
+    "local_equivalent": "5b9a7e4b69"
+  },
+  "independent_review": {
+    "reviewer": "budget_audit",
+    "verdict": "SEALED_BOUNDED_PASS",
+    "local": "42independentnewtests-Werror/zero skips",
+    "ci": "Reviewer independentlyread exactadf152/30actualMongo/zero skips jobSUCCESS",
+    "root": "Rootfullread4newruntime modules+42own-Werror1.44sPASS and exactCIlog read",
+    "scope": "boundedplan limit2/maxTime closesunproveduniqueindex assumption; no furtherconfirmedfinding. No atomic/providerauthority/attribution/funding/release proof."
+  }
 }
+
