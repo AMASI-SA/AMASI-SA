@@ -1499,8 +1499,8 @@
     "scope": "STATUS-only append for B CI/independent pair/root actualhost/normalM evidence. A/B source commits unchanged."
   },
   "root_operational_publication": {
-    "updated_at": "2026-10-29T23:29:57.009Z",
-    "state": "PUBLISHING_AWAIT_NEWER_EXPLICIT_FINISH",
+    "updated_at": "2026-10-29T23:45:10.924Z",
+    "state": "DEPLOYED_V5_THREE_PROBES_CLOSED_BOUNDED_LIVE_ACCEPTANCE",
     "source": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
     "intent": "9f094a0f8c65cdfcea3a80c691229d489357487f",
     "merge": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
@@ -1515,12 +1515,33 @@
     "prepare": "PASS",
     "prepublish": "ready_to_publish:true;exactA/M/runtime",
     "publish_changes_clicks": 1,
-    "UI": "Publishing...",
+    "UI": "Deployment finished Oct30 02:39Riyadh versioncafdb27; started02:29",
     "baseline_explicit_finish": "Oct30 02:05 Riyadh version8ee00b1",
-    "lease_active": true,
+    "lease_active": false,
     "own_lease": true,
-    "live_verified": false,
+    "live_verified": true,
     "financial_or_policy_changes": false,
-    "next": "Do not repeat publish. Waitnewerexplicitfinish, run ownv5verify3 andconfirmactivefalse, thenliveGoogleUI tests+screenshot. No otherhostmutationwhileleaseactive."
+    "next": "Slice1655 complete; do notrepublish. Continue accepted1658 freshsource withnewactualinactiveguard/buildA/B/v5/liveMerchantread. Paidruntime staysdisabled; ownerplan/limitsnotprovided.",
+    "verified": true,
+    "checks": 3,
+    "live": {
+      "url": "https://mezansalla.com/ads-manager?provider=google&tab=campaigns&account=5052346701",
+      "account": "5052346701",
+      "connection": "connected",
+      "campaigns": 22,
+      "plan_revision": 0,
+      "prior_fields": "Checkboxrevealedall5optionalfields; explicitremovehidall5/unchecked; explicitplanreloadretainedrevision0/blankfields",
+      "saved_owner_plan": false,
+      "financial_limits_entered": false,
+      "provider_writes": 0,
+      "plan_or_policy_writes": 0,
+      "positive_product_evidence_exercised": false,
+      "limitation": "Realpositiveplan/category/productevidenceflow requiresowneractualsavedplan/products, notinventedexample. Boundedempty-state/UIacceptance only."
+    },
+    "screenshot": {
+      "captured": true,
+      "inspected": true,
+      "sync": "BrowserJPEGcapture succeeded, sharedfile unavailable after bounded5s poll. No nonexistentattachment linked orclaimed durable."
+    }
   }
 }
