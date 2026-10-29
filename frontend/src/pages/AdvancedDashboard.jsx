@@ -18,6 +18,7 @@ import DashboardAdsSpendCard from "../components/DashboardAdsSpendCard";
 import LatestSoldProductsCard from "../components/LatestSoldProductsCard";
 import { buildPaymentFeeRows } from "../components/ProfitSummaryCard";
 import { useOrders } from "../hooks/useOrders";
+import { resolveOrderCampaign } from "../lib/orderCampaignAttribution";
 import OrderCurrencyAmount from "../components/OrderCurrencyAmount";
 import { mergeDashboardWithPlatformSpend, needsCanonicalDashboardSpendRefresh } from "../lib/dashboardPlatformSpendMerge";
 import { dashboardRequestRangeKey } from "../lib/dashboardLatestResponseBroker";
@@ -624,7 +625,7 @@ function SourceBadge({ order }) {
     else if (source.includes("meta") || source.includes("facebook") || source.includes("instagram") || source === "fb" || source === "ig") badge = { label: "ميتا", mark: source.includes("instagram") ? <Instagram className="h-3 w-3" /> : "∞", className: "border-blue-500 bg-blue-500 text-white" };
     else if (source.includes("google") || source.includes("adwords") || source.includes("gads")) badge = { label: "جوجل", mark: "G", className: "border-blue-200 bg-white text-blue-600" };
     if (!badge) return null;
-    return <span title={`مصدر الطلب: ${badge.label}`} aria-label={`مصدر الطلب: ${badge.label}`} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}>{badge.mark}</span>;
+    return <span title={resolveOrderCampaign(order).campaignDisplay || "الحملة غير محددة"} aria-label={`مصدر الطلب: ${badge.label}`} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-black leading-none shadow-sm ${badge.className}`}>{badge.mark}</span>;
 }
 
 const ORDER_STATUS_AR = {

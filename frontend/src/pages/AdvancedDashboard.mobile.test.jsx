@@ -82,3 +82,5 @@ test.each([
     expect(host.querySelector(`[role="region"][aria-label="${label}"]`)).toBe(region);
     expect(region.closest('[hidden]')).toBeNull();
 });
+
+test.each(["snapchat", "tiktok", "meta", "google"])("%s badge shows only its campaign without fetching", (channel) => { const spy = jest.fn(); const original = global.fetch; global.fetch = spy; try { act(() => root.render(<LatestOrders orders={[{ order_number: "hover-test", source: { channel, campaign_name: "Winter campaign" } }]} />)); const badge = host.querySelector("span[title=\"Winter campaign\"]"); expect(badge).not.toBeNull(); badge.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); expect(spy).not.toHaveBeenCalled(); } finally { global.fetch = original; } });
