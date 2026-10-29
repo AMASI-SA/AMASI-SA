@@ -132,6 +132,14 @@ async def generate(monkeypatch):
         prior["removed_response"] = await get(prior["removed_plan"], "prior-season-observations")
         assert db["unified_orders"].query is None
         prior["reference_plan"] = await put(client, db, parent["plan_id"], {**prior["removed_plan"]["fields"], "prior_season_context": context()}, 6)
+        no_url_fields = {**PARENT_FIELDS, "category_ids": ["8"], "category_url": None}
+        no_url = {"initial_plan": await put(client, db, "no-category-url", no_url_fields, 0)}
+        no_url["plan"] = await put(client, db, "no-category-url", {**no_url_fields, "prior_season_context": context(calendar_reference_text=None)}, 1)
+        no_url["response"] = await get(no_url["plan"], "prior-season-observations")
+        no_url["unrelated_plan"] = await put(client, db, "no-category-url", {**no_url["plan"]["fields"], "instruction": "راجع سياق دون رابط"}, 2)
+        no_url["removed_plan"] = await put(client, db, "no-category-url", {**no_url["unrelated_plan"]["fields"], "prior_season_context": None}, 3)
+        assert all(no_url[key]["fields"]["category_url"] is None for key in ("initial_plan", "plan", "unrelated_plan", "removed_plan"))
+        prior["no_category_url"] = no_url
     return {"googleLinkedCampaignEvidence.json": linked, "googleLiveCategoryPreview.json": category, "googleNativeInventoryPreview.json": inventory, "googleCommercialPlanPriorContext.json": prior}
 
 

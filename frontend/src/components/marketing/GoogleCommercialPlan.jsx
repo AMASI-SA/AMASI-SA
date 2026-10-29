@@ -27,6 +27,7 @@ function formFrom(plan) {
     const fields = plan?.fields || {};
     return { instruction: "", season: "", starts_on: "", ends_on: "", market: "", audience: "", message: "", category_url: "",
         calendar: "gregorian", selection_mode: "pinned_only", ...fields,
+        category_url: fields.category_url ?? "",
         ...Object.fromEntries(LISTS.map((key) => [key, (fields[key] || []).join(key === "exclusions" ? "\n" : ", ")])),
         prior_season_context: fields.prior_season_context ? { ...fields.prior_season_context, calendar_reference_text: fields.prior_season_context.calendar_reference_text ?? "" } : null,
         limits: { currency_code: "", ...Object.fromEntries(LIMITS.map((key) => [key, ""])), ...(fields.limits || {}) } };
@@ -53,7 +54,7 @@ function priorContextPayload(prior, startsOn) {
 export function commercialPlanPayload(form, revision) {
     const fields = { ...form };
     for (const key of LISTS) fields[key] = form[key].split(key === "exclusions" ? /\n+/ : /[\s,،]+/).map((value) => value.trim()).filter(Boolean);
-    fields.category_url = form.category_url.trim() || null;
+    fields.category_url = (form.category_url ?? "").trim() || null;
     const hasLimits = LIMITS.some((key) => String(form.limits[key] || "").trim());
     fields.limits = hasLimits ? { currency_code: form.limits.currency_code.trim().toUpperCase(),
         ...Object.fromEntries(LIMITS.map((key) => [key, String(form.limits[key] || "").trim() || null])) } : null;

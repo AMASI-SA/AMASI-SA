@@ -70,12 +70,14 @@ async def test_actual_authenticated_parent_put_then_all_readers_preserves_option
         initial = await client.put(path, json=payload)
         assert initial.status_code == 200, initial.text
         assert initial.json()["fields"]["prior_season_context"] is None
+        assert initial.json()["fields"]["category_url"] is None
         empty = await client.get(path + "/prior-season-observations?expected_revision=1")
         assert empty.status_code == 200 and empty.json()["status"] == "prior_season_not_configured"
         payload.update(expected_revision=1, prior_season_context=context(calendar_reference_text=None))
         saved = await client.put(path, json=payload)
         assert saved.status_code == 200, saved.text
         fields = saved.json()["fields"]
+        assert fields["category_url"] is None
         assert "acknowledge_review" not in fields and "expected_revision" not in fields
         before = {name: deepcopy(await mongo[name].find({}).to_list(100)) for name in (PLANS, "salla_integrations", "unified_orders")}
         linked = await client.get(path + "/linked-campaign-evidence?expected_revision=2")

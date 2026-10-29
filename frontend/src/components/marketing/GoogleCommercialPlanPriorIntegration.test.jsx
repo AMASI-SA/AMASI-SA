@@ -7,8 +7,7 @@ import fixture from "../../services/__fixtures__/googleCommercialPlanPriorContex
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() }, formatApiErrorDetail: jest.fn() }));
 const copy = (value) => JSON.parse(JSON.stringify(value));
-const path = "/integrations-v2/google_ads/commercial-plans/seasonal-focus";
-let container, root, actor, saved, priorRead, planRead;
+let container, root, actor, saved, priorRead, planRead, path;
 function IdentityRefresh() {
     const { refreshUser } = useAuth();
     return <button type="button" aria-label="refresh-auth" onClick={() => refreshUser().catch(() => {})}>refresh</button>;
@@ -16,6 +15,7 @@ function IdentityRefresh() {
 beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     actor = { id: "owner", role: "owner" }; saved = copy(fixture.plan); priorRead = null; planRead = null;
+    path = "/integrations-v2/google_ads/commercial-plans/seasonal-focus";
     api.get.mockReset(); api.put.mockReset(); api.post.mockReset();
     api.get.mockImplementation((url) => {
         if (url === "/auth/me") return Promise.resolve({ data: copy(actor) });
@@ -102,6 +102,35 @@ test("explicit removal sends null and removes prior child until another context 
     expect(api.put.mock.calls[0][1].expected_revision).toBe(5); expect(evidence()).toBeNull();
     expect(fixture.removed_response.status).toBe("prior_season_not_configured");
     expect(priorCalls()).toHaveLength(0);
+});
+
+test.each(["create", "preserve", "remove"])("actual saved null category URL permits prior %s without editing optional URL", async (operation) => {
+    const sample = fixture.no_category_url;
+    saved = copy(sample[operation === "create" ? "initial_plan" : operation === "preserve" ? "plan" : "unrelated_plan"]);
+    const result = sample[operation === "create" ? "plan" : operation === "preserve" ? "unrelated_plan" : "removed_plan"];
+    path = "/integrations-v2/google_ads/commercial-plans/" + saved.plan_id;
+    api.put.mockResolvedValue({ data: copy(result) });
+    priorRead = () => Promise.resolve({ data: copy(sample.response) });
+    await render({ planId: saved.plan_id });
+    expect(saved.fields.category_url).toBeNull(); expect(element("رابط القسم").value).toBe("");
+    if (operation === "create") {
+        await click(element("إضافة فترة موسم سابق للمراجعة"));
+        const prior = result.fields.prior_season_context;
+        await input("بداية الفترة السابقة", prior.date_from); await input("نهاية الفترة السابقة", prior.date_to);
+        await input("وصف الموسم السابق", prior.season_label); await input("سبب اختيار الفترة السابقة", prior.alignment_note);
+    } else if (operation === "preserve") await input("توجيه المالك", result.fields.instruction);
+    else await click(button("إزالة فترة الموسم السابق"));
+    await save();
+    expect(api.put).toHaveBeenCalledWith(path, { ...result.fields, expected_revision: saved.revision, acknowledge_review: true }, expect.any(Object));
+    expect(element("رابط القسم").value).toBe("");
+    if (operation === "create") { await read(); expect(evidence().textContent).toContain("عملة الطلب: SAR"); }
+});
+
+test("malformed nonstring category URL is not silently changed to absent", async () => {
+    saved.fields.category_url = 42; await render(); await save();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(element("بداية الفترة السابقة").value).toBe(fixture.plan.fields.prior_season_context.date_from);
 });
 
 test.each([
