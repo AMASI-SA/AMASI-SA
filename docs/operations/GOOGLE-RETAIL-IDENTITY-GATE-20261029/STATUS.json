@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-RETAIL-IDENTITY-GATE-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "task_branch": "codex/google-retail-identity-gate-20261029",
-  "status": "wip_local_contracts_pass_real_mongo_ci_and_independent_review_pending",
+  "status": "reviewed_and_tested_ready_for_root_selective_integration_not_deploy_ready",
   "base_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
   "scope": "Fail-closed selected native product eligibility for manual Shopping/retail PMax previews and AI drafts. No actual provider call, new write authority, paid activation or deployment.",
   "problem": "Offer-ID union allowed an eligible SA row to satisfy an ineligible QA selection and accepted missing availability. Owner selection was also labelled as independently verified mapping.",
@@ -39,9 +39,50 @@
     "exit_status": 0,
     "duration_seconds": 7.07,
     "coverage": "Existing regressions plus real v25 ShoppingProduct parsing, 17 identity refusal cases, required field-read rejection, 16 AI route cases, explicit mapping disclosure and generated-feed drift.",
-    "real_mongo": "22 added manual scenarios pending revised CI, including positive unique Shopping/PMax PAUSED dispatch, exact typed drift failures, legacy preview rejection and preserved Search/nonretail PMax.",
-    "ci": "pending",
-    "independent_review": "In progress by google_product_acceptance; its missing-native-row finding is fixed with direct lookup regression.",
+    "real_mongo": {
+      "new_cases": 22,
+      "result": "all passed in full CI against disposable actual Mongo8.0.26",
+      "provider": "fake provider only",
+      "coverage": [
+        "SA eligible/QA ineligible collision",
+        "unknown availability",
+        "merchant/account mismatch",
+        "incomplete inventory",
+        "campaign feed mismatch",
+        "native inventory changed between preview/dispatch",
+        "legacy preview without complete proof",
+        "positive unique Shopping/PMax dispatch remains PAUSED",
+        "Search/nonretail PMax unchanged"
+      ]
+    },
+    "ci": {
+      "run_id": 40928480817,
+      "url": "https://github.com/AMASI-SA/AMASI-SA/actions/runs/40928480817",
+      "conclusion": "success",
+      "backend_passed": 1307,
+      "backend_skipped": 0,
+      "frontend_passed": 228,
+      "frontend_build": "success",
+      "synthetic_merge_sha": "a169ea45fc2aac951a3bd8692f1be740d0467e0e",
+      "synthetic_tree": "78391fa978ee732d27da3a156b2bcf472aefadff",
+      "parents": [
+        "15b656131813af54a043c33821e3aa5f69e7703c",
+        "c7a36165f48f433ab3275320187e4d9c5b298020"
+      ],
+      "scope": "PR synthetic merge, not exact-source checkout. Local 308 cases ran on source-equivalent tree. No actual Google call."
+    },
+    "independent_review": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "bounded PASS",
+      "reviewed_source_sha": "c7a36165f48f433ab3275320187e4d9c5b298020",
+      "reviewed_tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
+      "local_passed": 308,
+      "local_skipped": 0,
+      "warnings_as_errors": true,
+      "duration_seconds": 5.87,
+      "scope": "Selected-offer identity gate; source-only malformed-row/collision/generic-retail/mixed-scope/digest probes also passed. Independently inspected actual-Mongo and frontend CI logs.",
+      "no_remaining_confirmed_blocker": true
+    },
     "production": "unchanged"
   },
   "changed_files": [
@@ -57,7 +98,7 @@
     "docs/operations/GOOGLE-RETAIL-IDENTITY-GATE-20261029/STATUS.json"
   ],
   "review_notes": "Only root integrates/releases. Preserve other conversations' route attachment hunks. Source is WIP until real Mongo CI and independent review. No Release Guard lease touched.",
-  "next_safe_action": "Create Draft PR, inspect actual CI results and request independent product_acceptance review of immutable source. Fix review failures before final source checkpoint.",
+  "next_safe_action": "Root fetches current production, preserves concurrent route attachments, selectively integrates reviewed source c7a36165f48f433ab3275320187e4d9c5b298020, then creates/validates a fresh Release Guard v5 Source A and Intent-only B. Publish only through the authorized root release and verify live behavior. Do not directly publish this WIP.",
   "rejected_checkpoint": {
     "sha": "6cd806f323548322f90e77003f45663541684237",
     "reason": "Self-review found draft type scoped only to preview. Negative dispatch tests accepted any HTTPException and therefore did not distinguish generic import failure. Correct scoped import and positive/exact-error tests added.",
@@ -78,5 +119,21 @@
       "finding": "Existing fake provider could not return PMax campaignAsset/assetGroupAsset/assetGroupSignal receipts.",
       "fix": "Test-only response collections added. Prior CI 40927736426 had exactly the two positive PMax failures; source runtime is unchanged by fixture repair."
     }
-  ]
+  ],
+  "reviewed_source_sha": "c7a36165f48f433ab3275320187e4d9c5b298020",
+  "reviewed_source_tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
+  "pr": {
+    "number": 1617,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1617",
+    "state": "draft"
+  },
+  "release_readiness": {
+    "run_id": 40928480774,
+    "backend_preflight": "success",
+    "classification": "failed",
+    "reason": "Inherited release identity lacks new backend helper membership; current production15b65613 is not ancestor of WIP sourcec7a36165.",
+    "required_next": "Root selectively integrates current production and creates a fresh reproducible v5 Source A/Intent-only B; do not directly deploy WIP."
+  },
+  "follow_up_ux": "Existing selector UI does not yet render the explicit owner-mapping disclaimer or disable every stock-unproved offer. Backend rejects unsafe selections and API evidence separates owner mapping from account eligibility. Root should schedule the small owner-facing disclosure separately; this assessment does not claim UX complete.",
+  "production_changed": "no"
 }
