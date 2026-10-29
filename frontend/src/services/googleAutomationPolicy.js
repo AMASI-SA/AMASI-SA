@@ -25,3 +25,7 @@ export async function activateGoogleAutomationPolicy(accountId, expectedRevision
         expected_revision: expectedRevision, acknowledge_execution: true,
     }, { signal })).data;
 }
+
+export async function verifyGoogleBudgetStorage({ signal } = {}) {
+    return (await api.post(`${GOOGLE_ADS_ROOT}/automation/storage-readiness`, {}, { signal })).data;
+}
