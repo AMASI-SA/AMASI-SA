@@ -20,11 +20,11 @@
     "red_green": "Two actual AuthProvider same-public-shape refresh cases fail on40c0 runtime because list/child signals remain unaborted; targeted redrun2failed/28filtered. Fixed runtime full122/0skip green. Private field test initially had a test-call index typo, fixed before green."
   },
   "remaining": [
-    "CodeQL still running at this checkpoint;16 other PR workflows complete(15success+knownold-baseReadinessfailure).",
-    "Root assigned separate coherent Merchant attachment WIP on commercial Source A when provided; no shared changes authorized until exact hunk proposal.",
-    "No live provider permission/product mapping/stock/eligibility/execution or production deployment claim."
+    "Source is accepted but unattached; coherent attachment successor is PR1657 at3bbe11247b10c69a610b88bc87ba008e674924e4.",
+    "Release Readiness remains a deliberate old-base ancestry/intent refusal, so d231 is not a deployable source.",
+    "No live provider permission/product mapping/stock/eligibility/execution claim."
   ],
-  "next_safe_action": "Inspect remaining CodeQL; preserve d231 source. Identify accepted Merchant blobs and narrow router/workspace/workflow attachments against root-provided commercial Source A, then await root hunk approval before editing an exclusive integration worktree.",
+  "next_safe_action": "Keep d231 frozen; continue separate PR1657 integration review and exact CI. Root handles final current-production re-source and release.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1653",
   "first_checkpoint_sha": "37273bae059ac4f82314d7fdd3eccd6ceee87897",
   "superseded_source_sha": "40c0a0806b423e53581d14158287c82b1c772a17",
@@ -102,14 +102,15 @@
     "qualification": "No globalcleanup/concurrency/liveprovider/attachment claim."
   },
   "pr_workflows": {
-    "success": 15,
+    "success": 16,
     "expected_failure": 1,
-    "pending": [
-      {
-        "name": "CodeQL",
-        "run": 40969664809
-      }
-    ],
+    "pending": [],
     "total": 17
+  },
+  "continuation": {
+    "pr": 1657,
+    "source_sha": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+    "tree_sha": "25445dad74066d5bcc08e433712575e93752d5af",
+    "parent_commercial_source": "5595d196a8874d477da7276c47cc9ed7ab5d27a6"
   }
 }
