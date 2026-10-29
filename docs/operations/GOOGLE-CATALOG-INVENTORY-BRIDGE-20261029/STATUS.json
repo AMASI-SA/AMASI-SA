@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
-  "state": "FROZEN_A_B_HOST_REHEARSAL_AND_B_CI_IN_PROGRESS",
+  "state": "MERGED_APP_MATERIALIZATION_PENDING_PUBLICATION",
   "branch": "codex/google-catalog-stock-review-status2-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
   "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
@@ -67,7 +67,7 @@
     "No policy, campaign or provider writes."
   ],
   "production_changed": false,
-  "next_safe_action": "Complete BCI/independentpair/actualhostadapter, freshprodhead guardinactive; normalmerge andappmaterialize; prepare/prepublish/singlepublish/newfinish/verify3/closedlease/liveinventoryreview. No adwrites.",
+  "next_safe_action": "Confirmappadapterpass; prepareactorcodex-google-catalog-stock-review-20261029, immediateprepublish/singlepublish; newerfinishthan22:21Riyadh thenverify3/closedlease/live. No duplicateclick.",
   "source_branch": "codex/google-catalog-stock-review-source2-20261029",
   "release": {
     "pr": 1618,
@@ -82,12 +82,31 @@
     "b_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
     "actual_host_a": "PASS; frozeninstall18.76s, designatedcandidatebootstrap two cleanbuilds; wholefrozenintent exactly75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c matchesCI",
     "first_a_attempt": "buildrefusedoldintent becausecandidatebootstrapflag omitted; correcteddesignatedmode, no sourcechange",
-    "actual_host_b": "running isolated cleanworktree",
+    "actual_host_b": "PASS55.43s, isolatedbackendhealth/frontendruntime/package verified",
     "b_readiness": 40941089878,
     "b_google": 40941089973,
     "b_replica": 40941089912,
-    "lease_created": false
+    "lease_created": false,
+    "merge": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "independent_pair": "PASSfullbackend1028/control243/frontend1013 exactGitrecords/fullhistory/onlyintent/two-buildproof",
+    "b_ci": {
+      "success_workflows": 11,
+      "intentional_skip": "TikTokCreator",
+      "readiness": 40941089878,
+      "host20_job": 123684828543,
+      "google": 40941089973,
+      "backend": 1242,
+      "frontend": 237,
+      "replica": 40941089912,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0,
+      "codeql": 40941089675,
+      "root_logs_verified": true
+    },
+    "app_materialization": "runningatM7"
   },
   "host_blocker": null,
-  "updated_at": "2026-10-29T19:33:54.779Z"
+  "updated_at": "2026-10-29T19:42:53.138Z",
+  "production_branch_changed": true
 }
