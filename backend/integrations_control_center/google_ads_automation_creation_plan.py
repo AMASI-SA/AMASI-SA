@@ -62,13 +62,41 @@ async def read_google_creation_native_context(client, *, user_id, account_id, po
         raise problem("google_creation_native_identity_unproved","تغيرت هوية حساب جوجل أو عملته أو توقيته.",409)
     stamp=read_started_at.astimezone(timezone.utc).isoformat()
     fields=["campaign.id","campaign.name","campaign.status","campaign.advertising_channel_type",
-        "campaign_budget.period","campaign_budget.amount_micros","campaign_budget.total_amount_micros"]
+        "campaign_budget.period","campaign_budget.amount_micros","campaign_budget.total_amount_micros",
+        "campaign.campaign_budget","campaign_budget.resource_name","campaign_budget.explicitly_shared","campaign_budget.reference_count"]
     rows,complete,_=await compatible_read(client,fields,"campaign","campaign.status != 'REMOVED'",
-        required=("campaign.id","campaign.status","campaign.advertising_channel_type","campaign_budget.period","campaign_budget.amount_micros"),limit=501)
-    campaigns=[];seen=set();inventory_ok=complete is True and len(rows)<=500
+        required=("campaign.id","campaign.status","campaign.advertising_channel_type","campaign_budget.period","campaign_budget.amount_micros",
+            "campaign.campaign_budget","campaign_budget.resource_name","campaign_budget.explicitly_shared","campaign_budget.reference_count"),limit=501)
+    campaigns=[];seen=set();budgets=set();inventory_ok=complete is True and len(rows)<=500
     for raw in rows[:500]:
+        if (not isinstance(raw,dict) or not isinstance(raw.get("campaign"),dict)
+            or not isinstance(raw.get("campaignBudget"),dict)):
+            inventory_ok=False
+            continue
+        budget=raw["campaignBudget"]
+        micros=budget.get("amountMicros")
+        micros_ok=(type(micros) in (str,int) and re.fullmatch(r"[0-9]{1,19}",str(micros)) is not None
+            and 0<int(micros)<2**63)
+        if not micros_ok:
+            inventory_ok=False
+            continue
         row=campaign_item(raw,metadata,stamp)
-        period=(raw.get("campaignBudget") or {}).get("period")
+        period=budget.get("period")
+        resource=budget.get("resourceName")
+        row["budget_resource"]=resource
+        row["shared_budget"]=(False if budget.get("explicitlyShared") is False
+            and (type(budget.get("referenceCount")) is int and budget["referenceCount"]==1
+                or type(budget.get("referenceCount")) is str and budget["referenceCount"]=="1") else None)
+        # Every nonremoved native budget participates in the common guard. A
+        # default/missing bool is unknown; a joined resource must agree with
+        # the campaign reference and be unique to this verified account.
+        if row["status"]!="REMOVED":
+            if (not isinstance(resource,str) or not re.fullmatch(rf"customers/{re.escape(account_id)}/campaignBudgets/[0-9]+",resource)
+                or (raw.get("campaign") or {}).get("campaignBudget")!=resource or resource in budgets
+                or row["shared_budget"] is not False or period!="DAILY" or not micros_ok
+                or _number(row["budget_native"]) is None or _number(row["budget_native"])<=0):
+                inventory_ok=False
+            if isinstance(resource,str):budgets.add(resource)
         if period not in ("DAILY","CUSTOM_PERIOD"):row["budget_mode"]=None
         cid=row["campaign_id"]
         if (not re.fullmatch(r"[0-9]{1,30}",cid) or cid in seen or row["status"] not in ("ENABLED","PAUSED","REMOVED")

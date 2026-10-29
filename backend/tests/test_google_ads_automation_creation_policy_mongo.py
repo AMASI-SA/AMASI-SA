@@ -8,6 +8,7 @@ import json
 from fastapi import APIRouter, FastAPI, Header
 import httpx
 import pytest
+from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 
 from integrations_control_center import google_ads_automation_creation_policy as policy
 from integrations_control_center.google_ads_client import GoogleAdsClient
@@ -17,6 +18,7 @@ from tests.test_google_ads_automation_creation_contract import case
 
 
 async def mounted(monkeypatch, database):
+    set_guard_time(NOW)
     product = case()["product"]
     await database.mezan_products_v2.insert_many([{**deepcopy(product), "user_id": owner} for owner in ("owner-a", "owner-b")])
     state = {"gate": None, "entered": asyncio.Event(), "mutations": 0}

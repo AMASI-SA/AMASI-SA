@@ -45,6 +45,10 @@ class Native:
             rows=[{"campaign":{"id":"15","status":"ENABLED"},"campaignBudget":{"period":"DAILY","amountMicros":"15000000"}},
                 {"campaign":{"id":"40","status":"ENABLED"},"campaignBudget":{"period":"DAILY","amountMicros":"40000000"}},
                 {"campaign":{"id":"999","status":"PAUSED"},"campaignBudget":{"period":"DAILY","amountMicros":"15000000"}}]
+            for row in rows:
+                resource="customers/123/campaignBudgets/"+row["campaign"]["id"]
+                row["campaign"]["campaignBudget"]=resource
+                row["campaignBudget"].update(resourceName=resource,explicitlyShared=False,referenceCount="1")
             return rows,self.incomplete!="campaign"
         if "FROM geo_target_constant" in query:return [{"geoTargetConstant":{"id":"2682","status":"ENABLED"}}],True
         if "FROM customer_conversion_goal" in query:return [{"customerConversionGoal":{"category":"PURCHASE","origin":"WEBSITE","biddable":True}}],True

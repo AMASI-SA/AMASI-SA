@@ -1,0 +1,49 @@
+{
+  "status": "WIP_selective_integration_not_deployable",
+  "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "reviewed_runtime": "5ba648258d1bec0fad55c0695429e74d22a7ceb8",
+  "reviewed_final_checkpoint": "9f20b5c425b65b1bbf1cc08b47c3883ed2b8bbad",
+  "scope": "7reviewedruntimefiles selected frominventoryA8b832 differential; existingM6 resume planner and tests preserved; Reports/CAS/nativecurrenthandlers unchanged except5owned policy/standing mutation modules.",
+  "runtime_available": false,
+  "operational_flags_changed": false,
+  "live_calls": false,
+  "new_limits_invented": false,
+  "external_writer_fence_proven": false,
+  "six_policy_mutations": "Mandatory Mongo transaction/epoch; ownerrevoke has no OAuth dependency but requires supportedstorage. No non-atomicfallback. Cannotdeploy before actual production storage/namespace/legacy proof.",
+  "standing": "Shared standing enable/budgetedit/pause reservation and original-proof settlement;100allocations,500nativecampaigns; unknownsend/commit retainsfence andbudget; quota notrefunded. Currentautomaticresume remainsfailclosed; no provenance invented.",
+  "confirmed_gap": "Existing PAUSED creation authorization/settlement is policy-local, not wired to sharedguard. LaunchAllocation remainsstorage-only/unwired and notfundedfirstlaunch authority. This slice cannot be called allpaths-covered; runtimeFalse prevents dispatch via standing.execution_enabled.",
+  "future_retail_overlap": "Retailidentity work touches management/planner/routes plus authority/gatewaytests; no7ownedruntime overlap. Preserve newerproofs on future selective integration; do not transplant retail wholemodules.",
+  "integration_resolutions": [
+    "RetainedM6 saved-enable-preview denial and gatewayno-nativewrite regression; merged transactionalfixture/guardclock changes",
+    "CI retains currentM6dependency pins, mandatoryreplica execution, andM6suggestionbackend/UI testselection",
+    "Old1606/frozenstoragehelper andallcurrentroutes/reporting/CAS untouched"
+  ],
+  "tests": {
+    "local": "627passed7.56s-Werror; guard/probe/lifecycle/reservation/settlement, policies/activation, standing/creationauthorities/gateways/workers, planner/plan/currentinventory",
+    "actualreplica": {
+      "run": 40936040649,
+      "job": 123666737989,
+      "result": "124passed33.49s incl29actualreplica;0failure/error/skip-Werror;summarysourceexact0dcb"
+    },
+    "full_management": {
+      "run": 40936040858,
+      "backend_job": 123666740011,
+      "result": "1353backend52.66s;228UI18suites+build"
+    },
+    "release_readiness": {
+      "run": 40936040925,
+      "result": "success; notallrepositorygatesclaimed; nooperationalintentpairfrozen"
+    }
+  },
+  "production_blockers": [
+    "Actual1621 explicit owner commit/readback andnamespacepermission/legacyresult",
+    "Complete validnativebudgetresource/currency/timezone/inventory evidence plusunresolvedlegacycommitment reconciliation",
+    "Creationcommonallocation migration remainsseparate bounded design andtests; no externalwriter fencing orfirstlaunchprovenance claim"
+  ],
+  "next": "Await independent exactintegration andpausedcontract review; implementpausedclaim/commonreservation/settlement in separate boundedWIP. Remainsnotdeployable; rootownsallrelease/liveproof.",
+  "fixture_resolution": "M6 doublecountregression previously usedpause→budget on sameenablednative snapshot; mandatoryguard correctly rejects missingpause reflection. Test nowverifiedbudgetedit→pause with exact22nativebudget reflected, preserving2proposalunionassertion andfailclosedresume.",
+  "tested_source": "0dcb03d9ce4a5778f29584cd4166b923439e8918",
+  "tested_tree": "26a5398bbda8f904d94741861946d0aca701a664",
+  "independent_review": "Requested budget_audit onexact0dcb; pending. Newpausedcreationcontractsentindependentlybeforecode; no newruntime implemented.",
+  "preservation": "ASTruntimeFalse; resumeplanner/CAS/reporting/routes/management/Reports/backendrequirements/frontendpackage+lock byte-identicalM6 verified."
+}
