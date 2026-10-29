@@ -1,5 +1,5 @@
 {
-  "status": "SOURCE_ALL_CI_ACCEPTED_HOST_EDITOR_DISCONNECTED_BEFORE_BUILD_COMPLETION",
+  "status": "ACTUAL_HOST_A_PASSED_EXACT_CI_INTENT_B_FROZEN_FINAL_GATES_PENDING",
   "production_base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
   "production_base_tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -225,7 +225,7 @@
     "general_gates": "All actual successful job logs read. Security full frontend2370 tests/318 suites; balance618+16 backend/187UI; G47 327backend/119UI zero-skip gates; stock875 zero-skip gate; catalog34; payments141; both CodeQL uploads complete. Scoped unrelated Snap and host/manual jobs were skipped by existing workflow logic, not disabled.",
     "root_review": "Root accepted unchanged runtime/shared seams, independently133backend-Werror/29UI on e398, reviewed final4ca0e sourceCI126/9Mongo,117/6Mongo,1307backend,261UI/build4.03s and all13 workflows success."
   },
-  "next": "Restoreactualhost andinspectexecutionstate; onlyinactiveguardallowsrehearsal. Freshprod must61da. CompletehostexactA/candidatehashmatch thenBonlyintent/allCI/hostB/merge/prepare/prepublish/onepublish/newfinish/3verify/liveprobes.",
+  "next": "Validate exact B CI and independent pair; actual-host B normal adapter on clean clone; freshbase andinactiveguard thennormalmerge/build/prepare/prepublish/onepublish/3verify/live.",
   "prior_historical_checkpoint": {
     "source": "e3984c28be8890dda03b37154347079685aa6038",
     "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
@@ -287,6 +287,30 @@
     "lease_created": false,
     "publish_clicked": false,
     "app_checkout_changed": false,
-    "next": "Recovereditor; readactualguard andcheckifcommand/clone/logexists before newattempt. Do notassumeexecution orreusemissingtmpfiles."
+    "next": "Recovereditor; readactualguard andcheckifcommand/clone/logexists before newattempt. Do notassumeexecution orreusemissingtmpfiles.",
+    "recovery": "Editor returned after502/reload; rootguardinactive and all3tmp artifacts absent. Isolatedclone/setup then actualA build ran successfully, not a duplicate."
+  },
+  "release": {
+    "A": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
+    "B": "b4cd1c0a0b2c2a550a00b40e34a4961ca9027f0d",
+    "B_tree": "7de7ac1f5c5049d6a88b8c363280f0a8cd09c17f",
+    "base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
+    "runtime": "rg5-baa395b92f4ffaeeae5f41cd6000863cc10c2bf759acb9e010250f295c2b4297",
+    "host_A": {
+      "exit": 0,
+      "install_seconds": 32.5,
+      "build_seconds": [
+        7.13,
+        6.53
+      ],
+      "intent_bytes": 946508,
+      "intent_sha256": "e05663b90c0b9a8fc3521af75145408b834b2afa2c1e0ba467bae54eb6439d39",
+      "ci_exact_match": true,
+      "clean_worktree": true
+    },
+    "B_CI": "pending",
+    "host_B": "pending",
+    "lease": false,
+    "published": false
   }
 }
