@@ -1,0 +1,32 @@
+{
+  "task": "MARKETING-REPORTS-20261029",
+  "branch": "codex/unified-marketing-reports-release-20261029",
+  "base": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "state": "Source verified locally; governed build and production acceptance pending",
+  "scope": "Unified marketing Reports page, same Snapchat V2 account-period reader, separate Salla/provider results, full direct costs and product modal opening new tabs",
+  "observed_cause": "Legacy campaigns selected Salla results (49) while V2 account screenshot selected Snapchat conversions (68); legacy and V2 commerce date/read paths differ.",
+  "completed": [
+    "Reports route and Arabic UI scaffold",
+    "Canonical V2 reader reuse",
+    "Optional Salla shipping/payment cost calculation",
+    "Exact-halalah cost allocation",
+    "Initial regression tests"
+  ],
+  "validation": [
+    "Focused backend regression and existing Snapchat suites: 38 passed",
+    "UI source/modal/platform/race and navigation: 17 passed",
+    "git diff --check: passed"
+  ],
+  "remaining": [
+    "Governed reproducible build and CI",
+    "Production same-account/date comparison and synchronization",
+    "Product dialog/new-tab visual acceptance",
+    "Verify exact release identity after publish"
+  ],
+  "production_changed": false,
+  "next": "Push source A on the latest production base, run governed build, freeze intent B, CI/rehearsal then authorized publish and live verification. Actual shared lease was inactive at preflight.",
+  "release_blocker": null,
+  "continuity_note": "Issue1006 refuses comments because it reached GitHub 2500-comment limit. Task STATUS and Draft PR are durable handoff.",
+  "previous_checkpoint": "bb7c274eb7433181efe434f7f1f53dbc6556bf96",
+  "previous_pr": 1613
+}
