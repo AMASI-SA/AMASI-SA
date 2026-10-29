@@ -171,3 +171,23 @@ async def test_prior_query_is_separate_and_four_current_windows_are_unchanged(mo
     assert db.orders.queries[0]['order_date']!=db.orders.queries[1]['order_date']
     assert db.orders.queries[1]['order_date']=={'$gte':'2025-10-31','$lte':'2026-01-01'}
     assert data['products'][0]['evidence_reasons']==['qualifying_saved_prior_gross_lines_alignment_unknown']
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation',['preview','state','save'])
+@pytest.mark.parametrize('mutation',['disabled','password'])
+async def test_owner_drift_during_last_review_read_is_caught_before_response(monkeypatch,operation,mutation):
+    from integrations_control_center import google_product_season_review as fits,google_product_test_review_reader as reader
+    db=DB()
+    async with client(app_for(monkeypatch,db)) as c:
+        assert (await c.put('/google_ads/commercial-plans/winter',json=payload())).status_code==200
+        assert (await save_fit(c)).status_code==200
+        target=reader if operation=='preview' else fits;original=target.read_reviews;calls=0
+        async def changing(*args,**kwargs):
+            nonlocal calls
+            rows=await original(*args,**kwargs);calls+=1
+            if calls==2:db.users.rows[0].update({'disabled':True} if mutation=='disabled' else {'password_updated_at':'2026-10-29T12:01:00Z'})
+            return rows
+        monkeypatch.setattr(target,'read_reviews',changing)
+        response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c,expected_review_revision=1)
+    assert response.status_code==403,response.text
+    if operation=='save':assert response.json()['detail']['review_may_have_persisted'] is True and db.reviews.rows[0]['revision']==2

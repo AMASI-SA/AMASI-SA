@@ -73,11 +73,11 @@ async def review_selected_product_tests(db,*,authenticated_user,plan_id,expected
             or date.fromisoformat(prior_context.date_to)>=as_of.astimezone(ZoneInfo('Asia/Riyadh')).date()):raise ValueError('prior owner provenance or closed day unproved')
         prior=await read_prior_season_observations(db,owner_id=scope['owner_id'],product_ids=selected_ids,as_of=as_of,date_from=prior_context.date_from,date_to=prior_context.date_to)
     linked=await linked_campaign_evidence(db,owner_id=scope['owner_id'],product_ids=selected_ids,as_of=as_of)
-    await verify_scope(db,authenticated_user,scope)
     latest_reviews=await read_reviews(db,scope,category,selected_ids)
     if _rows_snapshot(latest_reviews)!=_rows_snapshot(reviews):raise ValueError('owner product review changed')
     latest_connection=await db.salla_integrations.find_one({'user_id':scope['owner_id']},PUBLIC_INTEGRATION)
     if BSON.encode(latest_connection or {})!=BSON.encode(connection):raise ValueError('owned connection changed')
+    await verify_scope(db,authenticated_user,scope)
     finished=_aware(clock())
     if not started<=_instant(native['observed_started_at'])<=_instant(native['observed_finished_at'])<=finished:raise ValueError('native operation timing unproved')
     result=build_product_test_review(plan_id=plan_id,plan_revision=expected_revision,category_id=category,selected_ids=selected_ids,

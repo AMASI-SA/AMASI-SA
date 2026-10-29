@@ -66,6 +66,10 @@ async def verify_scope(db,user,scope):
     fresh=await capture_scope(db,user,scope['plan_id'],scope['revision'])
     if BSON.encode(fresh['owner'])!=BSON.encode(scope['owner']):raise problem('google_ads_owner_required','تغيرت صلاحية المالك أثناء القراءة.',403)
     if BSON.encode(fresh['plan'])!=BSON.encode(scope['plan']):raise problem('google_commercial_plan_revision_conflict','تغيرت الخطة أثناء المراجعة.',409)
+    # Last awaited fence checks current owner after the plan read. Separate
+    # document reads do not serialize subsequent external writes.
+    _,last_owner=await owner_snapshot(db,user)
+    if BSON.encode(last_owner)!=BSON.encode(scope['owner']):raise problem('google_ads_owner_required','تغيرت صلاحية المالك أثناء المراجعة.',403)
 
 RECORD_KEYS={'_id','user_id','plan_id','plan_revision','category_id','product_id','revision','decision','reason','reviewed_by','reviewed_at','authenticated_owner_password_revision','plan_fields_digest','review_digest'}
 def valid_record(row,scope,category,product):
@@ -125,9 +129,9 @@ async def save_product_season_review(db,*,authenticated_user,plan_id,product_id,
         else:await db[REVIEWS].insert_one(row)
     except DuplicateKeyError:raise problem('google_product_review_revision_conflict','تغيرت مراجعة المنتج؛ أعد قراءتها.',409) from None
     try:
-        await verify_scope(db,authenticated_user,scope)
         latest=await read_reviews(db,scope,category,[product])
         if latest.get(product)!=row:raise problem('google_product_review_revision_conflict','تغيرت المراجعة أثناء الحفظ.',409)
+        await verify_scope(db,authenticated_user,scope)
     except Exception as exc:
         raise problem('google_product_review_save_not_confirmed','لم يُؤكد الحفظ؛ أعد قراءة المراجعة قبل أي محاولة أخرى.',exc.status_code if isinstance(exc,HTTPException) else 503,review_may_have_persisted=True) from None
     return {'plan_id':plan_id,'plan_revision':scope['revision'],'category_id':category,'product_id':product,'review_revision':row['revision'],
@@ -140,9 +144,9 @@ async def read_product_season_review_state(db,*,authenticated_user,plan_id,expec
     products=[canonical(p) for p in selected_ids]
     scope=await capture_scope(db,authenticated_user,plan_id,expected_revision)
     rows=await read_reviews(db,scope,category,products)
-    await verify_scope(db,authenticated_user,scope)
     latest=await read_reviews(db,scope,category,products)
     if BSON.encode({'rows':rows})!=BSON.encode({'rows':latest}):raise ValueError('review changed')
+    await verify_scope(db,authenticated_user,scope)
     current=current_owner_reviews(rows,scope,clock())
     return {'plan_id':plan_id,'plan_revision':expected_revision,'category_id':category,
         'products':[{'product_id':p,'review_revision':rows[p]['revision'] if p in rows else 0,

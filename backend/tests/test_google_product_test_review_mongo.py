@@ -188,3 +188,22 @@ async def test_actual_review_password_revision_requires_explicit_cas_rereview(mo
         row=(await read_fit(c)).json()['products'][0];assert row['review_revision']==1 and row['current_owner_review'] is False
         assert (await save_fit(c,expected_review_revision=1)).status_code==200
         assert (await read_fit(c)).json()['products'][0]['current_owner_review'] is True
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation',['preview','state','save'])
+@pytest.mark.parametrize('mutation',['disabled','password'])
+async def test_actual_owner_drift_during_final_review_read_never_escapes(mongo,monkeypatch,operation,mutation):
+    from integrations_control_center import google_product_season_review as fits
+    async with client(app_for(monkeypatch,mongo)) as c:
+        assert (await c.put('/google_ads/commercial-plans/winter',json=payload())).status_code==200
+        assert (await save_fit(c)).status_code==200
+        target=reader if operation=='preview' else fits;original=target.read_reviews;calls=0
+        async def changing(*args,**kwargs):
+            nonlocal calls
+            rows=await original(*args,**kwargs);calls+=1
+            if calls==2:await mongo.users.update_one({'id':'owner'},{'$set':{'disabled':True} if mutation=='disabled' else {'password_updated_at':'2026-10-29T12:01:00Z'}})
+            return rows
+        monkeypatch.setattr(target,'read_reviews',changing)
+        response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c,expected_review_revision=1)
+    assert response.status_code==403,response.text
+    if operation=='save':assert response.json()['detail']['review_may_have_persisted'] is True and (await mongo[REVIEWS].find_one({}))['revision']==2
