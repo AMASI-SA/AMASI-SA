@@ -1,6 +1,15 @@
 """Standing creation uses native PAUSED proposals and explicit private claims."""
 from copy import deepcopy
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def accepted_guard_in_unit_scope(monkeypatch):
+    # Simulate an accepted code migration only for unit contract checks. This is
+    # not transaction, replica, provider or production activation evidence.
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
+
 from fastapi import HTTPException
 
 @pytest.mark.asyncio
@@ -155,10 +164,21 @@ class Collection:
         return SimpleNamespace(matched_count=0 if inserted else 1,upserted_id='test' if inserted else None)
 
 
-class DB:
-    def __init__(self,docs):self.collections={k:Collection(v) for k,v in docs.items()}
-    def __getitem__(self,key):return self.collections.setdefault(key,Collection())
-    def __getattr__(self,key):return self[key]
+from tests.google_ads_transactional_fake import TransactionalDBMixin, TransactionalCollection
+
+
+class DB(TransactionalDBMixin):
+    def __init__(self,docs):
+        self.collections={k:Collection(v) for k,v in docs.items()}
+        self._tx_setup(self.collections)
+    def _tx_get(self,key):
+        if key not in self._tx_collections:
+            self._tx_collections[key]=TransactionalCollection(self,key,Collection())
+        return self._tx_collections[key]
+    def __getitem__(self,key):return self._tx_get(key)
+    def __getattr__(self,key):
+        if key.startswith("_"):raise AttributeError(key)
+        return self[key]
 
 
 class NativeCreationProvider(NativeReads):
@@ -212,6 +232,10 @@ class NativeCreationProvider(NativeReads):
 async def setup(monkeypatch,db=None):
     from integrations_control_center import google_ads_automation_creation_authority as authority
     values=prepared_case();docs,_=case_documents(current=NOW)
+    # Explicit owner limits in this controlled fixture admit the55 native+15
+    # PAUSED hold; these are never production budget recommendations.
+    values['policy']['max_account_daily_budget_native']='100'
+    docs['mezan_google_ads_automation_policies_v1'][0]['max_account_daily_budget_native']='100'
     docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     docs[gateway.CREATION_POLICIES]=[{**values['policy'],'template':values['template'],'updated_by':'owner'}]
     docs[gateway.PRODUCT_COLLECTION]=[values['product']]
@@ -224,6 +248,8 @@ async def setup(monkeypatch,db=None):
         monkeypatch.setenv(name,'true')
     monkeypatch.setattr(management,'now',lambda:NOW)
     monkeypatch.setattr(authority,'now',lambda current=None:current or NOW)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,NOW)
     async def client(database,user_id,account_id,**kwargs):return provider,'test-epoch'
     monkeypatch.setattr(management,'account_client',client)
     return db,provider,values
@@ -261,7 +287,7 @@ async def test_native_creation_floor_readback_owned_ledger_and_no_replay(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_active55_allows_only_paused15_and_no_executable_enable(monkeypatch):
+async def test_active55_reserves_paused15_within_explicit100_cap_without_enable(monkeypatch):
     db,provider,values=await setup(monkeypatch);row=await preview(db,values)
     intent=(await db[gateway.CREATION_INTENTS].find_one({'account_id':'123'}))['intent']
     assert intent['enable_readiness']['enabled_and_reserved_average_budget_native']=='55'
@@ -277,12 +303,13 @@ async def test_active55_allows_only_paused15_and_no_executable_enable(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize('flag',['GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','GOOGLE_ADS_AUTOMATION_WORKER_ENABLED','GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED'])
 async def test_stop_after_acked_floor_never_http_and_preserves_floor(monkeypatch,flag):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def stop(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv(flag,'false')
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def stop(database,proposal):
+        result=await original(database,proposal)
+        monkeypatch.setenv(flag,'false')
         return result
-    monkeypatch.setattr(management,'record_event',stop)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',stop)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])
@@ -296,12 +323,16 @@ async def test_stop_after_acked_floor_never_http_and_preserves_floor(monkeypatch
 
 @pytest.mark.asyncio
 async def test_floor_ack_loss_has_no_http_or_no_http_marker_and_retains_reservation(monkeypatch):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def lose(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('lost floor ACK')
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=guard._commit_once
+    calls=0
+    async def lose(*args):
+        nonlocal calls
+        calls+=1
+        result=await original(*args)
+        if calls==2:raise TimeoutError('lost floor ACK')
         return result
-    monkeypatch.setattr(management,'record_event',lose)
+    monkeypatch.setattr(guard,'_commit_once',lose)
     result=await execute(db,row)
     assert result['status']=='uncertain' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])
@@ -387,6 +418,8 @@ def advance(monkeypatch,later):
     from integrations_control_center import google_ads_automation_creation_authority as authority
     monkeypatch.setattr(management,'now',lambda:later)
     monkeypatch.setattr(authority,'now',lambda current=None:current or later)
+    from tests.test_google_ads_automation_authority import freeze_guard_clock
+    freeze_guard_clock(monkeypatch,later)
 
 
 @pytest.mark.asyncio
@@ -481,20 +514,18 @@ async def test_committed_claim_cancellation_stays_held_then_stale_cancel_settles
 @pytest.mark.asyncio
 async def test_terminal_cancel_wins_before_old_floor_without_resurrection(monkeypatch):
     from integrations_control_center import google_ads_automation_creation_authority as authority
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def cancel(database,proposal,status,**kwargs):
-        if status=='submitted':
-            await database[management.PROPOSALS].update_one({'proposal_id':proposal['proposal_id'],
-                'execution_claim_id':proposal['execution_claim_id'],'status':'approved','submission_started':False},
-                {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch'}})
-            await authority.settle_google_creation_claim(database,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
-            await management._release_fence(database,proposal)
-        return await original(database,proposal,status,**kwargs)
-    monkeypatch.setattr(management,'record_event',cancel)
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def cancel(database,proposal):
+        await database[management.PROPOSALS].update_one({'proposal_id':proposal['proposal_id'],
+            'execution_claim_id':proposal['execution_claim_id'],'status':'approved','submission_started':False},
+            {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch'}})
+        await authority.settle_google_creation_claim(database,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
+        await management._release_fence(database,proposal)
+        return await original(database,proposal)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',cancel)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is False and provider.writes==0
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='released'
-
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('tamper',['identity','ownership','missing_policy'])
@@ -530,12 +561,13 @@ async def test_claim_ack_for_wrong_creation_identity_cannot_reach_native_floor(m
 
 @pytest.mark.asyncio
 async def test_native_proof_expiring_during_acked_floor_never_reaches_http(monkeypatch):
-    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=management.record_event
-    async def slow_floor(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':advance(monkeypatch,NOW+timedelta(seconds=91))
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def slow_floor(database,proposal):
+        result=await original(database,proposal)
+        advance(monkeypatch,NOW+timedelta(seconds=91))
         return result
-    monkeypatch.setattr(management,'record_event',slow_floor)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',slow_floor)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await management.get_proposal(db,'owner',row['proposal_id'])
@@ -554,6 +586,8 @@ async def test_standing_policy_native_proof_expiring_after_floor_never_reaches_h
         if status=='submitted':
             monkeypatch.setattr(management,'now',lambda:POLICY_NOW+timedelta(seconds=91))
             monkeypatch.setattr(authority,'_now',lambda current=None:current or POLICY_NOW+timedelta(seconds=91))
+            from tests.test_google_ads_automation_authority import freeze_guard_clock
+            freeze_guard_clock(monkeypatch,POLICY_NOW+timedelta(seconds=91))
         return result
     monkeypatch.setattr(management,'record_event',slow_floor)
     result=await policy_execute(db,row)
@@ -579,3 +613,31 @@ async def test_unclaimed_catalog_rejection_stale_cancellation_durably_unblocks_a
     assert cancelled['reservation_native']=='0' and cancelled.get('authorized_at') is None
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='released'
     assert (await gateway.reconcile_google_automation_creation(db,user_id='owner',account_id='123',proposal_id=row['proposal_id']))['status']=='failed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target',['owner','canonical_product'])
+@pytest.mark.parametrize('stage',['after_tx_reads_before_commit','after_commit'])
+async def test_postcommit_live_revalidation_blocks_nonconflicting_document_drift(monkeypatch,target,stage):
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values)
+    def drift():
+        if target=='owner':db.users.rows[0]['disabled']=True
+        else:db[gateway.PRODUCT_COLLECTION].rows[0]['quantity']=0
+    if stage=='after_commit':
+        async def changed():drift()
+        db.after_commit=changed
+    else:
+        original=authority._linearize_creation_claim
+        async def changed(*args):
+            result=await original(*args);drift();return result
+        monkeypatch.setattr(authority,'_linearize_creation_claim',changed)
+    result=await execute(db,row)
+    assert result['status']=='uncertain' and result['submission_started'] is False and provider.writes==0
+    policy=await db[gateway.CREATION_POLICIES].find_one({'user_id':'owner','account_id':'123'})
+    budget=await db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    assert policy['_creation_claim'] and budget['active_claim']
+    assert budget['epoch']==1 and next(iter(budget['allocations'].values()))['state']=='reserved'
+    assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    assert sum(session.commit_calls for session in db.sessions)==1

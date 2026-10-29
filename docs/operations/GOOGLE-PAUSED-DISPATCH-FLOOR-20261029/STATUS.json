@@ -1,0 +1,53 @@
+{
+  "status": "WIP_atomic_paused_floor_reviewed_actual_replica_verified_production_prerequisites_remain",
+  "base": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+  "reviewed_source": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
+  "scope": "Typed atomic PAUSED creation-only submission floor; preserve all retail/source integration files. runtime remains false.",
+  "path_overlap": "No overlap between reviewed M6-relative guard runtime/test/workflow patch and M6-to-retail source changes; applied exact patch successfully. No release intent copied.",
+  "production_changed": false,
+  "next": "Root assesses actual production commit+namespace/legacy/native inventory evidence before mandatory six-policy migration; integrate onto latest production conservatively, fresh CI/release protocol under root ownership. No autonomous activation or runtimeflag enable.",
+  "limitations": [
+    "No shared metadata/product/external Google writer serialization",
+    "Not deployable; production prerequisites and floor acceptance pending"
+  ],
+  "runtime_available": false,
+  "tests": {
+    "focused_unit": "141 passed3.71s -Werror;13floor incl original amount/currency/native fingerprint binding",
+    "replica": "7 new actualreplica cases passed on exacttestedsource, not merely collected. Dedicated44Mongo and full7/8/9 exactgates succeeded.",
+    "prior_source_189": "FullCI40949561011 failed2 obsolete Mongo hooks (record_event floor removed); migrated hooks to actual floor helper/raw commit, assertions preserved. No claim prior189 accepted.",
+    "broad_local_environment_limit": "1342 passed,49skipped,14failures due missing socksio in local venv proxy transport before reporting mock; not accepted full-suite proof. Exact GitHub full suite remains acceptance source.",
+    "source_0bc_replica": "focused40950178444:149passed1failed; full40950190093:1482passed1failed. Only failure wrong expected terminal creation allocation state label in new cancellation test: actualsettled vs expectedstandinglabelcancelled_before_http. Runtime behavior blockedHTTP/onefloorabort/settledknowncancel correctly. Test now asserts actual settled AND no_campaign ledger/claim/digest/original15hold, no relaxed alternatives. Exact next sourceCI required.",
+    "actual_replica": {
+      "focused_run": 40950866833,
+      "job": 123718309055,
+      "result": "153 passed119.13s; proofJSON44actualMongo/0failure-error-skip",
+      "full_run": 40950855990,
+      "backend_job": 123718271915,
+      "backend": "1486 passed87.67s; exact7floor+8paused+9legacyMongo and allrequiredmodules/zero skips",
+      "frontend_job": 123718272298,
+      "frontend": "261passed18suites/buildsuccess",
+      "readiness_run": 40950866948,
+      "floor_helper_seconds": {
+        "server91": 9.897,
+        "connection_close": 0.386,
+        "ack_loss_after_real_commit": 0.203
+      },
+      "floor_fault_contract": "Each one floor commit wire attempt, zero provider writes, retained original reservation/native fence; no replay from new database-client identity after lost positive server commit."
+    }
+  },
+  "floor_contract": "Typed commonTX reloads current policy rev/enabled/digest, exact claim+ledger+allocation, original intent/proposal operation binding and native fence. Proposal submitted/claim/marker and guard epoch committed in one raw command. Revocation/cancellation before boundary blocks; positiveACK means inflight. Unknown floor ACK yields no HTTP and retains hold/fence; no retry or cleanup inference.",
+  "expiry_contract": "Typed owner activation/revision/zone/expiry/proposalexpiry validated from current stored policy insideTX; fresh clock rechecked beforecommit. Result carries stored validity bounds, checked synchronously afterpositiveACK immediatelybefore dispatch. Expiry acrossACK retains submitted uncertain proposal/commonhold/nativefence, noHTTP/noresend.",
+  "independent_review": "budget_audit independently13floorunits-Werror; reviewed expiry/binding runtimeae023 and test-only12da correction with no further finding in bounded scenario. Reviewer verified exacthead runmetadata completed/success; root agent read all citedCI logs. Not full production/topology/externalwriter or metadata serialization acceptance.",
+  "floor_binding": "Original creation amount/currency/native account/timezone/fingerprint/observation/policy digest+revision and active claim proposal/operation identity are reloaded and compared inside floor; no created native budget resource exists before this PAUSED creation call.",
+  "tested_source": "12da1d13bd263aeba8d408f5bf1da718478ce8b2",
+  "tested_tree": "77b2437eeb08b577eae0160c505c5927b09f0a47",
+  "rollout_ready": false,
+  "retail_preservation": "All c0ce parent-to-source changed blobs compare identical except explicitly owned management floor seam; AI/routes/workspace/retail identity/current tests/composer preserved. No old release intent copied; new branch direct c0ce.",
+  "all_writes_audit": {
+    "document": "ALL-WRITES-AUDIT.md",
+    "scope": "Read-only source coverage on tested12da; no runtime changes",
+    "result": "Common accounting exists for PAUSED creation and standing budget updates, but standing-policy final submission remains proposal-only and does not serialize owner revoke/expiry. Enable/resume intentionally failclosed; no funded firstlaunch authority. Six mutation hooks attached, revoke OAuth-independent when TX healthy.",
+    "fresh_test": "13 passed111deselected2.18s-Werror owner revocation/activation tests; not production proof",
+    "recommended_next_patch": "Separate typed StandingDispatchFloor + narrow standing_policy management seam and actual replica revoke/cancel/expiry/unknownACK/replay acceptance; runtime staysfalse."
+  }
+}

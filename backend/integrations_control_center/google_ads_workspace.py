@@ -204,7 +204,7 @@ async def google_lookup(client, kind, *, query="", merchant_id=None):
         "conversion_actions": ("conversion_action", "conversionAction", ["id", "resource_name", "name", "status", "category", "type", "primary_for_goal"], "conversion_action.status = 'ENABLED'"),
         "merchants": ("product_link", "productLink", ["resource_name", "merchant_center.merchant_center_id", "type"], "product_link.type = 'MERCHANT_CENTER'"),
         "hotels": ("product_link_invitation", "productLinkInvitation", ["resource_name", "hotel_center.hotel_center_id", "type", "status"], "product_link_invitation.type = 'HOTEL_CENTER' AND product_link_invitation.status = 'ACCEPTED'"),
-        "products": ("shopping_product", "shoppingProduct", ["resource_name", "merchant_center_id", "item_id", "title", "feed_label", "status", "availability", "product_image_uri"], f"shopping_product.merchant_center_id = {identifier(merchant_id)}" if merchant_id else ""),
+        "products": ("shopping_product", "shoppingProduct", ["resource_name", "merchant_center_id", "item_id", "title", "feed_label", "channel", "language_code", "status", "availability", "product_image_uri"], f"shopping_product.merchant_center_id = {identifier(merchant_id)}" if merchant_id else ""),
         "apps": ("campaign", "campaign", ["id", "name", "app_campaign_setting.app_id", "app_campaign_setting.app_store"], "campaign.advertising_channel_type = 'MULTI_CHANNEL' AND campaign.status != 'REMOVED'"),
     }
     if kind == "conversion_goals":
@@ -214,17 +214,20 @@ async def google_lookup(client, kind, *, query="", merchant_id=None):
         raise problem("google_ads_lookup_invalid", "دليل جوجل المطلوب غير متاح.", 404)
     root, payload, names, where = config[kind]
     fields = [root + "." + name for name in names]
-    rows, complete, gaps = await compatible_read(client, fields, root, where, required=(fields[0],))
+    required = tuple(field for field in fields if field.rsplit(".", 1)[-1] not in {"title", "product_image_uri"}) if kind == "products" else (fields[0],)
+    rows, complete, gaps = await compatible_read(client, fields, root, where, required=required)
     items = []
     for row in rows:
         raw = row.get(payload) or {}
+        if kind == "products" and (not isinstance(raw, dict) or not raw.get("resourceName") or not raw.get("itemId")):
+            raise problem("google_ads_product_identity_unproved", "ورد منتج جوجل دون هوية كاملة؛ لا يمكن اعتماد اكتمال التغذية.", 409)
         item = {"id": str(raw.get("id") or ""), "name": raw.get("name") or raw.get("title"), "resource_name": raw.get("resourceName"), "type": raw.get("type"), "status": raw.get("status")}
         if kind == "merchants":
             item.update(id=str((raw.get("merchantCenter") or {}).get("merchantCenterId") or ""), merchant_id=str((raw.get("merchantCenter") or {}).get("merchantCenterId") or ""))
         elif kind == "hotels":
             item.update(id=str((raw.get("hotelCenter") or {}).get("hotelCenterId") or ""), hotel_center_id=str((raw.get("hotelCenter") or {}).get("hotelCenterId") or ""), eligibility="provider_validate_only_required", reason="يتطلب حسابًا مؤهلًا وموافقة جوجل؛ الدعوة المقبولة لا تثبت جاهزية الخلاصة والتسعير.")
         elif kind == "products":
-            item.update(id=raw.get("itemId"), offer_id=raw.get("itemId"), title=raw.get("title"), feed_label=raw.get("feedLabel"), merchant_id=str(raw.get("merchantCenterId") or ""), preview_url=raw.get("productImageUri"), availability=raw.get("availability"), approved=raw.get("status") in {"ELIGIBLE", "ELIGIBLE_LIMITED"})
+            item.update(id=raw.get("itemId"), offer_id=raw.get("itemId"), title=raw.get("title"), feed_label=raw.get("feedLabel"), channel=raw.get("channel"), language_code=raw.get("languageCode"), merchant_id=str(raw.get("merchantCenterId") or ""), preview_url=raw.get("productImageUri"), availability=raw.get("availability"), approved=raw.get("status") in {"ELIGIBLE", "ELIGIBLE_LIMITED"})
         elif kind == "apps":
             settings = raw.get("appCampaignSetting") or {}
             item.update(id=settings.get("appId"), app_id=settings.get("appId"), app_store=settings.get("appStore"))

@@ -124,7 +124,8 @@ class Provider:
             root, spec = next(iter(operation.items()))
             name = spec.get("remove") or (spec.get("update") or spec.get("create") or {}).get("resourceName")
             if not name:
-                collection = {"campaignLabelOperation": "campaignLabels", "campaignCriterionOperation": "campaignCriteria", "adGroupCriterionOperation": "adGroupCriteria", "adGroupAdOperation": "adGroupAds"}[root]
+                collection = {"campaignLabelOperation": "campaignLabels", "campaignCriterionOperation": "campaignCriteria", "adGroupCriterionOperation": "adGroupCriteria", "adGroupAdOperation": "adGroupAds",
+                              "campaignAssetOperation": "campaignAssets", "assetGroupAssetOperation": "assetGroupAssets", "assetGroupSignalOperation": "assetGroupSignals"}[root]
                 name = f"customers/{ACCOUNT}/{collection}/100~{1000 + index}"
             name = re.sub(r"(?<=[/~])-[0-9]+", str(1000 + index), name)
             responses.append({root.removesuffix("Operation") + "Result": {"resourceName": name}})
@@ -363,6 +364,75 @@ async def test_selected_product_retail_cannot_fall_back_to_all_feed(db, provider
         await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="all-feed-create"))
     assert error.value.detail["code"] == "google_ads_product_feed_scope_unproved"
     assert provider.preflights == provider.writes == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["SHOPPING", "PERFORMANCE_MAX"])
+@pytest.mark.parametrize("case", ["unique", "collision", "unknown", "merchant", "account", "incomplete", "wrong_feed", "stock_drift", "identity_drift", "legacy_preview"])
+async def test_retail_preview_checks_native_identity_before_provider_validation(db, provider, monkeypatch, family, case):
+    from tests.test_google_ads_workspace import retail_inventory
+    from tests.test_google_ads_campaign_builder import draft_for
+    from integrations_control_center import google_ads_workspace
+    value = draft_for(family)
+    value.update(product_ids=["1"], product_offer_selections=[{"product_id": "1", "merchant_id": "123", "offer_id": "SKU1"}],
+                 shopping={"merchant_id": "123", "feed_label": "QA" if case in {"collision", "wrong_feed"} else "SA"})
+    value["groups"][0]["product_offer_ids"] = ["SKU1"]
+    inventory = retail_inventory(account=ACCOUNT)
+    if case == "collision": inventory["items"] += retail_inventory(account=ACCOUNT, feed="QA", status="NOT_ELIGIBLE", availability="OUT_OF_STOCK")["items"]
+    if case == "unknown": inventory["items"][0]["availability"] = None
+    if case == "merchant": inventory["items"][0]["merchant_id"] = "999"
+    if case == "account": inventory["items"][0]["resource_name"] = inventory["items"][0]["resource_name"].replace(ACCOUNT, "777")
+    if case == "incomplete": inventory["complete"] = False
+    async def lookup(client, kind, **kwargs):
+        assert client is provider
+        if kind == "merchants": return {"items": [{"merchant_id": "123"}], "complete": True}
+        assert kind == "products"
+        return inventory
+    monkeypatch.setattr(google_ads_workspace, "google_lookup", lookup)
+    await db.mezan_products_v2.insert_one({"user_id": "owner-a", "salla_product_id": "1", "name": "منتج"})
+    saved = await save_draft(db, OWNER, DraftCreate(draft=GoogleCampaignDraft.model_validate(value), idempotency_key="retail-save"))
+    body = GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT, draft_id=saved["draft_id"], draft_revision=1, idempotency_key="retail-preview")
+    if case in {"unique", "stock_drift", "identity_drift", "legacy_preview"}:
+        result = await gateway.preview_google_action(db, OWNER, body)
+        assert result["planned"]["initial_status"] == "PAUSED" and provider.preflights == 1
+        assert result["planned"]["product_offers"][0]["mapping_status"] == "owner_selected_unverified"
+        if case == "stock_drift": inventory["items"][0]["availability"] = "OUT_OF_STOCK"
+        if case == "identity_drift": inventory["items"] = retail_inventory(account=ACCOUNT, language="en")["items"]
+        if case == "legacy_preview":
+            stored = await db[gateway.PROPOSALS].find_one({"proposal_id": result["proposal_id"]})
+            stored["planned"]["product_offers"] = [{"offer_id": "SKU1", "merchant_id": "123", "name": "منتج جوجل"}]
+            stored["confirmation_digest"] = gateway.digest(gateway.immutable(stored))
+            await db[gateway.PROPOSALS].replace_one({"proposal_id": result["proposal_id"]}, stored)
+            result["confirmation_digest"] = stored["confirmation_digest"]
+        if case != "unique":
+            with pytest.raises(HTTPException) as error:
+                await gateway.execute_google_proposal(db, OWNER, result["proposal_id"], result["confirmation_digest"])
+            assert error.value.detail["code"] == ("google_ads_product_offer_not_eligible" if case == "stock_drift" else "google_ads_product_identity_changed")
+            assert provider.preflights == 1
+        else:
+            completed = await gateway.execute_google_proposal(db, OWNER, result["proposal_id"], result["confirmation_digest"])
+            assert completed["verified"] is True and completed["status"] == "completed"
+            assert provider.writes == 1
+            assert all(op["campaignOperation"]["create"]["status"] == "PAUSED" for op in provider.operations if "campaignOperation" in op)
+    else:
+        with pytest.raises(HTTPException): await gateway.preview_google_action(db, OWNER, body)
+        assert provider.preflights == 0
+        assert await db[gateway.PROPOSALS].count_documents({}) == 0
+    assert provider.writes == (1 if case == "unique" else 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["SEARCH", "PERFORMANCE_MAX"])
+async def test_nonretail_creation_preserves_approval_without_catalog_reads(db, provider, monkeypatch, family):
+    from tests.test_google_ads_campaign_builder import draft_for
+    from integrations_control_center import google_ads_workspace
+    async def lookup(*args, **kwargs): raise AssertionError("nonretail draft must not access merchant inventory")
+    monkeypatch.setattr(google_ads_workspace, "google_lookup", lookup)
+    saved = await save_draft(db, OWNER, DraftCreate(draft=GoogleCampaignDraft.model_validate(draft_for(family)), idempotency_key="nonretail-save"))
+    proposal = await gateway.preview_google_action(db, OWNER, GoogleCampaignActionInput(action="create_campaign", account_id=ACCOUNT,
+        draft_id=saved["draft_id"], draft_revision=1, idempotency_key="nonretail-preview"))
+    result = await gateway.execute_google_proposal(db, OWNER, proposal["proposal_id"], proposal["confirmation_digest"])
+    assert result["verified"] is True and provider.writes == provider.preflights == 1
 
 
 @pytest.mark.asyncio

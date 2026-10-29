@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from contextvars import ContextVar
 import os
 from urllib.parse import urlsplit
 import uuid
@@ -23,6 +24,26 @@ from integrations_control_center.google_ads_client import GoogleAdsClient
 
 ACCOUNT = "1234567890"
 CURRENT = datetime(2026, 10, 26, 0, tzinfo=timezone.utc)
+_GUARD_TIME = ContextVar("google_real_mongo_guard_time", default=CURRENT)
+
+
+def set_guard_time(current):
+    _GUARD_TIME.set(current)
+
+
+@pytest.fixture(autouse=True)
+def guard_mongo_contract(monkeypatch):
+    """Test-only runtime opt-in; storage remains genuine Mongo transactions."""
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    class GuardClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _GUARD_TIME.get()
+    token = _GUARD_TIME.set(CURRENT)
+    monkeypatch.setattr(guard, "budget_guard_runtime_available", lambda: True)
+    monkeypatch.setattr(guard, "datetime", GuardClock)
+    yield
+    _GUARD_TIME.reset(token)
 
 
 @pytest.fixture(scope="session")
