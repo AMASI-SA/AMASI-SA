@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task": "google-merchant-owner-observation",
+  "branch": "codex/google-merchant-owner-observation-20261029",
+  "parent": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
+  "status": "WIP contract saved before implementation; no acceptance or attachment",
+  "production_changed": "no",
+  "runtime_available": false,
+  "provider_calls": false,
+  "credential_reads": false,
+  "owned_paths": [
+    "backend/integrations_control_center/google_merchant_observation_routes.py",
+    "backend/tests/test_google_merchant_observation_routes.py",
+    "backend/tests/test_google_merchant_observation_routes_mongo.py",
+    ".github/workflows/google-merchant-owner-observation.yml",
+    "docs/operations/GOOGLE-MERCHANT-OWNER-OBSERVATION-20261029/"
+  ],
+  "next": "Implement unattached owner route using frozen observer/helper; actual Mongo races and independent acceptance required before root attaches."
+}
