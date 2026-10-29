@@ -1201,12 +1201,19 @@
         "lease": "active-owned; do not change /app source until verify closes"
       },
       "publish": {
-        "state": "PUBLISHING",
+        "state": "UI_FINISHED_VERIFICATION_PENDING",
         "republish_ui_clicks": 1,
         "publish_changes_clicks": 1,
         "baseline_finish": "Oct28 09:17PM",
         "latest_observed": "Publishing…",
-        "do_not_repeat_click": true
+        "do_not_repeat_click": true,
+        "finished": "Oct29 06:54PM Asia/Riyadh"
+      },
+      "verification": {
+        "first_attempt": "REFUSED canonical frontend build-meta SHA expected05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5 actuala4a57ecd07d14ad379ecaa11f5035ecb8091d59ba99a5a2788aa3a669f2a8ab3; lease retained",
+        "diagnosis": "Subsequent canonical and cache-busted JSON responses both exact expected05b33de... and sourcef64152d3, no-store. Possible rollout propagation; not claimed proven cache cause. /app tracked files clean; original two untracked dirs preserved.",
+        "current": "Second read-only guard verify running; no second publish",
+        "functional": "After reload Google connected and22 campaigns visible; final acceptance pending guard"
       }
     },
     "next_inventory": {
@@ -1254,7 +1261,16 @@
         "Operational exclusion or provider mechanism for direct external Google budget writers; Mongo transaction alone is not a strict external spend ceiling",
         "Owner approved spending limits"
       ],
-      "production_writes": "none"
+      "production_writes": "none",
+      "new_wip": {
+        "pr": 1602,
+        "source": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
+        "tree": "fab129f6424a460bab38d2bd19dcf21990f8d367",
+        "parent": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+        "tests": "577 unit passed, actual replica CI pending",
+        "runtime_available": false,
+        "published": false
+      }
     }
   }
 }
