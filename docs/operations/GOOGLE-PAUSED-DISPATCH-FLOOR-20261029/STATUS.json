@@ -1,0 +1,25 @@
+{
+  "status": "WIP_floor_expiry_replay_cancellation_hardened_replica_CI_pending",
+  "base": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+  "reviewed_source": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
+  "scope": "Typed atomic PAUSED creation-only submission floor; preserve all retail/source integration files. runtime remains false.",
+  "path_overlap": "No overlap between reviewed M6-relative guard runtime/test/workflow patch and M6-to-retail source changes; applied exact patch successfully. No release intent copied.",
+  "production_changed": false,
+  "next": "Inspect exact fresh actualMongo/fullCI and independent review; no production migration/intent/deploy.",
+  "limitations": [
+    "No shared metadata/product/external Google writer serialization",
+    "Not deployable; production prerequisites and floor acceptance pending"
+  ],
+  "runtime_available": false,
+  "tests": {
+    "focused_unit": "141 passed3.71s -Werror;13floor incl original amount/currency/native fingerprint binding",
+    "replica": "7 new cases collected only; localMongo unavailable. DedicatedCI requires44Mongo/150total; full exact7floor+8paused+9legacy gates.",
+    "prior_source_189": "FullCI40949561011 failed2 obsolete Mongo hooks (record_event floor removed); migrated hooks to actual floor helper/raw commit, assertions preserved. No claim prior189 accepted.",
+    "broad_local_environment_limit": "1342 passed,49skipped,14failures due missing socksio in local venv proxy transport before reporting mock; not accepted full-suite proof. Exact GitHub full suite remains acceptance source.",
+    "source_0bc_replica": "focused40950178444:149passed1failed; full40950190093:1482passed1failed. Only failure wrong expected terminal creation allocation state label in new cancellation test: actualsettled vs expectedstandinglabelcancelled_before_http. Runtime behavior blockedHTTP/onefloorabort/settledknowncancel correctly. Test now asserts actual settled AND no_campaign ledger/claim/digest/original15hold, no relaxed alternatives. Exact next sourceCI required."
+  },
+  "floor_contract": "Typed commonTX reloads current policy rev/enabled/digest, exact claim+ledger+allocation, original intent/proposal operation binding and native fence. Proposal submitted/claim/marker and guard epoch committed in one raw command. Revocation/cancellation before boundary blocks; positiveACK means inflight. Unknown floor ACK yields no HTTP and retains hold/fence; no retry or cleanup inference.",
+  "expiry_contract": "Typed owner activation/revision/zone/expiry/proposalexpiry validated from current stored policy insideTX; fresh clock rechecked beforecommit. Result carries stored validity bounds, checked synchronously afterpositiveACK immediatelybefore dispatch. Expiry acrossACK retains submitted uncertain proposal/commonhold/nativefence, noHTTP/noresend.",
+  "independent_review": "budget_audit reviewed0bcac expiry fix independently:10floor-Werror pass and expiry finding addressed. Additional allocation binding hardening and exactMongo results still require review.",
+  "floor_binding": "Original creation amount/currency/native account/timezone/fingerprint/observation/policy digest+revision and active claim proposal/operation identity are reloaded and compared inside floor; no created native budget resource exists before this PAUSED creation call."
+}

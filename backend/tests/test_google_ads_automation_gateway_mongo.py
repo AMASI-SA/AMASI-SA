@@ -9,8 +9,11 @@ from datetime import timedelta
 
 from fastapi import HTTPException
 import pytest
+from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 
 from integrations_control_center import google_ads_automation_gateway as gateway
+from integrations_control_center import google_ads_automation_budget_guard as guard
+from motor.motor_asyncio import AsyncIOMotorClientSession
 from integrations_control_center import google_ads_automation_authority as authority
 from integrations_control_center import google_ads_management as management
 from integrations_control_center.google_ads_campaign_contract import GoogleCampaignActionInput
@@ -21,6 +24,7 @@ from tests.test_google_ads_automation_gateway import NativeProvider
 
 
 async def setup(monkeypatch,db):
+    set_guard_time(NOW)
     docs,native=case_documents();docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     await seed(db,docs)
     provider=NativeProvider(native)
@@ -85,16 +89,20 @@ async def test_real_shared_account_fence_serializes_manual_and_automation(monkey
 @pytest.mark.asyncio
 async def test_real_authority_postcommit_ack_loss_holds_then_terminally_cancels_without_http(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db)
-    original=authority._linearize_claim
-    async def lose_ack(*args,**kwargs):
-        await original(*args,**kwargs)
-        raise TimeoutError('test-only policy CAS committed but response lost')
-    monkeypatch.setattr(authority,'_linearize_claim',lose_ack)
+    original=guard._commit_once
+    async def lose_ack(database,session):
+        await original(database,session)
+        raise TimeoutError('test-only budget transaction committed but response lost')
+    monkeypatch.setattr(guard,'_commit_once',lose_ack)
     result=await execute(authority_db,row)
     assert result['status']=='uncertain' and result['submission_started'] is False and provider.writes==0
     configured=await authority_db[gateway.AUTOMATION_POLICIES].find_one({'user_id':'owner','account_id':'123'})
     assert configured['_dispatch_claim']['proposal_id']==row['proposal_id']
+    budget=await authority_db[guard.BUDGET_GUARDS].find_one({'user_id':'owner','account_id':'123'})
+    allocation=budget['allocations'][budget['active_claim']['allocation_id']]
+    assert allocation['state']=='reserved' and allocation['proposal_id']==row['proposal_id']
     assert (await authority_db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    monkeypatch.setattr(guard,'_commit_once',original)
     monkeypatch.setattr(management,'now',lambda:NOW+timedelta(minutes=6))
     monkeypatch.delenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED')
     result=await gateway.reconcile_google_automation_proposal(authority_db,user_id='owner',account_id='123',proposal_id=row['proposal_id'])
@@ -107,12 +115,13 @@ async def test_real_authority_postcommit_ack_loss_holds_then_terminally_cancels_
 @pytest.mark.asyncio
 async def test_real_submission_floor_postcommit_ack_loss_never_dispatches_or_auto_retries(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db);provider.verified=False
-    original=management.record_event
-    async def lose_floor_ack(db,proposal,status,**kwargs):
-        result=await original(db,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('test-only committed submission floor response lost')
+    original=guard._commit_once;calls=0
+    async def lose_floor_ack(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:raise TimeoutError('test-only real floor commit response lost')
         return result
-    monkeypatch.setattr(management,'record_event',lose_floor_ack)
+    monkeypatch.setattr(guard,'_commit_once',lose_floor_ack)
     result=await execute(authority_db,row)
     assert result['status']=='uncertain' and result['submission_started'] is True and provider.writes==0
     with pytest.raises(HTTPException):await execute(authority_db,row)
@@ -124,12 +133,12 @@ async def test_real_submission_floor_postcommit_ack_loss_never_dispatches_or_aut
 @pytest.mark.asyncio
 async def test_real_flag_off_after_floor_ack_stops_http_and_settles_bound_no_http_proof(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db)
-    original=management.record_event
-    async def kill_after_ack(db,proposal,status,**kwargs):
-        result=await original(db,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
+    original=authority.acknowledge_standing_dispatch_floor
+    async def kill_after_ack(db,proposal,**kwargs):
+        result=await original(db,proposal,**kwargs)
+        monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
         return result
-    monkeypatch.setattr(management,'record_event',kill_after_ack)
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',kill_after_ack)
     result=await execute(authority_db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await authority_db[management.PROPOSALS].find_one({'proposal_id':row['proposal_id']})
@@ -143,18 +152,17 @@ async def test_real_flag_off_after_floor_ack_stops_http_and_settles_bound_no_htt
 @pytest.mark.asyncio
 async def test_real_terminal_cancel_before_old_floor_is_never_resurrected(monkeypatch,authority_db):
     provider=await setup(monkeypatch,authority_db);row=await preview(authority_db)
-    original=management.record_event
-    async def cancel_before_floor(db,proposal,status,**kwargs):
-        if status=='submitted':
-            cancelled=await db[management.PROPOSALS].update_one({'user_id':'owner','account_id':'123',
-                'proposal_id':proposal['proposal_id'],'execution_claim_id':proposal['execution_claim_id'],
-                'status':'approved','submission_started':False}, {'$set':{'status':'failed',
-                'safe_error':'execution_cancelled_before_dispatch','provider_write_reached':False}})
-            assert cancelled.matched_count==1
-            await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
-            await management._release_fence(db,proposal)
-        return await original(db,proposal,status,**kwargs)
-    monkeypatch.setattr(management,'record_event',cancel_before_floor)
+    original=authority.acknowledge_standing_dispatch_floor
+    async def cancel_before_floor(db,proposal,**kwargs):
+        cancelled=await db[management.PROPOSALS].update_one({'user_id':'owner','account_id':'123',
+            'proposal_id':proposal['proposal_id'],'execution_claim_id':proposal['execution_claim_id'],
+            'status':'approved','submission_started':False}, {'$set':{'status':'failed',
+            'safe_error':'execution_cancelled_before_dispatch','provider_write_reached':False}})
+        assert cancelled.matched_count==1
+        await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id=proposal['execution_claim_id'])
+        await management._release_fence(db,proposal)
+        return await original(db,proposal,**kwargs)
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',cancel_before_floor)
     result=await execute(authority_db,row)
     assert result['status']=='failed' and result['safe_error']=='execution_cancelled_before_dispatch'
     stored=await authority_db[management.PROPOSALS].find_one({'proposal_id':row['proposal_id']})
