@@ -135,7 +135,7 @@
       "scope": "Capabilityprobe latency only, no productionDB/provider authority or commitdurability claim."
     },
     "unchanged": "runtime_available literalFalse; all operationalflags off; no launch/planner/sixpolicyhandler edits; no livepolicy/providerwrites.",
-    "adjacent_blocker": "Superseded by lifecycle_followup WIP implementation, pending actualMongo+independent acceptance; not productionready.",
+    "adjacent_blocker": "Resolved within replica-set/test scope by lifecycle_followup finalCI+independentreview; actualproductioncapability/nativeevidence remain rollout prerequisites.",
     "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged.",
     "code_checkpoint_sha": "74ea76cba2f48dd289c33dfb77c67f3a57c30ca7",
     "full_google_ci": {
@@ -146,14 +146,13 @@
     "independent_review": "budget_audit41probe+guard tests independently passed-Werror; no new scopedprobebypass; internalcapability60s existingcontract unchanged."
   },
   "lifecycle_followup": {
-    "state": "WIP reviewed deadline race fixed/replica-only gate; fresh actualCI+auditor pending",
+    "state": "Lifecycle/probe accepted within explicit replica-set scope; WIP not deployed/runtime disabled",
     "base": "90ef34a02b52c59b3a6555a3b9f51928e464e971",
     "reproduction": "Legacy wait_for cancelled Motor-style executor commit Future despite underlying executor work being unstoppable; installed Motor asynccontext delegates synchronous exit; PyMongo publiccommithelper retries retryablecommit despite retryWritesFalse. Not a liveproductionfailure claim.",
     "contract": "_run/read use explicitpublicsession lifecycle underoriginalCSOT; independent response wait nevercancels driver Futures. Retain tasks untilwork+asyncshieldedend_sessiondone. Technical perprocess24pendingwrite+8pendingread slots=32, preserving readcapacity forreconciliation; scopeddbobject/user/account/operation/kindduplicatebusy. Caller cancellation/timeout sets precommitstopflag, neverreleasesfence. RawpublicadmincommitTransaction command exactlyonce samepublicsession/majority+j; requirevalidok/noWCE. Any attemptedcommit failure/timeout remainsunknown, preservefence/reservation/noauto. Cleanupcannotupgradeunknownsuccess. RecoveryrawabortACK/storageonly no dispatch/releasepermission.",
-    "local_verification": "596passed-Werror on finaldeadline+replicagated runtime; AST/YAML/bash/whitespace checks. Frozen diagnostic/launch/planner/sixhandlerimplementations untouched.",
-    "actual_mongo_pending": "Final122expectedtests incl28Mongo afterexactcallercontractassertionupdate; currentruntimea110unchanged. FreshfullGoogleactualCIrequired.",
+    "local_verification": "596passed8.66s-Werror; AST/YAML/bash/whitespacechecks; frozen diagnostic/launch/planner/sixhandlerimplementations untouched.",
     "scope_limits": "No productionMongo/topologyproof/nativeprovider/externalwriter permission evidence. RuntimeflagliteralFalse/alloperationalflags off. Frozen diagnostic,launch/planner, sixpolicyhandlerimplementations unchanged. No livepolicy/ad/provider writes, Intent, merge or deployment.",
-    "next_safe_action": "Run freshactualreplica CI and fullGoogle suites, independent budget_audit exactsource review; fix evidenced failures before any guard migration. Parentowns integration/release.",
+    "next_safe_action": "Root independently review assembled latest-production selective patch, preserving automatic-resume failclosed changes. Before mandatoryhandler migration prove actualproductionreplicaset/storagecapability; before enabling automation prove nativepermissions/externalwriterconstraints/ownerlimits. No fundedlaunchupgrade in thisslice; no deployment/intent by thisagent.",
     "original_candidate_ci": {
       "source": "15daa567fd8a45b1c0dd1b0982f1b739b33e7008",
       "run": 40917165420,
@@ -174,6 +173,46 @@
       "frontend": "18suites226tests+buildSUCCESS",
       "wire": "ONEcommit retryWritesTrue;91unknown9.960s/not_proven;closeunknown.462s/not_proven;appliedWCEunknown.005s/committedreserved;fenceunchanged/gap.051s"
     },
-    "audit_controlled_test_gate": "Independentreview correctlyidentified exactpending503raceassertion needed controlledoverlap. Existingactualrace now holds firstcommit until secondobservesoperation_pending, then allows firstactualMongo commit. Exact1grant1deny503/fence/noauto/claim/generation/quota assertions unchanged; runtimeunchangeda110. Finalexacttest-gateCIpending."
+    "audit_controlled_test_gate": "Finalcontrolledtestholdsfirstcommituntilsecondrealregistrydenial; exact1grant1deny503/fence/noauto/claim/generation/quotaassertions preserved and passedactualCI.",
+    "code_checkpoint_sha": "113cf374fb1034a0c20cf02e95e827c61b6cb188",
+    "runtime_checkpoint_sha": "a110f1e8a538d52e77694fcf65907441a0214823",
+    "final_ci": {
+      "source": "113cf374fb1034a0c20cf02e95e827c61b6cb188",
+      "focused_run": 40919171022,
+      "focused_job": 123607412966,
+      "focused_result": "122passed92.66s,28actualMongo,failures/errors/skips0,-Werror",
+      "full_run": 40919171175,
+      "backend_job": 123607413254,
+      "backend_result": "1347passed51.39s/zero skips/all12requiredMongo modules",
+      "frontend_job": 123607413858,
+      "frontend_result": "18suites226tests+buildSUCCESS",
+      "actual_commit_faults": [
+        {
+          "fault": "server91",
+          "response_seconds": 9.967,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.051,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "not_proven"
+        },
+        {
+          "fault": "connection-close",
+          "response_seconds": 0.458,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.051,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "not_proven"
+        },
+        {
+          "fault": "writeConcernError",
+          "response_seconds": 0.006,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.05,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "committed/reserved, no dispatch/releasepermission"
+        }
+      ]
+    },
+    "independent_review": "budget_audit independently50guard/probe/lifecycleunits-Werror; deadlinechecks+mongosgateaccepted; controlledsameoperation503racegateacceptedwithoutbroadenederroracceptance/invariantweakening. FinalactualCIgreen."
   }
 }
