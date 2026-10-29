@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "additional_guard_race_capability_probe_pending",
+  "status": "unattached_runtime_wip_first_actual_behavior_ci_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -46,8 +46,26 @@
       "logs_read_by": "google_product_acceptance"
     },
     "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server.",
-    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending."
+    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending.",
+    "guard_race_CI": {
+      "run": 40972826009,
+      "job": 123793501584,
+      "source": "0b418ea8aad5164592970ffb72db505147f5abb6",
+      "tree": "c562ab14824135d603c5f7c4d1de4a85b040f486",
+      "result": "20 passed in 3.62s; exact20 actual authenticated Mongo8.0.26, zero skips, all steps success",
+      "guard_race": "raw create inside local transaction rejects same-options existing guard with exact NamespaceExists code48, no new-index command involved; outside transaction create is a separate no-op success case",
+      "logs_read_by": "google_product_acceptance"
+    },
+    "runtime_local": "40 unit/typed-boundary cases passed;93 collected total =40local+20engine+33actual bootstrap cases; actual behavior CI pending",
+    "runtime_changes": "NEW google_namespace_bootstrap.py and two new test modules; no existing production module/route/UI changes. Existing capability fixture gains optional real auth owner setup."
   },
-  "next": "Inspect new actual guard-specific race test before implementing runtime DDL fence. Historical19 engine pass remains source ad5 only; no new20-case pass claimed.",
-  "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288"
+  "next": "Inspect first93-case actual behavior CI; fix confirmed behavior failures, then add remaining lifecycle/restricted-role/old diagnostic compatibility cases before independent acceptance. Keep all existing production files unchanged.",
+  "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288",
+  "limitations": [
+    "Unattached WIP; no current production or provider/DB actions.",
+    "Catalog observations are bounded PRIMARY observations, not an atomic catalog snapshot.",
+    "New UUID continuity between commit and first catalog observation is unproved and explicitly false.",
+    "No-record preparation/claim boundary is explicitly qualified; no automatic retry.",
+    "Pending broader timeout/cancellation/privilege and original diagnostic GET compatibility acceptance before independent review."
+  ]
 }

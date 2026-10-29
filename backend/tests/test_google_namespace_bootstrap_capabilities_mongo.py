@@ -5,6 +5,7 @@ import a production bootstrap module or make any production/provider request.
 """
 import asyncio
 from contextlib import asynccontextmanager
+import hashlib
 import os
 from urllib.parse import urlsplit
 import uuid
@@ -40,7 +41,7 @@ class Capture(CommandListener):
 
 
 @asynccontextmanager
-async def fixture(*, missing=None):
+async def fixture(*, missing=None, with_owner=False):
     uri = os.environ.get('GOOGLE_NAMESPACE_BOOTSTRAP_TEST_ADMIN_URI')
     assert uri, 'dedicated disposable actual-Mongo URI required; no skip/fallback'
     parsed = urlsplit(uri)
@@ -54,6 +55,10 @@ async def fixture(*, missing=None):
         assert not hello.get('msg')
         await raw.create_collection(RECEIPTS)
         foreign = {'_id': 'owner_existing_diagnostic', 'state': 'completed', 'untouched': True}
+        if with_owner:
+            foreign = {'_id': 'owner_' + hashlib.sha256(b'owner').hexdigest(), 'owner_id': 'owner',
+                'schema_version': 1, 'version': 1, 'attempt_id': 'd' * 32, 'nonce': 'e' * 32,
+                'state': 'completed', 'checked_at': '2026-10-01T00:00:00Z'}
         await raw[RECEIPTS].insert_one(foreign)
         privileges = [{'resource': {'db': raw.name, 'collection': ''},
                        'actions': ['listCollections', 'listIndexes']}]
@@ -63,6 +68,10 @@ async def fixture(*, missing=None):
             privileges.append({'resource': {'db': raw.name, 'collection': name}, 'actions': actions})
         privileges.append({'resource': {'db': raw.name, 'collection': RECEIPTS},
                            'actions': ['find', 'insert', 'update']})
+        if with_owner:
+            await raw.users.insert_one({'id': 'owner', 'role': 'owner', 'disabled': False,
+                'is_active': True, 'password_updated_at': '2026-10-01T00:00:00Z'})
+            privileges.append({'resource': {'db': raw.name, 'collection': 'users'}, 'actions': ['find']})
         await raw.command({'createRole': 'bounded_bootstrap', 'privileges': privileges, 'roles': []})
         await raw.command({'createUser': 'bootstrap_fixture', 'pwd': 'ephemeral_fixture_only',
                            'roles': [{'role': 'bounded_bootstrap', 'db': raw.name}]})
