@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-CHOICES-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-choices-20261029",
-  "state": "WIP_backend_local_choices_first_checkpoint",
+  "state": "candidate_unattached_local_choices_and_manual_selector",
   "parent_source_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
   "assessment_sha": "2c2516ede2d33c8757d659a431c36039034a3c87",
   "runtime_attached": false,
@@ -11,14 +11,20 @@
   "credential_reads": 0,
   "deploy_ready": false,
   "verification": {
-    "unit": "50 passed2.19s,-W error,0skip",
-    "mongo": "18 tests written; actual loopback replica CI pending",
-    "workflow": "Dedicated exact push+PR gate requires418 tests including70 actualMongo; not yet run"
+    "unit": "348 passed3.56s,-W error,0skip;50 new local-choice +81 owner-route +217 inherited observer/helper/reporting/CAS cases",
+    "frontend": "114 passed4 suites1.736s,0skip;22 new selector +31 new service +55 frozen child +6 existing API cases; governedNode22.23.2/Yarn1.22.22",
+    "fixtures": "Actual local backend HTTP result and actual699 route/helper/observer empty-product response generated with synthetic DB/transports and consumed by new UI tests; real AuthProvider bootstrap and actual API401 no-replay exercised",
+    "mongo": "18 new real replica tests written; corrected dedicated CI now requires418 total including70 actualMongo; pending",
+    "first_ci_failure": "Exact372 run40967987627/job123777256712 ran319 tests successfully then expected-count assertion failed because workflow command omitted81 owner unit +18 new Mongo cases. This is a test-selection defect, not infra and not accepted realMongo coverage; corrected in successor with both files included.",
+    "source_scope": "Ten new files only relative7e686; no existing source/router/workspace/helper/child changed."
   },
   "remaining": [
-    "Frontend manual selector/list service not yet implemented.",
-    "Real Mongo CI and independent review pending.",
-    "Root owns final parent/router attachment and fresh production integration."
+    "Fresh exact-source dedicated418/70Mongo and114UI/build CI pending.",
+    "Independent review pending.",
+    "Shared parent/router attachment and current production integration remain root-owned.",
+    "No live owner accounts, native grant/link, product mapping, inventory or eligibility/authority verified."
   ],
-  "next_safe_action": "Run dedicated remote CI while adding approved new selector/service only; keep frozen699 route and7e686 child unchanged."
+  "next_safe_action": "Freeze successor source, inspect exact PUSH CI and request independent review; save final STATUS separately without changing accepted source. Root re-sources on current production for attachment.",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1653",
+  "first_checkpoint_sha": "37273bae059ac4f82314d7fdd3eccd6ceee87897"
 }

@@ -45,6 +45,17 @@ Explicit selections cause no request. The unchanged child performs the separate
 manual observation request and the699 server route re-proves credentials,
 raw local membership and native link sets. Parent/router attachment remains root.
 
-At the first checkpoint only backend/new tests/dedicated backend CI are written;
-frontend implementation and actual CI/review remain pending. No live account,
-grant or provider access was observed, no deployment happened.
+The successor implements both new frontend files and tests. The backend fixture
+is generated through the actual local HTTP route; a second fixture is generated
+through the actual699 protected route/helper/observer with synthetic providers.
+The wrapper test also uses actual AuthProvider bootstrap; the service test uses
+the real API401 interceptor and proves no refresh POST or replay. Local348
+backend and114 frontend tests pass with no skips. Dedicated actual replica CI
+and independent review remain pending. No live account, grant or provider access
+was observed, no deployment happened.
+
+First checkpoint372 had a workflow selection defect:319 tests passed, but its
+asserted418 count failed because81 existing owner unit and18 new Mongo cases
+were absent from the command. The successor adds those two files; no weakened
+assertions or skipped Mongo acceptance. Dedicated CI must prove418 total and70
+actual Mongo cases, plus114 frontend tests and a governed CI build.
