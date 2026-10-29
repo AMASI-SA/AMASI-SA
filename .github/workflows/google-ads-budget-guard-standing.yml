@@ -5,6 +5,8 @@ on:
     branches: [codex/google-budget-guard-integration-20261029]
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
+      - backend/integrations_control_center/google_ads_paused_creation_budget.py
+      - backend/tests/test_google_ads_paused_creation_budget_mongo.py
       - backend/tests/test_google_ads_automation_authority_mongo.py
       - backend/tests/test_google_ads_budget_guard_lifecycle.py
       - backend/tests/test_google_ads_budget_guard_lifecycle_mongo.py
@@ -28,6 +30,8 @@ on:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
+      - backend/integrations_control_center/google_ads_paused_creation_budget.py
+      - backend/tests/test_google_ads_paused_creation_budget_mongo.py
       - backend/tests/test_google_ads_automation_authority_mongo.py
       - backend/tests/test_google_ads_budget_guard_lifecycle.py
       - backend/tests/test_google_ads_budget_guard_lifecycle_mongo.py
@@ -133,6 +137,7 @@ jobs:
             backend/tests/test_google_ads_guard_integration_mongo.py \
             backend/tests/test_google_ads_legacy_budget_settlement.py \
             backend/tests/test_google_ads_legacy_budget_settlement_mongo.py \
+            backend/tests/test_google_ads_paused_creation_budget_mongo.py \
             --junitxml="$RUNNER_TEMP/google-budget-guard-proof/junit.xml"
       - name: Reject missing tests, skips, or partial transaction evidence
         if: always()
@@ -147,15 +152,15 @@ jobs:
           output = Path(os.environ['RUNNER_TEMP']) / 'google-budget-guard-proof'
           root = ET.parse(output / 'junit.xml').getroot()
           cases = list(root.iter('testcase'))
-          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo', 'test_google_ads_budget_guard_lifecycle_mongo', 'test_google_ads_automation_authority_mongo'))]
+          mongo = [case for case in cases if case.get('classname', '').endswith(('test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo', 'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_budget_guard_probe_mongo', 'test_google_ads_budget_guard_lifecycle_mongo', 'test_google_ads_automation_authority_mongo', 'test_google_ads_paused_creation_budget_mongo'))]
           errors = [case for case in cases if any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped'))]
           proof = {'tests': len(cases), 'replica_mongo_tests': len(mongo), 'failures_errors_or_skips': len(errors),
                    'source_sha': (output / 'source-sha.txt').read_text().strip(),
                    'provider_calls': 0, 'runtime_enabled_by_workflow': False}
           (output / 'summary.json').write_text(json.dumps(proof, indent=2) + '\n')
           print(json.dumps(proof, indent=2))
-          assert len(cases) >= 124
-          assert len(mongo) == 29
+          assert len(cases) >= 133
+          assert len(mongo) == 37
           assert not errors, 'Any failure, error or skipped test invalidates transaction evidence'
           PY
       - name: Preserve bounded Mongo diagnostics

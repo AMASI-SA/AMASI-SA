@@ -28,6 +28,7 @@ async def test_real_standing_reservation_quota_and_unknown_settlement_are_atomic
     snapshot.standing_policy.update(activated_at=current.isoformat(),
         expires_at=(current + timedelta(days=1)).isoformat(), max_actions_per_day=1)
     command.inventory['observed_at'] = current.isoformat()
+    command.claim['native_inventory_digest'] = guard._digest(command.inventory)
     from integrations_control_center.google_ads_automation_authority import policy_authorization_digest
     command.claim['policy_digest'] = policy_authorization_digest(snapshot.standing_policy)
     await db[guard.AUTOMATION_POLICIES].insert_one(snapshot.standing_policy)

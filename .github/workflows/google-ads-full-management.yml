@@ -58,7 +58,7 @@ jobs:
           uname -r
           docker run -d --name google-full-management-rs \
             -p 127.0.0.1:27473:27473 mongo:8.0.26 \
-            --port 27473 --replSet gGoogleFull --bind_ip_all
+            --port 27473 --replSet gGoogleFull --bind_ip_all --setParameter enableTestCommands=1
           ready=0
           for attempt in $(seq 1 60); do
             if [ "$(docker inspect -f '{{.State.Running}}' google-full-management-rs)" != true ]; then
@@ -128,6 +128,7 @@ jobs:
           backend/tests/test_google_ads_automation_creation_plan.py
           backend/tests/test_google_ads_creation_budget_reader.py
           backend/tests/test_google_ads_paused_creation_budget.py
+          backend/tests/test_google_ads_paused_creation_budget_mongo.py
           backend/tests/test_google_ads_automation_creation_authority.py
           backend/tests/test_google_ads_automation_creation_authority_mongo.py
           backend/tests/test_google_ads_automation_creation_gateway.py
@@ -155,8 +156,10 @@ jobs:
             'test_google_ads_automation_creation_gateway_mongo', 'test_google_ads_automation_creation_worker_mongo',
             'test_google_ads_automation_budget_guard_mongo', 'test_google_ads_guard_integration_mongo',
             'test_google_ads_legacy_budget_settlement_mongo', 'test_google_ads_creation_inventory_mongo',
+            'test_google_ads_paused_creation_budget_mongo',
           }
           present={case.attrib.get('classname','').split('.')[-1] for case in cases}
+          assert sum(case.attrib.get('classname','').endswith('test_google_ads_paused_creation_budget_mongo') for case in cases)==8
           assert len(cases) >= 1000 and required <= present, (len(cases), sorted(required-present))
           assert not [case for case in cases if any(case.find(tag) is not None for tag in ('failure','error','skipped'))]
           print('Verified',len(cases),'backend tests including all required Mongo modules; zero skips')

@@ -1,5 +1,5 @@
 {
-  "status": "WIP_common_claim_and_postcommit_revalidation_units_passed_actualMongo_pending",
+  "status": "WIP_actual_replica_acceptance_cases_added_CI_pending",
   "parent_guard_checkpoint": "c82ed32a4dee3b470a237fcdfe31de0d25d629b3",
   "guard_tested_source": "0dcb03d9ce4a5778f29584cd4166b923439e8918",
   "runtime_implemented": "Guarded PAUSED claim/ledger/generation/reservation and terminal settlement wired through actual creation authority helpers; retained same-session public-call boundary. Runtime literalFalse.",
@@ -8,12 +8,14 @@
   "owner_limits_invented": false,
   "rollout_ready": false,
   "contract": "DESIGN.md",
-  "next": "Remotecheckpoint, migrate existing actualMongo fixtures to realcommon boundaries, add actualcrosspolicy/documentdrift/commitfault cases; independent fullruntime review. No deploy oractivation.",
+  "next": "Push exact newreplica test/workflow checkpoint and read actualCI results; resolve failures before runtime acceptance. Root owns next fresh-postretail commonpolicy/nativefloor seam.",
   "design_review": "budget_audit accepts design direction WIP only; requires native inventory fingerprint/account/currency/timezone/freshness binding, final pre-send check, exactresource/amount/ownership proof, no unknownrelease. Runtime acceptance still pending code/actualMongo review.",
   "tests": {
     "focused": "231passed4.25s-Werror: actualreader/plan, creationauthority, commonmax/unknownholds, standingauthority/guard/legacysettlement/integration",
     "realMongo": "Not yet validated for new common-claim source; prior643reader/parent0dcb CI is not proof of this source",
-    "broad_unit": "693passed9.39s-Werror; includes4nonconflictingowner/productdriftcases before/aftercommit and actualgateway transport collaborator"
+    "broad_unit": "693passed9.39s-Werror; includes4nonconflictingowner/productdriftcases before/aftercommit and actualgateway transport collaborator",
+    "actual_replica_cases": "8new collected(notexecutedlocally):4owner/productwriters before/aftercommit; commonstandingincrease44vcreation15 exceedscombined55; ownerrevokeafterreservationofflineOAuth; failCommandcommit91/connection-close one-wire/no-floor/no-send/fenceretention. Existing9creationauthorizerMongo cases migrated to trueguardcommit/generationboundaries.",
+    "actualMongo": "CIpending; local Mongo unavailable; no skipped run represented as proof."
   },
   "accounting": "One max per verified native campaign+budgetresource across native amount, immutable original creationhold and unreflected standingtarget. Original20/native22/native15 andpending25unitcases preserveonecounter. Legacyunmapped/unknownbinding/currency/resource/shared/absence failclosed.",
   "remaining": [
@@ -25,5 +27,6 @@
   ],
   "postcommit_scope": "Retained10smajorityreadsession revalidates currentowner/policy/intent/draft/canonicalproduct/commonclaim/nativeearliestfingerprint before returning to nativefloor. Detects interveningdrift; doesNOTserialize sharedmetadata writers or submissionfloor. Unknown/readfailure retainsoriginalhold/fence.",
   "native_floor_blocker": "Current shared management submissionfloor is not yet part of commonpolicyepoch/revocationtransaction. Root will assign bounded seam on fresh postretailbase; this source explicitly not deployable.",
-  "fake_semantics": "Transactionalunitcollaborator commitswrite-setonly; read snapshots do not overwrite concurrentowner/productchanges. Public nontransactionmajorityreads allowed; writeswithsession stillrequireactiveTX."
+  "fake_semantics": "Transactionalunitcollaborator commitswrite-setonly; read snapshots do not overwrite concurrentowner/productchanges. Public nontransactionmajorityreads allowed; writeswithsession stillrequireactiveTX.",
+  "independent_review": "budget_audit reviewedreader42units andpostcommitdelta with limitations; full common-claim/accounting runtime and actualreplica acceptance still pending."
 }

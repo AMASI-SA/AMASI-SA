@@ -15,6 +15,7 @@ import pytest_asyncio
 from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 
 from integrations_control_center import google_ads_automation_creation_authority as authority
+from integrations_control_center import google_ads_automation_budget_guard as guard
 from integrations_control_center.google_ads_automation_creation_policy import CREATION_POLICIES
 from integrations_control_center import google_ads_management as management
 from tests.test_google_ads_automation_policy_mongo import automation_mongo_uri
@@ -22,7 +23,8 @@ from tests.test_google_ads_automation_creation_authority import NOW, documents
 
 
 @pytest.fixture(autouse=True)
-def enabled(monkeypatch):
+def enabled(monkeypatch,guard_mongo_contract):
+    set_guard_time(NOW)
     for key in ('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','GOOGLE_ADS_AUTOMATION_WORKER_ENABLED','GOOGLE_ADS_AUTOMATION_CREATION_ENABLED'):
         monkeypatch.setenv(key,'true')
     monkeypatch.setattr(authority,'now',lambda current=None:current or NOW)
@@ -48,6 +50,7 @@ async def creation_db(automation_mongo_uri):
 
 
 async def authorize(db,native):
+    set_guard_time(NOW)
     return await authority.authorize_google_creation_claim(db,user_id='owner',account_id='123',proposal_id='proposal123',
         execution_claim_id='claim123',native_evidence=native,current=NOW)
 
@@ -58,15 +61,18 @@ async def policy(db):return await db[CREATION_POLICIES].find_one({'user_id':'own
 @pytest.mark.asyncio
 async def test_real_mongo_simultaneous_claims_reserve_exactly_once(creation_db,monkeypatch):
     db,native,intent=creation_db
-    entered=0;ready=asyncio.Event();original=authority._linearize_creation_claim
-    async def together(*args):
-        nonlocal entered
-        entered+=1
-        if entered==2:ready.set()
-        await ready.wait()
-        return await original(*args)
-    monkeypatch.setattr(authority,'_linearize_creation_claim',together)
-    results=await asyncio.gather(authorize(db,native),authorize(db,native),return_exceptions=True)
+    entered=asyncio.Event();resume=asyncio.Event();original=guard._commit_once
+    async def blocked(*args):
+        entered.set();await resume.wait();return await original(*args)
+    monkeypatch.setattr(guard,'_commit_once',blocked)
+    first=asyncio.create_task(authorize(db,native))
+    try:
+        await asyncio.wait_for(entered.wait(),5)
+        with pytest.raises(HTTPException) as second:
+            await authorize(db,native)
+        assert second.value.detail['code']=='google_budget_guard_operation_pending'
+    finally:resume.set()
+    results=[await first,second.value]
     assert sum(isinstance(result,dict) and result.get('authorized') is True for result in results)==1
     assert sum(isinstance(result,HTTPException) for result in results)==1
     stored=await policy(db)
@@ -107,9 +113,9 @@ async def test_real_mongo_claim_first_revocation_preserves_reservation(creation_
 
 @pytest.mark.asyncio
 async def test_real_mongo_postcommit_response_loss_keeps_unknown_identity(creation_db,monkeypatch):
-    db,native,intent=creation_db;original=authority._linearize_creation_claim
+    db,native,intent=creation_db;original=guard._commit_once
     async def lost(*args):await original(*args);raise ConnectionError('injected response loss after Mongo commit')
-    monkeypatch.setattr(authority,'_linearize_creation_claim',lost)
+    monkeypatch.setattr(guard,'_commit_once',lost)
     with pytest.raises(HTTPException) as caught:await authorize(db,native)
     assert caught.value.detail['authorization_cas_attempted'] and caught.value.detail['preserve_execution_fence']
     stored=await policy(db)
@@ -190,9 +196,12 @@ async def test_real_mongo_new_revision_and_generation_cannot_reset_daily_quota(c
 
 @pytest.mark.asyncio
 async def test_real_mongo_unclaimed_cancel_barrier_defeats_late_authorizer(creation_db,monkeypatch):
-    db,native,intent=creation_db;entered=asyncio.Event();resume=asyncio.Event();original=authority._linearize_creation_claim
-    async def delayed(*args):entered.set();await resume.wait();return await original(*args)
-    monkeypatch.setattr(authority,'_linearize_creation_claim',delayed)
+    db,native,intent=creation_db;entered=asyncio.Event();resume=asyncio.Event();original=guard._run
+    async def delayed(*args,**kwargs):
+        if kwargs['operation_id'].startswith('paused_reserve_'):
+            entered.set();await resume.wait()
+        return await original(*args,**kwargs)
+    monkeypatch.setattr(guard,'_run',delayed)
     pending=asyncio.create_task(authorize(db,native));await entered.wait()
     await db[management.PROPOSALS].update_one({'user_id':'owner','account_id':'123','proposal_id':'proposal123'},
         {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch','provider_write_reached':False}})
@@ -210,13 +219,13 @@ async def test_real_mongo_unclaimed_cancel_barrier_defeats_late_authorizer(creat
 
 @pytest.mark.asyncio
 async def test_real_mongo_unclaimed_barrier_ack_loss_keeps_fence_until_read_proof(creation_db,monkeypatch):
-    db,_,intent=creation_db;original=authority._linearize_creation_settlement
+    db,_,intent=creation_db;original=guard._commit_once
     await db[management.PROPOSALS].update_one({'user_id':'owner','account_id':'123','proposal_id':'proposal123'},
         {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,'safe_error':'execution_cancelled_before_dispatch','provider_write_reached':False}})
     async def lost(*args):await original(*args);raise ConnectionError('injected settled barrier response lost')
-    monkeypatch.setattr(authority,'_linearize_creation_settlement',lost)
+    monkeypatch.setattr(guard,'_commit_once',lost)
     with pytest.raises(HTTPException):await authority.settle_google_creation_claim(db,user_id='owner',account_id='123',claim_id='claim123',current=NOW)
     assert (await policy(db))['_creation_ledger'][intent['creation_identity']]['state']=='no_campaign'
     assert (await db[management.FENCES].find_one({'user_id':'owner','account_id':'123'}))['status']=='claimed'
-    monkeypatch.setattr(authority,'_linearize_creation_settlement',original)
+    monkeypatch.setattr(guard,'_commit_once',original)
     assert (await authority.settle_google_creation_claim(db,user_id='owner',account_id='123',claim_id='claim123',current=NOW))['released']
