@@ -27,5 +27,12 @@
     "backend": "141 passed, no skips, 1.45s",
     "frontend": "25 passed, no skips; see current PR checkpoint result",
     "independent_review": "Requested from budget_audit; pending"
+  },
+  "ci_diagnosis": {
+    "run": 40914120688,
+    "job": 123589672647,
+    "source": "88a861ce83bad02cf880f7baaadb80073712ff4a",
+    "observed": "Replica started; pytest34passed2.50s; final JUnit count assertion still expected5 but new projection/invalidation test makes6. Overall workflow failed; not accepted CI.",
+    "fix": "Exact replica count6, total minimum34, require new regression test identity; preserve zero skipped/failure/error assertions. Fresh run required."
   }
 }
