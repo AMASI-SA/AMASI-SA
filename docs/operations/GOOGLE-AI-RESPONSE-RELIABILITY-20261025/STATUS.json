@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T18:30:54.933Z",
+  "updated_at": "2026-10-29T18:35:09.827Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -29,7 +29,8 @@
     "current_verified_head": "15b656131813af54a043c33821e3aa5f69e7703c",
     "current_verified_source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
     "current_verified_runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
-    "latest_deployed_pr": 1609
+    "latest_deployed_pr": 1609,
+    "current_git_head": "e51f5b88b68905460417a01fb9ceb3704706c168"
   },
   "budget_semantics": {
     "pr": 1509,
@@ -90,7 +91,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "1616 source A build on actualhost; only after exactCIintentmatch freezeB, CI/review/adapter, merge/publish/verify3 andlive. 1609accepted do notrepublish.",
+  "next_safe_action": "Finish1618 sourceCI/review; monitorforeignReportsclosedlease withoutmodifying/app. ThenactualhostAintentfreeze,newB/CI/cleanadapter,rootmerge/onepublish/newfinish/verify3/liveacceptance.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1567,6 +1568,16 @@
       "state": "WIP_CI_VERIFIED_PENDING_FRESH_DIRECT_PROD_SOURCE",
       "review_fix": "Limiteddetailsstockout cannotclaimwholeproductstockout; variantavailabilitydoesnotuseparentquantity.",
       "clean_source": {
+        "pr": 1618,
+        "source": "31d582f6fddacef63f758c82f6b80e7583025516",
+        "tree": "69e128a20531149d53a62ee32b0445ca7d6daba2",
+        "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+        "branch": "codex/google-catalog-stock-review-source2-20261029",
+        "state": "SOURCE_A_FRESH_CI_REVIEW_PENDING_WAIT_FOREIGNLEASE",
+        "selective_diff": "Exact9reviewedruntime/test/workflowblobs from878;newSTATUSonly;zeropathoverlapReportsM5→M6",
+        "prior_attempt": "Frozeninstallfailedregistry.yarnpkg502(data-view-byte-offset1.0.1);noB/nolease/nopublish. Source1616closed superseded preserved."
+      },
+      "prior_clean_source": {
         "pr": 1616,
         "branch": "codex/google-catalog-stock-review-source-20261029",
         "source": "87812e17f4218b9bde05d5d4f73eed81f98d6161",
@@ -1763,6 +1774,17 @@
       "owner": "google_connection",
       "state": "WIP_IMPLEMENTING_OWNER_READONLY_AUDIT",
       "scope": "Fixednamespace metadata/effectiveprivileges/indexes/boundedownerlegacyshape; sanitizedbooleansonly; no writes/createIndex/no livecredentials. Cannotproveenginecommit/migration/paid authority."
+    },
+    "foreign_reports_release": {
+      "pr": 1615,
+      "merge": "e51f5b88b68905460417a01fb9ceb3704706c168",
+      "source": "c1ff123d87870a582932f4419e02588edeab5c46",
+      "runtime": "rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b",
+      "actor": "codex-marketing-reports-20261029",
+      "prepared_at": "2026-10-29T18:29:38.187795+00:00",
+      "lease": "observedactive;untouched",
+      "coordination": "PostedPR1615coordinationcomment; rootwaitsclosedleasebeforehostrehearsal",
+      "preserved": "EntireReportsproductiondelta,foreignuntrackedfiles,ownedlease"
     }
   }
 }
