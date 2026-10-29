@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-PLAN-SUGGESTIONS-20261027",
-  "branch": "codex/google-plan-suggestions-source-20261029",
+  "branch": "codex/google-plan-suggestions-status-20261029",
   "base": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
   "state": "Fresh direct-production source candidate; exact runtime/UI/tests preserved from reviewed WIP; new CI required",
   "scope": "Suggest season, explicit ISO dates, supported country, audience, message and category URL from exact spans of the supplied instruction. No automatic budget, product IDs, exclusions or authorization.",
@@ -11,8 +11,8 @@
     "provider_calls": "Synthetic reasoning only; no live model request",
     "review": "pending"
   },
-  "production_changed": false,
-  "next": "Fresh exact-source CI, immutable review, governed source double-build after inventory lease closes; then intent-only B and actual-host adapter. No authorization or ads writes.",
+  "production_changed": true,
+  "next": "Sourcequoted ownerproposal slice complete. Continue diagnostic1606 then catalogproofbridge and autoresumesafety withfreshproductionbase. No claimofautomaticproductselection/fundedlaunch or supportedShopping/PMax completion.",
   "updated_at": "2026-10-27T00:42:33.730Z",
   "stage": "reviewed_combined_source_ci_pending",
   "frontend_source": "539d7c1de211b3d3a97bb5874af544b4216f0bee",
@@ -41,27 +41,65 @@
     "release_editor": "502 then Preview Unavailable: resting after inactivity. Fresh Emergent home opens then DOM and screenshot protocol timeouts. No /app mutation or guard lease."
   },
   "reintegration_20261029": {
-    "base_inventory_source": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
-    "reviewed_source": "e343461d7f53c1d55ca6557d6f859538467b0935",
-    "state": "Inventory production merge incorporated normally; release not frozen",
-    "scope": "Original11 files only; preserve CAS/Ubuntu22.04/inventory workflow union and current dependencies/intent.",
-    "fresh_validation": {
-      "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
-      "result": "46 passed, no skips, 0.90s, exit0 after inventory merge",
-      "diff_check": "passed",
-      "frontend": "Not run locally; worktree has no node_modules. Fresh CI required."
-    },
-    "next": "Fresh backend/frontend CI and independent acceptance; coordinator alone freezes intent and releases.",
-    "provider_calls": 0,
-    "production_changed": false,
-    "inventory_production_merge": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
-    "preserved_remote_parent": "712277d165b71767f5560957ce4fcad8cf4aa329",
-    "release_intent_and_dependencies": "Identical to inventory production merge"
+    "ci_backend": 1236,
+    "ci_frontend": 226,
+    "suites": 18,
+    "source_ci": 40909813383,
+    "source_readiness": 40909813373,
+    "b_readiness": 40913275844,
+    "host20_job": 123587143941,
+    "root_full_manifests": "1025backend242control exact",
+    "independent_pair": "PASS",
+    "actual_host_a": "two cleanbuilds wholeintent exactCI",
+    "actual_host_b": "retry1PASS91.18s",
+    "app_adapter": "PASS68.65s",
+    "environment_recovery": "Hostautosuspended interrupted firstB rehearsal; /tmp lost; guardinactive/trackedM2clean confirmed. ResumedviaPreviewbutton withoutpaidchat; newcleanB rehearsal passed. Interruptedattemptnotcounted."
   },
   "release_source_20261029": {
     "preserved_wip": "269c56812e28ad1f186cb50f931a92165d320a4f",
     "preserved_tree": "04d4476f0f60e990611e98a81b741e69354ddcf2",
     "reason": "Strict v5 full-history intent gate rejects WIP merge ancestry despite zero netintentdiff. New source is direct child of currentproductionM2; prior WIP branch and all frozen releases retained unchanged.",
     "code_changes": "none relative to WIP; continuity STATUS only"
+  },
+  "status": "DEPLOYED_AND_ACCEPTED_BOUNDED_SCOPE",
+  "pr": 1604,
+  "deployment": {
+    "source_a": "86a1fdaf1c7442883f60b205c3486c3b64c608d8",
+    "intent_b": "0524ac771eca9ebe2e73735dc2fac92ebb39e2fc",
+    "merge": "050b3da6ffc9660b2022a111117fd928da07ab51",
+    "runtime": "rg5-59c349b8311dfa31f5f9eb38baa975a2e3d59eb79f10110d583bc9642ac6b21e",
+    "intent_sha256": "d9256640837d65071ca36ca682a2e8f8cbad8e6bd5d5776284b00c411d47083e",
+    "finish": "2026-10-29 20:01 Asia/Riyadh",
+    "publish_changes_clicks": 1,
+    "verified": true,
+    "checks": 3,
+    "lease_active": false,
+    "boot_started_at": "2026-10-29T17:00:27.796589+00:00",
+    "artifact": "15f01e42987efc91678d7392aaa9359d811f643473f2ad9045a4cc50ff23258d"
+  },
+  "live_acceptance": {
+    "input": "ركز على هدايا الشتاء بالسعودية، واستهدف الرجال الباحثين عن هدية، واستفد من المنتجات والحملات الناجحة عندنا.",
+    "result": {
+      "season": "هدايا الشتاء",
+      "market": "SA",
+      "audience": "الرجال الباحثين عن هدية",
+      "missing": [
+        "starts_on",
+        "ends_on",
+        "message",
+        "category_url"
+      ]
+    },
+    "source_quotes_visible": true,
+    "fill_empty_button": "PASS changedonlyseasonmarketandaudience inunsaveddraft",
+    "money_limits": "blank unchanged",
+    "saved_revision": 0,
+    "review_acknowledged": false,
+    "persisted": false,
+    "ad_writes": 0,
+    "policy_writes": 0,
+    "google_connection": "connected",
+    "restoration": "PASS reload restored empty instruction/season/market/audience andblanklimits, savedrevision0; no persistence",
+    "screenshot": "docs/operations/GOOGLE-PLAN-SUGGESTIONS-20261027/google1604-live-plan-20261029.jpg"
   }
 }
