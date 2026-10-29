@@ -1,0 +1,29 @@
+{
+  "task": "MARKETING-REPORTS-TIKTOK-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/reports-tiktok-canonical-20261029",
+  "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "state": "Source verified; release build and live acceptance pending",
+  "scope": "Correct TikTok Reports to reuse the native campaign reader and retain account totals independently of campaign coverage",
+  "root_cause": "Reports used the generic overview, which intentionally excludes TikTok account-only pseudo campaigns. Empty campaign rows then erased valid account totals. The prior upstream-only diagnosis was incorrect.",
+  "completed": [
+    "Canonical native TikTok hierarchy adapter with all campaign pages",
+    "31-day window partitioning for the Reports 62-day range",
+    "Account spend and conversion totals independent of campaign coverage",
+    "Platform conversion events remain separate from Salla orders and unavailable provider purchase revenue",
+    "Fail-closed missing metrics, changed pagination, Salla failures and cost calculations"
+  ],
+  "changed_files": ["backend/marketing_reports.py", "backend/tests/test_marketing_reports.py", "docs/operations/MARKETING-REPORTS-TIKTOK-20261029/STATUS.json"],
+  "validation": [
+    {"command": "PYTHONPATH=backend .local-test/venv/bin/python -m pytest backend/tests/test_marketing_reports.py -q", "exit": 0, "result": "18 passed"},
+    {"command": "MEZAN_CGROUP_ROOT=<isolated test cgroup: 10% usage> PYTHONPATH=backend .local-test/venv/bin/python -m pytest backend/tests/test_marketing_reports.py backend/tests/test_tiktok_native_hierarchy.py backend/tests/test_tiktok_native_reporting.py -q", "exit": 0, "result": "50 passed, 3 existing deprecation warnings"},
+    {"command": "git diff --check", "exit": 0, "result": "passed"}
+  ],
+  "test_environment_note": "The first combined run had 9 hierarchy failures because the shared host cgroup triggered the unchanged resource governor. A test-only cgroup fixture resolved them; no production guard was changed.",
+  "release": {"pr": null, "ci": "pending", "review": "local diff reviewed", "guard": "shared /app inactive at preflight", "deployment": "not started"},
+  "remaining": ["Freeze source A / intent B", "CI and actual-host clean-clone rehearsal", "Authorized merge/publish and three identity probes", "Live native/report same-period TikTok comparison and Snapchat regression"],
+  "next": "Commit source A remotely, run governed reproducible build, freeze intent-only B, then review CI before release.",
+  "production_changed": false,
+  "continuity_note": "Issue #1006 has reached GitHub's 2500-comment limit; task STATUS and task PR are the continuation record.",
+  "preserved": "Google catalog release and all unrelated production sources; no provider writes, credentials or customer data in this change."
+}

@@ -6,7 +6,7 @@ are distributed across Salla products.
 """
 import asyncio
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -152,7 +152,86 @@ async def snapchat_report(db, user_id, start, end, account_id=None):
         "status": "available" if accounts else "not_connected"}
 
 
+async def tiktok_report(db, user_id, start, end):
+    """Use the native TikTok page, preserving account totals independently.
+
+    Its conversion metric is an event count, never a purchased-order/revenue
+    estimate. The generic Ads Manager overview intentionally drops its
+    account-only pseudo campaigns, so it cannot supply this campaign table.
+    """
+    from integrations_control_center.tiktok_native_hierarchy import tiktok_workspace
+
+    windows, catalog, accounts, warnings = [], {}, {}, []
+    cursor = start
+    while cursor <= end:
+        window_end = min(end, cursor + timedelta(days=30))
+        first = await tiktok_workspace(db, user_id, from_date=cursor.isoformat(),
+            to_date=window_end.isoformat(), entity_type="campaign", page=1, limit=100)
+        pagination = first.get("campaign_pagination") or {}
+        count = int(pagination.get("total") or 0)
+        pages = int(pagination.get("pages") or 0)
+        if count > 10000 or pages > 100:
+            raise ValueError("tiktok_campaign_report_truncated")
+        entities = list(first.get("entities") or [])
+        for page in range(2, pages + 1):
+            result = await tiktok_workspace(db, user_id, from_date=cursor.isoformat(),
+                to_date=window_end.isoformat(), entity_type="campaign", page=page, limit=100)
+            current = result.get("campaign_pagination") or {}
+            if current.get("total") != count or current.get("page") != page:
+                raise ValueError("tiktok_campaign_snapshot_changed")
+            entities.extend(result.get("entities") or [])
+        unique = {(str(e["account_id"]), str(e["entity_id"])): e for e in entities}
+        if len(unique) != count or len(entities) != count:
+            raise ValueError("tiktok_campaign_report_truncated")
+        for account in first.get("accounts") or []:
+            accounts[str(account["account_id"])] = account
+        for key, entity in unique.items():
+            catalog[key] = entity
+        windows.append({"entities": unique, "totals": first.get("totals") or {},
+                        "identity_ready": (first.get("ai_readiness") or {}).get("campaign_identity_ready") is True})
+        cursor = window_end + timedelta(days=1)
+
+    rows = []
+    for (aid, cid), entity in catalog.items():
+        facts = [w["entities"].get((aid, cid), {}) for w in windows]
+        account = accounts.get(aid, {})
+        status = entity.get("status") or entity.get("operation_status")
+        rows.append({"id": f"tiktok:{aid}:{cid}", "provider": "tiktok", "campaign_id": cid,
+            "name": entity.get("entity_name") or cid,
+            "account_id": aid, "account_name": account.get("account_name") or aid,
+            "timezone": account.get("timezone") or "Asia/Riyadh", "currency": entity.get("currency"),
+            "status": status, "active": str(status or "").upper() in {"ACTIVE", "ENABLED", "ENABLE", "CAMPAIGN_STATUS_ENABLE"},
+            "spend_sar": strict_sum(number(f.get("spend_sar")) for f in facts),
+            "spend_native": strict_sum(number(f.get("spend_native")) for f in facts),
+            "platform": {"orders": strict_sum(number(f.get("conversions")) for f in facts), "sales_sar": None},
+            "salla": {}, "profitability": None,
+            "impressions": strict_sum(number(f.get("impressions")) for f in facts),
+            "clicks": strict_sum(number(f.get("clicks")) for f in facts)})
+    total = {key: strict_sum(number(w["totals"].get(key)) for w in windows)
+             for key in ("spend_sar", "conversions", "impressions", "clicks")}
+    complete = all(w["totals"].get("data_complete") and w["identity_ready"]
+                   and all(e.get("data_complete") for e in w["entities"].values()) for w in windows)
+    if not complete:
+        warnings.append("بعض تفاصيل حملات تيك توك لم تكتمل؛ إجمالي الحساب المتاح مستقل عن تفاصيل الحملات.")
+    try:
+        await attach_commerce(db, user_id, "tiktok", start, end, rows)
+        commerce_available = True
+    except Exception:
+        commerce_available = False
+        for row in rows:
+            row.update(salla={}, profitability=None)
+        warnings.append("تعذرت قراءة طلبات سلة؛ تكاليفها وأرباحها غير متاحة مؤقتًا.")
+    return {"provider": "tiktok", "rows": rows, "accounts": [],
+            "source": "tiktok_native_hierarchy_v2", "source_totals": total,
+            "status": "available" if rows or total["spend_sar"] is not None else "unavailable",
+            "warnings": warnings, "commerce_available": commerce_available,
+            "coverage": {"status": "complete" if complete else "partial"},
+            "conversion_metric": "conversion", "provider_revenue_available": False}
+
+
 async def other_report(db, user_id, provider, start, end):
+    if provider == "tiktok":
+        return await tiktok_report(db, user_id, start, end)
     from ads_manager.google_native_overview import GoogleAdsManagerService
     data = await GoogleAdsManagerService(db).overview(user_id, date_from=start.isoformat(),
         date_to=end.isoformat(), provider=provider, page=1, limit=10000)
@@ -284,6 +363,10 @@ def make_marketing_reports_router(db, current_user):
                 if source == "platform":
                     total["orders"] = strict_sum(number(t.get("purchases")) for t in item["source_totals"])
                     total["sales_sar"] = strict_sum(number(t.get("sales_sar")) for t in item["source_totals"])
+            elif item["provider"] == "tiktok" and item.get("source_totals"):
+                item["totals"]["spend_sar"] = number(item["source_totals"].get("spend_sar"))
+                if source == "platform":
+                    item["totals"].update(orders=number(item["source_totals"].get("conversions")), sales_sar=None)
             reconcile_financial_totals(item["totals"], source)
         return {"provider": provider, "source": source, "currency": "SAR",
                 "range": {"date_from": start.isoformat(), "date_to": end.isoformat(), "timezone": zone},
