@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-plan-evidence-integration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "WIP_SELECTIVE_CURRENT_PRODUCTION_INTEGRATION_FOCUSED_LOCAL_PASSED_FULL_CI_PENDING",
+  "state": "REVIEWED_EXACT_SOURCE_CI_PASSED_READY_FOR_ROOT_CURRENT_PRODUCTION_INTEGRATION",
   "reviewed_sources": {
     "store_observations": {
       "pr": 1611,
@@ -34,14 +34,50 @@
     "frontend_command": "CI=true python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GoogleCategoryMembershipReview.test.jsx src/components/marketing/GoogleStoreProductObservations.test.jsx src/components/marketing/GoogleCommercialPlan.test.jsx src/components/marketing/GooglePinnedCatalogReview.test.jsx src/services/googleCommercialPlanSuggestion.test.js",
     "frontend_result": "exit 0; 108 passed in 5 suites, 2.282s; zero skips",
     "diff_check": "git diff --check exit 0",
-    "real_mongo": "Not available locally. Dedicated CI retains exact strict gates: observations minimum91/exact14 Mongo cases, category minimum38/exact9 Mongo cases, required actual-router/writer cases and zero failures/errors/skips.",
-    "full_ci": "Required on the new immutable integrated source: both dedicated workflows, full Google backend/UI/build and applicable repository checks. Prior source results are not acceptance for this source."
+    "real_mongo": "Exact-source CI passed strict unchanged gates: observations 91 total including 14 actual Mongo cases, categories 38 including 9 actual Mongo cases, zero skips/failures/errors.",
+    "full_ci": {
+      "all_applicable_workflows_success": 13,
+      "head_sha": "cb365f34a94e77a34ead8c21bc850654468cb888",
+      "checkout": "6225a04f7fee8364b0a2b66bf91ae52e0c09dcb1",
+      "checkout_tree": "ed9cadb802a1b316d6d9bb0db6024dacee35524a",
+      "full_google": {
+        "run": 40933879315,
+        "backend": 1348,
+        "frontend": 272,
+        "suites": 20,
+        "build": "passed"
+      },
+      "category": {
+        "run": 40933879398,
+        "total": 38,
+        "mongo": 9,
+        "frontend": 108,
+        "build": "passed"
+      },
+      "observations": {
+        "run": 40933879424,
+        "total": 91,
+        "mongo": 14,
+        "frontend": 87,
+        "build": "passed"
+      },
+      "catalog_replica": 40933879396,
+      "readiness": 40933879246
+    }
   },
   "continuity": {
     "issue_1006": "Read-only confirmed 2500-comment cap; latest bounded comments predate this task. Do not append or alter old comments.",
     "canonical_ledger": "codex/google-ai-action-loop-status-20261025:docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/STATUS.json continuation_20261029 read; root owns its update.",
-    "handoff": "Draft PR must record exact source SHA/tree and fresh CI. Root reviews and selectively re-sources on then-current production if needed; no source/intent pair frozen here."
+    "handoff": "Draft PR must record exact source SHA/tree and fresh CI. Root reviews and selectively re-sources on then-current production if needed; no source/intent pair frozen here.",
+    "evidence_branch": "codex/google-plan-evidence-status-20261029"
   },
   "production_changed": false,
-  "next": "Push WIP source, create Draft PR, verify exact-source real Mongo/full CI, then hand immutable source/tree and logs to root for review and any separately governed release."
+  "next": "Root selectively integrates exact reviewed source on then-current production; preserve new inventory/retail/other attachments and rerun applicable integration CI. Source cb365f34 remains unchanged. No intent, merge or deployment performed by this task.",
+  "source": "cb365f34a94e77a34ead8c21bc850654468cb888",
+  "source_tree": "ed9cadb802a1b316d6d9bb0db6024dacee35524a",
+  "pr": 1622,
+  "independent_review": {
+    "root": "Read actual router and CommercialPlan seams; no confirmed blocker. 85 focused -Werror cases passed in 1.41s. Root independently checked full/category/observations CI logs.",
+    "release": "Not merged/deployed; root owns any fresh direct-production source and new intent/release."
+  }
 }
