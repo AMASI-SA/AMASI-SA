@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "standalone_backend_wip_actual_replica_ci_pending",
+  "state": "standalone_backend_exact_ci_green_independent_review_pending",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -77,14 +77,37 @@
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
   "verification": {
-    "local": "31focused-Werror passed1.01s, zero skips; initialmissingmodule red observed",
-    "actual_mongo": "7collectedcases owner/same-revisionfields/planrevision/connectionrevision/storeidentity/staff gates; no localMongo execution",
-    "ci": "dedicated38total/7actualMongo/zero-skips gate pending remotecheckpoint"
+    "local": "31focused/-Werror/zero skips1.04s; missingvisibilitycategory_hidden regressionredfixedtonull",
+    "actual_mongo": {
+      "run": 40941530637,
+      "job": 123685874721,
+      "checkout": "fee4b78 merge4dcintoM6e51f",
+      "result": "38passed4.07s incl7actualMongo/zero skips exactgate",
+      "logs_retrieved_independently": true,
+      "provider_transport": "fixture-only; no liveSalla permission or payload claim"
+    },
+    "independent_review": "google_product_acceptance assigned exact4dc; verdict pending"
   },
-  "next": "Run dedicated actualMongo CI, independent source review; root later attaches guarded route/UI on latest production. No liveprovider call or publish.",
+  "next": "Independent sourceverdict, then root owns guarded sharedroute/UI integration and latest-production acceptance. No runtime edit absent confirmed reviewfinding.",
   "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
   "implemented": "Membership enumeration only, not live inventorydetails. New3modules, pure/reader/API/Mongo tests and dedicatedUbuntu22.04/Mongo8.0.26 CI. Allinventoryunproved/adselectionfalse; Salla ids only, Mezanmappingunproved and unresolvednonnumericexclusions explicit.",
   "first_slice_permission": "Only fixed storeinfo/category/categoryproducts GETs; nativecategories read success proves currentendpoint capability. No products/variants endpoint called or productspermission claimed until futureinventory slice.",
   "transport_bound_limit": "Existing shared call_salla loads JSON before new512KiB decodedresponse guard; guard prevents pagination expansion, not a transport/peakmemory cap. No providerETag or transactional snapshot claim.",
-  "source_limit": "URL-only discovery matches top-level provider category rows, not arbitrary descendants/slug inference. Storedstatus/scope are not capability truth; nativeerrors explicit. No liveaccount/grant validation performed."
+  "source_limit": "URL-only discovery matches top-level provider category rows, not arbitrary descendants/slug inference. Storedstatus/scope are not capability truth; nativeerrors explicit. No liveaccount/grant validation performed.",
+  "source": {
+    "sha": "4dc781bcaae21acf0d08eff667af113f490d7656",
+    "tree": "78c923f98c2e4af07d5f96c0c75c0e84e3854a35",
+    "local_equivalent": "ce3394f54c19cd2cd0ade53e022e60cc00753e3c",
+    "pr": 1628,
+    "base": "e51f5b88b68905460417a01fb9ceb3704706c168"
+  },
+  "route_contract": {
+    "attach": "attach_google_live_category_routes(router,db,current_user)",
+    "method": "GET",
+    "path": "/google_ads/commercial-plans/{plan_id}/live-category-preview?expected_revision=INTEGER>=1&category_id=OPTIONAL_SAVED_ID",
+    "owner": "principal owner only; no caller store override",
+    "errors": "401auth,403owner,404planmissing,409revision/fields/ownedstore/capabilityunproved,422invalidquery,503boundedsourceunproved",
+    "response": "Savedplan identity/revision; sourceSalla category/store ids, sourceobservation interval, category_status, Salla product membership observations with unknowninventory and falseeligibility; optional URLexactproof, localresponsehash; traversal_complete separate remote_snapshot_atomic:false/provider_revision:null",
+    "current_status_null": "product.category_hidden:null when category visibility missing/unknown; no defaultactive"
+  }
 }
