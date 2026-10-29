@@ -220,12 +220,19 @@
     "preserved": true
   },
   "host_rehearsal": {
-    "state": "A_REBUILD_IN_PROGRESS_AFTER_PREVIEW_IDLE_RESTART",
+    "state": "SOURCE_A_EXACT_CI_INTENT_PASS_HOST_B_RUNNING",
     "root_observed_guard_active": false,
     "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
     "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
     "directory": "/tmp/google1634-source-a-resumed-20261029",
     "recovery": "Initialhostdisconnected502thenPreviewUnavailableinactive; resumedviaResumePreview no chat. /tmp priorintent/logbothmissing, appHEADfdaandtrackedclean. unrelated.emergent/testing anddeployer-agent-docspreserved.",
-    "next": "ReadcurrentactualAlog/frozenintent; requirefullSHA256match3daf beforeB; no lease/publishyet"
-  }
+    "next": "All11 B CI plus independent exactpair andactualhostB adapter; freshprod then normalmerge,appbuild,prepare/prepublish/publishone,finish3probes/live.",
+    "intent_sha256": "3daf7034acc4d67b17efbcdd145813c5fb6cc627db0c2354dfeeac72f724321d",
+    "source_build_seconds": [
+      4.85,
+      5.21
+    ]
+  },
+  "intent_b": "ec1280b0dd7c003423b1cf79a469a5625205057b",
+  "intent_b_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6"
 }
