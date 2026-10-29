@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T19:49:41.409Z",
+  "updated_at": "2026-10-29T20:08:14.296Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -19,26 +19,21 @@
       "lease_active": false
     },
     "current_verified": {
-      "deployment_sha": "15b656131813af54a043c33821e3aa5f69e7703c",
-      "source_sha": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
-      "runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
-      "finished": "2026-10-29 21:19 Asia/Riyadh",
+      "pr": 1618,
+      "deployment_sha": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "source_sha": "31d582f6fddacef63f758c82f6b80e7583025516",
+      "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+      "finished": "2026-10-29 22:56 Asia/Riyadh",
       "verified_three_probes": true,
-      "owned_release_lease_closed": true,
-      "boot_started_at": "2026-10-29T18:18:28.294227+00:00",
-      "pr": 1609
+      "owned_release_lease_closed": true
     },
-    "current_verified_head": "15b656131813af54a043c33821e3aa5f69e7703c",
-    "current_verified_source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
-    "current_verified_runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
-    "latest_deployed_pr": 1609,
+    "current_verified_head": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+    "current_verified_source": "31d582f6fddacef63f758c82f6b80e7583025516",
+    "current_verified_runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+    "latest_deployed_pr": 1618,
     "current_git_head": "2fba251ab73780d984b2c53a4f991bc98d61c441",
     "active_release_lease": {
-      "active": true,
-      "actor": "codex-google-catalog-stock-review-20261029",
-      "deployment": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-      "source": "31d582f6fddacef63f758c82f6b80e7583025516",
-      "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91"
+      "active": false
     }
   },
   "budget_semantics": {
@@ -90,18 +85,17 @@
     ]
   },
   "blockers": [
-    "Foreign Reports release lease codex-marketing-reports-20261029 remains active; root cannot start actualhostrehearsal or publish/close anotherownerslease. Latestreadliveidentitystill1609A690/runtime051; noforeignnewfinishobserved.",
     "No approved owner monetary policy verified; no funded activation permitted from general commercial instruction.",
     "Shared budget guard migration still WIP: current native/legacy/namespace/productioncommit proof and pausedcreationreservationmigration incomplete; externalGooglewriters cannotbe atomicallyserialized.",
     "Complete firstlaunch authority/gateway/worker, full sales/refund/cost/season evidence, fullsection/variantcoverage andsupportedcatalogliveacceptance still incomplete."
   ],
   "remaining": [
-    "Deploy reviewed stored-inventory review1616, selected-retail identity1617, saved-plan observations1611 and categorymembership1614 via fresh current-production v5 pairs.",
+    "Deploy reviewed retail1629, storage diagnostics1621 and saved-plan/category/linked evidence1627/1630 through fresh current-production v5 pairs.",
     "Complete separate replica commit/majorityreadback diagnostic1612 and actual policy/native commitment proof before mandatory sharedbudgetmigration1602; keep runtimeoff and preserve OAuth-independentrevocation.",
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Waitnewer1618finishthan22:21Riyadh; doNOTrepeatpublish; verify3exactidentity/closedlease+liveGooglecatalogUI. Duringlease onlyisolatedGitHub/localwork: preparefreshretailAonM7, planUI/category andpausedcreationguardWIP. No fundedactivitywithoutownerlimits.",
+  "next_safe_action": "PR1618 deployed, verified3 and leaseclosed. PR1629 Source Ae16 all11CI/root/independent passed; actualhost doublebuild/freeze running in /tmp/google1629-source-a-20261029. Require exactCIintent e8cf4478...; then intent-onlyB/allCI/hostadapter/normalmerge/prepare/prepublish/singlepublish/verify3/livebehavior. No financial activity without ownerlimits.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1976,10 +1970,10 @@
     },
     "paused_creation_shared_guard": {
       "branch": "codex/google-paused-creation-budget-wip-20261029",
-      "checkpoint": "fd0d4d21da0f602303622fcae3f280868b9e4acc",
-      "state": "WIP_COMMON_CREATION_CLAIM_TX_WIRED_LOCAL_TESTS_BROAD_MONGO_AND_REVIEW_PENDING",
+      "checkpoint": "20a06e1689708fc37c174146b3532b1c32a0055a",
+      "state": "WIP_RUNTIME_FALSE_POSTCOMMIT_RECHECK_LOCAL_PASS_REALMONGO_REVIEW_PENDING",
       "scope": "Newreservation+settlement typedcommands, atomiccreationclaim/ledger/generation+guardallocation, unknownACKretention, noLaunchAllocationauthority/noenable. Existingcreationnative readerrequiresrealbudgetresource/shared/referenceCount proof; exclusiveboundedreaderhunk authorized.",
-      "limits": "runtimefalse; originalholdimmutable maxpercampaignbudgetresource countedonce; unknownretain; positiveREMOVEDreleaseunsupportedfailclosed; no productionproof",
+      "limits": "Metadata/productwriters notserialized; submissionfloornotserialized. Reviewerfound one-processrace mayhitlocalregistry, requirecrossworker andold9CIcountassertion. No productionproof orpaidrights.",
       "reader_verification": "42unit/schema tests incl19new productionreaderpath/23plan, -Werror; no actualGoogleproviderrequest",
       "reader_scope": "Nativebudgetresource/accountjoin/sharedfalse/refcount1/DAILY/positiveamount/unique500bound; missing/malformedfailclosed; earliestobservedtimestampretained",
       "contract_review": "budget_audit accepts WIPimplementationdirection only; bind nativefreshidentity beforedispatch, retainexternalwriter limitation; no codeacceptanceyet",
@@ -2063,6 +2057,58 @@
       "focused_total": 49,
       "actual_mongo": 11,
       "live_limit": "ownerplanrev0; genuineownerinputs needed forpositiveevidence; no manufacturedbusinessplan"
+    },
+    "catalog_stock_review_release_final": {
+      "pr": 1618,
+      "status_branch": "codex/google-catalog-stock-review-status2-20261029",
+      "checkpoint": "a156b87c9db76abae4c13f43ba2b0eb5af98e45b",
+      "source": "31d582f6fddacef63f758c82f6b80e7583025516",
+      "intent": "f1ece7eda0d943f4e48fc9646db5800cf91b765e",
+      "merge": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+      "finished": "2026-10-29 22:56 Asia/Riyadh",
+      "verified": 3,
+      "lease_active": false,
+      "live": "Google5052346701connected22campaigns,planrev0blanklimits/no pins; catalog review correctlyunavailableuntil genuine ownerplan. No fabricatedpositiveinventoryacceptance."
+    },
+    "retail_release_m7": {
+      "pr": 1629,
+      "source": "e16b46f0453776f5bb471ae1e641a083af275c38",
+      "tree": "ff3360eb7cf9b5eada07aaddeb3516ea93c48e69",
+      "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "status_checkpoint": "6e6cdd3401c74c4cc08b57dfef9a22783416d8ed",
+      "state": "ALL11SOURCE_CI_PASSED_ACTUALHOST_A_BUILD_RUNNING",
+      "intent": "e8cf4478439f0029da1a81483f1a1370e9c872b725dab101a326157f613335b9",
+      "runtime": "rg5-dd1039e63743caf56c49f95b990bfcde8d586cd570378a8c9dec43f7761b7fdd",
+      "full_ci": 40943696508,
+      "backend": 1307,
+      "frontend": 261,
+      "root_logs": true,
+      "replica": "34total/6actual0skip"
+    },
+    "live_category_ui": {
+      "pr": 1630,
+      "source": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
+      "checkpoint": "603923517956e16838b034f31a1814191e09df68",
+      "state": "INDEPENDENT_PASS_ALL15CI_ROOT_REVIEW_PENDING",
+      "full": "1426backend391UI",
+      "focused": "48incl8actualMongo0skip227UI",
+      "root_review": false
+    },
+    "native_inventory_preview": {
+      "pr": 1631,
+      "branch": "codex/google-native-inventory-preview-20261029",
+      "source": "d2e591a7dd20bdcf026765bbf62d45f73e461920",
+      "state": "WIP_LABEL_CONFLICT_FIX_AND_REVIEW_PENDING",
+      "limits": "Explicit1..5products/nativecategoryreproof/boundedvariants; no atomicstock/size/preptime/mapping/eligibilityproof"
+    },
+    "merchant_observation": {
+      "pr": 1633,
+      "branch": "codex/google-merchant-observation-20261029",
+      "source": "fa5154b01f1f9854f1d9858cdd1988da6cc76914",
+      "state": "PURE_OBSERVER_WIP_99LOCAL_TESTS_AUTH_SEAM_ASSIGNED",
+      "owner": "google_launch",
+      "scope": "Newobserver/fixedMerchantv1stream; narrowadditive reporting.py boundreadhelper assigned existingcredential/writersunchanged; no actualproviderread/routeattached"
     }
   }
 }
