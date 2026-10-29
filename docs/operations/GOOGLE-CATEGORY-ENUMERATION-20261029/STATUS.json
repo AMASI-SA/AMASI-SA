@@ -15,20 +15,32 @@
     "backend/salla_inventory_sync_routes.py": "Existing public metadata products scope gate and explicit branches.read freeze; proposed preview does not require or enable branch inventory"
   },
   "official_api_contract": [
-    {"url": "https://docs.salla.dev/categories/list", "verified": "GET/categories; categories.read; response id/status/urls.customer/sub_categories/update_at and pagination"},
-    {"url": "https://docs.salla.dev/categories/products", "verified": "GET/categories/{id}/products; categories.read; category-scoped product id/name/sort and pagination; not inventory payload"},
-    {"url": "https://docs.salla.dev/5394168e0", "verified": "GET/products; products.read; category/status filter and lightformat supported"},
-    {"url": "https://docs.salla.dev/product-variants/list", "verified": "GET/products/{product}/variants; products.read; paginated source stock_quantity and variant ids"}
+    {
+      "url": "https://docs.salla.dev/categories/list",
+      "verified": "GET/categories; categories.read; response id/status/urls.customer/sub_categories/update_at and pagination"
+    },
+    {
+      "url": "https://docs.salla.dev/categories/products",
+      "verified": "GET/categories/{id}/products; categories.read; category-scoped product id/name/sort and pagination; not inventory payload"
+    },
+    {
+      "url": "https://docs.salla.dev/5394168e0",
+      "verified": "GET/products; products.read; category/status filter and lightformat supported"
+    },
+    {
+      "url": "https://docs.salla.dev/product-variants/list",
+      "verified": "GET/products/{product}/variants; products.read; paginated source stock_quantity and variant ids"
+    }
   ],
   "permission_findings": {
-    "required": ["categories.read or categories.read_write", "products.read or products.read_write"],
-    "not_assumed": "Existing default OAuth fallback contains neither categories nor products scopes; actual stored grants must be checked with public scope/status fields only. External connector category metadata says offline_access, but current official Merchant API docs require categories.read; no connector capability implies Mezan app grant.",
-    "missing_permissions": "Return capability_unavailable with exact missing scopes; no auth redirect, scope expansion, token or connection edits in new modules",
+    "required": "Native endpoint capability is proved by successful owner-triggered fixedGET response. Docs list categories.read andproducts.read, but storedscope is metadata only, not a hard deny/allow.",
+    "not_assumed": "Stored scope is not reliably authoritative: service.store_token_response uses token_payload.scope or DEFAULT_SCOPES; refresh uses newpayload.scope or doc.scope or DEFAULT. Missing scope is unknown, not denied, and configured fallback is not verified grant. Connector metadata does not imply Mezan permission.",
+    "missing_permissions": "Do not force OAuth relink solely for absent storedscope. Explicit native403/scope401 maps permission_unproved for that endpoint, no scope expansion; successful fixedGET proves read capability at observationtime only. No live probe performed in assessment.",
     "existing_client_maintenance": "call_salla GET can legitimately refresh OAuth and update integration credentials, or mark needs_reauth on verified token failure. New adapter must disclose this existing maintenance boundary; no separate auth implementation or direct token access. Guard store identity and connection revision before/after; refresh during review can invalidate proof and require retry."
   },
   "proposed_contract": {
     "route": "Explicit owner-triggered plan-scoped preview with expected_revision and one selected category already in saved plan, or resolved exact optional saved URL; root chooses final shared attachment after review",
-    "store_binding": "Read public user-owned salla_integrations store_id/domain/status/scope/token_revision metadata. GET/store/info before/after must match owned stored store_id. Missing identity or change invalidates response. Source scope failures do not grant additional permissions.",
+    "store_binding": "Read public user-owned salla_integrations store_id/domain/status/declaredscope/token_revision metadata, not encrypted credentials. Owner-triggered fixedGET/store/info before/after must match owned stored store_id. Missing identity/change invalidates response. Native endpoint success proves capability only at observationtime; explicit permission errors remain endpoint-specific.",
     "category_resolution": "Canonical positive numeric id, validated exact provider-returned category. URL is optional and never requested as a network destination. Match exact safely parsed HTTPS urls.customer from owned-provider category response (or previously verified same-store source), never slug/name guesses, parent inheritance, metadata.url or arbitrary external URLs.",
     "membership": "GET/categories/{numericid}/products paginated source is direct current membership evidence; no inference from section name or product sales. Category hidden or product explicit hidden/out/excluded remains ineligible. Missing status remains unknown.",
     "enumeration": "Strict sequential currentPage/perPage/totalPages/total/count consistency, canonical ids and duplicate rejection; never follow pagination links or external nextURLs. Bound pages/rows/bytes/time before each new call. Missing metadata or limit reached yields partial and no absent-product claim.",
@@ -55,7 +67,7 @@
     "this STATUS only; planning agent owns shared owner-plan UI and root owns final router attachment"
   ],
   "acceptance_regressions_required": [
-    "No provider call before owner/revision/scope/store binding proof; no foreign tenant or caller-selected store/account",
+    "No provider call before owner/revision/ownedstoremetadata binding; missing storedscope remains unknown and does not block explicit native readprobe or force OAuth relink. No foreign tenant/caller store override.",
     "Only fixed relative paths with canonical numeric ids; arbitrary URL, credentials, fragment, host suffix confusion, encoded path tricks and pagination external nextURL never fetched",
     "Optional exact urls.customer resolution, category hidden respected; no missing status default active",
     "Pagecount drift, missing envelope, repeatpage, duplicate id, total mismatch, timeout/cap/429/401/403 all partial or explicit unavailable; no complete absence claim",
@@ -65,5 +77,6 @@
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
   "verification": "Source and official primary-document assessment only; no new implementation tests, CI, live grant or store/API behavior verified",
-  "next": "Root reviews supported contract/limits and OAuth-maintenance boundary; then assigns new backend implementation. Coordinate UI with google_plan_integration; keep1623 accepted runtime frozen."
+  "next": "Root reviews supported contract/limits and OAuth-maintenance boundary; then assigns new backend implementation. Coordinate UI with google_plan_integration; keep1623 accepted runtime frozen.",
+  "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown."
 }
