@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "read_only_design_assessment_no_runtime_implementation",
+  "state": "implementation_wip_standalone_unattached",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -76,7 +76,8 @@
     "Source digest is local response content hash, never provider revision; source observation interval explicit, no snapshot immutability",
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
-  "verification": "Source and official primary-document assessment only; no new implementation tests, CI, live grant or store/API behavior verified",
-  "next": "Root reviews supported contract/limits and OAuth-maintenance boundary; then assigns new backend implementation. Coordinate UI with google_plan_integration; keep1623 accepted runtime frozen.",
-  "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown."
+  "verification": "23focusedlocal -Werror tests passed0.96s; initialmissingmodule red observed. Route/Mongo/CI tests pending; no actualproviderbehavior claim.",
+  "next": "Add standaloneAPI and actualMongo owner/revision/connection race tests plus dedicatedCI; independentreview before rootattachment.",
+  "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
+  "implemented": "New purevalidation, boundedfixedGETreader, standaloneownerroute. Membership enumeration only; allinventoryunproved, no adselection. Missingstoredscope allowednativeprobe; exactendpoint403 permission_unproved. NativeperPage60 acceptedandvalidated; declaredoversize stopsbeforeexpansion. No sharedfiles or providercalls."
 }
