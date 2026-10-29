@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T20:58:38.687Z",
+  "updated_at": "2026-10-29T21:45:56.328Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -31,7 +31,7 @@
     "current_verified_source": "31d582f6fddacef63f758c82f6b80e7583025516",
     "current_verified_runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
     "latest_deployed_pr": 1618,
-    "current_git_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
+    "current_git_head": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
     "active_release_lease": {
       "active": true,
       "actor": "codex-reports-tiktok-20261029",
@@ -39,6 +39,11 @@
       "source": "a7831b46374a161805d773934d5e1ff7ef1c79c4",
       "runtime": "rg5-a1f46ddcb8010e15abe58d9002fbb5ec6e5509fd9b987ff839831b1f095a8e99",
       "prepared_at": "2026-10-29T20:19:10.368984+00:00"
+    },
+    "active_lease": {
+      "actor": "codex-dashboard-hover-20261030",
+      "foreign": true,
+      "pr": 1640
     }
   },
   "budget_semantics": {
@@ -101,7 +106,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Finish exact1634 actualhost A and compareCIintent, freezeintent-only B/allCI/independentreview/hostB, freshhead normalmerge/prepare/prepublish/onepublish/3probes/actuallivebehavior. Continue isolated1637 UI, Merchantrootreview and explicit priorseasonbackend; storage1621 freshrelease next.",
+  "next_safe_action": "Awaitforeign1640newexplicitfinish/owner3probes+closedlease, rootverifyretailcodecarriedandliveShoppingpickerbehavior; neverrepublishold473da. FreshstorageSourceA mustdirectlypreservecurrent0bf. ContinueisolatedStandingDispatchFloor,priorseason1638 andMerchantownerroute; nofundedrights.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -2173,7 +2178,7 @@
       "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
       "tree": "0e3596142bf2266ba72c3443967feb2b844291ed",
       "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
-      "state": "A_B_HOST_EXACT_MATCH_INDEPENDENT_PAIR_PASS_B_CI_ONLY_CODEQL_PENDING",
+      "state": "MERGED_CARRIED_BY_FOREIGN_1640_ACTIVE_PUBLICATION_ROOT_DID_NOT_PUBLISH",
       "local": "308-Werror0skip6.35s,261UI/18zero skips14.116s",
       "ci": {
         "google": 40948016906,
@@ -2181,7 +2186,7 @@
         "catalog": 40948016611
       },
       "host": "A exact942122byte3dafCIintent;doublebuild4.85/5.21s; Bnormaladapter77.43s isolatedhealth/runtime verified; environmentidlesleepresumed UI no paidchat,oldtmpgoneandrebuilt.",
-      "status_checkpoint": "210c96efd75818a8767ea180fa3c88e781b2e593",
+      "status_checkpoint": "083e3dde5dea581776de1ed207b5284d13304ddd",
       "artifact": 12930730411,
       "intent": "3daf7034acc4d67b17efbcdd145813c5fb6cc627db0c2354dfeeac72f724321d",
       "runtime": "rg5-1d92cc5150dd80334e499eb4b32c394cbee4c5351596d4091e97d3aecde24ba0",
@@ -2200,7 +2205,12 @@
         "catalog": 40953098262,
         "catalog_actual_mongo": 6,
         "root_logs_reviewed": true
-      }
+      },
+      "merge": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
+      "all_11_b_ci_success": true,
+      "root_app_build": "62.77sexit0",
+      "root_prepare": "exit2 foreignleasealreadyactive",
+      "root_publish_clicked": false
     },
     "saved_plan_reader_contract_bug": {
       "confirmed_by": [
@@ -2269,13 +2279,17 @@
     "prior_season": {
       "assessment": "2741b3b99be131e8bb80929852153fd9a4dc995f",
       "branch": "codex/google-prior-season-evidence-20261029",
-      "state": "WIP_FIELDS_QUALIFIER_NEW_STANDALONE_READER_ROUTE_101_UNIT_PASS_ACTUAL_MONGO_PENDING",
+      "state": "CANDIDATE_FROZEN_103_UNIT_ACTUAL_12_MONGO_CI_PENDING_REVIEW",
       "owner": "google_seasons",
       "contract": "Owner-declaredexplicitpriorISOinterval<=366inclusive/end<currentstart/closedRiyadhday; alignmentunknown, no354/365shift; separateboundedpriorquery±1; existing14/14/30/90 unchanged; no profit/growth/coverage/paid claim.",
       "checkpoint": "d67087cdf4e39613a239738a2325659f3ae812d1",
       "root_contract_review": true,
       "no_shared_route_attach": true,
-      "no_ui": true
+      "no_ui": true,
+      "pr": 1638,
+      "source": "4ebf67fd3a51786689a407c9d3ee54d8ef782f6b",
+      "tree": "0c90d8da62beb6f47f8f7fa0f5559429e382f327",
+      "ci": 40954079047
     },
     "standing_dispatch_floor": {
       "audit": "baa9411f6f66506f8c49c562346cc09d89225b6e",
@@ -2285,6 +2299,18 @@
       "owner": "google_connection",
       "reviewer": "budget_audit",
       "scope": "TypedStandingDispatchFloor,currentpolicy+claim+allocation+proposal+epoch atomicfloor,expirybeforecommit/syncafterACK/unknownretain/noresend; creationfloorunchanged runtimefalse/noresume."
+    },
+    "foreign_dashboard_hover_release": {
+      "pr": 1640,
+      "source": "3803ba2a700f33a24bb5614bdae2284a6992e53e",
+      "source_parent": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
+      "intent": "758c0e8d0148c870759236d663e94aa567880c08",
+      "merge": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+      "runtime": "rg5-6fe0594abb1c10a8b290b46c056cd851e1bab39617c0043d645d9254f3bb5721",
+      "actor": "codex-dashboard-hover-20261030",
+      "state": "ACTIVE_LEASE_PUBLISH_STARTED_20261030_0042_RIYADH",
+      "root_observation": "actualstatusactive true/apphead0bf; allretailpreservedbyonlytwoDashboardfiledelta+intent. No rootclearlease/appmutation/repeatpublishafterrefusal",
+      "coordination_comment": 6509033978
     }
   }
 }
