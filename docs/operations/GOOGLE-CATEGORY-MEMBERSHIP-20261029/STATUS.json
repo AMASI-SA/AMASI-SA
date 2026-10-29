@@ -1,0 +1,44 @@
+{
+  "task": "GOOGLE-CATEGORY-MEMBERSHIP-20261029",
+  "branch": "codex/google-category-review-20261029",
+  "base": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "state": "Integrated WIP actual owner route/UI; not deployed; exact-source real Mongo/full CI and independent review required",
+  "build_dependency": {
+    "selectively_includes": "71e6f57d988e57396d0eaaa72dfa1fdc3970c537 reviewed observations integration (PR1611), no old intent history imported",
+    "integration_requires_root": "Re-source category-specific files and minimal attachment/render/test/CI hunks onto then-current production preserving all parallel work",
+    "shared_ownership": "Only category attach2lines in google_ads_routes; ownerplan category render/hint; tests/CI. No offer eligibility/mapping hunks, catalog bridge, product writers, budget/policy or other platforms changed."
+  },
+  "contract": {
+    "scope": "Saved plan pinned-minus-excluded products and explicit numeric category_ids; supplied section URL optional and never inferred",
+    "source": "Owner ProductV2 current raw_salla.id/categories or category only, matching normalized canonical IDs/category IDs and fresh writer revision/last_synced; BSON UTC dates accepted, stale/future or ambiguous/missing fields unknown, never old raw_salla_details fallback",
+    "membership": "Positive observation in stored source only; absent or empty is not remote nonmembership, no full category enumeration or descendants inference",
+    "url": "Only exact HTTPS equality to explicit raw category.url for matched categoryID; no generated URL, slug/name matching, URL fetch, or live destination claim",
+    "catalog_ids": "Mezan and Salla identity only; platform_catalog_mapping_verified=false always. Manual campaign association is not independently verified feed identity. No Merchant/offer/otherplatform mapping implemented.",
+    "bounds": "100selected products/40categories; source arrays100;32KBwhole BSONdoc beforeprojection; owner/product existingindexhint/no fallback;maxTime2sec/route6sec; duplicate identities fail closed; plan revision+fullfields reread; hidden/out-of-stock remain ineligible",
+    "authority": "Read-only source/provider writes0; eligible_for_ad_selection=false and execution_authorized=false; no inventory/preparation/size/profit/season proof"
+  },
+  "verification": {
+    "red": "New pure module import failed collection before implementation",
+    "backend": "38 passed -Werror no skips1.40s:29 new category pure/API cases plus9 existing actual-observations-router cases",
+    "frontend": "108 passed5suites no skips1.935s: category component/service + actual ownerplan + observations/catalog/suggestion regressions",
+    "mongo": "9 actual-replica cases authored incl actual normalize_salla_product/_details_patch and BSON dates, owner/duplicates/stale/future/oversize/index/full actual management router. Not run locally; new Ubuntu22.04/Mongo8.0.26 loopback27476 gCategoryReview workflow enforces38+ cases/exact9real/no skips",
+    "workflow_yaml": "Parsed jobs replica/frontend; diff check passed",
+    "local_build": "Candidate full Vite build completed; exact duration in tool evidence/PR; not a governed release/reproducibility proof"
+  },
+  "synthetic_example": {
+    "product_id": "123",
+    "membership": "observed_in_stored_source",
+    "matched_category_ids": [
+      "8"
+    ],
+    "mezan_product_id": "mpv2_123",
+    "salla_product_id": "123",
+    "category_url_status": "not_requested",
+    "remote_category_coverage_complete": false,
+    "platform_catalog_mapping_verified": false,
+    "eligible_for_ad_selection": false
+  },
+  "production_changed": false,
+  "provider_calls": 0,
+  "next": "Remote WIP/DraftPR, exact real Mongo/full UI/build CI, root-coordinated independent product acceptance; root owns latest-production re-source and any release. No B frozen."
+}
