@@ -1,0 +1,34 @@
+{
+  "source_sha": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
+  "source_tree": "fdf2724767049ff6319f8c361981b46df8d66152",
+  "new_only_blobs": {
+    "backend/integrations_control_center/google_merchant_product_observation.py": "38f86c9554d76b288828ec2b69ca0cce3b61a634",
+    "backend/integrations_control_center/google_merchant_observation_routes.py": "41aae137a8ea3ef03cb258decc4ea72a495acedf",
+    "backend/integrations_control_center/google_merchant_observation_choices.py": "cc4cd33410b9f737f7fa8bc7706415b837cadc19",
+    "backend/tests/test_google_bound_read_session.py": "e1dd609dd0118a4cc81e6c2900035c5d75727bd3",
+    "backend/tests/test_google_bound_read_session_mongo.py": "b59f16f5e25b63cdcf8bf8b040180a9418f957b1",
+    "backend/tests/test_google_merchant_product_observation.py": "2d0d4561a69233dabc793e1eb8261db534aa4ea2",
+    "backend/tests/test_google_merchant_observation_routes.py": "a07991513725921174534cdb2ce18463fcf3b80f",
+    "backend/tests/test_google_merchant_observation_routes_mongo.py": "eb18a84b2d9f226a2bd4bda90e782d08a482282d",
+    "backend/tests/test_google_merchant_observation_choices.py": "197b897ed649addc721a0c529ffb5f2979e8be1d",
+    "backend/tests/test_google_merchant_observation_choices_mongo.py": "ff0f92a4105d0290b7d508cf95dd83cc47090389",
+    "frontend/src/components/marketing/GoogleMerchantObservation.jsx": "531398260ddf74497e4721c378d9ed015ddfde32",
+    "frontend/src/components/marketing/GoogleMerchantObservation.test.jsx": "fcfecd7f88f542a22ce50536aaed1e66b3cc0ff6",
+    "frontend/src/components/marketing/GoogleMerchantObservationSelector.jsx": "0de238df623ed9f7b8fc60052c2de07af9645817",
+    "frontend/src/components/marketing/GoogleMerchantObservationSelector.test.jsx": "d15d608dcabd9a596aa7cf169e0adb5b6aeb828d",
+    "frontend/src/services/googleMerchantObservationChoices.js": "e06c17a338d13580d1983174ca1df846a474fa4d",
+    "frontend/src/services/googleMerchantObservationChoices.test.js": "5aabbe38cb358f06a6ee9cb21a6c6d9d80e77b9a",
+    ".github/workflows/google-merchant-observation.yml": "afceda7764f1e9de45a471b3798009850b03523a",
+    ".github/workflows/google-merchant-owner-observation.yml": "8f9725775d692e19dd182f15cebc3e766d21bcb3",
+    ".github/workflows/google-merchant-observation-ui.yml": "15c5d46c42818eac5f9f2e630d5290e142329101",
+    ".github/workflows/google-merchant-observation-choices.yml": "1c802ef879a734954e1f4a3dce8d7b225da4b08b"
+  },
+  "shared_reporting_whole_file_blob": "d3ccdc5a961ec6dd0037d880e8e0de0b6ad3cd1b",
+  "reporting_parity": "Removing exactly the accepted237-line helper insertion yields commercial5595 reporting byte-for-byte; _credential/CAS and all other existing bytes unchanged.",
+  "allowed_integration_deltas": {
+    ".github/workflows/google-merchant-observation-choices.yml": {
+      "change": "Add this attachment branch to push trigger only; every accepted job/test/count/timeout/replica boundary unchanged.",
+      "integration_blob_sha": "945776ab84c3d5347140a8cbd58293cdb0c1d6e1"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "task_id": "GOOGLE-MERCHANT-OBSERVATION-ATTACHMENT-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-merchant-observation-attachment-20261029",
+  "state": "coherent_attachment_WIP_candidate",
+  "parent_source_sha": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+  "parent_tree_sha": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
+  "accepted_merchant_source_sha": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
+  "source_identity": "The commit carrying this status is the immutable WIP checkpoint; no self-referentialSHA claimed.",
+  "production_changed": false,
+  "host_actions": 0,
+  "real_provider_calls": 0,
+  "paid_writes": 0,
+  "deploy_ready": false,
+  "source_scope": {
+    "new_accepted_files": 20,
+    "accepted_manifest": "ACCEPTED_BLOBS.json",
+    "accepted_blobs_exact": 19,
+    "accepted_workflow_delta": "choices workflow push branch addition only; jobs/gates unchanged",
+    "reporting": "Exact accepted whole blobd3ccdc5a961ec6dd0037d880e8e0de0b6ad3cd1b; stripping237-line helper equals5595 source byte-for-byte",
+    "router": "Four additive lines attach choices and protected observation with existing current_user; all commercial attachments preserved",
+    "workspace": "Two additive lines import and render self-authenticated selector with no inherited account/default props",
+    "full_workflow": "All60 backend+30 frontend original test paths preserved in order; add5each. Exact-source push trigger added. Dedicated accepted replica workflow keeps422/74 and122UI gates.",
+    "new_integration_tests": [
+      "backend/tests/test_google_merchant_observation_attachment.py",
+      "frontend/src/components/marketing/GoogleMerchantObservationAttachment.test.jsx"
+    ]
+  },
+  "verification": {
+    "backend": "358passed5.64s,-Werror0skip; includes10 new full-router/actualauth syntheticJWT cases",
+    "frontend": "Full current workflow689passed35suites12.014s,0skip; includes6 fullWorkspace/realAuthProvider cases",
+    "additional_focus": "Workspace/page/newattachment25passed3suites6.835s; all inherited fixtures preserved",
+    "parity": "20 accepted baseline blob identities recorded;19 unchanged finalblobs,1 trigger-only change; reporting nonhelper bytes unchanged; diffcheckpass",
+    "first_test_harness_fix": "FastAPI0.140 included-router path enumeration corrected to inspect the actual attached APIRouter; HTTP behavior tests were already passing."
+  },
+  "ci": "Fresh source/synthetic fullGoogle +dedicated actualMongo/UI/build pending after remote checkpoint",
+  "review": "Independent integration review pending; root owns final re-source after commercial1655 publishes",
+  "remaining": [
+    "No live attachment/permission acceptance yet.",
+    "No store mapping, inventory, Ads eligibility or campaign execution authority.",
+    "Global Mongo concurrency/admission and every possible cleanup failure remain outside the bounded contract.",
+    "Parent commercial1655 is frozen but its release pending; root must re-source after production advances."
+  ],
+  "next_safe_action": "Inspect exact push and syntheticCI, obtain independent full integration review, keep source frozen and save final status separately. Root handles final current-production source/intent/release."
+}
