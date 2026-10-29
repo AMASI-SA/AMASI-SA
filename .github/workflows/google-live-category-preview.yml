@@ -57,7 +57,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('live-category-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_live_category_mongo')]
-          assert len(cases) == 38 and len(replica) == 7
+          assert len(cases) == 40 and len(replica) == 7
           assert any(c.attrib.get('name') == 'test_actual_mongo_native_fixture_read_without_scope_or_mutations' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_plan_and_integration_race_invalidate_fixture_observation') for c in replica) == 4
           assert any(c.attrib.get('name') == 'test_actual_staff_is_not_owner_even_with_ads_read_permission' for c in replica)

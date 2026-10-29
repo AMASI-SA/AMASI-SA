@@ -129,3 +129,13 @@ async def test_missing_category_visibility_is_unknown_never_defaults_active():
     assert result["category_status"] == "unknown"
     assert all(p["category_hidden"] is None for p in result["products"])
     assert all(p["eligible_for_ad_selection"] is False for p in result["products"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path,expected_calls", [("/store/info", 1), ("/categories/8", 2)])
+async def test_oversized_nonpage_response_cannot_expand_native_reads(path, expected_calls):
+    db, caller, fields = setup()
+    caller.responses[path]["oversized"] = "x" * 600000
+    with pytest.raises(ValueError, match="provider_response_size_limit"):
+        await preview_live_category(db, owner_id="owner", fields=fields, caller=caller)
+    assert len(caller.calls) == expected_calls

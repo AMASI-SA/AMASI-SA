@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import re
 
 from salla_integration.service import SallaError, call_salla
-from .google_live_category_proof import canonical_id, checked_page, digest, safe_customer_url
+from .google_live_category_proof import canonical_id, checked_page, checked_response, digest, safe_customer_url
 
 PUBLIC_INTEGRATION = {"_id": 0, "store_id": 1, "store_domain": 1, "status": 1, "scope": 1, "token_revision": 1}
 
@@ -16,7 +16,7 @@ async def _native(db, owner, path, params, caller):
     if not (path in ("/store/info", "/categories") or re.fullmatch(r"/categories/[1-9][0-9]{0,29}(/products)?", path)):
         raise ValueError("unsafe_provider_path")
     try:
-        return await caller(db, owner, "GET", path, params=params)
+        return checked_response(await caller(db, owner, "GET", path, params=params))
     except SallaError as exc:
         raise CategoryProofUnavailable("permission_unproved" if exc.status_code == 403 else "native_read_unavailable") from None
 

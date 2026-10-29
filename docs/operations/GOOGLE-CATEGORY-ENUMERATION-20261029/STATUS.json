@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "standalone_backend_exact_ci_green_independent_review_pending",
+  "state": "confirmed_sizeguard_fix_frozen_fresh_ci_required",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -77,7 +77,7 @@
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
   "verification": {
-    "local": "31focused/-Werror/zero skips1.04s; missingvisibilitycategory_hidden regressionredfixedtonull",
+    "local": "33focused/-Werror/zero skips1.06s",
     "actual_mongo": {
       "run": 40941530637,
       "job": 123685874721,
@@ -86,9 +86,10 @@
       "logs_retrieved_independently": true,
       "provider_transport": "fixture-only; no liveSalla permission or payload claim"
     },
-    "independent_review": "google_product_acceptance assigned exact4dc; verdict pending"
+    "independent_review": "google_product_acceptance assigned exact4dc; verdict pending",
+    "fresh_gate_required": "40total/7actualMongo/zero skips on sizeguard successor"
   },
-  "next": "Independent sourceverdict, then root owns guarded sharedroute/UI integration and latest-production acceptance. No runtime edit absent confirmed reviewfinding.",
+  "next": "Exactfix remotecheckpoint/freshCI and independentreview; no other runtimechange planned.",
   "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
   "implemented": "Membership enumeration only, not live inventorydetails. New3modules, pure/reader/API/Mongo tests and dedicatedUbuntu22.04/Mongo8.0.26 CI. Allinventoryunproved/adselectionfalse; Salla ids only, Mezanmappingunproved and unresolvednonnumericexclusions explicit.",
   "first_slice_permission": "Only fixed storeinfo/category/categoryproducts GETs; nativecategories read success proves currentendpoint capability. No products/variants endpoint called or productspermission claimed until futureinventory slice.",
@@ -109,5 +110,11 @@
     "errors": "401auth,403owner,404planmissing,409revision/fields/ownedstore/capabilityunproved,422invalidquery,503boundedsourceunproved",
     "response": "Savedplan identity/revision; sourceSalla category/store ids, sourceobservation interval, category_status, Salla product membership observations with unknowninventory and falseeligibility; optional URLexactproof, localresponsehash; traversal_complete separate remote_snapshot_atomic:false/provider_revision:null",
     "current_status_null": "product.category_hidden:null when category visibility missing/unknown; no defaultactive"
+  },
+  "review_finding": {
+    "reviewer": "google_product_acceptance",
+    "confirmed": "Oversized nonpage storeinfo/categorydetail bypassed pagination-only decoded sizeguard and expanded native calls",
+    "regression": "2focusedtestsfailed beforefix; common checked_response now runs every_native result before processing/expansion",
+    "qualification": "Still postsharedclient JSONdecode, not transport or peakmemory cap"
   }
 }

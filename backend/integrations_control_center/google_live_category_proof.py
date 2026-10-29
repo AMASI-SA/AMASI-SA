@@ -27,12 +27,19 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def checked_page(response, requested_page):
-    if not isinstance(response, dict) or response.get("success") is not True or response.get("status") != 200:
+def checked_response(response):
+    if not isinstance(response, dict):
         raise ValueError("provider_response_unproved")
     encoded = json.dumps(response, ensure_ascii=False).encode()
     if len(encoded) > 512 * 1024:
         raise ValueError("provider_response_size_limit")
+    return response
+
+
+def checked_page(response, requested_page):
+    checked_response(response)
+    if response.get("success") is not True or response.get("status") != 200:
+        raise ValueError("provider_response_unproved")
     rows, pagination = response.get("data"), response.get("pagination")
     if not isinstance(rows, list) or not isinstance(pagination, dict) or any(not isinstance(r, dict) for r in rows):
         raise ValueError("pagination_unproved")
