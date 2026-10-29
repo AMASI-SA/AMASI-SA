@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/reports-calendar-handoff-20261030",
   "base": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
-  "state": "Authorized calendar correction publishing; final live reconciliation pending",
+  "state": "Published and verified: six-source layout plus exact live Salla period reconciliation",
   "scope": "Direct and unclassified order-source rows and standalone filters; one deduplicated Salla order universe across sources",
   "completed": [
     "Six-source Salla view; direct requires explicit marketing evidence",
@@ -57,42 +57,44 @@
       "result": "Both passed, isolated package identity/artifact verified. Merge tree equals reviewed B tree7b9d58160619fc16756cf330fde6523b24156e71."
     }
   ],
-  "remaining": [
-    "New explicit deployment finish and three probes; close matching lease.",
-    "Live Oct29 all-status Salla orders/sales equality, six-row footer screenshot.",
-    "Final durable handoff."
-  ],
-  "next": "Wait new explicit Deployment finished after this publication; run own guard verify --url https://mezansalla.com for three exact probes, confirm active=false, then reload all-source Salla Reports Oct29 and compare with provider/register reference.",
+  "remaining": [],
+  "next": "No pending deployment or lease. User may review /ads-manager/reports?source=salla&provider=all&from=2026-10-29&to=2026-10-29. Any future Google coverage change belongs to source integration scope; do not fabricate missing ad spend.",
   "production_changed": true,
-  "release_guard": "Own active v5 lease codex-reports-calendar-20261030; prepare/prepublish passed ready_to_publish=true. Publish changes clicked once; do not modify /app or reuse/clear this lease.",
+  "release_guard": "Verified=true; checks=3; exact source8c09/deployment08160/runtime1ab7; matching owner lease closed active=false.",
   "continuity": "Issue #1006 is at its comment limit; task STATUS and draft PR are the checkpoint records",
   "preserved": "All Google #1646 work; six-source Reports #1642; native ad readers; /app untracked .emergent/testing/ and deployer-agent-docs/.",
   "pr": 1651,
   "broader_regression_note": "The optional attribution-recovery suite has two existing failures, reproduced unchanged on production base 473da65caea094b46fc3ce74bb4daec3ac6d2b00: test_salla_live_source_details_shape_resolves_exact_snapchat_campaign (existing utm_content expectation) and test_bounded_sync_recovery_loads_full_order_attribution (existing sync fake mismatch). No files for those implementations or tests were changed.",
-  "live_reference": "Read all ten Salla API pages for 2026-10-29 in Asia/Riyadh, all statuses; stable pagination, unique identities and SAR amounts retained only in session for post-deployment comparison. Not yet compared to candidate runtime.",
-  "pr_note": "Superseded pair1649 closed without publish. Integrated pair1651 merged preserving A/B.",
+  "live_reference": "Fresh read of all10 Salla API pages for2026-10-29, all statuses, Asia/Riyadh:146 unique orders,40462.04SAR. Exact match with live order-register status-summary and Reports. Previous40493.36snapshot changed in provider; no forced adjustment.",
+  "pr_note": "PR1651merged/published/verified. Superseded pair1649closed without publication. Docs handoff branch is not a release candidate.",
   "previous_release_pair": {
     "source": "7cba292af8a709e770f1796effd2ed9ae38fc5a3",
     "intent": "16ea59e69a07f6981c3803b963e0238ed46a9002",
     "rehearsal": "Actual Emergent host and CI both passed; not deployed due concurrent production advancement"
   },
   "last_verified_release": {
-    "source": "ade9b8ec599d10c69a22314010967fbb6c26fc14",
-    "deployment": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
-    "runtime": "rg5-f0663e033649e1da330bb6d90ebbfff2b6593b2ecc3cd8f68ca108514732bbf8",
+    "source": "8c09b2df6489ff397feda526d7d4be99eb5f1e32",
+    "intent": "7c5f4a4edac2b5e488480afc84f23d65c1b46e43",
+    "deployment": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+    "runtime": "rg5-1ab7a9ea6c77e79dbae6bc9b199fdb7b1137dd17d970b1a9d1318d7b3ba0e606",
     "checks": 3,
-    "finished": "2026-10-29T22:08:00Z"
+    "finished": "2026-10-29T23:05:00Z",
+    "emergent_version": "8ee00b1"
   },
   "live_acceptance": [
-    "Six rows plus totals visually present at 100% zoom, viewport 1363x936; all columns fit.",
-    "Direct and unclassified standalone filters and product modal verified.",
-    "Product target=_blank noopener noreferrer opened a separate tab.",
-    "Independent Salla API and order-register date totals agree. Reports differs because it reuses advertising timestamp precedence. All inspected normalized dates have field_sources.order_date=salla_direct and order_date_inferred=false."
+    "Live source counts: Snapchat83,TikTok10,Meta26,Google1,explicitDirect0,unclassified26; sum146.",
+    "Source sales sum40462.04SAR and footer matches direct Salla API and order register.",
+    "At ctrl+0 viewport1363x936 DPR1, all6 rows (74.875px each) and totals fully visible; no horizontal overflow.",
+    "Direct/unclassified standalone filters, product modal and new-tab product links verified on identical frontend source before calendar followup.",
+    "Three deployed identity and public JSON probes passed; own lease inactive."
   ],
   "source_git_sha": "8c09b2df6489ff397feda526d7d4be99eb5f1e32",
   "intent_git_sha": "7c5f4a4edac2b5e488480afc84f23d65c1b46e43",
   "deployment_git_sha": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "runtime_release_id": "rg5-1ab7a9ea6c77e79dbae6bc9b199fdb7b1137dd17d970b1a9d1318d7b3ba0e606",
-  "production_note": "Layout release1642 verified earlier; this calendar followup is publishing, not yet claimed live."
+  "production_note": "New explicit Deployment finished2026-10-30 02:05 Asia/Riyadh; Emergent version8ee00b1.",
+  "limitations": [
+    "Google ad-spend coverage incomplete for selected period: aggregate spend/ROAS/net profit remain unavailable, not invented zeros. Google Salla orders and sales included.",
+    "Browser screenshot captured/visually inspected, but shared-file synchronization failed after5s; do not link a missing screenshot."
+  ]
 }
-
