@@ -549,6 +549,7 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             "remaining_amount": 1,
             "paid_amount": 1,
             "total_amount": 1,
+            "currency": 1,
             "has_remaining_amount": 1,
             "payment_status": 1,
             "payment_method": 1,
@@ -2479,3 +2480,4 @@ __all__ = [
     "DRIVER_COLLECTIONS",
     "DRIVER_PAYMENT_REVIEWS",
 ]
+

@@ -91,3 +91,52 @@ def test_receipt_signature_detection():
 
 def test_delivery_evidence_channels_are_distinct():
     assert len({RECEIPTS, DELIVERY_PROOFS, CUSTOMER_CONVERSATION_EVIDENCE}) == 3
+
+
+
+def _partial_cod_order():
+    return {
+        "payment_method": "cod", "payment_status": "partial", "payment_collection_status": "partial",
+        "remaining_amount": 0, "has_remaining_amount": False, "total_amount": 300, "paid_amount": 0,
+        "raw_by_source": {"salla_direct": {
+            "payment_method": "cod", "amounts": {"total": {"amount": 300, "currency": "SAR"}},
+            "payment": {"status": "partial"},
+            "payment_actions": {"remaining_action": {"remaining_amount": None, "has_remaining_amount": False,
+                "paid_amount": {"amount": 50, "currency": "SAR"}}},
+        }},
+    }
+
+
+def test_partial_cod_uses_label_balance_instead_of_normalized_zero():
+    from store_courier_balance import cod_balance_when_salla_omits_remaining
+    order = _partial_cod_order()
+    raw = order["raw_by_source"]["salla_direct"]
+    label = cod_balance_when_salla_omits_remaining(raw, raw["payment_actions"]["remaining_action"])
+    assert label["amount"] == 250
+    assert authoritative_outstanding_amount(order) == label["amount"]
+
+
+def test_raw_explicit_cod_balance_recovers_normalized_zero():
+    order = _partial_cod_order()
+    order["raw_by_source"]["salla_direct"]["payment_actions"]["remaining_action"]["remaining_amount"] = {"amount": 250, "currency": "SAR"}
+    assert authoritative_outstanding_amount(order) == 250
+
+
+def test_uncertain_partial_cod_does_not_appear_paid():
+    order = _partial_cod_order()
+    del order["raw_by_source"]["salla_direct"]["payment_actions"]["remaining_action"]["paid_amount"]
+    with pytest.raises(StoreDeliveryRuleError, match="authoritative_outstanding_amount_unavailable"):
+        authoritative_outstanding_amount(order)
+
+
+def test_cod_currency_conflict_does_not_become_zero():
+    order = _partial_cod_order()
+    order["raw_by_source"]["salla_direct"]["payment_actions"]["remaining_action"]["paid_amount"]["currency"] = "QAR"
+    with pytest.raises(StoreDeliveryRuleError, match="authoritative_outstanding_amount_unavailable"):
+        authoritative_outstanding_amount(order)
+
+
+def test_paid_canonical_order_cannot_recollect_stale_provider_cod():
+    order = _partial_cod_order()
+    order["payment_status"] = "paid"
+    assert authoritative_outstanding_amount(order) == 0
