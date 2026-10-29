@@ -1169,15 +1169,15 @@
         "Initial network partial-clone checkout failed; discarded as proof, independent local object clone succeeded.",
         "First freeze invocation lacked public REACT_APP_BACKEND_URL; corrected invocation passed without source changes."
       ],
-      "production_changed": "no",
-      "next": "Wait final CodeQL, fresh production ref; normal merge preserving A/B, guard inactive then /app ff-only, adapter materialization, prepare/prepublish, one Republish, newer finish and three identity checks plus live functional checks.",
+      "production_changed": "live deployment no; /app ff-only plus adapter materialization in progress",
+      "next": "Require /app adapter success and matching identity; prepare/prepublish immediately before one publish. No lease or publish yet.",
       "pair_independent_review": "PASS: re-computed backend1022/control242 full Git manifests, ancestry and only-intent diff; source frontend unchanged and bound to A",
       "b_ci": {
         "release_readiness": 40902880964,
         "clean_clone_adapter_job": 123550194704,
         "google_full": 40902880974,
         "google_cas": 40902881056,
-        "status": "All relevant runtime/release checks passed; final CodeQL Python still running"
+        "status": "19 workflow runs SUCCESS; TikTok Creator intentionally skipped; no pending or failed run before normal merge"
       },
       "live_baseline": {
         "observed": "2026-10-29 before this release",
@@ -1190,7 +1190,9 @@
         "creation": "disabled",
         "oauth_relink_performed": false,
         "ad_writes_performed": false
-      }
+      },
+      "merge": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
+      "production_branch_changed": "yes, normal merge preserving frozen A/B"
     }
   }
 }
