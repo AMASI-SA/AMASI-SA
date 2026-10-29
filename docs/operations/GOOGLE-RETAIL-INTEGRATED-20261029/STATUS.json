@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "task": "google-retail-integrated",
+  "date_utc": "2026-10-29",
+  "branch": "codex/google-retail-integrated-20261029",
+  "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "status": "combined source locally tested; immutable CI and independent integration review pending; not deployment-ready",
+  "owned_files": [
+    "backend/integrations_control_center/google_ads_ai.py",
+    "backend/integrations_control_center/google_ads_management.py",
+    "backend/integrations_control_center/google_ads_retail_identity.py",
+    "backend/integrations_control_center/google_ads_routes.py",
+    "backend/integrations_control_center/google_ads_workspace.py",
+    "backend/tests/test_google_ads_ai.py",
+    "backend/tests/test_google_ads_ai_route_context.py",
+    "backend/tests/test_google_ads_management.py",
+    "backend/tests/test_google_ads_workspace.py",
+    "docs/operations/GOOGLE-RETAIL-INTEGRATED-20261029/STATUS.json",
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx"
+  ],
+  "components": {
+    "backend": {
+      "pr": 1617,
+      "source": "c7a36165f48f433ab3275320187e4d9c5b298020",
+      "tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
+      "integration": "Exact nine-file delta from DADA applied with git apply --check to freshly observed M6; all nine resulting files byte-equal reviewed source; no whole stale routes overwrite."
+    },
+    "frontend": {
+      "pr": 1620,
+      "source": "0972717d35582c45371863e833c7ee29464275d7",
+      "tree": "5d9bf0341fcb0793160d9c1ec7d66215dad6d165",
+      "sealed_checkpoint": "436494bce4552b20ef633b234aecae86f9a4a512",
+      "integration": "Only reviewed composer and its tests copied exactly; no prior WIP STATUS files copied."
+    }
+  },
+  "behavior": [
+    "Manual Shopping/retail PMax and AI selected offers require complete native inventory, unique account/merchant/language/channel/feed/item identity, exact campaign feed and known online in-stock eligibility.",
+    "Preview and approved dispatch share fresh native evidence; drift and old previews without proof fail closed. Campaign creation remains PAUSED.",
+    "Owner product-to-offer association is explicitly unverified manual selection. Eligible Google offer status is not proof of store identity, attribution, campaign delivery or profitability.",
+    "UI uses complete account/merchant-scoped inventory, recognized native eligibility and stock, duplicate ambiguity and explicit-feed mismatch gating; old choices remain visible/removable without autoediting; blank-feed AI flow and generic all-feed option remain.",
+    "Search and nonretail PMax unchanged; Reports, automatic-resume refusal and credential-CAS production changes preserved."
+  ],
+  "limits": [
+    "No category membership or independently verified product-feed mapping is added.",
+    "No live provider read/write, paid activation, standing resume or automatic first-funded-launch authority is added.",
+    "Full native identity and freshness remain server responsibilities; UI availability is not launch authorization."
+  ],
+  "validation": {
+    "exact_component_bytes": "verified",
+    "local_backend": {
+      "passed": 308,
+      "skipped": 0,
+      "seconds": 6.49,
+      "warnings_as_errors": true,
+      "official_sdk": "google-ads33.0.0/v25",
+      "mongo": "not executed locally; real Mongo CI pending",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_workspace.py backend/tests/test_google_ads_ai.py backend/tests/test_google_ads_ai_route_context.py backend/tests/test_google_ads_campaign_builder.py backend/tests/test_google_ads_protobuf_contract.py"
+    },
+    "local_frontend": {
+      "passed": 252,
+      "suites": 18,
+      "skipped": 0,
+      "seconds": 11.867,
+      "scope": "same18 frontend paths as Google Ads full management workflow; governed Node22.23.2/Yarn1.22.22; unchanged frozen lock"
+    },
+    "combined_mongo_ci": "pending real Mongo8.0.26 full workflow",
+    "independent_integration_review": "pending",
+    "release_guard_host": "untouched",
+    "provider_calls": false,
+    "paid_writes": false
+  },
+  "next": "Save combined source and draft PR; run integrated CI and independent review; root later refreshes production and creates fresh v5 Source A/Intent B."
+}

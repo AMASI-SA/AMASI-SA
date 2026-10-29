@@ -11,6 +11,58 @@ from integrations_control_center import google_ads_ai
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["SHOPPING", "PERFORMANCE_MAX"])
+@pytest.mark.parametrize("case", ["unique", "collision", "language", "unknown", "merchant", "account", "incomplete", "model_feed_change"])
+async def test_retail_ai_route_binds_unique_native_offer_and_generated_feed(monkeypatch, family, case):
+    from tests.test_google_ads_workspace import retail_inventory, CUSTOMER
+    inventory = retail_inventory()
+    if case == "collision": inventory["items"] += retail_inventory(feed="QA", status="NOT_ELIGIBLE", availability="OUT_OF_STOCK")["items"]
+    if case == "language": inventory["items"] += retail_inventory(language="en")["items"]
+    if case == "unknown": inventory["items"][0]["availability"] = None
+    if case == "merchant": inventory["items"][0]["merchant_id"] = "999"
+    if case == "account": inventory["items"][0]["resource_name"] = inventory["items"][0]["resource_name"].replace(CUSTOMER, "777")
+    if case == "incomplete": inventory["complete"] = False
+    contexts = []
+    client = SimpleNamespace(closed=False)
+    async def metadata(): return {"account_id": CUSTOMER, "currency_code": "SAR", "time_zone": "Asia/Riyadh"}
+    async def assets(): return [], True
+    async def close(): client.closed = True
+    client.account_metadata, client.assets, client.close = metadata, assets, close
+    async def principal(*args, **kwargs): return {"user_id": "owner", "actor_id": "owner", "owner": True, "can_draft": True}
+    async def account_client(*args, **kwargs): return client, "epoch"
+    async def lookup(provider, kind, **kwargs):
+        assert provider is client
+        if kind == "products": return inventory
+        if kind == "merchants": return {"items": [{"id": "123"}], "complete": True}
+        return {"items": [], "complete": True}
+    async def generate(*args, **kwargs):
+        contexts.append(kwargs["account_context"])
+        return {"draft": {"shopping": {"merchant_id": "123", "feed_label": "QA" if case == "model_feed_change" else "SA"},
+                          "groups": [{"product_offer_ids": ["SKU1"]}]}, "provider_writes": 0}
+    monkeypatch.setattr(routes, "principal", principal)
+    monkeypatch.setattr(routes, "account_client", account_client)
+    monkeypatch.setattr(routes, "google_lookup", lookup)
+    monkeypatch.setattr(google_ads_ai, "generate_google_campaign_draft", generate)
+    app, router = FastAPI(), APIRouter()
+    async def user(): return {"id": "owner"}
+    routes.attach_google_ads_management_routes(router, object(), user)
+    app.include_router(router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as http:
+        response = await http.post("/google_ads/ai/draft", json={"account_id": CUSTOMER, "campaign_type": family,
+            "prompt": "مسودة اختبار", "budget_ceiling_native": "1", "product_ids": ["1"],
+            "product_offer_selections": [{"product_id": "1", "merchant_id": "123", "offer_id": "SKU1"}]})
+    assert client.closed is True
+    if case == "unique":
+        assert response.status_code == 200, response.text
+        association = contexts[0]["product_offer_associations"][0]
+        assert association["verification_status"] == "provider_eligibility_verified"
+        assert association["mapping_status"] == "owner_selected_unverified" and association["feed_label"] == "SA"
+    else:
+        assert response.status_code in {409, 422}, response.text
+        assert len(contexts) == (1 if case == "model_feed_change" else 0)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("required_failure", [False, True])
 async def test_search_context_skips_unrelated_permissions_and_drains_failed_required_reads(monkeypatch, required_failure):
     calls, model_contexts = [], []
