@@ -1,5 +1,5 @@
 {
-  "status": "MERGED_EXACT_B_TREE_HOST_APP_BUILD_NEXT_NO_LEASE_OR_PUBLICATION",
+  "status": "PUBLISHING_ONCE_OWN_V5_LEASE_AWAIT_NEWER_FINISH",
   "production_base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
   "production_base_tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -225,7 +225,7 @@
     "general_gates": "All actual successful job logs read. Security full frontend2370 tests/318 suites; balance618+16 backend/187UI; G47 327backend/119UI zero-skip gates; stock875 zero-skip gate; catalog34; payments141; both CodeQL uploads complete. Scoped unrelated Snap and host/manual jobs were skipped by existing workflow logic, not disabled.",
     "root_review": "Root accepted unchanged runtime/shared seams, independently133backend-Werror/29UI on e398, reviewed final4ca0e sourceCI126/9Mongo,117/6Mongo,1307backend,261UI/build4.03s and all13 workflows success."
   },
-  "next": "Readactualguardinactive then/appffexactmerge/normaladapterbuild; prepare/prepublish/onepublish/newerfinish/3verify/closed/liveownertechnicalprobes.",
+  "next": "Wait explicit newer Deployment finished; own guard verify three identity/JSON probes closes matching lease; confirm inactive; perform owner live namespaceGET/technicalPOSTonce/receiptGET; remote checkpoint.",
   "prior_historical_checkpoint": {
     "source": "e3984c28be8890dda03b37154347079685aa6038",
     "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
@@ -451,7 +451,7 @@
       "exact_source_runtime": true,
       "expected_pre_materialization_warning": "Ignored backend/release_identity.json absent before adapter materialization; final verification succeeded."
     },
-    "lease": false,
+    "lease": true,
     "published": false,
     "independent_pair": "budget_audit fullhistory A/B/directbase/intentonly and1032backend245control1020frontend/proof/e05663/fullruntime PASS.",
     "merge": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
@@ -459,6 +459,19 @@
     "merge_parents": [
       "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
       "b4cd1c0a0b2c2a550a00b40e34a4961ca9027f0d"
-    ]
+    ],
+    "host_app": {
+      "exit": 0,
+      "seconds": 91.15,
+      "isolated_runtime_artifact_verified": true,
+      "exact_source_runtime": true,
+      "merge": "7a46f818c0abb7b3f829dc5b3a1e93b757348881"
+    },
+    "actor": "codex-google-storage-20261030",
+    "prepare": "PASS",
+    "prepublish": "PASS",
+    "publish_clicked_once": true,
+    "publish_started_utc": "2026-10-29T22:38:40.725Z",
+    "newer_finish_seen": false
   }
 }
