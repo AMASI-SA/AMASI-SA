@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T18:00:01.297Z",
+  "updated_at": "2026-10-29T18:05:10.233Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -1597,7 +1597,7 @@
           "readiness": 40920771219,
           "artifact": 12917913169
         },
-        "state": "MERGED_APP_MATERIALIZATION_RETRY_PENDING_NOT_PUBLISHED",
+        "state": "MERGED_APP_BUILD_PASSED_HOST_SESSION_RESUMING_GUARD_RESULT_UNKNOWN",
         "root_tests": "181passed2.16s -Werror0skip",
         "independent": "181focused+330compatibility pass -Werror0skip; independent M4-toA redgreen",
         "root_manifests": "Exact1026backend243control and runtimecompactprojection; strictfullhistoryPASS",
@@ -1621,19 +1621,27 @@
           ],
           "rootlogs": "reviewed"
         },
-        "next": "Finish cleanappmaterialization then prepare/prepublish/onepublish/newerfinish/verify3/closedlease/livebehavior. Never squash/rebase pair orpublishwithoutnewguard.",
+        "next": "After editor reconnect, read actualguard/appHEAD/gitstatus/outputs; if ownmatchinglease active inspectbeforeanyappmutation, nevertouchforeignlease. Re-run applicableappadapter/prepublish and onlythenonepublish. No1609publishhasoccurred.",
         "merge": "15b656131813af54a043c33821e3aa5f69e7703c",
         "status_branch": "codex/google-resume-safety-status-20261029",
-        "status_checkpoint": "5243fc9e37a49808aa3b9fe6ade47a693e27a61e",
+        "status_checkpoint": "d8eff1810ca1047d89d78d15dc9a89790ebcb302",
         "app_materialization": {
           "first": "REFUSED prepackaged bytecode backend/__pycache__, whiletrackedclean. No lease/publish. Two generatedpyc files mtime2026-10-29T17:31:55Z; origin not assumed.",
-          "recovery": "Guardactivefalse. Generatedcache preserved by moving to/tmp/google1609-bytecode-quarantine; no sourcechange/foreigndeletion. Retrylog/tmp/google1609-app-materialize-retry1.log running."
+          "recovery": "Guardactivefalse. Generatedcache preserved by moving to/tmp/google1609-bytecode-quarantine; no sourcechange/foreigndeletion. Retrylog/tmp/google1609-app-materialize-retry1.log running.",
+          "retry1": "PASS59.65s; exact source/runtime package proof, trackedclean; two foreigndirs preserved"
         },
         "publication": {
           "published": false,
           "publish_changes_clicks": 0,
           "baseline_finish": "2026-10-29 20:39 Asia/Riyadh"
-        }
+        },
+        "guard": {
+          "active": "unknown until recovered actualhost status",
+          "prepare": "command started; sessiondisconnected before output observed",
+          "prepublish": "unobserved, do notpublish",
+          "actor": "codex-google-resume-safety-20261029"
+        },
+        "host_recovery": "Emergent refreshed UI says website resuming1–2min/staticpreview. User editor Untitled1 remainsuntouched; do not assume/tmp persistence. This is previewenvironment interruption, not proofliveproductionfailure."
       }
     },
     "store_observations": {
