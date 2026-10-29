@@ -216,11 +216,10 @@
     "independent_review": "budget_audit independently50guard/probe/lifecycleunits-Werror; deadlinechecks+mongosgateaccepted; controlledsameoperation503racegateacceptedwithoutbroadenederroracceptance/invariantweakening. FinalactualCIgreen."
   },
   "technical_engine_probe_followup": {
-    "state": "WIP minimal namespacefix; freshactualstrict-validatorCIpending",
+    "state": "Minimal technical namespace fix independently reviewed and actualstrict-validatorCI passed; rollout still gated",
     "base": "43c56118e579e2aa4cb20f934d3633bd2cfbdad0",
     "change": "Engine-abortprobe writes only dedicated allowlistedgoogle_ads_budget_guard_engine_probes_v1, never syntheticbusinessbudget/policyrecord. PublicrawabortACK/originaldeadline/coalescing/retainedFuturecleanup/60sinternalengineproof unchanged. No policypermission/validator claim.",
     "local_tests": "162passed3.33s-Werror affectedprobe/guard/lifecycle/integration/standing+creationpolicy; newunitassertsallprobeoperationsonlytechnicalnamespace.",
-    "actual_ci_pending": "124expectedincl29Mongo; newstrictactualBUDGET_GUARDSvalidator permitsvalidguardrows butrejectsprobe_only/missingrequiredfields. Engineprobe succeedsinTECHNICALnamespace/abortswithoutpersisting; validactualguardTXcommits; tighteningbusinessvalidator thencausesactualguardTXtofailclosed+rollbackpolicy whileengineproofstillpasses. Foreignbusinessrowunchanged.",
     "namespace_gate_assessment": {
       "implemented": false,
       "no_op_limit": "Impossiblequery ormatchedempty-$set+explicitabort mayproveonlycurrentupdate-command authorization/zeroeffect, notinsert/createIndex/datavalidation/uniqueindexes. Mongo8.0.26 update_stage.cpp gatesactualwrite+collectionvalidation ondocWasModified; officialMongo docs separateinsert/upsertprivilege. No upsertTrue/invalidpolicy/syntheticbudgetprobe.",
@@ -234,6 +233,22 @@
       "live_flags": "No environment/productionflaginspection inthisassessment. SourceruntimeFalse/defaultoff gatesunchanged; no actualGoogleinventory/providerquery."
     },
     "preserved": "Frozen1612/1606helpers,sixhandlers,wiring,planner,resumeUI,providerpathsunchanged; no livebusinesswrites/flags/intent/deployment.",
-    "next_safe_action": "Runfocusedactualstrict-validatorCI+independentbudget_audit; rootseparatelyreview namespacegate/securityscope beforemetadatafeature. Rootlaterselectiveintegrationpreserveslatestprod/resumeguards."
+    "next_safe_action": "Rootreview namespace/securitygate design beforeanybroadermetadataimplementation. Before6handler migration proveactualnamespacepermission/schema/index/legacycompatibility; selectiveintegrationfromlatestprodwithcombinedCI. No mergeofconflictingoldWIP orflagsactivation.",
+    "code_checkpoint_sha": "5ba648258d1bec0fad55c0695429e74d22a7ceb8",
+    "actual_ci": {
+      "event": "push/sourcebranch (PR1602conflicts withnewproduction; no currentmerged-integrationclaim)",
+      "focused_run": 40926983019,
+      "focused_job": 123634996191,
+      "focused_result": "124passed94.60s,29actualMongo,failures/errors/skips0,-Werror",
+      "strict_validator_case": "Passed: strictbusinessschema rejectsoldsyntheticshape, technicalengineprobeabortsitsownnamespacewithoutapprecord; legitimateguardTXcommits; tightenedbusinessvalidatorrejectsnextactualguardwrite+rollsbackpolicy whileengineprobecontinuespassing;foreignrowunchanged.",
+      "full_run": 40926982926,
+      "backend_job": 123634996304,
+      "backend_result": "1319passed35.52s,allrequiredMongo,zero skips",
+      "frontend_job": 123634996770,
+      "frontend_result": "17suites189tests+buildSUCCESS",
+      "integration_limit": "PUSH checkoutsource doesnotincludelatestprodnewfeatures; parentmustselectivelyintegrate/reruncombinedCI preservingresumeUI andnewcommercialfeatures."
+    },
+    "independent_review": "budget_audit51guard/probe/lifecycleunits-Werror; minimalnamespacechangeaccepted; meaningfulstrictvalidatorcase reviewed. Engineproofnotbusinesspermissions/commitproof.",
+    "namespace_insert_requirement": "Dedicatedtechnicalnamespaceitself needsinsertauthorization;1612/1606positiveontheirdifferentnames doesnotproveit. Currentcode usesgoogle_ads_budget_guard_engine_probes_v1; reuseofalreadyapprovedtechnicalnamespacecanbeparentdecisionwithfreshverification, notimpliedpermission."
   }
 }
