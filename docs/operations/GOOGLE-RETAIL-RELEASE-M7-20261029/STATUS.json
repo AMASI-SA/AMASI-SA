@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "task": "google-retail-release-m7",
+  "date_utc": "2026-10-29",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-retail-release-m7-20261029",
+  "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "production_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
+  "source_reference": "Enclosing source commit; exact immutable SHA also recorded in Draft PR and handoff. No follow-up STATUS commit may follow frozen Source A before Intent B.",
+  "status": "Fresh M7 source candidate; local focused checks passed; fresh CI pending; not deployment-ready",
+  "owned_files": [
+    "backend/integrations_control_center/google_ads_ai.py",
+    "backend/integrations_control_center/google_ads_management.py",
+    "backend/integrations_control_center/google_ads_retail_identity.py",
+    "backend/integrations_control_center/google_ads_routes.py",
+    "backend/integrations_control_center/google_ads_workspace.py",
+    "backend/tests/test_google_ads_ai.py",
+    "backend/tests/test_google_ads_ai_route_context.py",
+    "backend/tests/test_google_ads_management.py",
+    "backend/tests/test_google_ads_workspace.py",
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+    "docs/operations/GOOGLE-RETAIL-RELEASE-M7-20261029/STATUS.json"
+  ],
+  "reviewed_components": {
+    "combined_pr": 1625,
+    "combined_source": "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d",
+    "combined_tree": "55bed05e7707b620f196e7eb1447d38cb6b5842e",
+    "backend_source": "c7a36165f48f433ab3275320187e4d9c5b298020",
+    "frontend_source": "0972717d35582c45371863e833c7ee29464275d7",
+    "resourcing": "Exact 11 accepted code/test blobs; zero overlap with M6-to-M7 inventory release delta; M7 inventory, Reports, credential CAS and resume refusal preserved; no intent change or old WIP history copied."
+  },
+  "behavior": [
+    "Shopping and retail PMax selected offers require complete native inventory, unique full account/merchant/channel/language/feed/item identity, exact campaign feed and known eligible ONLINE/IN_STOCK state.",
+    "AI preview and approved dispatch share a fresh native identity gate; drift, incomplete identities and old previews fail closed; creation remains PAUSED.",
+    "Both pickers explain owner_selected_unverified mapping, disable new unavailable/ambiguous/feed-mismatched choices, preserve existing selections for visible removal and prevent late or wrong-account inventory use.",
+    "Generic all-feed, Search and nonretail PMax behavior preserved."
+  ],
+  "historical_validation": {
+    "source": "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d",
+    "independent": "308 backend with -W error, no skips, plus 51 Composer tests; byte equality and bounded integration review passed. Root separately repeated 308 and read full CI logs.",
+    "google_ci_run": 40938463175,
+    "backend_job": 123675163689,
+    "backend": "1307 passed, no skips; actual Mongo8.0.26 loopback fake-provider cases including PAUSED retail dispatch",
+    "frontend_job": 123675164073,
+    "frontend": "252 tests /18 suites, build success",
+    "synthetic_merge": "14d99f6cbcefa9166f87ce081d0f69c73b9c5e36",
+    "limits": "Historical evidence on M6; fresh M7 CI required."
+  },
+  "validation": {
+    "component_blob_equality": true,
+    "m6_m7_overlap": [],
+    "fresh_local_backend": {
+      "passed": 308,
+      "skipped": 0,
+      "seconds": 6.94,
+      "warnings_as_errors": true,
+      "mongo": "not executed locally; fresh real Mongo CI required",
+      "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_workspace.py backend/tests/test_google_ads_ai.py backend/tests/test_google_ads_ai_route_context.py backend/tests/test_google_ads_campaign_builder.py backend/tests/test_google_ads_protobuf_contract.py"
+    },
+    "fresh_local_frontend": {
+      "passed": 261,
+      "suites": 18,
+      "skipped": 0,
+      "seconds": 15.682,
+      "toolchain": "governed Node22.23.2/Yarn1.22.22, unchanged frozen lock",
+      "scope": "18 Google management workflow paths; includes nine new M7 inventory UI cases compared with M6 252 total"
+    },
+    "fresh_ci": "pending",
+    "provider_calls": false,
+    "paid_writes": false,
+    "host_changes": false
+  },
+  "limitations": [
+    "No independently verified store-to-offer mapping, variant identity, category membership or attribution proof added.",
+    "No automatic first-funded launch or standing resume. No owner money limits inferred.",
+    "Actual provider eligibility and deployed behavior are not established by source tests."
+  ],
+  "production_changed": "no",
+  "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
+  "next": "Save immutable source and Draft PR; run all fresh CI and inspect logs. Root independently reviews M7 preservation and performs governed A/B build, lease, single publish and three live verifications after current inventory release lease closes."
+}

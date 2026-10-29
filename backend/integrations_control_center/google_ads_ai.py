@@ -533,11 +533,18 @@ async def generate_google_campaign_draft(
                               "biddable": item.get("biddable") is True} for item in _rows(context.get("conversion_goals"), 100)
                              if _identity(item.get("category")) and _identity(item.get("origin")) and isinstance(item.get("biddable"), bool)],
         "product_offer_associations": [{"product_id": _identity(item.get("product_id")),
-                                        "offer_id": _identity(item.get("offer_id")), "merchant_id": _identity(item.get("merchant_id"))}
+                                        "offer_id": item["offer_id"], "merchant_id": _identity(item.get("merchant_id")),
+                                        "feed_label": item.get("feed_label"), "language_code": item.get("language_code"),
+                                        "resource_name": item.get("resource_name"), "channel": item.get("channel"),
+                                        "verification_status": "provider_eligibility_verified", "mapping_status": "owner_selected_unverified"}
                                        for item in _rows(context.get("product_offer_associations"), 200)
-                                       if item.get("verification_status") == "verified" and
+                                       if item.get("verification_status") == "provider_eligibility_verified" and
+                                       item.get("mapping_status") == "owner_selected_unverified" and
                                        _identity(item.get("product_id")) in {product["product_id"] for product in products} and
-                                       _identity(item.get("offer_id")) and _identity(item.get("merchant_id")).isdigit()],
+                                       isinstance(item.get("offer_id"), str) and 0 < len(item["offer_id"]) <= 150 and
+                                       _identity(item.get("merchant_id")).isdigit() and
+                                       {key: item.get(key) for key in ("product_id", "merchant_id", "offer_id")} in
+                                       [selection.model_dump() for selection in body.product_offer_selections]],
     }
     # Build the structured model lazily: it shares the marketer's exact contract.
     class DraftResponse(BaseModel):
@@ -608,12 +615,13 @@ async def generate_google_campaign_draft(
     if draft.get("shopping") and canonical_products:
         merchant_id = str(draft["shopping"]["merchant_id"])
         selected_offers = {str(value) for group in draft.get("groups", []) for value in group.get("product_offer_ids", [])}
-        associations = [item for item in extra_resources["product_offer_associations"] if item["merchant_id"] == merchant_id]
+        associations = [item for item in extra_resources["product_offer_associations"] if item["merchant_id"] == merchant_id
+                        and item.get("feed_label") == draft["shopping"].get("feed_label") and item.get("feed_label")]
         known_offers = {item["offer_id"] for item in associations}
         covered_products = {item["product_id"] for item in associations if item["offer_id"] in selected_offers}
         if covered_products != canonical_products or not selected_offers or selected_offers - known_offers:
             missing.append({"code": "merchant_product_offer_mapping_required",
-                            "message": "اربط منتجات سلة المختارة بمعرّفات منتجات Merchant Center المثبتة؛ الاستهداف الحالي لا يثبت حصر الحملة فيها.",
+                            "message": "حدد الربط اليدوي لكل منتج وتغذية جوجل المطابقة؛ أهلية عرض جوجل لا تثبت أنه نفس منتج المتجر.",
                             "field": "groups.product_offer_ids"})
     # Model prose is advisory. Only authoritative contract/context checks decide
     # readiness; provider validate-only and approval remain mandatory downstream.
@@ -635,6 +643,8 @@ async def generate_google_campaign_draft(
     limitations = list(dict.fromkeys([*map(_text, output.limitations), "generated_creative_requires_review",
                                      "provider_validation_and_account_eligibility_required",
                                      "profitability_not_inferred_from_product_price"]))
+    if selected_product_offers:
+        limitations.append("owner_selected_product_offer_mapping_not_independently_verified")
     if any(value["price_semantics"] == "not_proven_additional_price" and value["price_field_native"] is not None
            for item in products for option in item["options"] for value in option["values"]):
         limitations.append("option_price_addition_semantics_unverified")
@@ -642,6 +652,7 @@ async def generate_google_campaign_draft(
             "explanation": _text(output.explanation, 2000), "product_ids": output.product_ids,
             "evidence": [{"evidence_id": key, **value} for key, value in evidence.items()],
             "limitations": limitations, "review_notes": review_notes,
+            "product_offer_associations": extra_resources["product_offer_associations"],
             "missing_requirements": missing, "ready_for_preview": not missing,
             "ready_for_execution": False, "approval_required": True, "provider_writes": 0}
 
