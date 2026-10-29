@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import GoogleNativeInventoryPreview from "./GoogleNativeInventoryPreview";
 import { getGoogleLiveCategoryPreview, liveCategoryOptions, liveCategoryScope } from "../../services/googleLiveCategoryPreview";
 import { isGoogleRequestCancelled } from "../../services/googleAds";
 
@@ -11,7 +12,7 @@ function failureMessage(failure) {
     if (detail?.code === "google_commercial_plan_revision_conflict" || failure?.response?.status === 404) return "تغيرت الخطة أو لم تعد متاحة؛ أعد تحميل نسختها المحفوظة قبل المعاينة.";
     return "تعذرت معاينة موثوقة للقسم ضمن حدود هذه القراءة. راجع نطاق الخطة المحفوظة ثم أعد المحاولة؛ لا توجد نتيجة صالحة للاختيار.";
 }
-function Observation({ result }) {
+function Observation({ result, plan }) {
     return <div className="mt-3 space-y-2" data-live-category-result>
         <p>المتجر {result.store_id} · القسم {result.category_id} · نسخة الخطة {result.plan_revision}</p>
         {result.category_url && <p className="break-all">رابط القسم كما أعاده المتجر: {result.category_url}</p>}
@@ -24,6 +25,7 @@ function Observation({ result }) {
             {result.products.map((product) => <tr key={product.salla_product_id} data-salla-product-id={product.salla_product_id}><td>{product.salla_product_id}</td><td>{product.excluded ? "مستبعد في الخطة" : "لا يطابق استبعادًا رقميًا محفوظًا؛ لا يمنح إذن اختيار"}</td><td>{PRODUCT_STATUS[product.product_status]}</td><td>المخزون غير مثبت · غير مؤهل للاختيار الإعلاني</td></tr>)}
         </tbody></table></div>}
         <p>المقاسات والمخزون ومدة التجهيز والمطابقة بمنتجات ميزان وعروض الكتالوج غير مثبتة. لا ترتيب للمنتجات أو استنتاج للربح أو تفويض تشغيل وميزانية.</p>
+        <GoogleNativeInventoryPreview plan={plan} category={result} isOwner={true} />
     </div>;
 }
 function RequestPanel({ plan, categoryId }) {
@@ -42,7 +44,7 @@ function RequestPanel({ plan, categoryId }) {
     }
     return <>
         <button type="button" onClick={read} disabled={!ready || busy || locked} className="rounded border px-3 py-2 disabled:opacity-40">{busy ? "جارٍ معاينة قسم سلة…" : "معاينة عضوية قسم سلة الآن"}</button>
-        {error && <p role="alert">{error}</p>}{result && <Observation result={result} />}
+        {error && <p role="alert">{error}</p>}{result && <Observation result={result} plan={plan} />}
     </>;
 }
 function Panel({ plan, options }) {

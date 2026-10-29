@@ -10,7 +10,7 @@ on:
       - backend/integrations_control_center/google_live_category_routes.py
       - backend/integrations_control_center/google_native_inventory_*.py
       - backend/tests/test_google_saved_plan_fields_contract*.py
-      - backend/tests/test_google_plan_ui_writer_fixtures.py
+      - backend/tests/test_google_plan_ui_writer*.py
       - frontend/src/services/__fixtures__/google*Preview.json
       - frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json
       - backend/tests/test_google_*campaign_routes.py
@@ -60,18 +60,20 @@ jobs:
           PYTHONPATH: backend
         run: |
           set -euo pipefail
-          python -m pytest --noconftest -q -Werror --junitxml=saved-plan-fields-results.xml backend/tests/test_google_saved_plan_fields_contract.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py backend/tests/test_google_linked_campaign_integration.py backend/tests/test_google_live_category_proof.py backend/tests/test_google_live_category_reader.py backend/tests/test_google_live_category_routes.py backend/tests/test_google_live_category_integration.py backend/tests/test_google_native_inventory_proof.py backend/tests/test_google_native_inventory_reader.py backend/tests/test_google_native_inventory_routes.py backend/tests/test_google_saved_plan_fields_contract_mongo.py backend/tests/test_google_plan_ui_writer_fixtures.py
+          python -m pytest --noconftest -q -Werror --junitxml=saved-plan-fields-results.xml backend/tests/test_google_saved_plan_fields_contract.py backend/tests/test_google_commercial_plan.py backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py backend/tests/test_google_linked_campaign_integration.py backend/tests/test_google_live_category_proof.py backend/tests/test_google_live_category_reader.py backend/tests/test_google_live_category_routes.py backend/tests/test_google_live_category_integration.py backend/tests/test_google_native_inventory_proof.py backend/tests/test_google_native_inventory_reader.py backend/tests/test_google_native_inventory_routes.py backend/tests/test_google_saved_plan_fields_contract_mongo.py backend/tests/test_google_plan_ui_writer_fixtures.py backend/tests/test_google_plan_ui_writer_mongo.py
           python - <<'PYGATE'
           import xml.etree.ElementTree as ET
           cases=ET.parse('saved-plan-fields-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_saved_plan_fields_contract_mongo')]
-          assert len(cases) == 148 and len(replica) == 8
+          integrated=[c for c in cases if c.attrib.get('classname','').endswith('test_google_plan_ui_writer_mongo')]
+          assert len(cases) == 149 and len(replica) == 8 and len(integrated) == 1
+          assert integrated[0].attrib.get('name') == 'test_actual_parent_mongo_put_then_category_and_native_read_preserves_saved_fields_and_scope'
           assert sum(c.attrib.get('name','').startswith('test_checked_ui_fixture_equals_actual_management_writer_then_reader') for c in cases) == 3
           assert sum(c.attrib.get('name','').startswith('test_actual_mongo_put_then_each_reader_accepts_writer_saved_fields_without_synthesized_ack') for c in replica) == 3
           assert sum(c.attrib.get('name','').startswith('test_actual_mongo_write_missing_or_false_review_ack_is_rejected_without_plan') for c in replica) == 2
           assert sum(c.attrib.get('name','').startswith('test_actual_mongo_invalid_saved_business_fields_still_fail_before_provider') for c in replica) == 3
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
-          print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
+          print('Verified',len(cases),'tests including',len(replica)+len(integrated),'real Mongo replica tests, zero skips')
           PYGATE
       - name: Remove disposable replica
         if: always()

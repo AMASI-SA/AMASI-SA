@@ -7,6 +7,14 @@ on:
     paths:
       - backend/integrations_control_center/google_native_inventory_*.py
       - backend/integrations_control_center/google_live_category_*.py
+      - backend/integrations_control_center/google_ads_routes.py
+      - backend/tests/test_google_plan_ui_writer_fixtures.py
+      - frontend/src/services/googleNativeInventoryPreview*
+      - frontend/src/services/__fixtures__/google*Preview.json
+      - frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json
+      - frontend/src/components/marketing/GoogleNativeInventoryPreview*
+      - frontend/src/components/marketing/GoogleLiveCategoryPreview*
+      - frontend/src/components/marketing/GoogleCommercialPlan*
       - backend/salla_integration/service.py
       - backend/tests/test_google_native_inventory_*.py
       - .github/workflows/google-native-inventory-preview.yml
@@ -53,12 +61,13 @@ jobs:
           PYTHONPATH: backend
         run: |
           set -euo pipefail
-          python -m pytest --noconftest -q -Werror --junitxml=native-inventory-results.xml backend/tests/test_google_native_inventory_proof.py backend/tests/test_google_native_inventory_reader.py backend/tests/test_google_native_inventory_routes.py backend/tests/test_google_native_inventory_mongo.py
+          python -m pytest --noconftest -q -Werror --junitxml=native-inventory-results.xml backend/tests/test_google_native_inventory_proof.py backend/tests/test_google_native_inventory_reader.py backend/tests/test_google_native_inventory_routes.py backend/tests/test_google_native_inventory_mongo.py backend/tests/test_google_plan_ui_writer_fixtures.py
           python - <<'PYGATE'
           import xml.etree.ElementTree as ET
           cases=ET.parse('native-inventory-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_native_inventory_mongo')]
-          assert len(cases) == 41 and len(replica) == 7
+          assert len(cases) == 44 and len(replica) == 7
+          assert sum(c.attrib.get('name','').startswith('test_checked_ui_fixture_equals_actual_management_writer_then_reader') for c in cases) == 3
           assert any(c.attrib.get('name') == 'test_actual_owner_read_observations_without_db_mutation_or_native_writes' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_outer_binding_covers_category_and_selected_product_flow') for c in replica) == 4
           assert any(c.attrib.get('name') == 'test_actual_standalone_route_detects_before_after_product_drift' for c in replica)
@@ -68,3 +77,38 @@ jobs:
       - name: Remove disposable replica
         if: always()
         run: docker rm -f google-native-inventory-rs
+
+  frontend:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare governed toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Frozen frontend install
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test actual owner plan and independent evidence views
+        env:
+          CI: 'true'
+        run: >-
+          python scripts/frontend_release_toolchain.py exec --
+          yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath
+          src/services/googleNativeInventoryPreview.test.js
+          src/components/marketing/GoogleNativeInventoryPreview.test.jsx
+          src/services/googleLiveCategoryPreview.test.js
+          src/components/marketing/GoogleLiveCategoryPreview.test.jsx
+          src/services/googleLinkedCampaignEvidence.test.js
+          src/components/marketing/GoogleLinkedCampaignEvidence.test.jsx
+          src/components/marketing/GoogleCommercialPlan.test.jsx
+          src/components/marketing/GoogleCategoryMembershipReview.test.jsx
+          src/components/marketing/GoogleStoreProductObservations.test.jsx
+          src/components/marketing/GooglePinnedCatalogReview.test.jsx
+          src/services/googleCommercialPlanSuggestion.test.js
+      - name: Build coherent current CI checkout
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build

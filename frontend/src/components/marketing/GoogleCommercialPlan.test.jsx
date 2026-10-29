@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import GoogleCommercialPlan from "./GoogleCommercialPlan";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
+import nativeFixture from "../../services/__fixtures__/googleNativeInventoryPreview.json";
 import categoryFixture from "../../services/__fixtures__/googleLiveCategoryPreview.json";
 import linkedFixture from "../../services/__fixtures__/googleLinkedCampaignEvidence.json";
 
@@ -328,4 +329,29 @@ test("parent evidence fixtures are bound to actual HTTP writer fields without wr
         expect(plan.fields).not.toHaveProperty("acknowledge_review"); expect(plan.fields).not.toHaveProperty("expected_revision");
     }
     expect(linkedParentResponse().plan_id).toBe(saved.plan_id); expect(categoryPreviewResponse().plan_revision).toBe(saved.revision);
+});
+
+test("actual parent uses writer-produced category and native inventory fixtures without automatic POST or plan mutation", async () => {
+    await render(); api.get.mockResolvedValueOnce({ data: nativeFixture.category });
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click()); expect(api.post).not.toHaveBeenCalled();
+    for (const id of ["1", "2", "3"]) await act(async () => element(`فحص مخزون المنتج ${id}`).click());
+    expect(api.post).not.toHaveBeenCalled(); api.post.mockResolvedValueOnce({ data: nativeFixture.response });
+    await act(async () => button("فحص مخزون المنتجات المحددة فقط").click());
+    expect(api.post.mock.calls[0][1]).toEqual({ expected_revision: 3, category_id: "8", selected_product_ids: ["1", "2", "3"] });
+    expect(container.querySelectorAll("[data-native-product-id]")).toHaveLength(3); expect(api.put).not.toHaveBeenCalled();
+    expect(nativeFixture.plan).toEqual(saved);
+});
+test.each(["edit", "save", "reload", "category-refresh", "owner"])("actual parent %s cancels native inventory and rejects a late response", async (kind) => {
+    await render(); api.get.mockResolvedValueOnce({ data: nativeFixture.category });
+    await act(async () => button("معاينة عضوية قسم سلة الآن").click());
+    for (const id of ["1", "2", "3"]) await act(async () => element(`فحص مخزون المنتج ${id}`).click());
+    let finish; api.post.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await act(async () => button("فحص مخزون المنتجات المحددة فقط").click()); const signal = api.post.mock.calls[0][2].signal;
+    if (kind === "edit") await input("الموسم", "موسم جديد");
+    else if (kind === "save") { await acknowledge(); await save(); }
+    else if (kind === "reload") await act(async () => button("إعادة تحميل خطة الموسم").click());
+    else if (kind === "category-refresh") { api.get.mockResolvedValueOnce({ data: nativeFixture.category }); await act(async () => button("معاينة عضوية قسم سلة الآن").click()); }
+    else await render({ isOwner: false });
+    expect(signal.aborted).toBe(true); await act(async () => finish({ data: nativeFixture.response }));
+    expect(container.querySelector("[data-native-inventory-result]")).toBeNull(); expect(api.put).toHaveBeenCalledTimes(kind === "save" ? 1 : 0);
 });
