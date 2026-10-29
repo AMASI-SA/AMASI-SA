@@ -258,9 +258,19 @@ async def test_real_day_quota_rolls_at_account_local_midnight_not_utc(authority_
 async def test_real_concurrent_authorization_acknowledges_one_claim_only(monkeypatch,authority_db):
     docs,native=rebased_case(NOW);await seed(authority_db,docs)
     barrier=asyncio.Barrier(2);original=guard.run_google_budget_guard_transaction
+    second_denied=asyncio.Event();original_commit=guard._commit_once
+    async def hold_first_commit(database,session):
+        await asyncio.wait_for(second_denied.wait(),5)
+        return await original_commit(database,session)
+    monkeypatch.setattr(guard,"_commit_once",hold_first_commit)
     async def simultaneous(database, **kwargs):
         await barrier.wait()
-        return await original(database, **kwargs)
+        try:
+            return await original(database, **kwargs)
+        except HTTPException as error:
+            if error.detail.get("code") == "google_budget_guard_operation_pending":
+                second_denied.set()
+            raise
     monkeypatch.setattr(guard,"run_google_budget_guard_transaction",simultaneous)
     results=await asyncio.wait_for(asyncio.gather(authorize(authority_db,native),authorize(authority_db,native),return_exceptions=True),10)
     granted=[result for result in results if isinstance(result,dict) and result.get("authorized")]

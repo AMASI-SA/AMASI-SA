@@ -163,6 +163,17 @@
     },
     "audit_deadline_fix": "Capture original monotonicdeadline beforetaskstart; workerCSOTremainingoriginaldeadline; _run checksclockbeforecommit evenifwaiternotwoken; afterwait lateappliedACK cannotreturnsuccess. Two deterministic clock tests proveprecommitabort andpostcommitunknown.",
     "compatibility": "Actualguardcapability explicitlyreplica-set-only; mongos rejected beforeprobe write/no capability. Shardedcommit recoveryToken/publicAPI semantics unproved; no privatefield access/fallback. Frozen diagnostic mayproveinsert+abort onother topology butdoesnotprove guardcommitreadiness.",
-    "caller_contract_test_followup": "Broader firstCI15daa:1346pass/1fail only oldsameoperationconcurrencydenialcode;1grant+1deny invariant held. Root-approved scopedduplicate gate now intentionallyreturns503operation_pending withfence/noautomaticretry instead ofoldMongoCAS409policy_changed. Exactactualtest updatednewcode/status/flags withoutweakeningclaim/quota assertions; addall6authorityMongo cases tofocusedCI."
+    "caller_contract_test_followup": "Broader firstCI15daa:1346pass/1fail only oldsameoperationconcurrencydenialcode;1grant+1deny invariant held. Root-approved scopedduplicate gate now intentionallyreturns503operation_pending withfence/noautomaticretry instead ofoldMongoCAS409policy_changed. Exactactualtest updatednewcode/status/flags withoutweakeningclaim/quota assertions; addall6authorityMongo cases tofocusedCI.",
+    "final_ci_before_controlled_test_gate": {
+      "source": "fb308ba1b4f1d75e80de0f347424ac79a7cb5e43",
+      "focused_run": 40918285055,
+      "focused_job": 123604278702,
+      "result": "122passed91.81s/28Mongo/0fail-error-skip-Werror",
+      "full_run": 40918285080,
+      "backend": "1347passed50.95s/0skip/all12Mongo",
+      "frontend": "18suites226tests+buildSUCCESS",
+      "wire": "ONEcommit retryWritesTrue;91unknown9.960s/not_proven;closeunknown.462s/not_proven;appliedWCEunknown.005s/committedreserved;fenceunchanged/gap.051s"
+    },
+    "audit_controlled_test_gate": "Independentreview correctlyidentified exactpending503raceassertion needed controlledoverlap. Existingactualrace now holds firstcommit until secondobservesoperation_pending, then allows firstactualMongo commit. Exact1grant1deny503/fence/noauto/claim/generation/quota assertions unchanged; runtimeunchangeda110. Finalexacttest-gateCIpending."
   }
 }
