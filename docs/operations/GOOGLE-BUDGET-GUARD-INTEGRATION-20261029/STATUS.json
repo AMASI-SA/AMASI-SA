@@ -20,13 +20,30 @@
   ],
   "tests": {
     "local": "627passed7.56s-Werror; guard/probe/lifecycle/reservation/settlement, policies/activation, standing/creationauthorities/gateways/workers, planner/plan/currentinventory",
-    "actualreplica": "CIpending; no localMongoorproductioncalls"
+    "actualreplica": {
+      "run": 40936040649,
+      "job": 123666737989,
+      "result": "124passed33.49s incl29actualreplica;0failure/error/skip-Werror;summarysourceexact0dcb"
+    },
+    "full_management": {
+      "run": 40936040858,
+      "backend_job": 123666740011,
+      "result": "1353backend52.66s;228UI18suites+build"
+    },
+    "release_readiness": {
+      "run": 40936040925,
+      "result": "success; notallrepositorygatesclaimed; nooperationalintentpairfrozen"
+    }
   },
   "production_blockers": [
     "Actual1621 explicit owner commit/readback andnamespacepermission/legacyresult",
     "Complete validnativebudgetresource/currency/timezone/inventory evidence plusunresolvedlegacycommitment reconciliation",
     "Creationcommonallocation migration remainsseparate bounded design andtests; no externalwriter fencing orfirstlaunchprovenance claim"
   ],
-  "next": "Fresh localregression plusrealreplicaCI andindependentreview, persist remote; no release/intent orpolicy/providerwrites.",
-  "fixture_resolution": "M6 doublecountregression previously usedpause→budget on sameenablednative snapshot; mandatoryguard correctly rejects missingpause reflection. Test nowverifiedbudgetedit→pause with exact22nativebudget reflected, preserving2proposalunionassertion andfailclosedresume."
+  "next": "Await independent exactintegration andpausedcontract review; implementpausedclaim/commonreservation/settlement in separate boundedWIP. Remainsnotdeployable; rootownsallrelease/liveproof.",
+  "fixture_resolution": "M6 doublecountregression previously usedpause→budget on sameenablednative snapshot; mandatoryguard correctly rejects missingpause reflection. Test nowverifiedbudgetedit→pause with exact22nativebudget reflected, preserving2proposalunionassertion andfailclosedresume.",
+  "tested_source": "0dcb03d9ce4a5778f29584cd4166b923439e8918",
+  "tested_tree": "26a5398bbda8f904d94741861946d0aca701a664",
+  "independent_review": "Requested budget_audit onexact0dcb; pending. Newpausedcreationcontractsentindependentlybeforecode; no newruntime implemented.",
+  "preservation": "ASTruntimeFalse; resumeplanner/CAS/reporting/routes/management/Reports/backendrequirements/frontendpackage+lock byte-identicalM6 verified."
 }
