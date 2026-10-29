@@ -1,0 +1,69 @@
+{
+  "task": "google-category-enumeration-20261029",
+  "branch": "codex/google-category-enumeration-20261029",
+  "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "state": "read_only_design_assessment_no_runtime_implementation",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
+  "reusable_sources": {
+    "backend/salla_integration/service.py": "call_salla fixedpath authenticated GET, token lifecycle and scope401 classification; get only public integration metadata projection in new adapter, never decrypt/read tokens directly",
+    "backend/product_category_variant_support.py": "Existing /products-v2/category-catalog proves /categories transport seam, but defaults unknown status active, discards customerURL and lacks strict pagination proof; do not call as completeness authority",
+    "backend/product_v2_routes.py": "Existing /products page/per_page/format transport seam; sync writes products and archives absent ids, so do not invoke sync",
+    "backend/product_v2_details_routes.py": "Existing GET/products/{id} and pure _details_patch shape; refresh-details route persists product and cost revisions, so do not invoke that route",
+    "backend/product_inventory_proof.py": "Reuse inventory proof semantics where full verified source variants actually exist; parent quantity or capped visible variant array is not complete remote purchasable inventory",
+    "backend/salla_inventory_sync_routes.py": "Existing public metadata products scope gate and explicit branches.read freeze; proposed preview does not require or enable branch inventory"
+  },
+  "official_api_contract": [
+    {"url": "https://docs.salla.dev/categories/list", "verified": "GET/categories; categories.read; response id/status/urls.customer/sub_categories/update_at and pagination"},
+    {"url": "https://docs.salla.dev/categories/products", "verified": "GET/categories/{id}/products; categories.read; category-scoped product id/name/sort and pagination; not inventory payload"},
+    {"url": "https://docs.salla.dev/5394168e0", "verified": "GET/products; products.read; category/status filter and lightformat supported"},
+    {"url": "https://docs.salla.dev/product-variants/list", "verified": "GET/products/{product}/variants; products.read; paginated source stock_quantity and variant ids"}
+  ],
+  "permission_findings": {
+    "required": ["categories.read or categories.read_write", "products.read or products.read_write"],
+    "not_assumed": "Existing default OAuth fallback contains neither categories nor products scopes; actual stored grants must be checked with public scope/status fields only. External connector category metadata says offline_access, but current official Merchant API docs require categories.read; no connector capability implies Mezan app grant.",
+    "missing_permissions": "Return capability_unavailable with exact missing scopes; no auth redirect, scope expansion, token or connection edits in new modules",
+    "existing_client_maintenance": "call_salla GET can legitimately refresh OAuth and update integration credentials, or mark needs_reauth on verified token failure. New adapter must disclose this existing maintenance boundary; no separate auth implementation or direct token access. Guard store identity and connection revision before/after; refresh during review can invalidate proof and require retry."
+  },
+  "proposed_contract": {
+    "route": "Explicit owner-triggered plan-scoped preview with expected_revision and one selected category already in saved plan, or resolved exact optional saved URL; root chooses final shared attachment after review",
+    "store_binding": "Read public user-owned salla_integrations store_id/domain/status/scope/token_revision metadata. GET/store/info before/after must match owned stored store_id. Missing identity or change invalidates response. Source scope failures do not grant additional permissions.",
+    "category_resolution": "Canonical positive numeric id, validated exact provider-returned category. URL is optional and never requested as a network destination. Match exact safely parsed HTTPS urls.customer from owned-provider category response (or previously verified same-store source), never slug/name guesses, parent inheritance, metadata.url or arbitrary external URLs.",
+    "membership": "GET/categories/{numericid}/products paginated source is direct current membership evidence; no inference from section name or product sales. Category hidden or product explicit hidden/out/excluded remains ineligible. Missing status remains unknown.",
+    "enumeration": "Strict sequential currentPage/perPage/totalPages/total/count consistency, canonical ids and duplicate rejection; never follow pagination links or external nextURLs. Bound pages/rows/bytes/time before each new call. Missing metadata or limit reached yields partial and no absent-product claim.",
+    "inventory": "Enumeration endpoint does not prove stock. Explicit bounded detail reads give source timestamp/hash and parent stock observations only; actual purchasable variant proof requires complete validated variants pagination. Missing/capped/contradictory details leave inventory unproved. No branch inventory, size/preparation/profit/catalog-feed claims.",
+    "freshness": "Record request start/end/observation times and local canonical response_digest. Existing call_salla returns JSON only, no response headers/ETag or immutable provider pagination revision: provider_revision:null, remote_snapshot_atomic:false. update_at timezone ambiguous is display metadata, not revision or freshness proof. Complete page traversal is not a transactional fullsection snapshot.",
+    "authority": "Preview only; no ranking, automatic selection, saved-plan mutation, Google paid test budget, launch, writer sync or stock change"
+  },
+  "proposed_technical_limits_for_review": {
+    "selected_categories_per_request": 1,
+    "page_size": 50,
+    "category_catalog_max_pages": 10,
+    "category_product_max_pages": 4,
+    "category_product_max_rows": 200,
+    "explicit_inventory_product_max_rows": 10,
+    "details_or_variants_max_pages_per_product": 3,
+    "total_deadline_seconds": 45,
+    "limit_semantics": "Technical read bounds, not spending limits. Hitting any bound yields partial/unproved; no claim entire category coverage or complete purchasable inventory. Final values to be reviewed before implementation."
+  },
+  "proposed_new_backend_ownership": [
+    "backend/integrations_control_center/google_live_category_proof.py",
+    "backend/integrations_control_center/google_live_category_reader.py",
+    "backend/integrations_control_center/google_live_category_routes.py",
+    "new focused pure/API/Mongo fixtures and dedicated CI if implementation is assigned",
+    "this STATUS only; planning agent owns shared owner-plan UI and root owns final router attachment"
+  ],
+  "acceptance_regressions_required": [
+    "No provider call before owner/revision/scope/store binding proof; no foreign tenant or caller-selected store/account",
+    "Only fixed relative paths with canonical numeric ids; arbitrary URL, credentials, fragment, host suffix confusion, encoded path tricks and pagination external nextURL never fetched",
+    "Optional exact urls.customer resolution, category hidden respected; no missing status default active",
+    "Pagecount drift, missing envelope, repeatpage, duplicate id, total mismatch, timeout/cap/429/401/403 all partial or explicit unavailable; no complete absence claim",
+    "Actual product/category fixtures preserve direct membership versus inventory distinction; parent stock never proves variant purchasability",
+    "Changed saved fields/revision or integration store/status/revision during read invalidates result; OAuth scope error does not deliberately disconnect valid integration",
+    "Source digest is local response content hash, never provider revision; source observation interval explicit, no snapshot immutability",
+    "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
+  ],
+  "verification": "Source and official primary-document assessment only; no new implementation tests, CI, live grant or store/API behavior verified",
+  "next": "Root reviews supported contract/limits and OAuth-maintenance boundary; then assigns new backend implementation. Coordinate UI with google_plan_integration; keep1623 accepted runtime frozen."
+}
