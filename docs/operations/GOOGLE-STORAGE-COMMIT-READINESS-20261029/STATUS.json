@@ -1,0 +1,26 @@
+{
+  "task": "GOOGLE-STORAGE-COMMIT-READINESS-20261029",
+  "state": "WIP localverticalslice; actualreplica+independentreview pending",
+  "branch": "codex/google-storage-commit-readiness-20261029",
+  "base_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "production_changed": false,
+  "contract": {
+    "scope": "Owner-only technical replica-set snapshot transaction/rawmajority+j commit/freshprimarymajorityreadback/ownpayloadcleanup. No OAuth/provider/account/policy/budget access.",
+    "receipt": "One durable owner-scoped fixedslot/receipt plus unique temporary payload. CAS/newrawinsert ACK required beforeTX; pending/unknownstate neveroverwritten/retried. No TTL/autorelease. Completed marker written only AFTER payloaddeleteACK+majorityabsence; later explicitPOSTmayCAS only majority-read completedreceipt. MarkerACKlosscannotcauseunknownpayloadcleanup to be repeated.",
+    "sessions": "Close original public session afterrawcommit withshieldedasyncend_session before freshprimarymajorityreadback/newsession; no private driver fields or retrying commit helper.",
+    "deadline": "Original20s deadline+CSOT; no newirreversiblephase afterexpiry/callerstop; retainoneunfinishedtaskperprocess untilactualdriverFuturecleanupdone. No FuturecancelonHTTPdeadline. Durableownerreceipt arbitratescrossworker attempts.",
+    "output": "Allowlisted status/scope/proofbooleans, noowner/host/DB/session/noncevalues. No permanentcapabilitytoken. execution_authorized/funding_ready/policy_permissions_verified alwaysFalse, provider_writes0, topology_freshness_guaranteedFalse; GET historicalreceiptneverfreshproof.",
+    "limits": [
+      "Necessaryengineproofonly; not actualpolicycollectionRBAC/validators/permissions/nativeexternalwriterproof.",
+      "No ongoingtopologyguarantee, operationalflags, campaignauthorization or sixhandler migration.",
+      "Unknownreceipt/cleanup remainsmanualtechnicalreconciliation; readGETneverresends/deletes/releases."
+    ]
+  },
+  "verification": {
+    "backend": "127passed3.50s-Werror: new16+oldabort16+standing/creationpolicy95",
+    "frontend": "21passed1.489s via governed toolchain; explicitownerbutton/noautomaticcalls/account-independentwidget, unknown/historicalresponsesnoauthority",
+    "actual_replica": "Pending dedicatedCI117expected including6actualMongo: success/repeat/foreign, commit91/close/WCE, cleanupACKloss, independentworkerCASrace. RetryWritesTruewirecommitcounter.",
+    "preservation": "Frozen1606 abort-onlyhelper and its tests/6policyhandlers unchanged; onlynewroute2line attach and workspaceimport/render. No releaseintent."
+  },
+  "next_safe_action": "Run exactsource actualreplica/frozenfrontend CI and independentbudget_audit; fix reviewfailures before any rootrelease. Rootownsdeployment andliveprobe."
+}
