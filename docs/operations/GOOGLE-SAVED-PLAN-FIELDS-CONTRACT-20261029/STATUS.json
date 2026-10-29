@@ -3,17 +3,17 @@
   "branch": "codex/google-saved-plan-fields-contract-fix-20261029",
   "base": "6638faf53bc15ccaa304dfaa436aa6bf9c83f904",
   "native_prerequisite": "Exact1631 c06aad50530681ad484d61ce5faaaa216c37903d source/test/workflow selected; native route intentionally unattached. Only native reader model import/parse and realistic saved fixture changed after selection.",
-  "state": "early_fix_wip_local_actual_writer_http_green_mongo_pending",
+  "state": "coherent_fix_frozen_actual_writer_replica_ci_required",
   "production_changed": false,
   "provider_calls_performed": false,
   "confirmed_bug": "Actual save/PUT excludes acknowledge_review and expected_revision from fields. Linked/category/native readers incorrectly used CommercialPlanInput requiring write-only acknowledgement; actualPUT200 followed by eachreader503 beforeproviderread. Historical1631/1630/1627 functional acceptance held separately.",
   "fix": "CommercialPlanFields preserves strict persisted field/business validation; CommercialPlanInput extends it with required expected_revision and explicit true acknowledgement validation. Writer signature and serialized fields unchanged. Three readers validate CommercialPlanFields directly, no synthesized acknowledgement or authorization. Revision/fullfields guards retained.",
   "verification": {
     "red": "Actual HTTP commercialplanPUT→linked/category/native3cases failed503; missing/false writeack2cases alreadyrejected422",
-    "green": "38focused/-Werror/zero skips1.42s including actualwriterHTTP readpath contract + commercialplan andthree reader routes",
-    "actual_mongo": "Not yet implemented/run; must prove actual savewriter outputs readable in allthree routes on disposable replica and missing/false writeack still rejected",
-    "ci": "Pending dedicated actualwriter replica/fullGoogle tests; no readiness claim"
+    "green": "137focused/-Werror/zero skips3.58s acrosscommercialplan, allthreepure/readers/routes andlinked/livefullrouter integration tests",
+    "actual_mongo": "8collected actualHTTPwriter→all3readers, missing/false writeack rejection, all3invalidpersistedfields reject beforeprovider; no localMongo execution",
+    "ci": "NewdedicatedUbuntu22.04/Mongo8.0.26 isolatedloopback27480/gSavedPlanFields expected145total/8actual/zero-skips gate; existingfullGoogle required"
   },
   "changed_scope": "Sharedcommercialplan model split, three reader parses, realistic savedfields fixtures, new actualwriter tests; exact native prerequisites only. No sharedrouter/nativeattachment/UI/Salla/auth/budget/ad write or ownerpolicy change.",
-  "next": "ActualMongo writer→allthree readers plus writeack rejection, strict invalidpersistedfields and race acceptance; freshCI androot+independent review before release. Keep historicalsources immutable."
+  "next": "Freshdedicated145/8actual CI andfullGoogle backend/UI/build; root+independent exactsource review, thenreleaseintegration onlatestproduction. No sourceedit absentconfirmedfailure."
 }

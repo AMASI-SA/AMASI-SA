@@ -5,7 +5,8 @@ import httpx
 import pytest
 from fastapi import APIRouter, FastAPI
 
-from integrations_control_center.google_commercial_plan import attach_google_commercial_plan_routes, PLANS
+from integrations_control_center.google_commercial_plan import attach_google_commercial_plan_routes, CommercialPlanFields, PLANS
+from pydantic import ValidationError
 from integrations_control_center.google_linked_campaign_routes import attach_google_linked_campaign_routes
 from integrations_control_center.google_live_category_routes import attach_google_live_category_routes
 from integrations_control_center.google_native_inventory_routes import attach_google_native_inventory_routes
@@ -81,3 +82,10 @@ async def test_actual_write_still_requires_explicit_true_review_acknowledgement(
         response = await client.put("/google_ads/commercial-plans/winter", json=payload)
     assert response.status_code == 422
     assert db.plans.rows == [] and native.calls == []
+
+
+@pytest.mark.parametrize("control", [{"expected_revision": 1}, {"acknowledge_review": True}])
+def test_persisted_fields_model_forbids_write_only_controls(control):
+    fields = {k: v for k, v in request_body().items() if k not in {"expected_revision", "acknowledge_review"}}
+    with pytest.raises(ValidationError):
+        CommercialPlanFields.model_validate(fields | control)
