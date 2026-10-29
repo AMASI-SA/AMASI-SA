@@ -1,0 +1,68 @@
+{
+  "task": "google-native-inventory-assessment-20261029",
+  "branch": "codex/google-native-inventory-assessment-20261029",
+  "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "state": "read_only_assessment_contract_no_runtime_implementation",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "accepted_backend_preserved": "PR1628 runtime d77306f8af92057d4414413a9900e03bda7b1295 frozen; no shared UI/router/Salla/auth/inventory writers changed",
+  "source_findings": {
+    "backend/salla_integration/service.py": "Reuse call_salla GET only, authorized existing OAuth maintenance. Missing/fallback storedscope not capability truth; native endpoint success proves momentary permission. New boundary must catch SallaError/httpx.RequestError and decoded-size guard every response.",
+    "backend/product_v2_details_routes.py": "M7 _details_patch calls normalize_salla_product and build_inventory_evidence. Pure patch may supply fallbackids, missingarray defaults, boolean coercion; raw facts must be validated before treating canonical fields as evidence. Never invoke refresh-details route because it persists catalog/cost revisions.",
+    "backend/product_inventory_proof.py": "MAX_INVENTORY_VARIANTS=50 is a LOCAL proof cap, not a Salla provider limit. build_inventory_evidence intentionally accepts one raw details snapshot and exact arrays/raw types; it is not proof of complete external variant pagination. inventory_readiness also binds revision/digest/observation age; no mutation needed.",
+    "backend/product_fulfillment_rules.py": "Inventory and preparation are independent. PRODUCT_OPERATION_CHOICES_FROZEN forces requires_preparation + finished_goods_inventory_not_tracked; defaults/frozen operational policy cannot prove actual ready stock or preparation duration.",
+    "backend/product_fulfillment_routes.py": "Read surfaces expose policy/resources, not a verified native preparation deadline. No numeric prep SLA found in these source rules. Do not reclassify operational defaults as product facts."
+  },
+  "official_sources": [
+    {"url": "https://docs.salla.dev/product/product-details", "facts": "GET/products/{product}, products.read. Raw identity/customer URL/status/is_available/quantity/unlimited_quantity/options/skus; source updated_at has no demonstrated offset. Field presence matters; options/skus are embedded without pagination completeness marker."},
+    {"url": "https://docs.salla.dev/product-variants/list", "facts": "GET/products/{product}/variants, products.read. Paginated variant id/stock_quantity/related_option_values. Example omits unlimited flag and may omit parent optionids; do not default absent flags false."},
+    {"url": "https://docs.salla.dev/product-options/details", "facts": "GET/products/options/{option}, products.read. Exact optionid/name/type/required/visibility/values(option_id,id,name)/skus. Useful only when response belongs to selected product's explicit option set; no name/position fallback."},
+    {"url": "https://docs.salla.dev/421124m0", "facts": "Official maximum per_page is60, not200. This limits page size, not total product variant count. Validate actual returned perPage; no provider total-variant maximum established."}
+  ],
+  "field_presence_rules": {
+    "parent": "Keep explicit parent quantity, unlimited flag, status sale/out/hidden and is_available boolean as separate source observations. Quantity0 and status sale/is_available true can coexist in official example; do not infer wholeproduct soldout from parent quantity alone when variants/unlimited semantics unresolved.",
+    "variants": "Canonical positive numeric variantids and bounded nonnegative stock_quantity/quantity decimal types; exact aliases must agree. Explicit unlimited_quantity/is_infinite boolean only, never bool(string). Zero with missing unlimited flag stays stock0 observed but purchasing effect unknown. Positive stock is an observation, not checkout guarantee.",
+    "options": "Exact related_option_values ids may be joined only to validated option value ids owned by explicit selected product options. Missing/conflicting ids or duplicate mapping leaves labels and size coverage unproved. Human labels may be displayed as source labels, not classified as business size semantics by fuzzy name matching.",
+    "visibility": "Explicit product hidden/out/is_available false blocks a readiness claim even when a variant has positive stock. Missing status/availability remains unknown. Missing/contradictory option stock visibility leaves choice purchasability unproved.",
+    "preparation": "No authoritative preparation duration or delivery SLA verified in Merchant product/variant docs or local frozen fulfillment policy. preparation_time:null and readiness beyond source stock observations unproved. associated_with_order_time/choose_date_time are option controls, not invented preparation days.",
+    "financial": "Native current price/cost fields are not historical costs or margin proof. Do not compute profit, ROAS or winner status in this slice."
+  },
+  "proposed_request": {
+    "route": "New owner-triggered plan-scoped live selected-product stock preview, standalone exported attach initially; root finalizes path after contract review",
+    "body": {"expected_revision": "positive saved revision", "category_id": "one canonical numeric id in savedplan or exact savedURL resolution", "selected_product_ids": "1..5 explicitly chosen unique canonical Salla ids, no automatic product selection"},
+    "scope": "Freshly reprove selected category membership using accepted1628 reader/pure contract; selected ids must appear in this request's verified membership observations and must not be explicitly excluded. Truncated traversal never proves a missing selected product absent. Unresolved exclusion identity blocks eligibility and remains explicit.",
+    "binding": "Outer owner savedplan revision/fullfields + public integration/store identity/revision before/after entire operation, including fresh category reproof. No caller store/account override; exact provider customer URLs only, no URL fetch or arbitrary path.",
+    "reads": "Existing call_salla fixed GET/store/info, GET/categories/{id} and paginated category products; for selected products only GET/products/{id}, bounded GET/products/{id}/variants, then GET/products/{id} re-read to detect changed exact relevant fields. Option-detail GET may be deferred when embedded mappings unproved rather than broad fanout.",
+    "reuse_boundary": "Reuse accepted1628 pure checked_response/checked_page/canonical_id/customerURL validation unchanged in buildbase. Its _native allowlist intentionally excludes products; new Google-owned product wrapper can add fixed numeric product paths without modifying accepted1628 helper or shared Salla client.",
+    "readiness": "Return parent and pervariant observations separately, perfield presence/source path and observation interval, variant pagination traversal status and explicit blocking reasons. Wholeproduct ready, global stock coverage, complete size range, preparation time and ad eligibility remain false/null unless separately proved; all paid execution authority false.",
+    "freshness": "Each native response gets request/observation times and local source digest. Different endpoint pages are not a transactional stock snapshot. provider_revision:null, remote_snapshot_atomic:false; no source update_at assumed UTC, no historical stock-period reconstruction. Same-field before/after read detects observed changes but cannot prove no intermediate ABA or reserve inventory."
+  },
+  "proposed_technical_bounds_not_provider_limits": {
+    "selected_products": 5,
+    "variant_pages_per_product": 2,
+    "variant_rows_per_product": 120,
+    "requested_per_page": 50,
+    "documented_provider_max_per_page": 60,
+    "existing_local_inventory_proof_variant_cap": 50,
+    "decoded_response_bytes": 524288,
+    "total_deadline_seconds": 45,
+    "semantics": "Proposed technical read caps to review before code; hitcaps→partial/unproved. No claims provider variant limit200, global inventory completeness or peakmemory/transport cap. Existing shared client loads JSON before decoded-size check."
+  },
+  "new_file_ownership_proposal": [
+    "new Google-owned selected-product inventory pure validator/reader/standalone route modules",
+    "new pure/provider-fixture/owner-route/actualMongo race tests and dedicated CI",
+    "new task STATUS only; root/planningagent retain accepted1628 and shared ownerUI/router ownership"
+  ],
+  "acceptance_tests_proposed": [
+    "Owner/revision/category scope/exclusions checked before selected product calls; foreign store/account/native productid mismatch rejected",
+    "Only canonical numeric fixed GET product/variant/option paths; no arbitraryURL or redirects followed by new code",
+    "Strict rawquantity booleans/numericstrings/alias conflict/null/missing unlimited, parent0 vs positivevariants, hidden/out and missingstatus handled separately without wholeproduct claims",
+    "ActualperPage60 while requested50, repeatedpage/id/totaldrift, >120variants, missingpagination, timeout/403/429, oversized anyendpoint all stop expansion/failclosed with explicitpartial/unproved",
+    "Exact option/value membership and duplicate ids; unmatchedrelated_option_values never invent size label or completeness",
+    "Changed selected product fields or plan/integration/category during read invalidates or marks unproved; no cached olddetails fallback",
+    "ActualMongo owner/savedfields/revision/store guards with native fixtures; no liveprovider test or sourcegrant claim",
+    "No refresh-details/sync/catalog/stock/policy/ad writes, no new scope/relink based on missing metadata, no preparation/profit/Google success inference"
+  ],
+  "verification": "Read-only source and primary official documentation assessment; no runtime implementation, tests or live provider calls",
+  "next": "Root reviews exact product/variant scope, technical caps and partial observation versus readiness wording, then assigns implementation. Preserve accepted1628 runtime and sharedUI."
+}
