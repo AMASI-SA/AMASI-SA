@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-CHOICES-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-choices-20261029",
-  "state": "successor_auth_context_invalidation_and_driver_boundary_tests_pending_ci",
+  "state": "exact_source_ci_pass_root_review_pass_independent_verdict_pending",
   "parent_source_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
   "assessment_sha": "2c2516ede2d33c8757d659a431c36039034a3c87",
   "runtime_attached": false,
@@ -14,18 +14,18 @@
     "unit": "348 passed3.56s,-W error,0skip;50 new local-choice +81 owner-route +217 inherited observer/helper/reporting/CAS cases",
     "frontend": "122 passed4 suites1.685s,0skip;30 selector +31 service +55 frozen child +6 API",
     "fixtures": "Actual local backend HTTP result and actual699 route/helper/observer empty-product response generated with synthetic DB/transports and consumed by new UI tests; real AuthProvider bootstrap and actual API401 no-replay exercised",
-    "mongo": "22 new replica cases collected, including4 real failCommand deadline/cancel/heartbeat/drain cases; fresh dedicatedCI requires422 total/74 actualMongo, pending",
+    "mongo": "Exact PUSH422 passed22.95s,74 actualMongo incl22 newchoices/4failpoint +21owner+10bound+21CAS;0skip. Four finite find/commit deadline/cancel/heartbeat/command-drain cases ran. No global admission/all-failure cleanup claim.",
     "first_ci_failure": "Exact372 run40967987627/job123777256712 ran319 tests successfully then expected-count assertion failed because workflow command omitted81 owner unit +18 new Mongo cases. This is a test-selection defect, not infra and not accepted realMongo coverage; corrected in successor with both files included.",
     "source_scope": "Ten new files only relative7e686; no existing source/router/workspace/helper/child changed.",
     "red_green": "Two actual AuthProvider same-public-shape refresh cases fail on40c0 runtime because list/child signals remain unaborted; targeted redrun2failed/28filtered. Fixed runtime full122/0skip green. Private field test initially had a test-call index typo, fixed before green."
   },
   "remaining": [
-    "Fresh exact-source422/74Mongo and122UI/build CI pending.",
-    "Independent review pending.",
-    "Shared parent/router attachment and current production integration remain root-owned.",
-    "No live owner accounts, native grant/link, product mapping, inventory or eligibility/authority verified."
+    "Independent successor verdict pending.",
+    "CodeQL/G47 PR workflows still pending at this checkpoint; readiness deliberately fails old ancestry.",
+    "Root owns fresh source integration and shared route/wrapper attachment; no production change by this task.",
+    "No live owner/provider access or product mapping/stock/eligibility/advertising authority proved."
   ],
-  "next_safe_action": "Freeze successor source, inspect exact PUSH CI and request independent review; save final STATUS separately without changing accepted source. Root re-sources on current production for attachment.",
+  "next_safe_action": "Receive independent successor verdict, inspect remaining CI, seal this status branch only; keep d231 runtime frozen. Root later selectively integrates on fresh production.",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1653",
   "first_checkpoint_sha": "37273bae059ac4f82314d7fdd3eccd6ceee87897",
   "superseded_source_sha": "40c0a0806b423e53581d14158287c82b1c772a17",
@@ -43,5 +43,76 @@
     "state": "successor_review_pending",
     "confirmed_finding": "Same-owner AuthContext revalidation did not unmount list/child; actual auth/me omits private password/status fields. Successor invalidates on any user-object replacement plus exact available AUTH_FIELDS presence/type key, without exposing fields or changing auth API.",
     "qualification": "No global request-admission/concurrency guarantee; driver boundary tests only cover their finite failpoint cases."
+  },
+  "runtime_source_sha": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
+  "runtime_tree_sha": "fdf2724767049ff6319f8c361981b46df8d66152",
+  "status_branch": "codex/google-merchant-observation-choices-status-20261029",
+  "exact_source_ci": {
+    "run_id": 40969660263,
+    "backend_job": 123782932964,
+    "backend": {
+      "passed": 422,
+      "actual_mongo": 74,
+      "skipped": 0,
+      "seconds": 22.95
+    },
+    "frontend_job": 123782932690,
+    "frontend": {
+      "passed": 122,
+      "suites": 4,
+      "skipped": 0,
+      "build_seconds": 6.48
+    },
+    "checkout": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
+    "logs_read": true
+  },
+  "synthetic_ci": {
+    "sha": "e61950791fea1cb69d5ad56ec0e864424e41b26e",
+    "tree": "98121cff8ce45e4b2b28d603d6a7b58eab4f7803",
+    "parents": [
+      "08160c883a040f3a9fb49a165dab8074d4ef7309",
+      "d231958ee4de80aa6b7fdd0593759c829d0da98f"
+    ],
+    "dedicated_run": 40969664606,
+    "backend_job": 123782946263,
+    "backend": "422 passed22.04s,74actualMongo0skip",
+    "google_full_run": 40969664686,
+    "google_backend_job": 123782946387,
+    "google_backend": "1307passed33.86s",
+    "google_frontend_job": 123782946951,
+    "google_frontend": "261passed18suites/build3.74s",
+    "qualification": "Different synthetic merge tree; not exact source or deployment evidence."
+  },
+  "release_readiness": {
+    "run": 40969664740,
+    "job": 123782947372,
+    "state": "expected_failure_old_source_ancestry_and_intent_membership",
+    "required_base": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
+    "candidate": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
+    "retry": false,
+    "intent_changed": false
+  },
+  "root_review": {
+    "state": "bounded_source_pass_pending_independent_seal",
+    "scope": "Full backend/service/selector and auth correction/failpoint delta",
+    "backend": "50 passed-Werror2.00s",
+    "frontend": "122passed4suites1.276s",
+    "exact_ci_logs_read": true,
+    "qualification": "No globalcleanup/concurrency/liveprovider/attachment claim."
+  },
+  "pr_workflows": {
+    "success": 14,
+    "expected_failure": 1,
+    "pending": [
+      {
+        "name": "CodeQL",
+        "run": 40969664809
+      },
+      {
+        "name": "G47 Focused Integration",
+        "run": 40969664969
+      }
+    ],
+    "total": 17
   }
 }
