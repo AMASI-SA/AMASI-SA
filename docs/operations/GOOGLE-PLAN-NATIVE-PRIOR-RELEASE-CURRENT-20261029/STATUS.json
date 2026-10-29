@@ -1497,5 +1497,30 @@
   "evidence_append": {
     "predecessor": "b75c9f5bf69225676f8f54bb07f5151f15ab4698",
     "scope": "STATUS-only append for B CI/independent pair/root actualhost/normalM evidence. A/B source commits unchanged."
+  },
+  "root_operational_publication": {
+    "updated_at": "2026-10-29T23:29:57.009Z",
+    "state": "PUBLISHING_AWAIT_NEWER_EXPLICIT_FINISH",
+    "source": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
+    "intent": "9f094a0f8c65cdfcea3a80c691229d489357487f",
+    "merge": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "runtime": "rg5-079f61e618463aaeddd72d0fdb81ca3491d3d9486e40b650a8c1ddccee9ab8d4",
+    "app_build_seconds": 62.01,
+    "tracked_clean": true,
+    "unrelated_untracked_preserved": [
+      ".emergent/testing/",
+      "deployer-agent-docs/"
+    ],
+    "actor": "codex-google-plan-season-20261030",
+    "prepare": "PASS",
+    "prepublish": "ready_to_publish:true;exactA/M/runtime",
+    "publish_changes_clicks": 1,
+    "UI": "Publishing...",
+    "baseline_explicit_finish": "Oct30 02:05 Riyadh version8ee00b1",
+    "lease_active": true,
+    "own_lease": true,
+    "live_verified": false,
+    "financial_or_policy_changes": false,
+    "next": "Do not repeat publish. Waitnewerexplicitfinish, run ownv5verify3 andconfirmactivefalse, thenliveGoogleUI tests+screenshot. No otherhostmutationwhileleaseactive."
   }
 }
