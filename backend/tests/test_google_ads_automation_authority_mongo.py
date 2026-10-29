@@ -266,7 +266,9 @@ async def test_real_concurrent_authorization_acknowledges_one_claim_only(monkeyp
     granted=[result for result in results if isinstance(result,dict) and result.get("authorized")]
     denied=[result for result in results if isinstance(result,HTTPException)]
     assert len(granted) == len(denied) == 1
-    assert denied[0].detail["code"] == "google_budget_guard_policy_changed"
+    assert denied[0].status_code == 503
+    assert denied[0].detail["code"] == "google_budget_guard_operation_pending"
+    assert denied[0].detail["automatic_retry_allowed"] is False
     assert denied[0].detail["preserve_execution_fence"] is True
     stored=await authority_db[policy.AUTOMATION_POLICIES].find_one({"user_id":"owner","account_id":"123"})
     assert stored["_dispatch_generation"] == 1
