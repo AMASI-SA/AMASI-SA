@@ -1,0 +1,54 @@
+{
+  "task_id": "GOOGLE-MERCHANT-SELECTOR-ASSESSMENT-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-merchant-selector-assessment-20261029",
+  "state": "read_only_assessment_wip",
+  "assessed_source_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
+  "assessed_tree_sha": "0f3bfab9bebd343d27b01bb00e4ee14d98a76be9",
+  "checkpoint_identity": "The branch commit carrying this STATUS is the immutable assessment checkpoint; no self-referential SHA is claimed.",
+  "owned_paths": [
+    "docs/operations/GOOGLE-MERCHANT-SELECTOR-ASSESSMENT-20261029/ASSESSMENT.md",
+    "docs/operations/GOOGLE-MERCHANT-SELECTOR-ASSESSMENT-20261029/STATUS.json"
+  ],
+  "runtime_changes": false,
+  "provider_calls": 0,
+  "credential_reads": 0,
+  "production_changed": false,
+  "deployment_ready": false,
+  "findings": [
+    "Existing overview provides local display candidates for both providers, capped at50 without completeness metadata.",
+    "Overview can inherit missing account status/provenance from provider; strict client parsing cannot restore stripped raw evidence.",
+    "Workspace/readiness may choose Ads accounts implicitly; native Merchant lookup proves Ads-side link only.",
+    "Real AuthContext user.id plus authenticated owner mode can scope the proposed wrapper, but does not replace backend authority.",
+    "Root selected a dedicated bounded complete local owner-list GET plus new manual wrapper; the overview-only alternative is rejected.",
+    "Complete raw local enumeration would require a separate reviewed backend interface; no remote-completeness claim is available."
+  ],
+  "verification": {
+    "source_read": "Actual AuthContext, workspace, integrations service/routes/models, Google discovery/projection, management, lookup and frozen observation contract.",
+    "functional_probe": "Existing FakeDB + actual _v2_snapshot/_card_from_snapshot:51 synthetic rows return50; absent row status/provenance become connected/api_connection; no completeness/owner/revision fields;0 writes. Exit0.",
+    "scope_check": "git diff --check and explicit two-document delta against7e686; no source tests rerun for docs-only assessment.",
+    "no_live_acceptance": true
+  },
+  "accepted_parent_evidence": {
+    "owner_route_sha": "69919f5045ec399492f391cef844cc97af005432",
+    "owner_route_exact_ci": "40961496541/123755126816:350 passed,52 actualMongo,0skip",
+    "child_ui_sha": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
+    "child_ui_exact_ci": "40964310319/123764758095:61 tests/2 suites,55 own cases,0skip,build3.85s",
+    "child_independent_review": "SEALED bounded PASS;61 tests and five actual backend-generated native-identity rows accepted by JS validator.",
+    "child_root_review": "Full child/validator/workflow read;61 tests/2 suites,0skip,0.938s; exact PUSH logs read; bounded accepted.",
+    "child_final_pr_ci": {
+      "total": 16,
+      "success": 15,
+      "failure": 1,
+      "pending": 0
+    },
+    "child_readiness_failure": "40964318766 expected old-base ancestry refusal, not infrastructure; fresh root integration source required."
+  },
+  "next_safe_action": "Implement approved new local-list module/manual wrapper in an isolated successor, using frozen699 projections/encoding; preserve shared parent/router ownership; unit + realMongo race tests and independent review before attachment.",
+  "remaining": [
+    "Approved new local-list and selector implementation not yet started at this docs checkpoint.",
+    "No current owner-specific accounts/grant/native membership verified.",
+    "No frozen backend route or child UI attached to production.",
+    "No store mapping, stock, Ads eligibility, destinations, attribution or execution authority established."
+  ]
+}
