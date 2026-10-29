@@ -55,14 +55,20 @@ async def test_real_independent_client_revoke_serializes_with_floor(monkeypatch,
         other.close()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('fault',['server91','connection_close'])
-async def test_real_floor_commit_unknown_never_http_retry_or_release(monkeypatch,actual_db,fault):
+@pytest.mark.parametrize('fault',['server91','connection_close','ack_loss_after_commit'])
+async def test_real_floor_commit_unknown_never_http_retry_or_release(monkeypatch,actual_db,automation_mongo_uri,fault):
     db,capture=actual_db;db,provider,values=await setup(monkeypatch,db);row=await preview(db,values)
     original=creation.acknowledge_paused_creation_dispatch_floor
     async def faulted(database,proposal):
-        data={'failCommands':['commitTransaction']}
-        data.update({'errorCode':91} if fault=='server91' else {'closeConnection':True})
-        await db.client.admin.command({'configureFailPoint':'failCommand','mode':{'times':1},'data':data})
+        if fault!='ack_loss_after_commit':
+            data={'failCommands':['commitTransaction']}
+            data.update({'errorCode':91} if fault=='server91' else {'closeConnection':True})
+            await db.client.admin.command({'configureFailPoint':'failCommand','mode':{'times':1},'data':data})
+        else:
+            raw=guard._commit_once
+            async def lost(*args):
+                await raw(*args);raise TimeoutError('floor ACK lost after real commit')
+            monkeypatch.setattr(guard,'_commit_once',lost)
         return await original(database,proposal)
     monkeypatch.setattr(creation,'acknowledge_paused_creation_dispatch_floor',faulted)
     started=time.monotonic()
@@ -76,4 +82,60 @@ async def test_real_floor_commit_unknown_never_http_retry_or_release(monkeypatch
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
     with pytest.raises(HTTPException):await execute(db,row)
     assert provider.writes==0 and capture.names.count('commitTransaction')==2
+    if fault=='ack_loss_after_commit':
+        other=AsyncIOMotorClient(automation_mongo_uri,serverSelectionTimeoutMS=2000,retryWrites=True)
+        try:
+            stored=await db[management.PROPOSALS].find_one({'proposal_id':row['proposal_id']},{'_id':0})
+            with pytest.raises(HTTPException) as error:await original(other[db.name],stored)
+            assert error.value.detail['code']=='google_budget_guard_operation_consumed'
+            assert provider.writes==0 and capture.names.count('commitTransaction')==2
+        finally:other.close()
     print({'case':fault,'floor_helper_seconds':round(duration,3),'floor_wire_attempts':1,'provider_writes':0,'hold_retained':True})
+
+@pytest.mark.asyncio
+async def test_real_owner_cancel_conflicts_with_floor_proposal_write(monkeypatch,actual_db,automation_mongo_uri):
+    from integrations_control_center.google_ads_paused_creation_budget import SessionCollection
+    from pymongo.write_concern import WriteConcern
+    db,capture=actual_db;db,provider,values=await setup(monkeypatch,db);row=await preview(db,values)
+    other=AsyncIOMotorClient(automation_mongo_uri,serverSelectionTimeoutMS=2000,retryWrites=True);worker=other[db.name]
+    original=SessionCollection.update_one;cancelled=[]
+    async def cancel_first(collection,query,update,**kwargs):
+        if update.get('$set',{}).get('creation_dispatch_marker'):
+            changed=await worker[management.PROPOSALS].with_options(write_concern=WriteConcern('majority',j=True)).update_one(
+                {'proposal_id':row['proposal_id'],'status':'approved','submission_started':False},
+                {'$set':{'status':'failed','submission_started':False,'provider_write_reached':False,
+                    'safe_error':'execution_cancelled_before_dispatch'}})
+            assert changed.matched_count==1;cancelled.append(True)
+        return await original(collection,query,update,**kwargs)
+    monkeypatch.setattr(SessionCollection,'update_one',cancel_first)
+    try:
+        result=await execute(db,row)
+        assert cancelled==[True] and result['status']=='failed' and result['submission_started'] is False and provider.writes==0
+        state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+        assert state['epoch']==2 and state['active_claim'] is None
+        allocation=next(iter(state['allocations'].values()))
+        assert allocation.get('dispatch_marker') is None and allocation['state']=='cancelled_before_http'
+        assert capture.names.count('commitTransaction')==2 # original claim + known no-HTTP settlement
+    finally:other.close()
+
+@pytest.mark.asyncio
+async def test_real_expiry_crossed_during_floor_ack_keeps_inflight_hold(monkeypatch,actual_db):
+    from datetime import timedelta
+    from tests.test_google_ads_automation_creation_gateway import advance,NOW
+    db,capture=actual_db;db,provider,values=await setup(monkeypatch,db)
+    await db[guard.CREATION_POLICIES].update_one({'account_id':'123'},
+        {'$set':{'expires_at':(NOW+timedelta(seconds=20)).isoformat()}})
+    row=await preview(db,values);original=guard._commit_once;calls=0
+    async def elapsed(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:advance(monkeypatch,NOW+timedelta(seconds=21))
+        return result
+    monkeypatch.setattr(guard,'_commit_once',elapsed)
+    result=await execute(db,row)
+    assert result['status']=='uncertain' and result['submission_started'] is True and provider.writes==0
+    assert result['safe_error']=='creation_authority_expired_after_floor'
+    state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+    assert state['epoch']==2 and state['active_claim'] and next(iter(state['allocations'].values()))['dispatch_marker']
+    assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    assert capture.names.count('commitTransaction')==2

@@ -66,3 +66,74 @@ async def test_floor_reloads_original_binding_and_retains_hold_on_drift(monkeypa
     assert state['epoch']==1 and state['active_claim']
     assert next(iter(state['allocations'].values())).get('dispatch_marker') is None
     assert (await db[guard.CREATION_POLICIES].find_one({'account_id':'123'}))['_creation_claim']
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('timing',['waiting_for_floor','before_commit','during_commit_ack'])
+async def test_expiry_crossing_floor_never_sends_or_releases_unknown(monkeypatch,timing):
+    from datetime import timedelta
+    from tests.test_google_ads_automation_creation_gateway import advance,NOW
+    db,provider,values=await setup(monkeypatch)
+    await db[guard.CREATION_POLICIES].update_one({'account_id':'123'},
+        {'$set':{'expires_at':(NOW+timedelta(seconds=20)).isoformat()}})
+    row=await preview(db,values)
+    if timing=='waiting_for_floor':
+        original=authority.acknowledge_paused_creation_dispatch_floor
+        async def elapsed(database,proposal):
+            advance(monkeypatch,NOW+timedelta(seconds=21))
+            return await original(database,proposal)
+        monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',elapsed)
+    elif timing=='before_commit':
+        original=authority._guard_paused_creation_command
+        async def elapsed(*args,**kwargs):
+            result=await original(*args,**kwargs)
+            if isinstance(kwargs['command'],guard.PausedCreationDispatchFloor):advance(monkeypatch,NOW+timedelta(seconds=21))
+            return result
+        monkeypatch.setattr(authority,'_guard_paused_creation_command',elapsed)
+    else:
+        original=guard._commit_once;calls=0
+        async def elapsed(*args):
+            nonlocal calls
+            calls+=1;result=await original(*args)
+            if calls==2:advance(monkeypatch,NOW+timedelta(seconds=21))
+            return result
+        monkeypatch.setattr(guard,'_commit_once',elapsed)
+    result=await execute(db,row)
+    assert provider.writes==0 and result['status']=='uncertain'
+    assert result['submission_started'] is (timing=='during_commit_ack')
+    state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+    assert state['active_claim'] and state['epoch']==(2 if timing=='during_commit_ack' else 1)
+    assert next(iter(state['allocations'].values()))['state']=='reserved'
+    assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    with pytest.raises(HTTPException):await execute(db,row)
+    assert provider.writes==0
+
+@pytest.mark.asyncio
+async def test_persisted_unknown_floor_cannot_be_replayed_after_process_state_loss(monkeypatch):
+    from integrations_control_center import google_ads_automation_creation_gateway as gateway
+    from tests.test_google_ads_automation_creation_gateway import advance,NOW
+    from datetime import timedelta
+    db,provider,values=await setup(monkeypatch);row=await preview(db,values)
+    original=guard._commit_once;calls=0;stale=[]
+    original_floor=authority.acknowledge_paused_creation_dispatch_floor
+    async def saved(database,proposal):
+        stale.append(deepcopy(proposal));return await original_floor(database,proposal)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',saved)
+    async def lost(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:raise TimeoutError('floor ACK lost after durable commit')
+        return result
+    monkeypatch.setattr(guard,'_commit_once',lost)
+    result=await execute(db,row)
+    assert result['submission_started'] is True and provider.writes==0
+    # New facade identity excludes in-memory operation receipts, as a restarted
+    # process would. The durable proposal/guard forbid a stale caller's retry.
+    restarted=type(db)({name:deepcopy(collection.rows) for name,collection in db._tx_collections.items()})
+    with pytest.raises(HTTPException):await original_floor(restarted,stale[0])
+    with pytest.raises(HTTPException):await execute(restarted,row)
+    advance(monkeypatch,NOW+timedelta(seconds=31))
+    with pytest.raises(HTTPException) as error:
+        await gateway.reconcile_google_automation_creation(restarted,user_id='owner',account_id='123',proposal_id=row['proposal_id'])
+    assert error.value.detail['code']=='google_ads_recovery_read_failed'
+    assert (await management.get_proposal(restarted,'owner',row['proposal_id']))['status']=='uncertain' and provider.writes==0
+    assert (await restarted[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'

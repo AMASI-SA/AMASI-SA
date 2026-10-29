@@ -32,12 +32,14 @@ async def test_real_mongo_floor_original_readback_ownership_and_no_resend(monkey
 
 @pytest.mark.asyncio
 async def test_real_mongo_lost_floor_ack_no_http_and_reservation_held(monkeypatch,authority_db):
-    db,provider,values=await setup(monkeypatch,authority_db);row=await preview(db,values);original=management.record_event
-    async def lose(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('lost floor ACK')
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    db,provider,values=await setup(monkeypatch,authority_db);row=await preview(db,values);original=guard._commit_once;calls=0
+    async def lose(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:raise TimeoutError('lost actual floor commit ACK')
         return result
-    monkeypatch.setattr(management,'record_event',lose)
+    monkeypatch.setattr(guard,'_commit_once',lose)
     result=await execute(db,row)
     assert result['status']=='uncertain' and result['submission_started'] is True and provider.writes==0
     policy=await db[gateway.CREATION_POLICIES].find_one({'account_id':'123'})
@@ -52,12 +54,13 @@ async def test_real_mongo_lost_floor_ack_no_http_and_reservation_held(monkeypatc
 
 @pytest.mark.asyncio
 async def test_real_mongo_stop_after_acked_floor_strict_settlement_preserves_floor_quota(monkeypatch,authority_db):
-    db,provider,values=await setup(monkeypatch,authority_db);row=await preview(db,values);original=management.record_event
-    async def stop(database,proposal,status,**kwargs):
-        result=await original(database,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','false')
+    from integrations_control_center import google_ads_automation_creation_authority as authority
+    db,provider,values=await setup(monkeypatch,authority_db);row=await preview(db,values);original=authority.acknowledge_paused_creation_dispatch_floor
+    async def stop(database,proposal):
+        result=await original(database,proposal)
+        monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_CREATION_ENABLED','false')
         return result
-    monkeypatch.setattr(management,'record_event',stop)
+    monkeypatch.setattr(authority,'acknowledge_paused_creation_dispatch_floor',stop)
     result=await execute(db,row)
     assert result['status']=='failed' and result['submission_started'] is True and provider.writes==0
     stored=await db[management.PROPOSALS].find_one({'proposal_id':row['proposal_id']})

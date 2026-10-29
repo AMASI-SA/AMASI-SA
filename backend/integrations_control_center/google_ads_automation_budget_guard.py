@@ -778,6 +778,9 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             _fail('google_budget_guard_epoch_changed')
         if phase.get('stop_requested') or _operation_clock() >= phase['deadline']:
             _fail('google_budget_guard_request_ended_before_commit')
+        if (isinstance(command, PausedCreationDispatchFloor)
+            and datetime.now(timezone.utc) >= datetime.fromisoformat(result['authority_valid_until'])):
+            _fail('google_budget_guard_creation_authority_expired')
         phase['commit_attempted'] = True
         await _commit_once(db, session)  # Exactly one wire command; no automatic commit retry.
         return {**result, 'committed': True, 'guard_epoch': row['epoch'] + 1, 'operation_id': operation_id,

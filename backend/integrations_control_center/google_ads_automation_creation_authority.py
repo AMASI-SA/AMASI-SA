@@ -553,6 +553,16 @@ async def _guard_paused_creation_command(db, *, session, snapshot, command, oper
             or not isinstance(active, dict) or active.get('allocation_id') != key
             or active.get('execution_claim_id') != command.execution_claim_id):
             guard_fail('google_budget_guard_creation_binding_unproved')
+        activated = contract._instant(typed.activated_at)
+        expiry = contract._instant(typed.expires_at)
+        proposal_expiry = contract._instant(row.get('expires_at'))
+        if (type(typed.activation_version) is not int or typed.activation_version != 1
+            or type(typed.activation_revision) is not int or typed.activation_revision != typed.revision
+            or typed.activated_by != snapshot.user_id or activated is None or activated > current
+            or expiry is None or not current < expiry <= current + timedelta(days=30)
+            or proposal_expiry is None or proposal_expiry <= current):
+            guard_fail('google_budget_guard_creation_authority_expired')
+        authority_valid_until = min(expiry, proposal_expiry).isoformat()
         stamp = current.isoformat()
         marker = {'operation_id': operation_id, 'proposal_id': command.proposal_id,
             'execution_claim_id': command.execution_claim_id, 'submitted_at': stamp,
@@ -571,7 +581,9 @@ async def _guard_paused_creation_command(db, *, session, snapshot, command, oper
         return {**old['allocations'], key: {**allocation, 'dispatch_marker': marker}}, active, {
             'kind': 'paused_creation_dispatch_floor', 'submission_started': True,
             'submitted_at': stamp, 'reconcile_after': (current + timedelta(seconds=30)).isoformat(),
-            'creation_dispatch_marker': marker, 'metadata_writers_serialized': False}
+            'creation_dispatch_marker': marker, 'authority_valid_until': authority_valid_until,
+            'authority_valid_from': activated.isoformat(),
+            'metadata_writers_serialized': False}
     if isinstance(command, PausedCreationReservation):
         if (old['active_claim'] is not None or len(old['allocations']) >= MAX_ALLOCATIONS
             or (snapshot.standing_policy or {}).get('_dispatch_claim') is not None):
