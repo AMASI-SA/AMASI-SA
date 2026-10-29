@@ -1,0 +1,31 @@
+{
+  "task": "GOOGLE-LIVE-CATEGORY-UI-INTEGRATION-20261029",
+  "state": "source_checkpoint_pending_ci_and_independent_review",
+  "production_parent": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "accepted_plan_source": "03a181de981dfa22c04831230f3ef1911d42126e",
+  "accepted_live_category_backend": "d77306f8af92057d4414413a9900e03bda7b1295",
+  "baseline_preservation": "42 non-doc accepted 1627 paths plus eight accepted 1628 paths selected onto M7; M7 inventory unchanged; seven category backend/test blobs byte-identical d773; shared new runtime delta from 1627 is two route attachment lines plus two parent component lines. Workflows extend prior strict gates.",
+  "scope": "Explicit owner-only GET for one saved category ID or exact saved URL; membership observed from owned fixed native Salla endpoints only. Times, source status, exclusions, pagination traversal, and non-atomic snapshot shown. No auto GET, URL fetch/navigation, plan save, product selection, ranking, inventory proof, mapping proof, profit, budget, or execution authority.",
+  "request_guards": [
+    "saved revision and full fields",
+    "dirty/reload/save/owner/unmount abort and late result discard",
+    "category choice cancels prior request",
+    "strict response scope and false/null authority proof",
+    "native permission errors scoped to this read; no forced OAuth"
+  ],
+  "tests": {
+    "red": "Five actual parent route cases failed before attachment; service suite failed before implementation.",
+    "local_backend": "56 passed -Werror, zero skips, 2.48s (35 accepted units + five new parent route + five linked integration +11 category routes)",
+    "local_ui": "227 passed / nine suites, 2.299s, includes actual parent cancellation and M7 inventory review",
+    "planned_dedicated_ci": "48 backend including eight actual Mongo (seven preserved + one full router), exact count and zero skips; nine UI suites and build",
+    "full_ci": "Google Ads full management backend/UI/build required on exact remote source"
+  },
+  "limitations": [
+    "Native Salla responses are fixtures in tests; no live provider request performed.",
+    "Decoded response bound 512 KiB is checked after shared client decoding, not a transport peak memory bound.",
+    "Pagination traversal is not an atomic provider snapshot; provider_revision remains null.",
+    "Inventory, size, preparation time, Mezan product mapping, catalog offer identity, all advertising eligibility and execution remain unproved/false.",
+    "No deployment, release intent, lease, paid launch, budgets, or owner plan writes by this task."
+  ],
+  "next": "Upload exact source and Draft PR; inspect all exact-source workflow logs and request independent review. Root owns production fresh-base release separately; frozen 1627 remains unchanged."
+}
