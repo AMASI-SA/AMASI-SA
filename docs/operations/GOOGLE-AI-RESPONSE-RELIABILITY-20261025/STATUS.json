@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T18:10:09.767Z",
+  "updated_at": "2026-10-29T18:30:54.933Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -25,7 +25,11 @@
       "finished": "2026-10-29 20:39 Asia/Riyadh",
       "verified_three_probes": true,
       "lease_active": false
-    }
+    },
+    "current_verified_head": "15b656131813af54a043c33821e3aa5f69e7703c",
+    "current_verified_source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
+    "current_verified_runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
+    "latest_deployed_pr": 1609
   },
   "budget_semantics": {
     "pr": 1509,
@@ -81,12 +85,12 @@
     "Complete firstlaunch authority/gateway/worker, product sales/profit/attribution/season evidence and supported catalogtypes still incomplete."
   ],
   "remaining": [
-    "Deploy reviewed automatic-resume safety1609, catalog stored-inventory review1605, wired store observations1611 via fresh current-production v5 pairs.",
+    "Deploy reviewed stored-inventory review1616, selected-retail identity1617, saved-plan observations1611 and categorymembership1614 via fresh current-production v5 pairs.",
     "Complete separate replica commit/majorityreadback diagnostic1612 and actual policy/native commitment proof before mandatory sharedbudgetmigration1602; keep runtimeoff and preserve OAuth-independentrevocation.",
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Wait newerexplicitfinish, verify3 expectedA690/M5/runtime051, confirmclosedlease, liveGoogleconnected/policyoff/manualflowregression. Do notrepeatpublish ormodify/app whileownedleaseactive.",
+  "next_safe_action": "1616 source A build on actualhost; only after exactCIintentmatch freezeB, CI/review/adapter, merge/publish/verify3 andlive. 1609accepted do notrepublish.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -707,7 +711,7 @@
       "limitation": "scope unique lock prevents parallel refresh; integration with actual HTTP/writers, durable recovery and multi-doc atomic OAuth incomplete"
     }
   },
-  "last_verified_production_head": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "last_verified_production_head": "15b656131813af54a043c33821e3aa5f69e7703c",
   "courier_release_coordination": {
     "pr": 1559,
     "production_merge": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -1514,14 +1518,14 @@
       },
       "lifecycle_wip": {
         "pr": 1602,
-        "latest_head": "43c56118e579e2aa4cb20f934d3633bd2cfbdad0",
+        "latest_head": "9f20b5c425b65b1bbf1cc08b47c3883ed2b8bbad",
         "runtime": "a110f1e8a538d52e77694fcf65907441a0214823",
         "state": "WIP_REVIEWED_CI_PASSED_NEEDS_SELECTIVE_CURRENT_PROD_INTEGRATION_AND_PRODUCTION_COMMIT_PROOF",
         "unit_tests": 596,
         "independent_tests": 50,
         "runtime_actual_ci": 40917887895,
         "actual_cases": 116,
-        "actual_mongo": 22,
+        "actual_mongo": 29,
         "skips": 0,
         "final_focused_ci": 40919171022,
         "final_expected_total": 122,
@@ -1533,13 +1537,17 @@
           "Replicasetonly;mongosunsupporteduntilrecoveryTokencontractproved"
         ],
         "remaining": "CurrentproductionTX/topology,legacycommitments/providerresourceinventory,externalwriterlimitations/firstlaunchauthority;runtimefalse",
-        "tested_source": "113cf374fb1034a0c20cf02e95e827c61b6cb188",
+        "tested_source": "5ba648258d1bec0fad55c0695429e74d22a7ceb8",
         "final_total": 122,
         "final_actual_mongo": 28,
         "final_skips": 0,
-        "full_ci": 40919171175,
-        "full_backend": 1347,
-        "full_frontend": 226
+        "full_ci": 40926982926,
+        "full_backend": 1319,
+        "full_frontend": 189,
+        "focused_ci": 40926983019,
+        "total": 124,
+        "proof_scope": "ExactoldbranchpushCI; currentprodselectiveintegration notyetproved",
+        "technical_probe": "Dedicatedengine namespace; no synthetic businessguarddocument;51independentunit/strictvalidatorMongo passed"
       }
     },
     "release_history_finding": "Suggestions269c and readiness normalmerge source histories inherit an intent change after M2, violating v5 rev-list full-history gate despite zero netintentdiff. Root preserving WIP branches and preparing new direct-M2 SourceA releases with same reviewedcode; no frozenpair/squash/rebase.",
@@ -1613,7 +1621,7 @@
           "readiness": 40920771219,
           "artifact": 12917913169
         },
-        "state": "PUBLISHING_SINGLE_CLICK",
+        "state": "DEPLOYED_AND_ACCEPTED_BOUNDED_SCOPE",
         "root_tests": "181passed2.16s -Werror0skip",
         "independent": "181focused+330compatibility pass -Werror0skip; independent M4-toA redgreen",
         "root_manifests": "Exact1026backend243control and runtimecompactprojection; strictfullhistoryPASS",
@@ -1637,30 +1645,55 @@
           ],
           "rootlogs": "reviewed"
         },
-        "next": "Wait newerexplicitfinish, verify3 expectedA690/M5/runtime051, confirmclosedlease, liveGoogleconnected/policyoff/manualflowregression. Do notrepeatpublish ormodify/app whileownedleaseactive.",
+        "next": "Complete clean Source A87812e17 catalog stock review1616 v5 release. No repeat1609 publish. Continue reviewed product/store/category/retail and storage prerequisites; no paid activity without ownerlimits.",
         "merge": "15b656131813af54a043c33821e3aa5f69e7703c",
         "status_branch": "codex/google-resume-safety-status-20261029",
-        "status_checkpoint": "ffa77d2b6052a12550fa61181a976d8aabfcbdad",
+        "status_checkpoint": "e473f1af6ed7e5a54059e3c30c43863daba3bb6d",
         "app_materialization": {
           "first": "REFUSED prepackaged bytecode backend/__pycache__, whiletrackedclean. No lease/publish. Two generatedpyc files mtime2026-10-29T17:31:55Z; origin not assumed.",
           "recovery": "Guardactivefalse. Generatedcache preserved by moving to/tmp/google1609-bytecode-quarantine; no sourcechange/foreigndeletion. Retrylog/tmp/google1609-app-materialize-retry1.log running.",
           "retry1": "PASS59.65s; exact source/runtime package proof, trackedclean; two foreigndirs preserved"
         },
         "publication": {
-          "published": "in progress",
+          "published": true,
           "publish_changes_clicks": 1,
           "republish_clicks": 1,
           "baseline_finish": "2026-10-29 20:39 Asia/Riyadh",
-          "latest_observed": "Publishing…",
-          "do_not_repeat": true
+          "latest_observed": "Deployment finished Oct29 09:19PM",
+          "do_not_repeat": true,
+          "finished": "2026-10-29 21:19 Asia/Riyadh"
         },
         "guard": {
-          "active": true,
+          "active": false,
           "actor": "codex-google-resume-safety-20261029",
           "prepare": "PASS afterfreshrecoveredactivefalse/M5/trackedclean",
-          "prepublish": "ready_to_publish true exactA690/M5/runtime051"
+          "prepublish": "ready_to_publish true exactA690/M5/runtime051",
+          "lease": "closed"
         },
-        "host_recovery": "Recovered editor in newtab9 while preserving originaluserUntitled1 tab1. AppHEADM5/trackedclean/backendidentity/frontendmeta persisted; /tmp cleared. Actualguard wasinactive. Freshprepare/prepublish passed."
+        "host_recovery": "Recovered editor in newtab9 while preserving originaluserUntitled1 tab1. AppHEADM5/trackedclean/backendidentity/frontendmeta persisted; /tmp cleared. Actualguard wasinactive. Freshprepare/prepublish passed.",
+        "published": true,
+        "verification": {
+          "verified": true,
+          "checks": 3,
+          "boot_started_at": "2026-10-29T18:18:28.294227+00:00",
+          "lease_active": false,
+          "source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
+          "deployment": "15b656131813af54a043c33821e3aa5f69e7703c",
+          "runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
+          "frontend_artifact": "6631a09243c43cdaa2c09e1b9a4fa3bc601dbecf681052b5405bf592c59be96a",
+          "functional": {
+            "google_connection": "connected",
+            "account": "5052346701",
+            "campaign_count": 22,
+            "manual_campaign_editor": "opened existing PAUSED campaign and hydrated existing name; closed without mutation",
+            "management_revision": 0,
+            "approved_limits": "blank",
+            "autonomy": "disabled",
+            "provider_writes": 0,
+            "policy_writes": 0
+          },
+          "screenshot": "docs/operations/GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029/google1609-live-policy-20261029.jpg"
+        }
       }
     },
     "store_observations": {
@@ -1717,11 +1750,19 @@
     "retail_identity_fix": {
       "pr": 1617,
       "owner": "google_launch",
-      "source": "6e7661610fef76d3888041d2c4b3270657ca8eb6",
+      "source": "c7a36165f48f433ab3275320187e4d9c5b298020",
       "rejected_source": "6cd806f323548322f90e77003f45663541684237",
-      "state": "WIP_DISPATCH_IMPORT_FIXED_NEW_REVIEW_CI_PENDING",
+      "state": "REVIEWED_CI_PASSED_NEEDS_CURRENT_PROD_SOURCE",
       "finding": "Crossfeed offerID union/unknownavailability andownerassertion mislabeledverified; execute mustrecheck fullnativefrozenproof. Oldsourceimportbug caughtbyself+independentreview; priorCIpassnotreleaseproof.",
-      "scope": "Manual/AI Shopping+retailPMax PAUSED only; no paidwrites"
+      "scope": "Manual/AI Shopping+retailPMax PAUSED only; no paidwrites",
+      "checkpoint": "d4dd6f8690fa0bda8cf60ea0f19778221e2caf34",
+      "tests": "Independent308-Werror0skip +root171; sourcefullCI40928480817 1307backend including22newactualMongo,228UI/build",
+      "limits": "Selectedoffergateonly; ownerassociationunverified; no liveproviderwrite orpaidlaunch"
+    },
+    "namespace_prerequisites": {
+      "owner": "google_connection",
+      "state": "WIP_IMPLEMENTING_OWNER_READONLY_AUDIT",
+      "scope": "Fixednamespace metadata/effectiveprivileges/indexes/boundedownerlegacyshape; sanitizedbooleansonly; no writes/createIndex/no livecredentials. Cannotproveenginecommit/migration/paid authority."
     }
   }
 }
