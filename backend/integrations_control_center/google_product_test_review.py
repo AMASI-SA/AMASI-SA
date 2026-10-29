@@ -39,6 +39,7 @@ def build_product_test_review(*,plan_id,plan_revision,category_id,selected_ids,f
         result.append({'product_id':product,'decision':decision,'season_fit':deepcopy(fit) if fit else {'decision':'unknown','meaning':'no_current_owner_review'},
             'inventory_observation':deepcopy(item),'evidence_reasons':reasons,'current_store_observations':deepcopy(store[product]),
             'prior_store_observations':deepcopy(history.get(product)),'campaign_context_refs':list(refs),
+            'campaign_associations':deepcopy(campaigns[product].get('associations',[])),
             'history_status':'qualified_observations_only_not_complete_history' if reasons else 'no_qualified_observations_not_absence_of_sales',
             'historical_cost_quality':'unknown','profitability':None,'growth':None,'preparation_time':None,'size_fit':'unknown',
             'approved_test_budget':'not_checked_requires_separate_owner_grant','paid_launch_eligible':False,'execution_authorized':False,

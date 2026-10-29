@@ -46,3 +46,13 @@ def test_separate_native_currencies_and_shared_campaign_context_never_allocate_o
 def test_nonpositive_stock_never_infers_global_purchasability(state):
     data=inputs();data['inventory']['products'][0]['parent_stock']['state']=state
     assert build_product_test_review(**data)['products'][0]['decision']=='needs_stock_review'
+
+def test_meta_tiktok_association_gaps_are_preserved_without_promoting_product_performance():
+    data=inputs()
+    associations=[{'provider':'meta','account_id':'meta-account','campaign_id':'m1','meaning':'intended_product_association_only','feed_mapping_verified':False,'metrics_status':'source_fields_unproved','missing':['persisted_native_timezone','atomic_campaign_snapshot_completeness']},
+        {'provider':'tiktok','account_id':'tiktok-account','campaign_id':'t1','meaning':'intended_product_association_only','feed_mapping_verified':False,'metrics_status':'source_fields_unproved','missing':['persisted_native_currency','persisted_native_timezone']}]
+    data['linked']['products'][0]['associations']=associations
+    row=build_product_test_review(**data)['products'][0]
+    assert row['campaign_associations']==associations and row['campaign_context_refs']==[]
+    assert row['decision']=='exploration_test_review' and row['evidence_reasons']==[]
+    assert row['profitability'] is None and row['paid_launch_eligible'] is False

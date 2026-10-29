@@ -207,3 +207,24 @@ async def test_actual_owner_drift_during_final_review_read_never_escapes(mongo,m
         response=await preview(c) if operation=='preview' else await read_fit(c) if operation=='state' else await save_fit(c,expected_review_revision=1)
     assert response.status_code==403,response.text
     if operation=='save':assert response.json()['detail']['review_may_have_persisted'] is True and (await mongo[REVIEWS].find_one({}))['revision']==2
+
+@pytest.mark.asyncio
+async def test_actual_meta_tiktok_association_writers_preserve_native_field_gaps_without_performance_claim(mongo,monkeypatch):
+    from integrations_control_center import campaign_product_associations as graph
+    recorded=datetime(2026,10,1,tzinfo=timezone.utc)
+    monkeypatch.setattr(graph,'_utcnow',lambda:recorded)
+    await graph.ensure_campaign_product_association_indexes(mongo)
+    for provider in ['meta','tiktok']:
+        await graph.attach_campaign_product(mongo,'owner',{'provider':provider,'account_id':provider+'-account','campaign_id':provider+'-campaign','product_id':'1',
+            'valid_from':recorded,'evidence':{'source':'manual','verification_status':'verified','observed_at':recorded}},idempotency_key='missing-source-'+provider)
+    async with client(app_for(monkeypatch,mongo)) as c:
+        assert (await c.put('/google_ads/commercial-plans/winter',json=payload())).status_code==200
+        assert (await save_fit(c)).status_code==200
+        response=await preview(c)
+    assert response.status_code==200,response.text
+    data=response.json();row=data['products'][0];associations={r['provider']:r for r in row['campaign_associations']}
+    assert set(associations)=={'meta','tiktok'}
+    assert associations['meta']['missing']==['persisted_native_timezone','atomic_campaign_snapshot_completeness']
+    assert associations['tiktok']['missing']==['persisted_native_currency','persisted_native_timezone']
+    assert all(r['feed_mapping_verified'] is False and r['meaning']=='intended_product_association_only' for r in associations.values())
+    assert row['decision']=='exploration_test_review' and row['evidence_reasons']==[] and data['campaign_contexts']==[]
