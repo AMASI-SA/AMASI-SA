@@ -114,5 +114,7 @@ jobs:
           src/components/marketing/GoogleAdsWorkspace.test.jsx
       - name: Build current reviewed checkout
         env:
+          CI: "false"
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           REACT_APP_BACKEND_URL: https://mezansalla.com
         run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build
