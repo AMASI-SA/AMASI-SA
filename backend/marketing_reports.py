@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from marketing_report_costs import number, order_costs, add_order_report_costs, finalize_report_costs
+from marketing_report_orders import EXTRA_SOURCES, apply_store_orders
 
 PROVIDERS = {"snapchat": "سناب شات", "tiktok": "تيك توك", "meta": "ميتا", "google": "إعلانات Google"}
 
@@ -33,7 +34,7 @@ def selected_metrics(row, source):
     costs = {k: number(profit.get(k)) if source == "salla" else None for k in cost_fields}
     return {"orders": orders, "sales_sar": sales, "spend_sar": spend, **costs,
             "roas": sales / spend if sales is not None and spend and spend > 0 else None,
-            "cpa_sar": spend / orders if spend is not None and orders and orders > 0 else None,
+            "cpa_sar": spend / orders if row.get("provider") not in EXTRA_SOURCES and spend is not None and orders and orders > 0 else None,
             "net_margin_pct": costs["net_profit_sar"] / sales * 100 if costs["net_profit_sar"] is not None and sales and sales > 0 else None}
 
 
@@ -64,7 +65,7 @@ def reconcile_financial_totals(total, source):
     return total
 
 
-async def snapchat_report(db, user_id, start, end, account_id=None):
+async def snapchat_report(db, user_id, start, end, account_id=None, *, include_commerce=True):
     from snapchat_v2.accounts import list_enabled_accounts, resolve_account
     from snapchat_v2.routes import _entity_performance_report, _add_sar_spend
     from snapchat_v2.salla_outcomes import load_salla_campaign_outcomes
@@ -104,7 +105,7 @@ async def snapchat_report(db, user_id, start, end, account_id=None):
                 identities=[{"account_id": aid, "campaign_id": r["campaign_id"], "campaign_name": r["campaign_name"]} for r in native_rows],
                 platform_purchases=int(native_total.get("purchases") or 0),
                 campaign_spend_sar={r["campaign_id"]: r.get("spend_sar") for r in native_rows},
-                include_report_costs=True)
+                include_report_costs=True) if include_commerce else {"by_campaign": {}, "summary": {}}
             commerce_available = True
         except Exception:
             commerce_available = False
@@ -152,7 +153,7 @@ async def snapchat_report(db, user_id, start, end, account_id=None):
         "status": "available" if accounts else "not_connected"}
 
 
-async def tiktok_report(db, user_id, start, end):
+async def tiktok_report(db, user_id, start, end, *, include_commerce=True):
     """Use the native TikTok page, preserving account totals independently.
 
     Its conversion metric is an event count, never a purchased-order/revenue
@@ -214,7 +215,8 @@ async def tiktok_report(db, user_id, start, end):
     if not complete:
         warnings.append("بعض تفاصيل حملات تيك توك لم تكتمل؛ إجمالي الحساب المتاح مستقل عن تفاصيل الحملات.")
     try:
-        await attach_commerce(db, user_id, "tiktok", start, end, rows)
+        if include_commerce:
+            await attach_commerce(db, user_id, "tiktok", start, end, rows)
         commerce_available = True
     except Exception:
         commerce_available = False
@@ -229,9 +231,9 @@ async def tiktok_report(db, user_id, start, end):
             "conversion_metric": "conversion", "provider_revenue_available": False}
 
 
-async def other_report(db, user_id, provider, start, end):
+async def other_report(db, user_id, provider, start, end, *, include_commerce=True):
     if provider == "tiktok":
-        return await tiktok_report(db, user_id, start, end)
+        return await tiktok_report(db, user_id, start, end, include_commerce=include_commerce)
     from ads_manager.google_native_overview import GoogleAdsManagerService
     data = await GoogleAdsManagerService(db).overview(user_id, date_from=start.isoformat(),
         date_to=end.isoformat(), provider=provider, page=1, limit=10000)
@@ -247,7 +249,8 @@ async def other_report(db, user_id, provider, start, end):
         "sales_sar": number(r.get("revenue_sar_equivalent"))}, "salla": {}, "profitability": None,
         "impressions": r.get("impressions"), "clicks": r.get("clicks")} for r in campaigns]
     try:
-        await attach_commerce(db, user_id, provider, start, end, rows)
+        if include_commerce:
+            await attach_commerce(db, user_id, provider, start, end, rows)
         commerce_available = True
     except Exception:
         commerce_available = False
@@ -326,15 +329,18 @@ def make_marketing_reports_router(db, current_user):
     router = APIRouter(prefix="/marketing-reports", tags=["marketing-reports"])
 
     @router.get("")
-    async def report(provider: Literal["all", "snapchat", "tiktok", "meta", "google"] = "snapchat",
+    async def report(provider: Literal["all", "snapchat", "tiktok", "meta", "google", "direct", "unclassified"] = "snapchat",
         source: Literal["salla", "platform"] = "platform",
+        status_scope: Literal["all", "report"] = "all",
         date_from: date | None = None, date_to: date | None = None,
         account_id: str | None = Query(default=None, max_length=128), user=Depends(current_user)):
         from integrations_control_center.routes import _require_owner as require_owner
         owner = require_owner(user)
         user_id = str(owner["id"])
+        if provider in EXTRA_SOURCES:
+            source = "salla"
         zone = "Asia/Riyadh"
-        if provider == "snapchat" and account_id != "all":
+        if source == "platform" and provider == "snapchat" and account_id != "all":
             from snapchat_v2.accounts import resolve_account
             account = await resolve_account(db, user_id, account_id)
             zone = (account or {}).get("timezone") or zone
@@ -343,17 +349,32 @@ def make_marketing_reports_router(db, current_user):
         if end < start or (end - start).days >= 62 or end > today:
             raise HTTPException(422, "اختر فترة صحيحة لا تتجاوز 62 يومًا ولا تشمل المستقبل")
         async def read(p):
+            if p in EXTRA_SOURCES:
+                return {"provider": p, "rows": [], "status": "available", "source": "synced_salla_orders", "accounts": []}
             try:
                 async with asyncio.timeout(45):
-                    return await (snapchat_report(db, user_id, start, end, "all" if provider == "all" else account_id)
-                        if p == "snapchat" else other_report(db, user_id, p, start, end))
+                    options = {"include_commerce": False} if source == "salla" else {}
+                    return await (snapchat_report(db, user_id, start, end,
+                        "all" if provider == "all" or (source == "salla" and not account_id) else account_id, **options)
+                        if p == "snapchat" else other_report(db, user_id, p, start, end, **options))
             except HTTPException:
                 raise
             except Exception as exc:
                 return {"provider": p, "rows": [], "status": "unavailable", "reason": type(exc).__name__}
-        reports = await asyncio.gather(*(read(p) for p in (PROVIDERS if provider == "all" else [provider])))
+        labels = {**PROVIDERS, **EXTRA_SOURCES}
+        requested = list(labels if source == "salla" else PROVIDERS) if provider == "all" else [provider]
+        reports = await asyncio.gather(*(read(p) for p in requested))
+        reconciliation = None
+        if source == "salla":
+            try:
+                async with asyncio.timeout(45):
+                    reconciliation = await apply_store_orders(db, user_id, start, end, reports,
+                        status_scope=status_scope, account_id=account_id if provider == "snapchat" else None)
+            except Exception as exc:
+                # Never present a partially processed order universe as final.
+                raise HTTPException(503, "تعذرت قراءة جميع طلبات سلة؛ لم تُعرض إجماليات جزئية.") from exc
         for item in reports:
-            item["label"] = PROVIDERS[item["provider"]]
+            item["label"] = labels[item["provider"]]
             for row in item["rows"]:
                 row["metrics"] = selected_metrics(row, source)
             item["totals"] = summarize(item["rows"], source)
@@ -367,8 +388,13 @@ def make_marketing_reports_router(db, current_user):
                 item["totals"]["spend_sar"] = number(item["source_totals"].get("spend_sar"))
                 if source == "platform":
                     item["totals"].update(orders=number(item["source_totals"].get("conversions")), sales_sar=None)
+            if source == "salla" and item["status"] == "unavailable":
+                item["totals"]["spend_sar"] = None
             reconcile_financial_totals(item["totals"], source)
+            if item["provider"] in EXTRA_SOURCES:
+                item["totals"].update(cpa_sar=None, roas=None)
         return {"provider": provider, "source": source, "currency": "SAR",
+                "reconciliation": reconciliation,
                 "range": {"date_from": start.isoformat(), "date_to": end.isoformat(), "timezone": zone},
                 "reports": reports, "generated_at": datetime.now(timezone.utc).isoformat(),
                 "totals": reconcile_financial_totals(summarize_totals([p["totals"] for p in reports]), source),

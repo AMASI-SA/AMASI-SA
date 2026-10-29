@@ -181,6 +181,9 @@ async def test_tiktok_uses_native_campaign_reader_not_aggregate_only_overview(mo
 
 @pytest.mark.parametrize("source,expected_orders,expected_sales", [("platform",730,None),("salla",2,100)])
 def test_tiktok_route_preserves_account_spend_and_separates_event_counts(monkeypatch, source, expected_orders, expected_sales):
+    # This route test isolates aggregation; real order partitioning is covered
+    # by test_marketing_report_orders, including the full HTTP path below.
+    monkeypatch.setattr(reports, "apply_store_orders", AsyncMock(return_value={}))
     monkeypatch.setattr(reports, "other_report", AsyncMock(return_value={
         "provider": "tiktok", "status": "available", "source_totals": {"spend_sar": 2221.6, "conversions": 730},
         "rows": [{"spend_sar": 20, "platform": {"orders": 4, "sales_sar": None},

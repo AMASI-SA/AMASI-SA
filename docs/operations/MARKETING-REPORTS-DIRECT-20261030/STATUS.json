@@ -1,0 +1,44 @@
+{
+  "task": "MARKETING-REPORTS-DIRECT-20261030",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/reports-direct-unclassified-20261030",
+  "base": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
+  "state": "WIP: implementation and focused tests passed; not released",
+  "scope": "Direct and unclassified order-source rows and standalone filters; one deduplicated Salla order universe across sources",
+  "completed": [
+    "Six-source Salla view; direct requires explicit marketing evidence",
+    "Single tenant-scoped capped order read and identity-alias deduplication",
+    "Known platform orders without campaign remain in that platform residual row",
+    "Riyadh store calendar and common all/report status scope",
+    "Synced order count and sales distribution reconciliation; no claim of live Salla comparison",
+    "Frontend source selector, status filter and reconciliation panel"
+  ],
+  "validation": [
+    {
+      "command": "PYTHONPATH=backend <venv>/python -m pytest backend/tests/test_marketing_report_orders.py backend/tests/test_marketing_reports.py -q",
+      "exit": 0,
+      "result": "26 passed; 3 existing warnings"
+    },
+    {
+      "command": "CI=true node node_modules/react-scripts/scripts/test.js --watchAll=false --runInBand --runTestsByPath src/pages/MarketingReports.test.jsx",
+      "exit": 0,
+      "result": "6 passed"
+    },
+    {
+      "command": "git diff --check",
+      "exit": 0,
+      "result": "passed"
+    }
+  ],
+  "remaining": [
+    "Review full ledger and profit semantics, error paths and regression coverage",
+    "CI and governed v5 source/intent build",
+    "Actual-host rehearsal, authorized publication and exact identity verification",
+    "Live Salla same-date/status order count and sales comparison; refresh after sync"
+  ],
+  "next": "Inspect source diff and integration behavior; do not claim live totals match Salla until independently compared. Recover code-server reconnect error for actual-host release steps.",
+  "production_changed": false,
+  "release_guard": "No lease created by this task",
+  "continuity": "Issue #1006 is at its comment limit; task STATUS and draft PR are the checkpoint records",
+  "preserved": "Existing Google retail identity release, TikTok native canonical reader, and all unrelated source. No provider/order writes."
+}

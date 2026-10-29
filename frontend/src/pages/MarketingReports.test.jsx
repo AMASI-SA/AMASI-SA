@@ -64,3 +64,30 @@ test("a slower old request cannot overwrite a newly selected source", async () =
     expect(host.querySelector("tfoot").textContent).toContain("49");
     expect(host.querySelector("tfoot").textContent).not.toContain("68");
 });
+
+test("direct and unclassified are standalone Salla sources without ad source toggle", async () => {
+    api.get.mockResolvedValue({ data: { ...payload("salla"), provider:"direct", reports:[{
+        provider:"direct", label:"طلبات مباشرة", status:"available", totals:metrics,
+        rows:[{...row, provider:"direct", row_kind:"order_source", name:"طلبات مباشرة"}]}] } });
+    await act(async () => root.render(<MemoryRouter initialEntries={["/ads-manager/reports?provider=direct&source=platform"]}><MarketingReports /></MemoryRouter>));
+    await flush();
+    expect(api.get.mock.calls.at(-1)[1].params.source).toBe("salla");
+    expect(host.textContent).toContain("غير مصنّفة لمنصة");
+    expect(host.textContent).not.toContain("عرض نتائج طلبات مباشرة");
+    expect(host.textContent).not.toContain("إخفاء الحملات بلا نشاط");
+    expect(host.querySelector("tbody").textContent).toContain("طلبات سلة");
+});
+
+test("all sources show six rows and the synced Salla reconciliation without claiming live verification", async () => {
+    api.get.mockResolvedValue({data:{...payload("salla"),provider:"all",reports:["snapchat","tiktok","meta","google","direct","unclassified"].map(provider=>({provider,label:provider,status:"available",totals:metrics})),
+        reconciliation:{orders:100,sales_sar:20000,order_delta:0,sales_delta_sar:0,scope:"store",included_statuses:[]}}});
+    await act(async () => root.render(<MemoryRouter initialEntries={["/ads-manager/reports?provider=all&source=salla"]}><MarketingReports /></MemoryRouter>));
+    await flush();
+    expect(host.querySelectorAll("tbody tr")).toHaveLength(6);
+    const proof=host.querySelector('[data-testid="salla-reconciliation"]');
+    expect(proof.textContent).toContain("100 طلب");
+    expect(proof.textContent).toContain("فرق توزيع الطلبات: 0");
+    expect(proof.textContent).toContain("المتزامنة");
+    expect(host.textContent).toContain("Asia/Riyadh");
+    expect(api.get.mock.calls.at(-1)[1].params.status_scope).toBe("all");
+});
