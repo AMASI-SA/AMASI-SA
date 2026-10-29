@@ -42,9 +42,9 @@ class CommercialLimits(BaseModel):
         return self
 
 
-class CommercialPlanInput(BaseModel):
+class CommercialPlanFields(BaseModel):
+    """Persisted commercial context; contains no request consent or revision."""
     model_config = ConfigDict(extra="forbid", strict=True)
-    expected_revision: int = Field(ge=0)
     instruction: str = Field(min_length=1, max_length=6000)
     season: str = Field(min_length=1, max_length=160)
     starts_on: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -60,7 +60,6 @@ class CommercialPlanInput(BaseModel):
     selection_mode: Literal["pinned_only", "review_category_candidates"] = "pinned_only"
     calendar: Literal["gregorian", "hijri_season"] = "gregorian"
     limits: CommercialLimits | None = None
-    acknowledge_review: bool
 
     @field_validator("instruction", "season", "audience", "message")
     @classmethod
@@ -88,16 +87,26 @@ class CommercialPlanInput(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def reviewed(self):
+    def valid_scope(self):
         start, end = date.fromisoformat(self.starts_on), date.fromisoformat(self.ends_on)
         if start > end or (end - start).days > 730:
             raise ValueError("invalid season interval")
-        if not self.acknowledge_review:
-            raise ValueError("review the structured fields before saving")
         if set(self.pinned_product_ids) & set(self.excluded_product_ids):
             raise ValueError("a product cannot be pinned and excluded")
         if self.selection_mode == "review_category_candidates" and not self.category_url and not self.category_ids:
             raise ValueError("category selection requires a category")
+        return self
+
+
+class CommercialPlanInput(CommercialPlanFields):
+    """Owner write request; acknowledgement is required and never persisted."""
+    expected_revision: int = Field(ge=0)
+    acknowledge_review: bool
+
+    @model_validator(mode="after")
+    def reviewed(self):
+        if not self.acknowledge_review:
+            raise ValueError("review the structured fields before saving")
         return self
 
 

@@ -1,0 +1,17 @@
+{
+  "status": "native_UI_source_checkpoint_pending_fresh_CI_and_independent_review_not_release_source",
+  "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
+  "accepted_base_tree": "1d0678a2fc3d15f7fff2aa430bfe434e9ec10f45",
+  "fixed_validation_gap": "Prior1627/1630 integration acceptance was withdrawn after real writer omits acknowledge_review. Accepted1636 Fields/Input split remains unchanged. All three UI fixtures now generated through actual management HTTP PUT then evidence GET/POST; stored fields explicitly omit acknowledge_review and expected_revision. Actual parent tests consume writer-produced parent fixtures.",
+  "runtime_changes": "Backend behavior/models byte-identical8dc except exactly two native router import/attachment lines. New strict frontend service and child; LiveCategoryPreview imports child, passes savedplan and mounts inside observed result. GoogleCommercialPlan runtime unchanged.",
+  "tests": {
+    "red": "Three fixture parity tests initially failed on missing actual native parent route.",
+    "local_writer_fixture_parity": "3 passed -Werror /0 skips1.07s",
+    "local_ui": "291 passed/11 suites2.888s including actual parent category→explicit native POST, edit/save/reload/category refresh/owner cancellation",
+    "planned": "Saved-fields CI strict149 total incl nine actualMongo (eight accepted writer regressions+one actual parent router writer→category→native), native44 incl seven actualMongo plus fixture parity, native11 UI suites/build, fullGoogle backend/UI/build. ReleaseReadiness ancestry failure remains non-bypassable pending fresh production source.",
+    "local_backend": "62 passed -Werror/zero skips1.76s including three actual management writer→reader fixture parity tests"
+  },
+  "scope": "Explicit owner selection for reading1–5 observed nonexcluded category products only, no automatic POST. Unresolved exclusions disable native read. Savedrevision/fullfields/category result/selection/dirty/owner/unmount cancellation and late discard. Parent and variant stock separate; unknown/unlimited/partial traversal/rawlabels/timestamps/non-atomic snapshot displayed. No plan or ad selection authority.",
+  "prohibited": "No live owner-plan/provider/host writes, migration, lease, deployment or ads launch. Frozen8dc,1627,1630 and storage recipe unchanged.",
+  "next": "Inspect exact-source CI logs, independent review, durable final handoff. Root owns later fresh production source and readiness; storage integration takes priority immediately after retail production merge."
+}
