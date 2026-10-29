@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T17:54:16.515Z",
+  "updated_at": "2026-10-29T18:00:01.297Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -1557,7 +1557,17 @@
       "full_backend": 1208,
       "full_frontend": 198,
       "state": "WIP_CI_VERIFIED_PENDING_FRESH_DIRECT_PROD_SOURCE",
-      "review_fix": "Limiteddetailsstockout cannotclaimwholeproductstockout; variantavailabilitydoesnotuseparentquantity."
+      "review_fix": "Limiteddetailsstockout cannotclaimwholeproductstockout; variantavailabilitydoesnotuseparentquantity.",
+      "clean_source": {
+        "pr": 1616,
+        "branch": "codex/google-catalog-stock-review-source-20261029",
+        "source": "87812e17f4218b9bde05d5d4f73eed81f98d6161",
+        "tree": "3bdcf71f314c735eb0e132d5f049a4092cef4632",
+        "base": "15b656131813af54a043c33821e3aa5f69e7703c",
+        "state": "SOURCE_A_CI_RUNNING_NO_B",
+        "independent": "budget_audit reviewing currentintegration",
+        "next": "FinishsourceCI/review; actualhostbuildonlyafter1609releaseverifiedclosed"
+      }
     },
     "automatic_resume_safety": {
       "pr": 1607,
@@ -1587,7 +1597,7 @@
           "readiness": 40920771219,
           "artifact": 12917913169
         },
-        "state": "FROZEN_PAIR_REVIEWED_BUILT_BCI_GREEN_READY_EVENT_TWO_CHECKS_RUNNING",
+        "state": "MERGED_APP_MATERIALIZATION_RETRY_PENDING_NOT_PUBLISHED",
         "root_tests": "181passed2.16s -Werror0skip",
         "independent": "181focused+330compatibility pass -Werror0skip; independent M4-toA redgreen",
         "root_manifests": "Exact1026backend243control and runtimecompactprojection; strictfullhistoryPASS",
@@ -1599,18 +1609,31 @@
         "actual_host_b_adapter": "PASS49.10s",
         "independent_pair": "PASS1026backend243control1010frontend/strictfullhistory/onlyintentdiff/two-buildproof",
         "b_ci": {
-          "all_original_success": 10,
+          "all_success": 12,
           "intentional_skip": "TikTokCreator",
           "readiness": 40924559810,
-          "host20_job": 123627015271,
+          "host20_no_git_job": 123627015271,
           "host20_seconds": 58.27,
           "codeql": 40924559683,
           "ready_event_rechecks": [
             40925604421,
             40925604892
-          ]
+          ],
+          "rootlogs": "reviewed"
         },
-        "next": "Wait latest two ready_for_review triggered Snap checks; fresh productionref then normalmerge treeequivalentB. Appadapter/prepare/prepublish/singlepublish/finish/verify3/livecheck."
+        "next": "Finish cleanappmaterialization then prepare/prepublish/onepublish/newerfinish/verify3/closedlease/livebehavior. Never squash/rebase pair orpublishwithoutnewguard.",
+        "merge": "15b656131813af54a043c33821e3aa5f69e7703c",
+        "status_branch": "codex/google-resume-safety-status-20261029",
+        "status_checkpoint": "5243fc9e37a49808aa3b9fe6ade47a693e27a61e",
+        "app_materialization": {
+          "first": "REFUSED prepackaged bytecode backend/__pycache__, whiletrackedclean. No lease/publish. Two generatedpyc files mtime2026-10-29T17:31:55Z; origin not assumed.",
+          "recovery": "Guardactivefalse. Generatedcache preserved by moving to/tmp/google1609-bytecode-quarantine; no sourcechange/foreigndeletion. Retrylog/tmp/google1609-app-materialize-retry1.log running."
+        },
+        "publication": {
+          "published": false,
+          "publish_changes_clicks": 0,
+          "baseline_finish": "2026-10-29 20:39 Asia/Riyadh"
+        }
       }
     },
     "store_observations": {
