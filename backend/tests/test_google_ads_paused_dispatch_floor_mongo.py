@@ -114,7 +114,13 @@ async def test_real_owner_cancel_conflicts_with_floor_proposal_write(monkeypatch
         state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
         assert state['epoch']==2 and state['active_claim'] is None
         allocation=next(iter(state['allocations'].values()))
-        assert allocation.get('dispatch_marker') is None and allocation['state']=='cancelled_before_http'
+        assert allocation.get('dispatch_marker') is None and allocation['state']=='settled'
+        policy=await db[guard.CREATION_POLICIES].find_one({'account_id':'123'})
+        entry=policy['_creation_ledger'][row['automation_source']['creation_identity']]
+        assert entry['state']=='no_campaign' and entry['reservation_native']=='15'
+        assert entry['claim_id']==allocation['execution_claim_id'] and policy['_creation_claim'] is None
+        assert allocation['creation_entry_digest']==management.digest(entry)
+        assert allocation['original_creation_budget_native']=='15'
         assert capture.names.count('commitTransaction')==2 # original claim + known no-HTTP settlement
     finally:other.close()
 
