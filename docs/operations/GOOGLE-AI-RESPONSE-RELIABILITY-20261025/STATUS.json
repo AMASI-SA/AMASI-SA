@@ -1215,8 +1215,46 @@
       "tree": "823f75c9af0886dc28f27063a9cabf28beda7294",
       "agent_tests": "377 passed",
       "independent_tests": "218 passed",
-      "ci": "running",
-      "published": false
+      "ci": {
+        "google_run": 40904330369,
+        "backend_job": 123554837986,
+        "backend_passed": 1208,
+        "inventory_real_mongo_cases": 4,
+        "mongo_kind": "standalone disposable Mongo8.0.26; not replica proof",
+        "frontend_passed": 189,
+        "frontend_suites": 17,
+        "products_run": 40904330354,
+        "products_passed": 286,
+        "readiness_run": 40904330373,
+        "codeql_run": 40904330816,
+        "codeql": "success"
+      },
+      "published": false,
+      "root_tests": "74 inventory cases passed1.60s with --noconftest matching CI; first unrelated shared Excel conftest import failed before tests and is not counted",
+      "root_manifest_check": "EXACT backend1024 and control242 from Git source/base",
+      "ci_intent_sha256": "b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4",
+      "next": "After CAS owned lease closes, actual-host clean A build before freeze B; no source/app mutation during active lease."
+    },
+    "next_suggestions": {
+      "pr": 1601,
+      "branch": "codex/google-plan-suggestions-release-20261029",
+      "source": "712277d165b71767f5560957ce4fcad8cf4aa329",
+      "tree": "0925bbb8539aee25b34b19767f117f651c155790",
+      "base": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+      "state": "STACKED WIP until inventory production merge;46 fresh backend cases, no fresh frontend proof yet",
+      "next": "Normally merge inventory production M before retarget production; no old intent import or funded authorization."
+    },
+    "budget_reassessment": {
+      "source": "0fbc710ddd54c118f1154ca72f38ac8dd3bcab39",
+      "pr": 1560,
+      "finding": "Saved WIP already mandates6policy mutations and standing enable/set_budget reservations/settlement; old optional-adapter STATUS is stale relative to this PR. Selective reintegration in progress in isolated codex/google-budget-guard-release-wip-20261029; runtime remains false.",
+      "missing": [
+        "First funded launch authority/gateway/worker",
+        "Production transaction capability and legacy/native inventory proof",
+        "Operational exclusion or provider mechanism for direct external Google budget writers; Mongo transaction alone is not a strict external spend ceiling",
+        "Owner approved spending limits"
+      ],
+      "production_writes": "none"
     }
   }
 }
