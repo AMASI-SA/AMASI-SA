@@ -170,7 +170,7 @@
   ],
   "production_changed": "no",
   "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "AwaitnewerexplicitReports1632finish andowner3verification/closedlease; rootreadguardinactive then actualhostA doublebuild/freezeexact3daf... →intent-onlyB/allCI/review/hostBadapter/freshnormalmerge/publishverify3/live. No newhostbuild orleasewhileforeignactive.",
+  "next": "Freshactualguardinactive,appfastforward473da andnormalbuild,prepareactor/prepublish/onepublish; latestexplicitfinish then3identityprobes/closedlease andliveShoppingpickers. No repeated1629/1618 publish.",
   "superseded_unpublished": {
     "pr": 1629,
     "source": "e16b46f0453776f5bb471ae1e641a083af275c38",
@@ -265,7 +265,13 @@
     "checkout": "5c0519f914c73e9663a09f1e6dd6ae1348026b75",
     "tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
     "root_logs_read": true,
-    "codeql": "onlyremaininginprogress"
+    "codeql": "success40953098343",
+    "all_distinct_required_workflows_success": 11
   },
-  "independent_final_pair": "PASS ec128 parentc0ce exactintent-only/fullsha3daf backend1029control243frontend1013; no host/CI claimed byreviewer"
+  "independent_final_pair": "PASS ec128 parentc0ce exactintent-only/fullsha3daf backend1029control243frontend1013; no host/CI claimed byreviewer",
+  "release_state": "MERGED_EXACT_PAIR_ALL11CI_PASS_APP_MATERIALIZATION_NEXT",
+  "merge": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
+  "merge_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
+  "production_git_changed": true,
+  "live_runtime_changed_by_this_release": false
 }
