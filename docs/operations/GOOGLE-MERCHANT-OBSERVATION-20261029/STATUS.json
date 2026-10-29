@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task": "google-merchant-product-observation",
+  "branch": "codex/google-merchant-observation-20261029",
+  "date_utc": "2026-10-29",
+  "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "assessment_checkpoint": "5813304637c2873ebebb213009977046fb50edcd",
+  "status": "Concrete route/auth/scope and observer design saved before implementation; shared bound auth-session interface unresolved",
+  "owned_paths": [
+    "backend/integrations_control_center/google_merchant_product_observation.py",
+    "backend/tests/test_google_merchant_product_observation.py",
+    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/CONTRACT.md",
+    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/STATUS.json"
+  ],
+  "current_changes": "Only CONTRACT.md and STATUS.json; no runtime implementation or router attachment yet",
+  "missing_shared_interface": "Opaque server-created Merchant/Ads read session binding exact owner, selected accounts, same observed grant and capabilities to transports; existing registration helper is configured-email-specific and bare Ads token plus later epoch is insufficient across relink",
+  "route_plan": "Owner-triggered read-only GET /google_ads/merchant-products/observation with explicit account_id and merchant_id, server membership and full native product_link checks before read plus scope/grant recheck before return; no selection mutation or default account",
+  "validation": "Read current auth/refresh/account/link/inventory source and official Merchant v1 schemas; docs only, no runtime tests claimed",
+  "retail_source_unchanged": "e16b46f0453776f5bb471ae1e641a083af275c38",
+  "scope_limits": [
+    "No product mapping or simple/variant proof",
+    "No Google provider calls, credentials or new scopes",
+    "No auth/router/shared files modified",
+    "Complete traversal is not an atomic provider snapshot"
+  ],
+  "production_changed": "no",
+  "next": "Root reviews concrete bound-session seam while isolated bounded observer and fake-stream functional tests proceed; root assigns shared auth interface before any real route/provider wiring. Retail PR1629 CI/review completion remains first priority."
+}
