@@ -211,13 +211,21 @@ RECOVERY_TIMEOUT_SECONDS = 10
 _pending_operations = {}
 
 
+def _operation_clock():
+    return asyncio.get_running_loop().time()
+
+
 async def _retained_operation(db, scope, operation_id, kind, work, seconds, phase):
     key = (id(db), scope['user_id'], scope['account_id'], operation_id, kind)
     limit = MAX_PENDING_WRITE_TASKS if kind == 'write' else MAX_PENDING_READ_TASKS
     if key in _pending_operations or sum(item['kind'] == kind for item in _pending_operations.values()) >= limit:
         raise problem('google_budget_guard_operation_pending', 'عمل تخزين سابق لم ينتهِ؛ لا تعِد الإرسال.', 503)
+    phase['deadline'] = _operation_clock() + seconds
     async def original_task():
-        with timeout(seconds):
+        remaining = phase['deadline'] - _operation_clock()
+        if remaining <= 0:
+            raise TimeoutError()
+        with timeout(remaining):
             return await work()
     state = {'kind': kind, 'task': asyncio.create_task(original_task())}
     _pending_operations[key] = state
@@ -228,8 +236,8 @@ async def _retained_operation(db, scope, operation_id, kind, work, seconds, phas
             del _pending_operations[key]
     state['task'].add_done_callback(consume)
     try:
-        done, _ = await asyncio.wait({state['task']}, timeout=seconds)
-        if not done:
+        done, _ = await asyncio.wait({state['task']}, timeout=max(0, phase['deadline'] - _operation_clock()))
+        if not done or _operation_clock() >= phase['deadline']:
             phase['stop_requested'] = True
             raise TimeoutError()
         return state['task'].result()
@@ -248,6 +256,7 @@ async def probe_google_budget_guard_transactions(db):
     Never cache completed proof, renew a deadline, retry uncertain operations,
     or cancel executor-backed driver Futures on a caller timeout/cancellation.
     Capability is issued only after explicit server abort ACK and async cleanup.
+    Replica sets only: sharded commit/recovery-token semantics are not proved.
     """
     global _pending_probe
     state = _pending_probe
@@ -263,7 +272,8 @@ async def probe_google_budget_guard_transactions(db):
                 session = await db.client.start_session()
                 try:
                     hello = await db.command('hello', session=session)
-                    if (not isinstance(hello, dict) or not (hello.get('setName') or hello.get('msg') == 'isdbgrid')
+                    if (not isinstance(hello, dict) or not isinstance(hello.get('setName'), str) or not hello['setName']
+                        or hello.get('msg') == 'isdbgrid'
                         or type(hello.get('logicalSessionTimeoutMinutes')) is not int):
                         _fail('google_budget_guard_transactions_unavailable')
                     _transaction(session)
@@ -744,7 +754,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         changed = await db[BUDGET_GUARDS].update_one({'_id': row['_id'], **scope, 'epoch': row['epoch']}, {'$set': update}, session=session)
         if changed.matched_count != 1:
             _fail('google_budget_guard_epoch_changed')
-        if phase.get('stop_requested'):
+        if phase.get('stop_requested') or _operation_clock() >= phase['deadline']:
             _fail('google_budget_guard_request_ended_before_commit')
         phase['commit_attempted'] = True
         await _commit_once(db, session)  # Exactly one wire command; no automatic commit retry.

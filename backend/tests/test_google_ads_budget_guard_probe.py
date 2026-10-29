@@ -111,3 +111,16 @@ async def test_async_cleanup_future_survives_waiter_deadline_and_owns_retained_s
         cleanup.set_result(None)
         await asyncio.gather(state['task'],return_exceptions=True);await asyncio.sleep(0)
     assert guard._pending_probe is None
+
+
+@pytest.mark.asyncio
+async def test_mongos_is_rejected_without_write_or_capability_until_commit_contract_proved():
+    db=DB()
+    async def command(name,*,session):
+        assert name=='hello'
+        return {'msg':'isdbgrid','logicalSessionTimeoutMinutes':30}
+    db.command=command
+    with pytest.raises(HTTPException) as error:await guard.probe_google_budget_guard_transactions(db)
+    assert error.value.detail['code']=='google_budget_guard_transactions_unavailable'
+    assert not db.rows and not db.calls
+    assert db.sessions[0].commit_calls==0 and not db.sessions[0].in_transaction

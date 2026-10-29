@@ -128,3 +128,35 @@ async def test_recovery_abort_future_survives_deadline_without_false_evidence(mo
         await asyncio.gather(*(state['task'] for state in list(guard._pending_operations.values())),return_exceptions=True)
         await asyncio.sleep(0)
     assert not guard._pending_operations
+
+
+@pytest.mark.asyncio
+async def test_worker_checks_original_deadline_before_commit_without_waiter_wakeup(monkeypatch):
+    db=DB();capability=await supported(db);clock=[100.0]
+    monkeypatch.setattr(guard,'_operation_clock',lambda:clock[0])
+    def delayed_planner(snapshot):
+        clock[0]+=20  # model work completing after deadline, not a global event-loop block
+        return mutation(snapshot)
+    with pytest.raises(HTTPException) as error:
+        await guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
+            operation_id='deadline_before_waiter',capability=capability,planner=delayed_planner,timeout_seconds=1)
+    assert error.value.detail['commit_attempted'] is False
+    assert error.value.detail['preserve_execution_fence'] is True
+    assert db.sessions[-1].commit_calls==0 and not db.rows
+
+
+@pytest.mark.asyncio
+async def test_post_wait_deadline_cannot_report_late_commit_as_confirmed_success(monkeypatch):
+    db=DB();capability=await supported(db);clock=[100.0];original=guard._commit_once
+    monkeypatch.setattr(guard,'_operation_clock',lambda:clock[0])
+    async def delayed_ack(database,session):
+        await original(database,session)
+        clock[0]+=20  # ACK already applied but caller resumes after original deadline
+    monkeypatch.setattr(guard,'_commit_once',delayed_ack)
+    with pytest.raises(HTTPException) as error:
+        await guard.run_google_budget_guard_transaction(db,user_id='owner',account_id='123',
+            operation_id='late_confirmed_ack',capability=capability,planner=mutation,timeout_seconds=1)
+    assert error.value.detail['commit_attempted'] is True
+    assert error.value.detail['preserve_execution_fence'] is True
+    assert error.value.detail['automatic_retry_allowed'] is False
+    assert db.sessions[-1].commit_calls==1 and db.rows[guard.BUDGET_GUARDS][0]['epoch']==1
