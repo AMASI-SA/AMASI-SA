@@ -1,8 +1,8 @@
 {
   "task": "MARKETING-REPORTS-20261029",
-  "updated_at": "2026-10-29T19:27:46.531Z",
+  "updated_at": "2026-10-29T19:37:25.733Z",
   "repository": "AMASI-SA/AMASI-SA",
-  "state": "Published, Release Guard verified with three probes and lease closed. Live browser acceptance in progress.",
+  "state": "Published and release verified. Live report/source/cost/modal/platform acceptance passed; one manual Snapchat sync retry is running after prior-worker lease expired naturally.",
   "scope": "Unified Arabic Reports page, canonical Snapchat V2 account-period metrics, separate provider/Salla sources, shipping/payment/net costs and product modal with new-tab links.",
   "branch": "codex/unified-marketing-reports-release-20261029",
   "continuity_branch": "codex/marketing-reports-publish-handoff-20261029",
@@ -82,12 +82,12 @@
   },
   "production_changed": "yes; explicit Deployment finished followed by three exact Release Guard probes and active=false",
   "remaining": [
-    "Complete live source toggle, product modal/new-tab, multi-platform drill and manual sync acceptance"
+    "Read terminal outcome of the user-authorized manual Snapchat sync started after 19:36:23Z",
+    "Perform post-sync parity and final handoff"
   ],
   "next_safe_actions": [
-    "Continue live UI acceptance at https://mezansalla.com/ads-manager/reports; no re-publish required.",
-    "Shared /app lease is closed; do not interfere with other owner's successor release.",
-    "Record final acceptance evidence and update this docs-only checkpoint and PR1615."
+    "Read live Reports sync state; if needed read canonical account status without mutating leases.",
+    "Complete post-sync canonical comparison and final checkpoint. Do not repeat publication."
   ],
   "preserved_unrelated": [
     "/app/.emergent/testing/",
@@ -108,6 +108,33 @@
       "reports_native_sales_sar": 22442.4,
       "canonical_native_sales_usd": 5977.63
     },
-    "remaining": "Source switching, syncing, modal and all-platform behavior"
+    "remaining": "Manual Snapchat sync terminal outcome and final post-sync parity",
+    "salla_parity": {
+      "reports_orders": 68,
+      "canonical_orders": 68,
+      "sales_sar": 19360.52,
+      "spend_sar": 7722.76,
+      "products_sar": 6736.4,
+      "shipping_sar": 1192.25,
+      "payment_sar": 811.81,
+      "net_sar": 2897.3,
+      "margin_percent": 14.96,
+      "independent_formula": "19360.52 - 6736.40 - 7722.76 - 1192.25 - 811.81 = 2897.30"
+    },
+    "ui": [
+      "All-platform summary rows rendered; platform row drill to Meta rendered campaign rows",
+      "Source switch from Salla to Snapchat works inside product modal",
+      "Product link target=_blank opens independent Products V2 detail with matching SKU; original modal remains",
+      "Main and modal bold Arabic layouts inspected visually",
+      "Active-only filter changes displayed rows to 18/48 but full-account total remains 82"
+    ],
+    "salla_sync": "Accepted background job from Reports; provider order/item HTTP reads observed; shipment permission unavailable in existing connection, no permission changes attempted.",
+    "snapchat_sync": {
+      "first_attempt": "failed due canonical prior-worker lease unavailable",
+      "diagnosis": "Existing rolling_refresh worker became abandoned at deployment restart; heartbeat stale. Lease expired naturally 19:36:10Z; status held=false confirmed at19:36:23Z. No lease/database mutation.",
+      "retry": "Started from Reports after observed expiry; waiting for terminal result."
+    },
+    "evidence_image": "Saved user-facing screenshot mezan-reports-products-live-20261029.jpg",
+    "platform_limitations": "TikTok data unavailable and Google coverage incomplete for this period; clearly shown rather than invented zero data. Provider aggregate source has no SKU-level costs; use Salla source."
   }
 }
