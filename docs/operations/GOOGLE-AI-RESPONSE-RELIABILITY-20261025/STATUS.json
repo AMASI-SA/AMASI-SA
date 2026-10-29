@@ -1169,8 +1169,8 @@
         "Initial network partial-clone checkout failed; discarded as proof, independent local object clone succeeded.",
         "First freeze invocation lacked public REACT_APP_BACKEND_URL; corrected invocation passed without source changes."
       ],
-      "production_changed": "deployment requested; live success not yet verified",
-      "next": "Wait newer explicit deployment finish, run guard verify --url https://mezansalla.com (3 consecutive intended identity checks), confirm active=false, functional Google/GA4 reads, preserve evidence.",
+      "production_changed": "yes verified",
+      "next": "CAS slice done; continueinventory.",
       "pair_independent_review": "PASS: re-computed backend1022/control242 full Git manifests, ancestry and only-intent diff; source frontend unchanged and bound to A",
       "b_ci": {
         "release_readiness": 40902880964,
@@ -1198,10 +1198,10 @@
         "actor": "codex-google-cas-20261029",
         "prepare": "PASS",
         "prepublish": "ready_to_publish=true, intended source/runtime/deployment confirmed",
-        "lease": "active-owned; do not change /app source until verify closes"
+        "lease": "closed; active=false"
       },
       "publish": {
-        "state": "UI_FINISHED_VERIFICATION_PENDING",
+        "state": "DEPLOYED_ACCEPTED",
         "republish_ui_clicks": 1,
         "publish_changes_clicks": 1,
         "baseline_finish": "Oct28 09:17PM",
@@ -1212,9 +1212,23 @@
       "verification": {
         "first_attempt": "REFUSED canonical frontend build-meta SHA expected05b33debf07989cf916877fac66b17fb483ac4ecf0b64d7357d6774a2548b9a5 actuala4a57ecd07d14ad379ecaa11f5035ecb8091d59ba99a5a2788aa3a669f2a8ab3; lease retained",
         "diagnosis": "Subsequent canonical and cache-busted JSON responses both exact expected05b33de... and sourcef64152d3, no-store. Possible rollout propagation; not claimed proven cache cause. /app tracked files clean; original two untracked dirs preserved.",
-        "current": "Second read-only guard verify running; no second publish",
-        "functional": "After reload Google connected and22 campaigns visible; final acceptance pending guard"
-      }
+        "current": "PASS exit0 verified=true checks3; guardactive=false",
+        "functional": {
+          "account": "5052346701",
+          "connection": "connected",
+          "campaigns": 22,
+          "groups": "1 testSearchgroup loaded",
+          "ads": "2 native RSA ads loaded; editor hydrated3headlines/2descriptions/exact productURL without saving",
+          "ga4": "Realtime active users and pages visible after release",
+          "management_policy_revision": 0,
+          "automatic_execution": "disabled",
+          "creation": "disabled",
+          "ad_or_policy_writes": 0,
+          "oauth_relink": false
+        },
+        "boot_started_at": "2026-10-29T15:55:49.067866+00:00"
+      },
+      "status_branch": "codex/google-refresh-cas-status-20261029"
     },
     "next_inventory": {
       "pr": 1600,
@@ -1240,7 +1254,12 @@
       "root_tests": "74 inventory cases passed1.60s with --noconftest matching CI; first unrelated shared Excel conftest import failed before tests and is not counted",
       "root_manifest_check": "EXACT backend1024 and control242 from Git source/base",
       "ci_intent_sha256": "b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4",
-      "next": "After CAS owned lease closes, actual-host clean A build before freeze B; no source/app mutation during active lease."
+      "next": "ExactB CI/pairreview, freshbase thennormalmerge and oneguardedpublish",
+      "intent_b": "5ba86281237ff193fb14a3ee6eba9d26e33b294c",
+      "deployment_tree": "d863ba7d5561bee98eb912229cd13ead8cb6ab9d",
+      "runtime": "rg5-74850b8727dfa76bfef242d53621c8377dd349d13a89700dcc95330ea8607aa0",
+      "actual_host_source_build": "PASS; whole intent SHA256b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4 exactCI",
+      "actual_host_b_adapter": "PASS exit0 51.85s"
     },
     "next_suggestions": {
       "pr": 1601,
@@ -1270,7 +1289,8 @@
         "tests": "577 unit passed, actual replica CI pending",
         "runtime_available": false,
         "published": false
-      }
+      },
+      "production_gate": "Mandatory guarded revocation still works withoutOAuth ifMongoTXsupports, but unsupportedMongo blocks previousownerrevocation409/503. Do NOT deploy1602 before actual production TX proof. Separate owner-only abort-only storage diagnostic slice in progress; no change to existing sixpolicyhandlers."
     }
   }
 }
