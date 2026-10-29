@@ -80,6 +80,17 @@ async def test_retail_lookup_cannot_hide_missing_required_native_field(field):
     assert error.value.detail["code"] == "google_ads_read_contract_unavailable" and not client.queries
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("malformed", [{}, {"itemId": "SKU2"}, {"resourceName": "customers/123/shoppingProducts/unknown"}, "invalid"])
+async def test_retail_lookup_cannot_drop_an_unidentified_native_row(malformed):
+    raw = {"resourceName": f"customers/{CUSTOMER}/shoppingProducts/123~2~ar~SA~SKU1", "merchantCenterId": "123",
+           "channel": "ONLINE", "languageCode": "ar", "feedLabel": "SA", "itemId": "SKU1", "status": "ELIGIBLE", "availability": "IN_STOCK"}
+    client = ReadClient({"shopping_product": [{"shoppingProduct": raw}, {"shoppingProduct": malformed}]})
+    with pytest.raises(HTTPException) as error:
+        await module.google_lookup(client, "products", merchant_id="123")
+    assert error.value.detail["code"] == "google_ads_product_identity_unproved"
+
+
 class Collection:
     def __init__(self):
         self.writes = []

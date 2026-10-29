@@ -219,6 +219,8 @@ async def google_lookup(client, kind, *, query="", merchant_id=None):
     items = []
     for row in rows:
         raw = row.get(payload) or {}
+        if kind == "products" and (not isinstance(raw, dict) or not raw.get("resourceName") or not raw.get("itemId")):
+            raise problem("google_ads_product_identity_unproved", "ورد منتج جوجل دون هوية كاملة؛ لا يمكن اعتماد اكتمال التغذية.", 409)
         item = {"id": str(raw.get("id") or ""), "name": raw.get("name") or raw.get("title"), "resource_name": raw.get("resourceName"), "type": raw.get("type"), "status": raw.get("status")}
         if kind == "merchants":
             item.update(id=str((raw.get("merchantCenter") or {}).get("merchantCenterId") or ""), merchant_id=str((raw.get("merchantCenter") or {}).get("merchantCenterId") or ""))

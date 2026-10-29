@@ -34,14 +34,14 @@
   },
   "verification": {
     "local_command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_workspace.py backend/tests/test_google_ads_ai.py backend/tests/test_google_ads_ai_route_context.py backend/tests/test_google_ads_campaign_builder.py backend/tests/test_google_ads_protobuf_contract.py",
-    "passed": 304,
+    "passed": 308,
     "skipped": 0,
     "exit_status": 0,
-    "duration_seconds": 6.3,
+    "duration_seconds": 7.07,
     "coverage": "Existing regressions plus real v25 ShoppingProduct parsing, 17 identity refusal cases, required field-read rejection, 16 AI route cases, explicit mapping disclosure and generated-feed drift.",
     "real_mongo": "22 added manual scenarios pending revised CI, including positive unique Shopping/PMax PAUSED dispatch, exact typed drift failures, legacy preview rejection and preserved Search/nonretail PMax.",
     "ci": "pending",
-    "independent_review": "pending",
+    "independent_review": "In progress by google_product_acceptance; its missing-native-row finding is fixed with direct lookup regression.",
     "production": "unchanged"
   },
   "changed_files": [
@@ -68,5 +68,15 @@
       "base": "15b656131813af54a043c33821e3aa5f69e7703c",
       "acceptance": "rejected as final evidence"
     }
-  }
+  },
+  "review_fixes": [
+    {
+      "finding": "Product lookup silently dropped a native row missing itemId/resourceName while claiming complete inventory.",
+      "fix": "Reject unidentified or malformed shoppingProduct rows before filtering; four regressions cover anonymous/missing-item/missing-resource/malformed rows."
+    },
+    {
+      "finding": "Existing fake provider could not return PMax campaignAsset/assetGroupAsset/assetGroupSignal receipts.",
+      "fix": "Test-only response collections added. Prior CI 40927736426 had exactly the two positive PMax failures; source runtime is unchanged by fixture repair."
+    }
+  ]
 }
