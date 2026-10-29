@@ -1,0 +1,44 @@
+{
+  "task": "GOOGLE-STORE-PRODUCT-OBSERVATIONS-20261029",
+  "branch": "codex/google-store-observations-20261029",
+  "base": "050b3da6ffc9660b2022a111117fd928da07ab51",
+  "state": "WIP standalone backend attach export and owner component; UNATTACHED; real replica CI and independent review pending",
+  "source_binding_reused_from": "66634b9a7b539f42b8d0017d2e7015f0bb283334; exact helper code plus provenance comment and original helper tests",
+  "scope": "New files only; no order writer/accounting/global normalizer/shared route or UI wiring changes",
+  "behavior": "Owner saved-plan pinned-minus-excluded product raw-line observations for closed14/previous14/30/90 Riyadh windows; bounded candidate read; no net sales/profit/growth/ranking",
+  "bounds": {
+    "candidate_read": "owner/order_date90days+/-1; exact existing index hint; max1000+sentinel; BSON document<=32768; maxTimeMS3000; route timeout6sec",
+    "identity": "canonicalowner/orderid/ordernumber bound to rawSalla IDs/timestamp; duplicate order IDs/numbers reject all affected docs; duplicate/missing line IDs or conflicting product/parent IDs reject whole order; no name/SKU fallback",
+    "eligibility": "Explicit completed/delivered source status, consistent canonical status/payment and paid marker; known returns/cancel/refund data reject; remaining refunds unreconciled",
+    "currency_account": "Native currency consistency/ISO; currencies separate. Actual native merchant/accountID unavailable: platform_account_id:null, account_scope:owner_store_projection. Internal purecontract ownerprojectionhash is not external account proof",
+    "quantity": "Explicit bounded positive raw quantity only. Counts lower-bound qualifying stored gross-line observations, NOT actual or net sales; empty windows null not zero",
+    "source_quality": "Raw snapshot may be merged/retained. No source coverage watermark, snapshot immutability or freshness guarantee. Date-only, naive and raw timezone-declared date objects rejected by inherited binding. Oversize docs omitted unquantified. Sentinel suppresses all counts",
+    "pure_builder": "Only complete:false/unverified records without monetary/verifiedorder metrics; no completeness bypass. Empty/missing catalog yields no pure context. No platform conversions included"
+  },
+  "synthetic_example": {
+    "as_of": "2026-10-29T12:00:00+00:00",
+    "product_id": "123",
+    "currency": "SAR",
+    "last14": {
+      "observed_orders": 1,
+      "observed_lines": 1,
+      "observed_units": "2"
+    },
+    "previous14": null,
+    "last30_and90": "Each independently2, never summed",
+    "sales_native": null,
+    "profitability": null,
+    "growth_14_days_percent": null,
+    "coverage_complete": false
+  },
+  "verification": {
+    "red": "New module missing import failed collection before implementation",
+    "backend": "59 passed, no skips, 1.20s (new pure/API and inherited source-binding/timestamp suites)",
+    "frontend": "19 passed, no skips, 1.051s using Node22.23.2/read-only existing deps",
+    "real_mongo": "5 authored cases; NOT executed locally. New dedicated Ubuntu22.04/Mongo8.0.26 disposable gStoreObservations replica port27475 workflow enforces realcase count5/min64 total/zero skips; fresh CI pending",
+    "diff_check": "passed"
+  },
+  "production_changed": false,
+  "provider_calls": 0,
+  "next": "Remote WIP/DraftPR; fresh actual replica CI and independent review; root owns any reviewed route/component wiring and final production integration/release"
+}
