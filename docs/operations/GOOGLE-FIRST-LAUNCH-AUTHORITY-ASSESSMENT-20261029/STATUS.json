@@ -202,7 +202,7 @@
   "next_safe_action": "Root may assign the owner-facing review handoff or continue catalog/budget diagnostics. Do not implement positive launch authority until real provenance and shared transaction interfaces are assigned; do not deploy this assessment as runtime functionality.",
   "checkpoint": {
     "assessment_base_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
-    "remote_assessment_sha": null,
+    "remote_assessment_sha": "a6d96c2f2d5eec2792f76e83c9c761577dabb5fe",
     "note": "The next documentation-only checkpoint records the initial immutable assessment commit; this avoids a self-referential commit hash."
   }
 }
