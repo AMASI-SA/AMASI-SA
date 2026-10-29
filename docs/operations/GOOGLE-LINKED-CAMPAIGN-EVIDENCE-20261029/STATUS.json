@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "implementation_wip_not_attached_not_reviewed",
+  "state": "implementation_wip_mongo_ci_pending_independent_review_required",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -34,13 +34,27 @@
   "verification": {
     "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
     "result": "31 passed, zero skips, 1.10s; initial missingmodule red observed",
-    "actual_mongo": "not run yet",
-    "ci": "not configured/run yet"
+    "actual_mongo": "9 collected actual writer/replica cases, not executed locally; dedicated CI required, zero-skips gate40total/9actual",
+    "ci": "new dedicated google-linked-campaign-evidence.yml pending remote checkpoint"
   },
-  "next": "Add real disposable Mongo projection/source writer fixture cases and dedicated CI, independent review; then root owns shared attachment.",
+  "next": "Obtain dedicated actual-Mongo CI40/9 with zero skips, independent review exact source; parent owns later small shared attachment/UI.",
   "known_source_limits": [
     "Canonical Snapchat _number(None) normalizes missing raw metric to zero; reader returns stored zero as unknown with metric provenance, never confirmedzero",
     "Read-only review route exported but not attached; no UI change",
     "Historical snapshots remain mutable perday; source_snapshot immutable not claimed"
-  ]
+  ],
+  "scope_bounds": {
+    "maximum_campaigns": 6,
+    "maximum_association_events_per_campaign": 500,
+    "association_document_bytes": 32768,
+    "snapshot_document_bytes": 524288,
+    "snapshot_total_bytes_per_campaign": 4194304,
+    "mongo_query_max_time_ms": 2000,
+    "route_deadline_seconds": 8
+  },
+  "collector_coordination": {
+    "meta": "Persist native timezone with immutable complete campaign-day snapshot and producing completedrun reference; do not infer from current account metadata.",
+    "tiktok": "Persist native currency and timezone with existing complete entity-day snapshot; define per-field presence instead of defaulted zero.",
+    "snapchat": "Optional future per-field provider-presence provenance would distinguish explicitzero from missingrawmetric; current slice treats storedzero asunknown."
+  }
 }
