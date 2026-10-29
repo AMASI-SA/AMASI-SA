@@ -3,7 +3,7 @@
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/reports-tiktok-release-handoff-20261029",
   "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-  "state": "Merged; Emergent publish unresolved after a failed attempt and a current building attempt",
+  "state": "Complete: deployed exact approved release and verified live",
   "scope": "Correct TikTok Reports to reuse the native campaign reader and retain account totals independently of campaign coverage",
   "root_cause": "Reports used the generic overview, which intentionally excludes TikTok account-only pseudo campaigns. Empty campaign rows then erased valid account totals. The prior upstream-only diagnosis was incorrect.",
   "completed": [
@@ -11,7 +11,10 @@
     "31-day window partitioning for the Reports 62-day range",
     "Account spend and conversion totals independent of campaign coverage",
     "Platform conversion events remain separate from Salla orders and unavailable provider purchase revenue",
-    "Fail-closed missing metrics, changed pagination, Salla failures and cost calculations"
+    "Fail-closed missing metrics, changed pagination, Salla failures and cost calculations",
+    "Merged approved source/intent pair without unrelated changes",
+    "Published and verified exact production identity with three probes; release lease closed",
+    "Live all-page TikTok, Salla, all-platform, product-modal and Snapchat acceptance"
   ],
   "changed_files": [
     "backend/marketing_reports.py",
@@ -44,19 +47,27 @@
     "runtime_id": "rg5-a1f46ddcb8010e15abe58d9002fbb5ec6e5509fd9b987ff839831b1f095a8e99",
     "ci": "18 latest checks passed,6 skipped; no pending/failures",
     "rehearsal": "Actual-host clean clone adapter passed,52.33s; isolated frontend/backend verified",
-    "guard": "prepare/prepublish exit0; active task-owned v5 lease",
+    "guard": "prepare/prepublish passed; verify exit0 with three matching production identity probes; task lease closed",
     "actor": "codex-reports-tiktok-20261029",
-    "deployment": "Started2026-10-29T23:19 Asia/Riyadh; eacef48 displayed failed;2486d97 listed while Building; no new success observed"
+    "deployment": "Publish requested 2026-10-29T23:19 Asia/Riyadh; first eacef48 attempt displayed failed; subsequent 2486d97 publish explicitly finished 2026-10-29T23:35 Asia/Riyadh. No duplicate publish requested.",
+    "proof": "7b6e65fd40629ec712b7406f7a10136d39d61a31a48425402241cea30809059e",
+    "tree": "91f8f05ca8ab653f788c29282e8797f90af553bf",
+    "live_identity_verified": true
   },
-  "remaining": [
-    "Resolve Emergent active publish and inspect failed logs when available",
-    "Three production identity probes and closed lease",
-    "Live TikTok 7-page native/report comparison, Salla/all-platform checks and Snapchat regression"
-  ],
-  "next": "Do not change /app or clear active lease. Observe Emergent current publish, inspect its logs; if a newer explicit success occurs, run PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com. Require three matching probes before live acceptance.",
-  "production_changed": false,
+  "remaining": [],
+  "next": "No release action pending. Preserve the verified frozen source/intent pair. Continue ordinary monitoring; a later material change requires a new governed release.",
+  "production_changed": true,
   "continuity_note": "Issue #1006 has reached GitHub's 2500-comment limit; task STATUS and task PR are the continuation record.",
   "preserved": "Google catalog release and all unrelated production sources; no provider writes, credentials or customer data in this change.",
-  "live_evidence": "Native campaign endpoint exposes664 unique identities across7 pages. Report live endpoint still used old generic reader at last check. Counts are conversion events, not Salla purchases.",
+  "live_evidence": {
+    "tiktok_native_campaign_pages": 7,
+    "tiktok_unique_campaigns": 664,
+    "campaign_name_spend_conversion_mismatches": 0,
+    "account_spend_and_conversion_totals": "Exact match to native endpoint; totals stable across seven pages",
+    "salla": "Matched Salla orders, sales and all costs render separately from platform conversion events; net profit reconciles against full account spend",
+    "all_platforms": "Four providers available; TikTok aggregation matches the selected-platform report",
+    "product_modal": "Real matched TikTok campaign renders product image, quantity, product cost, shipping, payment fee, allocated spend, net and margin. Open-product link verified target=_blank",
+    "snapchat_regression": "84 TOTAL purchases match native page. Native USD spend and revenue reconcile to Reports SAR values using configured account FX 3.7544, not an assumed fixed FX."
+  },
   "packaging_note": "Shared /app adapter initially refused one generated __pycache__ from guard status. Removed derived cache only and used PYTHONDONTWRITEBYTECODE=1 thereafter; app adapter then passed. No release guard weakened."
 }
