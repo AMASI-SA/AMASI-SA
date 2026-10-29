@@ -1,9 +1,9 @@
 {
   "task": "GOOGLE-BUDGET-STORAGE-READINESS-20261029",
   "scope": "Explicit owner-only snapshot write-and-abort storage diagnostic; six policy handlers unchanged",
-  "state": "PUBLISHING_ONE_CLICK_VERIFY_PENDING",
+  "state": "DEPLOYED_AND_ACCEPTED_BOUNDED_STORAGE_SCOPE",
   "branch": "codex/google-budget-storage-status-20261029",
-  "production_changed": "deployment in progress",
+  "production_changed": "yes",
   "release": {
     "pr": 1606,
     "source_a": "67b369887ee254a7cb4cd26c34b7a4cf078cd52a",
@@ -42,29 +42,50 @@
       "a": "Clean two-build frozen whole intent exactly matches CI",
       "b": "Clean adapter PASS50.53s",
       "app": "Materialize PASS60.07s exact B tree; foreign directories and usereditor unsavedfile preserved"
+    },
+    "live": {
+      "verified": true,
+      "checks": 3,
+      "exact_source": "67b369887ee254a7cb4cd26c34b7a4cf078cd52a",
+      "exact_deployment": "dada1def704ae968230d63c3c9885508a2a6653d",
+      "exact_runtime": "rg5-713e9eacd735e5d00de26fa837ec160962c5417ddeb1b35e9f84f767d4d82669",
+      "lease_active": false
     }
   },
   "guard": {
     "actor": "codex-google-budget-storage-20261029",
     "prepare": "PASS",
     "prepublish": "PASS ready_to_publish true exact A/M4/runtime",
-    "lease": "owned active pending verify"
+    "lease": "closed; active=false"
   },
   "publication": {
     "publish_changes_clicks": 1,
     "started": "2026-10-29 20:30 Asia/Riyadh",
     "baseline_finish": "2026-10-29 20:01 Asia/Riyadh",
-    "latest_observed": "Publishing your website to cloud...",
-    "do_not_repeat": true
+    "latest_observed": "Deployment finished Oct29 08:39PM",
+    "do_not_repeat": true,
+    "finished": "2026-10-29 20:39 Asia/Riyadh"
   },
   "limits": [
     "Abort-only transaction proof; no majority-commit durability or policy-collection permissions proof.",
-    "No Google account connection or management authorization proof from storage result.",
+    "Production snapshot insert and abort ACK verified; replica-set identity/majority commit/readback and actual policy-collection permissions remain unproved.",
     "No budget guard migration, policy activation, paid campaigns or owner limits.",
     "Per-process one retained task; original driver/session cleanup retained after HTTP deadline/cancellation."
   ],
   "production_probe": {
-    "performed": false
+    "performed": true,
+    "owner_button_clicks": 1,
+    "result": "storage_verified and snapshot_majority_write_aborted true, as validated by deployedUI result",
+    "message": "تم التحقق من معاملة التخزين وإلغائها. هذا تحقق للتخزين فقط؛ لم تتغير السياسة ولا يمنح صلاحية تشغيل أو جاهزية إنفاق.",
+    "google_account": "5052346701",
+    "google_connection": "connected",
+    "campaigns": 22,
+    "policy_revision": 0,
+    "automatic_management": "disabled",
+    "spending_limits": "blank",
+    "policy_writes": 0,
+    "provider_writes": 0,
+    "screenshot": "docs/operations/GOOGLE-BUDGET-STORAGE-READINESS-20261029/google1606-live-storage-20261029.jpg"
   },
-  "next_safe_action": "Wait newer explicit deployment finish, guard verify3/closedlease, actual owner UI diagnostic; preserve outcome without claiming budget execution ready."
+  "next_safe_action": "Release1609 automatic resume protection using fresh verified pair, then catalog proof and saved-plan observations. Keep budget migration off until separate commit/readback diagnostic and native commitments/permissions proved; no paid execution without owner limits."
 }
