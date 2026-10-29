@@ -7,7 +7,7 @@
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "production_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
   "source_reference": "This STATUS-only continuation commit is on a separate status branch and MUST NOT become deployment Source A or follow frozen A on the release branch.",
-  "status": "IMMUTABLE_PAIR_ROOT_AND_INDEPENDENT_PASS_ACTUALHOST_B_PASS_FINAL_CODEQL_STOCK_PENDING",
+  "status": "SUPERSEDED_UNPUBLISHED_PRODUCTION_ADVANCED_FRESH_SOURCE_REQUIRED",
   "owned_files": [
     "backend/integrations_control_center/google_ads_ai.py",
     "backend/integrations_control_center/google_ads_management.py",
@@ -168,7 +168,7 @@
   ],
   "production_changed": "no",
   "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "Read host B adapter completion and all B workflows; independent immutable pair review. Then fresh prod and normal merge exact B tree, app materialize, prepare/prepublish/singlepublish/verify3/live. Current live1618 is verified/closed; no newpublishyet.",
+  "next": "Do not merge/publish1629 stalepair. google_launch assignednew directfda source exact11acceptedretailblobs+newSTATUS, freshCI/newintent. ForeignReportsdeployslotpreserved.",
   "source_sha": "e16b46f0453776f5bb471ae1e641a083af275c38",
   "source_tree": "ff3360eb7cf9b5eada07aaddeb3516ea93c48e69",
   "pr": 1629,
@@ -205,6 +205,19 @@
         "CodeQL40946403302",
         "Stock40946403015"
       ]
+    },
+    "superseded_by_production": "fda86238dda9700806c0d700e9e411c1674c9bad",
+    "production_advance": {
+      "scope": "CanonicalTikTokReports",
+      "changed_paths": [
+        "backend/marketing_reports.py",
+        "backend/tests/test_marketing_reports.py",
+        "docs/operations/MARKETING-REPORTS-TIKTOK-20261029/STATUS.json",
+        "release/release-intent-v5.json"
+      ],
+      "retail_overlap": [],
+      "observed_app_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
+      "guard_active_at_observation": false
     }
   }
 }
