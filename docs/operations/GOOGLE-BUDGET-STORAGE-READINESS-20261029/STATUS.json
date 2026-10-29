@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-BUDGET-STORAGE-READINESS-20261029",
-  "state": "WIP: explicit abort server acknowledgement implemented; independent review and actual replica CI pending",
+  "state": "WIP verified storage-only diagnostic; independent final review pending, not deployed",
   "branch": "codex/google-budget-storage-readiness-20261029",
   "base_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
   "scope": "Owner-only explicit storage transaction diagnostic, no six-handler migration",
@@ -25,18 +25,39 @@
       "conclusion": "success",
       "result": "107 passed in 4.36s; failures/errors/skips0; includes actual disposable replica write+abort proof preserving foreign data and existing policy"
     },
-    "actual_mongo_pending": "Three tests in dedicated CI: successful raw command monitored for same lsid/txnNumber/autocommit/admin/majority and snapshot insert; server failCommand error91; connection-close uncertain abort response. No local Mongo.",
     "ack_replica_ci": {
       "source": "cdddbfa9872421b44a54d73e5bf15aa0c279de8c",
       "run": 40911092616,
       "job": 123578939047,
       "result": "113passed89.87s, failures/errors/skips0, -Werror"
     },
-    "timing_ci_pending": "Final-runtime CI pending:114expectedtests including actual HTTP <=12s, eventloopmaxgap<1.5s and separatecleanupduration for both failpoints."
+    "timing_replica_ci": {
+      "source": "4edb3564f02b009f12bc54c469a1549d1ec6120e",
+      "run": 40913294044,
+      "job": 123586725490,
+      "result": "114passed89.56s, failures/errors/skips0, -Werror",
+      "actual_http": [
+        {
+          "fault": "server91",
+          "status": 503,
+          "response_seconds": 8.003,
+          "cleanup_after_response_seconds": 0.0,
+          "event_loop_max_gap_seconds": 0.051
+        },
+        {
+          "fault": "connection-close",
+          "status": 503,
+          "response_seconds": 0.491,
+          "cleanup_after_response_seconds": 0.0,
+          "event_loop_max_gap_seconds": 0.051
+        }
+      ],
+      "limits": "Both authenticated ASGI requests <=12s; event-loop heartbeat gap<1.5s. Actual faults completed cleanup by response; delayed-retention behavior independently tested with controllable cleanup/executorFuture. Whole suite/test durations include setup/teardown, not request latency."
+    }
   },
-  "next_safe_action": "Run actual disposable replica CI including failpoints; request independent review of exact checkpoint before root creates direct-child release source. Parent owns release/productionprobe.",
+  "next_safe_action": "Complete budget_audit independent review of exact runtime4edb3564; root may then create fresh direct-production source from reviewed final code (do not release WIP ancestry). No production probe performed; parent owns release and subsequent explicit storage verification.",
   "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
-  "code_checkpoint_sha": "1a31164cb3e4a5d4125a4aaf708be4ba072b0581",
+  "code_checkpoint_sha": "4edb3564f02b009f12bc54c469a1549d1ec6120e",
   "pull_request": 1603,
   "cleanup_contract": "One strongly retained probe per process. HTTP/request cancellation never cancels executor-backed driver operations; failclosed response deadline8s is independent of original task work+cleanup. Further probes503 until actual taskdone. Public async end_session Future additionally shielded if original task itself cancelled; original CSOT context closes only after cleanup Future completion. No retry/unbounded HTTP cleanup await.",
   "motor_assessment": {
