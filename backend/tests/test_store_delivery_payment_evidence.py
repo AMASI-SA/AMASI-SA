@@ -140,3 +140,11 @@ def test_paid_canonical_order_cannot_recollect_stale_provider_cod():
     order = _partial_cod_order()
     order["payment_status"] = "paid"
     assert authoritative_outstanding_amount(order) == 0
+
+
+def test_explicit_zero_survives_a_raw_shipping_only_cod_snapshot():
+    order = {"remaining_amount": "0.00", "raw_by_source": {"salla_direct": {
+        "payment_method": "cod", "amounts": {"total": {"amount": "0.00", "currency": "SAR"}},
+        "shipping": {"status": "delivered"},
+    }}}
+    assert authoritative_outstanding_amount(order) == 0

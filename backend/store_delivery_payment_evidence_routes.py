@@ -78,6 +78,11 @@ def _salla_courier_balance(order: dict[str, Any]) -> float | None:
         return None
     actions = raw.get("payment_actions") if isinstance(raw.get("payment_actions"), dict) else {}
     remaining = actions.get("remaining_action") if isinstance(actions.get("remaining_action"), dict) else {}
+    # A historical raw shipping-only snapshot carries no payment evidence.
+    # Keep a deliberately explicit canonical balance rather than treating that
+    # unrelated raw payload as a failed payment calculation.
+    if not remaining and not payment and not any(raw.get(field) is not None for field in ("paid_amount", "payment_status", "payment_collection_status")):
+        return None
     explicit = remaining.get("remaining_amount")
     if explicit is not None:
         value = explicit.get("amount") if isinstance(explicit, dict) else explicit
