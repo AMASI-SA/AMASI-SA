@@ -7,7 +7,7 @@
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "production_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
   "source_reference": "This STATUS-only continuation commit is on a separate status branch and MUST NOT become deployment Source A or follow frozen A on the release branch.",
-  "status": "Frozen Source A actual-host double-build/freeze PASS; intent-only B pushed, B CI and actual-host adapter running",
+  "status": "IMMUTABLE_PAIR_ROOT_AND_INDEPENDENT_PASS_ACTUALHOST_B_PASS_FINAL_CODEQL_STOCK_PENDING",
   "owned_files": [
     "backend/integrations_control_center/google_ads_ai.py",
     "backend/integrations_control_center/google_ads_management.py",
@@ -183,8 +183,28 @@
     "intent_sha256": "e8cf4478439f0029da1a81483f1a1370e9c872b725dab101a326157f613335b9",
     "frontend_artifact": "d16cb651c37df30613db837cda0d7c0fd63feba6543b5f37f0146a22f584f6e0",
     "actual_host_a": "PASS0, frozeninstall/governedNode22.23.2/Yarn1.22.22/doublebuild12.68s exactwholeCIintent; optionalmissinggeneratedbackendidentity warningexpectedbeforematerialization",
-    "actual_host_b": "running in /tmp/google1629-intent-b-20261029",
+    "actual_host_b": "PASS51.83s; isolatedbackendhealth/frontendruntime/artifact/packageverifiedtrue",
     "lease_active": false,
-    "published": false
+    "published": false,
+    "independent_pair": "PASS A directM7/fullhistorynointent;B onlyintent/directA; exactbackend1029/control243/frontend1013; twocleanbuildsequal",
+    "b_ci": {
+      "readiness": 40946402998,
+      "host20_job": 123703717061,
+      "host20": "PASSnoGit56.37s/health+runtime+packageverified/rootlogsread",
+      "google": 40946403001,
+      "backend_job": 123702802141,
+      "backend": "1307passed35.84s",
+      "frontend_job": 123702801573,
+      "frontend": "261/18/build5.85s",
+      "replica": 40946403051,
+      "total": 34,
+      "actual_mongo": 6,
+      "skips": 0,
+      "root_logs_reviewed": true,
+      "pending": [
+        "CodeQL40946403302",
+        "Stock40946403015"
+      ]
+    }
   }
 }
