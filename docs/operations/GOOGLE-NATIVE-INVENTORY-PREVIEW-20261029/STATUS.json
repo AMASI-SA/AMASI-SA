@@ -1,0 +1,13 @@
+{
+  "task": "google-native-inventory-preview-20261029",
+  "branch": "codex/google-native-inventory-preview-20261029",
+  "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+  "state": "early_pure_contract_wip_not_reader_or_route",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "prerequisite": "Exact unchanged accepted1628 google_live_category_proof.py and reader.py copied as buildbase only; source d77306f8af92057d4414413a9900e03bda7b1295. No shared files or writers changed.",
+  "implemented": "Pure raw parent/variant stock and explicit simple-product observations; related option labels exact ids only. Relevant product fields before/after digest rejects drift. All global readiness, preparation time, complete sizes, Merchant mapping, ad selection and execution remain false/null.",
+  "verification": "8focusedlocal tests passed -Werror/zero skips0.71s after initial missingmodule red; reader/API/Mongo/CI not implemented or verified yet",
+  "bounds": "Planned5explicit products,2variantpages<=120rows,45s requestdeadline; officialpage maximum60, existinglocalstockproofcap50 is not provider limit",
+  "next": "Implement coherent standalone owner request with freshcategory reproof, selectedids/exclusions, fixedGET product+variant transport, outer plan/store/revision and before-after product guards; add actualMongo race/transport CI and independentreview before shared integration"
+}
