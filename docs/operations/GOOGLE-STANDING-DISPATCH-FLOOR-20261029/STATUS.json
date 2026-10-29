@@ -1,0 +1,16 @@
+{
+  "status": "WIP_scoped_standing_floor_not_implemented",
+  "base_tested_source": "12da1d13bd263aeba8d408f5bf1da718478ce8b2",
+  "base_tree": "77b2437eeb08b577eae0160c505c5927b09f0a47",
+  "runtime_available": false,
+  "production_changed": false,
+  "scope": [
+    "google_ads_automation_budget_guard.py typed StandingDispatchFloor",
+    "google_ads_automation_authority.py exact standing claim floor handler",
+    "google_ads_management.py narrow standing_policy floor seam",
+    "dedicated tests/workflow evidence/docs"
+  ],
+  "preserved": "Creation floor and frozenPR1635 unchanged; no automaticresume/fundedlaunch/sharedmetadatawriter scope",
+  "contract": "One commonTX rechecks enabled/revision/activation/expiry/current dispatchclaim/allocation/native-resource and proposal/analysis/operations/fence; proposal submitted+dispatchmarker and guardepoch commit together. Fresh precommit and noawait postACK clockchecks. Unknown ACK noHTTP/noresend/noquota refund; retainhold/fence.",
+  "next": "Implement bounded typed floor, unit and actual replica independent-client revoke/cancel/expiry/fault/restart gates; independent budget_audit review. Actual production storage/namespace/legacy/native prerequisites remain."
+}
