@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-AUTOMATIC-RESUME-SAFETY-20261029",
-  "state": "MERGED_APP_BUILD_PASSED_HOST_SESSION_RESUMING_GUARD_RESULT_UNKNOWN",
+  "state": "PUBLISHING_SINGLE_CLICK",
   "branch": "codex/google-resume-safety-status-20261029",
   "scope": "Standing automatic resume denied without complete fresh stop provenance; manualapproved actions unchanged",
   "release": {
@@ -49,15 +49,18 @@
     }
   },
   "publication": {
-    "published": false,
-    "publish_changes_clicks": 0,
-    "baseline_finish": "2026-10-29 20:39 Asia/Riyadh"
+    "published": "in progress",
+    "publish_changes_clicks": 1,
+    "republish_clicks": 1,
+    "baseline_finish": "2026-10-29 20:39 Asia/Riyadh",
+    "latest_observed": "Publishing…",
+    "do_not_repeat": true
   },
   "guard": {
-    "active": "unknown until recovered actualhost status",
-    "prepare": "command started; sessiondisconnected before output observed",
-    "prepublish": "unobserved, do notpublish",
-    "actor": "codex-google-resume-safety-20261029"
+    "active": true,
+    "actor": "codex-google-resume-safety-20261029",
+    "prepare": "PASS afterfreshrecoveredactivefalse/M5/trackedclean",
+    "prepublish": "ready_to_publish true exactA690/M5/runtime051"
   },
   "production_branch_changed": true,
   "production_runtime_changed": false,
@@ -66,6 +69,6 @@
     "Doesnotinterruptalreadydispatched operations.",
     "Runtimeflags andownerlimits unchanged; no paidactivity."
   ],
-  "next_safe_action": "After editor reconnect, read actualguard/appHEAD/gitstatus/outputs; if ownmatchinglease active inspectbeforeanyappmutation, nevertouchforeignlease. Re-run applicableappadapter/prepublish and onlythenonepublish. No1609publishhasoccurred.",
-  "host_recovery": "Emergent refreshed UI says website resuming1–2min/staticpreview. User editor Untitled1 remainsuntouched; do not assume/tmp persistence. This is previewenvironment interruption, not proofliveproductionfailure."
+  "next_safe_action": "Wait newerexplicitfinish, verify3 expectedA690/M5/runtime051, confirmclosedlease, liveGoogleconnected/policyoff/manualflowregression. Do notrepeatpublish ormodify/app whileownedleaseactive.",
+  "host_recovery": "Recovered editor in newtab9 while preserving originaluserUntitled1 tab1. AppHEADM5/trackedclean/backendidentity/frontendmeta persisted; /tmp cleared. Actualguard wasinactive. Freshprepare/prepublish passed."
 }
