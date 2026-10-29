@@ -6,7 +6,8 @@ import { buildProfitabilityProductCostHref } from "../campaignProfitabilityProdu
 import { snapchatSyncRangeAllowed } from "./SnapchatV2Page";
 import "./MarketingReports.css";
 
-const LABELS = { all: "جميع المنصات", snapchat: "سناب شات", tiktok: "تيك توك", meta: "ميتا", google: "إعلانات Google" };
+const LABELS = { all: "جميع المنصات", snapchat: "سناب شات", tiktok: "تيك توك", meta: "ميتا", google: "إعلانات Google", direct: "طلبات مباشرة", unclassified: "غير مصنّفة لمنصة" };
+const ORDER_SOURCES = new Set(["direct", "unclassified"]);
 const COLUMNS = [["orders", "عدد الطلبات"], ["cpa_sar", "تكلفة النتيجة"], ["roas", "ROAS الشراء"],
     ["spend_sar", "المبلغ المصروف"], ["sales_sar", "إجمالي المبيعات"], ["product_cost_sar", "تكلفة المنتجات"],
     ["shipping_cost_sar", "تكلفة الشحن"], ["payment_fees_sar", "رسوم الدفع"], ["net_profit_sar", "صافي الأرباح"], ["net_margin_pct", "هامش الربح"]];
@@ -21,7 +22,7 @@ function Metric({ value, field }) {
 function SourceSwitch({ source, onChange, provider }) {
     return <div className="report-source"><span>مصدر نتائج الطلبات</span><div role="group" aria-label="مصدر نتائج الطلبات">
         <button type="button" aria-pressed={source === "salla"} onClick={() => onChange("salla")}>عرض نتائج سلة</button>
-        <button type="button" aria-pressed={source === "platform"} onClick={() => onChange("platform")}>عرض نتائج {provider === "all" ? "المنصات" : LABELS[provider]}</button>
+        {!ORDER_SOURCES.has(provider) && <button type="button" aria-pressed={source === "platform"} onClick={() => onChange("platform")}>عرض نتائج {provider === "all" ? "المنصات" : LABELS[provider]}</button>}
     </div></div>;
 }
 
@@ -77,7 +78,9 @@ function downloadCsv(rows, filename) {
 export default function MarketingReports() {
     const [params, setParams] = useSearchParams();
     const provider = Object.hasOwn(LABELS, params.get("provider")) ? params.get("provider") : "snapchat";
-    const source = params.get("source") === "salla" ? "salla" : "platform";
+    const source = ORDER_SOURCES.has(provider) || params.get("source") === "salla" || (provider === "all" && params.get("source") !== "platform") ? "salla" : "platform";
+    const orderSource = ORDER_SOURCES.has(provider);
+    const statusScope = params.get("status_scope") === "report" ? "report" : "all";
     const accountId = params.get("account_id") || "";
     const from = params.get("from") || "", to = params.get("to") || "";
     const [data, setData] = useState(null), [busy, setBusy] = useState(true), [error, setError] = useState("");
@@ -96,13 +99,13 @@ export default function MarketingReports() {
         if (!background) { setBusy(true); setData(null); }
         setError("");
         try {
-            const result = await api.get("/marketing-reports", { signal: controller.current.signal, params: { provider, source, account_id: accountId || undefined, date_from: from || undefined, date_to: to || undefined } });
+            const result = await api.get("/marketing-reports", { signal: controller.current.signal, params: { provider, source, status_scope: statusScope, account_id: accountId || undefined, date_from: from || undefined, date_to: to || undefined } });
             if (epoch !== request.current) return;
             setData(result.data);
             setDraftFrom(result.data.range.date_from); setDraftTo(result.data.range.date_to);
         } catch (e) { if (epoch === request.current && e.code !== "ERR_CANCELED") setError("تعذر تحديث التقرير. إن ظهرت نتائج فهي من آخر قراءة ناجحة؛ أعد المحاولة."); }
         finally { if (epoch === request.current) { inFlight.current = false; setBusy(false); } }
-    }, [provider, source, accountId, from, to]);
+    }, [provider, source, statusScope, accountId, from, to]);
     useEffect(() => { load(); return () => { request.current++; controller.current?.abort(); inFlight.current = false; }; }, [load]);
     useEffect(() => {
         const tick = () => { if (document.visibilityState === "visible" && !syncing) load({ background: true }); };
@@ -149,28 +152,34 @@ export default function MarketingReports() {
         finally { setSallaSyncing(false); }
     }
     return <main className="marketing-reports" dir="rtl" data-testid="marketing-reports-page">
-        <header className="reports-heading"><div><p>التسويق</p><h1>التقارير</h1><small>{provider === "all" ? "إجماليات المنصات الإعلانية" : `الحملات الإعلانية · ${LABELS[provider]}`}</small></div><SourceSwitch provider={provider} source={source} onChange={v => change({source:v})} /></header>
-        <section className="reports-filters" aria-label="فلاتر التقارير"><label>المنصة<select value={provider} onChange={e => { close(); change({ provider:e.target.value, account_id:"" }); }}>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <header className="reports-heading"><div><p>التسويق</p><h1>التقارير</h1><small>{provider === "all" ? "إجماليات مصادر الطلبات والمنصات" : orderSource ? LABELS[provider] : `الحملات الإعلانية · ${LABELS[provider]}`}</small></div><SourceSwitch provider={provider} source={source} onChange={v => change({source:v})} /></header>
+        <section className="reports-filters" aria-label="فلاتر التقارير"><label>المنصة<select value={provider} onChange={e => { close(); change({ provider:e.target.value, account_id:"", ...(e.target.value === "all" || ORDER_SOURCES.has(e.target.value) ? {source:"salla"} : {}) }); }}>{Object.entries(LABELS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             {provider === "snapchat" && <label>الحساب الإعلاني<select value={accountId || currentReport?.selected_account_id || ""} onChange={e => { close(); change({account_id:e.target.value}); }}><option value="" disabled>اختر الحساب</option>{(currentReport?.accounts || []).map(a => <option key={a.id} value={a.id}>{a.name} · {a.currency} · {a.timezone}</option>)}<option value="all">كل حسابات سناب</option></select></label>}
+            {source === "salla" && <label>حالات الطلبات<select value={statusScope} onChange={e => change({status_scope:e.target.value})}><option value="all">جميع الحالات</option><option value="report">حسب إعدادات التقارير</option></select></label>}
             <label>من<input type="date" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} /></label><label>إلى<input type="date" value={draftTo} min={draftFrom} onChange={e => setDraftTo(e.target.value)} /></label>
             <button type="button" className="report-primary" disabled={!draftFrom || !draftTo || draftTo < draftFrom} onClick={() => change({from:draftFrom,to:draftTo})}>تطبيق الفترة</button>
             <button type="button" disabled={busy || syncing} onClick={() => load({background:true})}><ArrowsClockwise size={17} />تحديث النتائج</button>
             <button type="button" disabled={busy || sallaSyncing} onClick={syncSalla}><ArrowsClockwise size={17} />{sallaSyncing ? "جارٍ طلب المزامنة" : "مزامنة سلة الآن"}</button>
             {provider === "snapchat" && <button type="button" disabled={busy || syncing || currentReport?.selected_account_id === "all"} onClick={sync}><ArrowsClockwise size={17} className={syncing ? "report-spin" : ""} />{syncing ? "جارٍ مزامنة سناب" : "مزامنة سناب الآن"}</button>}
         </section>
-        <div className="report-context"><span>النتائج: <b>{source === "salla" ? "طلبات سلة المطابقة للحملات" : "تحويلات المنصة"}</b> · الفترة بتوقيت {provider === "all" || accountId === "all" ? "كل حساب كما في مصدره" : currentReport?.rows?.[0]?.timezone || data?.range?.timezone || "الحساب"}</span><span>تحديث تلقائي كل دقيقة · آخر قراءة {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString("ar-SA") : "—"}</span></div>
+        <div className="report-context"><span>النتائج: <b>{source === "salla" ? "طلبات سلة المتزامنة دون تكرار" : "تحويلات المنصة"}</b> · الفترة بتوقيت {source === "salla" ? "Asia/Riyadh" : provider === "all" || accountId === "all" ? "كل حساب كما في مصدره" : currentReport?.rows?.[0]?.timezone || data?.range?.timezone || "الحساب"}</span><span>تحديث تلقائي كل دقيقة · آخر قراءة {data?.generated_at ? new Date(data.generated_at).toLocaleTimeString("ar-SA") : "—"}</span></div>
         {data?.reports?.some(r => r.last_sync_at) && <p className="report-footnote">آخر مزامنة للمصدر: {data.reports.filter(r => r.last_sync_at).map(r => `${r.label}: ${new Date(r.last_sync_at).toLocaleString("ar-SA")}`).join(" · ")}</p>}
+        {source === "salla" && data?.reconciliation && <div className="report-explanation" role="status" data-testid="salla-reconciliation">
+            <strong>إجمالي طلبات سلة المتزامنة: {formatReportNumber(data.reconciliation.orders, 0)} طلب · {formatReportNumber(data.reconciliation.sales_sar)} ر.س</strong>
+            <div>{data.reconciliation.scope === "store" ? `فرق توزيع الطلبات: ${formatReportNumber(data.reconciliation.order_delta, 0)} · فرق المبيعات: ${formatReportNumber(data.reconciliation.sales_delta_sar)} ر.س` : "الجدول يعرض المصدر أو الحساب المحدد؛ اختر جميع المنصات لعرض إجمالي المتجر."}</div>
+            <small>{statusScope === "all" ? "جميع حالات الطلبات، بما فيها الملغاة والمسترجعة." : `الحالات: ${(data.reconciliation.included_statuses || []).join("، ") || "جميع الحالات"}.`} قيمة الطلبات بالريال وفق التحويل المسجل، وليست صافي المبيعات بعد خصم المرتجعات. المطابقة هنا بين الطلبات المتزامنة وتوزيعها؛ استخدم مزامنة سلة لجلب آخر التحديثات.</small>
+        </div>}
         {(error || notice) && <p className={error ? "report-alert" : "report-explanation"} role="status">{error || notice}</p>}
         {data?.reports?.some(r => r.status !== "available") && <p className="report-alert" role="status">بعض بيانات المنصات غير متاحة أو غير مرتبطة. لا تُحسب البيانات الناقصة كصفر.</p>}
         {data?.reports?.flatMap(r => (r.warnings || []).map((warning, index) => <p className="report-alert" role="status" key={`${r.provider}-${index}`}>{r.label}: {warning}</p>))}
-        <section className="reports-table-panel"><div className="reports-toolbar"><span>جميع المبالغ بالريال السعودي</span><div><input aria-label="بحث في التقرير" placeholder={provider === "all" ? "بحث بالمنصة" : "بحث باسم الحملة أو المعرّف"} value={query} onChange={e => setQuery(e.target.value)} />{provider !== "all" && <><label><input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />النشطة فقط</label><label><input type="checkbox" checked={activityOnly} onChange={e => setActivityOnly(e.target.checked)} />إخفاء الحملات بلا نشاط</label></>}<button type="button" disabled={!displayed.length} onClick={() => downloadCsv(displayed, `reports-${provider}-${data?.range.date_from}.csv`)}><DownloadSimple size={19} />تنزيل</button></div></div>
-            <div className="reports-scroll" aria-busy={busy}><table className="reports-table"><thead><tr><th className="report-name">{provider === "all" ? "اسم المنصة" : "اسم الحملة"}</th><th>الحالة</th>{COLUMNS.map(([key,label]) => <th key={key} className={["shipping_cost_sar", "payment_fees_sar"].includes(key) ? "added-cost" : ""}><button onClick={() => setSort({key,asc:sort.key === key ? !sort.asc : false})}>{source === "platform" && key === "orders" ? "تحويلات المنصة" : label}{sort.key === key ? sort.asc ? " ↑" : " ↓" : ""}</button>{key === "net_margin_pct" && <small>بعد التكاليف المباشرة</small>}</th>)}</tr></thead>
-                <tbody>{!busy && displayed.map(row => <tr key={row.id}><td className="report-name"><button onClick={() => provider === "all" ? change({provider:row.provider,account_id:""}) : setDialogId(row.id)}>{row.name}</button><small dir="ltr">{row.campaign_id || "عرض الحملات الإعلانية"}</small></td><td><span className={`report-status ${row.active || row.status === "available" ? "active" : ""}`}>{provider === "all" ? row.status === "available" ? "متاحة" : "غير متاحة" : row.active ? "نشطة" : "متوقفة"}</span></td>{COLUMNS.map(([key]) => <td key={key}><Metric field={key} value={row.metrics[key]} />{key === "net_profit_sar" && provider !== "all" && <button className="report-products-link" onClick={() => setDialogId(row.id)}>تفاصيل المنتجات</button>}</td>)}</tr>)}{(busy || !displayed.length) && <tr><td colSpan={12} className="report-empty">{busy ? "جارٍ تحميل التقرير من مصادره…" : "لا توجد نتائج للفترة والفلاتر المحددة."}</td></tr>}</tbody>
+        <section className="reports-table-panel"><div className="reports-toolbar"><span>جميع المبالغ بالريال السعودي</span><div><input aria-label="بحث في التقرير" placeholder={provider === "all" ? "بحث بالمنصة" : "بحث باسم الحملة أو المعرّف"} value={query} onChange={e => setQuery(e.target.value)} />{provider !== "all" && !orderSource && <><label><input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} />النشطة فقط</label><label><input type="checkbox" checked={activityOnly} onChange={e => setActivityOnly(e.target.checked)} />إخفاء الحملات بلا نشاط</label></>}<button type="button" disabled={!displayed.length} onClick={() => downloadCsv(displayed, `reports-${provider}-${data?.range.date_from}.csv`)}><DownloadSimple size={19} />تنزيل</button></div></div>
+            <div className="reports-scroll" aria-busy={busy}><table className="reports-table"><colgroup><col className="report-col-name"/><col className="report-col-status"/>{COLUMNS.map(([key]) => <col key={key} className={`report-col-${key}`}/>)}</colgroup><thead><tr><th className="report-name">{provider === "all" ? "اسم المنصة / المصدر" : orderSource ? "مصدر الطلبات" : "اسم الحملة"}</th><th>الحالة</th>{COLUMNS.map(([key,label]) => <th key={key} className={["shipping_cost_sar", "payment_fees_sar"].includes(key) ? "added-cost" : ""}><button onClick={() => setSort({key,asc:sort.key === key ? !sort.asc : false})}>{source === "platform" && key === "orders" ? "تحويلات المنصة" : label}{sort.key === key ? sort.asc ? " ↑" : " ↓" : ""}</button>{key === "net_margin_pct" && <small>بعد التكاليف المباشرة</small>}</th>)}</tr></thead>
+                <tbody>{!busy && displayed.map(row => <tr key={row.id}><td className="report-name"><button onClick={() => provider === "all" ? change({provider:row.provider,account_id:""}) : setDialogId(row.id)}>{row.name}</button><small dir="ltr">{row.row_kind === "order_source" || ORDER_SOURCES.has(row.provider) ? "عرض تفاصيل المنتجات" : row.campaign_id || "عرض الحملات الإعلانية"}</small></td><td><span className={`report-status ${row.active || row.status === "available" ? "active" : ""}`}>{provider === "all" ? row.status === "available" ? "متاحة" : "غير متاحة" : row.row_kind === "order_source" ? "طلبات سلة" : row.active ? "نشطة" : "متوقفة"}</span></td>{COLUMNS.map(([key]) => <td key={key}><Metric field={key} value={row.metrics[key]} />{key === "net_profit_sar" && provider !== "all" && <button className="report-products-link" onClick={() => setDialogId(row.id)}>تفاصيل المنتجات</button>}</td>)}</tr>)}{(busy || !displayed.length) && <tr><td colSpan={12} className="report-empty">{busy ? "جارٍ تحميل التقرير من مصادره…" : "لا توجد نتائج للفترة والفلاتر المحددة."}</td></tr>}</tbody>
                 {!busy && data && <tfoot><tr><th colSpan={2}>إجمالي الفترة</th>{COLUMNS.map(([key]) => <td key={key}><Metric field={key} value={data.totals[key]} /></td>)}</tr></tfoot>}</table></div>
-            <footer className="reports-table-footer"><span>عرض {displayed.length} من {rows.length} {provider === "all" ? "منصات" : "حملة"} · الإجمالي يشمل كامل الفترة قبل فلاتر العرض</span><span>مصدر موحّد للحساب والفترة المحددين</span></footer>
+            <footer className="reports-table-footer"><span>عرض {displayed.length} من {rows.length} {provider === "all" ? "مصادر" : orderSource ? "مصدر" : "حملة / مجموعة طلبات"} · الإجمالي يشمل كامل الفترة قبل فلاتر العرض</span><span>مصدر موحّد للحساب والفترة المحددين</span></footer>
         </section>
         <p className="report-equation">صافي الأرباح = إجمالي المبيعات − تكلفة المنتجات − الصرف الإعلاني − تكلفة الشحن − رسوم الدفع</p>
-        {source === "platform" && <p className="report-footnote">تحويلات المنصة قد تختلف عن طلبات سلة بسبب الإسناد. تفاصيل المنتجات والتكاليف والأرباح متاحة عبر «عرض نتائج سلة»؛ لا يمكن استنتاجها من التحويلات الإجمالية.</p>}
+        {source === "platform" && <p className="report-footnote">لعرض إجمالي طلبات المتجر، بما فيها المباشرة وغير المصنّفة، اختر «عرض نتائج سلة». تحويلات المنصة قد تختلف عن طلبات سلة بسبب الإسناد. تفاصيل المنتجات والتكاليف والأرباح متاحة عبر «عرض نتائج سلة»؛ لا يمكن استنتاجها من التحويلات الإجمالية.</p>}
         {modalRow && <ProductDialog row={modalRow} source={source} provider={provider} onSource={v => change({source:v})} onClose={close} />}
     </main>;
 }
