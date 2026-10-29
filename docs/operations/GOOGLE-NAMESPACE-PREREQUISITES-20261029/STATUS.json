@@ -1,5 +1,5 @@
 {
-  "status": "WIP_read_only_not_deployed",
+  "status": "WIP_tested_reviewed_not_deployed",
   "base": "15b656131813af54a043c33821e3aa5f69e7703c",
   "scope": "Owner-only read-only effective privilege, fixed namespace metadata/index and bounded owner legacy shape audit",
   "runtime_writes": false,
@@ -10,7 +10,12 @@
     "backend": "117 passed -W error in2.68s:22new+95existing",
     "frontend": "20 passed fresh run in1.455s"
   },
-  "actual_mongo": "Not run locally: disposable authenticated replica CI pending; no production capability claim",
+  "actual_mongo": {
+    "run": 40932922441,
+    "job": 123655819332,
+    "result": "126 passed5.42s incl9 authenticated disposable replica cases;0failure/error/skips -Werror",
+    "claim": "Test fixture roles only; no production namespace permissions verified"
+  },
   "preserved": "Six existing policy handlers, frozen diagnostic helpers and budget runtime unchanged. Root must preserve newer Reports M6 when selectively integrating; do not merge this WIP history into release.",
   "bounds": "12-second HTTP deadline; retained original task/session and no driver cancellation; one unfinished task per process. Unconfirmed own cursor cleanup permanently closes this process diagnostic slot rather than allocating another cursor. Completed ordinary reads are not cached authority.",
   "security": "No OAuth/provider calls, secrets/env reads, raw privilege/role/user/db/host output or business writes. Effective privilege output reduced internally to booleans. Empty/noauth/unavailable metadata, custom validators, missing indexes, incomplete inventory fail closed.",
@@ -20,7 +25,27 @@
     "createIndex boolean is PUT readiness only; existing offline OAuth save/revoke behavior unchanged",
     "No TTL/autorelease and no runtime budget flag enablement"
   ],
-  "next": "Remote immutable WIP checkpoint, independent review and authenticated real replica CI; resolve evidenced findings before root selective release.",
-  "review": "Independent audit identified lost cursor reply slot and guard allocation bound mismatch; fixed with two new tests. Immutable rereview pending.",
-  "ci_first_attempt": "40932637535:115pass9Mongo failure due unit-test monkeypatch restoring deliberate sticky state at teardown; fixture cleanup fixed. No actual Mongo capability claim from failed attempt."
+  "next": "Root selectively integrates final tree atop latest production preserving Reports/retail/category/resume UI; rerun CI/direct-source release guard. Explicit live owner read only after release; never use this output as migration/commit/legacy reconciliation authority.",
+  "review": "budget_audit independently reviewed00a083db and22newunits -Werror; earlier lost-cursor-reply andallocationbound findings resolved. No immediate blocker within bounded read-only scope; no production proof.",
+  "ci_first_attempt": "40932637535:115pass9Mongo failure due unit-test monkeypatch restoring deliberate sticky state at teardown; fixture cleanup fixed. No actual Mongo capability claim from failed attempt.",
+  "tested_source": "00a083dbf9e61aeaf1ce46a3971622614a43d7af",
+  "tested_tree": "183be2077d7bc45a49897e42d7ee82d208313368",
+  "ci": {
+    "focused": {
+      "run": 40932922441,
+      "result": "success",
+      "frontend_job": 123655819801,
+      "frontend": "20tests2suites+build passed"
+    },
+    "full_management": {
+      "run": 40932932417,
+      "result": "success",
+      "backend": "1242passed29.48s",
+      "frontend": "228tests18suites+build passed"
+    },
+    "release_readiness": {
+      "run": 40932932608,
+      "result": "blocked as expected: WIP not descendant of latest ReportsM6; root must build fresh direct-production SourceA, no intent/release claimed"
+    }
+  }
 }
