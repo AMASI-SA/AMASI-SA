@@ -14,7 +14,8 @@ permissions:
   contents: read
 jobs:
   replica:
-    runs-on: ubuntu-24.04
+    # Mongo8 host-kernel startup workaround, matching reviewed Google CI.
+    runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +58,8 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('catalog-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith(('test_google_product_catalog_reader_mongo','test_google_product_catalog_routes_mongo'))]
-          assert len(cases) >= 21 and len(replica) == 5
+          assert len(cases) >= 34 and len(replica) == 6
+          assert any(c.attrib.get('name') == 'test_real_mongo_details_proof_projection_and_oversize_refusal' for c in replica)
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
           PY

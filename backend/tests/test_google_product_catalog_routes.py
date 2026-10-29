@@ -70,3 +70,16 @@ async def test_non_owner_is_rejected_even_with_ad_permissions(monkeypatch):
     async def staff(*args,**kwargs): return {'owner':False,'user_id':'owner','actor_id':'staff'}
     monkeypatch.setattr(routes,'principal',staff)
     assert (await call(Db(),{'id':'staff','role':'viewer'})).status_code==403
+
+@pytest.mark.asyncio
+async def test_owner_review_returns_stock_proof_without_new_authority():
+    from product_inventory_proof import build_inventory_evidence
+    db=Db();row=db.products.rows[0]
+    row.update(unlimited_quantity=False, variants=[], options_count=0, details_loaded=True, details_synced_at=datetime.now(timezone.utc))
+    row['inventory_evidence_v1']=build_inventory_evidence({'quantity':1,'unlimited_quantity':False,'variants':[],'options':[]},row)
+    response=await call(db,{'id':'owner','role':'owner'})
+    assert response.status_code==200
+    data=response.json();proof=data['catalog']['inventory_reviews'][0]
+    assert data['catalog']['products'][0]['status']=='available' and proof['state']=='available'
+    assert proof['remote_variant_coverage_complete'] is False
+    assert data['execution_authorized'] is False and data['provider_writes']==0

@@ -76,3 +76,17 @@ async def test_real_mongo_bounds_freshness_missing_and_states(replica_db):
     assert result['missing_or_unverified_product_ids'] == ['1','4','5','6']
     assert [p.status for p in result['products']] == ['hidden','out_of_stock']
     with pytest.raises(ValueError): await read(replica_db,[str(x) for x in range(101)])
+
+@pytest.mark.asyncio
+async def test_real_mongo_details_proof_projection_and_oversize_refusal(replica_db):
+    from product_inventory_proof import build_inventory_evidence
+    good=product('12',unlimited_quantity=False,variants=[],options_count=0,details_loaded=True,details_synced_at=NOW)
+    good['inventory_evidence_v1']=build_inventory_evidence({'quantity':1,'unlimited_quantity':False,'variants':[],'options':[]},good)
+    await replica_db.mezan_products_v2.insert_one(good)
+    result=await read(replica_db,['12'])
+    assert result['products'][0].status=='available'
+    assert result['inventory_reviews'][0]['observed_at']==NOW.isoformat()
+    assert result['inventory_reviews'][0]['remote_variant_coverage_complete'] is False
+    await replica_db.mezan_products_v2.update_one({'salla_product_id':'12'},{'$set':{'quantity':2}})
+    result=await read(replica_db,['12'])
+    assert result['products'][0].status=='unknown' and result['inventory_reviews'][0]['state']=='unproved'
