@@ -6,6 +6,8 @@ on:
     paths:
       - "backend/integrations_control_center/google_ads*"
       - "backend/integrations_control_center/google_commercial_plan.py"
+      - "backend/product_inventory_proof.py"
+      - "backend/product_v2_details_routes.py"
       - "backend/ads_manager/**"
       - "backend/google_ads_automation_*.py"
       - "backend/tests/test_google_ads*"
@@ -76,6 +78,8 @@ jobs:
           backend/tests/test_google_ads_automation_runtime.py
           backend/tests/test_google_ads_automation_cycles.py
           backend/tests/test_google_ads_automation_creation_contract.py
+          backend/tests/test_google_ads_creation_inventory.py
+          backend/tests/test_google_ads_creation_inventory_mongo.py
           backend/tests/test_google_ads_automation_creation_policy.py
           backend/tests/test_google_ads_automation_creation_policy_mongo.py
           backend/tests/test_google_ads_automation_creation_plan.py

@@ -18,7 +18,8 @@ from pydantic import ValidationError
 
 from . import google_ads_automation_creation_contract as contract
 from . import google_ads_automation_policy as base
-from .google_ads_ai import PRODUCT_COLLECTION, PRODUCT_PROJECTION
+from .google_ads_ai import PRODUCT_COLLECTION
+from .google_ads_creation_inventory import PRODUCT_PROJECTION
 from .google_ads_automation_authority import activation_proof_valid
 from .google_ads_automation_creation_policy import CREATION_POLICIES, creation_policy_snapshot
 from .google_ads_client import GoogleAdsClient, problem

@@ -163,6 +163,7 @@ def _normalize_variants(raw: Any) -> list[dict[str, Any]]:
 
 
 def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
+    from product_inventory_proof import INVENTORY_EVIDENCE, build_inventory_evidence
     normalized = normalize_salla_product(raw, user_id=user_id, synced_at=_now())
     images_raw = raw.get("images") or raw.get("media") or []
     image_rows = []
@@ -175,7 +176,7 @@ def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
     variants = _normalize_variants(raw.get("variants") or raw.get("skus") or raw.get("product_variants"))
     metadata = raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {}
     seo = raw.get("seo") if isinstance(raw.get("seo"), dict) else {}
-    return {
+    patch = {
         **normalized,
         "description_html": raw.get("description") if isinstance(raw.get("description"), str) else normalized.get("description"),
         "short_description": _text(raw.get("short_description")) or None,
@@ -195,6 +196,8 @@ def _details_patch(raw: dict[str, Any], *, user_id: str) -> dict[str, Any]:
         "details_synced_at": _now(),
         "raw_salla_details": raw,
     }
+    patch[INVENTORY_EVIDENCE] = build_inventory_evidence(raw, patch)
+    return patch
 
 
 async def ensure_detail_indexes(db: Any) -> None:

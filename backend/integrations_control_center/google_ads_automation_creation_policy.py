@@ -20,7 +20,8 @@ from pymongo.errors import DuplicateKeyError
 
 from . import google_ads_automation_creation_contract as contract
 from . import google_ads_automation_policy as base
-from .google_ads_ai import PRODUCT_COLLECTION, PRODUCT_PROJECTION, _public_product
+from .google_ads_ai import PRODUCT_COLLECTION, _public_product
+from .google_ads_creation_inventory import PRODUCT_PROJECTION, inventory_readiness
 from .google_ads_client import GoogleAdsClient, identifier, problem
 from .google_ads_campaign_builder import _display_width
 from .google_ads_management import account_client
@@ -170,9 +171,13 @@ async def _catalog(db, user_id, ids, maximum_age, current):
         if scope.product_id in {item["product_id"] for item in scopes}:
             raise problem("google_creation_product_duplicate", "اختر كل منتج مرة واحدة فقط.", 422)
         available = row.get("unlimited_quantity") is True or contract._amount(row.get("quantity")) is not None
+        inventory_state, inventory_digest = inventory_readiness(row, current, maximum_age)
         codes = []
         if row.get("status") != "active" or row.get("archived") is not False: codes.append("product_not_public")
         if not available: codes.append("product_out_of_stock")
+        elif inventory_state == "unavailable": codes.append("product_out_of_stock")
+        elif inventory_state != "available": codes.append("product_inventory_unproved")
+        available = available and inventory_state == "available"
         if (not isinstance(row.get("source_revision"), str) or not re.fullmatch(r"[a-f0-9]{64}", row["source_revision"])
             or not contract._fresh(row.get("last_synced_at"), current, maximum_age)): codes.append("product_facts_stale")
         if (not contract._plain(row.get("name")) or len(row["name"]) > 500
@@ -184,6 +189,7 @@ async def _catalog(db, user_id, ids, maximum_age, current):
         review.append({"product_id": scope.product_id, "name": product["name"], "final_url": url,
             "product_short_name": contract._short_name(product["name"]), "sku": product["sku"],
             "status": product["status"], "available": available, "source_revision": row.get("source_revision"),
+            "inventory_digest": inventory_digest,
             "last_synced_at": product["last_synced_at"], "blockers": codes})
     if len(domains) != 1:
         raise problem("google_creation_store_domain_ambiguous", "يجب أن تكون روابط المنتجات في نطاق متجر واحد مثبت.", 422)
@@ -335,9 +341,9 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         scopes, products, blockers, domain = await _catalog(db, actor["user_id"], [p.product_id for p in settings.product_scopes], settings.catalog_max_age_seconds, now())
         if blockers or _creative_blockers(template, products):
             raise problem("google_creation_products_not_ready", "أحد المنتجات مخفي أو غير متاح أو يحتاج تحديث بياناته؛ احفظ السياسة وراجعها بعد التحديث.", 409)
-        prior_products = {p["product_id"]: (p.get("source_revision"), p.get("name"), p.get("final_url")) for p in row.get("product_review", [])}
+        prior_products = {p["product_id"]: (p.get("source_revision"), p.get("name"), p.get("final_url"), p.get("inventory_digest")) for p in row.get("product_review", [])}
         if (domain != settings.allowed_domain or scopes != [p.model_dump() for p in settings.product_scopes]
-            or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"]) for p in products)):
+            or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"], p["inventory_digest"]) for p in products)):
             raise problem("google_creation_product_review_changed", "تغيرت حقائق المنتج أو رابطه؛ أعد حفظ السياسة ومراجعتها قبل التفعيل.", 409)
         metadata, _ = await _native(db, actor["user_id"], scope["account_id"], settings.geo_target_ids, client_factory)
         if any(metadata[key] != getattr(settings, key) for key in ("currency_code", "time_zone")):
@@ -349,7 +355,7 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         _expiry(settings.expires_at, current)
         _, final_products, final_blockers, _ = await _catalog(db, actor["user_id"], [p.product_id for p in settings.product_scopes], settings.catalog_max_age_seconds, current)
         if (final_blockers or _creative_blockers(template, final_products)
-            or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"]) for p in final_products)):
+            or any(prior_products.get(p["product_id"]) != (p["source_revision"], p["name"], p["final_url"], p["inventory_digest"]) for p in final_products)):
             raise problem("google_creation_product_review_changed", "تغيرت جاهزية المنتج أثناء التحقق؛ راجع السياسة مجددًا.", 409)
         # The final catalog read is awaited: authority and runtime may have
         # changed while it was in flight. Check again after that boundary.
