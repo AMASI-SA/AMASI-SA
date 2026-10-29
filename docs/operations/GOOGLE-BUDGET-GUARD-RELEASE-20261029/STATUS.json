@@ -103,14 +103,46 @@
   "merge_or_publish": false,
   "next_safe_action": "Persist this dedicated WIP branch and Draft PR, inspect exact-source replica/full CI, then root supplies current production M for normal non-destructive merge and current-source review. Keep runtime false. Root alone owns release intent, actual-host guard and publication; no automatic paid launch is authorized by this checkpoint.",
   "probe_safety_followup": {
-    "state": "WIP; probe fixed, actual Mongo CI pending, broader transaction lifecycle remains migration blocker",
+    "state": "Probe unit/actual replica accepted; WIP migration still blocked by separate _run/read_commit lifecycle",
     "base_remote": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
     "contract": "One original-deadline retained probe per process; sameDBobject concurrent waiters coalesce, cancellationonewaiter nevercancelsdriver/otherwaiters, expiredattempt cannotreturncapability. DifferentDB/pendingexpiredcleanup busy503. Nevercachecompletedproof/renewdeadline/retry. Require acknowledgedinsert+explicitadminabortACKsamepublicsession majority+j; await shielded publicasyncend_session withinoriginaltask/CSOT. No OAuth/native call.",
     "reproduction": "Faithful legacy function issuedcapability without serverabortresponse; fixedprobe rejects.",
     "unit_result": "587passed7.70s -Werror including new10probe cases and existingCAS/inventory/policy/regression suites. AST/YAML/bash/whitespace pass.",
-    "real_mongo": "DedicatedCI adds3actualprobe tests success/server91/connectionclose plus existing16Mongo tests; pending. No localMongo.",
+    "real_mongo": {
+      "run": 40915336711,
+      "job": 123593934735,
+      "result": "104passed21.25s,19actualMongo, failures/errors/skips0,-Werror",
+      "probe_timing": [
+        {
+          "fault": "none",
+          "response_seconds": 0.003,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.05
+        },
+        {
+          "fault": "server91",
+          "response_seconds": 9.998,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.051
+        },
+        {
+          "fault": "connection-close",
+          "response_seconds": 0.497,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.05
+        }
+      ],
+      "scope": "Capabilityprobe latency only, no productionDB/provider authority or commitdurability claim."
+    },
     "unchanged": "runtime_available literalFalse; all operationalflags off; no launch/planner/sixpolicyhandler edits; no livepolicy/providerwrites.",
     "adjacent_blocker": "Actual _run stillasyncsessioncontext at509 and wait_for at712; read_commit745/762 samepattern. Synchronous Motor exit/cancelled executorFuture cleanup safety notresolvedhere; migrationNOTready. commit_attempted+preserve_execution_fence+automatic_retry_allowedFalse unchanged; no budgetrelease/refund changes.",
-    "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged."
+    "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged.",
+    "code_checkpoint_sha": "74ea76cba2f48dd289c33dfb77c67f3a57c30ca7",
+    "full_google_ci": {
+      "run": 40915336984,
+      "backend_job": 123593936220,
+      "backend_result": "1347passed47.61s,zero skips,all12requiredMongo modules; frontend tests passed/buildpending at checkpoint"
+    },
+    "independent_review": "budget_audit41probe+guard tests independently passed-Werror; no new scopedprobebypass; internalcapability60s existingcontract unchanged."
   }
 }
