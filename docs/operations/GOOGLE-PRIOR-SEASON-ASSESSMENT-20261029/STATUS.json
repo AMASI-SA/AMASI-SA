@@ -1,0 +1,66 @@
+{
+  "task": "google-prior-season-assessment-20261029",
+  "branch": "codex/google-prior-season-assessment-20261029",
+  "production_base": "fda86238dda9700806c0d700e9e411c1674c9bad",
+  "accepted_working_pipeline_source": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
+  "state": "read_only_assessment_for_root_contract_review_no_runtime_changes",
+  "production_changed": false,
+  "provider_calls_performed": false,
+  "ownership": "Docs only. CommercialPlanFields accepted8dc/frozen; planning agent owns active nativeUI LiveCategory seam. No shared model, routes, readers or UI edited.",
+  "reachable_pipeline_findings": {
+    "backend/integrations_control_center/google_commercial_plan.py": "Current production stores calendar gregorian/hijri_season and Gregorian starts_on/ends_on only. review_context prior_season remains alignment_required or not_collected, no explicit prior dates. Accepted8dc separates persisted CommercialPlanFields from write-only Input acknowledgement; extend Fields only when assigned, never reintroduce read acknowledgement.",
+    "frontend/src/components/marketing/GoogleCommercialPlan.jsx": "Actual owner form saves current season dates/calendar and global reviewed checkbox, then renders saved-plan store observations. Existing dirty/reload/owner/revision cancellation patterns should guard new prior-season preview. Owner date instruction is not paid authority.",
+    "backend/integrations_control_center/google_plan_store_observations.py": "Accepted8dc attaches /commercial-plans/{id}/store-observations in actual management router. Reads saved pinned minus exclusions; fixed normalized last90day±1 discovery via owner/order_date index, raw source binding exact local dates, max1000+sentinel/32KiB/3s and6s route. It cannot currently read prior-year intervals merely by caller date override.",
+    "backend/integrations_control_center/google_store_product_observations.py": "windows(as_of) hardcodes last14/previous14/30/90 Riyadh closed days; observe_product_lines rejects outside last90 envelope. Gross saved-line lower-bound observations only, duplicate ids/orders rejected, exact owner/rawtimestamp/payment/currency/refund proofs. Missing coverage watermark, retained mutable raw snapshots, unmatchedids and unreconciledreturns remain explicit; no net sales/growth/profit.",
+    "backend/integrations_control_center/google_product_evidence.py": "ProductSourceRecord permits at most366inclusive days but complete verified periods require stronger source evidence. Current builder recognizes fixed four recent windows only and explicitly prior_season_alignment_not_proven. Do not label owner-declared prior interval complete verified or turn partial records into eligible comparison metrics.",
+    "backend/integrations_control_center/google_ads_plan_suggestions.py": "Existing source-quoted suggestion prompt forbids inventing Hijri dates/lastyear seasons. Preserve this boundary; natural-language season text alone does not create a matched calendar interval."
+  },
+  "minimal_proposed_saved_contract": {
+    "field": "Optional prior_season_context on persisted CommercialPlanFields, default null for legacy plans; actual Input inherits it and retains existing required true write acknowledgement",
+    "owner_fields": {
+      "date_from": "Explicit Gregorian ISO date entered/reviewed by owner",
+      "date_to": "Explicit Gregorian ISO inclusive date entered/reviewed by owner",
+      "season_label": "Owner prior-season label, for example prior Ramadan year; text is not date proof",
+      "alignment_note": "Owner explanation of why this is the corresponding season",
+      "calendar_reference_text": "Optional owner-declared reference/provenance text, never automatically fetched or treated verified"
+    },
+    "validation": "date_from<=date_to;1..366inclusive days; prior date_to strictly before current plan starts_on. No inferred annual offset. At evidence read, prior end must be a closed Riyadh day relative to server-frozen as_of; caller cannot override owner/store/as_of or saved dates.",
+    "provenance": "Existing owner-only plan save, server updated_by/updated_at/revision and reviews audit bind both current/prior fields. Existing global context-review acknowledgement must reset on edits; it is not calendar verification or execution authorization. Never persist or synthesize a write acknowledgement to parse saved fields.",
+    "alignment_semantics": "Owner-declared date interval/reference is NOT independently verified Hijri or last-year season alignment. Response calendar_alignment_verification remains unknown/unverified and status owner_declared_context_only unless a future trusted external calendar source is separately verified. A pasted official-looking reference does not change this status.",
+    "current_windows": "Existing last14/previous14/30/90 dates, source timezones and output contracts remain unchanged; current plan season may be future or a different duration. Do not pretend recent rolling windows equal the whole current season."
+  },
+  "minimal_proposed_read_vertical": {
+    "entry": "Actual saved owner form→PUT plan→explicit prior-season read button→new saved-plan prior-season observations endpoint→source-scoped display. Not an unused helper or generic readiness boolean.",
+    "request": "Owner planid plus expected_revision only; no caller prior dates/store/account. Resolve saved pinned minus exclusions; freeze server as_of once; re-read plan revision/fullfields after source read.",
+    "query": "Separate owner+normalized date candidate query for prior interval±1 day using existing (user_id,order_date desc) index and same bounds. NEVER union prior interval with current90day range into a year-gap scan. No backfill, source sync or provider request.",
+    "reuse": "When assigned, factor existing raw qualification/dedup/refund/currency/line aggregation internally so existing observe_product_lines public defaults and four-window contract remain unchanged. New owner-prior interval wrapper must use identical source timestamp binding and explicit Riyadh raw business-date filter, not duplicate or weaken global normalizers/order writers.",
+    "bounds": "One saved prior interval<=366inclusive days, max1000+sentinel source rows, same32KiB before projection/rawrefund container guards, same3s query/6s endpoint budget and output caps. Hitlimits→truncated/unproved with no counts, not clipped season or falsely complete coverage.",
+    "output": "Exact saved prior dates/owner label/note/reference and server-reviewed revision provenance; products and native currency groups separate; observed gross order/line/unit counts only when qualifying saved facts exist. Missing observations remain null, not zero. coverage_complete:false, refunds_reconciled:false, source_snapshot_immutable:false, profitability:null, growth:null, success not established, execution_authorized:false.",
+    "comparison": "Show current rolling evidence and owner-declared prior-season evidence side by side with explicit differing dates/durations; do not compute growth, profitability or season winner from partial/differently scoped data. No platform conversions added as independent store orders; no FX or historical cost inference.",
+    "UI_guard": "Saved revision and fullfields including prior context, dirty/save/reload/owner/unmount abort, late response discard. Clear old prior result when dates/calendar/provenance/products/exclusions change. Legacy null prior interval displays not configured without making any source query."
+  },
+  "external_and_data_limits": [
+    "No independently verified Hijri calendar conversion/alignment source exists in inspected pipeline; no354/365-day shift, no guessed dates or automatic year matching proposed.",
+    "Source code does not prove last-year raw order availability, complete history or retained immutable order snapshots. Owner-declared dates are not a source coverage watermark.",
+    "Current mutable raw order/refund/cost limitations remain; source absence is not proof no sales. Current product cost cannot reconstruct prior-season profit.",
+    "Product/currency/owner scopes remain separate; provider-native campaign periods cannot be silently joined to Riyadh store windows or summed as store orders.",
+    "Actual source8dc backend contract now works with real saved shape; prior historical read routes requiring write acknowledgement remain release-held until successor integration."
+  ],
+  "proposed_file_ownership_after_assignment": [
+    "Root assigns optional prior context model fields/validator on CommercialPlanFields plus review_context output and owner form integration; no edits while nativeUI agent active",
+    "Google evidence owner can own new prior-season wrapper/reader/route/tests and narrowly approved internal shared qualifier extraction",
+    "Planning agent owns new prior UI/service and minimal actual owner form/render/request hooks; root owns final router attachment",
+    "Existing order writers/accounting/normalizers/provider collectors remain untouched"
+  ],
+  "acceptance_required": [
+    "Actual HTTP/Mongo save→read of optional prior context, not synthetic stored writeack fixtures; missing/false writeack remains rejected, legacy no-prior fields valid",
+    "Prior end<current start, inclusive366day boundary, leapday/date parse, closed-day server as_of, future/overlap/oversize interval rejected with no clipping",
+    "Hijri label/reference text never creates independently verified alignment or inferred dates, even when natural-language instruction says last Ramadan",
+    "Query exact prior interval±1 only, never year-gap union; same rawtimestamp/owner/currency/order and line dedup/payment/refund qualification as current observations",
+    "Existing14/14,30/90 regression outputs byte/semantically unchanged after internal factoring; separate native currency groups and unknown costs retained",
+    "Missing history,1000row bound, invalid raw proof/refunds/unmatchedids remain partial/null with no zero-fill/growth/profit/ranking or paid authority",
+    "ActualMongo planrevision/fullfields/owner race and strict source bounds; actualUI dirty/date/calendar/product changes cancel old results and late responses"
+  ],
+  "verification": "Read-only comparison of currentproductionfda and accepted8dc source; no runtime code, new tests, provider data or calendar conversion run",
+  "next": "Root reviews this contract and assigns shared model/qualifier/UI ownership after current nativeUI milestone. Do not implement before explicit assignment."
+}
