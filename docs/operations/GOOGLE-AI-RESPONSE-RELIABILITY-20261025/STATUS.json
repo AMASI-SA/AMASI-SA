@@ -1169,8 +1169,8 @@
         "Initial network partial-clone checkout failed; discarded as proof, independent local object clone succeeded.",
         "First freeze invocation lacked public REACT_APP_BACKEND_URL; corrected invocation passed without source changes."
       ],
-      "production_changed": "live deployment no; /app ff-only plus adapter materialization in progress",
-      "next": "Require /app adapter success and matching identity; prepare/prepublish immediately before one publish. No lease or publish yet.",
+      "production_changed": "deployment requested; live success not yet verified",
+      "next": "Wait newer explicit deployment finish, run guard verify --url https://mezansalla.com (3 consecutive intended identity checks), confirm active=false, functional Google/GA4 reads, preserve evidence.",
       "pair_independent_review": "PASS: re-computed backend1022/control242 full Git manifests, ancestry and only-intent diff; source frontend unchanged and bound to A",
       "b_ci": {
         "release_readiness": 40902880964,
@@ -1192,7 +1192,31 @@
         "ad_writes_performed": false
       },
       "merge": "a8222e470ebb4907a1bf69b39d70af5eeee0b04e",
-      "production_branch_changed": "yes, normal merge preserving frozen A/B"
+      "production_branch_changed": "yes, normal merge preserving frozen A/B",
+      "app_materialization": "PASS: ff-only to merge a8222e470ebb4907a1bf69b39d70af5eeee0b04e, exact B tree, package adapter exit0 in66.37s",
+      "guard": {
+        "actor": "codex-google-cas-20261029",
+        "prepare": "PASS",
+        "prepublish": "ready_to_publish=true, intended source/runtime/deployment confirmed",
+        "lease": "active-owned; do not change /app source until verify closes"
+      },
+      "publish": {
+        "state": "PUBLISHING",
+        "republish_ui_clicks": 1,
+        "publish_changes_clicks": 1,
+        "baseline_finish": "Oct28 09:17PM",
+        "latest_observed": "Publishing…",
+        "do_not_repeat_click": true
+      }
+    },
+    "next_inventory": {
+      "pr": 1600,
+      "source": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+      "tree": "823f75c9af0886dc28f27063a9cabf28beda7294",
+      "agent_tests": "377 passed",
+      "independent_tests": "218 passed",
+      "ci": "running",
+      "published": false
     }
   }
 }
