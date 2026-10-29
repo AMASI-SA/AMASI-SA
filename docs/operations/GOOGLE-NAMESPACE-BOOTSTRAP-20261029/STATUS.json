@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-20261029",
-  "status": "capabilities_passed_prepare_execute_contract_amended_before_runtime",
+  "status": "additional_guard_race_capability_probe_pending",
   "base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
   "branch": "codex/google-namespace-bootstrap-wip-20261029",
   "owner": "google_product_acceptance",
@@ -45,8 +45,9 @@
       "result": "19 passed in 3.22s; exact19 actual authenticated Mongo8.0.26 cases; zero skips; all setup/test/cleanup steps success",
       "logs_read_by": "google_product_acceptance"
     },
-    "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server."
+    "qualification": "Engine capability tests only, not production bootstrap implementation or live availability. Negative DDL cases plus positive privilege case exercised on the disposable server.",
+    "additional_probe": "Transactional raw create on a same-options foreign existing guard, without any policy-index command; expected NamespaceExists(48) must be demonstrated, not assumed from earlier policy races. New20-case CI pending."
   },
-  "next": "Implement NEW unattached module and actual behavior tests against this proved engine contract. Preserve every existing file. Add request/owner/durable receipt/uncertainty/race coverage and fresh CI; independent review before root integration.",
+  "next": "Inspect new actual guard-specific race test before implementing runtime DDL fence. Historical19 engine pass remains source ad5 only; no new20-case pass claimed.",
   "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288"
 }

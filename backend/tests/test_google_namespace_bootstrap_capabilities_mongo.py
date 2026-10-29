@@ -192,6 +192,24 @@ async def test_real_raw_create_on_existing_same_options_is_noop():
 
 
 @pytest.mark.asyncio
+async def test_real_transactional_create_rejects_foreign_existing_guard_without_new_index():
+    async with fixture() as (_, raw, client, db, _, _):
+        assert await target_metadata(raw) == {}
+        await raw.create_collection(NAMES[2])
+        before = await target_metadata(raw)
+        session = await client.start_session()
+        try:
+            begin(session)
+            # Unlike the policy race, there is no subsequent new-index command
+            # which could detect an old collection. This is a distinct fence.
+            with pytest.raises(OperationFailure) as error:
+                await db.command({'create': NAMES[2]}, session=session)
+            assert error.value.code == 48  # NamespaceExists; never privilege/network failure.
+        finally: await session.end_session()
+        assert await target_metadata(raw) == before
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('missing', ['insert', 'createIndex'])
 async def test_real_denied_target_privilege_is_not_replaced_by_broad_role(missing):
     async with fixture(missing=missing) as (_, raw, client, db, _, _):

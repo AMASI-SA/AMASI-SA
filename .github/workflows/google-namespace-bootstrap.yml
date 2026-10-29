@@ -79,7 +79,7 @@ jobs:
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root=ET.parse('namespace-bootstrap.xml').getroot();cases=root.findall('.//testcase')
-          assert len(cases)==19, len(cases)
+          assert len(cases)==20, len(cases)
           assert all('bootstrap_capabilities_mongo' in c.get('classname','') for c in cases)
           assert not root.findall('.//failure') and not root.findall('.//error') and not root.findall('.//skipped')
           required={
@@ -88,6 +88,7 @@ jobs:
               'test_real_snapshot_explicit_ddl_rejected',
               'test_real_existing_empty_collection_cannot_receive_new_index_in_transaction',
               'test_real_raw_create_on_existing_same_options_is_noop',
+              'test_real_transactional_create_rejects_foreign_existing_guard_without_new_index',
               'test_real_denied_target_privilege_is_not_replaced_by_broad_role',
               'test_real_catalog_commands_are_not_transaction_snapshot_reads',
               'test_real_foreign_create_race_before_transaction_is_not_silently_indexed',
@@ -95,7 +96,7 @@ jobs:
               'test_real_global_reservation_serializes_independent_clients',
           }
           assert {c.get('name','').split('[')[0] for c in cases}==required
-          print('Verified 19 actual authenticated Mongo capability cases, zero skips; no runtime implementation tested')
+          print('Verified 20 actual authenticated Mongo capability cases, zero skips; no runtime implementation tested')
           PYCODE
       - name: Remove disposable replica
         if: always()
