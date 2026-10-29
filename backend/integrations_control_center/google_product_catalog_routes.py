@@ -54,7 +54,7 @@ def attach_google_product_catalog_review_routes(router, db, current_user):
             except ValueError:
                 raise problem('google_catalog_identity_unproved', 'تعذر إثبات هوية منتجات الكتالوج.', 409) from None
         else:
-            result = {'products': [], 'missing_or_unverified_product_ids': [],
+            result = {'products': [], 'inventory_reviews': [], 'missing_or_unverified_product_ids': [],
                 'category_membership_verified': False, 'variant_availability_verified': False,
                 'source_writes': 0, 'execution_authorized': False}
         current = await db[PLANS].find_one(scope, {'_id': 0, 'revision': 1, 'fields': 1})

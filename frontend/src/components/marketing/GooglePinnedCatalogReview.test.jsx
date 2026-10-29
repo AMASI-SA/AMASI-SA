@@ -114,3 +114,35 @@ test("503 remains a safe retriable read with no private response displayed", asy
     expect(container.querySelector("button").disabled).toBe(false); expect(container.textContent).toContain("تعذرت قراءة الكتالوج");
     expect(container.textContent).not.toContain("secret");
 });
+
+function stockProof(state = "available", changes = {}) {
+    return { product_id: "123", state, observed_at: "2026-10-29T12:00:00+00:00", stock_digest: "a".repeat(64), scope: "stored_details_snapshot", maximum_supported_variants: 50, remote_variant_coverage_complete: false, size_suitability_verified: false, preparation_time_verified: false, ...changes };
+}
+test("bounded saved details proof shows its time and remaining requirements", async () => {
+    const response = result(); response.catalog.products[0].status = "available"; response.catalog.inventory_reviews = [stockProof()];
+    api.get.mockResolvedValue({ data: response }); await render(); await read();
+    expect(container.textContent).toContain("تظهر إتاحة مخزون في لقطة التفاصيل المحفوظة بتاريخ");
+    expect(container.textContent).toContain("2026-10-29T12:00:00+00:00");
+    expect(container.textContent).toContain("اكتمال التغطية البعيدة");
+    expect(container.textContent).toContain("وقت التجهيز");
+});
+test.each([{ maximum_supported_variants: 51 }, { remote_variant_coverage_complete: true }, { observed_at: "2026-10-29" }, { stock_digest: "bad" }, { product_id: "foreign" }, { preparation_time_verified: true }])("invalid inventory proof fails closed %j", async (change) => {
+    const response = result(); response.catalog.products[0].status = "available"; response.catalog.inventory_reviews = [stockProof("available", change)];
+    api.get.mockResolvedValue({ data: response }); await expect(getGoogleCatalogReview(plan)).rejects.toMatchObject({ code: "GOOGLE_CATALOG_REVIEW_UNPROVEN" });
+});
+
+ test("unavailable bounded snapshot is not a whole-product stockout", async () => {
+    const response = result(); response.catalog.inventory_reviews = [stockProof("unavailable")];
+    api.get.mockResolvedValue({ data: response }); await render(); await read();
+    expect(container.textContent).toContain("لا يظهر مخزون متاح في لقطة التفاصيل المحفوظة");
+    expect(container.textContent).toContain("لا يثبت ذلك نفاد مخزون المنتج الكامل");
+    expect(container.textContent).not.toContain("نفاد مخزون مسجل");
+});
+test("variant snapshot availability does not present parent quantity or every size as available", async () => {
+    const response = result(); response.catalog.inventory_reviews = [stockProof()];
+    response.catalog.products[0].available_quantity = null;
+    api.get.mockResolvedValue({ data: response }); await render(); await read();
+    expect(container.textContent).toContain("تظهر إتاحة مخزون في لقطة التفاصيل");
+    expect(container.textContent).toContain("لا تثبت إتاحة كل المقاسات");
+    expect(container.textContent).not.toContain("كمية");
+});
