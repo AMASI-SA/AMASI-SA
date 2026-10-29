@@ -1,0 +1,99 @@
+name: Google category membership
+on:
+  push:
+    branches: [codex/google-category-review-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_category_*.py
+      - backend/integrations_control_center/google_ads_routes.py
+      - backend/tests/test_google_category_*.py
+      - frontend/src/components/marketing/GoogleCategoryMembershipReview*
+      - frontend/src/components/marketing/GoogleCommercialPlan*
+      - frontend/src/services/googleCategoryMembershipReview*
+      - .github/workflows/google-category-membership.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replica:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1 cryptography==50.0.2
+          python-multipart==0.0.32 PyJWT==2.15.1 bcrypt==4.1.3
+          python-dotenv==1.2.4 pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Start disposable loopback replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name google-category-rs -p 127.0.0.1:27476:27476 mongo:8.0.26 --port 27476 --replSet gCategoryReview --bind_ip_all
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-category-rs mongosh --port 27476 --quiet --eval 'if(db.adminCommand({ping:1}).ok !== 1) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec google-category-rs mongosh --port 27476 --quiet --eval 'if(rs.initiate({_id:"gCategoryReview",members:[{_id:0,host:"127.0.0.1:27476"}]}).ok !== 1) quit(1)'
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-category-rs mongosh --port 27476 --quiet --eval 'const h=db.hello(); if(h.setName !== "gCategoryReview" || h.isWritablePrimary !== true || !Number.isInteger(h.logicalSessionTimeoutMinutes)) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+      - name: Test source-bound category review against replica
+        env:
+          GOOGLE_CATEGORY_TEST_MONGO_URI: mongodb://127.0.0.1:27476/
+          PYTHONPATH: backend
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -q --junitxml=category-membership-results.xml backend/tests/test_google_category_membership.py backend/tests/test_google_category_membership_routes.py backend/tests/test_google_category_membership_mongo.py
+          python - <<'PYGATE'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('category-membership-results.xml').getroot().findall('.//testcase')
+          replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_category_membership_mongo')]
+          assert len(cases) >= 38 and len(replica) == 9
+          assert sum(c.attrib.get('name','').startswith('test_actual_normalizer_and_details_writer_bson_snapshot_positive') for c in replica) == 2
+          assert any(c.attrib.get('name') == 'test_actual_management_route_reads_normalized_snapshot_and_rejects_stale_revision' for c in replica)
+          assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
+          print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
+          PYGATE
+      - name: Remove disposable replica
+        if: always()
+        run: docker rm -f google-category-rs
+  frontend:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare governed toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Frozen frontend install
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test read-only owner observations
+        env:
+          CI: 'true'
+        run: >-
+          python scripts/frontend_release_toolchain.py exec --
+          yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath
+          src/components/marketing/GoogleCategoryMembershipReview.test.jsx
+          src/components/marketing/GoogleStoreProductObservations.test.jsx
+          src/components/marketing/GoogleCommercialPlan.test.jsx
+          src/components/marketing/GooglePinnedCatalogReview.test.jsx
+          src/services/googleCommercialPlanSuggestion.test.js
+      - name: Build integrated current CI checkout
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build

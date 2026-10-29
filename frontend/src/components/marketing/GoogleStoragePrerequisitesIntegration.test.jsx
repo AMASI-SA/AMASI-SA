@@ -2,6 +2,7 @@ import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import api from "../../lib/api";
 import GoogleAdsWorkspace from "./GoogleAdsWorkspace";
+jest.mock("../../context/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner", role: "owner" }, authStatus: "authenticated" }) }));
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
 let container, root;
 beforeEach(() => {

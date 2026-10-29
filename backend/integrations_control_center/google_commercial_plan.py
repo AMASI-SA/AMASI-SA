@@ -42,9 +42,33 @@ class CommercialLimits(BaseModel):
         return self
 
 
-class CommercialPlanInput(BaseModel):
+class PriorSeasonContext(BaseModel):
+    """Owner-declared intervals, never independently verified calendar proof."""
     model_config = ConfigDict(extra="forbid", strict=True)
-    expected_revision: int = Field(ge=0)
+    date_from: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    date_to: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    season_label: str = Field(min_length=1, max_length=160)
+    alignment_note: str = Field(min_length=1, max_length=1000)
+    calendar_reference_text: str | None = Field(default=None, max_length=500)
+
+    @field_validator("season_label", "alignment_note", "calendar_reference_text")
+    @classmethod
+    def text(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("blank owner calendar context")
+        return value.strip() if value is not None else None
+
+    @model_validator(mode="after")
+    def interval(self):
+        first, last = date.fromisoformat(self.date_from), date.fromisoformat(self.date_to)
+        if first > last or (last - first).days > 365:
+            raise ValueError("prior interval must contain1..366inclusive days")
+        return self
+
+
+class CommercialPlanFields(BaseModel):
+    """Persisted commercial context; contains no request consent or revision."""
+    model_config = ConfigDict(extra="forbid", strict=True)
     instruction: str = Field(min_length=1, max_length=6000)
     season: str = Field(min_length=1, max_length=160)
     starts_on: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -59,8 +83,8 @@ class CommercialPlanInput(BaseModel):
     exclusions: list[str] = Field(default_factory=list, max_length=40)
     selection_mode: Literal["pinned_only", "review_category_candidates"] = "pinned_only"
     calendar: Literal["gregorian", "hijri_season"] = "gregorian"
+    prior_season_context: PriorSeasonContext | None = None
     limits: CommercialLimits | None = None
-    acknowledge_review: bool
 
     @field_validator("instruction", "season", "audience", "message")
     @classmethod
@@ -88,16 +112,28 @@ class CommercialPlanInput(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def reviewed(self):
+    def valid_scope(self):
         start, end = date.fromisoformat(self.starts_on), date.fromisoformat(self.ends_on)
         if start > end or (end - start).days > 730:
             raise ValueError("invalid season interval")
-        if not self.acknowledge_review:
-            raise ValueError("review the structured fields before saving")
+        if self.prior_season_context is not None and date.fromisoformat(self.prior_season_context.date_to) >= start:
+            raise ValueError("prior season must end before current season starts")
         if set(self.pinned_product_ids) & set(self.excluded_product_ids):
             raise ValueError("a product cannot be pinned and excluded")
         if self.selection_mode == "review_category_candidates" and not self.category_url and not self.category_ids:
             raise ValueError("category selection requires a category")
+        return self
+
+
+class CommercialPlanInput(CommercialPlanFields):
+    """Owner write request; acknowledgement is required and never persisted."""
+    expected_revision: int = Field(ge=0)
+    acknowledge_review: bool
+
+    @model_validator(mode="after")
+    def reviewed(self):
+        if not self.acknowledge_review:
+            raise ValueError("review the structured fields before saving")
         return self
 
 
@@ -111,7 +147,10 @@ def review_context(body: CommercialPlanInput, current: datetime) -> dict:
         "sales_previous_14_days": window(last - timedelta(days=27), last - timedelta(days=14)),
         "trend_last_30_days": window(last - timedelta(days=29), last),
         "trend_last_90_days": window(last - timedelta(days=89), last),
-        "prior_season": {"status": "alignment_required" if body.calendar == "hijri_season" else "not_collected", "calendar": body.calendar},
+        "prior_season": ({"status": "owner_declared_context_only", "calendar": body.calendar,
+            "alignment_verification": "unknown", "interval": body.prior_season_context.model_dump(),
+            "source": "owner_declared_interval_not_independently_verified"} if body.prior_season_context is not None else
+            {"status": "alignment_required" if body.calendar == "hijri_season" else "not_collected", "calendar": body.calendar}),
         "cost_quality": "unknown", "profitability": None,
         "inventory": "not_verified", "category_membership": "not_verified",
         "merchant_offer_mapping": "not_verified", "cross_platform_results": [],
