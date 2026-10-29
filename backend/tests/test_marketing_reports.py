@@ -1,5 +1,6 @@
 from datetime import date
 from unittest.mock import AsyncMock
+from copy import deepcopy
 
 import pytest
 from fastapi import FastAPI
@@ -142,3 +143,112 @@ async def test_salla_failure_preserves_native_snap_counts_and_missing_costs(monk
     assert row["profitability"] is None
     assert result["commerce_available"] is False
     assert result["warnings"]
+
+
+def tiktok_window(entities=None, *, total=1, pages=1, page=1, spend=2221.6):
+    return {"entities": entities if entities is not None else [{
+        "entity_id": "c1", "entity_name": "حملة تيك توك", "account_id": "a1",
+        "status": "ENABLE", "currency": "SAR", "data_complete": True,
+        "spend_sar": 20, "spend_native": 20, "conversions": 4, "impressions": 100, "clicks": 10}],
+        "totals": {"spend_sar": spend, "conversions": 730, "impressions": 2000,
+                   "clicks": 400, "data_complete": True},
+        "accounts": [{"account_id": "a1", "account_name": "تيك توك أماسي", "timezone": "Asia/Riyadh"}],
+        "campaign_pagination": {"total": total, "pages": pages, "page": page},
+        "ai_readiness": {"campaign_identity_ready": True}}
+
+
+@pytest.mark.asyncio
+async def test_tiktok_uses_native_campaign_reader_not_aggregate_only_overview(monkeypatch):
+    import integrations_control_center.tiktok_native_hierarchy as native
+    from ads_manager.google_native_overview import GoogleAdsManagerService
+    workspace = AsyncMock(return_value=tiktok_window())
+    monkeypatch.setattr(native, "tiktok_workspace", workspace)
+    legacy = AsyncMock(side_effect=AssertionError("wrong source"))
+    monkeypatch.setattr(GoogleAdsManagerService, "overview", legacy)
+    commerce = AsyncMock()
+    monkeypatch.setattr(reports, "attach_commerce", commerce)
+    data = await reports.other_report(object(), "owner", "tiktok", date(2026,10,29), date(2026,10,29))
+    assert data["source"] == "tiktok_native_hierarchy_v2"
+    assert data["rows"][0]["name"] == "حملة تيك توك"
+    assert data["rows"][0]["active"] is True
+    assert data["rows"][0]["platform"] == {"orders": 4, "sales_sar": None}
+    assert data["source_totals"]["spend_sar"] == 2221.6
+    assert data["source_totals"]["conversions"] == 730
+    legacy.assert_not_called()
+    assert commerce.await_args.args[2] == "tiktok"
+    assert workspace.await_args.kwargs["entity_type"] == "campaign"
+
+
+@pytest.mark.parametrize("source,expected_orders,expected_sales", [("platform",730,None),("salla",2,100)])
+def test_tiktok_route_preserves_account_spend_and_separates_event_counts(monkeypatch, source, expected_orders, expected_sales):
+    monkeypatch.setattr(reports, "other_report", AsyncMock(return_value={
+        "provider": "tiktok", "status": "available", "source_totals": {"spend_sar": 2221.6, "conversions": 730},
+        "rows": [{"spend_sar": 20, "platform": {"orders": 4, "sales_sar": None},
+                  "salla": {"orders": 2, "sales_sar": 100}, "profitability": {
+                      "product_cost_sar": 30, "shipping_cost_sar": 10, "payment_fees_sar": 2}}]}))
+    response = app_for({"id":"owner", "role":"owner"}).get(f"/marketing-reports?provider=tiktok&source={source}&date_from=2026-10-29&date_to=2026-10-29")
+    assert response.status_code == 200
+    total = response.json()["totals"]
+    assert total["spend_sar"] == 2221.6  # Full account, not the campaign subtotal20.
+    assert total["orders"] == expected_orders
+    assert total["sales_sar"] == expected_sales
+    if source == "platform":
+        assert total["net_profit_sar"] is None and total["roas"] is None
+    else:
+        assert total["net_profit_sar"] == -2163.6
+
+
+@pytest.mark.asyncio
+async def test_tiktok_collects_all_campaign_pages_and_counts_account_totals_once(monkeypatch):
+    import integrations_control_center.tiktok_native_hierarchy as native
+    first = tiktok_window(total=2, pages=2)
+    second = deepcopy(first)
+    second["campaign_pagination"]["page"] = 2
+    second["entities"][0]["entity_id"] = "c2"
+    workspace = AsyncMock(side_effect=[first, second])
+    monkeypatch.setattr(native, "tiktok_workspace", workspace)
+    monkeypatch.setattr(reports, "attach_commerce", AsyncMock())
+    data = await reports.tiktok_report(object(), "owner", date(2026,10,29), date(2026,10,29))
+    assert {r["campaign_id"] for r in data["rows"]} == {"c1", "c2"}
+    assert data["source_totals"]["conversions"] == 730
+    assert [c.kwargs["page"] for c in workspace.await_args_list] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_tiktok_rejects_duplicate_or_missing_campaign_pages(monkeypatch):
+    import integrations_control_center.tiktok_native_hierarchy as native
+    first = tiktok_window(total=2, pages=2)
+    duplicate = deepcopy(first)
+    duplicate["campaign_pagination"]["page"] = 2
+    monkeypatch.setattr(native, "tiktok_workspace", AsyncMock(side_effect=[first, duplicate]))
+    with pytest.raises(ValueError, match="truncated"):
+        await reports.tiktok_report(object(), "owner", date(2026,10,29), date(2026,10,29))
+
+
+@pytest.mark.asyncio
+async def test_tiktok_empty_campaign_catalog_keeps_valid_account_spend(monkeypatch):
+    import integrations_control_center.tiktok_native_hierarchy as native
+    monkeypatch.setattr(native, "tiktok_workspace", AsyncMock(return_value=tiktok_window([], total=0, pages=0)))
+    monkeypatch.setattr(reports, "attach_commerce", AsyncMock())
+    data = await reports.tiktok_report(object(), "owner", date(2026,10,29), date(2026,10,29))
+    assert data["status"] == "available" and data["rows"] == []
+    assert data["source_totals"]["spend_sar"] == 2221.6
+
+
+@pytest.mark.asyncio
+async def test_tiktok_long_period_splits_canonical_windows_and_preserves_missing_costs(monkeypatch):
+    import integrations_control_center.tiktok_native_hierarchy as native
+    second = tiktok_window(spend=None)
+    second["totals"]["data_complete"] = False
+    second["entities"][0].update(spend_sar=None, conversions=None, data_complete=False)
+    workspace = AsyncMock(side_effect=[tiktok_window(), second])
+    monkeypatch.setattr(native, "tiktok_workspace", workspace)
+    monkeypatch.setattr(reports, "attach_commerce", AsyncMock(side_effect=RuntimeError("unavailable")))
+    data = await reports.tiktok_report(object(), "owner", date(2026,9,1), date(2026,10,2))
+    assert [(c.kwargs["from_date"], c.kwargs["to_date"]) for c in workspace.await_args_list] == [
+        ("2026-09-01", "2026-10-01"), ("2026-10-02", "2026-10-02")]
+    assert data["source_totals"]["spend_sar"] is None
+    assert data["rows"][0]["platform"]["orders"] is None
+    assert data["rows"][0]["profitability"] is None
+    assert data["commerce_available"] is False
+    assert data["coverage"]["status"] == "partial"
