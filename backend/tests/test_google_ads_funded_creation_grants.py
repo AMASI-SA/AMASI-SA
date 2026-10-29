@@ -12,11 +12,16 @@ from tests.test_google_ads_standing_dispatch_floor import setup as native_setup,
 
 async def setup(monkeypatch,db=None):
     db,provider=await native_setup(monkeypatch,db)
+    values=prepared_case();values['product']['last_synced_at']=NOW.isoformat()
+    values['product']['details_synced_at']=NOW.isoformat()
+    values['product']['inventory_evidence_v1']['observed_at']=NOW.isoformat()
+    from integrations_control_center.google_ads_ai import PRODUCT_COLLECTION
+    await db[PRODUCT_COLLECTION].insert_one(values['product'])
     draft=prepare_google_creation_intent(**prepared_case())['draft']
     await db[management.DRAFTS].insert_one({'user_id':'owner','account_id':'123','draft_id':'reviewdraft',
         'revision':1,'draft':draft})
     body={'mode':'create_new_enabled_search','spend_semantics':grants.SEMANTICS,'request_key':'reviewed_launch_1',
-        'expected_revision':0,'owner_generation':1,'draft_id':'reviewdraft','draft_revision':1,
+        'expected_revision':0,'owner_generation':1,'draft_id':'reviewdraft','draft_revision':1,'catalog_max_age_seconds':3600,
         'valid_from':NOW.isoformat(),'expires_at':(NOW+timedelta(days=1)).isoformat(),'budget_native':'15',
         'max_campaign_daily_budget_native':'20','max_account_daily_budget_native':'55'}
     return db,provider,body

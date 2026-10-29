@@ -23,6 +23,7 @@ class FundedGrantReviewInput(BaseModel):
     owner_generation: int=Field(ge=1,le=2**63-2)
     draft_id: str=Field(min_length=1,max_length=160)
     draft_revision: int=Field(ge=1,le=2**63-2)
+    catalog_max_age_seconds: int=Field(ge=60,le=86400)
     valid_from: str=Field(max_length=64)
     expires_at: str=Field(max_length=64)
     budget_native: str=Field(pattern=pure._MONEY)
@@ -107,11 +108,14 @@ async def review_google_funded_grant(db,*,user,account_id,body,current=None,clie
         fail('google_funded_grant_input_invalid')
     review={'schema_version':1,'mode':body.mode,**scope,'request_key':body.request_key,'revision':grant['revision'],
         'owner_generation':body.owner_generation,'reviewed_by':actor['actor_id'],'spend_semantics':SEMANTICS,
-        'draft_id':body.draft_id,'draft_revision':body.draft_revision,'draft':draft,
+        'draft_id':body.draft_id,'draft_revision':body.draft_revision,'catalog_max_age_seconds':body.catalog_max_age_seconds,'draft':draft,
         'valid_from':body.valid_from,'expires_at':body.expires_at,'currency_code':grant['currency_code'],
         'time_zone':grant['time_zone'],'budget_native':body.budget_native,
         'max_campaign_daily_budget_native':body.max_campaign_daily_budget_native,
         'max_account_daily_budget_native':body.max_account_daily_budget_native}
+    from .google_ads_funded_creation_authority import _products
+    product=await _products(db,{'user_id':scope['user_id'],'review':review},started)
+    review['product_review_binding']={key:product[key] for key in ('product_id','canonical_url','name','sku')}
     digest=review_digest(review);grant['owner_review_digest']=digest
     return {**review,'review_digest':digest,'grant':grant}
 
@@ -136,6 +140,10 @@ async def _mutate_in_transaction(db,*,session,snapshot,command,current):
             or actor['actor_id']!=review['reviewed_by'] or (old or {}).get('consumed') is True
             or await view[RUNS].find_one({**scope,'grant_key':command.grant_key},{'_id':1})):
             fail('google_funded_slot_consumed_or_changed')
+        from .google_ads_funded_creation_authority import _products
+        product=await _products(view,{'user_id':scope['user_id'],'review':review},current)
+        if {key:product[key] for key in ('product_id','canonical_url','name','sku')}!=review.get('product_review_binding'):
+            fail('google_funded_product_review_changed')
         record={**scope,'grant_key':command.grant_key,'request_key':review['request_key'],
             'revision':command.expected_revision+1,'grant':review['grant'],'review':{key:value for key,value in review.items() if key not in {'grant','review_digest'}},
             'review_digest':review['review_digest'],'state':'configured','spend_semantics':SEMANTICS,

@@ -1,19 +1,21 @@
 {
-  "status": "WIP_OWNER_CONFIGURED_GRANT_REVIEW_SAVE_REVOKE_CHECKPOINT",
+  "status": "WIP_CALLABLE_STORAGE_AUTHORITY_IMPLEMENTED_REPLICA_ACCEPTANCE_PENDING",
   "branch": "codex/google-funded-storage-authority-wip-20261029",
   "base": "9e83dfbc7488483abe43d6443a80a1ac819476e1",
   "scope": "New fundedgrants/authority helpers plus narrow typedguard/exposure; no publicattach/gateway/worker/activation/flags/production calls",
-  "completed": "Actual persistedowner lookup and canonicalnative metadata/draft review; explicit typed AVERAGE_DAILY_COMMITMENT semantics inreviewdigest; save alwaysconfigured/revokeOAuthindependent via mandatorycommonTX, nofallback/noactivation. UnknownsaveACK neverretries orcreatesauthority.",
-  "tests": "12localunitpassed1.37s-Werror on actualhelpers with transport collaborator. No actualMongo/CI yet.",
+  "completed": "Authenticated canonicalreview/saveconfigured/offlineOAuthrevoke undercommonepoch; actualnativeinventory/settings/validate-only +currentcanonicalproduct readers mint privateboundbundle; callableone-shotreservation/floor/originalreceipt+actualgraphverification settlement; accountfence/epoch/proposal/journalbinding; explicitfundedunboundhold thennativepairMAXexposure andstoredcap. No activation/publicattachment/paidconsumer.",
+  "tests": "64localselected unit-Werror (latestresult); actualpositivefundedsettlement uses original fakeGoogletransport receipt and existing independent native verification helper; no actualprovider requests. ActualMongo/race/expiry/fault/bounds acceptance pending.",
   "remaining": [
-    "Realcallablefundedreservation/floor/settlement and permanentone-shotjournal",
-    "Explicitfundedcommonexposure/maxonce and crosspolicyhold accounting",
-    "Independentclient actualMongo revoke/cancel/clock/unknowncommit tests/CI",
-    "Immutableindependentreview and productionnewnamespaceprovisioning evidence"
+    "Adversarial grant/record/native/proposal/cap/expiry/unknowncommit/restart tests",
+    "Independentclient actualMongo crosspolicy/revoke/cancel/floor/fault and actualBSON/nozero-skipCI",
+    "Independent immutable fullruntime review",
+    "Newnamespacepermissions/provisioning/index/legacycontracts beforeanydeployment"
   ],
   "spend_semantics": "Required typed AVERAGE_DAILY_COMMITMENT; omission/HARD_DAILY_SPEND/HARD_TOTAL_SPEND rejected. No nativecap interpretation ofhardspendceilings. No numericdefaults.",
   "runtime_available": false,
   "production_changed": false,
   "financial_limits_saved_in_production": false,
-  "next": "Complete authority/journal/exposure on this isolatedbranch; checkpointbeforelongCI; preserve PAUSED/standingfloors/sixpolicyhandlers."
+  "next": "Complete authority/journal/exposure on this isolatedbranch; checkpointbeforelongCI; preserve PAUSED/standingfloors/sixpolicyhandlers.",
+  "production_engine_evidence": "Rootreports1646positive realreplica majority+jcommit/readback/cleanup andGETreceipt, finala99efcfd. This isengineproof only, not application/newfundednamespace/index/legacy proof; zero checked inventory isnotemptyproof.",
+  "prepared_auth_boundary": "Storage-only helper closes its read/validate-only client beforeTX and alwaysreturnsfunded_dispatch_authorized:false. No preparedpaidclient/dispatchpermission exists. Futuregateway must ownpreparedauth/client beforefloor and permit nointerveningrefresh/await afterpositiveACK."
 }

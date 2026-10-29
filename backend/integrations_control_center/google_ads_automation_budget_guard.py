@@ -67,6 +67,29 @@ class FundedGrantMutation:
 
 
 @dataclass(frozen=True)
+class FundedCreationReservation:
+    grant_key: str
+    proposal_id: str
+    execution_claim_id: str
+    prepared: object
+
+
+@dataclass(frozen=True)
+class FundedCreationDispatchFloor:
+    grant_key: str
+    proposal_id: str
+    execution_claim_id: str
+    prepared: object
+
+
+@dataclass(frozen=True)
+class FundedCreationSettlement:
+    grant_key: str
+    execution_claim_id: str
+    prepared: object
+
+
+@dataclass(frozen=True)
 class LaunchAllocation:
     allocation_id: str
     creation_identity: str
@@ -385,6 +408,11 @@ def _validate_guard(row, scope):
 
 
 def _command(command):
+    if isinstance(command,(FundedCreationReservation,FundedCreationDispatchFloor,FundedCreationSettlement)):
+        if any(not isinstance(value,str) or not _ID.fullmatch(value) for value in
+            (command.grant_key,command.execution_claim_id,getattr(command,'proposal_id','internal'))):
+            _fail('google_budget_guard_command_invalid')
+        return command
     if isinstance(command, FundedGrantMutation):
         if (not isinstance(command.grant_key,str) or not _ID.fullmatch(command.grant_key)
             or type(command.expected_revision) is not int or not 0<=command.expected_revision<2**63-2
@@ -805,6 +833,12 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             update.update(allocations=old['allocations'], active_claim=None)
             result = {'kind': 'standing_settlement', 'allocation_id': command.allocation_id,
                 'quota_refunded': False,'legacy_recovered':legacy}
+        elif isinstance(command,(FundedCreationReservation,FundedCreationDispatchFloor,FundedCreationSettlement)):
+            from .google_ads_funded_creation_authority import validate_command,_guard_funded_command
+            command=validate_command(db,command)
+            allocations,active_claim,result=await _guard_funded_command(db,session=session,snapshot=snapshot,
+                command=command,operation_id=operation_id,current=datetime.fromisoformat(stamp))
+            update.update(allocations=allocations,active_claim=active_claim)
         elif isinstance(command, (PausedCreationReservation, PausedCreationSettlement, PausedCreationDispatchFloor)):
             from .google_ads_automation_creation_authority import _guard_paused_creation_command
             allocations, active_claim, result = await _guard_paused_creation_command(db, session=session,
@@ -819,7 +853,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             _fail('google_budget_guard_epoch_changed')
         if phase.get('stop_requested') or _operation_clock() >= phase['deadline']:
             _fail('google_budget_guard_request_ended_before_commit')
-        if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor))
+        if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor, FundedCreationDispatchFloor))
             and datetime.now(timezone.utc) >= datetime.fromisoformat(result['authority_valid_until'])):
             _fail('google_budget_guard_creation_authority_expired')
         phase['commit_attempted'] = True

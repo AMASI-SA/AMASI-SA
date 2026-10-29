@@ -51,9 +51,24 @@ def standing_lineage(entry):
         'action', 'budget_resource', 'budget_native', 'claim_digest', 'created_at')})
 
 
-def common_caps(snapshot, reference):
+def common_caps(snapshot, reference, *, funded_grant=None):
     from .google_ads_automation_budget_guard import _money, _fail
     caps = []
+    if funded_grant is not None:
+        from .google_ads_funded_creation_contract import FundedCreationGrant
+        grant=FundedCreationGrant.model_validate(funded_grant)
+        if (grant.user_id!=snapshot.user_id or grant.account_id!=snapshot.account_id or grant.reviewed_by!=snapshot.user_id
+            or any(getattr(grant,key)!=reference.get(key) for key in ('currency_code','time_zone'))):
+            _fail('google_budget_guard_funded_binding_unproved')
+        caps.append(_money(grant.max_account_daily_budget_native))
+    for entry in snapshot.guard['allocations'].values():
+        if entry.get('kind')=='funded_new_creation' and entry.get('state')!='settled':
+            from .google_ads_funded_creation_authority import allocation_lineage
+            if (entry.get('reservation_lineage_digest')!=allocation_lineage(entry)
+                or any(entry.get(key)!=value for key,value in {'user_id':snapshot.user_id,'account_id':snapshot.account_id,
+                    'currency_code':reference.get('currency_code')}.items())):
+                _fail('google_budget_guard_funded_binding_unproved')
+            caps.append(_money(entry.get('account_cap_native')))
     for policy in (snapshot.standing_policy, snapshot.creation_policy):
         if policy is None:
             continue
@@ -69,7 +84,7 @@ def common_caps(snapshot, reference):
     return min(caps)
 
 
-def account_exposure(snapshot, inventory, reference, current):
+def account_exposure(snapshot, inventory, reference, current, *, funded_grant=None):
     """One maximum per native campaign/resource, then sum across the account.
 
     Original creation amount and observed native amount are different facts.
@@ -150,9 +165,37 @@ def account_exposure(snapshot, inventory, reference, current):
     if any(value.get('kind') == 'paused_creation' and key not in creation_ids
         for key, value in allocations.items()):
         _fail('google_budget_guard_creation_binding_unproved')
+    funded_ids=set()
+    for key,entry in allocations.items():
+        if entry.get('kind')!='funded_new_creation':continue
+        from .google_ads_funded_creation_authority import allocation_lineage
+        if (entry.get('reservation_lineage_digest')!=allocation_lineage(entry)
+            or entry.get('allocation_id')!=key or entry.get('user_id')!=snapshot.user_id
+            or entry.get('account_id')!=snapshot.account_id or entry.get('currency_code')!=reference['currency_code']
+            or not isinstance(entry.get('grant_key'),str) or not isinstance(entry.get('graph_digest'),str)
+            or not re.fullmatch(r'[a-f0-9]{64}',entry['graph_digest'])):
+            _fail('google_budget_guard_funded_binding_unproved')
+        funded_ids.add(key);hold=_money(entry.get('budget_native'))
+        if entry.get('state')=='reserved':
+            if entry.get('campaign_id') is not None or entry.get('budget_resource') is not None:
+                _fail('google_budget_guard_funded_binding_unproved')
+            unassigned+=hold
+        elif entry.get('state')=='native_enabled':
+            cid=entry.get('campaign_id');native=campaigns.get(cid);settled=_instant(entry.get('settled_at'))
+            if (not native or native['status']=='REMOVED' or native.get('budget_resource')!=entry.get('budget_resource')
+                or settled is None or observed<settled or not isinstance(entry.get('settlement_proof_digest'),str)
+                or not re.fullmatch(r'[a-f0-9]{64}',entry['settlement_proof_digest'])
+                or any(other.get('campaign_id')==cid and other.get('kind') in {'paused_creation','funded_new_creation'}
+                    for other_key,other in allocations.items() if other_key!=key)):
+                _fail('google_budget_guard_funded_binding_unproved')
+            exposure[cid]=max(exposure.get(cid,Decimal(0)),hold,_money(native['budget_native']))
+        elif (entry.get('state')!='settled' or entry.get('outcome') not in {'cancelled_before_http','provider_rejected'}
+            or not isinstance(entry.get('settlement_proof_digest'),str)
+            or not re.fullmatch(r'[a-f0-9]{64}',entry['settlement_proof_digest'])):
+            _fail('google_budget_guard_funded_binding_unproved')
     targets, reflected = set(), []
     for key, entry in allocations.items():
-        if key in creation_ids or entry['state'] in {'cancelled_before_http', 'settled'}:
+        if key in creation_ids or key in funded_ids or entry['state'] in {'cancelled_before_http', 'settled'}:
             continue
         cid, native = entry.get('campaign_id'), campaigns.get(entry.get('campaign_id'))
         if (cid in targets or native is None or native['status'] == 'REMOVED'
@@ -184,4 +227,4 @@ def account_exposure(snapshot, inventory, reference, current):
     return {'total': sum(exposure.values(), unassigned), 'campaigns': campaigns,
         'exposure_by_campaign': exposure, 'targeted_campaign_ids': targets,
         'reflected_allocation_ids': reflected, 'native_amount_drift_campaign_ids': drift,
-        'limit': common_caps(snapshot, reference)}
+        'limit': common_caps(snapshot, reference, funded_grant=funded_grant)}
