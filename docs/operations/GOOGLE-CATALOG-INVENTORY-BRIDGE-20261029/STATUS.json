@@ -1,0 +1,24 @@
+{
+  "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
+  "branch": "codex/google-catalog-inventory-bridge-20261029",
+  "base": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+  "state": "WIP implemented; independent review/full CI/real Mongo pending",
+  "scope": "Bridge existing inventory_readiness into saved-plan pinned catalog review; no writer/authority changes",
+  "contract": {
+    "legacy": "Absent inventory_reviews keeps old UI unknown; malformed present proof fails closed",
+    "proof": "Per-product stored details snapshot: state, validated observation time, exact stock digest, maximum50; no full remote coverage",
+    "precedence": "Hidden and explicit out_of_stock stay excluded even with available proof",
+    "unknown": "Cost/profit/size suitability/preparation/season/category membership remain unverified; no launch authority",
+    "race": "Existing owner/revision/fullfields reread and UI late-result invalidation unchanged"
+  },
+  "verification": {
+    "red": "7 new reader regressions failed before implementation",
+    "backend": "141 passed, no skips, 1.40s; catalog reader/routes + product evidence + creation inventory",
+    "frontend": "23 passed, no skips, 1.117s; GooglePinnedCatalogReview suite via Node22.23.2 with existing read-only dependency tree",
+    "mongo": "New real Mongo projection/invalidation regression authored; not run locally (no disposable Mongo)",
+    "ci": "Pending PR; catalog replica workflow still Ubuntu24.04/Mongo8.0.26 host-kernel issue requires coordinator decision"
+  },
+  "production_changed": false,
+  "provider_writes": 0,
+  "next": "Independent budget audit; full CI including real Mongo; coordinator integrates current production before release; no intent frozen"
+}

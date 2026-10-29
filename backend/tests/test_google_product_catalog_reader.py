@@ -31,3 +31,45 @@ async def test_stale_missing_and_wrong_owner():
 async def test_duplicate_and_bad_revision_fail_closed():
     with pytest.raises(ValueError): await read([row(),row()])
     assert (await read([row(source_revision='bad')]))['products']==[]
+
+def proved(**changes):
+    from product_inventory_proof import build_inventory_evidence
+    value=row(variants=[], options_count=0, details_loaded=True, details_synced_at=NOW, **changes)
+    raw={'quantity':value['quantity'],'unlimited_quantity':value['unlimited_quantity'],'variants':value['variants'],'options':[]}
+    value['inventory_evidence_v1']=build_inventory_evidence(raw,value)
+    return value
+
+@pytest.mark.asyncio
+async def test_details_proof_reports_available_with_bounded_timestamp_not_profit():
+    out=await read([proved()]); assert out['products'][0].status=='available'
+    proof=out['inventory_reviews'][0]
+    assert proof['state']=='available' and proof['observed_at']==NOW.isoformat()
+    assert proof['scope']=='stored_details_snapshot' and proof['remote_variant_coverage_complete'] is False
+    assert proof['maximum_supported_variants']==50
+    assert out['products'][0].cost_quality=='unknown' and out['execution_authorized'] is False
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change',[{'source_revision':'b'*64},{'quantity':4},{'details_synced_at':NOW-timedelta(days=2)},{'details_synced_at':NOW+timedelta(seconds=1)},{'variants_count':51}])
+async def test_invalidated_details_proof_remains_unknown(change):
+    value=proved();value.update(change);out=await read([value])
+    assert out['products'][0].status=='unknown' and out['inventory_reviews'][0]['state']=='unproved'
+    assert out['inventory_reviews'][0]['observed_at'] is None
+
+@pytest.mark.asyncio
+async def test_hidden_wins_even_when_details_stock_proof_is_available():
+    out=await read([proved(status='inactive')]);assert out['products'][0].status=='hidden'
+    assert out['inventory_reviews'][0]['state']=='available'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('quantities,expected', [([0,2],'available'),([0,0],'out_of_stock'),([None,2],'unknown')])
+async def test_variant_stock_uses_all_bounded_rows_not_parent_alone(quantities,expected):
+    from product_inventory_proof import build_inventory_evidence
+    variants=[{'id':str(i+1),'quantity':q,'unlimited_quantity':False} for i,q in enumerate(quantities)]
+    value=proved();value.update(variants=variants,variants_count=len(variants))
+    value['inventory_evidence_v1']=build_inventory_evidence({'quantity':3,'unlimited_quantity':False,'variants':variants,'options':[]},value)
+    assert (await read([value]))['products'][0].status==expected
+
+@pytest.mark.asyncio
+async def test_explicit_zero_and_unlimited_proofs_are_not_truthiness():
+    assert (await read([proved(quantity=0)]))['products'][0].status=='out_of_stock'
+    assert (await read([proved(quantity=None, unlimited_quantity=True)]))['products'][0].status=='available'

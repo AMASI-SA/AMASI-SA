@@ -1,19 +1,24 @@
 """Bounded owner-scoped V2 catalog reader; no selection or provider writes.
 
 Source verification establishes only a recently synced V2 catalog row. It does
-not establish category membership, variant availability, profitability, a
-landing URL or permission to advertise. Duplicates fail closed.
+not establish category membership, profitability, a
+landing URL or permission to advertise. Optional immutable details evidence
+establishes only bounded stored stock, not full remote variant coverage.
+Duplicates fail closed.
 """
 from datetime import datetime, timezone
 import hashlib
 import re
 
 from .google_product_evidence import ProductSource
+from product_inventory_proof import INVENTORY_EVIDENCE, MAX_INVENTORY_VARIANTS, inventory_readiness
 
 COLLECTION = 'mezan_products_v2'
 PROJECTION = {'_id': 0, 'user_id': 1, 'salla_product_id': 1, 'mezan_product_id': 1,
               'source': 1, 'source_revision': 1, 'last_synced_at': 1, 'status': 1,
-              'archived': 1, 'quantity': 1, 'unlimited_quantity': 1, 'variants_count': 1}
+              'archived': 1, 'quantity': 1, 'unlimited_quantity': 1, 'variants_count': 1,
+              'variants': {'$slice': MAX_INVENTORY_VARIANTS + 1}, 'options_count': 1, 'details_loaded': 1,
+              'details_synced_at': 1, INVENTORY_EVIDENCE: 1}
 
 
 def _identifier(value):
@@ -41,6 +46,7 @@ async def read_catalog_products(db, *, owner_id, product_ids, as_of, max_age_sec
         by_id[pid] = row
     output = []
     missing = []
+    inventory_reviews = []
     for pid in ids:
         row = by_id.get(pid)
         if row is None:
@@ -65,12 +71,31 @@ async def read_catalog_products(db, *, owner_id, product_ids, as_of, max_age_sec
             status = 'hidden'
         elif raw_status == 'out_of_stock':
             status = 'out_of_stock'
-        # Light sync maps absent variants to zero and coerces unlimited values.
-        # Neither proves purchasable inventory: active products remain unknown.
+        # Light sync never proves purchasable stock. Only the immutable details
+        # proof can establish this bounded snapshot; this is not remote coverage.
+        state, digest = inventory_readiness(row, as_of, max_age_seconds)
+        observed_details = None
+        if state != 'unproved':
+            stamp = row['details_synced_at']
+            if not isinstance(stamp, datetime):
+                stamp = datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+            observed_details = (stamp.replace(tzinfo=timezone.utc) if stamp.tzinfo is None else stamp.astimezone(timezone.utc)).isoformat()
+        inventory_reviews.append({'product_id': pid, 'state': state,
+            'observed_at': observed_details, 'stock_digest': digest,
+            'scope': 'stored_details_snapshot', 'maximum_supported_variants': MAX_INVENTORY_VARIANTS,
+            'remote_variant_coverage_complete': False,
+            'size_suitability_verified': False, 'preparation_time_verified': False})
+        if status == 'unknown' and raw_status == 'active' and row.get('archived') is False:
+            if state == 'available':
+                status = 'available'
+                unlimited = row['unlimited_quantity']
+                quantity = str(row['quantity']) if row.get('quantity') is not None else None
+            elif state == 'unavailable':
+                status = 'out_of_stock'
         ref = 'catalog-v2:' + hashlib.sha256((owner_id+'\0'+pid+'\0'+revision+'\0'+observed.isoformat()).encode()).hexdigest()
         output.append(ProductSource(product_id=pid, mezan_product_id='mpv2_'+pid,
             observed_at=observed, evidence_ref=ref, verification='verified', status=status,
             available_quantity=quantity, unlimited_quantity=unlimited, cost_quality='unknown'))
-    return {'products': output, 'missing_or_unverified_product_ids': missing,
+    return {'products': output, 'inventory_reviews': inventory_reviews, 'missing_or_unverified_product_ids': missing,
             'category_membership_verified': False, 'variant_availability_verified': False,
             'source_writes': 0, 'execution_authorized': False}
