@@ -170,7 +170,7 @@
   ],
   "production_changed": "no",
   "release_guard": "Root only; Source A and then intent-only B require governed build and fresh verification. No lease or deployment from this agent.",
-  "next": "Freshactualguardinactive,appfastforward473da andnormalbuild,prepareactor/prepublish/onepublish; latestexplicitfinish then3identityprobes/closedlease andliveShoppingpickers. No repeated1629/1618 publish.",
+  "next": "Do not republish473da/c0ce orclearforeignlease. Awaitowner1640 exact3probeverify+closedlease; rootindependentlyreadstate andtestGoogleShoppingnativeofferpickers carriedbynewrelease. FreshstorageSourceAmustpreserve0bf.",
   "superseded_unpublished": {
     "pr": 1629,
     "source": "e16b46f0453776f5bb471ae1e641a083af275c38",
@@ -234,7 +234,9 @@
     ],
     "intent_b_seconds": 77.43,
     "isolated_verified": true,
-    "frontend_isolated_runtime_artifact_verified": true
+    "frontend_isolated_runtime_artifact_verified": true,
+    "app_build_seconds": 62.77,
+    "app_build_exit": 0
   },
   "intent_b": "ec1280b0dd7c003423b1cf79a469a5625205057b",
   "intent_b_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
@@ -269,9 +271,30 @@
     "all_distinct_required_workflows_success": 11
   },
   "independent_final_pair": "PASS ec128 parentc0ce exactintent-only/fullsha3daf backend1029control243frontend1013; no host/CI claimed byreviewer",
-  "release_state": "MERGED_EXACT_PAIR_ALL11CI_PASS_APP_MATERIALIZATION_NEXT",
+  "release_state": "RETAIL_MERGED_CARRIED_BY_FOREIGN_1640_PUBLISH_IN_PROGRESS_ROOT_NOT_PUBLISHED",
   "merge": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
   "merge_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
   "production_git_changed": true,
-  "live_runtime_changed_by_this_release": false
+  "live_runtime_changed_by_this_release": false,
+  "foreign_carry": {
+    "pr": 1640,
+    "source": "3803ba2a700f33a24bb5614bdae2284a6992e53e",
+    "source_parent": "473da65caea094b46fc3ce74bb4daec3ac6d2b00",
+    "intent": "758c0e8d0148c870759236d663e94aa567880c08",
+    "merge": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
+    "runtime": "rg5-6fe0594abb1c10a8b290b46c056cd851e1bab39617c0043d645d9254f3bb5721",
+    "lease_actor": "codex-dashboard-hover-20261030",
+    "root_observed_active": true,
+    "started": "2026-10-30 00:42 Asia/Riyadh",
+    "changed_only": [
+      "frontend/src/pages/AdvancedDashboard.jsx",
+      "frontend/src/pages/AdvancedDashboard.mobile.test.jsx",
+      "release/release-intent-v5.json"
+    ],
+    "retail_preserved": true,
+    "root_prepare_exit": 2,
+    "root_publish_clicked": false,
+    "reason": "another production release is active",
+    "coordination_comment": 6509033978
+  }
 }
