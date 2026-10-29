@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T20:47:02.421Z",
+  "updated_at": "2026-10-29T20:58:38.687Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -2132,7 +2132,7 @@
       "pr": 1633,
       "branch": "codex/google-merchant-observation-20261029",
       "source": "2f6a6ff7480208dc3a0e874a091f34630ee6e5b3",
-      "state": "HELPER_INDEPENDENT_PASS_ROOT_REVIEW_PENDING_NO_ROUTE",
+      "state": "FIXED_HELPER_ROOT_AND_INDEPENDENT_ACCEPTED_NEW_MEMBERSHIP_ROUTE_ASSIGNED",
       "owner": "google_launch",
       "scope": "Newobserver/fixedMerchantv1stream; narrowadditive reporting.py boundreadhelper assigned existingcredential/writersunchanged; no actualproviderread/routeattached",
       "finding": "int64boundsfixed; authhelper/actualproviderlinkmembership routeunimplemented",
@@ -2148,7 +2148,9 @@
         "actual_mongo": 31,
         "checkout": "e3be17cdc002a3b4cc9b1d8f36b38a2571fdf4b6"
       },
-      "limits": "No owner/account/nativeAds-Merchantmembership authorization or route/livegrant proven"
+      "limits": "90sbody+2scleanup; no owner/account/nativeAds-Merchantmembership route/livegrant yet; newroute isolatedimplementationassigned",
+      "root_helper": "217-Werror0skip2.00s/fullhelper+fixread/248incl31actualMongo logsread",
+      "helper_checkpoint": "ab99c111b6fde71a8bc22d974293ae99267b9084"
     },
     "foreign_reports_tiktok_release": {
       "pr": 1632,
@@ -2171,19 +2173,34 @@
       "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
       "tree": "0e3596142bf2266ba72c3443967feb2b844291ed",
       "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
-      "state": "ACTUAL_HOST_SOURCE_A_BUILD_RUNNING_AFTER_FOREIGN_CLOSED_LEASE",
+      "state": "A_B_HOST_EXACT_MATCH_INDEPENDENT_PAIR_PASS_B_CI_ONLY_CODEQL_PENDING",
       "local": "308-Werror0skip6.35s,261UI/18zero skips14.116s",
       "ci": {
         "google": 40948016906,
         "readiness": 40948016680,
         "catalog": 40948016611
       },
-      "host": "Isolated/tmp/google1634-source-a-20261029, fetched exactc0ce and checked out; build+freeze pending; /app working tree unchanged.",
-      "status_checkpoint": "c64071b2c23b7683c6222a3d6846ccc424dc0d0e",
+      "host": "A exact942122byte3dafCIintent;doublebuild4.85/5.21s; Bnormaladapter77.43s isolatedhealth/runtime verified; environmentidlesleepresumed UI no paidchat,oldtmpgoneandrebuilt.",
+      "status_checkpoint": "210c96efd75818a8767ea180fa3c88e781b2e593",
       "artifact": 12930730411,
       "intent": "3daf7034acc4d67b17efbcdd145813c5fb6cc627db0c2354dfeeac72f724321d",
       "runtime": "rg5-1d92cc5150dd80334e499eb4b32c394cbee4c5351596d4091e97d3aecde24ba0",
-      "root_candidate": "PASS1029backend243control; exactA/base"
+      "root_candidate": "PASS1029backend243control; exactA/base",
+      "intent_b": "ec1280b0dd7c003423b1cf79a469a5625205057b",
+      "intent_b_tree": "315791a3e1fdca460cfa705ce6123f173fa1e8e6",
+      "b_ci": {
+        "google": 40953098373,
+        "backend": 1307,
+        "backend_seconds": 36.91,
+        "frontend": 261,
+        "suites": 18,
+        "readiness": 40953098216,
+        "host_job": 123726608227,
+        "host_seconds": 70.58,
+        "catalog": 40953098262,
+        "catalog_actual_mongo": 6,
+        "root_logs_reviewed": true
+      }
     },
     "saved_plan_reader_contract_bug": {
       "confirmed_by": [
@@ -2238,18 +2255,36 @@
     },
     "native_inventory_ui": {
       "pr": 1637,
-      "source": "522b6da0a3c17f9d761ce0bc419143a9eabb0d9d",
-      "state": "WIP_ACTUAL_HTTP_WRITER_FIXTURE_PARITY_NATIVE_UI_IMPLEMENTING",
+      "source": "e51b76393c517f7875d447ed242ec5af054ac918",
+      "state": "BOUNDED_ROOT_AND_INDEPENDENT_ACCEPTED_FRESH_PRODUCTION_RELEASE_REQUIRED",
       "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
       "owner": "google_plan_integration",
-      "tests": "3 actualPUT→linked/category/native parity regressions,135UI; native UI not sealed"
+      "tests": "3 actualPUT→linked/category/native parity regressions,135UI; native UI not sealed",
+      "tree": "3d5e29882db54af430e07e39ff091fba16ce382e",
+      "checkpoint": "1f1c9b699c49e78a6c3e1e989ad0413a921409e8",
+      "status_branch": "codex/google-native-inventory-ui-status-20261029",
+      "root": "FullnewUI/service/parentseam andactualwriterfixturesread,27backend-Werror1.40s,291UI/11suites2.28s; actualCIlogs149/9Mongo+44/7Mongo+1463backend455UI read",
+      "independent": "62backend/291UI;17workflowsSUCCESS, Readinessfails expectedoldbase/inheritedintent; no bypass/liveclaim"
     },
     "prior_season": {
       "assessment": "2741b3b99be131e8bb80929852153fd9a4dc995f",
-      "branch": "codex/google-prior-season-assessment-20261029",
-      "state": "ROOT_CONTRACT_REVIEWED_BACKEND_ONLY_IMPLEMENTATION_ASSIGNED",
+      "branch": "codex/google-prior-season-evidence-20261029",
+      "state": "WIP_FIELDS_QUALIFIER_NEW_STANDALONE_READER_ROUTE_101_UNIT_PASS_ACTUAL_MONGO_PENDING",
       "owner": "google_seasons",
-      "contract": "Owner-declaredexplicitpriorISOinterval<=366inclusive/end<currentstart/closedRiyadhday; alignmentunknown, no354/365shift; separateboundedpriorquery±1; existing14/14/30/90 unchanged; no profit/growth/coverage/paid claim."
+      "contract": "Owner-declaredexplicitpriorISOinterval<=366inclusive/end<currentstart/closedRiyadhday; alignmentunknown, no354/365shift; separateboundedpriorquery±1; existing14/14/30/90 unchanged; no profit/growth/coverage/paid claim.",
+      "checkpoint": "d67087cdf4e39613a239738a2325659f3ae812d1",
+      "root_contract_review": true,
+      "no_shared_route_attach": true,
+      "no_ui": true
+    },
+    "standing_dispatch_floor": {
+      "audit": "baa9411f6f66506f8c49c562346cc09d89225b6e",
+      "state": "CONFIRMED_STANDING_FLOOR_REVOCATION_EXPIRY_GAP_NEW_TYPED_FIX_ASSIGNED",
+      "branch": "codex/google-standing-dispatch-floor-wip-20261029",
+      "checkpoint": "4d5efc29b0825c5f6d299bd528883ff8e81bad88",
+      "owner": "google_connection",
+      "reviewer": "budget_audit",
+      "scope": "TypedStandingDispatchFloor,currentpolicy+claim+allocation+proposal+epoch atomicfloor,expirybeforecommit/syncafterACK/unknownretain/noresend; creationfloorunchanged runtimefalse/noresume."
     }
   }
 }
