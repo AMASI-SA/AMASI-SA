@@ -5,28 +5,31 @@
   "date_utc": "2026-10-29",
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
   "assessment_checkpoint": "5813304637c2873ebebb213009977046fb50edcd",
-  "status": "Isolated observer implemented with fake streaming transport; 99 local functional tests passed; real auth/session integration and independent review pending",
+  "status": "Observer candidate fixes independently found native int64 range defect; 114 local tests passed; dedicated CI and bound-session helper assigned but not implemented yet",
   "owned_paths": [
     "backend/integrations_control_center/google_merchant_product_observation.py",
     "backend/tests/test_google_merchant_product_observation.py",
     "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/CONTRACT.md",
-    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/STATUS.json"
+    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/STATUS.json",
+    ".github/workflows/google-merchant-observation.yml",
+    "backend/integrations_control_center/google_ads_reporting.py (additive bound-session helper only; existing _credential/callers/writers unchanged)",
+    "backend/tests/test_google_bound_read_session.py"
   ],
   "current_changes": "New observer module/test plus contract/status only; no route, auth or existing runtime file changes",
   "missing_shared_interface": "Opaque server-created Merchant/Ads read session binding exact owner, selected accounts, same observed grant and capabilities to transports; existing registration helper is configured-email-specific and bare Ads token plus later epoch is insufficient across relink",
   "route_plan": "Owner-triggered read-only GET /google_ads/merchant-products/observation with explicit account_id and merchant_id, server membership and full native product_link checks before read plus scope/grant recheck before return; no selection mutation or default account",
   "validation": {
     "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_merchant_product_observation.py",
-    "passed": 99,
+    "passed": 114,
     "skipped": 0,
-    "seconds": 1.29,
+    "seconds": 1.53,
     "warnings_as_errors": true,
     "provider_calls": false,
     "credential_reads": false,
-    "independent_review": "pending",
-    "ci": "new dedicated workflow ownership proposed to root; not yet added"
+    "independent_review": "Original99 cases independently passed; one versionNumber int64 bound finding confirmed and fixed; successor review pending",
+    "ci": "Root assigned .github/workflows/google-merchant-observation.yml; not yet added"
   },
-  "retail_source_unchanged": "e16b46f0453776f5bb471ae1e641a083af275c38",
+  "retail_source_unchanged": "c0ce749cab1f4c30c4f09432a432bd109495a2b9 on fresh foreign Reports base fda86238dda9700806c0d700e9e411c1674c9bad; old1629pair superseded/unpublished",
   "scope_limits": [
     "No product mapping or simple/variant proof",
     "No Google provider calls, credentials or new scopes",
@@ -34,11 +37,12 @@
     "Complete traversal is not an atomic provider snapshot"
   ],
   "production_changed": "no",
-  "next": "Save immutable observer WIP; request independent bounded review and dedicated CI; root assigns additive bound credential helper before any real route/provider wiring.",
+  "next": "Complete fresh retail1634 CI handoff first; then additive bound-session helper/new tests/dedicated CI and independent review. No route attachment or live provider calls.",
   "observer_contract_notes": [
     "Merchant v1 legacyLocal is retained as local/standard identity; false is not promoted to verified Google Ads ONLINE channel",
     "Protobuf omitted false scalar is accepted only with consistent native resource; no truthy coercion",
     "Optional link absence preserves unknown destination, never verified mapping",
     "No partial rows escape a malformed/incomplete traversal; semantic digest excludes times, token and ordering"
-  ]
+  ],
+  "fixed_review_finding": "versionNumber now accepts only canonical signed int64 strings within -9223372036854775808..9223372036854775807; native metadata is not a timestamp or an independent freshness/authority proof"
 }

@@ -135,6 +135,24 @@ async def test_absent_optional_destinations_do_not_become_mapping_or_eligibility
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["-9223372036854775808", "-1", "0", "1", "9223372036854775807"])
+async def test_native_signed_int64_boundaries_remain_observed_metadata(version):
+    row = product(); row["versionNumber"] = version
+    result, _ = await observe([{"products": [row]}])
+    assert result.products[0].version_number == version
+    assert result.observed_at == STAMP.isoformat()
+    assert result.as_public_dict()["execution_authorized"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["-9223372036854775809", "9223372036854775808", "99999999999999999999", "01", "+1", "-0", "00", "-01", "1e3", "1.0"])
+async def test_invalid_int64_range_or_noncanonical_representation_refuses_complete_observation(version):
+    row = product(); row["versionNumber"] = version
+    with pytest.raises(MerchantObservationError):
+        await observe([{"products": [product("good"), row]}])
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("patch", [
     {"name": "accounts/999/products/en~SA~SKU1"},
     {"name": "accounts/123/products/online~en~SA~SKU1"},

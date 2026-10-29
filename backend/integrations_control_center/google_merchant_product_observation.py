@@ -161,8 +161,12 @@ def _product(raw, merchant_id):
     if not re.fullmatch(re.escape("accounts/" + merchant_id + "/dataSources/") + r"[1-9][0-9]{0,29}", data_source):
         _fail("google_merchant_data_source_unproved")
     version = raw.get("versionNumber")
-    if version is not None and (not isinstance(version, str) or not re.fullmatch(r"[0-9]{1,20}", version)):
-        _fail()
+    if version is not None:
+        # The native field is signed int64. Retain canonical decimal metadata;
+        # it is not an observation timestamp or an independent freshness proof.
+        if (not isinstance(version, str) or not re.fullmatch(r"(?:0|-?[1-9][0-9]{0,18})", version)
+            or not -(2**63) <= int(version) <= 2**63 - 1):
+            _fail()
     attributes = raw.get("productAttributes", {})
     if not isinstance(attributes, dict):
         _fail()
