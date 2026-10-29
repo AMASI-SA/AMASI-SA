@@ -1,6 +1,6 @@
 {
   "task_id": "GOOGLE-REFRESH-CAS-RELEASE-20261029",
-  "state": "SOURCE CANDIDATE WIP; clean integration completed; exact-source fresh CI and independent review pending; not deployed",
+  "state": "SOURCE CANDIDATE WIP; fresh CI infrastructure failure diagnosed; dedicated replica runner compatibility fix awaiting new-source CI; not deployed",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-refresh-cas-release-20261029",
   "base_sha": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
@@ -21,7 +21,25 @@
     "local_unit_tests": "Pending local dependency bootstrap: current Python lacks pytest",
     "local_mongo": "Previous disposable binary removed by environment cleanup; no local mongod/docker found; no existing DB paths adopted",
     "exact_source_ci": "Pending remote candidate and Draft PR: dedicated workflow requires actual disposable Mongo replica, at least69 tests including21 actual Mongo cases, zero failures/errors/skips; existing Google compatibility suite follows",
-    "independent_review": "Pending coordinator review of current-base source"
+    "independent_review": "Pending coordinator review of current-base source",
+    "first_remote_source": "fb39919266916d65dc7fa7c3a2189be4ca36467a",
+    "first_dedicated_ci": {
+      "run": 40892444962,
+      "job": 123512570291,
+      "outcome": "Dependency install succeeded, Mongo8.0.26 container exited before tests; test steps did not run. No acceptance pass claimed."
+    },
+    "first_full_google_ci": {
+      "run": 40892445186,
+      "frontend_job": 123512570307,
+      "frontend": "Tests and build succeeded; exact counts require log review",
+      "backend_job": 123512571008,
+      "backend": "Mongo service exited before checkout/test, not a CAS test failure"
+    },
+    "runner_compatibility": {
+      "error": "MongoDB fatal12257600: Linux kernel6.19+ known incompatibility; SERVER-121912 / kernel detection SERVER-131779",
+      "primary_source": "https://github.com/actions/runner-images/issues/15005#issuecomment-6294443549",
+      "action": "Dedicated CAS workflow now uses GitHub-recommended temporary ubuntu-22.04. Mongo remains8.0.26; no production dependency change. Added fail-fast container logs and kernel version evidence. Shared workflow runner fixes remain coordinator-owned."
+    }
   },
   "historical_original_evidence_only": {
     "source": "40a54c806081ae7f2ca86f06c84bef7de4279db0",
