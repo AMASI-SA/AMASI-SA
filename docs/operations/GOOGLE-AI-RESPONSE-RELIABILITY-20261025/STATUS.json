@@ -1254,12 +1254,33 @@
       "root_tests": "74 inventory cases passed1.60s with --noconftest matching CI; first unrelated shared Excel conftest import failed before tests and is not counted",
       "root_manifest_check": "EXACT backend1024 and control242 from Git source/base",
       "ci_intent_sha256": "b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4",
-      "next": "ExactB CI/pairreview, freshbase thennormalmerge and oneguardedpublish",
+      "next": "Wait newer finish, guardverify3probes/closedlease and product/Googlefunctional checks. Do not start anotheractual-hostrelease rehearsal until leaseclosed.",
       "intent_b": "5ba86281237ff193fb14a3ee6eba9d26e33b294c",
       "deployment_tree": "d863ba7d5561bee98eb912229cd13ead8cb6ab9d",
       "runtime": "rg5-74850b8727dfa76bfef242d53621c8377dd349d13a89700dcc95330ea8607aa0",
       "actual_host_source_build": "PASS; whole intent SHA256b990fa3e29372626364408c5c2ee35d787b61da108166aaeb5ee4d2e3a1dace4 exactCI",
-      "actual_host_b_adapter": "PASS exit0 51.85s"
+      "actual_host_b_adapter": "PASS exit0 51.85s",
+      "merge": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+      "b_ci": {
+        "all_success": 11,
+        "intentionally_skipped": "TikTokCreator",
+        "readiness": 40907601841,
+        "host20_adapter_job": 123567074599
+      },
+      "pair_independent_review": "PASS exact1024backend/242control;onlyintentdiff/ancestry/fullmanifests",
+      "app_materialization": "PASS exit0/61.77s",
+      "guard": {
+        "actor": "codex-google-inventory-20261029",
+        "prepare": "PASS",
+        "prepublish": "ready_to_publish=true",
+        "lease": "ACTIVE_OWNED_DO_NOT_MODIFY_APP"
+      },
+      "publication": {
+        "state": "PUBLISHING",
+        "publish_changes_clicks": 1,
+        "baseline_finish": "Oct29 06:54PM",
+        "do_not_repeat": true
+      }
     },
     "next_suggestions": {
       "pr": 1601,
@@ -1291,6 +1312,7 @@
         "published": false
       },
       "production_gate": "Mandatory guarded revocation still works withoutOAuth ifMongoTXsupports, but unsupportedMongo blocks previousownerrevocation409/503. Do NOT deploy1602 before actual production TX proof. Separate owner-only abort-only storage diagnostic slice in progress; no change to existing sixpolicyhandlers."
-    }
+    },
+    "release_history_finding": "Suggestions269c and readiness normalmerge source histories inherit an intent change after M2, violating v5 rev-list full-history gate despite zero netintentdiff. Root preserving WIP branches and preparing new direct-M2 SourceA releases with same reviewedcode; no frozenpair/squash/rebase."
   }
 }
