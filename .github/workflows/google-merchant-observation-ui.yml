@@ -1,0 +1,50 @@
+name: Google Merchant observation UI
+on:
+  push:
+    branches: [codex/google-merchant-observation-ui-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - frontend/src/components/marketing/GoogleMerchantObservation*
+      - .github/workflows/google-merchant-observation-ui.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare governed frontend toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Install frozen frontend dependencies
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test explicit reads and real browser API no-replay behavior
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GoogleMerchantObservation.test.jsx src/lib/api.authRefresh.test.js --json --outputFile=/tmp/google-merchant-ui-results.json
+          python - <<'PY'
+          import json
+          with open('/tmp/google-merchant-ui-results.json') as stream:
+              result=json.load(stream)
+          assert result['numTotalTests'] == result['numPassedTests'] == 61
+          assert result['numPendingTests'] == result['numFailedTests'] == 0
+          own=[r for r in result['testResults'] if r['name'].endswith('/GoogleMerchantObservation.test.jsx')]
+          assert len(own) == 1 and len(own[0]['assertionResults']) == 55
+          assert all(r['status'] == 'passed' for r in own[0]['assertionResults'])
+          assert any('actual existing browser API interceptor' in r['fullName'] for r in own[0]['assertionResults'])
+          print('Verified61 tests including55 Merchant UI cases, zero skips')
+          PY
+      - name: Build current reviewed CI checkout
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build
+      - name: Check source whitespace
+        run: git diff --check
