@@ -3,7 +3,7 @@
   "task": "google-merchant-owner-observation",
   "branch": "codex/google-merchant-owner-observation-20261029",
   "parent": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
-  "status": "Exact source350-case actual Mongo CI passed; independent source seal and broader synthetic CI pending",
+  "status": "Bounded independent source PASS with exact350-case Mongo CI; broader synthetic CI pending",
   "contract_checkpoint": "5eb3c331e3643f4d445a51b7dacdfbdb7037fcef",
   "production_changed": "no",
   "runtime_available": false,
@@ -33,7 +33,7 @@
       "warnings_as_errors": true,
       "seconds": 4.04,
       "additional_probes": "Actual auth.get_current_user_from_db plus principal/route/helper/observer: fresh password timestamp succeeds; post-auth pre-snapshot password change403 before provider; during-read password change409/no products; BSON0-to-False membership change409",
-      "status": "No confirmed blocker in source; final350 CI review pending"
+      "status": "SEALED bounded PASS on69919f/tree0ebafad; independently inspected exact350/52Mongo CI setup/test/cleanup and official v25/writer contracts; no confirmed blocker"
     },
     "exact_source_ci": {
       "run": 40961496541,
@@ -55,7 +55,9 @@
       "state": "queued/in progress",
       "dedicated_pr": 40961508060,
       "full_google": 40961508068,
-      "readiness": 40961508129
+      "readiness": 40961508129,
+      "synthetic_merge": "ee92f5571ad90509f36ee1d279fc7cb4723dd2ce",
+      "base": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24"
     }
   },
   "limits": [
