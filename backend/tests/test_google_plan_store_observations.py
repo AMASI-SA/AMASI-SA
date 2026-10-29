@@ -75,3 +75,11 @@ async def test_document_sentinel_suppresses_all_partial_counts():
     r=await call(Db([order() for _ in range(1001)]));assert r.status_code==200
     out=r.json()['observations'];assert out['truncated'] is True and out['products'][0]['currency_groups']==[]
     assert all(v is None for v in out['diagnostics'].values())
+
+@pytest.mark.asyncio
+async def test_reader_validates_scope_before_any_database_read():
+    from integrations_control_center.google_plan_store_observations import read_store_observations
+    for owner,ids in (({'$ne':None},['123']),('owner',['bad']),('owner',['123','123'])):
+        db=Db()
+        with pytest.raises(ValueError):await read_store_observations(db,owner_id=owner,product_ids=ids,as_of=NOW)
+        assert db.orders.query is None

@@ -40,5 +40,12 @@
   },
   "production_changed": false,
   "provider_calls": 0,
-  "next": "Remote WIP/DraftPR; fresh actual replica CI and independent review; root owns any reviewed route/component wiring and final production integration/release"
+  "next": "Remote WIP/DraftPR; fresh actual replica CI and independent review; root owns any reviewed route/component wiring and final production integration/release",
+  "strict_source_followup": {
+    "finding": "Canonical payment or currency alone cannot replace absent raw proof",
+    "fix": "Explicit raw paid marker and raw ISO currency proof required; canonical fields only consistency checks. Public reader validates owner/product scope before querying.",
+    "red": "New missing-raw-proof regression failed on original d907 source",
+    "fresh_backend": "61 passed, no skips, 1.35s",
+    "ci": "New run required after followup. Original d907 replica/UI run40917869056 successful but not acceptance for changed source."
+  }
 }

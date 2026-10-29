@@ -28,11 +28,12 @@ def _conflict():return problem('google_commercial_plan_revision_conflict','تغ�
 
 
 async def read_store_observations(db,*,owner_id,product_ids,as_of):
-    period=windows(as_of)['last_90_days']
+    empty=observe_product_lines([],owner_id=owner_id,product_ids=product_ids,as_of=as_of)
+    period=empty['windows']['last_90_days']
     from datetime import date
     lower=(date.fromisoformat(period['from'])-timedelta(days=1)).isoformat()
     upper=(date.fromisoformat(period['to'])+timedelta(days=1)).isoformat()
-    if not product_ids:return observe_product_lines([],owner_id=owner_id,product_ids=[],as_of=as_of)
+    if not product_ids:return empty
     query={'user_id':owner_id,'order_date':{'$gte':lower,'$lte':upper},'$expr':{'$lte':[{'$bsonSize':'$$ROOT'},32768]}}
     cursor=(db['unified_orders'].find(query,PROJECTION).hint([('user_id',1),('order_date',-1)])
             .limit(MAX_DOCUMENTS+1).max_time_ms(3000))

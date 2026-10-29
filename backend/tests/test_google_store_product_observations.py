@@ -84,3 +84,9 @@ def test_ambiguous_or_missing_raw_source_stays_unknown(mutation):
 def test_multiple_lines_same_product_are_one_observed_order_but_two_lines():
     row=order();row['raw_by_source']['salla_direct']['items'].append({'id':31,'product_id':123,'quantity':'3.5'})
     assert group(run([row]))['windows']['last_14_days']=={'observed_orders':1,'observed_lines':2,'observed_units':'5.5'}
+
+def test_canonical_payment_or_currency_alone_cannot_replace_missing_raw_proof():
+    for missing in ('payment','currency'):
+        row=order();raw=row['raw_by_source']['salla_direct']
+        raw.pop('payment_status' if missing=='payment' else 'currency')
+        assert run([row])['products'][0]['currency_groups']==[]

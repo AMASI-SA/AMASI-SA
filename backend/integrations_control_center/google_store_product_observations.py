@@ -54,12 +54,14 @@ def _eligible(row,raw):
     payment=raw.get('payment_status')
     nested=raw.get('payment')
     nested=nested.get('status') if isinstance(nested,dict) else None
-    values=[v for v in (payment,nested,row.get('payment_status')) if v is not None]
-    return bool(values) and all(v=='paid' for v in values) and not _refund_marker(row,raw)
+    raw_values=[v for v in (payment,nested) if v is not None]
+    values=[*raw_values,*([row['payment_status']] if row.get('payment_status') is not None else [])]
+    return bool(raw_values) and all(v=='paid' for v in values) and not _refund_marker(row,raw)
 
 
 def _currency(row,raw):
     currencies=[]
+    raw_currency_present=any(key in raw for key in ('currency','original_currency'))
     for source in (row,raw):
         for key in ('currency','original_currency'):
             if key in source:
@@ -68,9 +70,10 @@ def _currency(row,raw):
     amounts=raw.get('amounts')
     total=amounts.get('total') if isinstance(amounts,dict) else None
     if isinstance(total,dict) and 'currency' in total:
+        raw_currency_present=True
         if not isinstance(total['currency'],str) or total['currency'] not in CURRENCY_CODES:return None
         currencies.append(total['currency'])
-    return currencies[0] if currencies and len(set(currencies))==1 else None
+    return currencies[0] if raw_currency_present and currencies and len(set(currencies))==1 else None
 
 
 def _lines(raw):
