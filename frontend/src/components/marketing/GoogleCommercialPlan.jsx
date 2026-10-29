@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { googleErrorMessage, isGoogleRequestCancelled } from "../../services/googleAds";
 import { getGoogleCommercialPlan, saveGoogleCommercialPlan } from "../../services/googleCommercialPlan";
 import GooglePinnedCatalogReview from "./GooglePinnedCatalogReview";
+import GoogleStoreProductObservations from "./GoogleStoreProductObservations";
+import GoogleCategoryMembershipReview from "./GoogleCategoryMembershipReview";
+import GoogleLinkedCampaignEvidence from "./GoogleLinkedCampaignEvidence";
 import GoogleCommercialPlanSuggestion from "./GoogleCommercialPlanSuggestion";
 import { applyGoogleSuggestionToEmptyFields } from "../../services/googleCommercialPlanSuggestion";
 
@@ -93,7 +96,7 @@ function PlanPanel({ planId }) {
                     <label className="text-sm font-bold">مرجع الموسم<select className={INPUT} aria-label="مرجع الموسم" value={form.calendar} onChange={(event) => edit("calendar", event.target.value)}><option value="gregorian">ميلادي</option><option value="hijri_season">موسم هجري · يحتاج مطابقة العام السابق</option></select></label>
                     <label className="text-sm font-bold">نطاق ترشيح المنتجات<select className={INPUT} aria-label="نطاق ترشيح المنتجات" value={form.selection_mode} onChange={(event) => edit("selection_mode", event.target.value)}><option value="pinned_only">المنتجات المثبتة فقط</option><option value="review_category_candidates">مراجعة مرشحي القسم</option></select></label>
                 </div>
-                <p className="text-xs leading-6 text-slate-500">رابط القسم والمعرفات مقترحات محفوظة؛ عضوية المنتجات ومخزونها ومعرفاتها في الكتالوج لم تُثبت بعد. فصل المعرفات بمسافة أو فاصلة.</p>
+                <p className="text-xs leading-6 text-slate-500">رابط القسم والمعرفات سياق محفوظ؛ راجع العضوية ضمن لقطة المصدر من مراجعة الأقسام أدناه بعد الحفظ. لا تثبت العضوية أهلية الإعلان أو اكتمال الكتالوج البعيد. فصل المعرفات بمسافة أو فاصلة.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                     {[["currency_code", "عملة الحدود مثل SAR"], ["daily_budget_native", "حد الميزانية اليومي الاختياري"], ["total_budget_native", "حد الميزانية الإجمالي الاختياري"], ["minimum_margin_percent", "الحد الأدنى للهامش %"], ["target_roas", "هدف العائد الاختياري ROAS"]].map(([key, label]) => <label key={key} className="text-sm font-bold">{label}<input className={INPUT} inputMode={key === "currency_code" ? "text" : "decimal"} aria-label={label} value={form.limits[key] || ""} onChange={(event) => edit("limits", { ...form.limits, [key]: event.target.value })} /></label>)}
                 </div>
@@ -102,9 +105,12 @@ function PlanPanel({ planId }) {
             </fieldset>
         </form>}
         {plan && form && <GooglePinnedCatalogReview plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
+        {plan && form && <GoogleStoreProductObservations plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
+        {plan && form && <GoogleCategoryMembershipReview plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
+        {plan && form && <GoogleLinkedCampaignEvidence plan={plan} isOwner={true} planDirty={busy || conflict || JSON.stringify(form) !== JSON.stringify(formFrom(plan))} />}
         {!plan && form && <p role="status" className="mt-3 text-sm text-slate-600">احفظ خطة ومعرفات منتجات سلة الرقمية أولًا لإتاحة مراجعة المنتجات المثبتة في الكتالوج.</p>}
         <section aria-label="جاهزية أدلة خطة الموسم" className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-7">
-            <p>المبيعات: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — الأدلة لم تُجمع بعد.</p>
+            <p>المبيعات المكتملة: آخر 14 يومًا مقابل الـ14 السابقة، واتجاه 30–90 يومًا، والموسم المقابل عند توفر المطابقة — اكتمالها غير مثبت. المشاهدات الجزئية لا تثبت صافي المبيعات أو نموها.</p>
             <p>الربحية غير مثبتة عند نقص التكاليف. المخزون والمقاسات ووقت التجهيز وربط الكتالوج تحتاج التحقق.</p>
             <p>نتائج سناب وتيك توك وميتا ترشح اختبارًا على جوجل؛ لا تضمن النجاح. تبقى نتائج كل منصة وحساب وعملة وفترة منفصلة، ولا تُجمع تحويلاتها كطلبات متجر.</p>
         </section>
