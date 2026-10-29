@@ -211,6 +211,21 @@ def allocation_lineage(entry):
         'account_cap_native','review_digest','created_at')})
 
 
+async def _stored_google_scope(view,user_id,account_id,expected_epoch):
+    # Match account_client's canonical local ownership/reauthorization contract.
+    # Snapshot reads do NOT serialize later OAuth/account writers.
+    connected={'user_id':user_id,'provider':'google_ads','connection_status':'connected',
+        'connection_provenance':'api_connection'}
+    account=await view.mezan_integration_accounts_v2.find_one({**connected,
+        '$or':[{'ad_account_id':account_id},{'external_account_id':account_id}]},{'_id':0,'provider':1})
+    connection=await view.mezan_integrations_v2.find_one(connected,{'_id':0,'provider':1})
+    credential=await view[management.GOOGLE_CREDENTIALS_COLLECTION].find_one({'user_id':user_id},
+        {'_id':0,'refresh_token_ciphertext':1,'scope':1,'google_subject':1})
+    epoch_projection={key:credential[key] for key in ('refresh_token_ciphertext','scope','google_subject') if credential and key in credential}
+    if not account or not connection or not credential or management.digest(epoch_projection)!=expected_epoch:
+        _fail('google_funded_google_scope_changed')
+
+
 async def _bound(view,snapshot,command,current,*,allow_consumed=False):
     scope={'user_id':snapshot.user_id,'account_id':snapshot.account_id}
     record=await view[grants.GRANTS].find_one({**scope,'grant_key':command.grant_key},{'_id':0})
@@ -225,6 +240,7 @@ async def _bound(view,snapshot,command,current,*,allow_consumed=False):
     fence=await view[management.FENCES].find_one({**scope,'proposal_id':command.proposal_id,
         'execution_claim_id':command.execution_claim_id,'status':'claimed'},{'_id':0})
     bundle=command.prepared.payload
+    await _stored_google_scope(view,scope['user_id'],scope['account_id'],bundle['auth_epoch'])
     pure.revalidate_google_funded_creation_intent(bundle['intent'],grant=record['grant'],draft=record['review']['draft'],current=current)
     if (not row or not fence or row.get('actor_id')!='mezan_google_automation_v1'
         or row.get('automation_source')!={'kind':'funded_new_creation','grant_key':command.grant_key,

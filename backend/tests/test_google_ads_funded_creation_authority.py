@@ -16,6 +16,16 @@ async def setup(monkeypatch,db=None,*,active=True,request_key='reviewed_launch_1
     db,_,body=await grant_setup(monkeypatch,db)
     body.update(request_key=request_key,max_account_daily_budget_native=cap)
     await db[guard.AUTOMATION_POLICIES].update_one({'account_id':'123'},{'$set':{'max_account_daily_budget_native':'100'}})
+    # Fake values only; match actual account_client epoch projection contract.
+    credential={'user_id':'owner','refresh_token_ciphertext':'fake-encrypted-test-value',
+        'scope':'fake-test-scope','google_subject':'fake-test-subject'}
+    await db[management.GOOGLE_CREDENTIALS_COLLECTION].insert_one(credential)
+    for collection in ('mezan_integration_accounts_v2','mezan_integrations_v2'):
+        query={'user_id':'owner','provider':'google_ads'}
+        values={**query,'connection_status':'connected','connection_provenance':'api_connection','ad_account_id':'123'}
+        if await db[collection].find_one(query):await db[collection].update_one(query,{'$set':values})
+        else:await db[collection].insert_one(values)
+    epoch=management.digest({key:value for key,value in credential.items() if key!='user_id'})
     provider=NativeCreationProvider()
     original=provider.mutate
     async def validate(operations,*,validate_only=False):
@@ -26,7 +36,7 @@ async def setup(monkeypatch,db=None,*,active=True,request_key='reviewed_launch_1
     monkeypatch.setattr(provider,'mutate',validate)
     async def client(database,user_id,account_id,**kwargs):
         assert user_id=='owner' and account_id=='123'
-        return provider,'test-epoch'
+        return provider,epoch
     monkeypatch.setattr(management,'account_client',client)
     preview=await review(db,body);await save(db,body,preview['review_digest'])
     key=grants.grant_key('owner','123',request_key)
@@ -42,7 +52,7 @@ async def setup(monkeypatch,db=None,*,active=True,request_key='reviewed_launch_1
     intent=authority.pure.prepare_google_funded_creation_intent(grant=preview['grant'],draft=preview['draft'],current=NOW)
     row={'user_id':'owner','account_id':'123','proposal_id':'funded_proposal1','execution_claim_id':'funded_claim1',
         'actor_id':'mezan_google_automation_v1','provider':'google_ads','action':'create_campaign','campaign_id':None,
-        'before_digest':None,'before_snapshot':None,'auth_epoch':'test-epoch','currency':'SAR','time_zone':'Asia/Riyadh',
+        'before_digest':None,'before_snapshot':None,'auth_epoch':epoch,'currency':'SAR','time_zone':'Asia/Riyadh',
         'draft_id':'reviewdraft','draft_revision':1,'planned':preview['draft'],'status':'approved','submission_started':False,
         'operations':intent['request']['mutateOperations'],'expires_at':(NOW+timedelta(minutes=30)).isoformat(),
         'created_at':NOW.isoformat(),'idempotency_key':intent['creation_identity'],
@@ -268,3 +278,32 @@ async def test_stored_grant_auth_rejects_password_change_before_marker_snapshot(
         result=await grants.revoke_google_funded_grant(db,user=fresh,account_id='123',request_key='reviewed_launch_1',expected_revision=1)
         assert result['state']=='revoked' and (await db[grants.GRANTS].find_one({'grant_key':key}))['claim']
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change',['relink','disconnect','account_removal'])
+async def test_floor_snapshot_refuses_google_scope_drift_after_prepare(monkeypatch,change):
+    db,provider,key,row=await setup(monkeypatch)
+    await reserve(db,key,row)
+    original=authority._prepare
+    async def changed_after_native_reads(*args,**kwargs):
+        prepared=await original(*args,**kwargs)
+        if change=='relink':
+            await db[management.GOOGLE_CREDENTIALS_COLLECTION].update_one({'user_id':'owner'},
+                {'$set':{'google_subject':'fake-relinked-test-subject'}})
+        elif change=='disconnect':
+            await db.mezan_integrations_v2.update_one({'user_id':'owner','provider':'google_ads'},
+                {'$set':{'connection_status':'error'}})
+        else:
+            await db.mezan_integration_accounts_v2.update_one({'user_id':'owner','provider':'google_ads'},
+                {'$set':{'ad_account_id':'456'}})
+        return prepared
+    monkeypatch.setattr(authority,'_prepare',changed_after_native_reads)
+    with pytest.raises(HTTPException) as error:await floor(db,key,row)
+    assert error.value.detail['code']=='google_funded_google_scope_changed'
+    state=await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'})
+    assert state['active_claim'] is not None
+    assert next(iter(state['allocations'].values()))['state']=='reserved'
+    assert (await db[grants.RUNS].find_one({'grant_key':key}))['phase']=='reserved'
+    assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
+    assert provider.writes==0
+    with pytest.raises(HTTPException):await floor(db,key,row)

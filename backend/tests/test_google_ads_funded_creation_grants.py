@@ -137,3 +137,27 @@ async def test_auth_binding_matches_bson_stamp_and_is_not_public_review_data(mon
     await grants.save_google_funded_grant(db,user=user,account_id='123',body=body,
         expected_review_digest=preview['review_digest'],current=NOW)
     assert provider.writes==0
+
+@pytest.mark.asyncio
+async def test_owner_read_has_server_limit_and_time_bound_through_session_wrapper(monkeypatch):
+    from integrations_control_center.google_ads_paused_creation_budget import SessionDatabase
+    calls=[]
+    class BoundedCursor:
+        def limit(self,value): calls.append(('limit',value)); return self
+        def max_time_ms(self,value): calls.append(('max_time_ms',value)); return self
+        async def to_list(self,*,length):
+            calls.append(('to_list',length)); return [{'_id':'test-owner','id':'owner','role':'owner'}]
+    class Owners:
+        def find(self,query,projection,*,session):
+            assert query=={'id':'owner'} and session is session_marker
+            assert set(projection)=={'_id',*grants.AUTH_FIELDS}
+            return BoundedCursor()
+    class Database:
+        def __getitem__(self,name):
+            assert name=='users'; return Owners()
+    async def owner(*args,**kwargs):return {'owner':True,'actor_id':'owner'}
+    monkeypatch.setattr(grants.management,'principal',owner)
+    session_marker=object()
+    await grants.read_owner_auth(SessionDatabase(Database(),session_marker),user_id='owner',
+        authenticated_user={'id':'owner','role':'owner'})
+    assert calls==[('limit',2),('max_time_ms',2000),('to_list',2)]

@@ -42,7 +42,7 @@ async def read_owner_auth(db,*,user_id,expected=None,authenticated_user=None):
     # Only nonsecret auth projection. The caller's authenticated_user must be
     # the server auth dependency result, NEVER HTTP JSON or a worker-built ID.
     if expected is None and authenticated_user is None:fail('google_funded_owner_auth_unproved')
-    rows=await db.users.find({'id':user_id},{'_id':1,**{key:1 for key in AUTH_FIELDS}}).to_list(length=2)
+    rows=await db.users.find({'id':user_id},{'_id':1,**{key:1 for key in AUTH_FIELDS}}).limit(2).max_time_ms(2000).to_list(length=2)
     if len(rows)!=1 or '_id' not in rows[0]:fail('google_funded_owner_auth_unproved')
     owner=rows[0]
     actor=await management.principal(db,owner,write=True)

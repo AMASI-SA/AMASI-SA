@@ -4,13 +4,14 @@
   "base": "9e83dfbc7488483abe43d6443a80a1ac819476e1",
   "scope": "New fundedgrants/authority helpers plus narrow typedguard/exposure; no publicattach/gateway/worker/activation/flags/production calls",
   "completed": "Authenticated canonicalreview/saveconfigured/offlineOAuthrevoke undercommonepoch; actualnativeinventory/settings/validate-only +currentcanonicalproduct readers mint privateboundbundle; callableone-shotreservation/floor/originalreceipt+actualgraphverification settlement; accountfence/epoch/proposal/journalbinding; explicitfundedunboundhold thennativepairMAXexposure andstoredcap. No activation/publicattachment/paidconsumer.",
-  "tests": "85localselectedunitpassed-Werror (newgrants/authority+existingpausedexposure/guard);38new tests passed2.10s in separate run. No actualMongo acceptance/CI fornewsource yet.",
+  "tests": "89 selected local unit tests passed -W error in3.15s (new grants/authority plus existing paused exposure/guard); no actualMongo/CI for new source yet.",
   "remaining": [
     "ActualMongo independentclients ownerpassword/role/disable marker races and exactauthcontract/BSON",
     "ActualMongo grant/revoke/proposal cancellation/clock/unknowncommit/wire/resourcecaps with nozero-skipCI",
     "NativepairMAX/crosspolicy/budgetcap/shape/validator/permissions adversarial acceptance",
     "Immutableindependentfullruntime review; productionnewnamespaces/users.update/currentvalidator/index/legacyprovisioning proof",
-    "Noactivation/publicattach/gateway/worker/funding. ExistingexternalOAuth/product/Googlewriters notserialized."
+    "Noactivation/publicattach/gateway/worker/funding. ExistingexternalOAuth/product/Googlewriters notserialized.",
+    "Queued completion: actual six mandatory policy writer integration/all automated increases, owner activation UI, funded gateway/worker remain incomplete; this storage slice is not completion."
   ],
   "spend_semantics": "Required typed AVERAGE_DAILY_COMMITMENT; omission/HARD_DAILY_SPEND/HARD_TOTAL_SPEND rejected. No nativecap interpretation ofhardspendceilings. No numericdefaults.",
   "runtime_available": false,
@@ -20,5 +21,7 @@
   "production_engine_evidence": "Rootreports1646positive realreplica majority+jcommit/readback/cleanup andGETreceipt, finala99efcfd. This isengineproof only, not application/newfundednamespace/index/legacy proof; zero checked inventory isnotemptyproof.",
   "prepared_auth_boundary": "Storage-only helper closes its read/validate-only client beforeTX and alwaysreturnsfunded_dispatch_authorized:false. No preparedpaidclient/dispatchpermission exists. Futuregateway must ownpreparedauth/client beforefloor and permit nointerveningrefresh/await afterpositiveACK.",
   "owner_auth_boundary": "Rootapproved positiveauthority-onlyusersmarker: exact_id/id/role/disabled/is_active/deleted_at/password_updated_at projection, missing/null CAS, realmarker mezan_google_funded_authority_epoch; no hash/token reads. Storedreview binds current authenticated dependency authprojection/passwordstamp/documentidentity. Actual auth.get_current_user_from_db tests prove oldJWTrevoked and stalepreviouslyreturneduser rejected. Marker onlyreservation/floor; no users.update forconfigure/revoke/cancel/settlement. Actualindependentclient password/role/disable before/aftermarker and validator/RBAC proof pending.",
-  "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned."
+  "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned.",
+  "owner_read_bound": "Exact owner projection uses server limit(2), max_time_ms(2000), including through SessionDatabase; dedicated collaborator asserts session and both bounds.",
+  "google_scope_boundary": "Reservation/floor snapshot re-reads canonical connected/api_connection integration and exact account membership plus account_client credential epoch projection after native awaits. Adversarial relink/disconnect/account-removal between prepare and TX reject and retain reservation/fence. No provider/OAuth call in transaction. Snapshot reads do not serialize later OAuth writers; future gateway lifecycle remains required."
 }

@@ -32,6 +32,8 @@ def matches(row, query):
 class Cursor:
     def __init__(self, rows): self.rows = deepcopy(rows)
     def sort(self, *args): return self
+    def limit(self, count): self.rows=self.rows[:count]; return self
+    def max_time_ms(self, milliseconds): return self
     async def to_list(self, length=None): return self.rows[:length]
 
 
