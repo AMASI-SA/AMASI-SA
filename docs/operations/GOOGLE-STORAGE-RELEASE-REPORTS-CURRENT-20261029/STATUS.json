@@ -1,5 +1,5 @@
 {
-  "status": "ACTUAL_HOST_A_PASSED_EXACT_CI_INTENT_B_FROZEN_FINAL_GATES_PENDING",
+  "status": "ALL_B_CI_AND_ACTUAL_HOST_ADAPTER_AND_INDEPENDENT_PAIR_PASSED_READY_NORMAL_MERGE",
   "production_base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
   "production_base_tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -225,7 +225,7 @@
     "general_gates": "All actual successful job logs read. Security full frontend2370 tests/318 suites; balance618+16 backend/187UI; G47 327backend/119UI zero-skip gates; stock875 zero-skip gate; catalog34; payments141; both CodeQL uploads complete. Scoped unrelated Snap and host/manual jobs were skipped by existing workflow logic, not disabled.",
     "root_review": "Root accepted unchanged runtime/shared seams, independently133backend-Werror/29UI on e398, reviewed final4ca0e sourceCI126/9Mongo,117/6Mongo,1307backend,261UI/build4.03s and all13 workflows success."
   },
-  "next": "Validate exact B CI and independent pair; actual-host B normal adapter on clean clone; freshbase andinactiveguard thennormalmerge/build/prepare/prepublish/onepublish/3verify/live.",
+  "next": "Freshcurrentbase61da andactualguardinactive; normalmergeexpectedB preservingtree, then/appff/build/prepare/prepublish/onepublish/newerfinish/3verify/closed/liveownertechnicalprobes.",
   "prior_historical_checkpoint": {
     "source": "e3984c28be8890dda03b37154347079685aa6038",
     "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
@@ -308,9 +308,151 @@
       "ci_exact_match": true,
       "clean_worktree": true
     },
-    "B_CI": "pending",
-    "host_B": "pending",
+    "B_CI": {
+      "state": "All13 distinct required workflows success;15 successful runs including duplicate Snap ready-event runs;1 conditionalTikTokCreator skipped",
+      "runs": [
+        {
+          "id": 40965422437,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965422506,
+          "name": "Snapchat Direct Active Publication",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359455,
+          "name": "TikTok Creator Release Candidate",
+          "status": "completed",
+          "conclusion": "skipped"
+        },
+        {
+          "id": 40965359417,
+          "name": "Snapchat Settings Management V2",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359133,
+          "name": "Qoyod Payment Freshness",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359215,
+          "name": "Snapchat Direct Active Publication",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359161,
+          "name": "Google catalog review replica",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359185,
+          "name": "Google storage commit preflight",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359393,
+          "name": "Google namespace prerequisite audit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359281,
+          "name": "Google Ads full management",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359371,
+          "name": "Operational Balance Web",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359370,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359350,
+          "name": "G47 Focused Integration",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359325,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359128,
+          "name": "Mezan Release Readiness",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40965359184,
+          "name": "Operational Stock Eligibility",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "google": {
+        "run": 40965359281,
+        "backend_job": 123768347314,
+        "backend": 1307,
+        "backend_seconds": 36.61,
+        "frontend_job": 123768347750,
+        "frontend": 261,
+        "suites": 18,
+        "build_seconds": 6.49
+      },
+      "commit": {
+        "run": 40965359185,
+        "job": 123768347112,
+        "total": 117,
+        "actual_mongo": 6,
+        "seconds": 15.61,
+        "skips": 0
+      },
+      "namespace": {
+        "run": 40965359393,
+        "job": 123768347578,
+        "total": 126,
+        "actual_mongo": 9,
+        "seconds": 4.92,
+        "skips": 0
+      },
+      "readiness": {
+        "run": 40965359128,
+        "host20_job": 123768757640,
+        "adapter_seconds": 68.91,
+        "isolated_runtime_artifact_verified": true
+      },
+      "root_primary_logs_read": true
+    },
+    "host_B": {
+      "exit": 0,
+      "seconds": 78.22,
+      "path": "/tmp/google1646-intent-b-20261030",
+      "log": "/tmp/google1646-intent-b-build.log",
+      "isolated_runtime_artifact_verified": true,
+      "exact_source_runtime": true,
+      "expected_pre_materialization_warning": "Ignored backend/release_identity.json absent before adapter materialization; final verification succeeded."
+    },
     "lease": false,
-    "published": false
+    "published": false,
+    "independent_pair": "budget_audit fullhistory A/B/directbase/intentonly and1032backend245control1020frontend/proof/e05663/fullruntime PASS."
   }
 }
