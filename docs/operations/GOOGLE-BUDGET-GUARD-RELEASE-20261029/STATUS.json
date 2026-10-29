@@ -1,0 +1,218 @@
+{
+  "task_id": "GOOGLE-BUDGET-GUARD-RELEASE-20261029",
+  "state": "WIP selective mandatory guard/settlement integration; local units passed; fresh replica CI and root production-M merge pending; runtime literal false",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-budget-guard-release-wip-20261029",
+  "base_inventory_A": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+  "reviewed_WIP_source": "0fbc710ddd54c118f1154ca72f38ac8dd3bcab39",
+  "original_pr": 1560,
+  "source_common_base": "3a23b587a218f2b190cf1913e3b0b1d22c175cbd",
+  "selection": "Explicit seven runtime files and related tests applied by a three-way patch from the common base; current inventory policy logic retained. Old WIP reporting/routes differences deliberately excluded.",
+  "scope": [
+    "All six standing/creation owner save, activate and revoke handlers use the mandatory same-database transaction adapter",
+    "Standing enable/set_budget/pause reservation and settlement share guard epoch, budgets and nonrefundable quota",
+    "Strict native budget resource/shared/reference-count observation binding preserved",
+    "Conservative terminal legacy-claim recovery, committed-hold retention and same-session account-fence marker CAS",
+    "No funded first launch implementation or LaunchAllocation upgrade; existing storage-only WIP command remains unavailable for runtime dispatch"
+  ],
+  "runtime_enabled": false,
+  "budget_guard_runtime_available": "Literal False, AST-verified",
+  "operational_flags_changed": false,
+  "provider_or_ad_or_policy_writes": 0,
+  "files": [
+    ".github/workflows/google-ads-budget-guard-standing.yml",
+    ".github/workflows/google-ads-full-management.yml",
+    "backend/integrations_control_center/google_ads_automation_activation.py",
+    "backend/integrations_control_center/google_ads_automation_authority.py",
+    "backend/integrations_control_center/google_ads_automation_budget_guard.py",
+    "backend/integrations_control_center/google_ads_automation_creation_policy.py",
+    "backend/integrations_control_center/google_ads_automation_gateway.py",
+    "backend/integrations_control_center/google_ads_automation_policy.py",
+    "backend/integrations_control_center/google_ads_automation_policy_mutation_adapter.py",
+    "backend/tests/google_ads_transactional_fake.py",
+    "backend/tests/test_google_ads_automation_activation.py",
+    "backend/tests/test_google_ads_automation_authority.py",
+    "backend/tests/test_google_ads_automation_authority_mongo.py",
+    "backend/tests/test_google_ads_automation_budget_guard.py",
+    "backend/tests/test_google_ads_automation_budget_guard_mongo.py",
+    "backend/tests/test_google_ads_automation_creation_authority.py",
+    "backend/tests/test_google_ads_automation_creation_authority_mongo.py",
+    "backend/tests/test_google_ads_automation_creation_gateway.py",
+    "backend/tests/test_google_ads_automation_creation_gateway_mongo.py",
+    "backend/tests/test_google_ads_automation_creation_policy.py",
+    "backend/tests/test_google_ads_automation_creation_policy_mongo.py",
+    "backend/tests/test_google_ads_automation_creation_worker.py",
+    "backend/tests/test_google_ads_automation_creation_worker_mongo.py",
+    "backend/tests/test_google_ads_automation_gateway.py",
+    "backend/tests/test_google_ads_automation_gateway_mongo.py",
+    "backend/tests/test_google_ads_automation_policy.py",
+    "backend/tests/test_google_ads_automation_policy_mongo.py",
+    "backend/tests/test_google_ads_automation_worker_mongo.py",
+    "backend/tests/test_google_ads_budget_guard_standing.py",
+    "backend/tests/test_google_ads_creation_inventory.py",
+    "backend/tests/test_google_ads_guard_integration.py",
+    "backend/tests/test_google_ads_guard_integration_mongo.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement.py",
+    "backend/tests/test_google_ads_legacy_budget_settlement_mongo.py",
+    "backend/tests/test_google_ads_transactional_fake.py"
+  ],
+  "preserved_unchanged_against_inventory_A": [
+    "backend/requirements.txt",
+    "frontend/package.json",
+    "frontend/yarn.lock",
+    "backend/integrations_control_center/google_ads_reporting.py",
+    "backend/integrations_control_center/google_ads_routes.py",
+    "backend/integrations_control_center/google_credential_refresh_cas.py",
+    "backend/product_inventory_proof.py",
+    "backend/product_v2_details_routes.py",
+    "backend/integrations_control_center/google_ads_automation_creation_authority.py",
+    "backend/integrations_control_center/google_ads_automation_creation_contract.py",
+    "backend/integrations_control_center/google_ads_automation_creation_plan.py",
+    "backend/integrations_control_center/google_ads_automation_creation_gateway.py"
+  ],
+  "verification": {
+    "focused_local": "577 passed in7.15s; policy, activation, standing authority/gateway, budget guard, legacy settlement, creation collaborators, current inventory and actual credential-CAS unit coverage; no skips in this selected unit command",
+    "python": "/tmp/mezan-google29-venv/bin/python -m pytest --noconftest; PYTHONPATH=backend, PYTHONDONTWRITEBYTECODE=1, PYTHON_DOTENV_DISABLED=1",
+    "compatibility_regression": "First577-case run576pass/1fail: current inventory claim test invoked a fixture helper without the newly required test-only accepted-guard capability. Added only scoped test opt-in and a guard against execution-disabled false-positive; fresh577-case run passed. Runtime still literal false.",
+    "local_mongo": "Not available; no actual replica acceptance claimed locally",
+    "fresh_ci": "Pending remote candidate: dedicated at least91 cases/exact16 actual replica and zero failures/errors/skips; full Google backend also requires all12 relevant Mongo modules and zero skips",
+    "workflow": "Both YAML files and all16 run-script blocks pass bash-n; Ubuntu22.04 preserved for Mongo8.0.26 kernel compatibility; full suite now uses actual replica instead of standalone, current inventory test selection retained; test bootstrap pins align runtime requirements",
+    "syntax": "All changed Python files ast.parse passed",
+    "release_identity": "All seven changed runtime files included by existing backend runtime source classifier; identity protocol unchanged",
+    "diff_check": "git diff --check and cached diff check passed"
+  },
+  "historical_evidence_not_current_acceptance": {
+    "source": "0fbc710ddd54c118f1154ca72f38ac8dd3bcab39",
+    "budget_ci": 40427999453,
+    "budget_tests": "91 tests including16 actual Mongo replica cases, zero skips/errors",
+    "full_ci": 40427999393,
+    "full_result": "1193 backend,162 frontend/15 suites and build passed",
+    "historical_review": "Original independent fence-release race regression and fix accepted; current integration still needs root review and fresh CI"
+  },
+  "missing_production_evidence": [
+    "Transaction capability and exact database scope in actual production Mongo; local/CI replica support does not prove the production topology",
+    "Actual legacy private claim/allocation/fence inventory and any known terminal recovery/absence proof before operational activation",
+    "Native account budget identities, explicit shared/reference-count fields and provider permissions on the intended real account",
+    "External Google/manual/other-app writers remain outside Mongo atomicity; no provider conditional-write or operational exclusion proof; no hard-spend-cap claim",
+    "Explicit valid current owner limits and activation are separate; no actual policy values were read or changed"
+  ],
+  "production_changed": false,
+  "app_or_browser_access": false,
+  "production_db_or_secret_access": false,
+  "release_intent_created": false,
+  "merge_or_publish": false,
+  "next_safe_action": "Persist this dedicated WIP branch and Draft PR, inspect exact-source replica/full CI, then root supplies current production M for normal non-destructive merge and current-source review. Keep runtime false. Root alone owns release intent, actual-host guard and publication; no automatic paid launch is authorized by this checkpoint.",
+  "probe_safety_followup": {
+    "state": "Probe unit/actual replica accepted; WIP migration still blocked by separate _run/read_commit lifecycle",
+    "base_remote": "97e93e162511e0c994ef68fa81d78d6cb8d28dff",
+    "contract": "One original-deadline retained probe per process; sameDBobject concurrent waiters coalesce, cancellationonewaiter nevercancelsdriver/otherwaiters, expiredattempt cannotreturncapability. DifferentDB/pendingexpiredcleanup busy503. Nevercachecompletedproof/renewdeadline/retry. Require acknowledgedinsert+explicitadminabortACKsamepublicsession majority+j; await shielded publicasyncend_session withinoriginaltask/CSOT. No OAuth/native call.",
+    "reproduction": "Faithful legacy function issuedcapability without serverabortresponse; fixedprobe rejects.",
+    "unit_result": "587passed7.70s -Werror including new10probe cases and existingCAS/inventory/policy/regression suites. AST/YAML/bash/whitespace pass.",
+    "real_mongo": {
+      "run": 40915336711,
+      "job": 123593934735,
+      "result": "104passed21.25s,19actualMongo, failures/errors/skips0,-Werror",
+      "probe_timing": [
+        {
+          "fault": "none",
+          "response_seconds": 0.003,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.05
+        },
+        {
+          "fault": "server91",
+          "response_seconds": 9.998,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.051
+        },
+        {
+          "fault": "connection-close",
+          "response_seconds": 0.497,
+          "cleanup_seconds": 0,
+          "event_loop_gap": 0.05
+        }
+      ],
+      "scope": "Capabilityprobe latency only, no productionDB/provider authority or commitdurability claim."
+    },
+    "unchanged": "runtime_available literalFalse; all operationalflags off; no launch/planner/sixpolicyhandler edits; no livepolicy/providerwrites.",
+    "adjacent_blocker": "Resolved within replica-set/test scope by lifecycle_followup finalCI+independentreview; actualproductioncapability/nativeevidence remain rollout prerequisites.",
+    "next_safe_action": "Run actualreplica CI and independent budget_audit review; separately resolve _run/read_commit lifecycle before guard migration. Root owns release; diagnostic frozen source unchanged.",
+    "code_checkpoint_sha": "74ea76cba2f48dd289c33dfb77c67f3a57c30ca7",
+    "full_google_ci": {
+      "run": 40915336984,
+      "backend_job": 123593936220,
+      "backend_result": "1347passed47.61s,zero skips,all12requiredMongo modules; frontend tests passed/buildpending at checkpoint"
+    },
+    "independent_review": "budget_audit41probe+guard tests independently passed-Werror; no new scopedprobebypass; internalcapability60s existingcontract unchanged."
+  },
+  "lifecycle_followup": {
+    "state": "Lifecycle/probe accepted within explicit replica-set scope; WIP not deployed/runtime disabled",
+    "base": "90ef34a02b52c59b3a6555a3b9f51928e464e971",
+    "reproduction": "Legacy wait_for cancelled Motor-style executor commit Future despite underlying executor work being unstoppable; installed Motor asynccontext delegates synchronous exit; PyMongo publiccommithelper retries retryablecommit despite retryWritesFalse. Not a liveproductionfailure claim.",
+    "contract": "_run/read use explicitpublicsession lifecycle underoriginalCSOT; independent response wait nevercancels driver Futures. Retain tasks untilwork+asyncshieldedend_sessiondone. Technical perprocess24pendingwrite+8pendingread slots=32, preserving readcapacity forreconciliation; scopeddbobject/user/account/operation/kindduplicatebusy. Caller cancellation/timeout sets precommitstopflag, neverreleasesfence. RawpublicadmincommitTransaction command exactlyonce samepublicsession/majority+j; requirevalidok/noWCE. Any attemptedcommit failure/timeout remainsunknown, preservefence/reservation/noauto. Cleanupcannotupgradeunknownsuccess. RecoveryrawabortACK/storageonly no dispatch/releasepermission.",
+    "local_verification": "596passed8.66s-Werror; AST/YAML/bash/whitespacechecks; frozen diagnostic/launch/planner/sixhandlerimplementations untouched.",
+    "scope_limits": "No productionMongo/topologyproof/nativeprovider/externalwriter permission evidence. RuntimeflagliteralFalse/alloperationalflags off. Frozen diagnostic,launch/planner, sixpolicyhandlerimplementations unchanged. No livepolicy/ad/provider writes, Intent, merge or deployment.",
+    "next_safe_action": "Root independently review assembled latest-production selective patch, preserving automatic-resume failclosed changes. Before mandatoryhandler migration prove actualproductionreplicaset/storagecapability; before enabling automation prove nativepermissions/externalwriterconstraints/ownerlimits. No fundedlaunchupgrade in thisslice; no deployment/intent by thisagent.",
+    "original_candidate_ci": {
+      "source": "15daa567fd8a45b1c0dd1b0982f1b739b33e7008",
+      "run": 40917165420,
+      "job": 123600362600,
+      "result": "113passed92.45s/22Mongo/0fail-error-skip, -Werror",
+      "wire_proof": "retryWritesTrue commandmonitor exactly1commit each:91\u2192unknown9.968s/not_proven;connectionclose\u2192unknown.469s/not_proven;WCE\u2192unknown.007s/actualreservedallocation+committedstorageproof. Commonfenceunchanged;loopgap.051s."
+    },
+    "audit_deadline_fix": "Capture original monotonicdeadline beforetaskstart; workerCSOTremainingoriginaldeadline; _run checksclockbeforecommit evenifwaiternotwoken; afterwait lateappliedACK cannotreturnsuccess. Two deterministic clock tests proveprecommitabort andpostcommitunknown.",
+    "compatibility": "Actualguardcapability explicitlyreplica-set-only; mongos rejected beforeprobe write/no capability. Shardedcommit recoveryToken/publicAPI semantics unproved; no privatefield access/fallback. Frozen diagnostic mayproveinsert+abort onother topology butdoesnotprove guardcommitreadiness.",
+    "caller_contract_test_followup": "Broader firstCI15daa:1346pass/1fail only oldsameoperationconcurrencydenialcode;1grant+1deny invariant held. Root-approved scopedduplicate gate now intentionallyreturns503operation_pending withfence/noautomaticretry instead ofoldMongoCAS409policy_changed. Exactactualtest updatednewcode/status/flags withoutweakeningclaim/quota assertions; addall6authorityMongo cases tofocusedCI.",
+    "final_ci_before_controlled_test_gate": {
+      "source": "fb308ba1b4f1d75e80de0f347424ac79a7cb5e43",
+      "focused_run": 40918285055,
+      "focused_job": 123604278702,
+      "result": "122passed91.81s/28Mongo/0fail-error-skip-Werror",
+      "full_run": 40918285080,
+      "backend": "1347passed50.95s/0skip/all12Mongo",
+      "frontend": "18suites226tests+buildSUCCESS",
+      "wire": "ONEcommit retryWritesTrue;91unknown9.960s/not_proven;closeunknown.462s/not_proven;appliedWCEunknown.005s/committedreserved;fenceunchanged/gap.051s"
+    },
+    "audit_controlled_test_gate": "Finalcontrolledtestholdsfirstcommituntilsecondrealregistrydenial; exact1grant1deny503/fence/noauto/claim/generation/quotaassertions preserved and passedactualCI.",
+    "code_checkpoint_sha": "113cf374fb1034a0c20cf02e95e827c61b6cb188",
+    "runtime_checkpoint_sha": "a110f1e8a538d52e77694fcf65907441a0214823",
+    "final_ci": {
+      "source": "113cf374fb1034a0c20cf02e95e827c61b6cb188",
+      "focused_run": 40919171022,
+      "focused_job": 123607412966,
+      "focused_result": "122passed92.66s,28actualMongo,failures/errors/skips0,-Werror",
+      "full_run": 40919171175,
+      "backend_job": 123607413254,
+      "backend_result": "1347passed51.39s/zero skips/all12requiredMongo modules",
+      "frontend_job": 123607413858,
+      "frontend_result": "18suites226tests+buildSUCCESS",
+      "actual_commit_faults": [
+        {
+          "fault": "server91",
+          "response_seconds": 9.967,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.051,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "not_proven"
+        },
+        {
+          "fault": "connection-close",
+          "response_seconds": 0.458,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.051,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "not_proven"
+        },
+        {
+          "fault": "writeConcernError",
+          "response_seconds": 0.006,
+          "cleanup_after_response_seconds": 0.004,
+          "event_loop_gap": 0.05,
+          "wire_commit_attempts": 1,
+          "storage_outcome": "committed/reserved, no dispatch/releasepermission"
+        }
+      ]
+    },
+    "independent_review": "budget_audit independently50guard/probe/lifecycleunits-Werror; deadlinechecks+mongosgateaccepted; controlledsameoperation503racegateacceptedwithoutbroadenederroracceptance/invariantweakening. FinalactualCIgreen."
+  }
+}

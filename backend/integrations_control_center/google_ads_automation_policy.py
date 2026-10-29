@@ -13,10 +13,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from pymongo.errors import DuplicateKeyError
 
 from .google_ads_client import GoogleAdsClient, identifier, problem
 from .google_ads_management import account_client, available_accounts, principal
+from .google_ads_automation_policy_mutation_adapter import mutate_google_automation_policy
 
 AUTOMATION_POLICIES = "mezan_google_ads_automation_policies_v1"
 PUBLIC_FIELDS = ("schema_version", "account_id", "revision", "enabled", "currency_code", "time_zone",
@@ -158,6 +158,7 @@ def attach_google_ads_automation_policy_routes(router, db, current_user, *, clie
 
     Every route authenticates a persisted owner. Provider access is limited to
     account_metadata on PUT; GET and revocation never send provider writes.
+    Every mutation uses the common transaction guard without legacy fallback.
     """
     root = "/google_ads/automation/policy/{account_id}"
 
@@ -194,16 +195,8 @@ def attach_google_ads_automation_policy_routes(router, db, current_user, *, clie
         payload.update(schema_version=1, revision=revision, expires_at=expires_at,
             currency_code=currency, time_zone=zone, updated_by=actor["actor_id"], updated_at=current.isoformat())
         event = _event(actor, revision, body.enabled, current)
-        if body.expected_revision == 0:
-            try:
-                await db[AUTOMATION_POLICIES].insert_one({**scope, **payload, "events": [event]})
-            except DuplicateKeyError:
-                raise problem("google_automation_policy_changed", "تغيرت سياسة جوجل؛ حدّثها قبل الحفظ.", 409) from None
-        else:
-            changed = await db[AUTOMATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-                {"$set": payload, "$push": {"events": {"$each": [event], "$slice": -50}}})
-            if not changed.matched_count:
-                raise problem("google_automation_policy_changed", "تغيرت سياسة جوجل؛ حدّثها قبل الحفظ.", 409)
+        await mutate_google_automation_policy(db, policy_kind="standing", scope=scope,
+            expected_revision=body.expected_revision, values=payload, event=event)
         row = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
         return public_policy(row, account_id=scope["account_id"], current=now())
 
@@ -213,10 +206,9 @@ def attach_google_ads_automation_policy_routes(router, db, current_user, *, clie
         # Revocation must remain available after OAuth/account disconnection.
         scope = {"user_id": actor["user_id"], "account_id": identifier(account_id)}
         current, revision = now(), body.expected_revision + 1
-        changed = await db[AUTOMATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-            {"$set": {"enabled": False, "revision": revision, "updated_by": actor["actor_id"], "updated_at": current.isoformat()},
-             "$push": {"events": {"$each": [_event(actor, revision, False, current)], "$slice": -50}}})
-        if not changed.matched_count:
-            raise problem("google_automation_policy_changed", "تغيرت سياسة جوجل؛ حدّثها قبل إيقافها.", 409)
+        await mutate_google_automation_policy(db, policy_kind="standing", scope=scope,
+            expected_revision=body.expected_revision,
+            values={"enabled": False, "revision": revision, "updated_by": actor["actor_id"], "updated_at": current.isoformat()},
+            event=_event(actor, revision, False, current))
         row = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
         return public_policy(row, account_id=scope["account_id"], current=now())

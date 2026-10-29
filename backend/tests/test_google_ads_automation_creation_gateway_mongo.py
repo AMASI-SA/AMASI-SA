@@ -1,6 +1,7 @@
 """Disposable real Mongo; only the external Google transport is fake."""
 import asyncio
 import pytest
+from tests.test_google_ads_automation_policy_mongo import guard_mongo_contract, set_guard_time
 from fastapi import HTTPException
 from integrations_control_center import google_ads_management as management
 from integrations_control_center import google_ads_automation_creation_gateway as gateway
@@ -8,6 +9,11 @@ from integrations_control_center.google_ads_campaign_contract import GoogleCampa
 from tests.test_google_ads_automation_authority_mongo import authority_db
 from tests.test_google_ads_automation_policy_mongo import automation_mongo_uri
 from tests.test_google_ads_automation_creation_gateway import setup,preview,execute,advance,NOW,timedelta
+
+
+@pytest.fixture(autouse=True)
+def creation_guard_clock():
+    set_guard_time(NOW)
 
 
 @pytest.mark.asyncio
