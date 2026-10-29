@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T19:18:27.292Z",
+  "updated_at": "2026-10-29T19:31:59.656Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -34,9 +34,8 @@
     "latest_deployed_pr": 1609,
     "current_git_head": "e51f5b88b68905460417a01fb9ceb3704706c168",
     "active_release_lease": {
-      "actor": "codex-marketing-reports-20261029",
-      "deployment_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
-      "state": "observedactive;ownedbyotherconversation;untouched"
+      "active": false,
+      "observed_by": "root actual /app guard status after Reports owner closure"
     }
   },
   "budget_semantics": {
@@ -99,7 +98,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "Do not touch foreignReportslease. Continueisolatedreviewedcode/CI andpausedcreationguardwork; whenforeignownercloseslease, refreshprod and release1618 SourceA31d viaactualhostbuild/intentB/allCI/adapter/normalmerge/onepublish/newfinish/verify3/livecheck. Allsubsequentslices need latestprod selective A/B.",
+  "next_safe_action": "Complete1618actualhostA+exactCIintent, intent-onlyB/allCI/independentreview/hostadapter, freshprodnormalmerge/appmaterialize/prepare/prepublish/singlepublish/newfinish/3verify/closedlease/live. Continue1625/1621/1627freshsources sequentially and pausedcreationguardWIP; no paidactivitywithoutownerlimits.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1581,7 +1580,7 @@
         "tree": "69e128a20531149d53a62ee32b0445ca7d6daba2",
         "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
         "branch": "codex/google-catalog-stock-review-source2-20261029",
-        "state": "SOURCE_A_REVIEWED_CI_PASSED_WAIT_FOREIGN_LEASE",
+        "state": "SOURCE_A_ACTUAL_HOST_REHEARSAL_IN_PROGRESS",
         "selective_diff": "Exact9reviewedruntime/test/workflowblobs from878;newSTATUSonly;zeropathoverlapReportsM5→M6",
         "prior_attempt": "Frozeninstallfailedregistry.yarnpkg502(data-view-byte-offset1.0.1);noB/nolease/nopublish. Source1616closed superseded preserved.",
         "ci": {
@@ -1604,7 +1603,11 @@
         "intent_sha256": "75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c",
         "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
         "status_branch": "codex/google-catalog-stock-review-status2-20261029",
-        "status_checkpoint": "0ac93d40d6ed317bab482679a9dd9d645a0e9a8e"
+        "status_checkpoint": "0ac93d40d6ed317bab482679a9dd9d645a0e9a8e",
+        "actual_host": {
+          "first": "FrozeninstallPASS18.76s, build refused oldreviewedintent because bootstrap flag omitted; no source/intent mutation andno lease",
+          "recovery": "Running designated MEZAN_RELEASE_BOOTSTRAP_INTENT=1 candidate doublebuild at exactA31d inisolatedworktree, thenfreeze+exactCIhashcompare"
+        }
       },
       "prior_clean_source": {
         "pr": 1616,
@@ -1816,17 +1819,14 @@
       "runtime": "rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b",
       "actor": "codex-marketing-reports-20261029",
       "prepared_at": "2026-10-29T18:29:38.187795+00:00",
-      "lease": "observedactive;untouched",
+      "lease": "CLOSED by owner; independently observed activefalse",
       "coordination": "PostedPR1615coordinationcomment; rootwaitsclosedleasebeforehostrehearsal",
       "preserved": "EntireReportsproductiondelta,foreignuntrackedfiles,ownedlease",
       "latest_read_only_check": {
-        "lease": "active actorcodex-marketing-reports-20261029 unchanged",
-        "live_source": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
-        "live_runtime": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
-        "verified_identity_available": true,
-        "ui_latest_finish": "2026-10-29 21:19 Asia/Riyadh",
-        "no_foreign_lease_mutation": true,
-        "coordination_comments": "PR1615 at18:32:57Z and18:47:34Z; ownerclosurepending"
+        "lease": "activefalse",
+        "app_head": "e51f5b88b68905460417a01fb9ceb3704706c168",
+        "ui_latest_finish": "2026-10-29 22:21 Asia/Riyadh",
+        "owner_verification": "PR1615comment19:26:05Z says3checks/closed; root independently observedfinishandguardinactive; noforeignleasemutation"
       }
     },
     "storage_diagnostics_combined": {
@@ -1965,15 +1965,44 @@
       "tree": "55bed05e7707b620f196e7eb1447d38cb6b5842e",
       "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
       "branch": "codex/google-retail-integrated-20261029",
-      "state": "SOURCE_REVIEWED_BLOB_PARITY_LOCAL_TESTS_PASSED_CI_PENDING",
+      "state": "SOURCE_REVIEWED_ALL11CI_PASSED_NOT_DEPLOYED",
       "scope": "9exactc7backendpaths +2exact097UIpaths +newcombinedSTATUS",
       "local": "308backend-Werror0skip252UI18suites",
-      "independent": "9backend+2UIblobparity/directM6/ReportsCASresumepreserved;171backendpass,49MongoSKIPPEDlocallyexplicitlyNOTcounted; actualCIpending"
+      "independent": "308backend-Werror0skip+51Composer0skip, exact11componentbytes/directM6/ReportsCASresume preserved",
+      "checkpoint": "8c52d2b083172997f9e16067593ac08d259e120d",
+      "ci": {
+        "run": 40938463175,
+        "backend_job": 123675163689,
+        "backend": 1307,
+        "frontend_job": 123675164073,
+        "frontend": 252,
+        "suites": 18,
+        "build_seconds": 6.18,
+        "skips": 0,
+        "root_logs_reviewed": true,
+        "readiness": 40938463138,
+        "all_source_workflows_success": 11,
+        "checkout": "14d99f6cbcefa9166f87ce081d0f69c73b9c5e36"
+      }
     },
     "next_category_enumeration_assessment": {
       "owner": "google_seasons",
-      "state": "ASSESSMENT_REQUESTED_NO_NEW_CODE_OR_PROVIDER_CALLS",
-      "scope": "ReuseexistingMezanSalla category/productpagination/scopes; newGoogle-owned readonlyboundedownerreview; resolveURLonlyverifiedprovider/store identity, noarbitraryURLfetch/OAuthscopeexpansion/collectorwrites"
+      "branch": "codex/google-category-enumeration-20261029",
+      "checkpoint": "42b7ecb869196796360e9e7e52a18341fbecfb32",
+      "state": "CORRECTED_ASSESSMENT_SAVED_NEW_BACKEND_IMPLEMENTATION_AUTHORIZED",
+      "scope": "ExplicitownerfixednativeGETpreview/ownedstore/strictpagination/optionalexactproviderURL; storedscopesdeclaredorunknown; no arbitraryURLfetch/scopeexpansion/collectorwrite. Existingroutinecredentialrefreshreused; no authority."
+    },
+    "linked_campaign_ui_integration": {
+      "pr": 1627,
+      "branch": "codex/google-linked-campaign-ui-integration-20261029",
+      "source": "03a181de981dfa22c04831230f3ef1911d42126e",
+      "tree": "fb813337f4c07e1c55e64ea78c1bd5d108c5d9b2",
+      "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+      "state": "COHERENT_SOURCE_LOCAL_TESTS_PASSED_CI_AND_INDEPENDENT_REVIEW_RUNNING",
+      "local": "58backend-Werror0skip/160UI7suites",
+      "ci": 40940566347,
+      "full_ci": 40940566087,
+      "scope": "Exact1622+acceptededbbackend; newchildUI/service +minimalactualparent/routerattachment; no sums/profit/attribution/authority"
     }
   }
 }
