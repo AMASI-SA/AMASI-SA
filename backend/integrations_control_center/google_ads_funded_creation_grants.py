@@ -1,5 +1,5 @@
 """Authenticated configured funded grants; no activation or provider dispatch."""
-from datetime import timedelta
+from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 import re
 import uuid
@@ -7,12 +7,62 @@ from typing import Literal
 from pydantic import BaseModel,ConfigDict,Field,ValidationError
 from . import google_ads_management as management
 from . import google_ads_funded_creation_contract as pure
-from .google_ads_automation_policy import _owner,_account_scope
+from .google_ads_automation_policy import _account_scope
 from .google_ads_client import GoogleAdsClient,identifier,problem
 
 GRANTS='mezan_google_ads_funded_creation_grants_v1'
 RUNS='mezan_google_ads_funded_creation_runs_v1'
 SEMANTICS='AVERAGE_DAILY_COMMITMENT'
+AUTH_FIELDS=('id','role','disabled','is_active','deleted_at','password_updated_at')
+
+
+def _auth_fields(user):
+    result={}
+    for key in AUTH_FIELDS:
+        value=user.get(key)
+        if key in {'password_updated_at','deleted_at'} and isinstance(value,datetime):
+            value=(value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)).isoformat()
+        if key=='password_updated_at' and value not in (None,''):
+            stamp=pure._instant(value)
+            if stamp is None:fail('google_funded_owner_auth_unproved')
+            value=stamp.isoformat()
+        if value is not None and type(value) not in (str,bool):fail('google_funded_owner_auth_unproved')
+        result[key]={'present':key in user,'value':value}
+    return result
+
+
+def _document_id(value):
+    from bson import ObjectId
+    if isinstance(value,ObjectId):return {'kind':'objectid','value':str(value)}
+    if isinstance(value,str) and 0<len(value)<=128:return {'kind':'string','value':value}
+    fail('google_funded_owner_auth_unproved')
+
+
+async def read_owner_auth(db,*,user_id,expected=None,authenticated_user=None):
+    # Only nonsecret auth projection. The caller's authenticated_user must be
+    # the server auth dependency result, NEVER HTTP JSON or a worker-built ID.
+    if expected is None and authenticated_user is None:fail('google_funded_owner_auth_unproved')
+    rows=await db.users.find({'id':user_id},{'_id':1,**{key:1 for key in AUTH_FIELDS}}).to_list(length=2)
+    if len(rows)!=1 or '_id' not in rows[0]:fail('google_funded_owner_auth_unproved')
+    owner=rows[0]
+    actor=await management.principal(db,owner,write=True)
+    if not actor.get('owner') or actor['actor_id']!=user_id:fail('google_ads_owner_required')
+    fields=_auth_fields(owner)
+    if authenticated_user is not None and _auth_fields(authenticated_user)!=fields:
+        fail('google_funded_authenticated_owner_changed')
+    binding={'user_id':user_id,'document_id':_document_id(owner['_id']),'fields':fields}
+    if expected is not None and expected!=binding:fail('google_funded_owner_auth_changed')
+    return actor,binding,owner
+
+
+async def capture_owner_auth(db,user):
+    if not isinstance(user,dict) or not isinstance(user.get('id'),str):fail('google_ads_authentication_required')
+    actor,binding,_=await read_owner_auth(db,user_id=user['id'],authenticated_user=user)
+    return actor,binding
+
+
+def public_google_funded_review(review):
+    return {key:value for key,value in review.items() if not key.startswith('_')}
 
 class FundedGrantReviewInput(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -69,7 +119,7 @@ def validate_record(row):
 
 
 async def review_google_funded_grant(db,*,user,account_id,body,current=None,client_factory=GoogleAdsClient):
-    actor=await _owner(db,user)
+    actor,owner_auth=await capture_owner_auth(db,user)
     try:body=FundedGrantReviewInput.model_validate(body)
     except ValidationError:fail('google_funded_grant_input_invalid')
     if body.mode!='create_new_enabled_search' or body.spend_semantics!=SEMANTICS:
@@ -106,7 +156,7 @@ async def review_google_funded_grant(db,*,user,account_id,body,current=None,clie
         or Decimal(draft['budget_native'])!=Decimal(body.budget_native)
         or body.request_key.startswith(('google_create_','google_funded_create_'))):
         fail('google_funded_grant_input_invalid')
-    review={'schema_version':1,'mode':body.mode,**scope,'request_key':body.request_key,'revision':grant['revision'],
+    review={'schema_version':1,'mode':body.mode,'_owner_auth_binding':owner_auth,**scope,'request_key':body.request_key,'revision':grant['revision'],
         'owner_generation':body.owner_generation,'reviewed_by':actor['actor_id'],'spend_semantics':SEMANTICS,
         'draft_id':body.draft_id,'draft_revision':body.draft_revision,'catalog_max_age_seconds':body.catalog_max_age_seconds,'draft':draft,
         'valid_from':body.valid_from,'expires_at':body.expires_at,'currency_code':grant['currency_code'],
@@ -135,7 +185,7 @@ async def _mutate_in_transaction(db,*,session,snapshot,command,current):
             fail('google_funded_review_changed')
         draft=await view[management.DRAFTS].find_one({'user_id':scope['user_id'],'draft_id':review['draft_id'],
             'revision':review['draft_revision'],'account_id':scope['account_id']},{'_id':0})
-        actor=await _owner(view,{'id':scope['user_id']})
+        actor,_,_=await read_owner_auth(view,user_id=scope['user_id'],expected=review.get('_owner_auth_binding'))
         if (not draft or pure.funded_creation_draft_digest(draft['draft'])!=review['grant']['draft_digest']
             or actor['actor_id']!=review['reviewed_by'] or (old or {}).get('consumed') is True
             or await view[RUNS].find_one({**scope,'grant_key':command.grant_key},{'_id':1})):
@@ -179,7 +229,7 @@ async def save_google_funded_grant(db,*,user,account_id,body,expected_review_dig
 
 
 async def revoke_google_funded_grant(db,*,user,account_id,request_key,expected_revision):
-    actor=await _owner(db,user);account_id=identifier(account_id)
+    actor,_=await capture_owner_auth(db,user);account_id=identifier(account_id)
     from . import google_ads_automation_budget_guard as guard
     capability=await guard.probe_google_budget_guard_transactions(db)
     return await guard.run_google_budget_guard_transaction(db,user_id=actor['user_id'],account_id=account_id,

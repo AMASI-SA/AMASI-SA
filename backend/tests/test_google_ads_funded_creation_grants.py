@@ -12,6 +12,8 @@ from tests.test_google_ads_standing_dispatch_floor import setup as native_setup,
 
 async def setup(monkeypatch,db=None):
     db,provider=await native_setup(monkeypatch,db)
+    owner=await db.users.find_one({'id':'owner'})
+    if '_id' not in owner:await db.users.update_one({'id':'owner'},{'$set':{'_id':'unit-owner-doc'}})
     values=prepared_case();values['product']['last_synced_at']=NOW.isoformat()
     values['product']['details_synced_at']=NOW.isoformat()
     values['product']['inventory_evidence_v1']['observed_at']=NOW.isoformat()
@@ -27,10 +29,10 @@ async def setup(monkeypatch,db=None):
     return db,provider,body
 
 async def review(db,body):
-    return await grants.review_google_funded_grant(db,user={'id':'owner'},account_id='123',body=body,current=NOW)
+    return await grants.review_google_funded_grant(db,user=await db.users.find_one({'id':'owner'}),account_id='123',body=body,current=NOW)
 
 async def save(db,body,digest):
-    return await grants.save_google_funded_grant(db,user={'id':'owner'},account_id='123',body=body,
+    return await grants.save_google_funded_grant(db,user=await db.users.find_one({'id':'owner'}),account_id='123',body=body,
         expected_review_digest=digest,current=NOW)
 
 @pytest.mark.asyncio
@@ -44,7 +46,7 @@ async def test_actual_review_save_configured_revoke_without_oauth_or_runtime(mon
     async def unavailable(*args,**kwargs):raise AssertionError('OAuth/provider access during revoke')
     monkeypatch.setattr(management,'account_client',unavailable)
     monkeypatch.setattr(guard,'budget_guard_runtime_available',lambda:False)
-    result=await grants.revoke_google_funded_grant(db,user={'id':'owner'},account_id='123',request_key=body['request_key'],expected_revision=1)
+    result=await grants.revoke_google_funded_grant(db,user=await db.users.find_one({'id':'owner'}),account_id='123',request_key=body['request_key'],expected_revision=1)
     row=await db[grants.GRANTS].find_one({'account_id':'123'})
     assert result['state']=='revoked' and row['revision']==2 and grants.validate_record(row)
     assert (await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'}))['epoch']==2 and provider.writes==0
@@ -89,3 +91,49 @@ async def test_unknown_save_ack_no_auto_retry_or_activation(monkeypatch):
     assert row['state']=='configured' and row['revision']==1 and row['consumed'] is False
     with pytest.raises(HTTPException):await save(db,body,preview['review_digest'])
     assert (await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'}))['epoch']==1 and provider.writes==0
+
+async def authenticated_user(db,monkeypatch,*,issued_at=NOW):
+    # Actual auth dependency, signed TEST-only token; no real credential/env read.
+    import auth
+    import jwt
+    from starlette.requests import Request
+    secret='test-only-funded-auth-key-not-production-0123456789'
+    monkeypatch.setattr(auth,'get_jwt_secret',lambda:secret)
+    token=jwt.encode({'sub':'owner','type':'access','mfa':True,'iat':issued_at.timestamp(),
+        'exp':(NOW+timedelta(days=90)).timestamp()},secret,algorithm=auth.JWT_ALGORITHM)
+    request=Request({'type':'http','path':'/api/integrations/v2/google_ads/automation/funded-grants',
+        'headers':[(b'authorization',('Bearer '+token).encode())]})
+    return await auth.get_current_user_from_db(request,db)
+
+@pytest.mark.asyncio
+async def test_actual_auth_password_revocation_and_stale_dependency_result_rejected(monkeypatch):
+    db,provider,body=await setup(monkeypatch)
+    user=await authenticated_user(db,monkeypatch,issued_at=NOW-timedelta(minutes=1))
+    assert 'password_hash' not in user
+    preview=await grants.review_google_funded_grant(db,user=user,account_id='123',body=body,current=NOW)
+    public=grants.public_google_funded_review(preview)
+    assert '_owner_auth_binding' not in public and 'password_updated_at' not in public
+    await db.users.update_one({'id':'owner'},{'$set':{'password_updated_at':NOW-timedelta(seconds=1),
+        'password_hash':'test-only-changed-not-a-secret'}})
+    with pytest.raises(HTTPException) as error:
+        await authenticated_user(db,monkeypatch,issued_at=NOW-timedelta(minutes=1))
+    assert error.value.status_code==401 and error.value.detail=='Session revoked'
+    # The dependency already returned this dict before the write. A fresh DB
+    # owner lookup alone would not reject it; exact auth projection must do so.
+    with pytest.raises(HTTPException) as error:
+        await grants.save_google_funded_grant(db,user=user,account_id='123',body=body,
+            expected_review_digest=preview['review_digest'],current=NOW)
+    assert error.value.detail['code']=='google_funded_authenticated_owner_changed'
+    assert provider.writes==0 and not await db[grants.GRANTS].find({}).to_list(length=1)
+
+@pytest.mark.asyncio
+async def test_auth_binding_matches_bson_stamp_and_is_not_public_review_data(monkeypatch):
+    db,provider,body=await setup(monkeypatch)
+    await db.users.update_one({'id':'owner'},{'$set':{'password_updated_at':(NOW-timedelta(minutes=1)).replace(tzinfo=None)}})
+    user=await authenticated_user(db,monkeypatch,issued_at=NOW)
+    preview=await grants.review_google_funded_grant(db,user=user,account_id='123',body=body,current=NOW)
+    assert preview['_owner_auth_binding']['fields']['password_updated_at']['value']==(NOW-timedelta(minutes=1)).isoformat()
+    assert all(not key.startswith('_') for key in grants.public_google_funded_review(preview))
+    await grants.save_google_funded_grant(db,user=user,account_id='123',body=body,
+        expected_review_digest=preview['review_digest'],current=NOW)
+    assert provider.writes==0

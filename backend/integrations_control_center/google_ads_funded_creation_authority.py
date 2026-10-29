@@ -16,7 +16,6 @@ from . import google_ads_management as management
 from . import google_ads_funded_creation_contract as pure
 from . import google_ads_funded_creation_grants as grants
 from . import google_ads_automation_budget_guard as guard
-from .google_ads_automation_policy import _owner
 from .google_ads_ai import PRODUCT_COLLECTION
 from .google_ads_creation_inventory import PRODUCT_PROJECTION
 from .google_ads_automation_creation_contract import _canonical_url
@@ -26,6 +25,8 @@ from .google_ads_client import GoogleAdsClient,mutation_resource_names
 from .google_ads_paused_creation_budget import SessionDatabase,account_exposure
 
 _PROOF=object()
+_ACK=object()
+_OWNER_FIELDS=grants.AUTH_FIELDS
 
 @dataclass(frozen=True)
 class _Prepared:
@@ -34,7 +35,33 @@ class _Prepared:
     proof: object
 
 
-def _fail(code):grants.fail(code)
+def _fail(code):
+    from .google_ads_client import problem
+    raise problem(code,'لم يثبت تفويض التخزين الممول؛ احتفظ بالحجز دون إعادة إرسال.',409,
+        preserve_execution_fence=True,automatic_retry_allowed=False)
+
+
+@dataclass
+class _ReservationAck:
+    db: object
+    grant_key: str
+    proposal_id: str
+    execution_claim_id: str
+    operation_id: str
+    proof: object
+    used: bool=False
+
+
+async def _owner_write_fence(view,*,user_id,operation_id,expected_auth):
+    # Exact auth snapshot includes the permitted password_updated_at stamp.
+    # No password/hash/token is read; any concurrent writer conflicts with this
+    # real document marker. The stored review also rejects pre-snapshot change.
+    _,_,owner=await grants.read_owner_auth(view,user_id=user_id,expected=expected_auth)
+    query={'_id':owner['_id']}
+    query.update({key:({'$eq':None,'$exists':True} if owner[key] is None else owner[key])
+        if key in owner else {'$exists':False} for key in _OWNER_FIELDS})
+    changed=await view.users.update_one(query,{'$set':{'mezan_google_funded_authority_epoch':operation_id}})
+    if changed.matched_count!=1:_fail('google_funded_owner_changed')
 
 
 def _scope(user_id,account_id):return guard._scope(user_id,account_id)
@@ -52,14 +79,24 @@ def _active(row,current):
         or row.get('activation_version')!=1 or type(row.get('activation_version')) is not int
         or type(row.get('activation_revision')) is not int or row.get('activation_revision')!=row['revision'] or row.get('activated_by')!=row['user_id']
         or row.get('activation_review_digest')!=row['review_digest']
+        or not isinstance(row.get('activation_policy_binding'),str)
+        or not re.fullmatch(r'[a-f0-9]{64}',row['activation_policy_binding'])
         or pure._instant(row.get('activated_at')) is None or pure._instant(row['activated_at'])>current):
         _fail('google_funded_grant_inactive_or_consumed')
-    pure.prepare_google_funded_creation_intent(grant=row['grant'],draft=row['review']['draft'],current=current)
+    try:pure.prepare_google_funded_creation_intent(grant=row['grant'],draft=row['review']['draft'],current=current)
+    except pure.FundedCreationContractError:_fail('google_funded_grant_expired_or_changed')
     return grant
 
 
 def policy_binding(snapshot):
-    return management.digest({'standing':guard.thaw_snapshot(snapshot.standing_policy),'creation':guard.thaw_snapshot(snapshot.creation_policy)})
+    from .google_ads_automation_authority import policy_authorization_digest
+    from .google_ads_automation_creation_policy import creation_policy_snapshot
+    standing=guard.thaw_snapshot(snapshot.standing_policy);creation=guard.thaw_snapshot(snapshot.creation_policy)
+    return management.digest({'standing':None if standing is None else {
+        'revision':standing['revision'],'digest':policy_authorization_digest(standing)},
+        'creation':None if creation is None else {'revision':creation['revision'],
+            'digest':management.digest(creation_policy_snapshot(creation))}})
+
 
 
 async def _products(db,record,current):
@@ -126,12 +163,12 @@ def _semantic(payload):
 
 async def _prepare(db,*,scope,grant_key,client_factory=GoogleAdsClient,allow_consumed=False):
     if not guard.budget_guard_runtime_available():_fail('google_funded_runtime_unavailable')
-    await _owner(db,{'id':scope['user_id']})
     record=await db[grants.GRANTS].find_one({**scope,'grant_key':grant_key},{'_id':0})
     started=management.now()
     check=deepcopy(record)
     if allow_consumed and check:check['consumed']=False
     _active(check,started)
+    await grants.read_owner_auth(db,user_id=scope['user_id'],expected=record['review'].get('_owner_auth_binding'))
     intent=pure.prepare_google_funded_creation_intent(grant=record['grant'],draft=record['review']['draft'],current=started)
     product=await _products(db,record,started)
     if {key:product[key] for key in ('product_id','canonical_url','name','sku')}!=record['review'].get('product_review_binding'):
@@ -181,7 +218,8 @@ async def _bound(view,snapshot,command,current,*,allow_consumed=False):
         if not record or record.get('state')!='active':_fail('google_funded_grant_inactive_or_consumed')
         copy=deepcopy(record);copy['consumed']=False;_active(copy,current)
     else:_active(record,current)
-    await _owner(view,{'id':scope['user_id']})
+    if record['activation_policy_binding']!=policy_binding(snapshot):_fail('google_funded_policy_changed')
+    await grants.read_owner_auth(view,user_id=scope['user_id'],expected=record['review'].get('_owner_auth_binding'))
     row=await view[management.PROPOSALS].find_one({**scope,'proposal_id':command.proposal_id,
         'execution_claim_id':command.execution_claim_id,'status':'approved','submission_started':False},{'_id':0})
     fence=await view[management.FENCES].find_one({**scope,'proposal_id':command.proposal_id,
@@ -237,7 +275,8 @@ async def _guard_funded_command(db,*,session,snapshot,command,operation_id,curre
             'state':'active','consumed':False},{'$set':{'consumed':True,'claim':claim}})
         if changed.matched_count!=1:_fail('google_funded_grant_changed')
         run={**scope,**claim,'phase':'reserved','consumed':True,'intent':bundle['intent'],
-            'bundle':bundle,'claim':claim,'allocation_id':key,'reserved_at':current.isoformat()}
+            'bundle':bundle,'claim':claim,'allocation_id':key,'reserved_at':current.isoformat(),
+            'reservation_operation_id':operation_id}
         await view[grants.RUNS].insert_one(run)
         allocations={**old['allocations'],key:entry};active={key:value for key,value in claim.items()
             if key in {'allocation_id','proposal_id','execution_claim_id'}}
@@ -275,6 +314,7 @@ async def _guard_funded_command(db,*,session,snapshot,command,operation_id,curre
         'execution_claim_id':command.execution_claim_id,'status':'claimed'},
         {'$set':{'_funded_storage_operation_id':operation_id}})
     if fenced.matched_count!=1:_fail('google_funded_binding_changed')
+    await _owner_write_fence(view,user_id=scope['user_id'],operation_id=operation_id,expected_auth=record['review'].get('_owner_auth_binding'))
     result.update(funded_dispatch_authorized=False,provider_writes=0)
     return allocations,active,result
 
@@ -372,15 +412,30 @@ async def reserve_google_funded_creation(db,*,user_id,account_id,grant_key,propo
     await grants.ensure_indexes(db)
     prepared=await _prepare(db,scope=scope,grant_key=grant_key,client_factory=client_factory)
     capability=await guard.probe_google_budget_guard_transactions(db)
-    return await guard.run_google_budget_guard_transaction(db,**scope,
-        operation_id='funded_reserve_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id}),
+    operation_id='funded_reserve_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id})
+    result=await guard.run_google_budget_guard_transaction(db,**scope,operation_id=operation_id,
         capability=capability,planner=lambda snapshot:guard.FundedCreationReservation(grant_key,proposal_id,execution_claim_id,prepared))
+    if result.get('committed') is not True or result.get('kind')!='funded_reservation' or result.get('operation_id')!=operation_id:
+        _fail('google_funded_reservation_ack_unproved')
+    now=management.now();grant=prepared.payload['intent']['binding']['grant']
+    if (not pure._instant(grant['valid_from'])<=now<pure._instant(grant['expires_at'])
+        or not 0<=(now-pure._instant(prepared.payload['observed_at'])).total_seconds()<90):
+        _fail('google_funded_reservation_expired_after_commit')
+    # An in-process, exact-phase ACK continuation, NEVER a provider permission.
+    # It is not persisted/reconstructed from read_commit, nor reusable on restart.
+    result['_reservation_ack']=_ReservationAck(db,grant_key,proposal_id,execution_claim_id,operation_id,_ACK)
+    return result
 
 
-async def floor_google_funded_creation(db,*,user_id,account_id,grant_key,proposal_id,execution_claim_id,client_factory=GoogleAdsClient):
+async def floor_google_funded_creation(db,*,user_id,account_id,grant_key,proposal_id,execution_claim_id,reservation_ack=None,client_factory=GoogleAdsClient):
+    if (not isinstance(reservation_ack,_ReservationAck) or reservation_ack.db is not db or reservation_ack.proof is not _ACK
+        or reservation_ack.grant_key!=grant_key or reservation_ack.proposal_id!=proposal_id
+        or reservation_ack.execution_claim_id!=execution_claim_id or reservation_ack.used):_fail('google_funded_reservation_ack_unproved')
+    reservation_ack.used=True # Burn before the first await; unknown floor cannot retry this continuation.
     scope=_scope(user_id,account_id)
     run=await db[grants.RUNS].find_one({**scope,'grant_key':grant_key,'execution_claim_id':execution_claim_id},{'_id':0})
-    if not run or run.get('phase')!='reserved':_fail('google_funded_slot_consumed_or_pending')
+    if (not run or run.get('phase')!='reserved' or run.get('reservation_operation_id')!=reservation_ack.operation_id):
+        _fail('google_funded_slot_consumed_or_pending')
     prepared=await _prepare(db,scope=scope,grant_key=grant_key,client_factory=client_factory,allow_consumed=True)
     capability=await guard.probe_google_budget_guard_transactions(db)
     result=await guard.run_google_budget_guard_transaction(db,**scope,
