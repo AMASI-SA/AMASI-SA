@@ -208,6 +208,11 @@ db = AcceptanceConfigDatabase(client[os.environ["DB_NAME"]])
 
 # ── App / Router ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hesab — Salla Accounting API")
+from latency_api_timing import LatencyEvidenceMiddleware
+from latency_control import attach_latency_control
+from release_identity import BOOT_RELEASE_IDENTITY
+app.add_middleware(LatencyEvidenceMiddleware)
+attach_latency_control(app, db, BOOT_RELEASE_IDENTITY.get("release_id"))
 from observability_middleware import DiagnosticsMiddleware
 app.add_middleware(DiagnosticsMiddleware)
 api = APIRouter(prefix="/api")
