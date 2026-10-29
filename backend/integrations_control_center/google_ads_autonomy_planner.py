@@ -233,6 +233,13 @@ def plan_google_autonomy(*, user_id, account_id, policy, analysis, workspace, hi
                     code = "account_budget_limit"
                 elif native_action == "set_budget":
                     changes = {"budget_native": item["proposed_budget_native"]}
+        if code is None and native_action == "enable":
+            # PAUSED and the latest saved Mezan pause do not prove who stopped
+            # the campaign: external enable/pause changes may intervene. Until
+            # a complete, fresh provenance contract exists, standing authority
+            # cannot resume it. Manual owner approval and a future first-launch
+            # authority are separate paths, never inferred from this policy.
+            code = "automatic_resume_provenance_unproved"
         if code is not None:
             candidate["blockers"] = [code]
             continue
