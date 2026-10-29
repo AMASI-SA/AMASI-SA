@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
-  "state": "PUBLISHING_SINGLE_CLICK_DO_NOT_REPEAT",
+  "state": "DEPLOYED_IDENTITY_VERIFIED_3_LEASE_CLOSED_SAFE_EMPTY_PLAN_LIVE_ACCEPTANCE",
   "branch": "codex/google-catalog-stock-review-status2-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
   "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
@@ -66,8 +66,8 @@
     "Inventory50bound/source_revision/digest/date verified; remote pagination, size suitability/preparation/season/profit not proved.",
     "No policy, campaign or provider writes."
   ],
-  "production_changed": false,
-  "next_safe_action": "Readnewerexplicitfinish;do not repeatPublish. Then PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com;require3exactidentitychecks+closedlease; actualGoogle/plancatalogbehavior. Nootherhostrehearsalwhileleaseactive.",
+  "production_changed": true,
+  "next_safe_action": "Do not republish1618. Fresh production/guard status then PR1629 frozen Source A host rehearsal; keep financial automation disabled absent owner limits.",
   "source_branch": "codex/google-catalog-stock-review-source2-20261029",
   "release": {
     "pr": 1618,
@@ -78,7 +78,7 @@
     "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
     "frontend_artifact": "29c827dba6192717c8f6eea7a7161648e69a95533d8d7462467a11c927ad92d3",
     "intent_b": "f1ece7eda0d943f4e48fc9646db5800cf91b765e",
-    "published": "requested not yet verified",
+    "published": true,
     "b_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
     "actual_host_a": "PASS; frozeninstall18.76s, designatedcandidatebootstrap two cleanbuilds; wholefrozenintent exactly75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c matchesCI",
     "first_a_attempt": "buildrefusedoldintent becausecandidatebootstrapflag omitted; correcteddesignatedmode, no sourcechange",
@@ -86,7 +86,7 @@
     "b_readiness": 40941089878,
     "b_google": 40941089973,
     "b_replica": 40941089912,
-    "lease_created": false,
+    "lease_created": true,
     "merge": "2fba251ab73780d984b2c53a4f991bc98d61c441",
     "independent_pair": "PASSfullbackend1028/control243/frontend1013 exactGitrecords/fullhistory/onlyintent/two-buildproof",
     "b_ci": {
@@ -110,17 +110,40 @@
       "actor": "codex-google-catalog-stock-review-20261029",
       "prepare": "PASS",
       "prepublish": "ready_to_publish true exactM7/A31d/runtime132",
-      "lease": "active owned; waitverify"
+      "lease": "closed; root status active:false"
     },
     "publication": {
       "republish_clicks": 1,
       "publish_changes_clicks": 1,
       "baseline_finish": "2026-10-29 22:21 Asia/Riyadh",
-      "state": "Publishing…",
-      "do_not_repeat": true
+      "state": "Deployment finished",
+      "do_not_repeat": true,
+      "started": "2026-10-29 22:47 Asia/Riyadh",
+      "finished": "2026-10-29 22:56 Asia/Riyadh"
+    },
+    "live_verification": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "31d582f6fddacef63f758c82f6b80e7583025516",
+      "deployment_git_sha": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "release_id": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+      "guard_active": false,
+      "root_observed": true
     }
   },
   "host_blocker": null,
-  "updated_at": "2026-10-29T19:47:54.372Z",
-  "production_branch_changed": true
+  "updated_at": "2026-10-29T20:04:53.030Z",
+  "production_branch_changed": true,
+  "live_acceptance": {
+    "google_account": "5052346701",
+    "connection": "connected",
+    "campaigns": 22,
+    "last_sync_display": "22:55 Asia/Riyadh",
+    "plan_saved_revision": 0,
+    "fields_and_owner_limits": "blank",
+    "catalog_review": "Correctly unavailable until genuine saved plan and numeric pinned Salla product IDs exist",
+    "positive_product_inventory_review": "Not exercised on live: no genuine owner plan/pins. Unit, replica and UI contracts passed; no fabricated business plan persisted.",
+    "writes": "No plan/policy/campaign/provider writes",
+    "screenshot": "/workspace/scratch/google1618-live-plan-20261029.jpg"
+  }
 }
