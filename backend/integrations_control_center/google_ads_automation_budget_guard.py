@@ -59,6 +59,14 @@ class PolicyMutation:
 
 
 @dataclass(frozen=True)
+class FundedGrantMutation:
+    grant_key: str
+    expected_revision: int
+    action: str
+    values: Mapping
+
+
+@dataclass(frozen=True)
 class LaunchAllocation:
     allocation_id: str
     creation_identity: str
@@ -377,6 +385,12 @@ def _validate_guard(row, scope):
 
 
 def _command(command):
+    if isinstance(command, FundedGrantMutation):
+        if (not isinstance(command.grant_key,str) or not _ID.fullmatch(command.grant_key)
+            or type(command.expected_revision) is not int or not 0<=command.expected_revision<2**63-2
+            or command.action not in {'save','revoke'} or not isinstance(command.values,Mapping)):
+            _fail('google_budget_guard_command_invalid')
+        return FundedGrantMutation(command.grant_key,command.expected_revision,command.action,_plain(command.values))
     if isinstance(command, StandingDispatchFloor):
         if (any(not isinstance(value, str) or not _ID.fullmatch(value)
                 for value in (command.proposal_id, command.execution_claim_id))
@@ -610,6 +624,10 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         update = {'epoch': row['epoch'] + 1, 'last_commit': {'operation_id': operation_id, 'committed_at': stamp}}
         if isinstance(command, PolicyMutation):
             result = await _policy_write(db, scope, snapshot, command, session)
+        elif isinstance(command, FundedGrantMutation):
+            from .google_ads_funded_creation_grants import _mutate_in_transaction
+            result=await _mutate_in_transaction(db,session=session,snapshot=snapshot,
+                command=command,current=datetime.fromisoformat(stamp))
         elif isinstance(command, StandingBudgetReservation):
             from zoneinfo import ZoneInfo
             from .google_ads_management import PROPOSALS
