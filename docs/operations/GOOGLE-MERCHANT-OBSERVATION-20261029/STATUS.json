@@ -1,89 +1,94 @@
 {
   "schema_version": 1,
   "task": "google-merchant-product-observation",
-  "branch": "codex/google-merchant-observation-20261029",
-  "date_utc": "2026-10-29",
+  "status": "Bounded observer + private same-token helper accepted; route and membership remain unattached",
+  "source_sha": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
+  "source_tree": "541df25548c4e3aa2a8fb6c2aab4aaf0b8724ccb",
+  "source_branch": "codex/google-merchant-observation-20261029",
+  "checkpoint_branch": "codex/google-merchant-observation-status-20261029",
+  "pr": 1633,
   "production_base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-  "assessment_checkpoint": "5813304637c2873ebebb213009977046fb50edcd",
-  "status": "Immutable helper fix candidate:217 local unit/regression tests passed;31 real Mongo cases awaiting dedicated248-case CI; helper review still pending",
-  "owned_paths": [
-    "backend/integrations_control_center/google_merchant_product_observation.py",
-    "backend/tests/test_google_merchant_product_observation.py",
-    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/CONTRACT.md",
-    "docs/operations/GOOGLE-MERCHANT-OBSERVATION-20261029/STATUS.json",
-    ".github/workflows/google-merchant-observation.yml",
-    "backend/integrations_control_center/google_ads_reporting.py (additive bound-session helper only; existing _credential/callers/writers unchanged)",
-    "backend/tests/test_google_bound_read_session.py",
-    "backend/tests/test_google_bound_read_session_mongo.py"
-  ],
-  "current_changes": "New observer/tests plus strictly additive bound-session helper and new helper unit/Mongo tests with dedicated CI; existing _credential/callers/refresh writers unchanged; no route/provider/membership wiring",
-  "missing_shared_interface": "Opaque server-created Merchant/Ads read session binding exact owner, selected accounts, same observed grant and capabilities to transports; existing registration helper is configured-email-specific and bare Ads token plus later epoch is insufficient across relink",
-  "route_plan": "Owner-triggered read-only GET /google_ads/merchant-products/observation with explicit account_id and merchant_id, server membership and full native product_link checks before read plus scope/grant recheck before return; no selection mutation or default account",
-  "validation": {
-    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_merchant_product_observation.py",
-    "passed": 114,
-    "skipped": 0,
-    "seconds": 1.53,
-    "warnings_as_errors": true,
-    "provider_calls": false,
-    "credential_reads": false,
-    "independent_review": "Original99 cases independently passed; one versionNumber int64 bound finding confirmed and fixed; successor review pending",
-    "ci": "Root assigned .github/workflows/google-merchant-observation.yml; not yet added"
-  },
-  "retail_source_unchanged": "c0ce749cab1f4c30c4f09432a432bd109495a2b9 on fresh foreign Reports base fda86238dda9700806c0d700e9e411c1674c9bad; old1629pair superseded/unpublished",
-  "scope_limits": [
-    "No product mapping or simple/variant proof",
-    "No Google provider calls, credentials or new scopes",
-    "No auth/router/shared files modified",
-    "Complete traversal is not an atomic provider snapshot"
-  ],
   "production_changed": "no",
-  "next": "Save immutable successor/DraftPR; inspect actual248-case replicaCI and full regression workflows, independent helper fix review. Root separately owns later owner/account/native product_link route contract; do not publish or wire based on pure/session tests alone.",
-  "observer_contract_notes": [
-    "Merchant v1 legacyLocal is retained as local/standard identity; false is not promoted to verified Google Ads ONLINE channel",
-    "Protobuf omitted false scalar is accepted only with consistent native resource; no truthy coercion",
-    "Optional link absence preserves unknown destination, never verified mapping",
-    "No partial rows escape a malformed/incomplete traversal; semantic digest excludes times, token and ordering"
-  ],
-  "fixed_review_finding": "versionNumber now accepts only canonical signed int64 strings within -9223372036854775808..9223372036854775807; native metadata is not a timestamp or an independent freshness/authority proof",
-  "observer_independent_review": {
-    "source": "2f6a6ff7480208dc3a0e874a091f34630ee6e5b3",
-    "tree": "254efddc1ef4073e3561adc1da8b2c461e4822da",
-    "product_acceptance": "Bounded pure-observer PASS;114 independent-Werror0skip1.40s; no authenticated/live/route claim",
-    "root": "Read full277-line observer and independently114-Werror0skip1.23s; bounded pure source PASS"
+  "runtime_available": false,
+  "scope": "Pure bounded Merchant v1 observer and strictly additive private bound-read session; existing OAuth writers and signatures unchanged",
+  "tests": {
+    "exact_source_local": {
+      "passed": 217,
+      "skipped": 0,
+      "warnings_as_errors": true,
+      "seconds": 2.07,
+      "command": "env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_bound_read_session.py backend/tests/test_google_merchant_product_observation.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_credential_refresh_cas.py",
+      "initial_environment_failure": "14 existing reporting tests could not construct HTTPX due host optional SOCKS dependency; rerun removed only proxy variables, no source/test weakening"
+    },
+    "independent": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "bounded PASS",
+      "passed": 217,
+      "skipped": 0,
+      "seconds": 1.82,
+      "original_iterator_leak": "Inner consumer receives sanitized GoogleBoundReadError only",
+      "original_cleanup_hang": "Accelerated .01s body timeout plus real2s cleanup completed2.013s",
+      "external_cancellation": "Both close coroutines terminated",
+      "limits": "No owner/account/native membership, route, real grant or live provider acceptance"
+    },
+    "dedicated_ci": {
+      "run": 40951394373,
+      "job": 123720142328,
+      "passed": 248,
+      "skipped": 0,
+      "seconds": 8.18,
+      "new_actual_mongo": 10,
+      "existing_cas_actual_mongo": 21,
+      "mongo": "8.0.26 disposable loopback replica Ubuntu22.04",
+      "synthetic_merge": "e3be17cdc002a3b4cc9b1d8f36b38a2571fdf4b6",
+      "synthetic_tree": "52bd23fe30d0f109455a8ab28512d2ee56f16a12",
+      "parents": [
+        "fda86238dda9700806c0d700e9e411c1674c9bad",
+        "ca5648d4906a4cb0ab170998c1d28491921f43bc"
+      ]
+    },
+    "full_google_ci": {
+      "run": 40951394390,
+      "backend": 1242,
+      "skipped": 0,
+      "seconds": 33.37,
+      "frontend": 237,
+      "frontend_suites": 18,
+      "build_seconds": 5.89
+    },
+    "cas_ci": {
+      "run": 40951394348,
+      "primary": 69,
+      "regression": 71
+    },
+    "readiness": {
+      "run": 40951393904,
+      "source": "ca5648d4906a4cb0ab170998c1d28491921f43bc",
+      "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
+      "preflight": 156,
+      "double_build_seconds": [
+        3.7,
+        3.93
+      ],
+      "qualification": "Old-base WIP source, not a fresh production handoff or host/deployment proof"
+    },
+    "all_pr_workflows": "14 of14 completed success, no retries"
   },
-  "helper_validation": {
-    "scope": "same-token private Ads reads/fixed Merchant stream, PRIMARY majority exact BSON snapshot incl absent/null/types, safe repr/errors, no raw client/token/header return",
-    "local_command": "env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_bound_read_session.py backend/tests/test_google_merchant_product_observation.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_credential_refresh_cas.py",
-    "passed": 217,
-    "skipped": 0,
-    "warnings_as_errors": true,
-    "first_attempt": "14 existing reporting tests could not construct HTTPX because host SOCKS proxy optional dependency absent; no provider calls. Rerun removed only proxy environment keys, with no source/test weakening.",
-    "real_mongo": "10 new bound-session races +21 existing refresh CAS races collected, not locally executed; dedicated replica CI pending",
-    "independent_helper_review": "Prior2a887 rejected for iterator error exposure and unbounded timeout cleanup; fixes/new regressions pending independent successor review",
-    "scope_authorization": "Not proved by helper; owner/account/native product_link checks remain separate and unattached",
-    "seconds": 2.07
-  },
-  "helper_red_green": {
+  "reviewed_fixes": {
     "rejected_source": "2a8873826ba7970d34c25cc9e6f21d58e76aa11b",
-    "red": "Root and independent product_acceptance both reproduced raw iterator sentinel caught inside stream context, and close-hang after expired outer deadline.211 old tracked tests passed but did not cover these cases.",
-    "green": "Iterator-local safe raise fromNone, separate finite cleanup deadlines with both close operations awaited, explicit initial-setup cancellation cleanup. Six new adversarial/lifecycle cases pass within217 local tests.",
-    "new_cases": [
-      "test_iterator_sanitizes_before_consumer_can_catch_inside_stream_context",
-      "test_expired_body_deadline_cannot_leave_cleanup_hung_or_background_closer",
-      "test_initial_current_read_cancellation_is_finite_and_constructs_no_clients[cancel]",
-      "test_initial_current_read_cancellation_is_finite_and_constructs_no_clients[timeout]",
-      "test_partial_client_construction_failure_closes_existing_client_safely",
-      "test_context_exit_refuses_expiry_even_when_credential_document_did_not_change"
-    ]
+    "changes": [
+      "Iterator-local exception sanitization before an inner consumer can catch it",
+      "Independent bounded concurrent cleanup and cancellation-safe setup",
+      "Signed canonical int64 observer versionNumber bounds"
+    ],
+    "timeout_contract": "Setup/body90s plus separate up-to2s concurrent cleanup, not hard90s total"
   },
-  "dedicated_ci": {
-    "workflow": ".github/workflows/google-merchant-observation.yml",
-    "required_total": 248,
-    "new_real_mongo": 10,
-    "existing_real_mongo": 21,
-    "skips_allowed": 0,
-    "mongo": "8.0.26 disposable loopback replica on Ubuntu22.04",
-    "state": "pending"
-  }
+  "limits": [
+    "No route attachment, frontend, native Ads/Merchant membership proof or general connection restoration",
+    "No live provider or actual credentials accessed by this task",
+    "No store-to-feed mapping, simple/variant proof, category/attribution upgrade or execution authorization",
+    "Complete Merchant traversal is not an atomic provider snapshot",
+    "Owner-selected association remains unverified; no SKU/title/URL-alone inference"
+  ],
+  "next": "Assigned new isolated branch directly from ca564 for owner-only route/native membership checks using frozen helper and observer. Root owns final attachment, fresh production integration, Release Guard and deployment."
 }
