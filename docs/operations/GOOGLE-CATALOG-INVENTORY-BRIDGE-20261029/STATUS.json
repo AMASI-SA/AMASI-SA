@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-CATALOG-INVENTORY-BRIDGE-20261029",
-  "state": "MERGED_APP_MATERIALIZATION_PENDING_PUBLICATION",
+  "state": "PUBLISHING_SINGLE_CLICK_DO_NOT_REPEAT",
   "branch": "codex/google-catalog-stock-review-status2-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
   "scope": "Read-only saved pinned catalog review adds bounded source-bound stored inventory proof; no remote completeness, size/preparation/profit/advertising eligibility guarantee",
@@ -67,7 +67,7 @@
     "No policy, campaign or provider writes."
   ],
   "production_changed": false,
-  "next_safe_action": "Confirmappadapterpass; prepareactorcodex-google-catalog-stock-review-20261029, immediateprepublish/singlepublish; newerfinishthan22:21Riyadh thenverify3/closedlease/live. No duplicateclick.",
+  "next_safe_action": "Readnewerexplicitfinish;do not repeatPublish. Then PYTHONDONTWRITEBYTECODE=1 python -B scripts/production_release_guard.py verify --url https://mezansalla.com;require3exactidentitychecks+closedlease; actualGoogle/plancatalogbehavior. Nootherhostrehearsalwhileleaseactive.",
   "source_branch": "codex/google-catalog-stock-review-source2-20261029",
   "release": {
     "pr": 1618,
@@ -78,7 +78,7 @@
     "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
     "frontend_artifact": "29c827dba6192717c8f6eea7a7161648e69a95533d8d7462467a11c927ad92d3",
     "intent_b": "f1ece7eda0d943f4e48fc9646db5800cf91b765e",
-    "published": false,
+    "published": "requested not yet verified",
     "b_tree": "9fb413d1b6342fc365fe45aef0f5876eddda790c",
     "actual_host_a": "PASS; frozeninstall18.76s, designatedcandidatebootstrap two cleanbuilds; wholefrozenintent exactly75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c matchesCI",
     "first_a_attempt": "buildrefusedoldintent becausecandidatebootstrapflag omitted; correcteddesignatedmode, no sourcechange",
@@ -104,9 +104,23 @@
       "codeql": 40941089675,
       "root_logs_verified": true
     },
-    "app_materialization": "runningatM7"
+    "app_materialization": "PASS61.05s atM7; source/runtime/fullpackage match",
+    "app_recovery": "Initialadapter refusedtwo existingbackendroot pyc timestamp17:59:32Z. Guardinactive/trackedsourcesclean; preservedby movingwholecache to/tmp/google1618-bytecode-quarantine; no deletion/sourcechange; retryPASS",
+    "guard": {
+      "actor": "codex-google-catalog-stock-review-20261029",
+      "prepare": "PASS",
+      "prepublish": "ready_to_publish true exactM7/A31d/runtime132",
+      "lease": "active owned; waitverify"
+    },
+    "publication": {
+      "republish_clicks": 1,
+      "publish_changes_clicks": 1,
+      "baseline_finish": "2026-10-29 22:21 Asia/Riyadh",
+      "state": "Publishing…",
+      "do_not_repeat": true
+    }
   },
   "host_blocker": null,
-  "updated_at": "2026-10-29T19:42:53.138Z",
+  "updated_at": "2026-10-29T19:47:54.372Z",
   "production_branch_changed": true
 }
