@@ -1,5 +1,5 @@
 {
-  "status": "native_UI_source_checkpoint_pending_fresh_CI_and_independent_review_not_release_source",
+  "status": "bounded_integration_pass_release_readiness_blocked_pending_fresh_production_source",
   "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
   "accepted_base_tree": "1d0678a2fc3d15f7fff2aa430bfe434e9ec10f45",
   "fixed_validation_gap": "Prior1627/1630 integration acceptance was withdrawn after real writer omits acknowledge_review. Accepted1636 Fields/Input split remains unchanged. All three UI fixtures now generated through actual management HTTP PUT then evidence GET/POST; stored fields explicitly omit acknowledge_review and expected_revision. Actual parent tests consume writer-produced parent fixtures.",
@@ -8,10 +8,244 @@
     "red": "Three fixture parity tests initially failed on missing actual native parent route.",
     "local_writer_fixture_parity": "3 passed -Werror /0 skips1.07s",
     "local_ui": "291 passed/11 suites2.888s including actual parent category→explicit native POST, edit/save/reload/category refresh/owner cancellation",
-    "planned": "Saved-fields CI strict149 total incl nine actualMongo (eight accepted writer regressions+one actual parent router writer→category→native), native44 incl seven actualMongo plus fixture parity, native11 UI suites/build, fullGoogle backend/UI/build. ReleaseReadiness ancestry failure remains non-bypassable pending fresh production source.",
-    "local_backend": "62 passed -Werror/zero skips1.76s including three actual management writer→reader fixture parity tests"
+    "local_backend": "62 passed -Werror/zero skips1.76s including three actual management writer→reader fixture parity tests",
+    "ci": {
+      "saved_fields": {
+        "run": 40952219614,
+        "job": 123723007000,
+        "passed": 149,
+        "real_mongo": 9,
+        "skips": 0,
+        "seconds": 5.9
+      },
+      "native": {
+        "run": 40952219700,
+        "backend_job": 123723007219,
+        "passed": 44,
+        "real_mongo": 7,
+        "skips": 0,
+        "seconds": 5.03,
+        "frontend_job": 123723006863,
+        "ui": 291,
+        "suites": 11,
+        "build_seconds": 6.76
+      },
+      "full": {
+        "run": 40952219612,
+        "backend_job": 123723007552,
+        "backend": 1463,
+        "backend_seconds": 43.02,
+        "frontend_job": 123723006582,
+        "ui": 455,
+        "suites": 26,
+        "build_seconds": 4.77
+      },
+      "actual_logs_read": true
+    },
+    "preserved_ci": {
+      "linked": {
+        "run": 40952219643,
+        "job": 123723007311,
+        "passed": 49,
+        "real_mongo": 11,
+        "skips": 0,
+        "seconds": 4.1
+      },
+      "live_category": {
+        "run": 40952219629,
+        "job": 123723006747,
+        "passed": 48,
+        "real_mongo": 8,
+        "skips": 0,
+        "seconds": 3.65
+      },
+      "category_membership": {
+        "run": 40952219586,
+        "job": 123723006467,
+        "passed": 38,
+        "real_mongo": 9,
+        "skips": 0,
+        "seconds": 2.97
+      },
+      "store_observations": {
+        "run": 40952219721,
+        "job": 123723008007,
+        "passed": 91,
+        "real_mongo": 14,
+        "skips": 0,
+        "seconds": 5.64
+      },
+      "actual_logs_read": true
+    }
   },
   "scope": "Explicit owner selection for reading1–5 observed nonexcluded category products only, no automatic POST. Unresolved exclusions disable native read. Savedrevision/fullfields/category result/selection/dirty/owner/unmount cancellation and late discard. Parent and variant stock separate; unknown/unlimited/partial traversal/rawlabels/timestamps/non-atomic snapshot displayed. No plan or ad selection authority.",
   "prohibited": "No live owner-plan/provider/host writes, migration, lease, deployment or ads launch. Frozen8dc,1627,1630 and storage recipe unchanged.",
-  "next": "Inspect exact-source CI logs, independent review, durable final handoff. Root owns later fresh production source and readiness; storage integration takes priority immediately after retail production merge."
+  "next": "Inspect exact-source CI logs, independent review, durable final handoff. Root owns later fresh production source and readiness; storage integration takes priority immediately after retail production merge.",
+  "source": {
+    "sha": "e51b76393c517f7875d447ed242ec5af054ac918",
+    "tree": "3d5e29882db54af430e07e39ff091fba16ce382e",
+    "local_equivalent": "307347dd4cf4b519554e9b122ec6434f14ed73a2",
+    "pr": 1637,
+    "branch": "codex/google-native-inventory-ui-integration-20261029",
+    "frozen": true
+  },
+  "ci_checkout": {
+    "sha": "40ecb9a4e81f1d17dd6684356607151687260132",
+    "tree": "17fac3baef70c6ceefd590244eeb349ceaea9182",
+    "parents": [
+      "fda86238dda9700806c0d700e9e411c1674c9bad",
+      "e51b76393c517f7875d447ed242ec5af054ac918"
+    ],
+    "qualification": "CI is source merged into current Reports production; CI merge tree is NOT equal to source tree.",
+    "git_api_verified": true
+  },
+  "independent_review": {
+    "agent": "google_product_acceptance",
+    "verdict": "bounded integration PASS; no blocking findings; NOT release/live-provider acceptance",
+    "source": "e51b76393c517f7875d447ed242ec5af054ac918",
+    "tree": "3d5e29882db54af430e07e39ff091fba16ce382e",
+    "backend": 62,
+    "backend_seconds": 1.76,
+    "flags": "-W error; zero skips",
+    "ui": 291,
+    "suites": 11,
+    "ui_seconds": 2.336,
+    "actual_ci_logs_read": true,
+    "proof": "Actual HTTP writer→all three readers fixture parity and actual Mongo parent PUT→category→native close prior ack-shape gap; actual parent UI consumes writer-produced fixtures; accepted backend8dc exact except two router lines; owner/scope/max5/exclusions/late cancellation and qualified stock wording reviewed."
+  },
+  "release_readiness": {
+    "run": 40952219788,
+    "frontend_job": 123723008206,
+    "status": "failure",
+    "reason": "Current production fda86238 is not an ancestor of feature source e51b; inherited release intent frontend hash differs for GoogleCommercialPlan.jsx.",
+    "actual_log_read": true,
+    "retry_or_bypass": false,
+    "required": "Root must selectively prepare fresh direct-current-production Source A and complete new required CI/A-B/merge/deploy verification."
+  },
+  "evidence_branch": "codex/google-native-inventory-ui-status-20261029",
+  "root_review": {
+    "verdict": "bounded UI integration accepted; not deployment acceptance",
+    "source": "e51b76393c517f7875d447ed242ec5af054ac918",
+    "backend": 27,
+    "flags": "-Werror",
+    "backend_seconds": 1.4,
+    "ui": 291,
+    "ui_seconds": 2.28,
+    "actual_ci_logs_read": true,
+    "reviewed": "Full native UI/service, actual writer fixtures, and parent seam. Initial direct Jest invocation failed configuration before tests; corrected react-scripts command passed without source change."
+  },
+  "workflows": {
+    "total": 18,
+    "passed": 17,
+    "runs": [
+      {
+        "id": 40952219788,
+        "name": "Mezan Release Readiness",
+        "status": "completed",
+        "conclusion": "failure"
+      },
+      {
+        "id": 40952219796,
+        "name": "Snapchat Settings Management V2",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219600,
+        "name": "Google product evidence contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219603,
+        "name": "Google catalog review replica",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219614,
+        "name": "Google saved plan fields contract",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219721,
+        "name": "Google store product observations",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219643,
+        "name": "Google linked campaign evidence",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219616,
+        "name": "Snapchat Direct Active Publication",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219611,
+        "name": "Qoyod Payment Freshness",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219619,
+        "name": "Operational Stock Eligibility",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219662,
+        "name": "Operational Balance Web",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219586,
+        "name": "Google category membership",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219598,
+        "name": "Security Gate",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219629,
+        "name": "Google live category preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219612,
+        "name": "Google Ads full management",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219700,
+        "name": "Google native inventory preview",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219718,
+        "name": "G47 Focused Integration",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 40952219632,
+        "name": "CodeQL",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  }
 }
