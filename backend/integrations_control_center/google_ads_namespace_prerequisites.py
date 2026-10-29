@@ -64,11 +64,16 @@ async def _command(db, value, session):
 
 
 async def _rows(db, command, session):
-    reply = await _command(db, command, session); _ack(reply)
-    cursor = reply.get('cursor')
-    if not isinstance(cursor, dict) or not isinstance(cursor.get('firstBatch'), list): raise _problem()
-    rows, cursor_id = cursor['firstBatch'], cursor.get('id')
-    if not isinstance(cursor_id, int) or isinstance(cursor_id, bool) or cursor_id < 0: raise _problem()
+    try:
+        reply = await _command(db, command, session); _ack(reply)
+        cursor = reply.get('cursor')
+        if not isinstance(cursor, dict) or not isinstance(cursor.get('firstBatch'), list): raise _CursorCleanupUnconfirmed()
+        rows, cursor_id = cursor['firstBatch'], cursor.get('id')
+        if not isinstance(cursor_id, int) or isinstance(cursor_id, bool) or cursor_id < 0: raise _CursorCleanupUnconfirmed()
+    except Exception:
+        # A lost reply can conceal a newly created server cursor. Do not open
+        # another diagnostic until this process is repaired/restarted.
+        raise _CursorCleanupUnconfirmed() from None
     complete = cursor_id == 0
     if cursor_id:
         # Close only the cursor returned by THIS command, in this database and
@@ -169,7 +174,7 @@ def _inventory(label, rows, owner):
             valid &= (row.get('_id') == expected and type(row.get('protocol')) is int and row['protocol'] == 1
                 and type(row.get('epoch')) is int and 0 <= row['epoch'] < 2**63
                 and row.get('allocations_type') == 'object' and type(row.get('allocations_count')) is int
-                and 0 <= row['allocations_count'] <= 200 and row.get('claim_type') in ('null', 'object'))
+                and 0 <= row['allocations_count'] <= 100 and row.get('claim_type') in ('null', 'object'))
             pending += row.get('claim_type') == 'object' or type(row.get('allocations_count')) is int and row['allocations_count'] > 0
         malformed += not valid
     return {'records_checked': len(rows), 'malformed_count': int(malformed), 'duplicate_scope_count': int(duplicates),

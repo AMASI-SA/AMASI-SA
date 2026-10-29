@@ -7,8 +7,8 @@
   "engine_commit_verified": false,
   "live_calls": false,
   "local_tests": {
-    "backend": "115 passed -W error in 2.84s; includes 20 new unit cases and 95 existing policy cases",
-    "frontend": "20 passed (5 new +15 workspace), prior checkpoint; no frontend changes since"
+    "backend": "117 passed -W error in2.68s:22new+95existing",
+    "frontend": "20 passed fresh run in1.455s"
   },
   "actual_mongo": "Not run locally: disposable authenticated replica CI pending; no production capability claim",
   "preserved": "Six existing policy handlers, frozen diagnostic helpers and budget runtime unchanged. Root must preserve newer Reports M6 when selectively integrating; do not merge this WIP history into release.",
@@ -20,5 +20,7 @@
     "createIndex boolean is PUT readiness only; existing offline OAuth save/revoke behavior unchanged",
     "No TTL/autorelease and no runtime budget flag enablement"
   ],
-  "next": "Remote immutable WIP checkpoint, independent review and authenticated real replica CI; resolve evidenced findings before root selective release."
+  "next": "Remote immutable WIP checkpoint, independent review and authenticated real replica CI; resolve evidenced findings before root selective release.",
+  "review": "Independent audit identified lost cursor reply slot and guard allocation bound mismatch; fixed with two new tests. Immutable rereview pending.",
+  "ci_first_attempt": "40932637535:115pass9Mongo failure due unit-test monkeypatch restoring deliberate sticky state at teardown; fixture cleanup fixed. No actual Mongo capability claim from failed attempt."
 }

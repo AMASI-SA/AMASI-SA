@@ -162,4 +162,27 @@ async def test_uncertain_own_cursor_cleanup_blocks_further_probe_resources(monke
         assert second.json()['detail']['code']=='google_namespace_audit_busy' and len(db.calls)==before
         assert 'private_cleanup_marker' not in response.text
     finally:
-        monkeypatch.setattr(audit,'_active',None)
+        audit._active=None
+
+
+@pytest.mark.asyncio
+async def test_lost_cursor_creation_reply_also_closes_resource_slot():
+    db=DB();original=db.command
+    async def command(value,**kw):
+        if 'listCollections' in value:raise ConnectionError('private_lost_reply_marker')
+        return await original(value,**kw)
+    db.command=command
+    try:
+        response=await request(db)
+        assert response.status_code==503 and audit._active['resource_unconfirmed']
+        assert db.sessions[0].ended
+        assert (await request(db)).json()['detail']['code']=='google_namespace_audit_busy'
+        assert 'private_lost_reply_marker' not in response.text
+    finally:audit._active=None
+
+
+def test_guard_shape_respects_runtime_allocation_bound():
+    import hashlib
+    row={'account':'123','protocol':1,'epoch':0,'allocations_type':'object','allocations_count':101,'claim_type':'null'}
+    row['_id']='google_budget_'+hashlib.sha256(json.dumps({'user_id':'owner','account_id':'123'},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    assert audit._inventory('account_guard',[row],'owner')['malformed_count']==1
