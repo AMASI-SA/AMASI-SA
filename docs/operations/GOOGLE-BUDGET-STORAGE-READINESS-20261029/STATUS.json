@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-BUDGET-STORAGE-READINESS-20261029",
-  "state": "WIP diagnostic only; not deployed",
+  "state": "WIP: cleanup retention fixed; Motor abort acknowledgement contract requires review",
   "branch": "codex/google-budget-storage-readiness-20261029",
   "base_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
   "scope": "Owner-only explicit storage transaction diagnostic, no six-handler migration",
@@ -16,18 +16,24 @@
     ]
   },
   "verification": {
-    "backend": "106 passed in 2.73s after normal production M2 merge, no skips",
+    "backend": "106 passed in 2.53s with -W error; abort suppresses cancellation until explicit test release, second probe denied, original task awaited to completion, slot cleared, next probe allowed",
     "frontend": "19 passed in 1.29s with governed Node22.23.2/Yarn1.22.22",
-    "actual_mongo": {
+    "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base",
+    "actual_mongo_previous_sha": {
       "run_id": 40908995457,
       "job_id": 123571481048,
       "conclusion": "success",
       "result": "107 passed in 4.36s; failures/errors/skips0; includes actual disposable replica write+abort proof preserving foreign data and existing policy"
-    },
-    "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base"
+    }
   },
-  "next_safe_action": "Review source, run disposable Mongo CI, normal merge actual production inventory M, review diagnostic before any release. Parent owns release and any production probe.",
+  "next_safe_action": "Independent review cleanup lifecycle fix and address Motor abort acknowledgement semantics before creating a release source. Parent owns releases; preserve all WIP ancestry.",
   "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
   "code_checkpoint_sha": "1a31164cb3e4a5d4125a4aaf708be4ba072b0581",
-  "pull_request": 1603
+  "pull_request": 1603,
+  "cleanup_contract": "At most one pending diagnostic task per process, held by strong reference until its original task closes session/CSOT. HTTP deadline remains8s; unfinished cleanup rejects subsequent probes503; no retries or unbounded cleanup await in HTTP handler.",
+  "motor_assessment": {
+    "evidence": "Motor3.7.1 AsyncIOMotorClientSession.__aexit__ calls synchronous delegate.__exit__. PyMongo4.18.3 ClientSession.abort_transaction swallows OperationFailure/ConnectionFailure per spec. Source inspected locally; no live fault injection.",
+    "limitation": "Normal abort helper completion alone does not prove server abort acknowledgement. Existing result claim needs bounded command-ack proof or revised diagnostic contract before release. Unit fake context warning is not evidence of production driver failure.",
+    "production_claim": "No production Mongo capability, abort acknowledgement, funding readiness or majority commit durability proved."
+  }
 }

@@ -12,6 +12,9 @@ from .google_ads_management import problem
 
 PROBE_COLLECTION = "google_ads_budget_storage_readiness_probes"
 TIMEOUT_SECONDS = 8
+# One strong reference bounds both active probes and delayed session cleanup.
+# A timed-out task retains this slot until its original task exits CSOT/session.
+_active_probe = None
 
 
 def _result(verified):
@@ -27,6 +30,11 @@ async def verify_budget_storage(db):
     request. No capability object escapes this diagnostic. A successful abort
     acknowledgement is mandatory for success; any uncertainty fails closed.
     """
+    global _active_probe
+    if _active_probe is not None and not _active_probe.done():
+        raise problem("google_budget_storage_probe_busy",
+            "يوجد تحقق تخزين لم ينتهِ تنظيف جلسته بعد؛ لم يبدأ تحقق جديد.", 503)
+
     async def probe():
         async with await db.client.start_session() as session:
             hello = await db.command("hello", session=session)
@@ -49,22 +57,25 @@ async def verify_budget_storage(db):
             return await probe()
 
     task = asyncio.create_task(bounded_probe())
+    _active_probe = task
     # wait_for waits for cancellation cleanup; a stuck abort would then exceed
     # the HTTP deadline. Bound the response independently while the driver-owned
     # session cleans up only its own transaction. Never retry this probe.
     def consume(done):
+        global _active_probe
         if not done.cancelled():
             done.exception()
+        if _active_probe is done:
+            _active_probe = None
+    task.add_done_callback(consume)
     try:
         done, _ = await asyncio.wait({task}, timeout=TIMEOUT_SECONDS)
         if not done:
             task.cancel()
-            task.add_done_callback(consume)
             raise TimeoutError()
         return task.result()
     except asyncio.CancelledError:
         task.cancel()
-        task.add_done_callback(consume)
         raise
     except Exception:
         # Do not expose driver messages, connection strings, hosts or DB names.

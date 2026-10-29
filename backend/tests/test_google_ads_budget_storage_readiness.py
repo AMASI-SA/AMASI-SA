@@ -1,5 +1,6 @@
 """Actual diagnostic/ASGI contract with isolated transaction lifecycle fake."""
 import asyncio
+import time
 from types import SimpleNamespace
 
 from fastapi import FastAPI, APIRouter, HTTPException
@@ -21,7 +22,13 @@ class Session:
         self.active = True; self.db.started += 1
     async def abort_transaction(self):
         self.db.aborted += 1
-        if self.db.failure == 'abort_timeout': await asyncio.Event().wait()
+        if self.db.failure == 'abort_timeout':
+            self.db.abort_entered.set()
+            while not self.db.release_abort.is_set():
+                try:
+                    await self.db.release_abort.wait()
+                except asyncio.CancelledError:
+                    self.db.cancellation_seen.set()
         if self.db.failure == 'abort': raise RuntimeError('private-db-name')
         self.active = False
 
@@ -31,6 +38,7 @@ class ProbeDB:
         self.owner = OwnerDB(); self.users = self.owner.users
         self.users.rows.append({"id":"staff", "role":"staff", "owner_id":"owner"})
         self.failure = failure; self.started = self.aborted = self.writes = 0
+        self.abort_entered = asyncio.Event(); self.release_abort = asyncio.Event(); self.cancellation_seen = asyncio.Event()
         self.documents = []; self.client = SimpleNamespace(start_session=self.session)
     async def session(self): return Session(self)
     async def command(self, name, *, session):
@@ -79,7 +87,7 @@ async def test_auth_failure_never_starts_database_probe(user,status):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure', ['standalone','write','abort','unacknowledged','timeout','abort_timeout'])
+@pytest.mark.parametrize('failure', ['standalone','write','abort','unacknowledged','timeout'])
 async def test_fail_closed_sanitized_bounded_probe(monkeypatch,failure):
     db = ProbeDB(failure)
     monkeypatch.setattr(readiness, 'TIMEOUT_SECONDS', .02)
@@ -90,7 +98,10 @@ async def test_fail_closed_sanitized_bounded_probe(monkeypatch,failure):
     assert 'private-db' not in str(error.value.detail) and 'secret-host' not in str(error.value.detail)
     if failure == 'standalone': assert db.started == db.writes == db.aborted == 0
     else:
-        await asyncio.sleep(0)  # cancellation delivers the owned-session abort
+        task = readiness._active_probe
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0)
         assert db.aborted >= 1
 
 
@@ -100,3 +111,35 @@ async def test_probes_never_reuse_document_or_session():
     await readiness.verify_budget_storage(db); await readiness.verify_budget_storage(db)
     assert db.documents[0]['_id'] != db.documents[1]['_id']
     assert db.started == db.writes == db.aborted == 2
+
+
+@pytest.mark.asyncio
+async def test_delayed_abort_is_retained_bounds_concurrency_and_finishes_in_own_context(monkeypatch):
+    monkeypatch.setattr(readiness, 'TIMEOUT_SECONDS', .02)
+    db = ProbeDB('abort_timeout')
+    started = time.monotonic()
+    with pytest.raises(HTTPException) as error:
+        await readiness.verify_budget_storage(db)
+    assert error.value.detail['code'] == 'google_budget_storage_unverified'
+    assert time.monotonic() - started < .5
+    task = readiness._active_probe
+    assert task is not None and not task.done()
+    await asyncio.wait_for(db.cancellation_seen.wait(), timeout=.5)
+    second = ProbeDB()
+    try:
+        with pytest.raises(HTTPException) as busy:
+            await readiness.verify_budget_storage(second)
+        assert busy.value.status_code == 503
+        assert busy.value.detail['code'] == 'google_budget_storage_probe_busy'
+        assert second.started == second.writes == second.aborted == 0
+        assert readiness._active_probe is task and not task.done()
+    finally:
+        db.release_abort.set()
+        result = await asyncio.wait_for(asyncio.shield(task), timeout=.5)
+        assert result['storage_verified'] is True  # result discarded by expired HTTP request
+        await asyncio.sleep(0)  # consume callback releases the slot
+    assert readiness._active_probe is None
+    assert (db.started, db.writes, db.aborted) == (1, 1, 1)
+    assert (await readiness.verify_budget_storage(second))['storage_verified'] is True
+    await asyncio.sleep(0)
+    assert readiness._active_probe is None
