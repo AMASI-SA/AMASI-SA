@@ -4,7 +4,7 @@
   "date_utc": "2026-10-29",
   "branch": "codex/google-retail-integrated-20261029",
   "production_base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "status": "combined source locally tested; immutable CI and independent integration review pending; not deployment-ready",
+  "status": "reviewed combined source and all CI successful; ready for root release preparation, not deployed",
   "owned_files": [
     "backend/integrations_control_center/google_ads_ai.py",
     "backend/integrations_control_center/google_ads_management.py",
@@ -64,11 +64,98 @@
       "seconds": 11.867,
       "scope": "same18 frontend paths as Google Ads full management workflow; governed Node22.23.2/Yarn1.22.22; unchanged frozen lock"
     },
-    "combined_mongo_ci": "pending real Mongo8.0.26 full workflow",
-    "independent_integration_review": "pending",
+    "combined_mongo_ci": {
+      "run": 40938463175,
+      "conclusion": "success",
+      "synthetic_merge": "14d99f6cbcefa9166f87ce081d0f69c73b9c5e36",
+      "synthetic_tree": "55bed05e7707b620f196e7eb1447d38cb6b5842e",
+      "parents": [
+        "e51f5b88b68905460417a01fb9ceb3704706c168",
+        "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d"
+      ],
+      "scope": "PR synthetic merge verified tree-equal to reviewed source; actual logs inspected by implementing agent; Google provider remains fake",
+      "backend": {
+        "job": 123675163689,
+        "passed": 1307,
+        "skipped": 0,
+        "seconds": 31.7,
+        "mongo": "8.0.26; mongodb://127.0.0.1:27017; disposable CI service",
+        "coverage": "Includes22 retail management cases: positive PAUSED Shopping/PMax dispatch and exact identity/feed/inventory drift refusal before mutate."
+      },
+      "frontend": {
+        "job": 123675164073,
+        "passed": 252,
+        "suites": 18,
+        "skipped": 0,
+        "build_seconds": 6.18
+      }
+    },
+    "independent_integration_review": {
+      "reviewer": "budget_audit",
+      "verdict": "bounded PASS; no confirmed integration finding",
+      "source": "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d",
+      "tree": "55bed05e7707b620f196e7eb1447d38cb6b5842e",
+      "backend": {
+        "passed": 308,
+        "skipped": 0,
+        "warnings_as_errors": true,
+        "seconds": 5.96
+      },
+      "composer": {
+        "passed": 51,
+        "skipped": 0,
+        "seconds": 4.234,
+        "command": "npm test focused Composer suite"
+      },
+      "checks": [
+        "Direct M6 parent and exact12-file diff.",
+        "Nine backend blobs match c7; two UI files match097.",
+        "No direct Reports/CAS/resume modifications.",
+        "No additional integration finding in inspected scope."
+      ],
+      "preliminary_run_limit": "Earlier different test scope returned171passed/49Mongo skips because no local Mongo; this is not final Mongo evidence. Actual Mongo evidence is separately inspected combined CI.",
+      "live_proof": false
+    },
     "release_guard_host": "untouched",
     "provider_calls": false,
-    "paid_writes": false
+    "paid_writes": false,
+    "readiness": {
+      "run": 40938463138,
+      "frontend_job": 123675164056,
+      "backend_job": 123675163495,
+      "conclusion": "success",
+      "scope": "source candidate classification, governed reproducible double frontend build and backend preflight; no release Intent B frozen here"
+    },
+    "all_commit_workflows": {
+      "checked_source": "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d",
+      "result": "all11 completed successfully",
+      "runs": {
+        "google_full_management": 40938463175,
+        "release_readiness": 40938463138,
+        "codeql": 40938463137,
+        "security_gate": 40938463294,
+        "google_catalog_replica": 40938463218,
+        "operational_stock": 40938463123,
+        "operational_balance": 40938463169,
+        "g47": 40938463160,
+        "qoyod_freshness": 40938463189,
+        "snapchat_settings": 40938463132,
+        "snapchat_publication_scope": 40938463151
+      }
+    }
   },
-  "next": "Save combined source and draft PR; run integrated CI and independent review; root later refreshes production and creates fresh v5 Source A/Intent B."
+  "next": "Root fetches current production again, preserves concurrent releases/route attachments, incorporates this reviewed combined source, and creates fresh Source A plus Intent-only B. Complete Release Guard v5 CI/native build/prepare/prepublish, one publish click, newer completion and three live identity checks, lease closure, then read-only retail owner-flow acceptance. Do not deploy component UI alone.",
+  "reviewed_source_sha": "4fa6cb8c1c9e310de9b60548d1d3c7c6a2efb51d",
+  "reviewed_source_tree": "55bed05e7707b620f196e7eb1447d38cb6b5842e",
+  "pull_request": {
+    "number": 1625,
+    "url": "https://github.com/AMASI-SA/AMASI-SA/pull/1625",
+    "state": "draft"
+  },
+  "latest_observed_production_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "remaining": [
+    "Root-owned final integration with any newly advanced production, Release Guard v5 build and deployment.",
+    "Authenticated live read-only owner acceptance of retail composer, mapping disclosure, lookup eligibility and saved choices; no paid launch needed.",
+    "Independent store/feed mapping, category membership, automated funded first launch, standing resume and owner-approved money limits remain outside this slice."
+  ]
 }
