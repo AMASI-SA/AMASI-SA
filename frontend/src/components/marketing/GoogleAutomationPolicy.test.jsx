@@ -203,3 +203,29 @@ test("late activation response cannot mark another account active", async () => 
     expect(container.textContent).not.toContain("اعتُمد التفويض لهذا الإصدار");
     expect(container.textContent).not.toContain("الإدارة الآلية مفعّلة ضمن الحدود المعتمدة");
 });
+
+test("storage diagnostic is explicit and does not save, activate, or confer authority", async () => {
+    await render();
+    expect(api.post).not.toHaveBeenCalled();
+    api.post.mockResolvedValue({ data: { scope: "budget_storage_transaction_only", storage_verified: true,
+        snapshot_majority_write_aborted: true, execution_authorized: false, funding_ready: false } });
+    await act(async () => button("التحقق من تخزين حدود جوجل").click());
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(api.post.mock.calls[0][0]).toBe("/integrations-v2/google_ads/automation/storage-readiness");
+    expect(api.put).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("هذا تحقق للتخزين فقط");
+    expect(container.textContent).toContain("لا يمنح صلاحية تشغيل أو جاهزية إنفاق");
+    expect(container.querySelector('[aria-label="اعتماد إجراءات جوجل التلقائية ضمن الحدود"]').disabled).toBe(true);
+});
+
+test("unverified storage response and failure never present funding readiness", async () => {
+    await render();
+    api.post.mockResolvedValue({ data: { storage_verified: true, funding_ready: true } });
+    await act(async () => button("التحقق من تخزين حدود جوجل").click());
+    expect(container.textContent).toContain("لم تُثبت جاهزية التخزين");
+    api.post.mockRejectedValue(new Error("private failure"));
+    await act(async () => button("التحقق من تخزين حدود جوجل").click());
+    expect(container.textContent).toContain("تعذر إثبات جاهزية التخزين");
+    expect(container.textContent).not.toContain("private failure");
+    expect(api.put).not.toHaveBeenCalled();
+});

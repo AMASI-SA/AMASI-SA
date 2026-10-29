@@ -1,0 +1,26 @@
+{
+  "task": "GOOGLE-BUDGET-STORAGE-READINESS-20261029",
+  "state": "WIP diagnostic only; not deployed",
+  "branch": "codex/google-budget-storage-readiness-20261029",
+  "base_sha": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
+  "scope": "Owner-only explicit storage transaction diagnostic, no six-handler migration",
+  "production_changed": false,
+  "contract": {
+    "transaction": "Own session, snapshot read concern, majority write concern configured, unique probe insert, mandatory explicit abort acknowledgement. Never commit/delete foreign data.",
+    "result": "Storage diagnostic only; no reusable capability, execution_authorized=false, funding_ready=false, policy_changed=false, provider_writes=0",
+    "deadline": "8 seconds HTTP and driver operation deadline. On timeout cancel own probe and fail closed; own-session cleanup may continue asynchronously, never retry.",
+    "not_proven": [
+      "Majority commit durability: probe intentionally aborts, never commits.",
+      "Production Mongo capability until deployed diagnostic is explicitly invoked successfully.",
+      "Native Google permissions, external writers, budget guard readiness, funding readiness."
+    ]
+  },
+  "verification": {
+    "backend": "106 passed in 2.44s, no skips; post-normal-merge rerun required",
+    "frontend": "19 passed in 1.29s with governed Node22.23.2/Yarn1.22.22",
+    "actual_mongo": "Not run locally; dedicated disposable loopback replica workflow included; CI pending",
+    "preserved": "Standing/creation save/revoke/activation implementations byte-for-byte unchanged from inventory base"
+  },
+  "next_safe_action": "Review source, run disposable Mongo CI, normal merge actual production inventory M, review diagnostic before any release. Parent owns release and any production probe.",
+  "production_merged_normally": "0ea10ab2a9c786a0ebe7c663ea792ca669861514"
+}
