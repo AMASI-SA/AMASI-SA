@@ -1,38 +1,107 @@
 {
   "task": "MARKETING-REPORTS-20261029",
+  "updated_at": "2026-10-29T18:58:27Z",
+  "repository": "AMASI-SA/AMASI-SA",
+  "state": "Implementation merged and checked; production publication unconfirmed because browser control is unavailable. Live acceptance NOT complete.",
+  "scope": "Unified Arabic Reports page, canonical Snapchat V2 account-period metrics, separate provider/Salla sources, shipping/payment/net costs and product modal with new-tab links.",
   "branch": "codex/unified-marketing-reports-release-20261029",
-  "base": "15b656131813af54a043c33821e3aa5f69e7703c",
-  "state": "Source verified locally; governed build and production acceptance pending",
-  "scope": "Unified marketing Reports page, same Snapchat V2 account-period reader, separate Salla/provider results, full direct costs and product modal opening new tabs",
-  "observed_cause": "Legacy campaigns selected Salla results (49) while V2 account screenshot selected Snapchat conversions (68); legacy and V2 commerce date/read paths differ.",
+  "continuity_branch": "codex/marketing-reports-publish-handoff-20261029",
+  "source_sha": "c1ff123d87870a582932f4419e02588edeab5c46",
+  "intent_sha": "3ed825b2ef47c4a7f201ac84bfd93d89cb4995b4",
+  "reviewed_base_sha": "15b656131813af54a043c33821e3aa5f69e7703c",
+  "merged_deployment_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "runtime_release_id": "rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b",
+  "pr": 1615,
+  "pr_state": "merged; merge tree identical to intent B",
+  "observed_cause": "Legacy campaigns selected Salla results (49) while account V2 used Snapchat conversions (68). The readers also differed in commerce date handling. Source labels are now explicit and V2 readers reused.",
   "completed": [
-    "Reports route and Arabic UI scaffold",
-    "Canonical V2 reader reuse",
-    "Optional Salla shipping/payment cost calculation",
-    "Exact-halalah cost allocation",
-    "Initial regression tests"
+    "Marketing nav and /ads-manager/reports route",
+    "All-platform totals or single-platform campaigns; default native source with Salla toggle",
+    "Canonical full-account totals, account timezone and FX handling",
+    "Direct product/shipping/payment costs; exact-halalah allocation; unknown values remain null",
+    "Product dialog, focus handling and target=_blank links",
+    "Foreground minute read refresh; existing explicit sync actions",
+    "Governed reproducible A/B build and clean-clone Emergent adapter rehearsal",
+    "Exact candidate CI, PR merge, shared /app fast-forward, Release Guard prepare and prepublish"
   ],
-  "validation": [
-    "Focused backend regression and existing Snapchat suites: 38 passed",
-    "UI source/modal/platform/race and navigation: 17 passed",
-    "git diff --check: passed"
+  "changed_files": [
+    "backend/marketing_report_costs.py",
+    "backend/marketing_reports.py",
+    "backend/snapchat_v2/salla_outcomes.py",
+    "backend/server.py",
+    "backend/tests/test_marketing_reports.py",
+    "frontend/src/pages/MarketingReports.jsx",
+    "frontend/src/pages/MarketingReports.css",
+    "frontend/src/pages/MarketingReports.test.jsx",
+    "frontend/src/App.js",
+    "frontend/src/components/MezanV2NavigationShellLegacy.jsx",
+    "frontend/src/components/MezanV2NavigationShell.test.jsx",
+    ".github/workflows/snapchat-reporting-v2.yml",
+    "release/release-intent-v5.json",
+    "docs/operations/MARKETING-REPORTS-20261029/STATUS.json"
   ],
-  "remaining": [
-    "Governed reproducible build and CI",
-    "Production same-account/date comparison and synchronization",
-    "Product dialog/new-tab visual acceptance",
-    "Verify exact release identity after publish"
-  ],
-  "production_changed": false,
-  "next": "Push source A on the latest production base, run governed build, freeze intent B, CI/rehearsal then authorized publish and live verification. Actual shared lease was inactive at preflight.",
-  "release_blocker": null,
-  "continuity_note": "Issue1006 refuses comments because it reached GitHub 2500-comment limit. Task STATUS and Draft PR are durable handoff.",
-  "previous_checkpoint": "bb7c274eb7433181efe434f7f1f53dbc6556bf96",
-  "previous_pr": 1613,
-  "previous_release_pair": {
-    "source": "5e50473932b1cb39afa6409c6052be74adfdfe90",
-    "intent": "82f7c7ab48956cc63721a7cb547a7cf3c57b4ae7",
-    "state": "superseded because production advanced; no deployment"
+  "validation": {
+    "backend": {
+      "passed": 38,
+      "command": "PYTHONPATH=backend .local-test/venv/bin/python -m pytest backend/tests/test_marketing_reports.py backend/tests/test_snapchat_reporting_v2_salla_timezone_alignment.py backend/tests/test_snapchat_reporting_v2_entity_performance.py backend/tests/test_snapchat_campaign_profitability_v1.py -q",
+      "exit": 0
+    },
+    "frontend": {
+      "passed": 17,
+      "command": "CI=true <governed-node-22.23.2> node_modules/react-scripts/bin/react-scripts.js test --watch=false --runInBand --runTestsByPath src/pages/MarketingReports.test.jsx src/components/MezanV2NavigationShell.test.jsx",
+      "cwd": "frontend",
+      "exit": 0
+    },
+    "ci": {
+      "sha": "3ed825b2ef47c4a7f201ac84bfd93d89cb4995b4",
+      "success": 43,
+      "skipped": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    "governed_build": "passed exact A/B source and intent; shared clean-clone adapter matched runtime release",
+    "merge_tree": "B and merge identical"
   },
-  "pr": 1615
+  "deployment": {
+    "shared_workspace": "/app",
+    "actor": "codex-marketing-reports-20261029",
+    "prepare": "passed",
+    "prepublish": "passed",
+    "lease": "Expected active; last observed owned by this task. Cannot inspect/verify/close because browser terminal tool timed out. Never clear another task's lease.",
+    "publish_attempt": "Republish opened confirmation; one Publish changes click attempted. Tool timed out after 300s. Do not repeat until UI deployment state is inspected.",
+    "browser_failure": "Repeated cua_repl js, getAXState, js_reset and rewriteDocumentation calls timed out after 300s; no alternate browser control or authorized shell transport available.",
+    "last_public_health": {
+      "source_git_sha": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
+      "release_id": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
+      "verified_identity_available": true,
+      "critical_file_hashes_match": true,
+      "frontend_build_verified": true,
+      "meaning": "Previous deployment still served; reports deployment not confirmed",
+      "observed_at": "2026-10-29T18:58:27Z",
+      "cache_busted": true
+    },
+    "build_meta_probe": "HTTP 403 from local public request; not accepted as release verification"
+  },
+  "production_changed": "No reports deployment observed in public health; shared source workspace was changed. Final publish action outcome unknown.",
+  "remaining": [
+    "Restore browser connection, inspect Emergent deployment history and matching lease",
+    "Confirm newer explicit Deployment Succeeded and run exact Release Guard verify",
+    "Compare live report and /snapchat-accounts for same account/date/source after sync",
+    "Verify all-platform view, Salla toggle, modal layout and product opening a separate tab"
+  ],
+  "next_safe_actions": [
+    "Read this checkpoint and AGENTS.md; fetch reviewed task branch and verify full source/intent/merge SHAs",
+    "Restore permitted browser control, inspect SallaAnalytics at https://app.emergent.sh/chat and existing /app terminal; do NOT repeat Publish blindly",
+    "In /app run python scripts/production_release_guard.py status; preserve unrelated files and any different owner's lease",
+    "If a newer successful deployment is explicitly shown, run python scripts/production_release_guard.py verify --url https://mezansalla.com; require three exact probes and active=false",
+    "If publish did not start or failed, reconcile UI state and this task's exact lease before retrying. Owner-only abort, if needed after confirmed no in-flight publish: python scripts/production_release_guard.py abort --expected-sha e51f5b88b68905460417a01fb9ceb3704706c168 --expected-release-id rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b",
+    "Complete authenticated live acceptance; counts are changing, do not force 68"
+  ],
+  "preserved_unrelated": [
+    "/app/.emergent/testing/",
+    "/app/deployer-agent-docs/",
+    "Existing unsaved VS Code Untitled editor",
+    "Other tasks and their release history"
+  ],
+  "continuity_note": "Issue #1006 is full (2500 comments; rejected 403). PR #1615 and this separate handoff branch are the continuity fallback. This docs-only branch MUST NOT replace the reviewed deployment pair or be published without a new governed release."
 }
