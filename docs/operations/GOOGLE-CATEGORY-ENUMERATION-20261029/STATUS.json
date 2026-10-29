@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "confirmed_transport_fix_frozen_fresh_ci_required",
+  "state": "bounded_backend_independent_pass_root_integration_pending",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -77,28 +77,39 @@
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
   "verification": {
-    "local": "35focused/-Werror/zero skips; freshsuccessor42total/7actual gate required",
+    "local": "35focused/-Werror/zero skips1.11s",
     "actual_mongo": {
-      "run": 40941530637,
-      "job": 123685874721,
-      "checkout": "fee4b78 merge4dcintoM6e51f",
-      "result": "38passed4.07s incl7actualMongo/zero skips exactgate",
+      "run": 40942323966,
+      "job": 123688630848,
+      "checkout": "9601568 merged773intoM6e51f",
+      "result": "42passed2.66s exact42total/7actualMongo/zero-skips gate",
       "logs_retrieved_independently": true,
-      "provider_transport": "fixture-only; no liveSalla permission or payload claim"
+      "provider_transport": "fixture-only; no liveowner grant/payload proof"
     },
-    "independent_review": "google_product_acceptance assigned exact4dc; verdict pending",
-    "fresh_gate_required": "42total/7actualMongo/zero skips on transportfix successor"
+    "independent_review": {
+      "reviewer": "google_product_acceptance",
+      "verdict": "PASS bounded; no confirmed blocker",
+      "local": "35focused/-Werror/zero skips1.18s clean equivalentHEAD",
+      "additional": "Actual default call_salla+fakeHTTP4fixedGET flow andscope401→permission_unproved withoutforcedrefresh/disconnect; exactCIlogs independentlyinspected",
+      "qualifications": [
+        "Existingclient mayperform authorizedOAuthmaintenance",
+        "Postdecodebound nottransport/peakmemory cap",
+        "No liveowner grant/read tested",
+        "URL-onlyresolution top-level exactproviderrows only",
+        "Missingstatus unknown; enumeration notstock/adeligibility/atomic snapshot"
+      ]
+    }
   },
-  "next": "Exactfix remotecheckpoint/freshCI and independentreview; no other runtimechange planned.",
+  "next": "Root/planintegration agent owns guarded actualUI/sharedroute attachment and latest-production integratedCI/site acceptance. Runtimecode frozen d773; subsequentcheckpointSTATUSonly.",
   "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
   "implemented": "Membership enumeration only, not live inventorydetails. New3modules, pure/reader/API/Mongo tests and dedicatedUbuntu22.04/Mongo8.0.26 CI. Allinventoryunproved/adselectionfalse; Salla ids only, Mezanmappingunproved and unresolvednonnumericexclusions explicit.",
   "first_slice_permission": "Only fixed storeinfo/category/categoryproducts GETs; nativecategories read success proves currentendpoint capability. No products/variants endpoint called or productspermission claimed until futureinventory slice.",
   "transport_bound_limit": "Existing shared call_salla loads JSON before new512KiB decodedresponse guard; guard prevents pagination expansion, not a transport/peakmemory cap. No providerETag or transactional snapshot claim.",
   "source_limit": "URL-only discovery matches top-level provider category rows, not arbitrary descendants/slug inference. Storedstatus/scope are not capability truth; nativeerrors explicit. No liveaccount/grant validation performed.",
   "source": {
-    "sha": "4dc781bcaae21acf0d08eff667af113f490d7656",
-    "tree": "78c923f98c2e4af07d5f96c0c75c0e84e3854a35",
-    "local_equivalent": "ce3394f54c19cd2cd0ade53e022e60cc00753e3c",
+    "sha": "d77306f8af92057d4414413a9900e03bda7b1295",
+    "tree": "f764ce31422c0dcbf0ee20879878352dbc7e15bb",
+    "local_equivalent": "9e3df73a",
     "pr": 1628,
     "base": "e51f5b88b68905460417a01fb9ceb3704706c168"
   },
