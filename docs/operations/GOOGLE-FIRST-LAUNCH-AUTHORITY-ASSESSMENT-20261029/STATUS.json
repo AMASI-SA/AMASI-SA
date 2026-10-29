@@ -1,0 +1,208 @@
+{
+  "task_id": "GOOGLE-FIRST-LAUNCH-AUTHORITY-ASSESSMENT-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "task_branch": "codex/google-first-launch-authority-assessment-20261029",
+  "status": "read_only_assessment_complete_authority_implementation_withheld",
+  "assessed_at_date_utc": "2026-10-29",
+  "production_source_observed": "dada1def704ae968230d63c3c9885508a2a6653d",
+  "production_source_tree": "3317a1e1c31cae823718275f7ffaf44a20157d43",
+  "record_scope": "Documentation only. No authority module, route, worker, dispatch, guard edit, operating flag or provider/account call.",
+  "instruction": "Root narrowed the task after confirming that available native history cannot establish uninterrupted never-launched/manual-stop provenance. Do not add a permanently denying authority placeholder or positive tests based on fabricated provenance.",
+  "inspected_checkpoints": {
+    "budget_pr": 1602,
+    "budget_docs": "43c56118e579e2aa4cb20f934d3633bd2cfbdad0",
+    "budget_reviewed_runtime": "a110f1e8a538d52e77694fcf65907441a0214823",
+    "first_launch_evidence_pr": 1610,
+    "evidence_reviewed_source": "26b10be88c3a86804242b9c5c6cc9a91b1330f3a",
+    "evidence_final_docs": "2813a5fe844c0bd325e72462d19c0dfa48ea8813",
+    "resume_safety_pr": 1607,
+    "resume_reviewed_source": "a7f018fdb588dbf3a20d2aef33cb38f67eaa9e4c",
+    "resume_final_docs": "5020cbd8a61677386286ea68f551c6511a43881f",
+    "deployment_warning": "WIP source/review does not establish production deployment. Root must selectively integrate with current production and follow fresh Release Guard v5 A/B."
+  },
+  "installed_schema_evidence": {
+    "python": "/tmp/mezan-google29-venv/bin/python",
+    "packages": {
+      "google-ads": "33.0.0",
+      "protobuf": "7.36.2",
+      "proto-plus": "1.29.0"
+    },
+    "schema_version_imported": "google.ads.googleads.v25",
+    "inspected_types": [
+      "resources.types.change_event.ChangeEvent",
+      "resources.types.change_status.ChangeStatus",
+      "enums.types.change_client_type.ChangeClientTypeEnum"
+    ],
+    "scope": "Local schema availability and protobuf wire validation only. SDK enums do not establish report completeness, account access or successful provider execution."
+  },
+  "provider_history_limits": {
+    "change_event": {
+      "official_url": "https://developers.google.com/google-ads/api/docs/change-event",
+      "field_reference": "https://developers.google.com/google-ads/api/fields/v25/change_event",
+      "checked_on": "2026-10-29",
+      "findings": [
+        "Queries cover dates within the past 30 days, with at most 10000 rows per query.",
+        "Changes can take up to three minutes to appear.",
+        "Not every account change has a corresponding ChangeEvent.",
+        "Google Ads Editor changes are unsupported in ChangeEvent despite the client enum value.",
+        "Detailed old/new fields identify recorded changes, not absence of every possible intervening writer."
+      ]
+    },
+    "change_status": {
+      "official_url": "https://developers.google.com/google-ads/api/docs/change-status",
+      "field_reference": "https://developers.google.com/google-ads/api/fields/v25/change_status",
+      "checked_on": "2026-10-29",
+      "findings": [
+        "Queries cover dates within the past 90 days, with at most 10000 rows per query.",
+        "Changes can take up to three minutes to appear.",
+        "Only the latest change for a resource within the queried window is returned.",
+        "A parent resource change can represent subordinate activity, not a specific campaign status transition.",
+        "Not every ChangeStatus row has detailed ChangeEvent fields."
+      ]
+    },
+    "assessment_inference": "Combining these reports can expose changes but does not prove the absence of an intervening activation or owner stop immediately before a later dispatch. Neither an empty report nor the latest local pause establishes never-launched history or exclusion of concurrent external writers.",
+    "prohibited_substitutes": [
+      "Caller-supplied history_verified or never_launched Boolean.",
+      "Absence of a local execution ledger entry.",
+      "Current PAUSED plus original PAUSED creation.",
+      "Latest Mezan pause or naming/label resemblance.",
+      "A waiting period alone; it does not prevent a new external change after the wait."
+    ],
+    "operational_blocker": "No reviewed enforceable provider/operational exclusion contract establishes uninterrupted launch/stop provenance. Automatic first-funded launch remains withheld."
+  },
+  "shared_guard_interface_assessment": {
+    "file": "backend/integrations_control_center/google_ads_automation_budget_guard.py",
+    "inspected_symbols": [
+      "LaunchAllocation",
+      "StandingBudgetReservation",
+      "BudgetGuardSnapshot",
+      "standing_commitment",
+      "_allocation",
+      "_run"
+    ],
+    "existing_reuse": [
+      "One common transaction reads guard and both policies; owner policy revision races are serialized.",
+      "Standing commitments count current enabled inventory and unreflected pending positive increments once.",
+      "The hardened commit path makes one commit attempt and preserves ambiguous reservations/fences.",
+      "Recovery observation does not confer dispatch authority or release uncertain budget."
+    ],
+    "gaps": [
+      "LaunchAllocation is a storage command; it does not independently prove fresh product/native intent, owner activation/caps/auth_epoch, or original creation/fence identity.",
+      "BudgetGuardSnapshot has guard and policy rows, but no same-session original intent, completed proposal, native operation fence or authentication epoch dependency.",
+      "The synchronous planner cannot independently load those source rows within the transaction.",
+      "StandingBudgetReservation requires standing management activation and policy/claim digest. Fabricating such a policy or enable claim for first launch would conflate two distinct authorizations.",
+      "A dedicated launch authority module cannot safely compensate for absent shared-guard transaction inputs outside that transaction."
+    ],
+    "future_interface_owned_by_shared_guard_maintainer": [
+      "A typed launch reservation command that binds exact owner revision, activation generation, auth_epoch, expiry, immutable creation identity, completed proposal, operation fence and independently trusted provenance.",
+      "Same-session reads/CAS dependencies for all mutable authority rows; fresh native semantic evidence remains timestamped outside the transaction and rechecked at the dispatch boundary.",
+      "Refactor/reuse the common commitment calculation for existing unshared budget identity and only its incremental unreflected commitment; never reserve the same current or pending amount twice.",
+      "Explicit ambiguous claim/commit states keep the reservation/fence and prohibit resubmission until independent settlement proves the result.",
+      "Revocation must remain available without OAuth; transaction failure must never fall back to non-atomic writes."
+    ],
+    "tests_required_if_positive_interface_becomes_real": [
+      "Actual replica-set races for owner revoke/revision/auth_epoch and simultaneous standing increases/launch reservations.",
+      "Unknown commit or provider acknowledgement cannot release, retry, or duplicate budget.",
+      "Existing budget reflected in current inventory and matching pending claim are counted once.",
+      "Manual campaigns, unknown provenance, intervening external changes and owner-stop evidence cannot be adopted."
+    ],
+    "authority_code_written": false
+  },
+  "capability_coverage": [
+    {
+      "campaign": "SEARCH",
+      "native_editor_contract": "RSA and DSA builders, keyword/exclusion controls, server-owned action masks and PAUSED creation.",
+      "automated_creation": "Search/RSA only; approved single-product choice/template, exact product URL, explicit owner budget and account commitment ceiling, finite expiry and quotas, fresh product/inventory, purchase-value prerequisites. Policy/worker reject auto_enable_new.",
+      "first_funded_launch": "Unavailable automatically. PR1610 verifies read-only evidence only and leaves launch_history_verified/executable false.",
+      "owner_disclosure_ar": "الإنشاء الآلي الحالي يدعم إعلانات البحث النصية RSA ويُنشئ الحملة متوقفة. تشغيلها الممول يحتاج مراجعة واعتمادًا صريحًا لكل حملة؛ لا يثبت إنشاء ميزان أنها لم تُشغّل أو تُوقف خارجه."
+    },
+    {
+      "campaign": "SHOPPING",
+      "native_editor_contract": "Standard Shopping PRODUCT graph; linked Merchant Center selection, optional feed label, selected offer-ID listing units with excluded Other. Empty selection can intentionally represent all-feed in generic native drafting; scoped product proposals must not silently fall back.",
+      "automated_creation": "No Shopping creation policy/worker in the audited automated Search contract.",
+      "first_funded_launch": "No automatic Shopping launch evidence/authority. Native builder/schema success is not account eligibility or live provider acceptance.",
+      "owner_disclosure_ar": "يتوفر تجهيز يدوي لحملة Shopping بعد إثبات ربط Merchant Center وأهلية المنتجات. اختيار عروض المنتجات لا يثبت تلقائيًا عضويتها في القسم أو مطابقتها عبر المنصات، ولا توجد دورة إنشاء وتشغيل آلي مكتملة لهذا النوع."
+    },
+    {
+      "campaign": "PERFORMANCE_MAX",
+      "native_editor_contract": "Ordinary PMax MULTI_ASSET groups, brand/text/image/video assets, audience/search-theme signals and optional retail listing filters. Travel and Local Services subtypes are explicitly excluded.",
+      "automated_creation": "No PMax creation policy/worker in the audited automated Search contract.",
+      "first_funded_launch": "No automatic PMax launch evidence/authority. Full supported asset/configuration proof and current provider validation remain required.",
+      "owner_disclosure_ar": "يتوفر تجهيز يدوي لـPerformance Max العادي مع المواد المطلوبة، وربط المنتجات عند استخدام الكتالوج. إشارات الجمهور وموضوعات البحث ليست استهداف كلمات بحث مضمونًا. الأنواع المتخصصة ودورة التشغيل الآلي غير مكتملة."
+    }
+  ],
+  "source_contract_evidence": [
+    "backend/integrations_control_center/google_ads_campaign_contract.py::campaign_capabilities declares builder_ready and live_verified:false.",
+    "backend/integrations_control_center/google_ads_campaign_builder.py::build_campaign_operations always creates PAUSED campaigns.",
+    "backend/integrations_control_center/google_ads_campaign_builder.py::_listing_tree builds selected-offer units and excluded Other.",
+    "backend/integrations_control_center/google_ads_management.py::create_proposal checks tenant product selection and current linked merchant/eligible offers for product-scoped retail previews.",
+    "backend/integrations_control_center/google_ads_workspace.py::google_lookup reads native resource labels; it is not independent Salla category membership proof.",
+    "backend/integrations_control_center/google_ads_automation_creation_contract.py::GoogleAutomationCreationPolicy restricts campaign_type SEARCH and explicit positive native monetary limits.",
+    "backend/integrations_control_center/google_ads_automation_creation_plan.py::read_google_creation_native_context states reads do not prove creation permission and native validate-only remains required.",
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx already exposes exact-preview owner approval and states created campaigns are paused.",
+    "backend/tests/test_google_ads_management.py contains Mongo-backed manual approval/replay/timeout tests; these were read, not rerun in this local audit."
+  ],
+  "catalog_boundaries": [
+    "Current native owner-selected product_id/merchant_id/offer_id mapping is not independent section-membership evidence or a cross-platform identity graph.",
+    "Current product lookup includes feed_label, but selected-offer eligibility is compared by offer_id; distinct feed/language identities must not be assumed equivalent.",
+    "Proven section membership, stable native catalog identities, hidden/unavailable exclusions and product landing URLs belong to the separate seasons/catalog bridge work.",
+    "A product performing well on another platform is a test candidate, not proof of Google performance; orders/platform conversions and currencies must remain separately attributed."
+  ],
+  "honest_owner_flow": [
+    "Save reviewable season/market/products/section/audience/exclusions and explicit financial bounds; natural-language recommendations alone confer no spending authority.",
+    "Show verified product and inventory evidence, missing costs, native prerequisites and campaign-type coverage before making a claim of readiness.",
+    "Where deployed executors and valid owner policy permit it, prepare/create supported Search/RSA campaigns as PAUSED. This assessment does not enable that policy.",
+    "After creation, reread the selected campaign/product/native settings and present the exact per-campaign preview with account currency, budget semantics and material risks.",
+    "When uninterrupted stop history cannot be established, require a fresh explicit owner instruction for that specific manual enable proposal. Reuse the existing manual native gateway; do not disguise standing automation as manual approval.",
+    "Changed or expired preview, revoked owner, missing approved limits, unknown dispatch/acknowledgement or failed freshness prevents a new dispatch. Retain ambiguous reservations/fences and reconcile without resending.",
+    "Report verified native result or uncertainty; a human approval is a new instruction, not retrospective proof of never-launched history or an external-writer lock.",
+    "Keep automatic first-funded launch and automatic resume withheld until their separate provenance and authority contracts are established."
+  ],
+  "money_and_serving_disclosure_ar": "حدود الميزانية يجب أن يحددها المالك؛ لم تُعتمد مبالغ أو أهداف ربحية لهذه المهمة. متوسط الميزانية اليومية ليس سقف إنفاق يوميًا ثابتًا، وحالة التفعيل لا تضمن قبول الإعلان أو بدء ظهوره.",
+  "next_bounded_feature_recommendation": {
+    "recommendation": "Owner-facing creation result and per-campaign review handoff, with a read-only capability/evidence summary and navigation to the existing manual proposal flow.",
+    "scope": [
+      "Consume existing capability metadata and reviewed evidence; do not add an authority or provider write path.",
+      "Distinguish created-by-Mezan, fresh configuration evidence, unknown launch/stop history, unsupported campaign type and unapproved financial limits.",
+      "Offer manual review only after the independently authorized manual flow can show its exact current preview; no prechecked approval, implicit activation or invented defaults.",
+      "Keep catalog identity/membership output sourced from the catalog owner and preserve its unknown/conflict states."
+    ],
+    "acceptance": [
+      "All three campaign families show accurate builder/automation/live-verification distinctions.",
+      "Unknown history cannot render an automatic launch control or claim that a campaign was never launched.",
+      "Every monetary input remains owner-entered; no default budget/return target is introduced.",
+      "Read-only handoff performs zero provider writes; selected campaign/account identity is preserved into the existing preview.",
+      "Revoked/expired/changed evidence requires fresh review and cannot reuse a previous approval.",
+      "Manual proposal success, ambiguity and failure remain explicit; automatic PAUSED creation is not labelled full autonomous management."
+    ],
+    "file_ownership": "Proposal only. Root must assign exact existing UI/route ownership before edits; no files outside this STATUS were changed."
+  },
+  "verification": {
+    "audited_code_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHON_DOTENV_DISABLED=1 PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -B -m pytest --noconftest -q -W error -p no:cacheprovider backend/tests/test_google_ads_campaign_builder.py backend/tests/test_google_ads_protobuf_contract.py backend/tests/test_google_ads_automation_creation_contract.py",
+    "exit_status": 0,
+    "passed": 235,
+    "skipped": 0,
+    "duration_seconds": 2.66,
+    "scope": "Existing local offline contracts and installed official v25 protobufs. No new tests, actual Mongo or live provider acceptance in this assessment.",
+    "new_ci": "Not requested for documentation-only assessment. Prior PR acceptance is recorded in the respective source STATUS; it is not reused as authority acceptance.",
+    "independent_review": "Assessment handed to root; no claim of new independent implementation review."
+  },
+  "deployment": {
+    "production_changed": "no",
+    "provider_calls": 0,
+    "writes": 0,
+    "paid_activation": false,
+    "release_guard_lease": "not touched",
+    "readiness": "not a deployment candidate"
+  },
+  "changed_files": [
+    "docs/operations/GOOGLE-FIRST-LAUNCH-AUTHORITY-ASSESSMENT-20261029/STATUS.json"
+  ],
+  "next_safe_action": "Root may assign the owner-facing review handoff or continue catalog/budget diagnostics. Do not implement positive launch authority until real provenance and shared transaction interfaces are assigned; do not deploy this assessment as runtime functionality.",
+  "checkpoint": {
+    "assessment_base_sha": "dada1def704ae968230d63c3c9885508a2a6653d",
+    "remote_assessment_sha": null,
+    "note": "The next documentation-only checkpoint records the initial immutable assessment commit; this avoids a self-referential commit hash."
+  }
+}
