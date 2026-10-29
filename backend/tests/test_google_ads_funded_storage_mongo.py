@@ -317,3 +317,46 @@ async def test_replica_original_provider_graph_settlement_keeps_positive_native_
     assert (await db[grants.GRANTS].find_one({'grant_key':key}))['consumed'] is True
     with pytest.raises(HTTPException):await reserve(db,key,row)
     assert provider.writes==1 # seeded original outcome; zero helper-funded sends
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change',['disabled','role','password'])
+async def test_replica_owner_writer_after_floor_user_marker_orders_after_transaction(monkeypatch,actual_db,automation_mongo_uri,change):
+    from pymongo.monitoring import CommandListener
+    db,capture=actual_db;db,provider,key,row=await setup(monkeypatch,db);await reserve(db,key,row)
+    before=await db.users.find_one({'id':'owner'});loop=asyncio.get_running_loop();sent=asyncio.Event();writers=[]
+    class Started(CommandListener):
+        def started(self,event):
+            if event.command_name=='update':loop.call_soon_threadsafe(sent.set)
+        def succeeded(self,event):pass
+        def failed(self,event):pass
+    other=AsyncIOMotorClient(automation_mongo_uri,serverSelectionTimeoutMS=2000,retryWrites=True,event_listeners=[Started()])
+    await other.admin.command('ping')
+    original=authority._owner_write_fence
+    async def after_marker(view,**kwargs):
+        result=await original(view,**kwargs)
+        values={'disabled':True} if change=='disabled' else {'role':'staff'} if change=='role' else {
+            'password_updated_at':NOW,'password_hash':'test-only-after-marker-value'}
+        async def write():
+            return await other[db.name].users.with_options(write_concern=WriteConcern('majority',j=True)).update_one(
+                {'id':'owner'},{'$set':values})
+        writers.append(asyncio.create_task(write()))
+        await asyncio.wait_for(sent.wait(),timeout=3)
+        # Independent update is on the wire while this transaction owns users.
+        # It cannot commit that same document ahead of our floor commit.
+        assert not writers[0].done()
+        return result
+    monkeypatch.setattr(authority,'_owner_write_fence',after_marker)
+    try:
+        result=await floor(db,key,row)
+        assert result['committed'] is True and result['funded_dispatch_authorized'] is False
+        changed=await asyncio.wait_for(asyncio.shield(writers[0]),timeout=5)
+        assert changed.matched_count==1
+        await held(db,key,phase='submitted')
+        after=await db.users.find_one({'id':'owner'})
+        mutable={'mezan_google_funded_authority_epoch',*({'disabled'} if change=='disabled' else {'role'} if change=='role' else {'password_updated_at','password_hash'})}
+        assert {k:v for k,v in after.items() if k not in mutable}=={k:v for k,v in before.items() if k not in mutable}
+        with pytest.raises(HTTPException):await floor(db,key,row)
+        assert provider.writes==0
+    finally:
+        if writers:await asyncio.wait_for(asyncio.gather(*writers,return_exceptions=True),timeout=10)
+        other.close()
