@@ -126,3 +126,23 @@ async def test_more_than_five_selection_is_rejected_before_native_call():
     with pytest.raises(ValueError):
         await read(db, native, fields, [str(i) for i in range(1, 7)])
     assert native.calls == []
+
+
+@pytest.mark.asyncio
+async def test_url_only_saved_plan_reproves_exact_resolved_category_before_selected_product_reads():
+    db, native, fields = setup()
+    fields.update(category_ids=[], category_url="https://store.test/winter")
+    native.responses["/categories"] = page([{"id": 8, "status": "active", "urls": {"customer": "https://store.test/winter"}}])
+    result = await read(db, native, fields)
+    assert result["category_id"] == "8" and len(result["products"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_url_resolution_cannot_silently_switch_explicit_requested_category():
+    db, native, fields = setup()
+    fields.update(category_ids=[], category_url="https://store.test/winter")
+    native.responses["/categories"] = page([{"id": 9, "status": "active", "urls": {"customer": "https://store.test/winter"}}])
+    native.responses["/categories/9/products"] = page([{"id": 1}])
+    with pytest.raises(ValueError, match="selected_category_changed"):
+        await read(db, native, fields)
+    assert all(not p.startswith("/products/") for p, _ in native.calls)

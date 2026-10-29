@@ -43,6 +43,7 @@ async def selected_inventory_preview(db, *, owner_id, fields, category_id, selec
     excluded = {canonical_id(v) for v in fields.get("excluded_product_ids", [])}
     if excluded & set(selected_ids):
         raise CategoryProofUnavailable("selected_product_excluded")
+    requested_category = canonical_id(category_id)
     started = datetime.now(timezone.utc).isoformat()
     before = await db.salla_integrations.find_one({"user_id": owner_id}, PUBLIC_INTEGRATION)
     if not before:
@@ -51,7 +52,11 @@ async def selected_inventory_preview(db, *, owner_id, fields, category_id, selec
         if method != "GET":
             raise ValueError("native_write_forbidden")
         return await _get(db, owner, path, params, caller)
-    category = await preview_live_category(db, owner_id=owner_id, fields=fields, category_id=category_id, caller=fixed)
+    resolve_url_only = not fields.get("category_ids") and fields.get("category_url") is not None
+    category = await preview_live_category(db, owner_id=owner_id, fields=fields,
+        category_id=None if resolve_url_only else requested_category, caller=fixed)
+    if category["category_id"] != requested_category:
+        raise CategoryProofUnavailable("selected_category_changed")
     if category["store_id"] != canonical_id(before.get("store_id")):
         raise CategoryProofUnavailable("store_identity_changed")
     members = {r["salla_product_id"] for r in category["products"]}

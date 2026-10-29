@@ -58,7 +58,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('native-inventory-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_native_inventory_mongo')]
-          assert len(cases) == 34 and len(replica) == 7
+          assert len(cases) == 36 and len(replica) == 7
           assert any(c.attrib.get('name') == 'test_actual_owner_read_observations_without_db_mutation_or_native_writes' for c in replica)
           assert sum(c.attrib.get('name','').startswith('test_actual_outer_binding_covers_category_and_selected_product_flow') for c in replica) == 4
           assert any(c.attrib.get('name') == 'test_actual_standalone_route_detects_before_after_product_drift' for c in replica)

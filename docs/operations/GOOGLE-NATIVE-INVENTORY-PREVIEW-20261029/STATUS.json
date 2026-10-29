@@ -2,15 +2,15 @@
   "task": "google-native-inventory-preview-20261029",
   "branch": "codex/google-native-inventory-preview-20261029",
   "base": "2fba251ab73780d984b2c53a4f991bc98d61c441",
-  "state": "standalone_readonly_preview_wip_frozen_for_ci_and_review",
+  "state": "url_only_plan_fix_frozen_fresh_ci_required",
   "production_changed": false,
   "provider_calls_performed": false,
   "prerequisite": "Exact unchanged accepted1628 google_live_category_proof.py and reader.py copied as buildbase only; source d77306f8af92057d4414413a9900e03bda7b1295. No shared files or writers changed.",
   "implemented": "Pure+reader+standaloneownerPOST. Freshcategoryreproof, canonicalexplicitselectedids/exclusions, ownedstore/credentialrevision across wholeflow and savedplan fullfields/revision guards. Productdetails relevant before-after drift, boundedtwo-pagevariant observations, sourceoptionlabels only, explicitsimpleproduct rawemptyarrays+completeemptyvariantendpoint. Allglobalready/prep/size/mapping/paid authority false/null.",
   "verification": {
-    "local": "27focused-Werror/zero skips1.12s; initialmissingmodule red observed",
+    "local": "29focused-Werror/zero skips; URL-only savedplan regression red beforefix, resolvedcategoryid mismatch rejected beforeproductcalls",
     "actual_mongo": "7collectedcases owner/foreign/stale/4outerbindingraces/productdrift; no localMongo execution",
-    "ci": "new dedicatedUbuntu22.04/Mongo8.0.26 expected34total/7actual/zero-skips gate pending"
+    "ci": "Freshdedicated36total/7actualMongo/zero-skips gate required"
   },
   "bounds": "Planned5explicit products,2variantpages<=120rows,45s requestdeadline; officialpage maximum60, existinglocalstockproofcap50 is not provider limit",
   "next": "DedicatedactualMongo CI, independentreview exactfrozen source, then root/planningagent actualintegration onlatestproduction.",
@@ -22,5 +22,6 @@
     "Parentquantity separate fromvariants; zero+missingunlimitedunknown; labels exactoptionvalueids; no stockreservation/checkout guarantee",
     "Detailsbeforeafter relevantfields detects observeddrift, notABA/transactionalsnapshot; provider_revisionnull/remote_snapshot_atomicfalse",
     "No liveprovider/grant test; nativefixturesonly; no newwriter/sync/auth/sharedUI/router edit"
-  ]
+  ],
+  "own_confirmed_fix": "When savedplan onlyhasexactcategoryURL, newreader reusesunchanged1628 resolver withNone thenchecks resolvedcategoryid equals explicitrequest id; no arbitraryURL fetch or acceptedhelper change."
 }
