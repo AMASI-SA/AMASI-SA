@@ -59,6 +59,7 @@ import InstagramCustomerIntelligenceIntegration from "./pages/InstagramCustomerI
 import CustomerIntelligenceCenter from "./pages/CustomerIntelligenceCenter";
 import OrderTrackingNotes from "./pages/OrderTrackingNotes";
 import AdsManager from "./pages/AdsManager";
+import MarketingReports from "./pages/MarketingReports";
 import FulfillmentV2 from "./pages/FulfillmentV2";
 import InventoryReceivingWorkspace from "./pages/InventoryReceivingWorkspace";
 import MezanSuppliersV2 from "./pages/MezanSuppliersV2";
@@ -161,6 +162,7 @@ function AppRoutes() {
             <Route path="/reports" element={<ProtectedRoute><Layout><Reports /></Layout></ProtectedRoute>} />
             <Route path="/reports/ads" element={<ProtectedRoute><Layout><AdsReport /></Layout></ProtectedRoute>} />
             <Route path="/reports/advertising-expenses" element={<ProtectedRoute><Layout><AdvertisingExpensesReport /></Layout></ProtectedRoute>} />
+            <Route path="/ads-manager/reports" element={<ProtectedRoute><Layout><MarketingReports /></Layout></ProtectedRoute>} />
             <Route path="/snapchat-accounts" element={<ProtectedRoute><Layout><SnapchatV2Page /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/settings" element={<ProtectedRoute><Layout><AdsV2Settings /></Layout></ProtectedRoute>} />
             <Route path="/ads-v2/report" element={<ProtectedRoute><Layout><AdsV2Report /></Layout></ProtectedRoute>} />
