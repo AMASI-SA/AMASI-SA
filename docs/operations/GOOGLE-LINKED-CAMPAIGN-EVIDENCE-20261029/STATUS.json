@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "design_checkpoint_not_implemented",
+  "state": "implementation_wip_not_attached_not_reviewed",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -31,6 +31,16 @@
     "Owner saved-plan revision changes invalidate response; no source or policy mutations",
     "Actual disposable Mongo tests and fresh CI required before readiness"
   ],
-  "verification": "Read-only source assessment only; no implementation tests yet",
-  "next": "Implement new pure/reader/standalone-route modules with red regressions; root attaches reviewed route/UI later"
+  "verification": {
+    "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
+    "result": "31 passed, zero skips, 1.10s; initial missingmodule red observed",
+    "actual_mongo": "not run yet",
+    "ci": "not configured/run yet"
+  },
+  "next": "Add real disposable Mongo projection/source writer fixture cases and dedicated CI, independent review; then root owns shared attachment.",
+  "known_source_limits": [
+    "Canonical Snapchat _number(None) normalizes missing raw metric to zero; reader returns stored zero as unknown with metric provenance, never confirmedzero",
+    "Read-only review route exported but not attached; no UI change",
+    "Historical snapshots remain mutable perday; source_snapshot immutable not claimed"
+  ]
 }
