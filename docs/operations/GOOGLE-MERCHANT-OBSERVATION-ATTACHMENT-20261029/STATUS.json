@@ -2,11 +2,11 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-ATTACHMENT-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-attachment-20261029",
-  "state": "exact_source_full_ci_pass_independent_source_review_pass_final_pr_ci_pending",
+  "state": "coherent_attachment_source_ci_and_independent_root_review_accepted_production_resourcing_required",
   "parent_source_sha": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
   "parent_tree_sha": "2ced61ca41f8dcb5b8bfe658db8ccfb092b0e62d",
   "accepted_merchant_source_sha": "d231958ee4de80aa6b7fdd0593759c829d0da98f",
-  "source_identity": "The commit carrying this status is the immutable WIP checkpoint; no self-referentialSHA claimed.",
+  "source_identity": "Frozen runtime source 3bbe11247b10c69a610b88bc87ba008e674924e4; this separate status branch records evidence only and does not alter the reviewed source.",
   "production_changed": false,
   "host_actions": 0,
   "real_provider_calls": 0,
@@ -33,15 +33,15 @@
     "parity": "20 accepted baseline blob identities recorded;19 unchanged finalblobs,1 trigger-only change; reporting nonhelper bytes unchanged; diffcheckpass",
     "first_test_harness_fix": "FastAPI0.140 included-router path enumeration corrected to inspect the actual attached APIRouter; HTTP behavior tests were already passing."
   },
-  "ci": "Exact source fullGoogle and dedicated replica/UI/build pass; PR synthetic/full remainder pending. Do not substitute PR or old source for exact checkout evidence.",
-  "review": "Independent integration review pending; root owns final re-source after commercial1655 publishes",
+  "ci": "Exact-source full Google and dedicated Merchant replica/UI/build passed. All 29 PR workflows settled: 28 success and one non-applicable TikTok candidate skipped; zero failure or pending.",
+  "review": "Independent budget_audit and root bounded coherent-attachment acceptance. Production re-source, Release Guard v5 and live owner acceptance remain root-owned.",
   "remaining": [
-    "Independent reviewer final exact-CI seal pending.",
-    "General PR workflows and release-readiness are still queued/in progress at this checkpoint.",
-    "Root must freshly re-source after commercial1655 publishes; no intent/ReleaseGuard/production change by this task.",
-    "No live account/permission/mapping/inventory/Ads eligibility/paid authority proved."
+    "Root must freshly re-source after commercial1655 publishes, preserving current production and all accepted blobs/hunks.",
+    "Fresh release-source CI/review, original host build, Source A/Intent-only B, v5 prepare/prepublish/single publish, three live identities and behavior acceptance remain root-owned.",
+    "Owner must explicitly select Ads and Merchant candidates and initiate read; real grant/native access not tested by this task.",
+    "Observation does not verify store-to-offer mapping, inventory, Ads eligibility, destinations or paid authority; no automatic launch enabled."
   ],
-  "next_safe_action": "Read qualified PR synthetic/readiness logs and independent final verdict; update this status branch only. Preserve3bbe source and let root own fresh production integration/release.",
+  "next_safe_action": "Preserve frozen3bbe and await root's new production SHA; then prepare a new isolated direct-production source if assigned. Do not rebase this reviewed source or use its CI candidate as a production intent.",
   "runtime_source_sha": "3bbe11247b10c69a610b88bc87ba008e674924e4",
   "runtime_tree_sha": "25445dad74066d5bcc08e433712575e93752d5af",
   "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1657",
@@ -66,70 +66,16 @@
   },
   "independent_review": {
     "reviewer": "budget_audit",
-    "state": "source_integration_no_finding_exact_logs_handoff_pending_seal",
-    "evidence": "Independently verified19/20 copied blobs and trigger-only workflow delta, whole reportingd3cc parity, additive router/Workspace; reran10 backend full-router/auth and6 Workspace/AuthProvider cases, all0skip.",
-    "qualification": "No live provider/paid authority or universal Mongo cleanup/global admission claim."
+    "state": "bounded_sealed_pass",
+    "evidence": "Independently checked 19 unchanged accepted blobs plus one trigger-only workflow delta, whole reporting d3ccdc5 parity and additive router/Workspace. Independently reran 10 backend full-router/auth and 6 Workspace/real AuthProvider tests with zero skips. Directly read all four exact-source PUSH jobs (1855 backend;689 UI/build;422 backend including74 actualMongo;122 UI/build). No confirmed integration finding.",
+    "qualification": "No provider/live authority, continuous authorization, universal Mongo cleanup or global concurrency claim."
   },
   "pr_ci_snapshot": [
-    {
-      "id": 40971865721,
-      "name": "CodeQL",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865907,
-      "name": "Snapchat Settings Management V2",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865680,
-      "name": "Production TikTok Native Hierarchy",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865626,
-      "name": "Google category membership",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865215,
-      "name": "Google Merchant bounded observation",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865678,
-      "name": "G47 Focused Integration",
-      "status": "queued",
-      "conclusion": null
-    },
     {
       "id": 40971865934,
       "name": "TikTok Creator Release Candidate",
       "status": "completed",
       "conclusion": "skipped"
-    },
-    {
-      "id": 40971865713,
-      "name": "Security Gate",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865830,
-      "name": "Google store product observations",
-      "status": "queued",
-      "conclusion": null
-    },
-    {
-      "id": 40971865657,
-      "name": "Mezan Release Readiness",
-      "status": "queued",
-      "conclusion": null
     },
     {
       "id": 40971865803,
@@ -144,28 +90,10 @@
       "conclusion": "success"
     },
     {
-      "id": 40971865862,
-      "name": "MZ2 advertising V2 native accounting",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40971865740,
-      "name": "Google credential refresh CAS",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40971865491,
       "name": "Snapchat Direct Active Publication",
       "status": "completed",
       "conclusion": "success"
-    },
-    {
-      "id": 40971865520,
-      "name": "Google linked campaign evidence",
-      "status": "in_progress",
-      "conclusion": null
     },
     {
       "id": 40971865725,
@@ -186,36 +114,6 @@
       "conclusion": "success"
     },
     {
-      "id": 40971865540,
-      "name": "Operational Stock Eligibility",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40971865789,
-      "name": "Google Ads full management",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40971865923,
-      "name": "Production Dashboard Four Platform Spend V1",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40971865738,
-      "name": "Google prior season evidence",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40971865802,
-      "name": "Operational Balance Web",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40971865670,
       "name": "Google native inventory preview",
       "status": "completed",
@@ -228,22 +126,159 @@
       "conclusion": "success"
     },
     {
-      "id": 40971865421,
-      "name": "Qoyod Payment Freshness",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40971865794,
       "name": "Google prior season review UI",
       "status": "completed",
       "conclusion": "success"
     },
     {
+      "id": 40971865421,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865740,
+      "name": "Google credential refresh CAS",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865738,
+      "name": "Google prior season evidence",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865923,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865520,
+      "name": "Google linked campaign evidence",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865862,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865215,
+      "name": "Google Merchant bounded observation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
       "id": 40971865777,
       "name": "Google live category preview",
-      "status": "in_progress",
-      "conclusion": null
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865657,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865789,
+      "name": "Google Ads full management",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865802,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865907,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865680,
+      "name": "Production TikTok Native Hierarchy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865540,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865626,
+      "name": "Google category membership",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865830,
+      "name": "Google store product observations",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865678,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865721,
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40971865713,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
     }
-  ]
+  ],
+  "root_review": {
+    "state": "bounded_accepted",
+    "evidence": "Root read actual integration seams and tests, independently ran 10 backend -W error tests in2.52s and6 actual AuthProvider UI tests in0.939s, all passing; directly read all four exact-source PUSH logs.",
+    "qualification": "Accepted pending fresh production source, v5 and live acceptance."
+  },
+  "pr_synthetic_ci": {
+    "sha": "1febb21da0aeaedf312777dae990c081fad6a9ab",
+    "tree": "25445dad74066d5bcc08e433712575e93752d5af",
+    "parents": [
+      "08160c883a040f3a9fb49a165dab8074d4ef7309",
+      "3bbe11247b10c69a610b88bc87ba008e674924e4"
+    ],
+    "same_tree_as_source": true,
+    "run": 40971865789,
+    "backend_job": 123790307179,
+    "backend": "1855 passed40.42s",
+    "frontend_job": 123790306795,
+    "frontend": "689 passed35suites,build6.55s",
+    "qualification": "Distinct synthetic commit with identical tree; exact-source PUSH evidence remains separately recorded."
+  },
+  "release_readiness": {
+    "run": 40971865657,
+    "conclusion": "success",
+    "backend_job": 123790306620,
+    "frontend_job": 123790306934,
+    "source": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+    "source_base": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+    "frontend_builds_seconds": [
+      4.04,
+      3.87
+    ],
+    "artifact_id": 12939804252,
+    "artifact_zip_sha256": "8ace8251f9d61605f6de52cce1c0da4972cd17bb89d44ca9538334919b1c7bfa",
+    "qualification": "CI candidate only; no host materialization, intent-only B, prepare/prepublish/publish or live identity acceptance by this task. Root requires fresh production re-source after1655."
+  }
 }
