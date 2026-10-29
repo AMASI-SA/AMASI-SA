@@ -16,13 +16,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends
 from pydantic import Field, ValidationError, field_validator, model_validator
-from pymongo.errors import DuplicateKeyError
 
 from . import google_ads_automation_creation_contract as contract
 from . import google_ads_automation_policy as base
 from .google_ads_ai import PRODUCT_COLLECTION, _public_product
 from .google_ads_creation_inventory import PRODUCT_PROJECTION, inventory_readiness
 from .google_ads_client import GoogleAdsClient, identifier, problem
+from .google_ads_automation_policy_mutation_adapter import mutate_google_automation_policy
 from .google_ads_campaign_builder import _display_width
 from .google_ads_management import account_client
 from .google_ads_workspace import compatible_read
@@ -299,13 +299,8 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
             "updated_by": actor["actor_id"], "updated_at": current.isoformat()}
         event = {"kind": "configuration_saved_disabled", "revision": revision, "actor_id": actor["actor_id"], "occurred_at": current.isoformat()}
         await _index(db)
-        if body.expected_revision == 0:
-            try: await db[CREATION_POLICIES].insert_one({**payload, "events": [event]})
-            except DuplicateKeyError: _changed()
-        else:
-            changed = await db[CREATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-                {"$set": payload, "$push": {"events": {"$each": [event], "$slice": -50}}})
-            if not changed.matched_count: _changed()
+        await mutate_google_automation_policy(db, policy_kind="creation", scope=scope,
+            expected_revision=body.expected_revision, values=payload, event=event)
         row = await db[CREATION_POLICIES].find_one(scope, {"_id": 0})
         return public_creation_policy(row, scope["account_id"], now())
 
@@ -314,10 +309,11 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         actor = await base._owner(db, user)
         scope = {"user_id": actor["user_id"], "account_id": identifier(account_id)}
         current, revision = now(), body.expected_revision + 1
-        changed = await db[CREATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-            {"$set": {"enabled": False, "revision": revision, "updated_by": actor["actor_id"], "updated_at": current.isoformat()},
-             "$push": {"events": {"$each": [{"kind": "revoked", "revision": revision, "actor_id": actor["actor_id"], "occurred_at": current.isoformat()}], "$slice": -50}}})
-        if not changed.matched_count: _changed()
+        await mutate_google_automation_policy(db, policy_kind="creation", scope=scope,
+            expected_revision=body.expected_revision,
+            values={"enabled": False, "revision": revision, "updated_by": actor["actor_id"], "updated_at": current.isoformat()},
+            event={"kind": "revoked", "revision": revision, "actor_id": actor["actor_id"], "occurred_at": current.isoformat()},
+            )
         return public_creation_policy(await db[CREATION_POLICIES].find_one(scope, {"_id": 0}), scope["account_id"], now())
 
     @router.post(root + "/activate")
@@ -366,11 +362,12 @@ def attach_google_ads_automation_creation_policy_routes(router, db, current_user
         _expiry(settings.expires_at, current)
         if any(not contract._fresh(p.get("last_synced_at"), current, settings.catalog_max_age_seconds) for p in final_products):
             raise problem("google_creation_products_not_ready", "تحتاج حقائق المنتج تحديثًا قبل تفعيل الإنشاء.", 409)
-        changed = await db[CREATION_POLICIES].update_one({**scope, "revision": body.expected_revision},
-            {"$set": {"enabled": True, "revision": revision, "activation_version": 1, "activation_revision": revision,
+        await mutate_google_automation_policy(db, policy_kind="creation", scope=scope,
+            expected_revision=body.expected_revision,
+            values={"enabled": True, "revision": revision, "activation_version": 1, "activation_revision": revision,
                 "activated_by": actor["user_id"], "activated_at": current.isoformat(), "configuration_blockers": [],
                 "updated_by": actor["actor_id"], "updated_at": current.isoformat()},
-             "$push": {"events": {"$each": [{"kind": "owner_activation", "revision": revision,
-                "actor_id": actor["actor_id"], "auto_enable_acknowledged": body.acknowledge_auto_enable, "occurred_at": current.isoformat()}], "$slice": -50}}})
-        if not changed.matched_count: _changed()
+            event={"kind": "owner_activation", "revision": revision, "actor_id": actor["actor_id"],
+                "auto_enable_acknowledged": body.acknowledge_auto_enable, "occurred_at": current.isoformat()},
+            )
         return public_creation_policy(await db[CREATION_POLICIES].find_one(scope, {"_id": 0}), scope["account_id"], now())

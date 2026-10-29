@@ -1,6 +1,15 @@
 """Standing creation uses native PAUSED proposals and explicit private claims."""
 from copy import deepcopy
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def accepted_guard_in_unit_scope(monkeypatch):
+    # Simulate an accepted code migration only for unit contract checks. This is
+    # not transaction, replica, provider or production activation evidence.
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    monkeypatch.setattr(guard, 'budget_guard_runtime_available', lambda: True)
+
 from fastapi import HTTPException
 
 @pytest.mark.asyncio
@@ -554,6 +563,8 @@ async def test_standing_policy_native_proof_expiring_after_floor_never_reaches_h
         if status=='submitted':
             monkeypatch.setattr(management,'now',lambda:POLICY_NOW+timedelta(seconds=91))
             monkeypatch.setattr(authority,'_now',lambda current=None:current or POLICY_NOW+timedelta(seconds=91))
+            from tests.test_google_ads_automation_authority import freeze_guard_clock
+            freeze_guard_clock(monkeypatch,POLICY_NOW+timedelta(seconds=91))
         return result
     monkeypatch.setattr(management,'record_event',slow_floor)
     result=await policy_execute(db,row)

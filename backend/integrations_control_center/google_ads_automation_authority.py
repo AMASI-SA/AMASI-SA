@@ -41,7 +41,9 @@ _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 def execution_enabled():
-    return os.getenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    from .google_ads_automation_budget_guard import budget_guard_runtime_available
+    return (budget_guard_runtime_available()
+        and os.getenv("GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
 
 
 def _now(current=None):
@@ -176,11 +178,23 @@ def _native_proof(row, evidence, policy, current):
     # Snapshot and complete inventory must describe the same target settings.
     target = next((campaign for campaign in inventory.get("campaigns", [])
         if isinstance(campaign, dict) and campaign.get("campaign_id") == row.get("campaign_id")), None)
+    campaign = snapshot.get("campaign") or {}
+    budget = snapshot.get("campaign_budget") or {}
+    if not isinstance(campaign, dict) or not isinstance(budget, dict):
+        _fail("google_automation_native_evidence_invalid")
     human = human_snapshot(snapshot)
+    budget_name = target.get("budget_resource") if target else None
     try:
         same = (target and human["campaign_id"] == row.get("campaign_id")
             and human["status"] == target.get("status") and human["budget_mode"] == target.get("budget_mode")
-            and Decimal(human["budget_native"]) == Decimal(target.get("budget_native")))
+            and Decimal(human["budget_native"]) == Decimal(target.get("budget_native"))
+            and isinstance(budget_name, str)
+            and re.fullmatch(r"customers/" + re.escape(row["account_id"]) + r"/campaignBudgets/[0-9]+", budget_name)
+            and campaign.get("campaignBudget") == budget_name == budget.get("resourceName")
+            and target.get("shared_budget") is False
+            and budget.get("explicitlyShared") is False
+            and (type(budget.get("referenceCount")) is int and budget["referenceCount"] == 1
+                or type(budget.get("referenceCount")) is str and budget["referenceCount"] == "1"))
     except (TypeError, ValueError, ArithmeticError):
         same = False
     if not same:
@@ -361,15 +375,19 @@ async def _authorize(db, *, user_id, account_id, proposal_id, execution_claim_id
         "campaign_id": row["campaign_id"], "action": row["action"], "authorized_at": cas_time.isoformat(),
         "account_local_date": today.isoformat(), "time_zone": policy["time_zone"],
         "native_inventory_digest": digest(inventory), **_budget_reservation(inventory, target, candidate)}
-    query = {**scope, **{key: policy.get(key) for key in POLICY_BINDING_FIELDS if key not in scope},
-        "enabled": True, "expires_at": {"$eq": policy["expires_at"], "$gt": cas_time.isoformat()},
-        "_dispatch_claim": {"$in": [None]},
-        "_dispatch_generation": generation if "_dispatch_generation" in policy else {"$exists": False},
-        "_dispatch_days": policy["_dispatch_days"] if "_dispatch_days" in policy else {"$exists": False}}
+    # All six owner mutations and all standing budget writers share this epoch.
+    # Native reads stay outside Mongo, but current policy/claim/quota are reloaded
+    # and the budget reservation commits atomically with the private claim.
+    from .google_ads_automation_budget_guard import (
+        StandingBudgetReservation, probe_google_budget_guard_transactions,
+        run_google_budget_guard_transaction)
+    capability = await probe_google_budget_guard_transactions(db)
     phase["cas_attempted"] = True
-    changed = await _linearize_claim(db[AUTOMATION_POLICIES], query,
-        {"$set": {"_dispatch_claim": claim, "_dispatch_days": days}, "$inc": {"_dispatch_generation": 1}})
-    if not changed.matched_count:
+    result = await run_google_budget_guard_transaction(db, **scope,
+        operation_id="standing_" + execution_claim_id, capability=capability,
+        planner=lambda snapshot: StandingBudgetReservation("standing_" + execution_claim_id,
+            source["policy_revision"], claim, inventory))
+    if result.get("committed") is not True:
         _fail("google_automation_policy_claim_changed")
     if not execution_enabled():
         # Preserve the reservation/claim for explicit recovery; do not hand the
@@ -421,41 +439,19 @@ async def settle_google_automation_claim(db, *, user_id, account_id, claim_id, c
 
 
 async def _settle(db, *, user_id, account_id, claim_id, current):
-    current_time = _now(current)
-    account_id = identifier(account_id)
-    scope = {"user_id": user_id, "account_id": account_id}
-    policy = await db[AUTOMATION_POLICIES].find_one(scope, {"_id": 0})
-    claim = (policy or {}).get("_dispatch_claim")
-    if not isinstance(claim, dict) or claim.get("claim_id") != claim_id:
+    # Settlement remains available with disabled flags/revoked OAuth. Unknown
+    # outcome never releases the budget allocation, quota or execution fence.
+    from .google_ads_automation_budget_guard import (
+        BudgetReservationSettlement, probe_google_budget_guard_transactions,
+        run_google_budget_guard_transaction)
+    scope = {"user_id": user_id, "account_id": identifier(account_id)}
+    if not isinstance(claim_id, str) or not _ID.fullmatch(claim_id):
         _fail("google_automation_settlement_unproved")
-    row = await db[PROPOSALS].find_one({**scope, "proposal_id": claim.get("proposal_id"),
-        "execution_claim_id": claim.get("execution_claim_id")}, {"_id": 0})
-    if not row:
-        _fail("google_automation_settlement_unproved")
-    source = _bound_proposal(row)
-    if (row.get("confirmation_digest") != claim.get("confirmation_digest") or digest(row.get("operations")) != claim.get("operations_digest")
-        or source["policy_revision"] != claim.get("policy_revision") or source["policy_digest"] != claim.get("policy_digest")):
-        _fail("google_automation_settlement_unproved")
-    completed = row.get("status") == "completed" and row.get("verified") is True and row.get("submission_started") is True
-    cancelled = row.get("status") == "failed" and row.get("submission_started") is False and row.get("safe_error") == "execution_cancelled_before_dispatch"
-    rejection = row.get("rejection") or {}
-    rejected = (row.get("status") == "failed" and row.get("submission_started") is True and row.get("provider_write_reached") is False
-        and isinstance(rejection, dict) and type(rejection.get("provider_status")) is int and 400 <= rejection["provider_status"] < 500)
-    stopped = stopped_before_http_proven(row, current_time)
-    if stopped:
-        authorized_at = _instant(claim.get("authorized_at"))
-        stopped_at = _instant(row.get("dispatch_cancelled_before_http_at"))
-        if authorized_at is None or stopped_at < authorized_at:
-            _fail("google_automation_settlement_unproved")
-    if not (completed or cancelled or rejected or stopped):
-        _fail("google_automation_settlement_unproved")
-    generation = policy.get("_dispatch_generation")
-    if type(generation) is not int or not 0 <= generation < 2**63 - 1:
-        _fail("google_automation_settlement_unproved")
-    changed = await db[AUTOMATION_POLICIES].update_one({**scope, "_dispatch_claim": claim, "_dispatch_generation": generation},
-        {"$set": {"_dispatch_claim": None, "_dispatch_last_settlement": {"claim_id": claim_id,
-            "status": "completed" if completed else "cancelled_before_dispatch" if cancelled else "provider_rejected" if rejected else "stopped_before_provider_dispatch",
-            "observed_at": current_time.isoformat()}}, "$inc": {"_dispatch_generation": 1}})
-    if not changed.matched_count:
+    capability = await probe_google_budget_guard_transactions(db)
+    result = await run_google_budget_guard_transaction(db, **scope,
+        operation_id="settle_" + claim_id, capability=capability,
+        planner=lambda snapshot: BudgetReservationSettlement("standing_" + claim_id, claim_id,
+            recover_legacy_terminal=True))
+    if result.get("committed") is not True:
         _fail("google_automation_settlement_unproved")
     return {"released": True, "claim_id": claim_id, "provider_writes": 0, "quota_refunded": False}
