@@ -1,8 +1,8 @@
 {
   "task": "MARKETING-REPORTS-20261029",
-  "updated_at": "2026-10-29T18:58:27Z",
+  "updated_at": "2026-10-29T19:27:46.531Z",
   "repository": "AMASI-SA/AMASI-SA",
-  "state": "Implementation merged and checked; production publication unconfirmed because browser control is unavailable. Live acceptance NOT complete.",
+  "state": "Published, Release Guard verified with three probes and lease closed. Live browser acceptance in progress.",
   "scope": "Unified Arabic Reports page, canonical Snapchat V2 account-period metrics, separate provider/Salla sources, shipping/payment/net costs and product modal with new-tab links.",
   "branch": "codex/unified-marketing-reports-release-20261029",
   "continuity_branch": "codex/marketing-reports-publish-handoff-20261029",
@@ -66,36 +66,28 @@
     "shared_workspace": "/app",
     "actor": "codex-marketing-reports-20261029",
     "prepare": "passed",
-    "prepublish": "passed",
-    "lease": "Expected active; last observed owned by this task. Cannot inspect/verify/close because browser terminal tool timed out. Never clear another task's lease.",
-    "publish_attempt": "Republish opened confirmation; one Publish changes click attempted. Tool timed out after 300s. Do not repeat until UI deployment state is inspected.",
-    "browser_failure": "Repeated cua_repl js, getAXState, js_reset and rewriteDocumentation calls timed out after 300s; no alternate browser control or authorized shell transport available.",
-    "last_public_health": {
-      "source_git_sha": "69052b215dd1ae96cec7511d6b5b5c646f12b985",
-      "release_id": "rg5-05151d6760459cce21f13d0350d4296d61245881c09cfa350b2a4e4e582ff8c2",
-      "verified_identity_available": true,
-      "critical_file_hashes_match": true,
-      "frontend_build_verified": true,
-      "meaning": "Previous deployment still served; reports deployment not confirmed",
-      "observed_at": "2026-10-29T18:58:27Z",
-      "cache_busted": true
+    "prepublish": "passed; rerun before confirmed publish",
+    "deployment_started": "2026-10-29T22:12:00+03:00",
+    "deployment_finished": "2026-10-29T22:21:00+03:00",
+    "verify": {
+      "command": "python scripts/production_release_guard.py verify --url https://mezansalla.com",
+      "exit": 0,
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "c1ff123d87870a582932f4419e02588edeab5c46",
+      "deployment_git_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
+      "release_id": "rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b"
     },
-    "build_meta_probe": "HTTP 403 from local public request; not accepted as release verification"
+    "lease_active": false
   },
-  "production_changed": "No reports deployment observed in public health; shared source workspace was changed. Final publish action outcome unknown.",
+  "production_changed": "yes; explicit Deployment finished followed by three exact Release Guard probes and active=false",
   "remaining": [
-    "Restore browser connection, inspect Emergent deployment history and matching lease",
-    "Confirm newer explicit Deployment Succeeded and run exact Release Guard verify",
-    "Compare live report and /snapchat-accounts for same account/date/source after sync",
-    "Verify all-platform view, Salla toggle, modal layout and product opening a separate tab"
+    "Complete live source toggle, product modal/new-tab, multi-platform drill and manual sync acceptance"
   ],
   "next_safe_actions": [
-    "Read this checkpoint and AGENTS.md; fetch reviewed task branch and verify full source/intent/merge SHAs",
-    "Restore permitted browser control, inspect SallaAnalytics at https://app.emergent.sh/chat and existing /app terminal; do NOT repeat Publish blindly",
-    "In /app run python scripts/production_release_guard.py status; preserve unrelated files and any different owner's lease",
-    "If a newer successful deployment is explicitly shown, run python scripts/production_release_guard.py verify --url https://mezansalla.com; require three exact probes and active=false",
-    "If publish did not start or failed, reconcile UI state and this task's exact lease before retrying. Owner-only abort, if needed after confirmed no in-flight publish: python scripts/production_release_guard.py abort --expected-sha e51f5b88b68905460417a01fb9ceb3704706c168 --expected-release-id rg5-455088b409b5a5b306f95645861ca7a6731c2295e0fa3432273c95dabc14002b",
-    "Complete authenticated live acceptance; counts are changing, do not force 68"
+    "Continue live UI acceptance at https://mezansalla.com/ads-manager/reports; no re-publish required.",
+    "Shared /app lease is closed; do not interfere with other owner's successor release.",
+    "Record final acceptance evidence and update this docs-only checkpoint and PR1615."
   ],
   "preserved_unrelated": [
     "/app/.emergent/testing/",
@@ -103,5 +95,19 @@
     "Existing unsaved VS Code Untitled editor",
     "Other tasks and their release history"
   ],
-  "continuity_note": "Issue #1006 is full (2500 comments; rejected 403). PR #1615 and this separate handoff branch are the continuity fallback. This docs-only branch MUST NOT replace the reviewed deployment pair or be published without a new governed release."
+  "continuity_note": "Issue #1006 is full (2500 comments; rejected 403). PR #1615 and this separate handoff branch are the continuity fallback. This docs-only branch MUST NOT replace the reviewed deployment pair or be published without a new governed release.",
+  "live_acceptance": {
+    "snapchat_parity": {
+      "account_scope": "selected USD Snapchat account, America/Los_Angeles",
+      "date": "2026-10-29",
+      "reports_conversions": 82,
+      "canonical_conversions": 82,
+      "reports_spend_sar": 7722.76,
+      "canonical_spend_usd": 2056.99,
+      "fx": 3.7544,
+      "reports_native_sales_sar": 22442.4,
+      "canonical_native_sales_usd": 5977.63
+    },
+    "remaining": "Source switching, syncing, modal and all-platform behavior"
+  }
 }
