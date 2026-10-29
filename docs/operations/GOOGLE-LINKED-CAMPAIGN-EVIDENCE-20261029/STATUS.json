@@ -1,0 +1,36 @@
+{
+  "task": "google-linked-campaign-evidence-20261029",
+  "branch": "codex/google-cross-platform-evidence-20261029",
+  "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "state": "design_checkpoint_not_implemented",
+  "production_changed": false,
+  "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
+  "contract": {
+    "associations": "Bounded complete event histories from mezan_campaign_product_links_v2; verified campaign-level links are intended product scope, never conversion attribution. Historical observations require link validity and recording before the observed interval.",
+    "snapchat": "Read only atomic mezan_snapchat_committed_totals_v1 snapshots, validate complete producing mezan_snapchat_sync_runs_v2 run, same owner/account/native day/timezone/currency and source provenance. No legacy mutable fallback.",
+    "context": "Campaign context stored once per provider/account/campaign/currency/attribution/window; product rows only reference it, never receive allocated campaign conversions or spend.",
+    "windows": "Server-frozen closed native days: last14, previous14, last30, last90; missing days remain partial and overlapping windows are never added.",
+    "meta": "Existing campaign daily source has native currency but lacks source timezone/atomic complete snapshot proof; retain useful association and explicit evidence gaps.",
+    "tiktok": "Existing entity daily complete snapshots lack persisted native currency/timezone; retain useful association and explicit evidence gaps.",
+    "financial_authority": "No product profit, ROAS, winner ranking, platform conversion sum as store orders, provider calls, budgets, advertising writes or execution permission. Manual verified association is not feed mapping or destination proof."
+  },
+  "source_paths": [
+    "backend/integrations_control_center/campaign_product_associations.py",
+    "backend/snapchat_v2/committed_totals.py",
+    "backend/snapchat_v2/total_facts.py",
+    "backend/integrations_control_center/meta_campaign_reporting.py",
+    "backend/integrations_control_center/tiktok_native_hierarchy.py",
+    "backend/marketing_reports.py"
+  ],
+  "acceptance_required": [
+    "Tenant/account isolation, bounded histories and BSON caps, no truncated-history effective link claim",
+    "Detach/restatement/future/backdated association cannot establish retroactive product performance",
+    "Producing complete run identity and exact period validation; stale/expired/future proof explicit",
+    "Shared multi-product campaign metrics appear once; provider conversions remain provider observations",
+    "Missing metric/day/currency/timezone stays unknown; no zero fill, financial inference or complete claim",
+    "Owner saved-plan revision changes invalidate response; no source or policy mutations",
+    "Actual disposable Mongo tests and fresh CI required before readiness"
+  ],
+  "verification": "Read-only source assessment only; no implementation tests yet",
+  "next": "Implement new pure/reader/standalone-route modules with red regressions; root attaches reviewed route/UI later"
+}
