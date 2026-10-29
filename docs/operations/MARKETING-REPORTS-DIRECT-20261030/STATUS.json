@@ -1,9 +1,9 @@
 {
   "task": "MARKETING-REPORTS-DIRECT-20261030",
   "repository": "AMASI-SA/AMASI-SA",
-  "branch": "codex/reports-direct-integrated-20261030",
-  "base": "0bf90537643c9b033d4ec9cc1d51e2e9c2d20a24",
-  "state": "Reports source integrated onto current production including dashboard hover; fresh immutable release pair required",
+  "branch": "codex/reports-store-calendar-20261030",
+  "base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
+  "state": "Narrow Salla calendar correction after live acceptance identified timestamp precedence mismatch",
   "scope": "Direct and unclassified order-source rows and standalone filters; one deduplicated Salla order universe across sources",
   "completed": [
     "Six-source Salla view; direct requires explicit marketing evidence",
@@ -12,7 +12,8 @@
     "Riyadh store calendar and common all/report status scope",
     "Synced order count and sales distribution reconciliation; no claim of live Salla comparison",
     "Frontend source selector, status filter and reconciliation panel",
-    "Compact desktop layout: six rows, responsive column widths, bold readable typography, sticky totals at 100% browser zoom"
+    "Compact desktop layout: six rows, responsive column widths, bold readable typography, sticky totals at 100% browser zoom",
+    "Prefer validated non-inferred Salla-owned order_date in Reports; retain existing timestamp fallback for other records."
   ],
   "validation": [
     {
@@ -29,26 +30,48 @@
       "command": "git diff --check",
       "exit": 0,
       "result": "passed"
+    },
+    {
+      "command": "Focused Salla calendar regression before change",
+      "exit": 1,
+      "result": "Expected failure: period count 1 instead of 2; conflicting timestamp moves valid store-day orders."
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 MEZAN_CGROUP_ROOT=<isolated test cgroup> PYTHONPATH=backend <venv>/python -B -m pytest backend/tests/test_marketing_report_orders.py backend/tests/test_marketing_reports.py backend/tests/test_tiktok_native_hierarchy.py backend/tests/test_tiktok_native_reporting.py backend/tests/test_snapchat_reporting_v2_period_candidates.py -q",
+      "exit": 0,
+      "result": "74 passed, 1 skipped, 3 existing warnings after calendar fix"
     }
   ],
   "remaining": [
-    "Review full ledger and profit semantics, error paths and regression coverage",
-    "CI and governed v5 source/intent build",
-    "Actual-host rehearsal, authorized publication and exact identity verification",
-    "Live Salla same-date/status order count and sales comparison; refresh after sync"
+    "Freeze fresh A/B release pair, CI and host rehearsal.",
+    "Publish authorized follow-up only after inactive guard and verify three probes.",
+    "Repeat live Salla/register/report reconciliation and retain final handoff."
   ],
-  "next": "Create governed source A, build reproducibly, freeze intent-only B and run CI/clean-clone rehearsal. Guard status in shared /app was inactive. Publish only the verified pair and reconcile live counts/sales, plus visually check six rows and totals at 100%.",
-  "production_changed": false,
-  "release_guard": "No lease created by this task",
+  "next": "Create immutable source A from these three files; build/freeze intent-only B, CI, actual-host rehearsal and authorized publication. Preserve the prior verified release and all unrelated production work.",
+  "production_changed": true,
+  "release_guard": "Prior Reports publication verified in three probes; its lease closed active=false. No follow-up lease yet.",
   "continuity": "Issue #1006 is at its comment limit; task STATUS and draft PR are the checkpoint records",
   "preserved": "Existing Google retail identity release, TikTok native canonical reader, and all unrelated source. No provider/order writes.",
-  "pr": 1639,
+  "pr": 1642,
   "broader_regression_note": "The optional attribution-recovery suite has two existing failures, reproduced unchanged on production base 473da65caea094b46fc3ce74bb4daec3ac6d2b00: test_salla_live_source_details_shape_resolves_exact_snapchat_campaign (existing utm_content expectation) and test_bounded_sync_recovery_loads_full_order_attribution (existing sync fake mismatch). No files for those implementations or tests were changed.",
   "live_reference": "Read all ten Salla API pages for 2026-10-29 in Asia/Riyadh, all statuses; stable pagination, unique identities and SAR amounts retained only in session for post-deployment comparison. Not yet compared to candidate runtime.",
-  "pr_note": "Prior source/intent PR #1639 superseded by fresh integration branch; new PR recorded in discussion.",
+  "pr_note": "Follow-up PR will be linked from #1642 after immutable pair is created.",
   "previous_release_pair": {
     "source": "7cba292af8a709e770f1796effd2ed9ae38fc5a3",
     "intent": "16ea59e69a07f6981c3803b963e0238ed46a9002",
     "rehearsal": "Actual Emergent host and CI both passed; not deployed due concurrent production advancement"
-  }
+  },
+  "last_verified_release": {
+    "source": "ade9b8ec599d10c69a22314010967fbb6c26fc14",
+    "deployment": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
+    "runtime": "rg5-f0663e033649e1da330bb6d90ebbfff2b6593b2ecc3cd8f68ca108514732bbf8",
+    "checks": 3,
+    "finished": "2026-10-29T22:08:00Z"
+  },
+  "live_acceptance": [
+    "Six rows plus totals visually present at 100% zoom, viewport 1363x936; all columns fit.",
+    "Direct and unclassified standalone filters and product modal verified.",
+    "Product target=_blank noopener noreferrer opened a separate tab.",
+    "Independent Salla API and order-register date totals agree. Reports differs because it reuses advertising timestamp precedence. All inspected normalized dates have field_sources.order_date=salla_direct and order_date_inferred=false."
+  ]
 }
