@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T18:35:09.827Z",
+  "updated_at": "2026-10-29T18:47:36.515Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -1573,9 +1573,30 @@
         "tree": "69e128a20531149d53a62ee32b0445ca7d6daba2",
         "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
         "branch": "codex/google-catalog-stock-review-source2-20261029",
-        "state": "SOURCE_A_FRESH_CI_REVIEW_PENDING_WAIT_FOREIGNLEASE",
+        "state": "SOURCE_A_REVIEWED_CI_PASSED_WAIT_FOREIGN_LEASE",
         "selective_diff": "Exact9reviewedruntime/test/workflowblobs from878;newSTATUSonly;zeropathoverlapReportsM5→M6",
-        "prior_attempt": "Frozeninstallfailedregistry.yarnpkg502(data-view-byte-offset1.0.1);noB/nolease/nopublish. Source1616closed superseded preserved."
+        "prior_attempt": "Frozeninstallfailedregistry.yarnpkg502(data-view-byte-offset1.0.1);noB/nolease/nopublish. Source1616closed superseded preserved.",
+        "ci": {
+          "all_workflows_success": 11,
+          "google": 40931996112,
+          "backend": 1242,
+          "frontend": 237,
+          "suites": 18,
+          "build_seconds": 5.97,
+          "replica": 40931995860,
+          "total": 34,
+          "actual_mongo": 6,
+          "skips": 0,
+          "readiness": 40931996398,
+          "artifact": 12921324906,
+          "root_logs_reviewed": true,
+          "checkout": "166cfe932c8c5539cdd7f634c2bdb15d9175fecf",
+          "retry": "Firstfrontendfrozeninstallregistry502; failedjobonlyrerun passedalltests/build, no sourcechange"
+        },
+        "intent_sha256": "75c6008214faaf923ad0d174fe4d933afe892bddf4cab89c06a5ef1d02eebd6c",
+        "runtime": "rg5-132e8a93f0e86e0b784bc39e5ff8dfc314f358e66cc78db389bfea7f60509d91",
+        "status_branch": "codex/google-catalog-stock-review-status2-20261029",
+        "status_checkpoint": "0ac93d40d6ed317bab482679a9dd9d645a0e9a8e"
       },
       "prior_clean_source": {
         "pr": 1616,
@@ -1771,9 +1792,14 @@
       "limits": "Selectedoffergateonly; ownerassociationunverified; no liveproviderwrite orpaidlaunch"
     },
     "namespace_prerequisites": {
-      "owner": "google_connection",
-      "state": "WIP_IMPLEMENTING_OWNER_READONLY_AUDIT",
-      "scope": "Fixednamespace metadata/effectiveprivileges/indexes/boundedownerlegacyshape; sanitizedbooleansonly; no writes/createIndex/no livecredentials. Cannotproveenginecommit/migration/paid authority."
+      "pr": 1619,
+      "source": "00a083dbf9e61aeaf1ce46a3971622614a43d7af",
+      "checkpoint": "a7c4a432bf60d17e22349f811c19ad1177eaa9c4",
+      "state": "WIP_REVIEWED_CI_PASSED_ROOT_MODULE_AND_LOGS_VERIFIED",
+      "root": "22-Werror1.53s; fullmodule read; auth126incl9actualMongo0skip,20UI/build;full1242/228 reviewed",
+      "ci": 40932922441,
+      "full_ci": 40932932417,
+      "limits": "Read-only fixednamespace/legacyshapeaudit, no actualproductionpermissionproof/commit/migration/authority; unknowncursorresource retains processslot"
     },
     "foreign_reports_release": {
       "pr": 1615,
@@ -1785,6 +1811,38 @@
       "lease": "observedactive;untouched",
       "coordination": "PostedPR1615coordinationcomment; rootwaitsclosedleasebeforehostrehearsal",
       "preserved": "EntireReportsproductiondelta,foreignuntrackedfiles,ownedlease"
+    },
+    "storage_diagnostics_combined": {
+      "pr": 1621,
+      "source": "311075afcd6b0a0675a61ac753579e426b4134d6",
+      "tree": "27440fcb515e825959ccb6a594f5d4d88d0eb44b",
+      "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+      "state": "WIP_SELECTIVE_INTEGRATION_CI_REVIEW_PENDING",
+      "local": "133backend-Werror29UI4suites; ownercollapsedwrapper/noautodiagnostic/independentbuttons",
+      "limits": "Original6handlers/abortdiagnosticunchanged; nofunding/migrationauthority/liveprobe"
+    },
+    "plan_evidence_combined": {
+      "pr": 1622,
+      "source": "cb365f34a94e77a34ead8c21bc850654468cb888",
+      "tree": "ed9cadb802a1b316d6d9bb0db6024dacee35524a",
+      "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
+      "state": "WIP_EXACT27REVIEWED_BLOBS_INTEGRATED_CI_REVIEW_PENDING",
+      "local": "106backend-Werror0skip108UI/5suites",
+      "limits": "Partialstoredobservations/categorypinnedonly; no netsales/profit/provider mapping"
+    },
+    "retail_ui_companion": {
+      "pr": 1620,
+      "source": "0e40b85471d6e97eb168933886feb2b6355eed88",
+      "state": "WIP_REVIEW_CI_PENDING_FEED_REFINEMENT",
+      "dependency": "Mustdeploywithreviewedc7servergate; standaloneoldlookuphasnochannelthusnewchoicesdisabled",
+      "local": "249UI18suites,48composer incl21new",
+      "review": "48independent plusstaleMerchantCenterprobes; finalsuccessorpending"
+    },
+    "linked_campaign_evidence": {
+      "branch": "codex/google-cross-platform-evidence-20261029",
+      "checkpoint": "43fcb4d9be146c27962edb76d3d3da7d6dce126e",
+      "state": "WIP_NEWFILES_ONLY31UNITPASS_REALMONGO_CI_REVIEW_PENDING",
+      "scope": "Verifiedeffectivehistoricalassociationreferences nativeSnapcommittedcampaigncontextonce perprovideraccountcurrencywindow; no duplicateproductmetrics/orderattribution/profit/ranking. Storedzero maymeanomissionthusunknown; Meta/TikTokpersistedcurrency/TZgaps explicit. Nocollectormutations."
     }
   }
 }
