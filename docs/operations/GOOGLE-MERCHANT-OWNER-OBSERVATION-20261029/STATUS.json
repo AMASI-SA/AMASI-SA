@@ -89,6 +89,30 @@
       },
       "workflows": [
         {
+          "id": 40961508078,
+          "name": "CodeQL",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508050,
+          "name": "Operational Stock Eligibility",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961508371,
+          "name": "Security Gate",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 40961507987,
+          "name": "G47 Focused Integration",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
           "id": 40961508083,
           "name": "Snapchat Direct Active Publication",
           "status": "completed",
@@ -117,12 +141,6 @@
           "name": "Google Ads full management",
           "status": "completed",
           "conclusion": "success"
-        },
-        {
-          "id": 40961508078,
-          "name": "CodeQL",
-          "status": "in_progress",
-          "conclusion": null
         },
         {
           "id": 40961508020,
@@ -159,27 +177,10 @@
           "name": "Mezan Release Readiness",
           "status": "completed",
           "conclusion": "failure"
-        },
-        {
-          "id": 40961507987,
-          "name": "G47 Focused Integration",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "id": 40961508050,
-          "name": "Operational Stock Eligibility",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "id": 40961508371,
-          "name": "Security Gate",
-          "status": "completed",
-          "conclusion": "success"
         }
       ],
-      "qualification": "Synthetic merge preserves current production including retail and foreign Reports; it differs from exact source tree. Root must create fresh integration SourceA, reviewed A/B intent and actual deployment; this source is not deploy-ready."
+      "qualification": "Synthetic merge preserves current production including retail and foreign Reports; it differs from exact source tree. Root must create fresh integration SourceA, reviewed A/B intent and actual deployment; this source is not deploy-ready.",
+      "final_workflows": "14 completed success; one readiness failure due old-base source ancestry, no pending workflows and no retry"
     }
   },
   "limits": [
@@ -208,5 +209,11 @@
   "source_tree": "0ebafad6d8ab3c822101d61719597390a54bec75",
   "pr": 1643,
   "checkpoint_branch": "codex/google-merchant-owner-observation-status-20261029",
-  "root_review": "Root read full route/fix and exact350/52Mongo logs; its own route/observer subset running at last handoff. Root alone owns attachment/integration."
+  "root_review": "Root read full route/fix and exact350/52Mongo logs; its own route/observer subset running at last handoff. Root alone owns attachment/integration.",
+  "follow_on": {
+    "pr": 1648,
+    "branch": "codex/google-merchant-observation-ui-20261029",
+    "source": "7e686bcfc8d89c60cc9f8a4a9dba2d8289846f91",
+    "status": "Unattached new UI child;61 local tests passed; CI/review pending. Backend source699 unchanged."
+  }
 }
