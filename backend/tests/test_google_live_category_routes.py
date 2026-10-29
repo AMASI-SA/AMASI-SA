@@ -82,3 +82,15 @@ async def test_invalid_category_cannot_reach_fixed_transport():
     app, _, caller = app_and_db()
     assert (await get(app, category="99")).status_code == 409
     assert caller.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [httpx.ReadTimeout("private transport detail"), httpx.ConnectError("private transport detail")])
+async def test_native_transport_failures_are_sanitized_and_stop_expansion(error):
+    app, _, caller = app_and_db()
+    caller.responses["/categories/8"] = error
+    response = await get(app)
+    assert response.status_code == 409
+    assert response.json()["detail"]["reason"] == "native_read_unavailable"
+    assert "private transport detail" not in response.text
+    assert [path for path, _ in caller.calls] == ["/store/info", "/categories/8"]

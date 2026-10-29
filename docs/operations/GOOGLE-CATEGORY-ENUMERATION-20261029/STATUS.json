@@ -2,7 +2,7 @@
   "task": "google-category-enumeration-20261029",
   "branch": "codex/google-category-enumeration-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "confirmed_sizeguard_fix_frozen_fresh_ci_required",
+  "state": "confirmed_transport_fix_frozen_fresh_ci_required",
   "production_changed": false,
   "provider_calls_performed": false,
   "scope": "New Google-owned backend preview only; no Salla shared module, collector, OAuth scope, inventory write, Google authority or existing1623 source change",
@@ -77,7 +77,7 @@
     "No calls to sync/writer routes, no policy/budget/Google provider mutation, no secret in response/log/status"
   ],
   "verification": {
-    "local": "33focused/-Werror/zero skips1.06s",
+    "local": "35focused/-Werror/zero skips; freshsuccessor42total/7actual gate required",
     "actual_mongo": {
       "run": 40941530637,
       "job": 123685874721,
@@ -87,7 +87,7 @@
       "provider_transport": "fixture-only; no liveSalla permission or payload claim"
     },
     "independent_review": "google_product_acceptance assigned exact4dc; verdict pending",
-    "fresh_gate_required": "40total/7actualMongo/zero skips on sizeguard successor"
+    "fresh_gate_required": "42total/7actualMongo/zero skips on transportfix successor"
   },
   "next": "Exactfix remotecheckpoint/freshCI and independentreview; no other runtimechange planned.",
   "source_scope_provenance": "Existing scope may originate in actualtokenresponse or configuredfallback, with no persisted provenance marker distinguishing them; new proof should label storedscope declared_or_unknown.",
@@ -116,5 +116,11 @@
     "confirmed": "Oversized nonpage storeinfo/categorydetail bypassed pagination-only decoded sizeguard and expanded native calls",
     "regression": "2focusedtestsfailed beforefix; common checked_response now runs every_native result before processing/expansion",
     "qualification": "Still postsharedclient JSONdecode, not transport or peakmemory cap"
+  },
+  "transport_review_finding": {
+    "reviewer": "google_product_acceptance",
+    "confirmed": "Existing sharedcall_salla can raise httpx.ReadTimeout/ConnectError; newroute leaked generic500 instead of sanitized unavailable",
+    "fix": "New_native catches httpx.RequestError, maps native_read_unavailable, no subsequent read/private upstream message; sharedclient untouched",
+    "regression": "2routecases failed beforefix"
   }
 }

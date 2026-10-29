@@ -1,6 +1,7 @@
 """Owner-triggered fixed Salla GET observations. Never syncs catalog or stock."""
 from datetime import datetime, timezone
 import re
+import httpx
 
 from salla_integration.service import SallaError, call_salla
 from .google_live_category_proof import canonical_id, checked_page, checked_response, digest, safe_customer_url
@@ -19,6 +20,8 @@ async def _native(db, owner, path, params, caller):
         return checked_response(await caller(db, owner, "GET", path, params=params))
     except SallaError as exc:
         raise CategoryProofUnavailable("permission_unproved" if exc.status_code == 403 else "native_read_unavailable") from None
+    except httpx.RequestError:
+        raise CategoryProofUnavailable("native_read_unavailable") from None
 
 
 async def _pages(db, owner, path, caller, maximum_pages, maximum_rows):
