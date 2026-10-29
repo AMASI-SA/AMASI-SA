@@ -42,5 +42,12 @@
   "tested_source": "12da1d13bd263aeba8d408f5bf1da718478ce8b2",
   "tested_tree": "77b2437eeb08b577eae0160c505c5927b09f0a47",
   "rollout_ready": false,
-  "retail_preservation": "All c0ce parent-to-source changed blobs compare identical except explicitly owned management floor seam; AI/routes/workspace/retail identity/current tests/composer preserved. No old release intent copied; new branch direct c0ce."
+  "retail_preservation": "All c0ce parent-to-source changed blobs compare identical except explicitly owned management floor seam; AI/routes/workspace/retail identity/current tests/composer preserved. No old release intent copied; new branch direct c0ce.",
+  "all_writes_audit": {
+    "document": "ALL-WRITES-AUDIT.md",
+    "scope": "Read-only source coverage on tested12da; no runtime changes",
+    "result": "Common accounting exists for PAUSED creation and standing budget updates, but standing-policy final submission remains proposal-only and does not serialize owner revoke/expiry. Enable/resume intentionally failclosed; no funded firstlaunch authority. Six mutation hooks attached, revoke OAuth-independent when TX healthy.",
+    "fresh_test": "13 passed111deselected2.18s-Werror owner revocation/activation tests; not production proof",
+    "recommended_next_patch": "Separate typed StandingDispatchFloor + narrow standing_policy management seam and actual replica revoke/cancel/expiry/unknownACK/replay acceptance; runtime staysfalse."
+  }
 }
