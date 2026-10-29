@@ -33,10 +33,10 @@ async function openProductPicker() {
 const shoppingReadiness = { ...readiness, campaign_types: [...readiness.campaign_types, { type: "SHOPPING", create: true, manage: true, implemented: "builder_ready", formats: ["PRODUCT"], bidding_strategies: ["MANUAL_CPC"], budget_modes: ["DAILY", "TOTAL"] }] };
 const shoppingDraft = { ...googleDefaultDraft("123", "SHOPPING"), name: "هدايا التسوق", budget_native: "139.50", shopping: { merchant_id: "77", campaign_priority: 0 }, groups: [{ ...googleDefaultDraft("123", "SHOPPING").groups[0], cpc_bid_native: "2.50" }] };
 const mezanGift = { id: "owned_gift", product_id: "owned_gift", name: "هدية باسمها", source: "mezan_products_v2" };
-const googleGift = { offer_id: "offer-gift", merchant_id: "77", name: "هدية أماسي في جوجل", status: "ELIGIBLE_LIMITED", availability: "IN_STOCK", approved: true };
+const googleGift = { offer_id: "offer-gift", merchant_id: "77", name: "هدية أماسي في جوجل", status: "ELIGIBLE_LIMITED", availability: "IN_STOCK", channel: "ONLINE", approved: true };
 function productLookups(url) {
     return url.endsWith("/google_ads/products") ? { items: [mezanGift], complete: true }
-        : url.endsWith("/lookup/products") ? { items: [googleGift, { offer_id: "disapproved-gift", name: "منتج مرفوض", status: "NOT_ELIGIBLE", availability: "OUT_OF_STOCK", approved: false }] }
+        : url.endsWith("/lookup/products") ? { complete: true, items: [googleGift, { offer_id: "disapproved-gift", name: "منتج مرفوض", status: "NOT_ELIGIBLE", availability: "OUT_OF_STOCK", approved: false }] }
             : url.endsWith("/lookup/merchants") ? { items: [{ merchant_id: "77", name: "متجر أماسي", link_verified: true }] } : { items: [] };
 }
 
@@ -100,6 +100,9 @@ test("PMax draft saves its complete selected assets and search themes unchanged"
     await render({ selection: { ...selection, initialDraft: pmaxDraft }, readiness: pmaxReadiness });
     await act(async () => button("حفظ المسودة").click());
     expect(api.post.mock.calls[0][1].draft.groups[0]).toMatchObject({ image_assets: ["customers/123/assets/10"], square_image_assets: ["customers/123/assets/11"], logo_assets: ["customers/123/assets/12"], search_themes: ["هدايا باسمها"] });
+    expect(api.get.mock.calls.some(([url]) => url.endsWith("/lookup/products"))).toBe(false);
+    expect(container.querySelector('[aria-label^="منتجات المجموعة"]')).toBeNull();
+    expect(container.textContent).not.toContain("مطابقة عرض جوجل بمنتج المتجر اختيار يدوي");
 });
 
 test("preview binds saved revision and a changed server digest clears approval", async () => {
@@ -275,6 +278,151 @@ test("AI uses the exact explicit product and Merchant offer pair and exposes mis
     expect(button("معاينة العملية في جوجل").disabled).toBe(true);
 });
 
+test.each([
+    ["unknown stock", { availability: undefined }, "توفر المنتج غير مؤكد"],
+    ["null stock", { availability: null }, "توفر المنتج غير مؤكد"],
+    ["unknown enum stock", { availability: "UNKNOWN" }, "توفر المنتج غير مؤكد"],
+    ["unspecified stock", { availability: "UNSPECIFIED" }, "توفر المنتج غير مؤكد"],
+    ["out of stock", { availability: "OUT_OF_STOCK" }, "غير متوفر حاليًا"],
+    ["preorder", { availability: "PREORDER" }, "توفر المنتج غير مؤكد"],
+    ["unproved channel", { channel: undefined }, "غير مثبت للبيع عبر الإنترنت"],
+    ["local offer", { channel: "LOCAL" }, "غير مثبت للبيع عبر الإنترنت"],
+    ["approved flag without native status", { status: undefined }, "أهلية العرض غير مؤكدة"],
+    ["ineligible native status", { status: "NOT_ELIGIBLE" }, "أهلية العرض غير مؤكدة"],
+])("new retail selection refuses %s in both pickers without changing saved drafts", async (_, patch, reason) => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, ...patch }] } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "blocked_offer", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness });
+    await openProductPicker();
+    const picker = container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]');
+    expect([...picker.options].find((option) => option.value === "offer-gift").disabled).toBe(true);
+    expect(picker.textContent).toContain(reason);
+    const checkbox = container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]');
+    expect(checkbox.disabled).toBe(true);
+    expect(checkbox.closest("label").textContent).toContain(reason);
+    // A stale DOM event must not add a now-disabled offer either.
+    await change("منتج جوجل المقابل للمنتج 1", "offer-gift");
+    await act(async () => checkbox.click());
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft.product_offer_selections).toEqual([]);
+    expect(api.post.mock.calls[0][1].draft.groups[0].product_offer_ids).toEqual([]);
+});
+
+test.each([false, undefined])("an inventory with completeness %s cannot add apparently eligible offers", async (complete) => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete, items: [googleGift] } : productLookups(url) }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness });
+    await openProductPicker();
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
+    expect(container.textContent).toContain("لم يكتمل التحقق من قائمة المنتجات");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test.each(["ELIGIBLE", "ELIGIBLE_LIMITED"])("a complete in-stock online %s offer can be selected and explained as an owner assertion", async (status) => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, status }] } : productLookups(url) }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness });
+    await openProductPicker();
+    expect(container.textContent).toContain("مطابقة عرض جوجل بمنتج المتجر اختيار يدوي منك ولم تُثبت تلقائيًا");
+    expect(container.textContent).toContain("أهلية العرض لا تثبت أنه المنتج نفسه");
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(false);
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(false);
+    const allFeed = container.querySelector('[aria-label="تغذية منتجات جوجل"] option[value=""]');
+    expect(allFeed.textContent).toBe("كل منتجات الحساب");
+    expect(allFeed.disabled).toBe(false);
+    await change("منتج جوجل المقابل للمنتج 1", "offer-gift");
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').checked).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("duplicate offer IDs across feeds remain a single ambiguous disabled choice", async () => {
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, feed_label: "SA" }, { ...googleGift, feed_label: "QA", availability: "OUT_OF_STOCK", status: "NOT_ELIGIBLE" }] } : productLookups(url) }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"] } }, readiness: shoppingReadiness });
+    await openProductPicker();
+    const options = container.querySelectorAll('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]');
+    expect(options).toHaveLength(1);
+    expect(options[0].disabled).toBe(true);
+    expect(options[0].textContent).toContain("يوجد أكثر من عرض بهذا الاختيار");
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
+});
+
+test.each(["unavailable", "missing"])("saved %s offers stay visible and unchanged until the owner removes them", async (state) => {
+    const pair = { product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" };
+    const savedDraft = { ...shoppingDraft, product_ids: ["owned_gift"], product_offer_selections: [pair], groups: [{ ...shoppingDraft.groups[0], product_offer_ids: ["offer-gift"] }] };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: state === "missing" ? [] : [{ ...googleGift, availability: "OUT_OF_STOCK" }] } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "old_selection", revision: 1, draft: body.draft } }));
+    api.put.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "old_selection", revision: 2, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: savedDraft }, readiness: shoppingReadiness }); await openProductPicker();
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"]').value).toBe("offer-gift");
+    expect(container.textContent).toContain("الاختيار محفوظ دون إثبات أهليته الحالية");
+    expect(api.post).not.toHaveBeenCalled();
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft.product_offer_selections).toEqual([pair]);
+    expect(api.post.mock.calls[0][1].draft.groups[0].product_offer_ids).toEqual(["offer-gift"]);
+    await change("منتج جوجل المقابل للمنتج 1", "");
+    await act(async () => button("حفظ تعديلات المسودة").click());
+    expect(api.put.mock.calls[0][1].draft.product_offer_selections).toEqual([]);
+    expect(api.put.mock.calls[0][1].draft.groups[0].product_offer_ids).toEqual([]);
+});
+
+test("a checked unavailable group offer can be removed while unrelated saved owner associations stay intact", async () => {
+    const pair = { product_id: "owned_gift", merchant_id: "77", offer_id: "offer-gift" };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, availability: "OUT_OF_STOCK" }] } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "group_removal", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: { ...shoppingDraft, product_ids: ["owned_gift"], product_offer_selections: [pair], groups: [{ ...shoppingDraft.groups[0], product_offer_ids: ["offer-gift"] }] } }, readiness: shoppingReadiness });
+    const checkbox = container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]');
+    expect(checkbox.checked).toBe(true); expect(checkbox.disabled).toBe(false);
+    await act(async () => checkbox.click());
+    expect(checkbox.disabled).toBe(true);
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft.groups[0].product_offer_ids).toEqual([]);
+    expect(api.post.mock.calls[0][1].draft.product_offer_selections).toEqual([pair]);
+});
+
+test("changing account clears stale selectable inventory even if the replacement lookup fails", async () => {
+    let rejectReplacement;
+    api.get.mockImplementation((url, options) => url.endsWith("/lookup/products") && options.params.account_id === "456" ? new Promise((resolve, reject) => { rejectReplacement = reject; }) : Promise.resolve({ data: productLookups(url) }));
+    const initialDraft = { ...shoppingDraft, product_ids: ["owned_gift"] };
+    await render({ selection: { ...selection, initialDraft }, readiness: shoppingReadiness }); await openProductPicker();
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(false);
+    await render({ selection: { ...selection, accountId: "456", initialDraft }, readiness: shoppingReadiness });
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]')).toBeNull();
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]')).toBeNull();
+    await act(async () => rejectReplacement(new Error("lookup unavailable")));
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]')).toBeNull();
+    expect(container.textContent).toContain("تعذر تحميل منتجات الحساب المختار");
+    expect(api.post).not.toHaveBeenCalled();
+});
+
+test("a late inventory from a previous account cannot replace an incomplete current inventory", async () => {
+    let resolvePrevious;
+    api.get.mockImplementation((url, options) => {
+        if (!url.endsWith("/lookup/products")) return Promise.resolve({ data: productLookups(url) });
+        if (options.params.account_id === "123") return new Promise((resolve) => { resolvePrevious = resolve; });
+        return Promise.resolve({ data: { complete: false, items: [googleGift] } });
+    });
+    const initialDraft = { ...shoppingDraft, product_ids: ["owned_gift"] };
+    await render({ selection: { ...selection, initialDraft }, readiness: shoppingReadiness }); await openProductPicker();
+    await render({ selection: { ...selection, accountId: "456", initialDraft }, readiness: shoppingReadiness });
+    await act(async () => resolvePrevious({ data: { complete: true, items: [googleGift] } }));
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(true);
+    expect(container.textContent).toContain("لم يكتمل التحقق من قائمة المنتجات");
+});
+
+test("retail PMax preserves the all-feed draft and refuses an out-of-stock offer", async () => {
+    const retailDraft = { ...googleDefaultDraft("123", "PERFORMANCE_MAX"), name: "هدايا أماسي", budget_native: "139.50", shopping: shoppingDraft.shopping, product_ids: ["owned_gift"] };
+    const retailReadiness = { ...readiness, campaign_types: [...readiness.campaign_types, { type: "PERFORMANCE_MAX", create: true, implemented: "builder_ready", formats: ["MULTI_ASSET"] }] };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/lookup/products") ? { complete: true, items: [{ ...googleGift, availability: "OUT_OF_STOCK" }] } : productLookups(url) }));
+    api.post.mockImplementation((url, body) => Promise.resolve({ data: { draft_id: "retail_pmax", revision: 1, draft: body.draft } }));
+    await render({ selection: { ...selection, initialDraft: retailDraft }, readiness: retailReadiness }); await openProductPicker();
+    expect(container.querySelector('[aria-label="منتجات المجموعة 1: هدية أماسي في جوجل"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="منتج جوجل المقابل للمنتج 1"] option[value="offer-gift"]').disabled).toBe(true);
+    expect(container.querySelector('[aria-label="تغذية منتجات جوجل"]').value).toBe("");
+    await act(async () => button("حفظ المسودة").click());
+    expect(api.post.mock.calls[0][1].draft).toMatchObject({ campaign_type: "PERFORMANCE_MAX", shopping: shoppingDraft.shopping, product_offer_selections: [] });
+    expect(api.post.mock.calls[0][1].draft.groups[0].product_offer_ids).toEqual([]);
+});
+
 test("AI cannot silently replace the selected campaign type", async () => {
     api.post.mockResolvedValue({ data: { draft: shoppingDraft } });
     await render(); await openProductPicker(); await change("طلب حملة جوجل بالذكاء", "جهّز حملة بحث"); await change("سقف ميزانية مسودة الذكاء", "150");
@@ -282,6 +430,7 @@ test("AI cannot silently replace the selected campaign type", async () => {
     expect(api.post.mock.calls[0][1]).toMatchObject({ campaign_type: "SEARCH", product_ids: [], product_offer_selections: [] });
     expect(container.querySelector('[aria-label="نوع حملة جوجل"]').value).toBe("SEARCH");
     expect(container.textContent).toContain("لم يطابق اقتراح الذكاء نوع الحملة المختار");
+    expect(api.get.mock.calls.some(([url]) => url.endsWith("/lookup/products"))).toBe(false);
 });
 
 test("frozen server product and offer names take precedence over mutable catalog labels", async () => {
@@ -291,6 +440,8 @@ test("frozen server product and offer names take precedence over mutable catalog
     expect(frozen.textContent).toContain("هدية وقت المعاينة"); expect(frozen.textContent).toContain("عرض جوجل وقت المعاينة");
     expect(frozen.textContent).not.toContain("اسم تغير بعد المعاينة"); expect(frozen.textContent).not.toContain("عرض تغير بعد المعاينة");
     expect(frozen.textContent).not.toContain("owned_gift"); expect(frozen.textContent).not.toContain("offer-gift");
+    expect(frozen.textContent).toContain("مطابقة عرض جوجل بمنتج المتجر اختيار يدوي منك ولم تُثبت تلقائيًا");
+    expect(frozen.textContent).toContain("أهلية العرض لا تثبت أنه المنتج نفسه");
 });
 
 test("image review renders only an opaque object URL from this document", async () => {

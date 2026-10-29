@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task": "google-retail-selection-ui",
+  "date_utc": "2026-10-29",
+  "branch": "codex/google-retail-selection-ui-20261029",
+  "production_base_sha": "e51f5b88b68905460417a01fb9ceb3704706c168",
+  "status": "WIP UI companion; immutable review and CI pending; not deployment-ready",
+  "owned_files": [
+    "frontend/src/components/marketing/GoogleCampaignComposer.jsx",
+    "frontend/src/components/marketing/GoogleCampaignComposer.test.jsx",
+    "docs/operations/GOOGLE-RETAIL-SELECTION-UI-20261029/STATUS.json"
+  ],
+  "backend_dependency": {
+    "pr": 1617,
+    "reviewed_source": "c7a36165f48f433ab3275320187e4d9c5b298020",
+    "tree": "13a9fa63a2deb026b1b137f99728dd4b3cb6a9f5",
+    "integration": "path-only UI companion; does not include or modify backend dependency; must release together with c7 gate or verified equivalent"
+  },
+  "behavior": [
+    "New pair and group selections require complete current-account/current-merchant inventory, native ELIGIBLE/ELIGIBLE_LIMITED status, ONLINE channel and IN_STOCK availability; approved flag alone is insufficient.",
+    "Duplicate offer IDs collapse to a disabled ambiguous choice; backend remains authoritative for full native identity, exact campaign feed, merchant/account ownership and final dispatch freshness.",
+    "Existing unavailable or missing selections remain visible without automatic edits, stay in saved drafts, and can be explicitly removed by the owner.",
+    "Owner-selected product/offer mapping is disclosed as an unverified manual assertion in selection and frozen review; native eligibility does not prove store-to-offer identity.",
+    "Account changes clear scoped lookup options; failed or late previous-account lookups cannot restore stale selectable rows.",
+    "Generic all-feed option, Search and nonretail PMax remain available. No campaign creation or execution logic changed."
+  ],
+  "validation": {
+    "focused_composer": "48 cases passed within full suite (27 existing + 21 new)",
+    "full_frontend": {
+      "result": "249 passed; 18 suites; 0 skips; exit 0",
+      "seconds": 12.13,
+      "toolchain": "governed Node v22.23.2 / Yarn 1.22.22",
+      "scope": "same 18 frontend paths as Google Ads full management workflow"
+    },
+    "dependency_lock": "same yarn.lock SHA256 1bfa215ae3fb98df72a4c934fa0de33c9f11038ccede9affde4dab0a2cae5d4a; existing node_modules reused read-only",
+    "live_google_calls": false,
+    "paid_writes": false,
+    "deployment": false,
+    "git_diff_check": "passed"
+  },
+  "remaining": [
+    "Finish exact-tree frontend regression and independent review; save source and final evidence remotely.",
+    "Root integrates reviewed c7 backend plus UI paths onto latest production; run integrated CI and create fresh Source A/Intent B under Release Guard v5.",
+    "Root verifies deployed owner flow; this slice does not claim live provider eligibility, independent mapping, automatic first launch or category membership."
+  ],
+  "next_action": "Save immutable source checkpoint and draft PR for review; root alone owns release."
+}
