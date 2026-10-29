@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-RELEASE-M622-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-release-m622-20261029",
-  "state": "fresh_source_full_ci_pass_independent_preservation_pass_general_pr_checks_pending",
+  "state": "fresh_source_all_ci_pass_independent_review_sealed_root_candidate_verified_host_release_pending",
   "source_identity": "Immutable reviewed release source7f214. This separate status branch records evidence without modifying runtime source.",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "parent_production_tree": "c4074b70bc63d0bc44759256841319938516af20",
@@ -88,9 +88,9 @@
     },
     "fresh_review": {
       "reviewer": "budget_audit",
-      "state": "bounded_preservation_pass",
-      "evidence": "Direct622c parent/tree verified,24exact3bbe blobs,2workflowbranch-only additions;5595→622c intent-only and currentintent15a28cb preserved. No source integration finding.",
-      "qualification": "No repeated broad tests needed for identical runtime; freshCI logs initially read by implementer, independent freshCI seal pending."
+      "state": "bounded_sealed_pass",
+      "evidence": "Independently verified direct622c parent/tree,24 exact3bbe blobs,two workflow trigger-only additions, current intent15a28cb preserved. Directly read all four exact7f214 PUSH logs:1855backend,689UI/build4.05,422 including74 actualMongo/zero skips,122UI/build6.13. No additional source finding.",
+      "qualification": "No new broad rerun on identical runtime; previous3bbe10backend+6actualAuthProvider independent/root integration tests remain historical. No live provider or deployment claim."
     }
   },
   "production_changed_by_this_task": false,
@@ -99,13 +99,13 @@
   "paid_writes": 0,
   "deploy_ready": false,
   "remaining": [
-    "General PR checks still running; no failure at this checkpoint. Read final results before release.",
-    "Independent fresh CI seal and root source/CI acceptance pending; inherited3bbe bounded review already accepted.",
-    "Root must finish1655 publication,3 live identities and lease closure before starting new host work.",
-    "Root owns original hostA build, intent-onlyB, prepare/prepublish/singlepublish and live owner behavior acceptance.",
-    "No mapping, inventory, Ads eligibility, continuous auth or funded launch proved; all limits retained."
+    "Root must finish1655 publication, verify identity three times and close its lease before new host work.",
+    "Root rechecks current production and accepted source before original hostA build and intent-onlyB; if production advances, create new source and repeat required evidence.",
+    "Root owns prepare/prepublish/single publish, newest deployment success, three live identities/lease closure and explicit owner UI/route acceptance.",
+    "Owner must explicitly choose Ads/Merchant and initiate read; real native access/grant is not proved by synthetic tests.",
+    "Store-offer mapping, inventory, Ads eligibility, continuous authorization and paid first launch are not enabled or proved."
   ],
-  "next_safe_action": "Preserve frozen7f214, inspect final general PR checks and independent CI verdict; update status branch only. Root owns host/deployment and must re-check production before intentB.",
+  "next_safe_action": "Handoff frozen7f214 and candidate evidence to root. Preserve source unchanged; only status branch may receive later release evidence. No agent host/lease/provider actions.",
   "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "runtime_source_sha": "7f214a76ea98500d17b239d3577b43e542801374",
   "runtime_tree_sha": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
@@ -133,7 +133,14 @@
       "622c310d8dcee13da61410bca6b3ac85134a9cfe",
       "7f214a76ea98500d17b239d3577b43e542801374"
     ],
-    "same_tree_as_source": true
+    "same_tree_as_source": true,
+    "full_google_run": 40973647130,
+    "backend_job": 123796267315,
+    "backend": "1855 passed52.81s",
+    "frontend_job": 123796267787,
+    "frontend": "689 passed35suites,build4.87s",
+    "logs_read": true,
+    "qualification": "Distinct synthetic ee3f commit has same tree as7f214; exact-source PUSH evidence separately recorded."
   },
   "ci_snapshot": [
     {
@@ -142,20 +149,6 @@
       "event": "pull_request",
       "status": "completed",
       "conclusion": "success"
-    },
-    {
-      "id": 40973647044,
-      "name": "Security Gate",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40973647273,
-      "name": "CodeQL",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
     },
     {
       "id": 40973647175,
@@ -179,13 +172,6 @@
       "conclusion": "success"
     },
     {
-      "id": 40973647068,
-      "name": "Google category membership",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40973646956,
       "name": "Mezan Release Readiness",
       "event": "pull_request",
@@ -207,13 +193,6 @@
       "conclusion": "success"
     },
     {
-      "id": 40973647214,
-      "name": "G47 Focused Integration",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40973647243,
       "name": "MZ2 advertising V2 native accounting",
       "event": "pull_request",
@@ -228,46 +207,11 @@
       "conclusion": "success"
     },
     {
-      "id": 40973647188,
-      "name": "Google linked campaign evidence",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
       "id": 40973647255,
       "name": "Snapchat Settings Management V2",
       "event": "pull_request",
       "status": "completed",
       "conclusion": "success"
-    },
-    {
-      "id": 40973647100,
-      "name": "Operational Balance Web",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40973647250,
-      "name": "Operational Stock Eligibility",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40973647102,
-      "name": "Google Merchant local choices",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
-    },
-    {
-      "id": 40973647200,
-      "name": "Google live category preview",
-      "event": "pull_request",
-      "status": "in_progress",
-      "conclusion": null
     },
     {
       "id": 40973647149,
@@ -298,6 +242,69 @@
       "conclusion": "success"
     },
     {
+      "id": 40973647068,
+      "name": "Google category membership",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647102,
+      "name": "Google Merchant local choices",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647200,
+      "name": "Google live category preview",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647100,
+      "name": "Operational Balance Web",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647188,
+      "name": "Google linked campaign evidence",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647044,
+      "name": "Security Gate",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647214,
+      "name": "G47 Focused Integration",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647250,
+      "name": "Operational Stock Eligibility",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40973647273,
+      "name": "CodeQL",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
       "id": 40973613183,
       "name": "Google Ads full management",
       "event": "push",
@@ -311,5 +318,29 @@
       "status": "completed",
       "conclusion": "success"
     }
-  ]
+  ],
+  "ci_summary": {
+    "total": 25,
+    "exact_source_push": 2,
+    "pull_request": 23,
+    "success": 25,
+    "failure": 0,
+    "pending": 0
+  },
+  "root_candidate_review": {
+    "attribution": "root",
+    "state": "exact_remote_source_loader_pass",
+    "source": "7f214a76ea98500d17b239d3577b43e542801374",
+    "source_base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "artifact_id": 12941855881,
+    "zip_bytes": 272328,
+    "zip_sha256": "367f9d49e7b04a3b229af14483e9bf08ac98997b364949f36a2d820a22935d71",
+    "intent_bytes": 972848,
+    "intent_sha256": "8ceacb6760ec91cef5f11215282774d3863e3776bde686514ae76290eb53924e",
+    "backend_manifest_files": 1053,
+    "control_manifest_files": 257,
+    "runtime_id": "rg5-c6da2eab2383aafe2a1f54e971a443adf5d2e61dcb5e9abf5c2442006ea6d57a",
+    "qualification": "Root's first loader call on local equivalent81b5 was correctly refused for HEAD mismatch; exact remote7f214 worktree passed. No source/gate changes. This is candidate review, not original hostA or a publication."
+  },
+  "ready_for_root_release_review": true
 }
