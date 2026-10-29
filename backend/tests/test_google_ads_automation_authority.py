@@ -35,15 +35,18 @@ def case_documents(action="PAUSE_CAMPAIGN", *, current=NOW, proposal_id="proposa
     native_action = {"PAUSE_CAMPAIGN":"pause", "RESUME_CAMPAIGN":"enable", "CHANGE_BUDGET":"set_budget"}[action]
     changes = {"budget_native":"22"} if native_action == "set_budget" else {}
     source = authority.make_automation_source(policy, analysis_id=analysis["analysis_id"], recommendation_id="rec1")
-    from integrations_control_center.google_ads_autonomy_planner import plan_google_autonomy
-    candidate = plan_google_autonomy(**data)["candidates"][0]
+    # Construct an already-saved proposal independently of today's planner.
+    # This also lets regressions prove old enable previews cannot gain authority.
+    idempotency_key = "google_auto_" + digest({"user_id":"owner", "account_id":"123",
+        "policy_revision":policy["revision"], "analysis_id":analysis_id,
+        "recommendation_id":"rec1", "campaign_id":"456", "action":native_action, "changes":changes})
     row = {"user_id":"owner", "account_id":"123", "proposal_id":proposal_id, "execution_claim_id":claim_id,
         "actor_id":authority.SERVICE_ACTOR_ID, "provider":"google_ads", "action":native_action, "campaign_id":"456",
         "status":"approved", "submission_started":False, "auth_epoch":"test-epoch", "currency":"SAR", "time_zone":"Asia/Riyadh",
         "planned":{"action":native_action, **changes}, "before_digest":digest(snapshot), "before_snapshot":snapshot,
         "operations":build_update_operations(native_action,"123",snapshot,changes),
         "created_at":current.isoformat(), "expires_at":(current+timedelta(minutes=30)).isoformat(),
-        "automation_source":source, "idempotency_key":candidate["idempotency_key"]}
+        "automation_source":source, "idempotency_key":idempotency_key}
     row["confirmation_digest"] = authority.automation_confirmation_digest(row)
     fence = {"user_id":"owner","account_id":"123","status":"claimed","proposal_id":proposal_id,"execution_claim_id":claim_id}
     native = {"metadata":{"account_id":"123","identity_verified":True,"currency_code":"SAR","time_zone":"Asia/Riyadh"},
@@ -122,7 +125,7 @@ async def test_default_off_creates_no_claim_or_database_writes(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action,delta",[("PAUSE_CAMPAIGN","0"),("RESUME_CAMPAIGN","20"),("CHANGE_BUDGET","2")])
+@pytest.mark.parametrize("action,delta",[("PAUSE_CAMPAIGN","0"),("CHANGE_BUDGET","2")])
 async def test_authorization_only_claims_policy_and_requires_separate_submission_floor(action,delta):
     docs,native=case_documents(action);db=DB(docs)
     result=await authorize(db,native)
@@ -135,6 +138,16 @@ async def test_authorization_only_claims_policy_and_requires_separate_submission
     assert db[PROPOSALS].rows[0]["submission_started"] is False
     with pytest.raises(HTTPException) as error:await authorize(db,native)
     assert error.value.detail["code"] == "google_automation_claim_pending"
+
+
+@pytest.mark.asyncio
+async def test_previously_saved_enable_preview_cannot_claim_without_stop_provenance():
+    docs,native=case_documents("RESUME_CAMPAIGN");db=DB(docs)
+    with pytest.raises(HTTPException) as error:
+        await authorize(db,native)
+    assert error.value.detail["code"] == "google_automation_plan_not_eligible"
+    assert not db[AUTOMATION_POLICIES].updates
+    assert db[PROPOSALS].rows[0]["submission_started"] is False
 
 
 @pytest.mark.asyncio
@@ -328,7 +341,7 @@ async def test_history_and_existing_reservation_are_unioned_without_double_count
     db=DB(docs);await authorize(db,native)
     db[PROPOSALS].rows[0].update(status="completed",verified=True,submission_started=True,submitted_at=NOW.isoformat(),executed_at=NOW.isoformat())
     await authority.settle_google_automation_claim(db,user_id="owner",account_id="123",claim_id="claim1",current=NOW)
-    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="RESUME_CAMPAIGN")
+    later=NOW+timedelta(hours=2);fresh=next_attempt(db,later,action="CHANGE_BUDGET")
     result=await authority.authorize_google_automation_claim(db,user_id="owner",account_id="123",proposal_id="proposal2",execution_claim_id="claim2",native_evidence=fresh,current=later)
     assert result["authorized"] is True
     assert db[AUTOMATION_POLICIES].rows[0]["_dispatch_days"][0]["proposal_ids"] == ["proposal1","proposal2"]
