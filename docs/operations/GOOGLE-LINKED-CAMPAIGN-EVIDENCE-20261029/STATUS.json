@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "backend_frozen_actual_replica_green_independent_review_pending",
+  "state": "review_metadata_fixes_frozen_fresh_replica_ci_required",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -33,7 +33,7 @@
   ],
   "verification": {
     "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
-    "result": "32 passed, zero skips, 1.17s -Werror; variant duplicate-reference regression failed before dedup fix",
+    "result": "33 passed, zero skips, -Werror; currentfix freshactualMongo required",
     "actual_mongo": {
       "run": 40934459598,
       "job": 123661202492,
@@ -41,9 +41,10 @@
       "result": "41 passed in3.65s;9actualMongo/zero skips",
       "logs_retrieved_independently": true
     },
-    "ci": "Dedicated exact-source replica job SUCCESS; no claim fullGoogle CI or deployment"
+    "ci": "Dedicated exact-source replica job SUCCESS; no claim fullGoogle CI or deployment",
+    "actual_mongo_next_gate": "43total/10actualMongo/zero skips required including actual latevariant appendwriter regression"
   },
-  "next": "Independent exact-source review; planning agent implements guarded owner UI/service in separate branch. Root later integrates reviewed attachment and re-sources latest production. No deployment authorization exercised.",
+  "next": "Fresh exactfix actualMongo CI then independent reviewer verdict; notify planningagent schema unchanged/accurate association counts",
   "known_source_limits": [
     "Canonical Snapchat _number(None) normalizes missing raw metric to zero; reader returns stored zero as unknown with metric provenance, never confirmedzero",
     "Read-only review route exported but not attached; no UI change",
@@ -94,5 +95,13 @@
     "response": "Plan identity/revision/asof; perproduct associations and unique contextrefs; shared daily campaigncontexts and four native scoped window reference sets withmissingdates; no aggregated metrics or growth",
     "authority": "All responses execution_authorized:false, source_coverage_complete:false, product_attribution_verified:false; independent_store_orders:null, profitability:null",
     "integration_owner": "google_plan_integration owns newUI/service and CommercialPlan render; root merges shared route attach. Backend code held frozen except confirmed finding."
+  },
+  "independent_review": {
+    "reviewer": "google_product_acceptance",
+    "findings_fixed": [
+      "Late variant event sameproduct inherited observed_context_days and metricstatus from earlier association; counts now require proof.event_id+product_id",
+      "associated_product_count counted variant links rather than distinctproductids; now distinctproducts"
+    ],
+    "regression": "Latevariant puretest failed1beforefix;33tests nowgreen; newactualwriterMongo regression collected"
   }
 }

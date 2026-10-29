@@ -81,6 +81,20 @@ async def test_multiproduct_campaign_context_is_emitted_once_no_allocated_metric
 async def test_two_verified_variant_associations_do_not_duplicate_product_context_reference():
     result = await read(database([event(), event(event_id="variant", association_key="variant", product_variant_id="size")]))
     assert len(result["products"][0]["context_refs"]) == 1
+    assert result["campaign_contexts"][0]["associated_product_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_late_variant_event_does_not_inherit_other_associations_historical_context():
+    late = "2026-10-29T00:00:00+00:00"
+    newer = event(event_id="new-variant", association_key="new-variant-key", product_variant_id="new-size",
+                  valid_from=late, recorded_at=late,
+                  evidence={"source": "manual", "verification_status": "verified", "observed_at": late})
+    result = await read(database([event(), newer]))
+    associations = {a["event_id"]: a for a in result["products"][0]["associations"]}
+    assert associations["event-product"]["observed_context_days"] == 1
+    assert associations["new-variant"]["observed_context_days"] == 0
+    assert associations["new-variant"]["metrics_status"] == "no_qualified_historical_context"
 
 
 @pytest.mark.asyncio

@@ -83,6 +83,23 @@ async def test_actual_graph_and_committed_writers_native_bson_context(mongo, mon
 
 
 @pytest.mark.asyncio
+async def test_actual_late_variant_writer_cannot_inherit_earlier_association_evidence(mongo, monkeypatch):
+    await seed(mongo, monkeypatch)
+    late = datetime(2026, 10, 29, tzinfo=timezone.utc)
+    monkeypatch.setattr(graph, "_utcnow", lambda: late)
+    newer = await graph.attach_campaign_product(mongo, "owner", {
+        "provider": "snapchat_ads", "account_id": "account", "campaign_id": "campaign", "product_id": "product",
+        "product_variant_id": "new-size", "valid_from": late,
+        "evidence": {"source": "manual", "verification_status": "verified", "observed_at": late}},
+        idempotency_key="source-late-variant")
+    result = await read(mongo)
+    association = next(a for a in result["products"][0]["associations"] if a["event_id"] == newer["event_id"])
+    assert association["observed_context_days"] == 0
+    assert association["metrics_status"] == "no_qualified_historical_context"
+    assert len(result["campaign_contexts"]) == 1 and len(result["products"][0]["context_refs"]) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("mutation", ["foreign_owner", "wrong_account", "incomplete", "wrong_window"])
 async def test_producing_run_mismatch_never_promotes_committed_snapshot(mongo, monkeypatch, mutation):
     await seed(mongo, monkeypatch)

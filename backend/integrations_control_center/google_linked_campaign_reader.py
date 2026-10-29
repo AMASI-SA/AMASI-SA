@@ -156,7 +156,7 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
                     continue
                 context["context_id"] = _ref([provider, account, campaign, *identity, context["currency"]])
                 context["window_ids"] = (["last14"] if age < 14 else ["previous14"] if age < 28 else []) + (["last30"] if age < 30 else []) + ["last90"]
-                context["associated_product_count"] = len(before)
+                context["associated_product_count"] = len({link["product_id"] for link in before})
                 context["association_proofs"] = proof
                 contexts.append(context)
             except (ValueError, TypeError, KeyError, OverflowError):
@@ -167,10 +167,12 @@ async def linked_campaign_evidence(db, *, owner_id, product_ids, as_of):
         for link in linked:
             entry = next(a for a in products[link["product_id"]]["associations"] if
                 a["event_id"] == link["event_id"])
-            entry.update(observed_context_days=sum(any(p["product_id"] == link["product_id"] for p in c["association_proofs"]) for c in contexts),
+            observed_days = sum(any(p["product_id"] == link["product_id"] and p["event_id"] == link["event_id"]
+                                    for p in c["association_proofs"]) for c in contexts)
+            entry.update(observed_context_days=observed_days,
                          rejected_source_snapshots=rejected, source_coverage_complete=False,
                          missing=["complete_period_product_attribution", "independent_store_order_matching", "historical_product_costs"],
-                         metrics_status="partial_saved_campaign_context" if contexts else "no_qualified_historical_context")
+                         metrics_status="partial_saved_campaign_context" if observed_days else "no_qualified_historical_context")
         output["campaign_contexts"].extend(contexts)
         for context in contexts:
             for proof in context["association_proofs"]:

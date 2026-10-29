@@ -59,9 +59,10 @@ jobs:
           import xml.etree.ElementTree as ET
           cases=ET.parse('linked-campaign-results.xml').getroot().findall('.//testcase')
           replica=[c for c in cases if c.attrib.get('classname','').endswith('test_google_linked_campaign_mongo')]
-          assert len(cases) == 41 and len(replica) == 9
+          assert len(cases) == 43 and len(replica) == 10
           assert any(c.attrib.get('name') == 'test_actual_graph_and_committed_writers_native_bson_context' for c in replica)
           assert any(c.attrib.get('name') == 'test_actual_standalone_owner_route_saved_scope_and_revision' for c in replica)
+          assert any(c.attrib.get('name') == 'test_actual_late_variant_writer_cannot_inherit_earlier_association_evidence' for c in replica)
           assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
           print('Verified',len(cases),'tests including',len(replica),'real Mongo replica tests, zero skips')
           PYGATE
