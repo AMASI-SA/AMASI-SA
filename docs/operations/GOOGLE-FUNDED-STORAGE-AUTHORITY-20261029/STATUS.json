@@ -1,10 +1,10 @@
 {
-  "status": "WIP_OWNER_AUTH_STAMP_MARKER_ONESHOT_UNIT_MILESTONE_REPLICA_PENDING",
+  "status": "WIP_PRIVATE_INITIATION_PREPARED_JOURNAL_IMPLEMENTED_REPLICA_PENDING",
   "branch": "codex/google-funded-storage-authority-wip-20261029",
   "base": "9e83dfbc7488483abe43d6443a80a1ac819476e1",
   "scope": "New fundedgrants/authority helpers plus narrow typedguard/exposure; no publicattach/gateway/worker/activation/flags/production calls",
   "completed": "Authenticated canonicalreview/saveconfigured/offlineOAuthrevoke undercommonepoch; actualnativeinventory/settings/validate-only +currentcanonicalproduct readers mint privateboundbundle; callableone-shotreservation/floor/originalreceipt+actualgraphverification settlement; accountfence/epoch/proposal/journalbinding; explicitfundedunboundhold thennativepairMAXexposure andstoredcap. No activation/publicattachment/paidconsumer.",
-  "tests": "89 selected local unit tests passed -W error in3.15s (new grants/authority plus existing paused exposure/guard); no actualMongo/CI for new source yet.",
+  "tests": "96 selected local units -W error passed3.21s; old standing/PAUSED authority/gateway/floors241passed4.41s before initiation-only delta. Initial CI293e565 failed221passed/10failed due TEST epoch dict mutated by Motor insert_one adding_id; corrected fixture selects exact3fields. New30 actualMongo cases collected, no acceptance until executed.",
   "remaining": [
     "ActualMongo independentclients ownerpassword/role/disable marker races and exactauthcontract/BSON",
     "ActualMongo grant/revoke/proposal cancellation/clock/unknowncommit/wire/resourcecaps with nozero-skipCI",
@@ -24,6 +24,6 @@
   "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned.",
   "owner_read_bound": "Exact owner projection uses server limit(2), max_time_ms(2000), including through SessionDatabase; dedicated collaborator asserts session and both bounds.",
   "google_scope_boundary": "Reservation/floor snapshot re-reads canonical connected/api_connection integration and exact account membership plus account_client credential epoch projection after native awaits. Adversarial relink/disconnect/account-removal between prepare and TX reject and retain reservation/fence. No provider/OAuth call in transaction. Snapshot reads do not serialize later OAuth writers; future gateway lifecycle remains required.",
-  "replica_test_preparation": "24 actual Mongo cases collected locally, not executed here: initial14 plus3 floor commit faults,4 independent revoke/cancel ordering,3 expiry phases. First14 CI running on293e565; new10 not checkpoint-tested yet.",
-  "confirmed_blocker": "Reservation unknown commit with absent RUNS does not itself prevent a caller from reinvoking reserve. No paid consumer exists; entrypoint initiation continuation amendment proposed in RESERVE-INITIATION-AMENDMENT.md, not implemented."
+  "replica_test_preparation": "30 actualMongo cases collected: owner beforecapture/snapshot-marker races and validator; floor+reserve91/close/ACKloss; independent revoke/cancel ordering; three expiry phases; OAuthrelink/disconnect/accountremoval. Dedicated gate49newunits+30newMongo+53existingMongo, zero skips. New source not yet run inCI.",
+  "confirmed_blocker": "Original absent-RUNS reservation retry gap addressed in source by required private initiation ACK burned before first await and prepared\u2192reserved only. No application issuer exists; fixture-only acknowledged future preparation is explicitly not activation authority. Actual91/close/ACKloss acceptance remains pending."
 }

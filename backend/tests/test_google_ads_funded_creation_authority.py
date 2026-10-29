@@ -25,7 +25,7 @@ async def setup(monkeypatch,db=None,*,active=True,request_key='reviewed_launch_1
         values={**query,'connection_status':'connected','connection_provenance':'api_connection','ad_account_id':'123'}
         if await db[collection].find_one(query):await db[collection].update_one(query,{'$set':values})
         else:await db[collection].insert_one(values)
-    epoch=management.digest({key:value for key,value in credential.items() if key!='user_id'})
+    epoch=management.digest({key:credential[key] for key in ('refresh_token_ciphertext','scope','google_subject')})
     provider=NativeCreationProvider()
     original=provider.mutate
     async def validate(operations,*,validate_only=False):
@@ -63,9 +63,29 @@ async def setup(monkeypatch,db=None,*,active=True,request_key='reviewed_launch_1
         'execution_claim_id':row['execution_claim_id'],'status':'claimed','claimed_at':NOW.isoformat()})
     return db,provider,key,row
 
+async def seed_future_preparation(db,key,row):
+    # TEST ONLY. There is NO application activation/preparation ACK producer.
+    scope={'user_id':'owner','account_id':'123'}
+    record=await db[grants.GRANTS].find_one({'grant_key':key},{'_id':0})
+    state=await db[guard.BUDGET_GUARDS].find_one(scope)
+    operation_id='test_future_prepare_1'
+    claim={'proposal_id':row['proposal_id'],'execution_claim_id':row['execution_claim_id'],
+        'preparation_operation_id':operation_id}
+    binding={**scope,'grant_key':key,'grant_revision':record['revision'],'review_digest':record['review_digest'],
+        'proposal':management.immutable(row),'fence':await db[management.FENCES].find_one({**scope,'proposal_id':row['proposal_id']},{'_id':0}),'execution_claim_id':row['execution_claim_id'],
+        'preparation_operation_id':operation_id,'guard_epoch':state['epoch']}
+    digest=management.digest(binding)
+    await db[grants.GRANTS].update_one({'grant_key':key},{'$set':{'consumed':True,'claim':claim}})
+    await db[grants.RUNS].insert_one({**scope,'grant_key':key,'phase':'prepared','consumed':True,**claim,
+        'claim':claim,'preparation_binding':binding,'preparation_binding_digest':digest})
+    return authority._InitiationAck(db,'owner','123',key,row['proposal_id'],row['execution_claim_id'],digest,operation_id,authority._INITIATION)
+
 async def reserve(db,key,row):
+    if ('_initiation_ack' not in row and not await db[grants.RUNS].find_one({'grant_key':key})
+        and (await db[grants.GRANTS].find_one({'grant_key':key})).get('state')=='active'):
+        row['_initiation_ack']=await seed_future_preparation(db,key,row)
     result=await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key=key,
-        proposal_id=row['proposal_id'],execution_claim_id=row['execution_claim_id'])
+        proposal_id=row['proposal_id'],execution_claim_id=row['execution_claim_id'],initiation_ack=row.get('_initiation_ack'))
     row['_reservation_ack']=result['_reservation_ack']
     return result
 
@@ -104,8 +124,8 @@ async def test_actual_reader_reservation_floor_original_graph_settlement_one_sho
 async def test_configured_grant_cannot_activate_when_runtime_changes(monkeypatch):
     db,provider,key,row=await setup(monkeypatch,active=False)
     with pytest.raises(HTTPException) as error:await reserve(db,key,row)
-    assert error.value.detail['code']=='google_funded_grant_inactive_or_consumed' and provider.writes==0
-    assert not await db[grants.RUNS].find({}).to_list(length=1)
+    assert error.value.detail['code']=='google_funded_initiation_ack_unproved' and provider.writes==0
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('phase',['before_reservation','after_reservation'])
@@ -240,7 +260,7 @@ async def test_arbitrary_native_flags_cannot_mint_prepared_proof(monkeypatch):
             capability=capability,planner=lambda snapshot:guard.FundedCreationReservation(key,row['proposal_id'],row['execution_claim_id'],
                 {'identity_verified':True,'complete':True,'provider_validated':True}))
     assert error.value.detail['code']=='google_funded_native_bundle_unproved'
-    assert not await db[grants.RUNS].find({}).to_list(length=1) and provider.writes==0
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
 
 @pytest.mark.asyncio
 async def test_owner_marker_changes_only_approved_field_and_is_not_revocation_dependency(monkeypatch):
@@ -307,3 +327,48 @@ async def test_floor_snapshot_refuses_google_scope_drift_after_prepare(monkeypat
     assert (await db[management.FENCES].find_one({'account_id':'123'}))['status']=='claimed'
     assert provider.writes==0
     with pytest.raises(HTTPException):await floor(db,key,row)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind',['missing','json','wrong_db','wrong_scope','burned'])
+async def test_initiation_capability_rejected_before_any_await_or_reader(kind):
+    class NoReads:
+        def __getattr__(self,name):raise AssertionError('No reads permitted before valid capability')
+        def __getitem__(self,name):raise AssertionError('No reads permitted before valid capability')
+    db=NoReads()
+    ack=authority._InitiationAck(db,'owner','123','grant','proposal','claim','a'*64,'prepare',authority._INITIATION)
+    if kind=='missing':ack=None
+    elif kind=='json':ack={'proof':'verified','prepared':True}
+    elif kind=='wrong_db':ack.db=object()
+    elif kind=='wrong_scope':ack.user_id='other'
+    else:ack.used=True
+    with pytest.raises(HTTPException) as error:
+        await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key='grant',
+            proposal_id='proposal',execution_claim_id='claim',initiation_ack=ack)
+    assert error.value.detail['code']=='google_funded_initiation_ack_unproved'
+
+@pytest.mark.asyncio
+async def test_valid_initiation_is_burned_when_prepared_journal_missing(monkeypatch):
+    db,provider,key,row=await setup(monkeypatch)
+    ack=authority._InitiationAck(db,'owner','123',key,row['proposal_id'],row['execution_claim_id'],
+        'a'*64,'test_prepare',authority._INITIATION)
+    with pytest.raises(HTTPException) as error:
+        await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key=key,
+            proposal_id=row['proposal_id'],execution_claim_id=row['execution_claim_id'],initiation_ack=ack)
+    assert ack.used and error.value.detail['code']=='google_funded_preparation_unproved'
+    assert provider.previews==0 and provider.writes==0
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None
+
+@pytest.mark.asyncio
+async def test_unknown_reserve_not_applied_never_reuses_initiation(monkeypatch):
+    db,provider,key,row=await setup(monkeypatch)
+    row['_initiation_ack']=await seed_future_preparation(db,key,row)
+    async def lost_before_apply(*args):raise TimeoutError('test-only unknown commit without apply')
+    monkeypatch.setattr(guard,'_commit_once',lost_before_apply)
+    with pytest.raises(HTTPException) as error:await reserve(db,key,row)
+    assert error.value.detail['commit_attempted'] is True
+    assert (await db[grants.RUNS].find_one({'grant_key':key}))['phase']=='prepared'
+    assert (await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'}))['allocations']=={}
+    reads=provider.previews
+    with pytest.raises(HTTPException) as repeated:await reserve(db,key,row)
+    assert repeated.value.detail['code']=='google_funded_initiation_ack_unproved'
+    assert provider.previews==reads and provider.writes==0

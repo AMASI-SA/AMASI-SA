@@ -26,6 +26,7 @@ from .google_ads_paused_creation_budget import SessionDatabase,account_exposure
 
 _PROOF=object()
 _ACK=object()
+_INITIATION=object()
 _OWNER_FIELDS=grants.AUTH_FIELDS
 
 @dataclass(frozen=True)
@@ -39,6 +40,22 @@ def _fail(code):
     from .google_ads_client import problem
     raise problem(code,'لم يثبت تفويض التخزين الممول؛ احتفظ بالحجز دون إعادة إرسال.',409,
         preserve_execution_fence=True,automatic_retry_allowed=False)
+
+
+@dataclass
+class _InitiationAck:
+    # No application producer exists. A future separately ACKed durable
+    # preparation is the ONLY permitted issuer; never mint from a readback.
+    db: object
+    user_id: str
+    account_id: str
+    grant_key: str
+    proposal_id: str
+    execution_claim_id: str
+    preparation_binding_digest: str
+    preparation_operation_id: str
+    proof: object
+    used: bool=False
 
 
 @dataclass
@@ -268,11 +285,23 @@ async def _guard_funded_command(db,*,session,snapshot,command,operation_id,curre
         return await _settle_tx(view,snapshot,command,operation_id,current)
     if not guard.budget_guard_runtime_available():_fail('google_funded_runtime_unavailable')
     floor=isinstance(command,guard.FundedCreationDispatchFloor)
-    scope,record,row,bundle=await _bound(view,snapshot,command,current,allow_consumed=floor)
+    scope,record,row,bundle=await _bound(view,snapshot,command,current,allow_consumed=True)
     run=await view[grants.RUNS].find_one({**scope,'grant_key':command.grant_key},{'_id':0})
     key='funded_new_'+management.digest({'grant_key':command.grant_key,'claim_id':command.execution_claim_id})
     if not floor:
-        if (run or record.get('consumed') or old['active_claim'] is not None or len(old['allocations'])>=guard.MAX_ALLOCATIONS
+        fence=await view[management.FENCES].find_one({**scope,'proposal_id':command.proposal_id,
+            'execution_claim_id':command.execution_claim_id,'status':'claimed'},{'_id':0})
+        preparation_claim={'proposal_id':command.proposal_id,'execution_claim_id':command.execution_claim_id,
+            'preparation_operation_id':(run or {}).get('preparation_operation_id')}
+        expected_preparation={'user_id':scope['user_id'],'account_id':scope['account_id'],'grant_key':command.grant_key,
+            'grant_revision':record['revision'],'review_digest':record['review_digest'],
+            'proposal':management.immutable(row),'fence':fence,'execution_claim_id':command.execution_claim_id,
+            'preparation_operation_id':(run or {}).get('preparation_operation_id'),'guard_epoch':old['epoch']}
+        if (not run or run.get('phase')!='prepared' or record.get('consumed') is not True
+            or record.get('claim')!=preparation_claim or run.get('claim')!=preparation_claim
+            or run.get('preparation_binding')!=expected_preparation
+            or run.get('preparation_binding_digest')!=management.digest(expected_preparation)
+            or old['active_claim'] is not None or len(old['allocations'])>=guard.MAX_ALLOCATIONS
             or (snapshot.standing_policy or {}).get('_dispatch_claim') is not None
             or (snapshot.creation_policy or {}).get('_creation_claim') is not None):
             _fail('google_funded_slot_consumed_or_pending')
@@ -288,12 +317,14 @@ async def _guard_funded_command(db,*,session,snapshot,command,operation_id,curre
             'account_cap_native':record['grant']['max_account_daily_budget_native'],'created_at':current.isoformat()}
         entry['reservation_lineage_digest']=allocation_lineage(entry)
         changed=await view[grants.GRANTS].update_one({**scope,'grant_key':command.grant_key,'revision':record['revision'],
-            'state':'active','consumed':False},{'$set':{'consumed':True,'claim':claim}})
+            'state':'active','consumed':True,'claim':preparation_claim},{'$set':{'consumed':True,'claim':claim}})
         if changed.matched_count!=1:_fail('google_funded_grant_changed')
-        run={**scope,**claim,'phase':'reserved','consumed':True,'intent':bundle['intent'],
+        reserved={**scope,**claim,'phase':'reserved','consumed':True,'intent':bundle['intent'],
             'bundle':bundle,'claim':claim,'allocation_id':key,'reserved_at':current.isoformat(),
             'reservation_operation_id':operation_id}
-        await view[grants.RUNS].insert_one(run)
+        changed=await view[grants.RUNS].update_one({**scope,'grant_key':command.grant_key,'phase':'prepared',
+            'preparation_binding_digest':run['preparation_binding_digest']},{'$set':reserved})
+        if changed.matched_count!=1:_fail('google_funded_preparation_changed')
         allocations={**old['allocations'],key:entry};active={key:value for key,value in claim.items()
             if key in {'allocation_id','proposal_id','execution_claim_id'}}
         active['operation_id']=operation_id
@@ -422,11 +453,20 @@ async def _settle_tx(view,snapshot,command,operation_id,current):
         'grant_key':command.grant_key,'native_fence_released':False,'funded_dispatch_authorized':False,'provider_writes':0}
 
 
-async def reserve_google_funded_creation(db,*,user_id,account_id,grant_key,proposal_id,execution_claim_id,client_factory=GoogleAdsClient):
+async def reserve_google_funded_creation(db,*,user_id,account_id,grant_key,proposal_id,execution_claim_id,initiation_ack=None,client_factory=GoogleAdsClient):
+    if (not isinstance(initiation_ack,_InitiationAck) or initiation_ack.db is not db or initiation_ack.proof is not _INITIATION
+        or initiation_ack.used or (initiation_ack.user_id,initiation_ack.account_id,initiation_ack.grant_key,
+            initiation_ack.proposal_id,initiation_ack.execution_claim_id)!=(user_id,account_id,grant_key,proposal_id,execution_claim_id)):
+        _fail('google_funded_initiation_ack_unproved')
+    initiation_ack.used=True # Before first await; unknown reserve can NEVER retry.
     scope=_scope(user_id,account_id)
-    if await db[grants.RUNS].find_one({**scope,'grant_key':grant_key},{'_id':1}):_fail('google_funded_slot_consumed_or_pending')
+    run=await db[grants.RUNS].find_one({**scope,'grant_key':grant_key},{'_id':0})
+    if (not run or run.get('phase')!='prepared' or run.get('execution_claim_id')!=execution_claim_id
+        or run.get('proposal_id')!=proposal_id or run.get('preparation_binding_digest')!=initiation_ack.preparation_binding_digest
+        or run.get('preparation_operation_id')!=initiation_ack.preparation_operation_id):
+        _fail('google_funded_preparation_unproved')
     await grants.ensure_indexes(db)
-    prepared=await _prepare(db,scope=scope,grant_key=grant_key,client_factory=client_factory)
+    prepared=await _prepare(db,scope=scope,grant_key=grant_key,client_factory=client_factory,allow_consumed=True)
     capability=await guard.probe_google_budget_guard_transactions(db)
     operation_id='funded_reserve_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id})
     result=await guard.run_google_budget_guard_transaction(db,**scope,operation_id=operation_id,
