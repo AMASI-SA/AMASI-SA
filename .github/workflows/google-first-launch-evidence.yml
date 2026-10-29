@@ -1,0 +1,91 @@
+name: Google first-launch evidence
+
+on:
+  push:
+    branches: ["codex/google-first-launch-evidence-*"]
+    paths:
+      - "backend/integrations_control_center/google_ads*"
+      - "backend/product_inventory_proof.py"
+      - "backend/tests/test_google_ads*"
+      - ".github/workflows/google-first-launch-evidence.yml"
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - "backend/integrations_control_center/google_ads_automation_creation_launch*"
+      - "backend/tests/test_google_ads_automation_creation_launch*"
+      - ".github/workflows/google-first-launch-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:8.0.26
+        ports: ["127.0.0.1:27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production-compatible focused dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1
+          python-multipart==0.0.32 cryptography==50.0.2
+          PyJWT==2.15.1 bcrypt==4.1.3 python-dotenv==1.2.4
+          pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Verify new contracts with actual disposable Mongo
+        timeout-minutes: 4
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHON_DOTENV_DISABLED: "1"
+          GOOGLE_ADS_TEST_MONGO_URI: mongodb://127.0.0.1:27017
+        run: >-
+          python -B -m pytest --noconftest -q -W error -p no:cacheprovider
+          --junitxml=/tmp/google-launch-evidence.xml
+          backend/tests/test_google_ads_automation_creation_launch_contract.py
+          backend/tests/test_google_ads_automation_creation_launch_evidence.py
+      - name: Require all 148 cases and four actual Mongo scenarios without skips
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          rows = ET.parse('/tmp/google-launch-evidence.xml').findall('.//testcase')
+          assert len(rows) == 148, f'Expected 148 cases, got {len(rows)}'
+          assert all(not list(row) for row in rows), 'Skipped, failed or errored case is not acceptance'
+          scenarios = {row.attrib['name'] for row in rows if row.attrib['name'].startswith('test_real_mongo_')}
+          assert scenarios == {
+              'test_real_mongo_projected_evidence_remains_readonly_and_scoped[verified_read]',
+              'test_real_mongo_projected_evidence_remains_readonly_and_scoped[duplicate_product]',
+              'test_real_mongo_projected_evidence_remains_readonly_and_scoped[foreign_proposal]',
+              'test_real_mongo_projected_evidence_remains_readonly_and_scoped[policy_drift]',
+          }
+          print('Verified 148 cases including four disposable real-Mongo scenarios; no skips.')
+          PY
+      - name: Verify reused creation inventory and native contracts
+        timeout-minutes: 4
+        env:
+          PYTHONPATH: backend
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHON_DOTENV_DISABLED: "1"
+        run: >-
+          python -B -m pytest --noconftest -q -W error -p no:cacheprovider
+          backend/tests/test_google_ads_automation_creation_contract.py
+          backend/tests/test_google_ads_automation_creation_plan.py
+          backend/tests/test_google_ads_creation_inventory.py
+          backend/tests/test_google_ads_campaign_builder.py
+          backend/tests/test_google_ads_workspace.py
+          backend/tests/test_google_ads_verification.py
+          backend/tests/test_google_ads_client.py
+          backend/tests/test_google_ads_protobuf_contract.py
+      - name: Check source whitespace
+        run: git diff --check

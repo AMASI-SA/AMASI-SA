@@ -300,7 +300,9 @@ def test_readonly_evidence_never_claims_a_first_launch_or_owner_stop_authority()
     result = launch.prepare_google_creation_launch_intent(**case())
     assert result['ready_for_enable_preview'] is False
     assert result['launch_history_verified'] is False
-    assert result['blockers'] == ['launch_stop_provenance_unproved', 'launch_atomic_authority_unimplemented']
+    assert result['configuration_evidence_verified'] is False
+    assert result['blockers'] == ['launch_product_configuration_evidence_unproved',
+        'launch_stop_provenance_unproved', 'launch_atomic_authority_unimplemented']
 
 
 def test_refreshing_only_observation_times_does_not_change_semantic_binding():
@@ -315,3 +317,63 @@ def test_refreshing_only_observation_times_does_not_change_semantic_binding():
     refreshed = launch.revalidate_google_creation_launch_intent(original, **values)
     assert refreshed['intent_digest'] == original['intent_digest']
     assert refreshed['evidence_observed_at'] != original['evidence_observed_at']
+
+
+def proved_case():
+    from tests.test_google_ads_automation_creation_launch_evidence import evidence_case
+    from integrations_control_center.google_ads_automation_creation_launch_evidence import prepare_launch_evidence
+    facts = evidence_case(); facts['original_proposal']['created_at'] = NOW.isoformat()
+    values = case()
+    values.update({key: facts[key] for key in ('policy', 'creation_intent', 'ledger_entry', 'original_proposal')})
+    values['launch_evidence'] = prepare_launch_evidence(**facts)
+    values['native_context'] = None
+    return values, facts
+
+
+def test_verified_fresh_bundle_replaces_legacy_flags_but_never_grants_launch_authority():
+    values, _ = proved_case()
+    values['launch_state'].update(never_launched=True, owner_stop_excluded=True)
+    result = launch.prepare_google_creation_launch_intent(**values)
+    assert result['configuration_evidence_verified'] is True
+    assert result['launch_history_verified'] is False and result['ready_for_enable_preview'] is False
+    assert result['blockers'] == ['launch_stop_provenance_unproved', 'launch_atomic_authority_unimplemented']
+    assert result['funding']['resulting_average_commitment_native'] == '55'
+
+
+def test_fresh_bundle_observation_times_do_not_invalidate_unchanged_launch_review():
+    from integrations_control_center.google_ads_automation_creation_launch_evidence import prepare_launch_evidence
+    values, facts = proved_case(); original = launch.prepare_google_creation_launch_intent(**values)
+    later = NOW+timedelta(seconds=5)
+    facts.update(read_started_at=later, read_finished_at=later, current=later)
+    facts['purchase_context']['observed_at'] = later.isoformat()
+    for row in facts['purchase_context']['campaigns']: row['observed_at'] = later.isoformat()
+    values['launch_evidence'] = prepare_launch_evidence(**facts)
+    values['launch_state']['observed_at'] = later.isoformat(); values['current'] = later
+    assert launch.revalidate_google_creation_launch_intent(original, **values)['intent_digest'] == original['intent_digest']
+
+
+def test_fresh_inventory_change_invalidates_old_review_even_when_stock_remains_available():
+    from integrations_control_center.google_ads_automation_creation_launch_evidence import prepare_launch_evidence
+    from tests.test_google_ads_automation_creation_contract import prove_inventory
+    values, facts = proved_case(); original = launch.prepare_google_creation_launch_intent(**values)
+    facts['product']['quantity'] = 3; prove_inventory(facts['product'])
+    values['launch_evidence'] = prepare_launch_evidence(**facts)
+    with pytest.raises(launch.CreationLaunchContractError, match='launch_intent_changed'):
+        launch.revalidate_google_creation_launch_intent(original, **values)
+
+
+@pytest.mark.parametrize('change', [
+    lambda v: v['original_proposal']['resource_names'].__setitem__(3, 'customers/123/campaignCriteria/999~888'),
+    lambda v: v['ledger_entry'].update(another_owner_decision='different'),
+    lambda v: v['launch_evidence'].update(campaigns=[None]),
+])
+def test_evidence_cannot_be_rebound_to_changed_server_resources_or_ledger(change):
+    values, _ = proved_case(); change(values)
+    blocked(values, 'launch_evidence_binding_changed')
+
+
+def test_expired_complete_bundle_never_becomes_fresh_by_only_updating_outer_native_time():
+    values, _ = proved_case()
+    values['current'] = NOW+timedelta(seconds=90)
+    values['launch_state']['observed_at'] = values['current'].isoformat()
+    blocked(values, 'launch_evidence_stale')

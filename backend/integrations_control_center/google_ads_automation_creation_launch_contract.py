@@ -1,9 +1,10 @@
 """Pure future launch preview. NO storage, provider calls, claims or execution.
 
 All inputs are loaded by a future trusted server authority, never accepted as
-client/model proof. In particular ALL_CAMPAIGNS means an unfiltered, unsegmented,
-fully paginated native inventory; configuration_verified means a native read was
-compared against the immutable original draft, including assets/URLs/targeting.
+client/model proof. ALL_CAMPAIGNS requires a complete unfiltered, unsegmented
+native inventory. Legacy configuration flags alone are explicitly insufficient;
+only the new trusted read bundle can establish current product/configuration
+evidence. Neither form proves stop provenance or grants launch authority.
 The allocation/standing-policy absence snapshots need a common transactional
 fence before actual execution; this pure function supplies no such guarantee.
 guard_epoch binds a read-only future shared account barrier snapshot; its presence
@@ -184,7 +185,7 @@ def _semantic_snapshots(native, state):
 
 
 def prepare_google_creation_launch_intent(*, policy, creation_intent, ledger_entry, original_proposal,
-        native_context, launch_state, campaign_id, current, standing_policy=None):
+        native_context, launch_state, campaign_id, current, standing_policy=None, launch_evidence=None):
     """Return nonexecutable enable-only preview, or a bounded reason code.
 
     Never adopts campaigns. Never decreases budgets or reallocates planned
@@ -220,6 +221,20 @@ def prepare_google_creation_launch_intent(*, policy, creation_intent, ledger_ent
         or draft.get('budget_native') != policy['budget_native']
         or draft.get('geo_target_ids') != policy['geo_target_ids'] or draft.get('bidding', {}).get('strategy') != policy['bidding_strategy']):
         _fail('launch_creation_scope_changed')
+    evidence_binding = None
+    if launch_evidence is not None:
+        from .google_ads_automation_creation_launch_evidence import validate_launch_evidence, LaunchEvidenceError
+        try:
+            evidence_binding = validate_launch_evidence(launch_evidence, policy=policy,
+                creation_intent=creation_intent, ledger_entry=ledger_entry, original_proposal=original_proposal,
+                campaign_id=campaign_id, current=current)
+        except LaunchEvidenceError as exc:
+            _fail(exc.code)
+        # Current native facts come from the validated server read bundle, not
+        # older caller flags. The public interface has no route accepting this.
+        native_context = {**evidence_binding['purchase_context'], 'observed_at': launch_evidence['observed_at'],
+            'campaigns': deepcopy(launch_evidence['campaigns']), 'segmented': False,
+            'inventory_scope': 'ALL_CAMPAIGNS', 'has_more': False}
     campaigns = _inventory(native_context, policy, current)
     target = campaigns.get(campaign_id)
     if (target is None or target['status'] != 'PAUSED' or target.get('campaign_type') != 'SEARCH'
@@ -247,7 +262,7 @@ def prepare_google_creation_launch_intent(*, policy, creation_intent, ledger_ent
         'proposal_id': original_proposal['proposal_id'], 'confirmation_digest': original_proposal['confirmation_digest'],
         'ledger_digest': creation._digest(ledger_entry), 'draft_digest': binding['draft_digest']}
     semantic_native, semantic_state = _semantic_snapshots(native_context, launch_state)
-    before = {'native_inventory': semantic_native, 'launch_state': semantic_state,
+    before = {'native_inventory': semantic_native, 'launch_state': semantic_state, 'launch_evidence': evidence_binding,
         'creation_policy': policy, 'standing_policy': standing_policy, 'ownership': ownership}
     result_binding = {'user_id': policy['user_id'], 'account_id': policy['account_id'], 'campaign_id': campaign_id,
         'policy_revision': policy['revision'], 'policy_digest': creation._digest(policy), 'launch_scope': launch_scope,
@@ -262,7 +277,9 @@ def prepare_google_creation_launch_intent(*, policy, creation_intent, ledger_ent
         'launch_identity': 'google_launch_' + creation._digest({'user_id': policy['user_id'], 'account_id': policy['account_id'],
             'campaign_id': campaign_id, 'creation_identity': creation_intent['creation_identity']}),
         'ready_for_enable_preview': False, 'launch_history_verified': False,
-        'blockers': ['launch_stop_provenance_unproved', 'launch_atomic_authority_unimplemented'],
+        'configuration_evidence_verified': evidence_binding is not None,
+        'blockers': ([] if evidence_binding is not None else ['launch_product_configuration_evidence_unproved'])
+            + ['launch_stop_provenance_unproved', 'launch_atomic_authority_unimplemented'],
         'evidence_observed_at': {'native': native_context['observed_at'], 'state': launch_state['observed_at']},
         'planned': {'action': 'enable', 'campaign_id': campaign_id, 'before_status': 'PAUSED', 'after_status': 'ENABLED'},
         'funding': {'budget_semantics': 'DAILY_AVERAGE_COMMITMENT', 'enabled_average_budget_native': str(enabled),
