@@ -1,0 +1,86 @@
+{
+  "version": "proposed_google_product_test_review_v1",
+  "state": "DESIGN_ONLY_ROOT_ASSIGNMENT_REQUIRED",
+  "ownership": {
+    "new_only": ["backend/integrations_control_center/google_product_season_review.py", "backend/integrations_control_center/google_product_test_review.py", "backend/integrations_control_center/google_product_test_review_reader.py", "backend/integrations_control_center/google_product_test_review_routes.py", "backend/tests/test_google_product_season_review*.py", "backend/tests/test_google_product_test_review*.py", ".github/workflows/google-product-test-review.yml"],
+    "later_new_child": ["frontend/src/components/marketing/GoogleProductTestReview.jsx", "frontend/src/services/googleProductTestReview.js", "matching NEW tests and actualHTTPwriter fixtures"],
+    "shared_changes": "None proposed for existing readers, shared forms or routes in initial implementation. Root/integration owns eventual router and existing plan/category child attachment. Product owner-fit is a separate explicit action/state, not inferred form text."
+  },
+  "callables": {
+    "pure": "build_product_test_review(*, plan_id, plan_revision, selected_ids, frozen_as_of, operation_started_at, operation_finished_at, owner_reviews, category_and_inventory, current_store_observations, prior_store_observations_or_none, linked_campaign_evidence) -> decision envelope. All inputs are internal trusted adapter outputs, never a public verified-flags API.",
+    "server_reader": "review_selected_product_tests(db, *, authenticated_user, plan_id, expected_revision, category_id, selected_ids, caller=call_salla, clock=server_clock). No self-HTTP or actor fabrication. caller/clock are server construction-time test seams, not request fields. Read owner/plan/reviews, reuse fixed native reader and saved source readers, final fences then pure builder.",
+    "owner_review_read": "get_product_season_reviews(db, *, owner_id, plan_id, plan_revision, category_id, product_ids) -> current exact bounded rows for <=5 deterministic IDs; no fuzzy names/SKU/title mapping.",
+    "owner_review_write": "save_product_season_review(db, *, authenticated_user, plan_id, expected_plan_revision, product_id, category_id, expected_review_revision, decision, reason, acknowledged_owner_review) -> current review row. Explicit local owner-review state only, never provider/grant write."
+  },
+  "proposed_routes_unattached": {
+    "POST /google_ads/commercial-plans/{plan_id}/product-test-review": {"body": {"expected_revision": "strictint>=1", "category_id": "canonical positive numeric ID", "selected_product_ids": "1..5 unique canonical IDs"}, "effect": "Explicit owner-triggered read; fixed native Salla GETs plus bounded stored reads only. No reviewer-supplied proof, fit flags, budget, metric or actor in body."},
+    "PUT /google_ads/commercial-plans/{plan_id}/product-season-reviews/{product_id}": {"body": {"expected_plan_revision": "strictint>=1", "expected_review_revision": "strictint>=0", "category_id": "canonical positive numeric ID", "decision": "suitable_for_test|not_suitable|needs_review", "reason": "trimmed nonblank1..1000", "acknowledge_owner_review": "required exacttrue"}, "effect": "Save owner-declared commercial fit only; this acknowledgement is not budget/spend/launch authority. Unknown is default when absent; not_suitable blocks nomination."}
+  },
+  "owner_review_storage_proposal": {
+    "collection": "mezan_google_product_season_reviews_v1",
+    "id": "sha256 canonical tuple(owner_id, plan_id, plan_revision, category_id, product_id); built server-side",
+    "fields": ["user_id", "plan_id", "plan_revision", "category_id", "product_id", "revision", "decision", "reason", "reviewed_by", "reviewed_at", "authenticated_owner_password_revision", "plan_fields_digest", "review_digest"],
+    "semantics": "All IDs/revision/digests/time derived or verified server-side. Owner-declared fit, never independent season verification. No manual verification_status, performance, budget, stock or feed-mapping claims. Same plan revision and category/product required for use; any plan field/revision drift or password revision change invalidates reuse.",
+    "CAS": "One current row keyed by Mongo implicit unique_id; first insert expects0 and catches duplicate; subsequent atomicupdate filters exactid and strict existingreviewrevision plus scoped identity, increments revision. No upsert overwrite. No append-only history claim; reviewdigest and lastreviewtimestamp expose current audit state. Returning read must verify latestreviewrevision/digest before output.",
+    "write_race_qualification": "Before/after fresh owner and plan checks reject acknowledged success on races. A local review-state write may have persisted before final race detection; do not auto retry or claim global transaction atomicity. Such rows are inert unless current exact plan/owner/password/scope match; never usable as paid authority. If root requires zero persisted state on any race, assign transactional/locking contract separately rather than silently claim a transaction read fence prevents concurrent owner updates.",
+    "read_bound": "Use exact <=5 deterministic IDs with _id $in and bounded BSON projection/docsize. No new cross-tenant scan or implicit index creation on GET. Legacy/malformed/duplicate/foreign record is unknown or source failure, not suitable."
+  },
+  "orchestration_sequence": [
+    "1. Exact owner principal from current_user; fresh bounded unique DB owner state incl password_updated_at must match authenticated dependency. Snapshot BSON projection. Capture savedplan strict Fields/revision/audit and exact BSON snapshot; selection canonical1..5/noexcluded and category scope.",
+    "2. Freeze server as_of once for all stored closed-day windows. Capture operation_started_at separately. Read exact current owner-fit state for scope; absent/mismatched record remains unknown (no pin/title/instruction inference).",
+    "3. Call existing selected_inventory_preview(db,owner_id,fields,category_id,selected_ids,caller) directly once. It reproves ownedstore/category membership, fixed product/details/variants and before/after credential/store/digests. Missing status remains unknown. No arbitrary URL fetch or provider write/sync.",
+    "4. Call existing read_store_observations once for selectedids/current90dayband; read_prior_season_observations once only if savedexplicit prior context configured/closed; linked_campaign_evidence once for sameowner/ids/as_of. No HTTP child routes, fabricated actor or ProductSourceRecord complete/verified coercion.",
+    "5. Whole operation uses one45second technical deadline (including native work), existing provider page/byte/row ceilings and DB query maxTime limits. On any limit/source ambiguity fail bounded operation; no broadened query/retry/fallback. This deadline is an engineering limit, not customer promise.",
+    "6. Re-read exact owner/plan/review state and Salla public store/credential metadata; compare BSON types+snapshots and expected revisions. Capture finished_at; new native observation timestamps must lie within this operation, while stored source facts are <=frozenas_of. Crossing local midnight never shifts stored windows halfway through.",
+    "7. Pure decision output returns source timestamps/digests and coverage unknown. No global atomic snapshot: native observations occur during operation after frozen stored as_of, stored order snapshots mutable, Snap committed contexts have their own observed/TTL timestamps. Never collapse these clocks into one freshness guarantee."
+  ],
+  "required_reader_reuse_no_refactor": [
+    "google_native_inventory_reader.selected_inventory_preview: existing non-route callable; returns categorydigest/memberstock observations and operationtime metadata, max5/2variantpages/120rows. No change needed.",
+    "google_plan_store_observations.read_store_observations: callable current4window output; no need expose raw customer/order data. Preserve exact existing qualifier/projection/index and falsecoverage.",
+    "google_prior_season_reader.read_prior_season_observations: callable exactsaved interval; new orchestration must duplicate its route's closedserverday+ownerreviewprovenance validations via explicit new wrapper, not invoke endpoint or bypass Fields. No change to priorreader.",
+    "google_linked_campaign_reader.linked_campaign_evidence: callable; contexts once with per-productrefs/nativeperiods; no need newgraphwriter or collector. Do not call old generic purebuild_product_evidence as verified data adapter.",
+    "google_live_category_proof.CategoryProofUnavailable and reader _native errors: reuse sanitizednative error codes; no forced OAuth/scopes on absent stored scope. Existing call_salla routine refresh may occur as authorized maintenance; credentialmetadata drift rejects candidate operation."
+  ],
+  "decision_row_example": {
+    "product_id": "123",
+    "decision": "supported_test_review",
+    "meaning": "Owner-declared suitable + positive bounded source stock + qualifying evidence context; review a Google test, not a predicted winner or ready-to-launch product",
+    "season_fit": {"status": "owner_declared_suitable", "reason": "owner supplied reason", "review_revision": 2, "plan_revision": 3, "independent_verification": "unknown"},
+    "inventory": {"status": "positive_variant_observation", "global_ready": false, "size_fit": "unknown", "preparation_time": null},
+    "evidence_reasons": ["qualified_saved_current_order_lines", "effective_shared_campaign_context"],
+    "current_store_refs": "Exact product/nativecurrency/currentwindow references; no crosscurrency sum and no growth from lowerbounds",
+    "prior_store_refs": "Separate saved interval; owner-declared alignment remainsunknown",
+    "campaign_context_refs": ["once-per-campaign-context-id"],
+    "missing": ["historical_cost_completeness", "profitability", "preparation_duration", "size_suitability", "approved_test_budget_not_checked", "feed_mapping_not_checked"],
+    "profitability": null,
+    "growth": null,
+    "paid_launch_eligible": false,
+    "execution_authorized": false
+  },
+  "decision_rules": [
+    "Owner not_suitable, explicitexcluded, nativehidden/out/is_availablefalse or unprovedidentity/category prevent nomination. Missing is not negative evidence; zero+unknownunlimited remainsunknown.",
+    "Positive parentstock is not positive purchasablevariantstock. With variants, only positive observedvariant gives limited stocksupport, still size/purchasability unknown; simpleparent needs explicitstructural simpleproduct observation, not normalizer0default. Incomplete variant traversal never global stockcomplete.",
+    "Absent ownerfit always needs_owner_fit_review, even pinned or in chosen category. suitable review is ownerdeclaration only. Supportedtestreview means review priority, never spend readiness; all grants/budgets remain rootlaunch pipeline outside this output.",
+    "Noqualifiedhistory→exploration_test_review only when ownerfit+limitedstock support exist; history remainsunknown, never mark newproduct/zero sales. Existingpositivegross/context explains support without count/ROAS ranking. Preserveownerselection order within explicitlanes; no arbitrary numeric score.",
+    "Campaigncontexts remain top-level once with productrefs; no campaign metrics allocated to product; source dates/TZ/owner/account/currency/attribution/windows stay separate. No platformconversions added as independentstoreorders. Meta/TikTok gaps remain explicit.",
+    "Current4windows and priorperiod are separate observations, no trend/growth/netprofit. Histcost/preptime/wholecoverage unknown remain null. A saved limit is not approvedfunding; newproduct experimentation cannot invent grant/cap."
+  ],
+  "historical_cost_source_audit": {
+    "source": "c19901536e:backend/order_option_cost_snapshot_routes.py plus product_cost_revision.py/product_catalog_cost_resolution.py/product_costs.py; read-only source, no records/provider access",
+    "identity": "Snapshot rows have user_id/order_number/order_id/order_item_id/source_item_id/salla_product_id/mezan_product_id/quantity; source lines would need exact owner+nativeorder+item+variant mapping. Current aggregate observation output intentionally does not expose source line IDs, so no honest historiccost join yet.",
+    "currency": "calculate_order_cost_snapshot returns hardcoded SAR at top level; stored nonbundle rows do not contain native cost currency. GET cost-snapshot sums rows without currency field. Cost_profiles/resources may assume SAR; this is not explicit perlinecurrency proof usable for arbitrary nativecurrency orders. Do not convert or call matching currency by assumption.",
+    "completeness": "cost_complete is resolved_base_cost isnotNone; calculation_cost_available and mezan_cost_complete distinguish basecost sources. Product/option missingresources fallback unit_cost0.0 and missingbindingquantity1.0; therefore basecomplete does not independently prove all resource/options/fees/taxes/shipping/discounts/returns costs. Existing semantics are useful elsewhere, not certification of full campaign/product margin.",
+    "time": "calculated_at records rebuildtime; writer uses currentproducts/costprofiles/resources and update_one upsert same(owner,order_number,item) key. Snapshotid regenerates on rebuild. No immutable sale-time revision/valid-from cost lock in this path. product_cost_revision is cache invalidation, not dated historicalcost evidence.",
+    "returns": "Snapshot sums gross quantity*resolvedunitcost; no refund/return reconciliation in this calculation. Existing strict order observer rejects knownrefunds and still labels refunds_reconciled false, so no netprofit even with costrow match.",
+    "bundle": "Bundle branch records bundle_revision, expected_cost/actual_cost and stage actual|expected; expected must never be treated actual. Still requires exactline/currency/return/time qualification; do not blanket certify bundleactualcost for campaignprofit.",
+    "safe_first_use": "At most report existence/quality gaps and sourcecalculatedtimestamp after strictidentity audit, not amounts/margin. First shortlist keeps historicalcost/profit unknown. Any future monetaryadapter requires explicit perlinecurrency provenance, immutable/effective cost time, fullcomponent coverage, exact rawline binding and return reconciliation; sourcewriters owned separately. No globalcost normalizer rewrite proposed."
+  },
+  "acceptance_minimum": [
+    "Actualauthenticated HTTP planwriter→ownerreviewCAS→explicitcandidatePOST,5productmaximum and no auto requests; no client proof/actor/metric accepted.",
+    "Ownerreview absent/currentplanrevision/passwordmismatch/not_suitable fail nomination; CASlostack preserves state and requires reread, no auto resubmit; plandrift cannot reuse oldfit.",
+    "Fresh owner before/after, missing/duplicateowner, passwordchange after dependency, role/deletion/disable and BSONbool/float revisionalias races; finalreviewrevision changes reject output.",
+    "RealMongo strictprojection/currentwindowgolden/priorseparateband, no source/provider writes; exactnamedrealreplicacount and zero skips.",
+    "Whole45s deadline/caps across native+storedreads; sourcecurrentclock crossingmidnight freezeswindows; native source timestamps are later observations explicitly notatomic.",
+    "Mixedcurrency/sharedcontext/lateassociation/refunds/duplicates/truncation/explorationhistoryunknown/parentvariant/prepunknown/costunknown regressions; no profitscore/ROASwinner/approvedbudget inferred."
+  ]
+}

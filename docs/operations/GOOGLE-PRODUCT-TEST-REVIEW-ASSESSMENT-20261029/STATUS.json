@@ -7,17 +7,75 @@
   "source_binding": {
     "fresh_fetched_production": "7a46f818c0abb7b3f829dc5b3a1e93b757348881",
     "integration_reviewed_read_only": "c19901536e (native/prior integration successor, not released or accepted here)",
-    "immutable_baselines": ["b3ea651cced66b6171ba379806b955879409a3b3 prior backend", "d1b0d65c422cef4fa36f59405270a877bf3d7c27 prior child", "edb9de0c0abc461252eb123493c739f65c3a107f linked campaign backend"],
+    "immutable_baselines": [
+      "b3ea651cced66b6171ba379806b955879409a3b3 prior backend",
+      "d1b0d65c422cef4fa36f59405270a877bf3d7c27 prior child",
+      "edb9de0c0abc461252eb123493c739f65c3a107f linked campaign backend"
+    ],
     "instructions": "Current production AGENTS continuity/release rules read. Assessment owns docs only; parent integration, Merchant selection, launch authority and other-platform collectors preserved. No runtime test claims for this assessment."
   },
   "current_capabilities_and_limits": [
-    {"paths": ["backend/integrations_control_center/google_store_product_observations.py", "backend/integrations_control_center/google_plan_store_observations.py"], "available": "Strict saved raw Salla line observations for last14/previous14/30/90, native currency groups, exact raw timestamp qualification, duplicates/refunds/ambiguous IDs rejected; indexed owner90day discovery query with +/-1 candidate days.", "limit": "coverage_complete/refunds_reconciled/source_snapshot_immutable false; gross lower bounds only, not net sales or growth. Rejected/oversized/missing rows and1000document cap preclude full ranking."},
-    {"paths": ["backend/integrations_control_center/google_prior_season_reader.py", "backend/integrations_control_center/google_prior_season_routes.py", "backend/integrations_control_center/google_commercial_plan.py"], "available": "Explicit owner-reviewed prior interval <=366 days, before current start, exact separate prior +/-1 query; owner audit, auth/password and BSON plan fences.", "limit": "Owner declaration/reference is not verified Hijri/year alignment; no inferred354/365shift, no year-gap union, no growth/profit."},
-    {"paths": ["backend/integrations_control_center/google_live_category_reader.py", "backend/integrations_control_center/google_native_inventory_reader.py", "backend/integrations_control_center/google_native_inventory_proof.py"], "available": "Explicit fixed native GET category enumeration and fresh selected1..5 product details/variants, category/store reproof, exclusions, details before-after digest, parent/variant stock separate, source option labels only via proved IDs.", "limit": "Category traversal is not atomic snapshot. Variants <=2pages/120rows; unknown status/zero-unlimited remains unknown. No size coverage, prep SLA, Merchant mapping, ad readiness or source persistence of native preview."},
-    {"paths": ["backend/integrations_control_center/google_product_evidence.py", "backend/integrations_control_center/google_product_catalog_reader.py"], "available": "Typed pure future trusted-adapter contract with ISO currency/provenance/cost guards. Hidden/out excluded; candidate labels already exist.", "limit": "Current adapter intentionally emits incomplete/unverified store records without metrics; pure builder reader_wired false and cannot legitimately turn these into complete growth, product profit or cross-platform winners. Do not bypass complete:false or synthesize verified ProductSourceRecord."},
-    {"paths": ["backend/integrations_control_center/campaign_product_associations.py", "backend/integrations_control_center/google_linked_campaign_reader.py", "backend/integrations_control_center/google_linked_campaign_evidence.py"], "available": "Existing append-only effective-dated campaign product graph; proposal intent then verified creation/adoption already supported. Snap completed committed native-day campaign contexts bound owner/account/currency/TZ/attribution and effective association event; context appears once with product references.", "limit": "Association means intended advertised scope only, not product attribution/feed mapping. Shared multi-product campaign results cannot be allocated or counted per product. Meta needs persisted TZ plus atomic campaign snapshot completeness; TikTok needs persisted native currency and TZ. Provider zero may mean omitted source metric. No retroactive association or conversion addition as independent orders."},
-    {"paths": ["backend/product_cost_revision.py", "backend/product_catalog_cost_resolution.py", "backend/product_costs.py", "backend/order_option_cost_snapshot_routes.py"], "available": "Current product costs have cache revision/fingerprints; legacy matcher has SKU/product/name fallback. Existing order-item cost snapshots include source item/order/product IDs, cost_complete, cost authority, calculated_at, option/resource components and SAR output.", "limit": "Currentcost is not historical ordercost. Snapshot endpoint is rebuildable/upserts same order/item key, calculated_at may be later than sale, and cost_complete primarily basecost presence; currency and all-components/returns completeness need separate exactline audit. Do not declare this missing entirely, but do not use it for product profit until audited; no cost writer/accounting mutation."},
-    {"paths": ["backend/product_fulfillment_rules.py", "backend/product_fulfillment_routes.py"], "available": "Current fulfillment profiles distinguish inventory behavior from preparation; explicit service requires_preparation can force workflow.", "limit": "Requires preparation is not preparation duration/deadline SLA; resource links alone do not prove preparation. Keep unknown without trustworthy product/option/time evidence."}
+    {
+      "paths": [
+        "backend/integrations_control_center/google_store_product_observations.py",
+        "backend/integrations_control_center/google_plan_store_observations.py"
+      ],
+      "available": "Strict saved raw Salla line observations for last14/previous14/30/90, native currency groups, exact raw timestamp qualification, duplicates/refunds/ambiguous IDs rejected; indexed owner90day discovery query with +/-1 candidate days.",
+      "limit": "coverage_complete/refunds_reconciled/source_snapshot_immutable false; gross lower bounds only, not net sales or growth. Rejected/oversized/missing rows and1000document cap preclude full ranking."
+    },
+    {
+      "paths": [
+        "backend/integrations_control_center/google_prior_season_reader.py",
+        "backend/integrations_control_center/google_prior_season_routes.py",
+        "backend/integrations_control_center/google_commercial_plan.py"
+      ],
+      "available": "Explicit owner-reviewed prior interval <=366 days, before current start, exact separate prior +/-1 query; owner audit, auth/password and BSON plan fences.",
+      "limit": "Owner declaration/reference is not verified Hijri/year alignment; no inferred354/365shift, no year-gap union, no growth/profit."
+    },
+    {
+      "paths": [
+        "backend/integrations_control_center/google_live_category_reader.py",
+        "backend/integrations_control_center/google_native_inventory_reader.py",
+        "backend/integrations_control_center/google_native_inventory_proof.py"
+      ],
+      "available": "Explicit fixed native GET category enumeration and fresh selected1..5 product details/variants, category/store reproof, exclusions, details before-after digest, parent/variant stock separate, source option labels only via proved IDs.",
+      "limit": "Category traversal is not atomic snapshot. Variants <=2pages/120rows; unknown status/zero-unlimited remains unknown. No size coverage, prep SLA, Merchant mapping, ad readiness or source persistence of native preview."
+    },
+    {
+      "paths": [
+        "backend/integrations_control_center/google_product_evidence.py",
+        "backend/integrations_control_center/google_product_catalog_reader.py"
+      ],
+      "available": "Typed pure future trusted-adapter contract with ISO currency/provenance/cost guards. Hidden/out excluded; candidate labels already exist.",
+      "limit": "Current adapter intentionally emits incomplete/unverified store records without metrics; pure builder reader_wired false and cannot legitimately turn these into complete growth, product profit or cross-platform winners. Do not bypass complete:false or synthesize verified ProductSourceRecord."
+    },
+    {
+      "paths": [
+        "backend/integrations_control_center/campaign_product_associations.py",
+        "backend/integrations_control_center/google_linked_campaign_reader.py",
+        "backend/integrations_control_center/google_linked_campaign_evidence.py"
+      ],
+      "available": "Existing append-only effective-dated campaign product graph; proposal intent then verified creation/adoption already supported. Snap completed committed native-day campaign contexts bound owner/account/currency/TZ/attribution and effective association event; context appears once with product references.",
+      "limit": "Association means intended advertised scope only, not product attribution/feed mapping. Shared multi-product campaign results cannot be allocated or counted per product. Meta needs persisted TZ plus atomic campaign snapshot completeness; TikTok needs persisted native currency and TZ. Provider zero may mean omitted source metric. No retroactive association or conversion addition as independent orders."
+    },
+    {
+      "paths": [
+        "backend/product_cost_revision.py",
+        "backend/product_catalog_cost_resolution.py",
+        "backend/product_costs.py",
+        "backend/order_option_cost_snapshot_routes.py"
+      ],
+      "available": "Current product costs have cache revision/fingerprints; legacy matcher has SKU/product/name fallback. Existing order-item cost snapshots include source item/order/product IDs, cost_complete, cost authority, calculated_at, option/resource components and SAR output.",
+      "limit": "Currentcost is not historical ordercost. Snapshot endpoint is rebuildable/upserts same order/item key, calculated_at may be later than sale, and cost_complete primarily basecost presence; currency and all-components/returns completeness need separate exactline audit. Do not declare this missing entirely, but do not use it for product profit until audited; no cost writer/accounting mutation."
+    },
+    {
+      "paths": [
+        "backend/product_fulfillment_rules.py",
+        "backend/product_fulfillment_routes.py"
+      ],
+      "available": "Current fulfillment profiles distinguish inventory behavior from preparation; explicit service requires_preparation can force workflow.",
+      "limit": "Requires preparation is not preparation duration/deadline SLA; resource links alone do not prove preparation. Keep unknown without trustworthy product/option/time evidence."
+    }
   ],
   "recommended_next_slice": {
     "name": "One owner-triggered product test-review shortlist from existing evidence, not another isolated diagnostic panel",
@@ -36,7 +94,13 @@
     "actual_use": "One explicit Review candidates action in owner plan produces concise table: product, review decision, evidence reasons, missingfit/stock/cost/prep/authority, source contexts, owner-selected next action. Root integrates this instead of adding another generic unconnected readiness UI. No automatic selection/save/launch."
   },
   "proposed_ownership_if_assigned": {
-    "new_backend": ["backend/integrations_control_center/google_product_test_review.py", "backend/integrations_control_center/google_product_test_review_reader.py", "backend/integrations_control_center/google_product_test_review_routes.py", "backend/tests/test_google_product_test_review*.py", ".github/workflows/google-product-test-review.yml"],
+    "new_backend": [
+      "backend/integrations_control_center/google_product_test_review.py",
+      "backend/integrations_control_center/google_product_test_review_reader.py",
+      "backend/integrations_control_center/google_product_test_review_routes.py",
+      "backend/tests/test_google_product_test_review*.py",
+      ".github/workflows/google-product-test-review.yml"
+    ],
     "later_root_owned": "One shared router attach and existing owner-plan summary/table integration after coherent root source. Any persisted per-product owner season-fit field belongs coordinated CommercialPlanFields/form owner; do not invent generic write API.",
     "do_not_touch": "Existing raw order/global normalizers, product/cost/Salla writers, graph generic writer, otherplatform collectors, Merchant identity selector, launch/budget/authorization, frozen accepted source files."
   },
@@ -49,5 +113,6 @@
     "Missing/rebuildable/currentcost is not historical cost; negative/zero/pending/partial cost never manufactured profit. Requires_preparation is not duration; no winner inference from sales/ROAS alone.",
     "RealMongo source projection/owner/plan race gates and actualwriter fixture, no skips; response service validates source binding and final parent UI cancels dirty/fullfields/owner/revision changes. No provider mutation or paid execution."
   ],
-  "next": "Root review and assign exact evidence-fit semantics/field ownership before implementation. No runtime or shared file edits performed; assessment only."
+  "next": "Root reviews proposed contract and assigns runtimeimplementation/newstate semantics. No source/runtime modifications or historicalcost monetary claims.",
+  "callable_contract": "CALLABLE-CONTRACT.json: exact internal orchestration/no readerrefactor, standalone proposedroutes, separate current ownerfit CASstate, finalsourcefences, one45s deadline, outputsample, actualcostcurrency/completeness/time/returns audit, acceptance tests"
 }
