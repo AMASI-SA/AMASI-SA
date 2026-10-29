@@ -2,7 +2,7 @@
   "task": "google-linked-campaign-evidence-20261029",
   "branch": "codex/google-cross-platform-evidence-20261029",
   "base": "e51f5b88b68905460417a01fb9ceb3704706c168",
-  "state": "review_metadata_fixes_frozen_fresh_replica_ci_required",
+  "state": "backend_exact_fix_actual_replica_green_independent_verdict_pending",
   "production_changed": false,
   "scope": "Google-owned read-only saved campaign context joined to verified campaign-product associations; no collector changes",
   "contract": {
@@ -35,14 +35,14 @@
     "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q -Werror backend/tests/test_google_linked_campaign_evidence.py backend/tests/test_google_linked_campaign_reader.py backend/tests/test_google_linked_campaign_routes.py",
     "result": "33 passed, zero skips, -Werror; currentfix freshactualMongo required",
     "actual_mongo": {
-      "run": 40934459598,
-      "job": 123661202492,
-      "checkout": "a60b573 (merge5bdintoM6e51f)",
-      "result": "41 passed in3.65s;9actualMongo/zero skips",
-      "logs_retrieved_independently": true
+      "run": 40937859851,
+      "job": 123673084251,
+      "checkout": "44bc544 (mergeedbintoM6e51f)",
+      "result": "43 passed in4.99s;10actualMongo/zero skips",
+      "logs_retrieved_independently": true,
+      "includes": "Actual existing append-only association writer latevariant chronology and committed-snapshot publication writers, BSON/projection/ownerroute/oversize/legacyfallback/runproof cases"
     },
-    "ci": "Dedicated exact-source replica job SUCCESS; no claim fullGoogle CI or deployment",
-    "actual_mongo_next_gate": "43total/10actualMongo/zero skips required including actual latevariant appendwriter regression"
+    "ci": "Dedicated exact-fixed-source replica SUCCESS. FullGoogle integrated CI, UI and live acceptance not claimed."
   },
   "next": "Fresh exactfix actualMongo CI then independent reviewer verdict; notify planningagent schema unchanged/accurate association counts",
   "known_source_limits": [
@@ -73,10 +73,10 @@
     "Meta/TikTok associations and exact missing source fields only"
   ],
   "source": {
-    "sha": "5bd0e524938461099950cd64d8a17e0652560d02",
-    "tree": "d508b3bea57ad8e1f6968fdfbb4397dfe2935467",
+    "sha": "edb9de0c0abc461252eb123493c739f65c3a107f",
+    "tree": "c60cfbee4712b04c7b3d6caac1984772a1e0afbd",
     "pr": 1623,
-    "local_equivalent": "64580e908",
+    "local_equivalent": "1ecffb186ece0033ca35bb63a1e28e0ec795da61",
     "base": "e51f5b88b68905460417a01fb9ceb3704706c168"
   },
   "route_contract": {
@@ -103,5 +103,11 @@
       "associated_product_count counted variant links rather than distinctproductids; now distinctproducts"
     ],
     "regression": "Latevariant puretest failed1beforefix;33tests nowgreen; newactualwriterMongo regression collected"
+  },
+  "ui_handoff": {
+    "agent": "google_plan_integration",
+    "source": "edb9de0c0abc461252eb123493c739f65c3a107f",
+    "status": "Full response/error/authority contract delivered; agent owns newUI/service and CommercialPlan attachment; schema unchanged after metadata fix",
+    "root_owns": "Shared route attachment, latest-production source integration, review/release"
   }
 }
