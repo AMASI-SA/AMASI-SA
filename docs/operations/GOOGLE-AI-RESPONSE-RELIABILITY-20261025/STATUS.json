@@ -1154,6 +1154,23 @@
       "publish": false
     },
     "local_build": "Frozen yarn install still progressing; cache downloads observed. Clean worktree google-cas-clean-20261029.",
-    "next": "Finish reproducible A build and compare to exact CI candidate, freeze intent-only B, fresh Bchecks and actual-host clean-clone adapter, fetch production, normalmerge, guard prepare/prepublish/singlepublish/newfinish/3verify/closedlease/live behavior. Then inventory1590 and owner suggestions1584 rebuilt sequentially. No budget WIP or funded activation."
+    "next": "Finish reproducible A build and compare to exact CI candidate, freeze intent-only B, fresh Bchecks and actual-host clean-clone adapter, fetch production, normalmerge, guard prepare/prepublish/singlepublish/newfinish/3verify/closedlease/live behavior. Then inventory1590 and owner suggestions1584 rebuilt sequentially. No budget WIP or funded activation.",
+    "release_pair": {
+      "source_a": "f64152d34aed7ff4d75408c7d8f657bc474e052a",
+      "intent_only_b": "407ef8f2fd4cb33b9a00ca912e92312419d20f44",
+      "deployment_tree": "ef230e44c417bae86cef3bee380fbac8804ccb46",
+      "production_base": "30a13c2a0a205e2ffb08c80208cb5c9d2a2ca493",
+      "intent_sha256": "a2a7884749f69ec5f2391afcb42bbb378afb426031c3b02da8bf31b9803968f1",
+      "runtime": "rg5-3debafb4d26cbeb5266a86af45d1f20e56e03d21b7f9ef27cac161e100e79b3d",
+      "actual_host_source_build": "PASS: isolated clean A clone, frozen install and two clean builds; whole frozen intent byte-for-byte equals CI candidate",
+      "artifact_tree_sha256": "49056199f7125720d3a13315d2a3c9b3b1518ebef89c75d661add30f86a038ee",
+      "actual_host_adapter": "RUNNING on fresh clean B clone /tmp/google1599-adapter-407ef8f2; no lease",
+      "recovered_attempts": [
+        "Initial network partial-clone checkout failed; discarded as proof, independent local object clone succeeded.",
+        "First freeze invocation lacked public REACT_APP_BACKEND_URL; corrected invocation passed without source changes."
+      ],
+      "production_changed": "no",
+      "next": "Require exact-B CI and actual-host clean-clone adapter proof, then normal merge, prepare/prepublish, one publish and newer explicit finish plus three identity probes and functional Google reads."
+    }
   }
 }
