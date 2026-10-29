@@ -108,6 +108,18 @@ async def test_disabled_execution_never_reads_provider_or_submits(integration,mo
     with pytest.raises(HTTPException):await preview(db)
     assert provider.previews==provider.writes==0
 
+
+@pytest.mark.asyncio
+async def test_automatic_resume_never_reaches_native_validation_or_mutation(integration):
+    db,provider=integration
+    db[management.ANALYSES].rows[0]['result']['recommendations'][0]['action']='RESUME_CAMPAIGN'
+    provider.native['campaign_snapshot']['campaign']['status']='PAUSED'
+    with pytest.raises(HTTPException) as error:
+        await preview(db)
+    assert error.value.detail['code']=='google_automation_plan_not_eligible'
+    assert provider.previews==provider.writes==0
+    assert not db[management.PROPOSALS].rows and not db[management.FENCES].rows
+
 @pytest.mark.asyncio
 async def test_policy_revoked_after_preview_cannot_send(integration):
     db,provider=integration;row=await preview(db);db[gateway.AUTOMATION_POLICIES].rows[0]['enabled']=False

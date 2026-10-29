@@ -140,6 +140,24 @@ async def test_history_overflow_is_not_a_complete_history_and_does_not_read_prov
 
 
 @pytest.mark.asyncio
+async def test_owner_read_plan_explains_automatic_resume_block_without_writes(monkeypatch):
+    instance, db, _, inventory = app(monkeypatch)
+    db[ANALYSES].rows[0]["result"]["recommendations"][0]["action"] = "RESUME_CAMPAIGN"
+    inventory["campaigns"][0]["status"] = "PAUSED"
+    db[PROPOSALS].rows = [{"user_id":"owner", "account_id":"123", "campaign_id":"456",
+        "actor_id":"owner", "action":"pause", "status":"completed", "verified":True,
+        "executed_at":(NOW-timedelta(hours=2)).isoformat()}]
+    before = deepcopy(db[policy.AUTOMATION_POLICIES].rows)
+    response = await get(instance, analysis_id="analysis1")
+    assert response.status_code == 200
+    candidate = response.json()["candidates"][0]
+    assert candidate["decision"] == "blocked"
+    assert candidate["blockers"] == ["automatic_resume_provenance_unproved"]
+    assert "idempotency_key" not in candidate
+    assert db[policy.AUTOMATION_POLICIES].rows == before
+
+
+@pytest.mark.asyncio
 async def test_pending_operations_across_all_time_block_account_preview(monkeypatch):
     instance, db, calls, _ = app(monkeypatch)
     db[PROPOSALS].rows = [{"user_id":"owner","account_id":"123","status":"uncertain","created_at":"2020-01-01T00:00:00Z"}]
