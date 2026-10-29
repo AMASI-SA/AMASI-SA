@@ -4,6 +4,7 @@ Intentionally unattached. Catalog observations bracket work; they are not an
 atomic catalog snapshot or a barrier against unrelated privileged DB writers.
 """
 import asyncio
+from contextvars import Context
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
@@ -360,7 +361,12 @@ async def _update(db, prior, values, session, state, transactional=False):
 
 
 async def _end(session, state):
-    task = asyncio.create_task(session.end_session())
+    async def close():
+        # Motor returns a Future. Await it within a coroutine, and start a
+        # separate bounded context so an expired body deadline cannot suppress
+        # cleanup before it reaches the driver.
+        with timeout(CLEANUP_SECONDS): await session.end_session()
+    task = asyncio.create_task(close(), context=Context())
     done, _ = await asyncio.wait({task}, timeout=CLEANUP_SECONDS)
     if not done:
         state['resource_unconfirmed'] = True

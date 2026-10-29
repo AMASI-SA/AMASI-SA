@@ -191,3 +191,27 @@ async def test_unconfirmed_session_cleanup_remains_process_blocker_even_after_wo
         assert bootstrap._active['resource_unconfirmed'] is True
     finally:
         release.set(); await closed.wait(); bootstrap._active = None
+
+
+@pytest.mark.asyncio
+async def test_motor_future_session_cleanup_is_supported():
+    class Session:
+        def end_session(self):
+            future = asyncio.get_running_loop().create_future()
+            future.set_result(None)
+            return future
+    state = {}
+    await bootstrap._end(Session(), state)
+    assert 'resource_unconfirmed' not in state
+
+
+@pytest.mark.asyncio
+async def test_cleanup_has_fresh_bounded_mongo_deadline_after_body_expired():
+    from pymongo import _csot, timeout
+    remaining = []
+    class Session:
+        async def end_session(self): remaining.append(_csot.remaining())
+    with timeout(.001):
+        await asyncio.sleep(.01)
+        await bootstrap._end(Session(), {})
+    assert len(remaining) == 1 and 0 < remaining[0] <= bootstrap.CLEANUP_SECONDS

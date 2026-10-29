@@ -1,11 +1,12 @@
 """Actual authenticated owner HTTP -> bootstrap -> disposable Mongo behavior."""
+import asyncio
 from contextlib import asynccontextmanager
 from copy import deepcopy
 import importlib.util
 from pathlib import Path
 import uuid
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 import httpx
 import pytest
 
@@ -378,3 +379,50 @@ async def test_real_missing_metadata_or_receipt_privilege_never_guesses_absence(
         assert response.status_code == 503
         assert ddl_count(capture) == 0 and await target_metadata(raw) == {}
         assert await raw[RECEIPTS].find({}).to_list(length=2) == [foreign]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('interruption', ['caller_cancel', 'deadline'])
+@pytest.mark.parametrize('stage', ['create', 'commitTransaction'])
+async def test_real_interrupted_reply_retains_original_task_and_never_replays_ddl(monkeypatch, interruption, stage):
+    async with owner_case(monkeypatch) as (raw, db, api, capture, _):
+        body = await prepare(api)
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def hold_reply(value):
+            if stage in value:
+                entered.set()
+                await release.wait()
+        db.after = hold_reply
+        monkeypatch.setattr(bootstrap, 'TIMEOUT_SECONDS', 1)
+        request = asyncio.create_task(api.post(PREFIX + '/execute', json=body))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            original = bootstrap._active['task']
+            if interruption == 'caller_cancel':
+                request.cancel()
+                with pytest.raises(asyncio.CancelledError): await request
+            else:
+                response = await asyncio.wait_for(request, timeout=2)
+                assert response.status_code == 503 and response.json()['detail']['code'].endswith('deadline')
+            assert not original.done() and bootstrap._active['stop'] is True
+            rejected = await api.post(PREFIX + '/execute', json=body)
+            assert rejected.status_code == 503 and rejected.json()['detail']['code'].endswith('busy')
+            release.set()
+            with pytest.raises(HTTPException) as ended:
+                await asyncio.wait_for(asyncio.shield(original), timeout=4)
+            assert ended.value.detail['code'] in ('google_namespace_bootstrap_deadline',
+                'google_namespace_bootstrap_session_cleanup_unconfirmed')
+        finally:
+            release.set()
+            if not request.done():
+                request.cancel()
+                with pytest.raises(asyncio.CancelledError): await request
+        committed = stage == 'commitTransaction'
+        assert (await raw[RECEIPTS].find_one({'_id': SLOT}))['state'] == ('applied' if committed else 'consumed')
+        assert bool(await target_metadata(raw)) is committed
+        assert sum(name == 'commitTransaction' for name, _ in capture.commands) == int(committed)
+        prior = deepcopy(capture.commands)
+        db.after = None; bootstrap._active = None
+        retry = await api.post(PREFIX + '/execute', json=body)
+        assert retry.status_code == 409 and retry.json()['detail']['code'].endswith('reconciliation_required')
+        assert capture.commands == prior

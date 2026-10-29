@@ -33,9 +33,9 @@
     "contract_primary_sources": "MongoDB official v8.0 transactions/create/privilege actions plus catalog command documentation read; constraints also independently confirmed by root",
     "live_mongo_experiments": "none",
     "source_changes": "NEW unattached module, unit and actual-Mongo tests, dedicated workflow, contract and status; existing production files unchanged",
-    "next_evidence": "Fresh100-case gate:43unit+20engine+37actual bootstrap cases; runtime CI not yet passed",
+    "next_evidence": "Fresh106-case gate:45unit+20engine+41actual bootstrap cases including four actual interruption seams",
     "local": "19 capability cases collected successfully with -W error, 0.31s; no actual local Mongo execution",
-    "workflow": "google-namespace-bootstrap.yml, exact100/57actualMongo/zero-skips gate, source-head checkout, disposable authenticated Mongo8.0.26 port27483",
+    "workflow": "google-namespace-bootstrap.yml exact106/61actualMongo/zero-skips gate, direct source-head checkout, authenticated disposable Mongo8.0.26 port27483",
     "CI": {
       "run": 40971850976,
       "job": 123790260212,
@@ -56,8 +56,8 @@
       "guard_race": "raw create inside local transaction rejects same-options existing guard with exact NamespaceExists code48, no new-index command involved; outside transaction create is a separate no-op success case",
       "logs_read_by": "google_product_acceptance"
     },
-    "runtime_local": "43 unit/typed/lifecycle cases passed in1.30s;100 collected total in1.37s; git diff --check passed",
-    "runtime_changes": "Runtime module unchanged since717 checkpoint; adds original diagnostic GET compatibility, four restricted-role cases and three retained-task lifecycle unit cases. No existing production module/route/UI changes.",
+    "runtime_local": "45 unit/typed/lifecycle cases passed; two new cleanup regressions confirmed red before fix; fresh106-case actualCI pending",
+    "runtime_changes": "New module cleanup accepts Motor Future and independently bounds cleanup; four added actual-Mongo caller cancellation/deadline cases after create or commit response. No existing production files changed.",
     "first_runtime_CI": {
       "run": 40974558579,
       "job": 123799265538,
@@ -65,9 +65,18 @@
       "tree": "e85d53e4ad0380b170a2baf9d17cb74bd623aa48",
       "result": "Collection failed: missing cryptography dependency via package initializer. No runtime test passed or failed. Owned workflow dependencies corrected in successor.",
       "logs_read_by": "google_product_acceptance"
+    },
+    "runtime_CI_rejected": {
+      "source": "0b9fe9a3e13b63f4b7c661dff62ced583b2517eb",
+      "tree": "2de24d99dfe0fb2c67bd0aae0cc90038bec020c9",
+      "run": 40975473171,
+      "job": 123802301656,
+      "result": "33 failed,67 passed in13.04s; whole100-case gate failed; actual prepare failed during session cleanup",
+      "confirmed_local_red": "Motor-style Future caused asyncio.create_task TypeError; expired body CSOT deadline leaked into cleanup; two regressions failed before fix",
+      "fix": "await Motor Future in coroutine under an independent bounded cleanup context; no retry or other production changes"
     }
   },
-  "next": "Inspect fresh100-case actual behavior CI; fix confirmed behavior failures and finish real timeout/cancellation boundaries before independent acceptance. No production attachment or namespace writes.",
+  "next": "Inspect fresh106-case actual behavior CI; fix confirmed runtime failures; request independent review only after actual behavior and cleanup proof pass.",
   "contract_checkpoint": "a68d012b19410edb555eba87b4b742cba48ea288",
   "limitations": [
     "Unattached WIP; no current production or provider/DB actions.",

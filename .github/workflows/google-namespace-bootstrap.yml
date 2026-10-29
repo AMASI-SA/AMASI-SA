@@ -89,10 +89,10 @@ jobs:
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root=ET.parse('namespace-bootstrap.xml').getroot();cases=root.findall('.//testcase')
-          assert len(cases)==100, len(cases)
+          assert len(cases)==106, len(cases)
           engine=[c for c in cases if 'bootstrap_capabilities_mongo' in c.get('classname','')]
           runtime=[c for c in cases if c.get('classname','').endswith('test_google_namespace_bootstrap_mongo')]
-          assert len(engine)==20 and len(runtime)==37, (len(engine),len(runtime))
+          assert len(engine)==20 and len(runtime)==41, (len(engine),len(runtime))
           assert not root.findall('.//failure') and not root.findall('.//error') and not root.findall('.//skipped')
           required={
               'test_real_local_transaction_creates_all_four_with_required_restricted_privileges',
@@ -112,9 +112,10 @@ jobs:
               'test_real_commit_reply_loss_never_recommits_or_recreates',
               'test_real_owner_revocation_during_transaction_is_checked_outside_stale_snapshot',
               'test_real_foreign_create_after_consumed_fence_is_rejected_without_adoption',
-              'test_real_existing_uuid_replacement_after_consumption_aborts_new_names'
+              'test_real_existing_uuid_replacement_after_consumption_aborts_new_names',
+              'test_real_interrupted_reply_retains_original_task_and_never_replays_ddl'
           } <= {c.get('name','').split('[')[0] for c in runtime}
-          print('Verified 100 tests including20 engine and37 bootstrap actual authenticated Mongo cases; zero skips')
+          print('Verified 106 tests including20 engine and41 bootstrap actual authenticated Mongo cases; zero skips')
           PYCODE
       - name: Remove disposable replica
         if: always()
