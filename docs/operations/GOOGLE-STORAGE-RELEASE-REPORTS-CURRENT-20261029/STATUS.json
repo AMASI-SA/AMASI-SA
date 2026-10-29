@@ -1,5 +1,5 @@
 {
-  "status": "sealed_source_A_all13_CI_success_independent_preservation_PASS_root_candidate_verified",
+  "status": "SOURCE_ALL_CI_ACCEPTED_HOST_EDITOR_DISCONNECTED_BEFORE_BUILD_COMPLETION",
   "production_base": "61da14e645e8aec6a5fa33eac8a8f5208c110e5c",
   "production_base_tree": "55b755bd959d788f57b9b5f0caefbcce8913d381",
   "reviewed_source": "311075afcd6b0a0675a61ac753579e426b4134d6",
@@ -225,7 +225,7 @@
     "general_gates": "All actual successful job logs read. Security full frontend2370 tests/318 suites; balance618+16 backend/187UI; G47 327backend/119UI zero-skip gates; stock875 zero-skip gate; catalog34; payments141; both CodeQL uploads complete. Scoped unrelated Snap and host/manual jobs were skipped by existing workflow logic, not disabled.",
     "root_review": "Root accepted unchanged runtime/shared seams, independently133backend-Werror/29UI on e398, reviewed final4ca0e sourceCI126/9Mongo,117/6Mongo,1307backend,261UI/build4.03s and all13 workflows success."
   },
-  "next": "SourceA sealed; root owns remaining foreign-owner close verification, host A, operational B, full B checks and normal merge/publish under production protocol. No later source mutation by integration agent; a future changed production base requires re-source. Integration agent stands by for native1637 next fresh release after storage.",
+  "next": "Restoreactualhost andinspectexecutionstate; onlyinactiveguardallowsrehearsal. Freshprod must61da. CompletehostexactA/candidatehashmatch thenBonlyintent/allCI/hostB/merge/prepare/prepublish/onepublish/newfinish/3verify/liveprobes.",
   "prior_historical_checkpoint": {
     "source": "e3984c28be8890dda03b37154347079685aa6038",
     "tree": "68167a5f9e37d95a015a94bc99e0b009f685cd60",
@@ -267,10 +267,26 @@
   },
   "candidate_artifact_note": "Root downloaded ZIP and verified digest, then loaded candidate from isolated exact SourceA checkout successfully. Integration agent read Actions metadata; no host action.",
   "root_candidate_verification": {
-    "zip_sha256": "bccde1b280ff9a1a9050d63928d747ce7a2e5c727cc0710b5e3c1bfda4d9ba52",
-    "json_bytes": 946508,
-    "json_sha256": "e05663b90c0b9a8fc3521af75145408b834b2afa2c1e0ba467bae54eb6439d39",
-    "runtime_generation": "rg5-baa395b92f4ffaeeae5f41cd6000863cc10c2bf759acb9e010250f295c2b4297",
-    "candidate_validation": "Root load_candidate_release_intent PASS on isolated HEAD4ca0e;1032 backend source paths/245 release-control paths"
+    "source": "4ca0e771a9b36eb111e9973b9ef91841fc4cba06",
+    "bytes": 946508,
+    "sha256": "e05663b90c0b9a8fc3521af75145408b834b2afa2c1e0ba467bae54eb6439d39",
+    "backend_files": 1032,
+    "control_files": 245,
+    "runtime": "rg5-baa395b92f4ffaeeae5f41cd6000863cc10c2bf759acb9e010250f295c2b4297",
+    "guard_loader": "PASS in exact-source isolated worktree"
+  },
+  "host_attempt": {
+    "previous_foreign_lease": "Reports1642 closed, owner3probe comment6509532816; rootactualstatusactivefalse",
+    "actual_guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "command": "Isolated SourceA clone/build/freeze requested via code-server terminal; input appeared incomplete during lost connection; no completion observed.",
+    "editor": "Disconnected then502 Host Error at2026-10-29T22:16:08Z; previewiframe refused connection; trying normal environment recovery only, no paidchat.",
+    "intended_clone": "/tmp/google1646-source-a-20261030",
+    "intended_log": "/tmp/google1646-source-a-build.log",
+    "intended_output": "/tmp/google1646-host-intent.json",
+    "intent_b_created": false,
+    "lease_created": false,
+    "publish_clicked": false,
+    "app_checkout_changed": false,
+    "next": "Recovereditor; readactualguard andcheckifcommand/clone/logexists before newattempt. Do notassumeexecution orreusemissingtmpfiles."
   }
 }
