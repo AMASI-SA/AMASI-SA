@@ -14,7 +14,8 @@ permissions:
   contents: read
 jobs:
   replica:
-    runs-on: ubuntu-24.04
+    # Mongo 8 startup requires the compatible hosted kernel (runner-images#15005).
+    runs-on: ubuntu-22.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
