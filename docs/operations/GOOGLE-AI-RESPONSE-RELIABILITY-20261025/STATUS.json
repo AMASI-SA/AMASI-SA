@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T20:23:04.329Z",
+  "updated_at": "2026-10-29T20:30:36.193Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -33,9 +33,12 @@
     "latest_deployed_pr": 1618,
     "current_git_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
     "active_release_lease": {
-      "active": false,
-      "observed_app_head": "fda86238dda9700806c0d700e9e411c1674c9bad",
-      "qualification": "ForeignReports1632 materializing/publishing; this wasstatusatread only. Recheckbeforeanyhostwork."
+      "active": true,
+      "actor": "codex-reports-tiktok-20261029",
+      "deployment": "fda86238dda9700806c0d700e9e411c1674c9bad",
+      "source": "a7831b46374a161805d773934d5e1ff7ef1c79c4",
+      "runtime": "rg5-a1f46ddcb8010e15abe58d9002fbb5ec6e5509fd9b987ff839831b1f095a8e99",
+      "prepared_at": "2026-10-29T20:19:10.368984+00:00"
     }
   },
   "budget_semantics": {
@@ -98,7 +101,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "AwaitforeignReports1632 newerfinish/closedguard; rootthenfresh1634actualhostA/matchingnewB/allCI/review/build/merge/deployverify3. Meanwhile1634sourceCI and1626transactiontests run.1631sealedunattached,1630rootaccepted,storagefreshsourcewaitsfinalretailmerge.",
+  "next_safe_action": "ForeignReports1632ownerinvestigatingfailedpublish;preservelease/app.1634all11CI/independent/rootcandidatePASS awaitingforeignresolution/closedlease beforehostA. Continuefieldsfix actualwriterMongo, pausedfloor actualMongo, Merchantboundauth. No1627/1630/1631publishuntilfieldsfixreviewed. Storage1621freshsourcewaitsretailmerge.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -1973,8 +1976,8 @@
     },
     "paused_creation_shared_guard": {
       "branch": "codex/google-paused-creation-budget-wip-20261029",
-      "checkpoint": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
-      "state": "WIP_TWO_MOTOR_CLIENT_FORCED_TRANSACTION_RACE_FRESH_CI_PENDING",
+      "checkpoint": "306952dc43e68a81ea383ca24e8f14159be4f21e",
+      "state": "BOUNDED_CROSSCLIENT_TRANSACTION_RACE_CI_PASS_RUNTIME_FALSE_FLOOR_NEXT",
       "scope": "Newreservation+settlement typedcommands, atomiccreationclaim/ledger/generation+guardallocation, unknownACKretention, noLaunchAllocationauthority/noenable. Existingcreationnative readerrequiresrealbudgetresource/shared/referenceCount proof; exclusiveboundedreaderhunk authorized.",
       "limits": "Metadata/productwriters notserialized; submissionfloornotserialized. Reviewerfound one-processrace mayhitlocalregistry, requirecrossworker andold9CIcountassertion. No productionproof orpaidrights.",
       "reader_verification": "42unit/schema tests incl19new productionreaderpath/23plan, -Werror; no actualGoogleproviderrequest",
@@ -1988,7 +1991,9 @@
       "pending_ci": {
         "focused": 40948046970,
         "full": 40948047399
-      }
+      },
+      "tested_source": "fd0c9a8e763fcf1ea078bf6899bc72c72e322fc2",
+      "root_ci": "Readfocused133/37actual0skip106.21s andfull1401/8new+9oldgate0skip70.86s"
     },
     "commercial_gap_audit": {
       "branch": "codex/google-commercial-acceptance-gap-audit-20261029",
@@ -2064,7 +2069,8 @@
       "full_frontend": 324,
       "focused_total": 49,
       "actual_mongo": 11,
-      "live_limit": "ownerplanrev0; genuineownerinputs needed forpositiveevidence; no manufacturedbusinessplan"
+      "live_limit": "ownerplanrev0; genuineownerinputs needed forpositiveevidence; no manufacturedbusinessplan",
+      "hold_checkpoint": "35dc944dd2e4ba2be2b00be9238831beceaab640"
     },
     "catalog_stock_review_release_final": {
       "pr": 1618,
@@ -2104,7 +2110,8 @@
       "full": "1426backend391UI",
       "focused": "48incl8actualMongo0skip227UI",
       "root_review": true,
-      "root_checkpoint": "53500cf07b3d9685c876de7cb3a7f27981e3c29e"
+      "root_checkpoint": "53500cf07b3d9685c876de7cb3a7f27981e3c29e",
+      "hold_checkpoint": "5715c9cf7276211736f15b6df20f75ce5cb26218"
     },
     "native_inventory_preview": {
       "pr": 1631,
@@ -2118,24 +2125,32 @@
       "root": "Full3modulesread,34-Werror1.30s andCIlogs41incl7Mongo0skip4.09s",
       "independent": "34-Werror1.01s+8adversarialprobes,sourceoptionsconflictnullfix",
       "ci": 40947688402,
-      "job": 123707254059
+      "job": 123707254059,
+      "hold_checkpoint": "720a6046637f24fdd1f9fe85c0ce27a77cb5b5f2"
     },
     "merchant_observation": {
       "pr": 1633,
       "branch": "codex/google-merchant-observation-20261029",
-      "source": "fa5154b01f1f9854f1d9858cdd1988da6cc76914",
-      "state": "PURE_OBSERVER_WIP_99LOCAL_TESTS_AUTH_SEAM_ASSIGNED",
+      "source": "2f6a6ff7480208dc3a0e874a091f34630ee6e5b3",
+      "state": "PURE_OBSERVER_ROOT_AND_INDEPENDENT_114_PASS_HELPER_IMPLEMENTATION_PENDING",
       "owner": "google_launch",
       "scope": "Newobserver/fixedMerchantv1stream; narrowadditive reporting.py boundreadhelper assigned existingcredential/writersunchanged; no actualproviderread/routeattached",
-      "finding": "IndependentversionNumberparseraccepted20digitsoutsideint64; smallfixassignedowner beforeboundedacceptance. Authhelpernotyetimplemented;retailpriority."
+      "finding": "int64boundsfixed; authhelper/actualproviderlinkmembership routeunimplemented",
+      "root": "Full277linemoduleread114-Werror0skip1.23s; int64fixaccepted",
+      "independent": "114-Werror1.40s+officialv1/specialIDprobes"
     },
     "foreign_reports_tiktok_release": {
       "pr": 1632,
       "source": "a7831b46374a161805d773934d5e1ff7ef1c79c4",
       "intent": "df25d414d4c75ed6cc636b998332a8b23940bbbb",
       "merge": "fda86238dda9700806c0d700e9e411c1674c9bad",
-      "state": "MERGED_APP_ADVANCED_NEWLIVE_NOTYETVERIFIED_BY_ROOT",
-      "coordination": "PRcommentawaitownerfinish/closed; rootnohostmutationswhiledeploy"
+      "state": "PUBLISHING_FAILED_UI_OWNER_INVESTIGATING_LEASE_ACTIVE",
+      "coordination": "PRcommentawaitownerfinish/closed; rootnohostmutationswhiledeploy",
+      "ui_attempt": "eacef48",
+      "ui_started": "2026-10-29 23:19 Asia/Riyadh",
+      "owner_comment": 6507570394,
+      "root_coordination_comment": 6507568138,
+      "qualification": "FailedentrywithstaleBuildingcard; no rootclaimsuccessfulrollout/siteoutage. Do not touchforeignlease/app orrepeatPublish."
     },
     "retail_release_reports": {
       "pr": 1634,
@@ -2143,14 +2158,19 @@
       "source": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
       "tree": "0e3596142bf2266ba72c3443967feb2b844291ed",
       "base": "fda86238dda9700806c0d700e9e411c1674c9bad",
-      "state": "FRESH_SOURCE_EXACT11_BLOBS_ROOT_INDEPENDENT_PARITY_PASS_CI_RUNNING",
+      "state": "ALL11CI_ROOT_INDEPENDENT_PASS_HOST_HELD_FOREIGN_LEASE",
       "local": "308-Werror0skip6.35s,261UI/18zero skips14.116s",
       "ci": {
         "google": 40948016906,
         "readiness": 40948016680,
         "catalog": 40948016611
       },
-      "host": "Notstarted;foreignReports1632deployunderway"
+      "host": "Notstarted;foreignReports1632deployunderway",
+      "status_checkpoint": "c64071b2c23b7683c6222a3d6846ccc424dc0d0e",
+      "artifact": 12930730411,
+      "intent": "3daf7034acc4d67b17efbcdd145813c5fb6cc627db0c2354dfeeac72f724321d",
+      "runtime": "rg5-1d92cc5150dd80334e499eb4b32c394cbee4c5351596d4091e97d3aecde24ba0",
+      "root_candidate": "PASS1029backend243control; exactA/base"
     },
     "saved_plan_reader_contract_bug": {
       "confirmed_by": [
@@ -2169,7 +2189,19 @@
       "owner": "google_seasons",
       "assigned": "Exclusivecommercialplan.py Fields/Inputmodelsplit preservingwriteschema;3readroutesvalidateStoredFields/no syntheticack; actualsave→readrealMongo regressions, false/missingackwritestillrejected",
       "review": "Priorreachable-integrationPASSwithdrawn; source/UIboundcontractsremainhistoricalevidence. No affectedpublishuntilsuccessoraccepted.",
-      "state": "WIP_FIX_ASSIGNED_NEW_ISOLATED_COHERENT_BRANCH"
+      "state": "WIP_FIX_ASSIGNED_NEW_ISOLATED_COHERENT_BRANCH",
+      "fix_checkpoint": "c469d8c1f3d71d38de67b6d4fcde5cc36dcaffd1",
+      "fix_branch": "codex/google-saved-plan-fields-contract-fix-20261029",
+      "local": "38-Werror1.42s; actualwriterunitred3thenpass; realMongo pending"
+    },
+    "paused_creation_dispatch_floor": {
+      "branch": "codex/google-paused-dispatch-floor-wip-20261029",
+      "checkpoint": "64537d0c0cef71e78cb53f50e228dcef72f56a58",
+      "base": "c0ce749cab1f4c30c4f09432a432bd109495a2b9",
+      "owner": "google_connection",
+      "state": "WIP_REVIEWED_BUDGET_SELECTIVE_IMPORT_COMPLETE_TYPED_FLOOR_IMPLEMENTATION_TESTING",
+      "scope": "Exclusive6line standing_creation managementfloorseam, typedcommonTX policy/proposal/fence/allocation/epoch+dispatchmarker; onecommit unknownretain/noresend. Otherhuman/standingunchanged.",
+      "limits": "runtimefalse; metadata/product/externalGooglewritersunserialized; no prodTX/namespace/nativecapacity proof/ownerlimits"
     }
   }
 }
