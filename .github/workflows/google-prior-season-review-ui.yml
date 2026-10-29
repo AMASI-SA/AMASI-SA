@@ -1,0 +1,68 @@
+name: Google prior season review UI
+on:
+  push:
+    branches: [codex/google-prior-season-review-ui-20261029]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - frontend/src/components/marketing/GooglePriorSeasonReview*
+      - frontend/src/services/googlePriorSeasonReview*
+      - frontend/src/services/__fixtures__/googlePriorSeasonReview.json
+      - backend/tests/google_prior_season_review_fixture.py
+      - backend/tests/test_google_prior_season_review_fixture.py
+      - .github/workflows/google-prior-season-review-ui.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install production compatible fixture dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1 cryptography==50.0.2
+          python-multipart==0.0.32 PyJWT==2.15.1 bcrypt==4.1.3
+          python-dotenv==1.2.4 pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Verify actual HTTP writer fixture parity
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m pytest --noconftest -q -Werror --junitxml=prior-review-fixture.xml backend/tests/test_google_prior_season_review_fixture.py
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('prior-review-fixture.xml').getroot().findall('.//testcase')
+          assert len(cases)==1 and not any(c.find(x) is not None for c in cases for x in ('failure','error','skipped'))
+          print('Verified actual HTTP writer/read fixture parity, 1 case, zero skips')
+          PY
+      - name: Prepare governed frontend toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Frozen frontend install
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test standalone saved prior season child
+        env:
+          CI: 'true'
+        run: |
+          python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GooglePriorSeasonReview.test.jsx src/services/googlePriorSeasonReview.test.js --json --outputFile=prior-season-review-results.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('frontend/prior-season-review-results.json').read_text())
+          assert report['success'] is True and report['numTotalTestSuites']==2 and report['numPassedTestSuites']==2
+          assert report['numTotalTests']==52 and report['numPassedTests']==52
+          assert report['numPendingTests']==0 and report['numTodoTests']==0
+          print('Verified 52 prior season UI/service tests, 2 suites, zero skips')
+          PY
+      - name: Build current CI source
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build
+      - name: Check source whitespace
+        run: git diff --check
