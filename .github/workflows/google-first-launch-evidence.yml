@@ -55,12 +55,12 @@ jobs:
           --junitxml=/tmp/google-launch-evidence.xml
           backend/tests/test_google_ads_automation_creation_launch_contract.py
           backend/tests/test_google_ads_automation_creation_launch_evidence.py
-      - name: Require all 148 cases and four actual Mongo scenarios without skips
+      - name: Require all 157 cases and five actual Mongo scenarios without skips
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
           rows = ET.parse('/tmp/google-launch-evidence.xml').findall('.//testcase')
-          assert len(rows) == 148, f'Expected 148 cases, got {len(rows)}'
+          assert len(rows) == 157, f'Expected 157 cases, got {len(rows)}'
           assert all(not list(row) for row in rows), 'Skipped, failed or errored case is not acceptance'
           scenarios = {row.attrib['name'] for row in rows if row.attrib['name'].startswith('test_real_mongo_')}
           assert scenarios == {
@@ -68,8 +68,9 @@ jobs:
               'test_real_mongo_projected_evidence_remains_readonly_and_scoped[duplicate_product]',
               'test_real_mongo_projected_evidence_remains_readonly_and_scoped[foreign_proposal]',
               'test_real_mongo_projected_evidence_remains_readonly_and_scoped[policy_drift]',
+              'test_real_mongo_projected_evidence_remains_readonly_and_scoped[details_writer_bson]',
           }
-          print('Verified 148 cases including four disposable real-Mongo scenarios; no skips.')
+          print('Verified 157 cases including five disposable real-Mongo scenarios; no skips.')
           PY
       - name: Verify reused creation inventory and native contracts
         timeout-minutes: 4

@@ -47,9 +47,33 @@ def _fail(code):
     raise LaunchEvidenceError(code)
 
 
+def _stored_utc(value):
+    """Only BSON datetime objects have implicit UTC at this storage boundary.
+
+    Do not apply this rule to caller clock strings or generic values. Motor's
+    default codec returns Mongo UTC dates as naive datetime objects.
+    """
+    if not isinstance(value, datetime):
+        raise TypeError('unsupported stored evidence type')
+    stamp = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return stamp.isoformat()
+
+
+def _stored_product_clocks(product):
+    if not isinstance(product, dict):
+        return product
+    product = deepcopy(product)
+    for key in ('last_synced_at', 'details_synced_at'):
+        if isinstance(product.get(key), datetime): product[key] = _stored_utc(product[key])
+    proof = product.get('inventory_evidence_v1')
+    if isinstance(proof, dict) and isinstance(proof.get('observed_at'), datetime):
+        proof['observed_at'] = _stored_utc(proof['observed_at'])
+    return product
+
+
 def _bounded(value):
     try:
-        if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode()) > _MAX_BYTES:
+        if len(json.dumps(value, ensure_ascii=False, allow_nan=False, default=_stored_utc).encode()) > _MAX_BYTES:
             _fail('launch_evidence_size_limit')
     except (TypeError, ValueError, OverflowError):
         _fail('launch_evidence_shape_unproved')
@@ -242,6 +266,7 @@ def prepare_launch_evidence(*, user_id, account_id, campaign_id, policy, creatio
     """Validate server-read inputs; a JSON flag alone is never configuration proof."""
     start, finish, current = _window(read_started_at, read_finished_at, current)
     _bounded([policy, creation_intent, ledger_entry, original_proposal, product, metadata, inventory_rows, snapshot, verification, purchase_context])
+    product = _stored_product_clocks(product)
     if (not creation.creation_campaign_ownership_verified(ledger_entry, intent=creation_intent, user_id=user_id,
         account_id=account_id, campaign_id=campaign_id, proposal=original_proposal)):
         _fail('launch_creation_ownership_unproved')

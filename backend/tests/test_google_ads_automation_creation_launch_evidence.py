@@ -193,6 +193,39 @@ def test_fresh_product_unavailability_is_not_confused_with_changed_inventory_pro
     blocked(values, 'launch_product_unavailable')
 
 
+def stored_details_product(values, monkeypatch):
+    from product_v2_details_routes import _details_patch
+    monkeypatch.setattr('product_v2_details_routes._now', lambda: NOW)
+    return _details_patch({'id': '1', 'name': values['product']['name'], 'sku': values['product']['sku'],
+        'status': 'sale', 'quantity': 4, 'unlimited_quantity': False,
+        'urls': {'product': 'https://amasi-sa.com/p1'}, 'options': [], 'variants': []}, user_id='owner')
+
+
+@pytest.mark.parametrize('mongo_naive', [False, True])
+def test_actual_details_writer_dates_are_utc_freshness_without_changing_stock_semantics(monkeypatch, mongo_naive):
+    values = evidence_case(); product = stored_details_product(values, monkeypatch)
+    if mongo_naive:
+        for key in ('last_synced_at', 'details_synced_at'): product[key] = product[key].replace(tzinfo=None)
+        product['inventory_evidence_v1']['observed_at'] = product['inventory_evidence_v1']['observed_at'].replace(tzinfo=None)
+    values['product'] = product; original = deepcopy(product)
+    proof = evidence.prepare_launch_evidence(**values)
+    assert product == original
+    assert proof['product_observed_at'] == proof['inventory_observed_at'] == NOW.isoformat()
+    assert proof['binding']['product']['inventory_digest'] == product['inventory_evidence_v1']['stock_digest']
+
+
+@pytest.mark.parametrize('value', [NOW-timedelta(hours=1), NOW+timedelta(seconds=1), NOW.replace(tzinfo=None).isoformat()])
+def test_stored_date_normalization_does_not_accept_stale_future_or_timezone_free_strings(value):
+    values = evidence_case(); values['product']['last_synced_at'] = value
+    blocked(values, 'launch_product_stale')
+
+
+@pytest.mark.parametrize('value', [object(), {1, 2}, b'opaque'])
+def test_date_size_encoding_does_not_coerce_other_unsupported_source_types(value):
+    values = evidence_case(); values['product']['price'] = value
+    blocked(values, 'launch_evidence_shape_unproved')
+
+
 class Cursor:
     def __init__(self, rows): self.rows = rows
     async def to_list(self, length): return deepcopy(self.rows[:length])
@@ -313,7 +346,7 @@ async def test_reader_final_clock_cannot_hide_slow_successful_reads(monkeypatch)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('scenario', ['verified_read', 'duplicate_product', 'foreign_proposal', 'policy_drift'])
+@pytest.mark.parametrize('scenario', ['verified_read', 'duplicate_product', 'foreign_proposal', 'policy_drift', 'details_writer_bson'])
 @pytest.mark.skipif(not os.getenv('GOOGLE_ADS_TEST_MONGO_URI'), reason='Disposable loopback Mongo is required')
 async def test_real_mongo_projected_evidence_remains_readonly_and_scoped(monkeypatch, scenario):
     from motor.motor_asyncio import AsyncIOMotorClient
@@ -331,6 +364,8 @@ async def test_real_mongo_projected_evidence_remains_readonly_and_scoped(monkeyp
     try:
         await db.command('ping')
         values, fake, args = reader_case(monkeypatch)
+        if scenario == 'details_writer_bson':
+            fake[evidence.PRODUCT_COLLECTION].rows = [stored_details_product(values, monkeypatch)]
         for name, collection in fake.items():
             await db[name].insert_many(deepcopy(collection.rows))
         if scenario == 'duplicate_product':
@@ -341,10 +376,14 @@ async def test_real_mongo_projected_evidence_remains_readonly_and_scoped(monkeyp
             await db[evidence.CREATION_POLICIES].update_one({}, {'$inc': {'revision': 1}})
         client = Client(values, hook=drift if scenario == 'policy_drift' else None)
         commands.names.clear()
-        if scenario == 'verified_read':
+        if scenario in {'verified_read', 'details_writer_bson'}:
             proof = await evidence.read_google_creation_launch_evidence(db, client=client, **args)
             assert proof['created_by_mezan_verified'] is True and proof['ready_for_enable_preview'] is False
-            assert proof['binding']['product']['inventory_digest'] == values['product']['inventory_evidence_v1']['stock_digest']
+            assert proof['binding']['product']['inventory_digest'] == fake[evidence.PRODUCT_COLLECTION].rows[0]['inventory_evidence_v1']['stock_digest']
+            if scenario == 'details_writer_bson':
+                stored = await db[evidence.PRODUCT_COLLECTION].find_one({}, {'_id': 0, 'last_synced_at': 1})
+                assert stored['last_synced_at'].tzinfo is None  # actual Motor BSON decoding, not an ISO fixture
+                assert proof['product_observed_at'] == NOW.isoformat()
         else:
             code = {'duplicate_product': 'launch_product_identity_unproved', 'foreign_proposal': 'launch_creation_ownership_unproved',
                 'policy_drift': 'launch_storage_changed_during_read'}[scenario]
