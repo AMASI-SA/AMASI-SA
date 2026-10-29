@@ -2,7 +2,7 @@
   "task": "GOOGLE-PLAN-SUGGESTIONS-20261027",
   "branch": "codex/google-plan-suggestions-release-20261029",
   "base": "5c3353034be910ab2bde62c12512d1d8ded26faa",
-  "state": "WIP backend owner-only quoted suggestions; frontend integration in progress",
+  "state": "Current-production integration source; fresh full CI and independent review required",
   "scope": "Suggest season, explicit ISO dates, supported country, audience, message and category URL from exact spans of the supplied instruction. No automatic budget, product IDs, exclusions or authorization.",
   "verification": {
     "command": "PYTHONPATH=backend python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
@@ -43,16 +43,19 @@
   "reintegration_20261029": {
     "base_inventory_source": "8b8324e20ba52fdfbce7667c45ae770dbbe452d5",
     "reviewed_source": "e343461d7f53c1d55ca6557d6f859538467b0935",
-    "state": "WIP based on unreleased inventory source; not release-ready",
+    "state": "Inventory production merge incorporated normally; release not frozen",
     "scope": "Original11 files only; preserve CAS/Ubuntu22.04/inventory workflow union and current dependencies/intent.",
     "fresh_validation": {
       "command": "PYTHONPATH=backend /tmp/mezan-google29-venv/bin/python -m pytest --noconftest -q backend/tests/test_google_ads_plan_suggestions.py backend/tests/test_google_commercial_plan.py",
-      "result": "46 passed, no skips, 1.63s, exit0",
+      "result": "46 passed, no skips, 0.90s, exit0 after inventory merge",
       "diff_check": "passed",
       "frontend": "Not run locally; worktree has no node_modules. Fresh CI required."
     },
-    "next": "Incorporate inventory production merge normally when coordinator supplies it; fresh full CI and independent review; no intent freeze by this agent.",
+    "next": "Fresh backend/frontend CI and independent acceptance; coordinator alone freezes intent and releases.",
     "provider_calls": 0,
-    "production_changed": false
+    "production_changed": false,
+    "inventory_production_merge": "0ea10ab2a9c786a0ebe7c663ea792ca669861514",
+    "preserved_remote_parent": "712277d165b71767f5560957ce4fcad8cf4aa329",
+    "release_intent_and_dependencies": "Identical to inventory production merge"
   }
 }
