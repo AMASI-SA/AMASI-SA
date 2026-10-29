@@ -109,6 +109,8 @@ def attach_google_ads_management_routes(router, db, current_user, *, client_fact
     attach_google_linked_campaign_routes(router, db, current_user)
     from .google_live_category_routes import attach_google_live_category_routes
     attach_google_live_category_routes(router, db, current_user)
+    from .google_native_inventory_routes import attach_google_native_inventory_routes
+    attach_google_native_inventory_routes(router, db, current_user)
     from .google_ads_budget_storage_readiness import attach_google_ads_budget_storage_readiness_routes
     attach_google_ads_budget_storage_readiness_routes(router, db, current_user)
     from .google_ads_automation_policy import attach_google_ads_automation_policy_routes

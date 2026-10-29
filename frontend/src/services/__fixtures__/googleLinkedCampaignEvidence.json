@@ -1,9 +1,18 @@
 {
-  "generated_from_source": "edb9de0c0abc461252eb123493c739f65c3a107f",
+  "generated_by": "actual_management_http_put_then_read",
   "plan": {
     "plan_id": "winter",
     "revision": 3,
     "fields": {
+      "instruction": "ركز على هدايا الشتاء بالسعودية",
+      "season": "هدايا الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "هدية الشتاء",
+      "category_url": null,
+      "category_ids": [],
       "pinned_product_ids": [
         "123",
         "456"
@@ -11,8 +20,57 @@
       "excluded_product_ids": [
         "789"
       ],
-      "instruction": "هدايا الشتاء"
-    }
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "not_collected",
+        "calendar": "gregorian"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
   },
   "response": {
     "plan_id": "winter",
@@ -146,6 +204,421 @@
           {
             "product_id": "456",
             "event_id": "event-456"
+          }
+        ]
+      }
+    ],
+    "campaign_windows": [
+      {
+        "provider": "snapchat_ads",
+        "account_id": "account",
+        "campaign_id": "campaign",
+        "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "attribution_key": "564597d3b574b2cf28ec1d89",
+        "window_id": "last14",
+        "date_from": "2026-10-15",
+        "date_to": "2026-10-28",
+        "context_refs": [
+          "175e6adc26096cf5a92eebbbf0a1dfcc22a4cd61e9f13d4bf4ddceecc5ee1e89"
+        ],
+        "observed_context_days": 1,
+        "expected_days": 14,
+        "missing_dates": [
+          "2026-10-15",
+          "2026-10-16",
+          "2026-10-17",
+          "2026-10-18",
+          "2026-10-19",
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-24",
+          "2026-10-25",
+          "2026-10-26",
+          "2026-10-27"
+        ],
+        "source_coverage_complete": false,
+        "metrics_aggregated": false,
+        "comparison_status": "partial_context_only_no_growth_inference"
+      },
+      {
+        "provider": "snapchat_ads",
+        "account_id": "account",
+        "campaign_id": "campaign",
+        "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "attribution_key": "564597d3b574b2cf28ec1d89",
+        "window_id": "previous14",
+        "date_from": "2026-10-01",
+        "date_to": "2026-10-14",
+        "context_refs": [],
+        "observed_context_days": 0,
+        "expected_days": 14,
+        "missing_dates": [
+          "2026-10-01",
+          "2026-10-02",
+          "2026-10-03",
+          "2026-10-04",
+          "2026-10-05",
+          "2026-10-06",
+          "2026-10-07",
+          "2026-10-08",
+          "2026-10-09",
+          "2026-10-10",
+          "2026-10-11",
+          "2026-10-12",
+          "2026-10-13",
+          "2026-10-14"
+        ],
+        "source_coverage_complete": false,
+        "metrics_aggregated": false,
+        "comparison_status": "partial_context_only_no_growth_inference"
+      },
+      {
+        "provider": "snapchat_ads",
+        "account_id": "account",
+        "campaign_id": "campaign",
+        "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "attribution_key": "564597d3b574b2cf28ec1d89",
+        "window_id": "last30",
+        "date_from": "2026-09-29",
+        "date_to": "2026-10-28",
+        "context_refs": [
+          "175e6adc26096cf5a92eebbbf0a1dfcc22a4cd61e9f13d4bf4ddceecc5ee1e89"
+        ],
+        "observed_context_days": 1,
+        "expected_days": 30,
+        "missing_dates": [
+          "2026-09-29",
+          "2026-09-30",
+          "2026-10-01",
+          "2026-10-02",
+          "2026-10-03",
+          "2026-10-04",
+          "2026-10-05",
+          "2026-10-06",
+          "2026-10-07",
+          "2026-10-08",
+          "2026-10-09",
+          "2026-10-10",
+          "2026-10-11",
+          "2026-10-12",
+          "2026-10-13",
+          "2026-10-14",
+          "2026-10-15",
+          "2026-10-16",
+          "2026-10-17",
+          "2026-10-18",
+          "2026-10-19",
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-24",
+          "2026-10-25",
+          "2026-10-26",
+          "2026-10-27"
+        ],
+        "source_coverage_complete": false,
+        "metrics_aggregated": false,
+        "comparison_status": "partial_context_only_no_growth_inference"
+      },
+      {
+        "provider": "snapchat_ads",
+        "account_id": "account",
+        "campaign_id": "campaign",
+        "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "attribution_key": "564597d3b574b2cf28ec1d89",
+        "window_id": "last90",
+        "date_from": "2026-07-31",
+        "date_to": "2026-10-28",
+        "context_refs": [
+          "175e6adc26096cf5a92eebbbf0a1dfcc22a4cd61e9f13d4bf4ddceecc5ee1e89"
+        ],
+        "observed_context_days": 1,
+        "expected_days": 90,
+        "missing_dates": [
+          "2026-07-31",
+          "2026-08-01",
+          "2026-08-02",
+          "2026-08-03",
+          "2026-08-04",
+          "2026-08-05",
+          "2026-08-06",
+          "2026-08-07",
+          "2026-08-08",
+          "2026-08-09",
+          "2026-08-10",
+          "2026-08-11",
+          "2026-08-12",
+          "2026-08-13",
+          "2026-08-14",
+          "2026-08-15",
+          "2026-08-16",
+          "2026-08-17",
+          "2026-08-18",
+          "2026-08-19",
+          "2026-08-20",
+          "2026-08-21",
+          "2026-08-22",
+          "2026-08-23",
+          "2026-08-24",
+          "2026-08-25",
+          "2026-08-26",
+          "2026-08-27",
+          "2026-08-28",
+          "2026-08-29",
+          "2026-08-30",
+          "2026-08-31",
+          "2026-09-01",
+          "2026-09-02",
+          "2026-09-03",
+          "2026-09-04",
+          "2026-09-05",
+          "2026-09-06",
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-12",
+          "2026-09-13",
+          "2026-09-14",
+          "2026-09-15",
+          "2026-09-16",
+          "2026-09-17",
+          "2026-09-18",
+          "2026-09-19",
+          "2026-09-20",
+          "2026-09-21",
+          "2026-09-22",
+          "2026-09-23",
+          "2026-09-24",
+          "2026-09-25",
+          "2026-09-26",
+          "2026-09-27",
+          "2026-09-28",
+          "2026-09-29",
+          "2026-09-30",
+          "2026-10-01",
+          "2026-10-02",
+          "2026-10-03",
+          "2026-10-04",
+          "2026-10-05",
+          "2026-10-06",
+          "2026-10-07",
+          "2026-10-08",
+          "2026-10-09",
+          "2026-10-10",
+          "2026-10-11",
+          "2026-10-12",
+          "2026-10-13",
+          "2026-10-14",
+          "2026-10-15",
+          "2026-10-16",
+          "2026-10-17",
+          "2026-10-18",
+          "2026-10-19",
+          "2026-10-20",
+          "2026-10-21",
+          "2026-10-22",
+          "2026-10-23",
+          "2026-10-24",
+          "2026-10-25",
+          "2026-10-26",
+          "2026-10-27"
+        ],
+        "source_coverage_complete": false,
+        "metrics_aggregated": false,
+        "comparison_status": "partial_context_only_no_growth_inference"
+      }
+    ],
+    "source_coverage_complete": false,
+    "product_attribution_verified": false,
+    "independent_store_orders": null,
+    "profitability": null,
+    "execution_authorized": false,
+    "rule": "Campaign metrics are shared context, never allocated product results or independent store orders.",
+    "limitations": [
+      "No product ranking or Google success inference",
+      "No approved test budget or launch authority",
+      "Native days and attribution settings remain separate"
+    ]
+  },
+  "parent_plan": {
+    "plan_id": "seasonal-focus",
+    "revision": 3,
+    "fields": {
+      "instruction": "ركز على هدايا الشتاء",
+      "season": "الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "دفء الشتاء",
+      "category_url": "https://amasi-sa.com/shawls",
+      "category_ids": [],
+      "pinned_product_ids": [
+        "123"
+      ],
+      "excluded_product_ids": [],
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "not_collected",
+        "calendar": "gregorian"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
+  },
+  "parent_response": {
+    "plan_id": "seasonal-focus",
+    "plan_revision": 3,
+    "status": "bounded_campaign_context_review",
+    "snapshot_immutable": false,
+    "catalog_identity_verified": false,
+    "as_of": "2026-10-29T12:00:00+00:00",
+    "products": [
+      {
+        "product_id": "123",
+        "associations": [
+          {
+            "provider": "snapchat_ads",
+            "account_id": "account",
+            "campaign_id": "campaign",
+            "event_id": "event-123",
+            "source": "manual",
+            "meaning": "intended_product_association_only",
+            "feed_mapping_verified": false,
+            "metrics_status": "partial_saved_campaign_context",
+            "missing": [
+              "complete_period_product_attribution",
+              "independent_store_order_matching",
+              "historical_product_costs"
+            ],
+            "observed_context_days": 1,
+            "rejected_source_snapshots": 0,
+            "source_coverage_complete": false
+          },
+          {
+            "provider": "snapchat_ads",
+            "account_id": "account",
+            "campaign_id": "campaign",
+            "event_id": "late-123",
+            "source": "manual",
+            "meaning": "intended_product_association_only",
+            "feed_mapping_verified": false,
+            "metrics_status": "no_qualified_historical_context",
+            "missing": [
+              "complete_period_product_attribution",
+              "independent_store_order_matching",
+              "historical_product_costs"
+            ],
+            "observed_context_days": 0,
+            "rejected_source_snapshots": 0,
+            "source_coverage_complete": false
+          }
+        ],
+        "context_refs": [
+          "175e6adc26096cf5a92eebbbf0a1dfcc22a4cd61e9f13d4bf4ddceecc5ee1e89"
+        ],
+        "status": "partial_saved_campaign_context"
+      }
+    ],
+    "campaign_contexts": [
+      {
+        "provider": "snapchat_ads",
+        "account_id": "account",
+        "campaign_id": "campaign",
+        "currency": "SAR",
+        "timezone": "Asia/Riyadh",
+        "date": "2026-10-28",
+        "window_start_utc": "2026-10-27T21:00:00+00:00",
+        "window_end_utc": "2026-10-28T21:00:00+00:00",
+        "attribution_key": "564597d3b574b2cf28ec1d89",
+        "attribution_windows": {
+          "swipe": "28_DAY",
+          "view": "7_DAY"
+        },
+        "action_report_time": "conversion",
+        "source_run_id": "run",
+        "observed_at": "2026-10-29T01:00:00+00:00",
+        "snapshot_finished_at": "2026-10-29T01:00:00+00:00",
+        "metrics": {
+          "spend_native": 12.5,
+          "provider_reported_purchases": 3,
+          "provider_reported_purchase_value_native": 90
+        },
+        "metric_provenance": {
+          "spend_native": "positive_saved_source_observation",
+          "provider_reported_purchases": "positive_saved_source_observation",
+          "provider_reported_purchase_value_native": "positive_saved_source_observation"
+        },
+        "snapshot_age_seconds": 39600.0,
+        "live_freshness_verified": false,
+        "source_collection": "mezan_snapchat_committed_totals_v1",
+        "product_attribution_verified": false,
+        "independent_store_orders": null,
+        "profitability": null,
+        "execution_authorized": false,
+        "context_id": "175e6adc26096cf5a92eebbbf0a1dfcc22a4cd61e9f13d4bf4ddceecc5ee1e89",
+        "window_ids": [
+          "last14",
+          "last30",
+          "last90"
+        ],
+        "associated_product_count": 2,
+        "association_proofs": [
+          {
+            "product_id": "123",
+            "event_id": "event-123"
           }
         ]
       }

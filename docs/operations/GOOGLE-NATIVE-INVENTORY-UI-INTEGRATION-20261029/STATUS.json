@@ -1,0 +1,16 @@
+{
+  "status": "WIP_actual_writer_fixtures_verified_native_UI_pending_not_release_source",
+  "base": "8dcafd8a8c0a86cfafdf159670562c530a282dad",
+  "accepted_base_tree": "1d0678a2fc3d15f7fff2aa430bfe434e9ec10f45",
+  "fixed_validation_gap": "Prior1627/1630 integration acceptance was withdrawn after real writer omits acknowledge_review. Accepted1636 Fields/Input split remains unchanged. All three UI fixtures now generated through actual management HTTP PUT then evidence GET/POST; stored fields explicitly omit acknowledge_review and expected_revision. Actual parent tests consume writer-produced parent fixtures.",
+  "runtime_changes": "Exactly two native inventory router import/attachment lines; no backend behavior/model changes.",
+  "tests": {
+    "red": "Three fixture parity tests initially failed on missing actual native parent route.",
+    "local_writer_fixture_parity": "3 passed -Werror /0 skips1.07s",
+    "local_ui": "135 passed/five suites2.576s",
+    "planned": "Bounded native service/child plus minimal category parent seam; exact-source backend/realMongo/UI/build CI and independent review required."
+  },
+  "scope": "Explicit owner request1..5 observed nonexcluded category products; fresh backend category proof. Native parent/variant raw stock observations only; no plan save, ad selection, budget or execution authority.",
+  "prohibited": "No live owner-plan/provider/host writes, migration, lease, deployment or ads launch. Frozen8dc,1627,1630 and storage recipe unchanged.",
+  "next": "Complete native UI/service/tests; validate accepted runtime bytes; checkpoint exact source and CI. Production freshness/readiness requires separate later direct-production source; no bypass."
+}

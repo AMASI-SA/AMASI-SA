@@ -6,6 +6,7 @@ on:
     paths:
       - "backend/integrations_control_center/google_ads*"
       - "backend/integrations_control_center/google_commercial_plan.py"
+      - "backend/tests/test_google_plan_ui_writer_fixtures.py"
       - "backend/integrations_control_center/google_live_category_*.py"
       - "backend/tests/test_google_live_category_*.py"
       - "frontend/src/services/googleLiveCategoryPreview*"
@@ -113,6 +114,7 @@ jobs:
           backend/tests/test_google_ads_client.py
           backend/tests/test_google_ads_reporting_v1.py
           backend/tests/test_google_commercial_plan.py
+          backend/tests/test_google_plan_ui_writer_fixtures.py
           backend/tests/test_google_live_category_proof.py
           backend/tests/test_google_live_category_reader.py
           backend/tests/test_google_live_category_routes.py

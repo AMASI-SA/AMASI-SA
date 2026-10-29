@@ -7,10 +7,8 @@ import categoryFixture from "../../services/__fixtures__/googleLiveCategoryPrevi
 import linkedFixture from "../../services/__fixtures__/googleLinkedCampaignEvidence.json";
 
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), post: jest.fn() } }));
-const fields = { instruction: "ركز على هدايا الشتاء", season: "الشتاء", starts_on: "2026-11-01", ends_on: "2026-12-31", market: "SA",
-    audience: "رجال يبحثون عن هدية", message: "دفء الشتاء", category_url: "https://amasi-sa.com/shawls", category_ids: [],
-    pinned_product_ids: ["123"], excluded_product_ids: [], exclusions: [], selection_mode: "pinned_only", calendar: "gregorian", limits: null };
-const saved = { plan_id: "seasonal-focus", revision: 3, fields, execution_authorized: false };
+const saved = categoryFixture.parent_plan;
+const fields = saved.fields;
 let container, root;
 beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -275,13 +273,7 @@ test("editing actual parent category field aborts late category request", async 
     expect(api.put).not.toHaveBeenCalled();
 });
 
-function linkedParentResponse() {
-    const result = JSON.parse(JSON.stringify(linkedFixture.response));
-    result.plan_id = saved.plan_id;
-    result.products = result.products.filter((product) => product.product_id === "123");
-    result.campaign_contexts.forEach((context) => { context.association_proofs = context.association_proofs.filter((proof) => proof.product_id === "123"); });
-    return result;
-}
+function linkedParentResponse() { return JSON.parse(JSON.stringify(linkedFixture.parent_response)); }
 
 test("actual saved owner plan exposes linked context alongside existing evidence without automatic requests or writes", async () => {
     api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith("/linked-campaign-evidence") ? linkedParentResponse() : saved }));
@@ -307,10 +299,8 @@ test.each(["edit", "reload", "save"])("actual parent %s aborts and discards pend
     expect(api.post).not.toHaveBeenCalled();
 });
 
-function categoryPreviewResponse() {
-    return { ...JSON.parse(JSON.stringify(categoryFixture.response)), plan_id: saved.plan_id, plan_revision: saved.revision,
-        category_url: fields.category_url, unresolved_exclusion_ids: [], products: categoryFixture.response.products.map((row) => ({ ...row, excluded: false })) };
-}
+function categoryPreviewResponse() { return JSON.parse(JSON.stringify(categoryFixture.parent_response)); }
+
 test("actual owner plan attaches explicit saved-URL live preview alongside existing reviews", async () => {
     await render(); expect(api.get).toHaveBeenCalledTimes(1);
     api.get.mockResolvedValueOnce({ data: categoryPreviewResponse() });
@@ -330,4 +320,12 @@ test.each(["edit", "reload", "save"])("actual parent %s aborts and discards pend
     expect(signal.aborted).toBe(true);
     await act(async () => finish({ data: categoryPreviewResponse() })); expect(container.querySelector("[data-live-category-result]")).toBeNull();
     expect(api.post).not.toHaveBeenCalled(); expect(api.put).toHaveBeenCalledTimes(kind === "save" ? 1 : 0);
+});
+
+test("parent evidence fixtures are bound to actual HTTP writer fields without write controls", () => {
+    expect(saved).toEqual(linkedFixture.parent_plan);
+    for (const plan of [saved, linkedFixture.plan, categoryFixture.plan]) {
+        expect(plan.fields).not.toHaveProperty("acknowledge_review"); expect(plan.fields).not.toHaveProperty("expected_revision");
+    }
+    expect(linkedParentResponse().plan_id).toBe(saved.plan_id); expect(categoryPreviewResponse().plan_revision).toBe(saved.revision);
 });

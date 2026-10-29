@@ -12,7 +12,7 @@ test("accepts real backend response with explicit exclusions and unproved invent
 test("request binds saved ID revision and signal, never sends a URL to fetch", async () => {
     api.get.mockResolvedValue({ data: fixture.response }); const controller = new AbortController();
     await getGoogleLiveCategoryPreview(fixture.plan, { categoryId: "8", signal: controller.signal });
-    expect(api.get).toHaveBeenCalledWith("/integrations-v2/google_ads/commercial-plans/winter/live-category-preview", { params: { expected_revision: 1, category_id: "8" }, signal: controller.signal });
+    expect(api.get).toHaveBeenCalledWith("/integrations-v2/google_ads/commercial-plans/category-winter/live-category-preview", { params: { expected_revision: 1, category_id: "8" }, signal: controller.signal });
 });
 test("URL-only uses the saved exact URL and no arbitrary URL query", async () => {
     const plan = { ...fixture.plan, fields: { ...fixture.plan.fields, category_ids: [], category_url: fixture.response.category_url } };
