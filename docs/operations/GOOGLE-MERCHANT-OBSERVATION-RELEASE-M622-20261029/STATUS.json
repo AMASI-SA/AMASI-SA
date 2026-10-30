@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-RELEASE-M622-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-release-m622-20261029",
-  "state": "SOURCE_SEALED_HOST_A_INTERRUPTED_BY_ENVIRONMENT_IDLE_RECOVERY_IN_PROGRESS",
+  "state": "SOURCE_SEALED_HOST_ENVIRONMENT_RECREATED_ORIGINAL_TMP_ABSENT",
   "source_identity": "Immutable reviewed release source7f214. This separate status branch records evidence without modifying runtime source.",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "parent_production_tree": "c4074b70bc63d0bc44759256841319938516af20",
@@ -104,7 +104,7 @@
     "Owner must explicitly choose Ads/Merchant and initiate read; real native access/grant is not proved by synthetic tests.",
     "Store-offer mapping, inventory, Ads eligibility, continuous authorization and paid first launch are not enabled or proved."
   ],
-  "next_safe_action": "After IDE resumes, read actual guard, inspect original host process/log/frozen intent before any retry. If complete compare whole972848-byte intent SHA8ceac... with CI. No SourceB/merge/lease/publish before original host proof.",
+  "next_safe_action": "Reproduce exact7f214 original hostA in a new isolated clone after confirming own old process absent, compare whole frozen intent with CI8ceac. No SourceB or lease until proof.",
   "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "runtime_source_sha": "7f214a76ea98500d17b239d3577b43e542801374",
   "runtime_tree_sha": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
@@ -349,9 +349,14 @@
     "original_command": "Isolated clone /tmp/google1658-source-a-20261030; exact7f214 checkout; pinned install/build:release and freeze output /tmp/google1658-host-intent.json",
     "last_observed": "Clone and exact source checkout completed; Python build running. Completion and frozen hash not yet observed.",
     "interruption": "Code-server disconnected. Preview displayed resting after inactivity; explicit Resume Preview now clicked once; editor Starting IDE. No evidence of production failure.",
-    "result": "unknown until recovered host inspection",
+    "result": "Original /tmp intent and both build/freeze logs are absent after environment recovery. No success inferred.",
     "lease_created": false,
-    "publish_clicked": false
+    "publish_clicked": false,
+    "resumed_guard_active": false,
+    "resumed_host_head": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "resumed_guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
+    "original_tmp_artifacts_present": false,
+    "auth": "Secure browserAuth submitted and IDE signed-in visibly verified; no credential read."
   },
   "predecessor": {
     "pr": 1655,
@@ -360,5 +365,5 @@
     "lease_closed": true,
     "do_not_republish": true
   },
-  "updated_at": "2026-10-30T00:01:26.253Z"
+  "updated_at": "2026-10-30T13:13:46.831Z"
 }
