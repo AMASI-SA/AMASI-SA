@@ -105,7 +105,16 @@
     },
     "root_review": "Exact23pathcomposition/18acceptedblobs preserved and only4knownmergedrouter/workflow differences, fullnewparent/child/AuthProviderintegration reviewed; Workspace/intent byteunchanged anddiffcheckPASS. Root primaryPUSH logs153/30actualMongo0skip,202UI/3.78,full1898/32.38 and752/38/build5.92 read.",
     "root_test": "Exacte26d root43backend testsPASS9.97s-Werror with prescribedCI PYTHONPATHbackend/--noconftest. InitialcommandwithoutCIoption hit unrelatedglobalconftestmissingopenpyxl; no dependencies/source/test configuration altered.",
-    "independent": "budget_audit source/tree/narrowseam preservation+exactPUSH primarylog reviewPASS; no financialauthority orattributionclaim."
+    "independent": "budget_audit source/tree/narrowseam preservation+exactPUSH primarylog reviewPASS; no financialauthority orattributionclaim.",
+    "root_candidate": {
+      "artifact_id": 12985865486,
+      "zip_bytes": 273613,
+      "zip_sha256": "9399d2d8efa871edb5a580fbcfe39b00639593084a22bc0a884840f246c02722",
+      "intent_bytes": 977861,
+      "intent_sha256": "c27f1aa64b316013ad572adaa38f85b8a6c7828fd206fefc5a739060a0f7430a",
+      "candidate_runtime": "rg5-8b5b89062a7204c9eafc2d292505077f3e5e9e219013b0f59e2a6f4b1d91a26e",
+      "root_loader": "PASSat exacte26d/fb123 withpython-B; no originalhostmatchorintentB yet"
+    }
   },
   "production_changed": false,
   "provider_calls": false,
@@ -117,6 +126,6 @@
     "local_equivalent": "b2c8c5e70",
     "pr": 1664
   },
-  "updated_at": "2026-10-30T14:35:37.918Z",
+  "updated_at": "2026-10-30T14:38:41.092Z",
   "source_a": "e26d9a8ca4cf5d8fc8c8b7e443349aef56e82533"
 }
