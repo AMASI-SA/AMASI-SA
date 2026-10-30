@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-node24-release-20261030",
-  "state": "MERGED_APP_REHEARSAL_BLOCKED_BY_PREEXISTING_GENERATED_BYTECODE",
+  "state": "PREPARED_OWN_LEASE_NOT_YET_PUBLISHED",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
   "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
@@ -24,7 +24,7 @@
   "host_actions": 1,
   "provider_writes": 0,
   "paid_writes": 0,
-  "lease_created": false,
+  "lease_created": true,
   "publish_clicked": false,
   "remaining": [
     "Fresh direct-source and PR CI, root/independent combinedmanifest review.",
@@ -34,8 +34,8 @@
     "Actual owner Merchant choices/read UI acceptance; currentGoogleUI reportedtemporaryrequestlimit withoutOAuth inference.",
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
-  "next_safe_action": "Observe freshinactiveguard+boundedignoredcache inventory; preserve generatedcache outside /app if safe, rerun normalappbuild, then ownprepare/prepublish/onepublish and liveverification.",
-  "updated_at": "2026-10-30T14:24:16.443Z",
+  "next_safe_action": "Runprepublish immediatelybeforeONEpublish; waitnewexplicitfinish then3identityverifyandclosedlease, ownerMerchantUI.",
+  "updated_at": "2026-10-30T14:28:33.637Z",
   "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
   "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
   "pr": 1663,
@@ -55,11 +55,18 @@
     "b_all_ci": "26PRruns:25success1nonapplicableTikTokskip, no pending/failures. Readiness41069873971 allrequiredstepsPASS.",
     "b_dual_host_runtime": "Root and independent reviewer read fullcleanclone jobs124111913605 Node20 normalbuild58.07s,double5.02/4.68;124111913534 Node24normalbuild67.18s,double6.78/6.94. Both actual yarnstart and exactJSON canonical/cachebusted/prod+previewHost passed. IsolatedBackend/Frontend identity matches. Not production proof.",
     "merge": "Normal merge with parent622c andB; tree exactly58b54046. Freshactualguardinactive, /app622c trackedclean; unrelated .emergent/testing and deployer-agent-docs preserved.",
-    "app_rehearsal": "Fast-forward /app to exactM succeeded; normalbuild refused beforeexecution: Backend runtime source contains prepackaged bytecode __pycache__. Actualhost isolatedexactB alreadyPASS79.46s. No lease/publish. Inspecting ignored generatedcache directories for reversible relocation outside buildroot, without changing source/guard."
+    "app_rehearsal": "Initialrefusal preserved; exactlyoneignoredgeneratedbackendcache with2regular.pyc files movedreversiblyto/tmp/google1663-preserved-app-bytecode-20261030. UnchangednormalNode24/yarnbuild onactual /app exactM PASS64.70s runtime/source/packageproofmatches. No source/guard weakening; unrelated untrackedfiles preserved."
   },
   "intent_b": "6f6566168f1a52851f6ebdc629cb76e09728357e",
   "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
   "merge": "fb12300c353cb1875f4462dc279b25360913af5c",
   "production_branch_changed": true,
-  "live_production_changed": false
+  "live_production_changed": false,
+  "lease": {
+    "actor": "codex-google-merchant-node24-20261030",
+    "prepared_at": "2026-10-30T14:27:18.326525+00:00",
+    "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
+    "deployment": "fb12300c353cb1875f4462dc279b25360913af5c",
+    "runtime": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314"
+  }
 }
