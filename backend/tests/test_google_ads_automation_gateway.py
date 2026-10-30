@@ -46,10 +46,9 @@ class GatewayCollection(Collection):
 
 class GatewayDB(DB):
     def __init__(self,docs):
-        self.collections={k:GatewayCollection(v) for k,v in docs.items()};self.users=self['users']
+        self._tx_setup({k:GatewayCollection(v) for k,v in docs.items()});self.collections=self._tx_collections;self.users=self['users']
     def __getitem__(self,key):
-        if key not in self.collections:self.collections[key]=GatewayCollection([])
-        return self.collections[key]
+        return self._tx_get(key)
 
 class NativeProvider:
     def __init__(self,native):
@@ -71,10 +70,38 @@ class NativeProvider:
         return {'mutateOperationResponses':[{'campaignResult':{'resourceName':'customers/123/campaigns/456'}}]}
     async def verify_operations(self,*args,**kwargs):return self.verified,{'verified':self.verified}
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['other_account', 'different_resource', 'missing_shared', 'missing_reference_count'])
+async def test_rest_inventory_budget_identity_never_authorizes_mismatched_evidence(monkeypatch, change):
+    docs, evidence = case_documents('CHANGE_BUDGET')
+    provider = NativeProvider(evidence)
+    raw = deepcopy(evidence['campaign_snapshot']['campaign_budget'])
+    if change == 'other_account': raw['resourceName'] = 'customers/777/campaignBudgets/999'
+    elif change == 'different_resource': raw['resourceName'] = 'customers/123/campaignBudgets/1000'
+    elif change == 'missing_shared': raw.pop('explicitlyShared')
+    else: raw.pop('referenceCount')
+    async def rest_rows(*args, **kwargs):
+        return [{'campaign': deepcopy(evidence['campaign_snapshot']['campaign']), 'campaignBudget': raw}], True, None
+    monkeypatch.setattr(gateway, 'compatible_read', rest_rows)
+    monkeypatch.setattr(management, 'now', lambda: NOW)
+    evidence['inventory'] = await gateway._inventory(provider, evidence['metadata'])
+    with pytest.raises(HTTPException) as error:
+        authority._native_proof(docs[management.PROPOSALS][0], evidence,
+            docs[gateway.AUTOMATION_POLICIES][0], NOW)
+    assert error.value.detail['code'] == 'google_automation_native_evidence_invalid'
+    assert provider.writes == 0
+
 @pytest.fixture
 def integration(monkeypatch):
     docs,native=case_documents();docs[management.PROPOSALS]=[];docs[management.FENCES]=[]
     db=GatewayDB(docs);provider=NativeProvider(native)
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    from datetime import datetime
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):return NOW
+    monkeypatch.setattr(guard,'datetime',Clock)
+    monkeypatch.setattr(guard,'budget_guard_runtime_available',lambda:True)
     monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','true')
     monkeypatch.setattr(management,'now',lambda:NOW)
     monkeypatch.setattr(authority,'_now',lambda current=None:NOW)
@@ -177,17 +204,37 @@ async def test_native_drift_before_authority_never_sends_and_leaves_no_authoriza
     assert provider.writes==0 and db[management.FENCES].rows[0]['status']=='released'
     assert '_dispatch_claim' not in db[gateway.AUTOMATION_POLICIES].rows[0]
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['other_account', 'different_resource', 'missing_shared', 'missing_reference_count'])
+async def test_execute_never_mutates_when_rest_inventory_budget_proof_changes(integration, change):
+    db, provider = integration
+    row = await preview(db)
+    async def changed_rest_row(query):
+        snap = provider.native['campaign_snapshot']
+        budget = deepcopy(snap['campaign_budget'])
+        if change == 'other_account': budget['resourceName'] = 'customers/777/campaignBudgets/999'
+        elif change == 'different_resource': budget['resourceName'] = 'customers/123/campaignBudgets/1000'
+        elif change == 'missing_shared': budget.pop('explicitlyShared')
+        else: budget.pop('referenceCount')
+        return [{'campaign': deepcopy(snap['campaign']), 'campaignBudget': budget}], True
+    provider.search = changed_rest_row
+    try:
+        result = await execute(db, row)
+        assert result['status'] != 'completed'
+    except HTTPException:
+        pass
+    assert provider.writes == 0
+    assert db[management.PROPOSALS].rows[0].get('submission_started') is not True
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind',['not_acknowledged','cancel_after_claim','kill_after_claim'])
 async def test_submission_floor_failure_never_calls_google_and_holds_claim(integration,monkeypatch,kind):
     db,provider=integration;row=await preview(db)
-    original_event=management.record_event
-    async def fail_event(db_arg,proposal,status,**kwargs):
-        if status=='submitted':
-            if kind=='cancel_after_claim':raise asyncio.CancelledError()
-            raise TimeoutError('test-only floor acknowledgement lost')
-        return await original_event(db_arg,proposal,status,**kwargs)
-    monkeypatch.setattr(management,'record_event',fail_event)
+    async def fail_floor(db_arg,proposal,**kwargs):
+        if kind=='cancel_after_claim':raise asyncio.CancelledError()
+        raise TimeoutError('test-only floor acknowledgement lost')
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',fail_floor)
     if kind=='cancel_after_claim':
         with pytest.raises(asyncio.CancelledError):await execute(db,row)
     else:
@@ -228,12 +275,9 @@ async def test_manual_proposal_cannot_enter_automation_execution(integration):
 @pytest.mark.asyncio
 async def test_operator_kill_after_policy_claim_never_reaches_submission_floor(integration,monkeypatch):
     db,provider=integration;row=await preview(db)
-    original=authority._linearize_claim
-    async def kill_after_ack(*args,**kwargs):
-        result=await original(*args,**kwargs)
+    async def kill_after_ack():
         monkeypatch.delenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED')
-        return result
-    monkeypatch.setattr(authority,'_linearize_claim',kill_after_ack)
+    db.after_commit=kill_after_ack
     result=await execute(db,row)
     assert result['status']=='uncertain' and result['submission_started'] is False
     assert provider.writes==0 and db[management.FENCES].rows[0]['status']=='claimed'
@@ -242,12 +286,14 @@ async def test_operator_kill_after_policy_claim_never_reaches_submission_floor(i
 @pytest.mark.asyncio
 async def test_floor_commit_with_lost_ack_never_dispatches_and_cannot_be_cancelled_as_unsubmitted(integration,monkeypatch):
     db,provider=integration;row=await preview(db);provider.verified=False
-    original=management.record_event
-    async def lose_ack(db_arg,proposal,status,**kwargs):
-        result=await original(db_arg,proposal,status,**kwargs)
-        if status=='submitted':raise TimeoutError('test-only postcommit floor response lost')
+    from integrations_control_center import google_ads_automation_budget_guard as guard
+    original=guard._commit_once;calls=0
+    async def lose_ack(*args):
+        nonlocal calls
+        calls+=1;result=await original(*args)
+        if calls==2:raise TimeoutError('test-only real floor commit response lost')
         return result
-    monkeypatch.setattr(management,'record_event',lose_ack)
+    monkeypatch.setattr(guard,'_commit_once',lose_ack)
     result=await execute(db,row)
     assert result['submission_started'] is True and result['status']=='uncertain' and provider.writes==0
     monkeypatch.setattr(management,'now',lambda:NOW+__import__('datetime').timedelta(minutes=6))
@@ -286,12 +332,12 @@ async def test_expired_policy_blocks_before_provider_read_or_claim(integration):
 
 @pytest.mark.asyncio
 async def test_operator_kill_after_submission_ack_prevents_http_and_preserves_floor(integration,monkeypatch):
-    db,provider=integration;row=await preview(db);original=management.record_event
-    async def kill_after_floor(db_arg,proposal,status,**kwargs):
-        result=await original(db_arg,proposal,status,**kwargs)
-        if status=='submitted':monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
+    db,provider=integration;row=await preview(db);original=authority.acknowledge_standing_dispatch_floor
+    async def kill_after_floor(db_arg,proposal,**kwargs):
+        result=await original(db_arg,proposal,**kwargs)
+        monkeypatch.setenv('GOOGLE_ADS_AUTOMATION_EXECUTION_ENABLED','false')
         return result
-    monkeypatch.setattr(management,'record_event',kill_after_floor)
+    monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',kill_after_floor)
     result=await execute(db,row)
     assert provider.writes==0
     assert result['status']=='failed' and result['submission_started'] is True
@@ -313,11 +359,11 @@ async def test_terminal_cancellation_winning_old_executor_is_never_resurrected(i
         await authority.settle_google_automation_claim(db,user_id='owner',account_id='123',claim_id=stored['execution_claim_id'])
         await management._release_fence(db,stored)
     if phase=='before_floor':
-        original=management.record_event
-        async def cancel_before_floor(db_arg,proposal,status,**kwargs):
-            if status=='submitted':await cancel_terminal()
-            return await original(db_arg,proposal,status,**kwargs)
-        monkeypatch.setattr(management,'record_event',cancel_before_floor)
+        original=authority.acknowledge_standing_dispatch_floor
+        async def cancel_before_floor(db_arg,proposal,**kwargs):
+            await cancel_terminal()
+            return await original(db_arg,proposal,**kwargs)
+        monkeypatch.setattr(authority,'acknowledge_standing_dispatch_floor',cancel_before_floor)
     else:
         original=authority.authorize_google_automation_claim
         async def cancel_then_lose_ack(*args,**kwargs):

@@ -44,14 +44,22 @@ async def _policy(db, user_id, account_id, revision=None):
 
 
 async def _inventory(client, metadata):
-    rows, complete, _ = await compatible_read(client, INVENTORY_FIELDS, "campaign",
-        "campaign.status != 'REMOVED'", required=("campaign.id", "campaign.status", "campaign_budget.period", "campaign_budget.amount_micros"), limit=501)
+    fields = [*INVENTORY_FIELDS, 'campaign_budget.resource_name', 'campaign_budget.explicitly_shared', 'campaign_budget.reference_count']
+    rows, complete, _ = await compatible_read(client, fields, "campaign",
+        "campaign.status != 'REMOVED'", required=("campaign.id", "campaign.status", "campaign_budget.period", "campaign_budget.amount_micros",
+            'campaign_budget.resource_name', 'campaign_budget.explicitly_shared', 'campaign_budget.reference_count'), limit=501)
     observed = management.now().isoformat()
     campaigns = []
     for item in rows[:500]:
         campaign = campaign_item(item, metadata, observed)
         if (item.get("campaignBudget") or {}).get("period") not in ("DAILY", "CUSTOM_PERIOD"):
             campaign["budget_mode"] = None
+        budget = item.get('campaignBudget') or {}
+        campaign['budget_resource'] = budget.get('resourceName')
+        # Missing values are unknown, never inferred as an unshared budget.
+        campaign['shared_budget'] = (False if budget.get('explicitlyShared') is False
+            and (type(budget.get('referenceCount')) is int and budget['referenceCount'] == 1
+                or type(budget.get('referenceCount')) is str and budget['referenceCount'] == '1') else None)
         campaigns.append(campaign)
     return {"account_id": metadata["account_id"], "currency_code": metadata["currency_code"],
         "time_zone": metadata["time_zone"], "observed_at": observed, "source": "google_ads_api",

@@ -1,0 +1,98 @@
+{
+  "status": "WIP_BOUNDED_STORAGE_REPLICA_AND_INDEPENDENT_REVIEW_COMPLETE_NOT_DEPLOYABLE",
+  "branch": "codex/google-funded-storage-authority-wip-20261029",
+  "base": "9e83dfbc7488483abe43d6443a80a1ac819476e1",
+  "scope": "New fundedgrants/authority helpers plus narrow typedguard/exposure; no publicattach/gateway/worker/activation/flags/production calls",
+  "completed": "Authenticated canonicalreview/saveconfigured/offlineOAuthrevoke undercommonepoch; actualnativeinventory/settings/validate-only +currentcanonicalproduct readers mint privateboundbundle; callableone-shotreservation/floor/originalreceipt+actualgraphverification settlement; accountfence/epoch/proposal/journalbinding; explicitfundedunboundhold thennativepairMAXexposure andstoredcap. No activation/publicattachment/paidconsumer.",
+  "tests": "100 selected local units -W error passed3.25s; exact621294 focusedCI264passed113.17s:53newunits+36newactualMongo+53existingMongo,zero failures/errors/skips. Full PR synthetic merge09b3c26 passed1760backend/561frontend/30suites/build; not exactsource checkout. Logs personally read.",
+  "remaining": [
+    "Production new funded namespaces/users.update/current validator/index/legacy provisioning contract and permissions remain unproved; no DB/RBAC changes authorized here",
+    "No application activation/preparation ACK producer, public attachment, gateway, worker or funded provider consumer. Configured grants cannot autoactivate",
+    "OAuth/product/native external writers after last snapshot remain unserialized; prepared paid-client lifecycle/no-intervening-await boundary must be implemented before any dispatch",
+    "Queued completion: actual six mandatory policy writer integration/all automated increases, owner activation UI and funded gateway/worker. Historical WIP ancestry not deployable; root must selectively integrate onto latest production"
+  ],
+  "spend_semantics": "Required typed AVERAGE_DAILY_COMMITMENT; omission/HARD_DAILY_SPEND/HARD_TOTAL_SPEND rejected. No nativecap interpretation ofhardspendceilings. No numericdefaults.",
+  "runtime_available": false,
+  "production_changed": false,
+  "financial_limits_saved_in_production": false,
+  "next": "Root review/selective composition on latest production after proving new namespace provisioning/users.update/validator/index/legacy and actual authority lifecycle. Existing producer/activation/gateway/worker absent; no deployment requested by this checkpoint.",
+  "production_engine_evidence": "Rootreports1646positive realreplica majority+jcommit/readback/cleanup andGETreceipt, finala99efcfd. This isengineproof only, not application/newfundednamespace/index/legacy proof; zero checked inventory isnotemptyproof.",
+  "prepared_auth_boundary": "Storage-only helper closes its read/validate-only client beforeTX and alwaysreturnsfunded_dispatch_authorized:false. No preparedpaidclient/dispatchpermission exists. Futuregateway must ownpreparedauth/client beforefloor and permit nointerveningrefresh/await afterpositiveACK.",
+  "owner_auth_boundary": "Rootapproved positiveauthority-onlyusersmarker: exact_id/id/role/disabled/is_active/deleted_at/password_updated_at projection, missing/null CAS, realmarker mezan_google_funded_authority_epoch; no hash/token reads. Storedreview binds current authenticated dependency authprojection/passwordstamp/documentidentity. Actual auth.get_current_user_from_db tests prove oldJWTrevoked and stalepreviouslyreturneduser rejected. Marker onlyreservation/floor; no users.update forconfigure/revoke/cancel/settlement. Real Mongo now proves independent disable/role/password before capture and between snapshot/marker, after-marker blocked writer ordering, unchanged unrelated fields, strict validator rejection; production users.update/validator readiness still unproved.",
+  "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned.",
+  "owner_read_bound": "Exact owner projection uses server limit(2), max_time_ms(2000), including through SessionDatabase; dedicated collaborator asserts session and both bounds.",
+  "google_scope_boundary": "Reservation/floor snapshot re-reads canonical connected/api_connection integration and exact account membership plus account_client credential epoch projection after native awaits. Adversarial relink/disconnect/account-removal between prepare and TX reject and retain reservation/fence. No provider/OAuth call in transaction. Snapshot reads do not serialize later OAuth writers; future gateway lifecycle remains required.",
+  "replica_test_preparation": "36 newactual Mongo cases passed on621294. Controlled funded-vs-standing uses distinct clients/DB identities/process registry keys and barrier after both snapshot reads; one commit/epoch, total70or59<=72 and knownprecommit policy_changed loser. After-marker writer put onwire and blocked before floor allowed to commit. No OS-process/all-interleaving or local ACK delivery-order claim.",
+  "confirmed_blocker": "Absent-RUNS reservation retry gap addressed by required private initiation ACK burned before first await and prepared\u2192reserved only; no application issuer. Real91/close not-applied and ACKloss-applied tests retain prepared/reserved respectively, refuse reused/restarted continuation and attempt raw commit once. No attempt/preparation reconstructed from absence/readback.",
+  "actual_ci_8438": {
+    "run_id": 40975470321,
+    "job_id": 123802292387,
+    "source": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+    "result": "254passed168.48s;49newunit/30newactualMongo/53oldMongo;0failure/error/skip; personally read checkout and full summary",
+    "reserve_unknown_seconds": {
+      "server91": 9.75,
+      "connection_close": 0.287,
+      "ack_loss_after_commit": 0.035
+    },
+    "floor_unknown_seconds": {
+      "server91": 9.814,
+      "connection_close": 0.123,
+      "ack_loss_after_commit": 0.031
+    },
+    "claim": "bounded storage acceptance only; not latest36 cases/provisioning/activation/provider authorization"
+  },
+  "tested_source": "62129405ba3aba94f1c5edc3001f337d4665da19",
+  "tested_tree": "c602740cb095258da7e37ef2a489ebfe0e151c00",
+  "actual_ci_621294": {
+    "run_id": 40976156447,
+    "job_id": 123804579244,
+    "source": "62129405ba3aba94f1c5edc3001f337d4665da19",
+    "result": "264passed113.17s;53newunit/36newMongo/53existingMongo;0failure/error/skip",
+    "personally_read": true,
+    "reserve_unknown_seconds": {
+      "server91": 9.816,
+      "connection_close": 0.314,
+      "ack_loss_after_commit": 0.044
+    },
+    "floor_unknown_seconds": {
+      "server91": 9.776,
+      "connection_close": 0.261,
+      "ack_loss_after_commit": 0.041
+    },
+    "semantics": "One raw commit attempt; prepared/prepared/reserved journal for reserve faults; holds/fences remain; no paid helper sends or continuation reconstruction."
+  },
+  "full_ci_merge": {
+    "run_id": 40976156204,
+    "backend_job": 123804577756,
+    "backend": "1760passed120.24s",
+    "frontend_job": 123804577916,
+    "frontend": "561passed30suites;build6.33s",
+    "checkout": "09b3c26b2cc3cdd514d3a91041582866860066c3",
+    "merge_parents": "621294 into622c310d8dcee13da61410bca6b3ac85134a9cfe",
+    "personally_read": true
+  },
+  "readiness": {
+    "run_id": 40976156263,
+    "frontend_job": 123804578780,
+    "result": "failed: inherited intent GoogleCampaignComposer source mismatch and622c production not ancestor of historical WIP621294; backendpreflightpassed, host skipped",
+    "implication": "No all-gates/release claim. No frozen intent changed; root owns fresh selective Source A/Intent B."
+  },
+  "independent_review": {
+    "agent": "budget_audit",
+    "source": "62129405ba3aba94f1c5edc3001f337d4665da19",
+    "result": "No additional finding in scoped runtime and latest two-client/marker/settlement delta. Independently read exact job123804579244:264passed113.17s,53existingMongo+36newMongo+53newunit,0skip. Bounded WIP only; no issuer/activation/dispatch/production proof."
+  },
+  "resume_verification_20261030": {
+    "checked_at": "2026-10-30T13:02:34.242967+00:00",
+    "recovered_remote_head": "69dcdaf5729aa2054666738b0f8b3c6a792de675",
+    "isolated_detached_worktree": "google-funded-storage-recovered-20261030",
+    "pr": 1659,
+    "pr_state": "open draft, unmerged",
+    "runtime_frozen_at": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+    "runtime_tree_comparison": "git diff --name-only8438..69dcdaf -- backend/integrations_control_center returned no paths",
+    "focused_ci_reread": "Exact checkout621294 and264passed113.17s;53newunits+36newMongo+53oldMongo;0failure/error/skip re-read from actual job123804579244",
+    "readiness_actual_failure": "Job123804578780 Classify reviewed B or source candidate A failed before build: inherited intent differs at src/components/marketing/GoogleCampaignComposer.jsx; git merge-base --is-ancestor622c310d8dcee13da61410bca6b3ac85134a9cfe62129405ba3aba94f1c5edc3001f337d4665da19 failed. Backend preflight passed; host rehearsal and manual redeploy skipped. This is a release identity/ancestry gate, not a funded unit/Mongo failure.",
+    "changes": "Documentation-only handoff. No runtime edits, new initiation issuer, activation, provider calls, host changes, production DB writes, operational flags or frozen intent changes.",
+    "next_safe_action": "Root reviews selective blobs on current production; fresh Source A and Intent-only B plus complete CI/review/reproducible host proof remain root-owned. Do not deploy historical WIP or infer production namespace/user permissions from disposable tests."
+  }
+}

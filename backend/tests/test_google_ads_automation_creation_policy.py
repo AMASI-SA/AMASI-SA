@@ -44,13 +44,16 @@ class Collection:
         return SimpleNamespace(matched_count=0)
 
 
-class DB:
+from tests.google_ads_transactional_fake import TransactionalDBMixin
+
+
+class DB(TransactionalDBMixin):
     def __init__(self):
-        self.users = Collection([{"id": "owner", "role": "owner"}])
-        self.policies, self.products = Collection(), Collection([case()["product"]])
-    def __getitem__(self, name):
-        if name == "mezan_products_v2": return self.products
-        return self.policies
+        self._tx_setup({'users':Collection([{"id":"owner","role":"owner"}]),
+            policy.CREATION_POLICIES:Collection(), 'mezan_products_v2':Collection([case()["product"]])})
+        self.users=self._tx_get('users');self.policies=self._tx_get(policy.CREATION_POLICIES)
+        self.products=self._tx_get('mezan_products_v2')
+    def __getitem__(self,name):return self._tx_get(name)
 
 
 def body(**changes):
