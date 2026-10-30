@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { BOOTSTRAP_LABELS, bootstrapExpiry, executeGoogleNamespaceBootstrap, newBootstrapNonce, prepareGoogleNamespaceBootstrap, readGoogleBootstrapReceipt } from "../../services/googleNamespaceBootstrap";
 
@@ -24,14 +24,14 @@ function validOwner(user, status) {
 function BootstrapPanel({ context, generation }) {
     const [view, setView] = useState({ phase: "idle" }), [prepareAck, setPrepareAck] = useState(false), [executeAck, setExecuteAck] = useState(false);
     const mounted = useRef(true), pending = useRef(null), uncertainty = useRef(null), denied = useRef(false);
-    const fresh = () => mounted.current && context.current.generation === generation && context.current.allowed && !denied.current;
+    const fresh = useCallback(() => mounted.current && context.current.generation === generation && context.current.allowed && !denied.current, [context, generation]);
     useEffect(() => { mounted.current = true; return () => { mounted.current = false; pending.current?.controller.abort(); }; }, []);
     const candidate = view.data?.status === "prepared" ? view.data : null;
     useEffect(() => {
         if (!candidate) return undefined;
         const timer = setTimeout(() => { if (fresh()) { setExecuteAck(false); setView({ phase: "expired" }); } }, Math.max(0, Math.min(bootstrapExpiry(candidate.expires_at) - Date.now(), 2147483647)));
         return () => clearTimeout(timer);
-    }, [candidate]); // A client deadline can only remove an action; server authority stays independent.
+    }, [candidate, fresh]); // A client deadline can only remove an action; server authority stays independent.
     async function run(operation) {
         if (!fresh() || pending.current) return;
         const prepared = candidate;
