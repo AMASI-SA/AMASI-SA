@@ -18,7 +18,7 @@
   "next": "Root review/selective composition on latest production after proving new namespace provisioning/users.update/validator/index/legacy and actual authority lifecycle. Existing producer/activation/gateway/worker absent; no deployment requested by this checkpoint.",
   "production_engine_evidence": "Rootreports1646positive realreplica majority+jcommit/readback/cleanup andGETreceipt, finala99efcfd. This isengineproof only, not application/newfundednamespace/index/legacy proof; zero checked inventory isnotemptyproof.",
   "prepared_auth_boundary": "Storage-only helper closes its read/validate-only client beforeTX and alwaysreturnsfunded_dispatch_authorized:false. No preparedpaidclient/dispatchpermission exists. Futuregateway must ownpreparedauth/client beforefloor and permit nointerveningrefresh/await afterpositiveACK.",
-  "owner_auth_boundary": "Rootapproved positiveauthority-onlyusersmarker: exact_id/id/role/disabled/is_active/deleted_at/password_updated_at projection, missing/null CAS, realmarker mezan_google_funded_authority_epoch; no hash/token reads. Storedreview binds current authenticated dependency authprojection/passwordstamp/documentidentity. Actual auth.get_current_user_from_db tests prove oldJWTrevoked and stalepreviouslyreturneduser rejected. Marker onlyreservation/floor; no users.update forconfigure/revoke/cancel/settlement. Actualindependentclient password/role/disable before/aftermarker and validator/RBAC proof pending. Real Mongo now proves independent disable/role/password before capture and between snapshot/marker, after-marker blocked writer ordering, unchanged unrelated fields, strict validator rejection; production users.update/validator readiness still unproved.",
+  "owner_auth_boundary": "Rootapproved positiveauthority-onlyusersmarker: exact_id/id/role/disabled/is_active/deleted_at/password_updated_at projection, missing/null CAS, realmarker mezan_google_funded_authority_epoch; no hash/token reads. Storedreview binds current authenticated dependency authprojection/passwordstamp/documentidentity. Actual auth.get_current_user_from_db tests prove oldJWTrevoked and stalepreviouslyreturneduser rejected. Marker onlyreservation/floor; no users.update forconfigure/revoke/cancel/settlement. Real Mongo now proves independent disable/role/password before capture and between snapshot/marker, after-marker blocked writer ordering, unchanged unrelated fields, strict validator rejection; production users.update/validator readiness still unproved.",
   "ack_continuation": "Positive reservationACK mints private sameDB/exactslot single-use in-process continuation forstoragefloor. It is burnedbeforefirstawait; unknownfloor/restart/read_commit cannot recreate permission. Alwaysfunded_dispatch_authorized:false and no preparedpaidclient returned.",
   "owner_read_bound": "Exact owner projection uses server limit(2), max_time_ms(2000), including through SessionDatabase; dedicated collaborator asserts session and both bounds.",
   "google_scope_boundary": "Reservation/floor snapshot re-reads canonical connected/api_connection integration and exact account membership plus account_client credential epoch projection after native awaits. Adversarial relink/disconnect/account-removal between prepare and TX reject and retain reservation/fence. No provider/OAuth call in transaction. Snapshot reads do not serialize later OAuth writers; future gateway lifecycle remains required.",
@@ -81,5 +81,18 @@
     "agent": "budget_audit",
     "source": "62129405ba3aba94f1c5edc3001f337d4665da19",
     "result": "No additional finding in scoped runtime and latest two-client/marker/settlement delta. Independently read exact job123804579244:264passed113.17s,53existingMongo+36newMongo+53newunit,0skip. Bounded WIP only; no issuer/activation/dispatch/production proof."
+  },
+  "resume_verification_20261030": {
+    "checked_at": "2026-10-30T13:02:34.242967+00:00",
+    "recovered_remote_head": "69dcdaf5729aa2054666738b0f8b3c6a792de675",
+    "isolated_detached_worktree": "google-funded-storage-recovered-20261030",
+    "pr": 1659,
+    "pr_state": "open draft, unmerged",
+    "runtime_frozen_at": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+    "runtime_tree_comparison": "git diff --name-only8438..69dcdaf -- backend/integrations_control_center returned no paths",
+    "focused_ci_reread": "Exact checkout621294 and264passed113.17s;53newunits+36newMongo+53oldMongo;0failure/error/skip re-read from actual job123804579244",
+    "readiness_actual_failure": "Job123804578780 Classify reviewed B or source candidate A failed before build: inherited intent differs at src/components/marketing/GoogleCampaignComposer.jsx; git merge-base --is-ancestor622c310d8dcee13da61410bca6b3ac85134a9cfe62129405ba3aba94f1c5edc3001f337d4665da19 failed. Backend preflight passed; host rehearsal and manual redeploy skipped. This is a release identity/ancestry gate, not a funded unit/Mongo failure.",
+    "changes": "Documentation-only handoff. No runtime edits, new initiation issuer, activation, provider calls, host changes, production DB writes, operational flags or frozen intent changes.",
+    "next_safe_action": "Root reviews selective blobs on current production; fresh Source A and Intent-only B plus complete CI/review/reproducible host proof remain root-owned. Do not deploy historical WIP or infer production namespace/user permissions from disposable tests."
   }
 }
