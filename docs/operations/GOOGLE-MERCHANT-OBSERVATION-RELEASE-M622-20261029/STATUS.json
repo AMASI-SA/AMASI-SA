@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-OBSERVATION-RELEASE-M622-20261029",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-observation-release-m622-20261029",
-  "state": "B_CI_INDEPENDENT_SEALED_HOST_B_RESULT_NEEDS_INSPECTION",
+  "state": "SEALED_B_HOST_DEFAULT_NODE24_ENGINE_BLOCK_NEW_COMPATIBILITY_REVIEW",
   "source_identity": "Immutable reviewed release source7f214. This separate status branch records evidence without modifying runtime source.",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "parent_production_tree": "c4074b70bc63d0bc44759256841319938516af20",
@@ -104,7 +104,7 @@
     "Owner must explicitly choose Ads/Merchant and initiate read; real native access/grant is not proved by synthetic tests.",
     "Store-offer mapping, inventory, Ads eligibility, continuous authorization and paid first launch are not enabled or proved."
   ],
-  "next_safe_action": "Recover IDE and read actualguard and hostB log; diagnose specificfailure before normalbuild retry. No merge/lease/publish until actualhostB completes. Latest visible deployment remains predecessor Oct30 02:39 Riyadh.",
+  "next_safe_action": "Inspect actualhost interpreter paths and independently assess release-entry compatibility. Do not ignoreengines/changefrozenpair. If governedsourcechangesneeded createfreshA/B fromcurrentproduction withacceptedMerchantdelta and testedcompatibility; nolease/publish until supported originalnormalentry succeeds.",
   "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "runtime_source_sha": "7f214a76ea98500d17b239d3577b43e542801374",
   "runtime_tree_sha": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
@@ -357,8 +357,9 @@
     "resumed_guard_blob": "bc03ccfae879dcfcad3fa80a7dc5e63c5aa98252",
     "original_tmp_artifacts_present": false,
     "auth": "Secure browserAuth submitted and IDE signed-in visibly verified; no credential read.",
-    "host_B": "ExactB checkout succeeded, terminal later showed Command Failed before logtail output. IDEdisconnected while deploymentauthpending. Need read /tmp/google1658-host-b.log; do not infer reason or success.",
-    "deployment_auth": "Email/password and OTP securebrowserAuth submitted; /home signed-in projectlist, SallaAnalytics /chat and deploymenthistory observed."
+    "host_B": "Fresh cleanB actualhost defaultyarn1.22.22 failed before dispatcher: frontendengines >=20.18.1 <21 || >=22.23.2 <23, actualNode24.19.0. EarlierhostB logwaslost onenvironmentrestart; reasonnotinferredthen.",
+    "actual_host_default_node": "24.19.0",
+    "normal_B_success": false
   },
   "predecessor": {
     "pr": 1655,
@@ -367,39 +368,5 @@
     "lease_closed": true,
     "do_not_republish": true
   },
-  "updated_at": "2026-10-30T13:41:47.251Z",
-  "final_B_verification": {
-    "independent": "google_launch: exactB soleparentA/intentonly;1053backend257control1055frontend complete records+loader PASS",
-    "primary_logs_read_by_root": true,
-    "full": {
-      "run": 41062005533,
-      "jobs": [
-        124083806625,
-        124083806178
-      ],
-      "backend": "1855pass46.24s",
-      "frontend": "689/35suites/build6.79"
-    },
-    "dedicated": {
-      "run": 41062005469,
-      "jobs": [
-        124083805840,
-        124083806066
-      ],
-      "backend": "422pass22.98s including74actualMongo0skip",
-      "frontend": "122/4suites/build6.66"
-    },
-    "readiness": {
-      "run": 41062014265,
-      "host_job": 124084313379,
-      "result": "SUCCESS; cleanclone normalNode20adapter62.19s, governedbuilds6.31/5.84 andpackage/runtime/JSONassertionsPASS"
-    },
-    "all_runs": {
-      "success": 25,
-      "conditional_not_applicable_skip": 1,
-      "failure": 0,
-      "pending": 0
-    },
-    "synthetic": "cefd931d2cd71419aa6b07418881a22a959dd755"
-  }
+  "updated_at": "2026-10-30T13:45:11.238Z"
 }
