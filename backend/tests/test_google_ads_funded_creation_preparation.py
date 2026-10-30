@@ -52,7 +52,7 @@ async def setup(monkeypatch,db=None,*,acknowledged=True,metadata=True):
                     'authenticatedUserPrivileges':[{'resource':{'db':db.name,'collection':name},'actions':list(actions)}
                         for name,actions in preparation._namespaces().items()]}}
             if 'listCollections'in value:
-                return {'ok':1,'cursor':{'id':0,'firstBatch':[{'name':name,'type':'collection','options':{}}
+                return {'ok':1,'cursor':{'id':0,'firstBatch':[{'name':name,'type':'collection','options':{},'info':{'uuid':name.encode()[:16].ljust(16,b'0')}}
                     for name in preparation._namespaces()]}}
             if 'listIndexes'in value:
                 indexes=[{'name':name,'key':dict(keys),'unique':True} for name,keys in preparation._indexes()[value['listIndexes']]]
@@ -229,3 +229,87 @@ async def test_cancelled_cursor_preserves_latch_without_swallowing_cancel(monkey
     db.command=cancelled
     with pytest.raises(asyncio.CancelledError):await preparation._cursor_command(db,{'listCollections':1},maximum=2)
     assert preparation._metadata_unconfirmed
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change',['policy','collection_generation','privileges'])
+async def test_pre_native_snapshot_drift_is_rejected_after_native(monkeypatch,change):
+    db,provider,key,preview=await setup(monkeypatch);native=authority._read_native_bundle;command=db.command;drift=[False]
+    async def changed(*args,**kwargs):
+        result=await native(*args,**kwargs)
+        if change=='policy':await db[guard.AUTOMATION_POLICIES].update_one({'account_id':'123'},{'$inc':{'revision':1}})
+        drift[0]=True;return result
+    async def metadata(value,**kwargs):
+        result=await command(value,**kwargs)
+        if drift[0] and isinstance(value,dict):
+            if change=='collection_generation' and 'listCollections'in value:result['cursor']['firstBatch'][0]['info']['uuid']=b'changed-uuid-0001'
+            if change=='privileges' and 'connectionStatus'in value:result['authInfo']['authenticatedUserPrivileges']=[]
+        return result
+    monkeypatch.setattr(authority,'_read_native_bundle',changed);db.command=metadata
+    with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('when',['before_commit','after_ack'])
+async def test_metadata_latch_prevents_ack_even_after_prior_preflight(monkeypatch,when):
+    db,provider,key,preview=await setup(monkeypatch)
+    if when=='before_commit':
+        original=preparation._write_preparation
+        async def changed(*args,**kwargs):
+            result=await original(*args,**kwargs);preparation._metadata_unconfirmed=True;return result
+        monkeypatch.setattr(preparation,'_write_preparation',changed)
+    else:
+        async def changed():preparation._metadata_unconfirmed=True
+        db.after_commit=changed
+    with pytest.raises(HTTPException) as error:await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert error.value.detail['code']=='google_funded_storage_metadata_pending'
+    assert (await db[grants.RUNS].find_one({'grant_key':key}) is not None) is (when=='after_ack')
+    assert provider.writes==0
+
+@pytest.mark.asyncio
+async def test_metadata_inflight_resources_are_retained_and_process_bounded(monkeypatch):
+    db,provider,key,preview=await setup(monkeypatch);command=db.command;entered=asyncio.Event();release=asyncio.Event();calls=[]
+    async def blocked(value,**kwargs):
+        if isinstance(value,dict) and 'listCollections'in value:
+            calls.append(True);entered.set();await release.wait();raise TimeoutError('test-only unknown cursor response')
+        return await command(value,**kwargs)
+    db.command=blocked;scope={'user_id':'owner','account_id':'123'}
+    tasks=[asyncio.create_task(guard._retained_operation(db,scope,'metadata_resource_'+str(i),'read',
+        lambda:preparation._storage_contract(db),5,{})) for i in range(guard.MAX_PENDING_READ_TASKS)]
+    try:
+        await entered.wait()
+        assert len([v for v in guard._pending_operations.values() if v['kind']=='read'])==guard.MAX_PENDING_READ_TASKS
+        with pytest.raises(HTTPException) as error:
+            await guard._retained_operation(db,scope,'metadata_extra','read',lambda:preparation._storage_contract(db),5,{})
+        assert error.value.detail['code']=='google_budget_guard_operation_pending' and calls==[True]
+    finally:
+        release.set();results=await asyncio.gather(*tasks,return_exceptions=True)
+    assert all(isinstance(r,HTTPException) for r in results) and preparation._metadata_unconfirmed
+    assert not [v for v in guard._pending_operations.values() if v['kind']=='read']
+
+@pytest.mark.asyncio
+async def test_actual_bson_cursor_id_and_uuid_types_are_supported(monkeypatch):
+    from bson.int64 import Int64
+    import uuid
+    db,provider,key,preview=await setup(monkeypatch);command=db.command
+    async def bson_types(value,**kwargs):
+        result=await command(value,**kwargs)
+        if isinstance(value,dict) and 'cursor'in result:
+            result['cursor']['id']=Int64(0)
+            for row in result['cursor']['firstBatch']:
+                if 'info'in row:row['info']['uuid']=uuid.UUID(bytes=row['info']['uuid'])
+        return result
+    db.command=bson_types
+    result=await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert result['committed'] is True and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('option,value',[('expireAfterSeconds',0),('partialFilterExpression',{}),('sparse',True),('hidden',True)])
+async def test_unsupported_index_options_fail_even_when_value_is_falsey(monkeypatch,option,value):
+    db,provider,key,preview=await setup(monkeypatch);command=db.command
+    async def changed(request,**kwargs):
+        result=await command(request,**kwargs)
+        if isinstance(request,dict) and 'listIndexes'in request:result['cursor']['firstBatch'][0][option]=value
+        return result
+    db.command=changed
+    with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0

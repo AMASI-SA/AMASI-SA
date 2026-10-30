@@ -68,7 +68,7 @@ def begin_google_funded_owner_admission(db,*,authenticated_user,account_id,reque
         or spend_acknowledgment!={'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}):
         _fail('google_funded_owner_admission_unproved')
     scope=guard._scope(authenticated_user['id'],account_id)
-    slot=(scope['user_id'],scope['account_id'],request_key)
+    slot=(id(db),scope['user_id'],scope['account_id'],request_key)
     if slot in _admitted_slots or len(_admitted_slots)>=MAX_ADMITTED_SLOTS:
         _fail('google_funded_owner_admission_consumed')
     _admitted_slots.add(slot) # Before any possible await; no automatic retry.
@@ -98,7 +98,7 @@ async def _cursor_command(db,command,*,collection=None,maximum):
         cursor=result.get('cursor') if isinstance(result,dict) else None
         if not isinstance(cursor,dict):raise ValueError('unproved cursor')
         rows=cursor.get('firstBatch');cursor_id=cursor.get('id')
-        if type(cursor_id) is not int or not isinstance(rows,list):raise ValueError('unproved cursor')
+        if isinstance(cursor_id,bool) or not isinstance(cursor_id,int) or not isinstance(rows,list):raise ValueError('unproved cursor')
         if cursor_id:
             # Kill only this returned cursor, on its exact server collection.
             own=collection or '$cmd.listCollections'
@@ -147,7 +147,9 @@ async def _read_storage_contract(db):
     try:
         status=await db.command({'connectionStatus':1,'showPrivileges':True})
         info=status.get('authInfo',{})
-        if not info.get('authenticatedUsers') or not info.get('authenticatedUserPrivileges'):
+        privileges=info.get('authenticatedUserPrivileges')
+        if (not info.get('authenticatedUsers') or not isinstance(privileges,list) or not 0<len(privileges)<=2000
+            or any(not isinstance(p,dict) or not isinstance(p.get('actions'),list) or len(p['actions'])>512 for p in privileges)):
             _fail('google_funded_storage_privileges_unproved')
         for name,actions in required.items():
             allowed=set()
@@ -163,13 +165,19 @@ async def _read_storage_contract(db):
             if row.get('type')!='collection' or row.get('options'):
                 _fail('google_funded_storage_schema_unproved')
         fingerprint=[]
+        for row in rows:
+            generation=row.get('info',{}).get('uuid')
+            if isinstance(generation,uuid.UUID):generation=generation.bytes
+            if not isinstance(generation,bytes) or len(generation)!=16:_fail('google_funded_storage_generation_unproved')
+            fingerprint.append({'collection':row['name'],'generation':generation.hex()})
         for name,contracts in _indexes().items():
             indexes=await _cursor_command(db,{'listIndexes':name},collection=name,maximum=64)
             for index_name,keys in contracts:
                 matches=[index for index in indexes if index.get('name')==index_name]
                 if (len(matches)!=1 or list(matches[0].get('key',{}).items())!=keys
                     or matches[0].get('unique') is not True
-                    or any(matches[0].get(key) for key in ('sparse','partialFilterExpression','collation','expireAfterSeconds','hidden'))):
+                    or any(key in matches[0] for key in ('partialFilterExpression','collation','expireAfterSeconds'))
+                    or matches[0].get('sparse') or matches[0].get('hidden')):
                     _fail('google_funded_storage_index_unproved')
             fingerprint.append({'collection':name,'indexes':indexes})
         return management.digest(guard._plain(fingerprint))
@@ -192,13 +200,16 @@ async def _read_preparation(db,admission,phase,client_factory):
     pure.prepare_google_funded_creation_intent(grant=record['grant'],draft=record['review']['draft'],current=started)
     if await db[grants.RUNS].find_one({**scope,'grant_key':key},{'_id':1}):_fail('google_funded_slot_consumed_or_pending')
     contract=await _storage_contract(db)
+    standing=await guard._read_policy(db,scope,'standing',None)
+    creation=await guard._read_policy(db,scope,'creation',None)
+    policies=authority.policy_binding(guard.BudgetGuardSnapshot(**scope,guard={},standing_policy=standing,creation_policy=creation))
     # Real read collaborators mint proof; no client-supplied booleans accepted.
     native=await authority._read_native_bundle(db,scope=scope,record=record,started=started,client_factory=client_factory)
     if await _storage_contract(db)!=contract:_fail('google_funded_storage_contract_changed')
     _metadata_available()
     if phase.get('stop_requested') or guard._operation_clock()>=phase['deadline']:_fail('google_funded_preparation_expired')
     return _Preparation(db,guard._plain({'scope':scope,'grant_key':key,'record_digest':management.digest(record),
-        'owner_auth':owner,'native':native.payload,'storage_contract_digest':contract,
+        'owner_auth':owner,'policy_binding':policies,'native':native.payload,'storage_contract_digest':contract,
         'proposal_id':'funded_proposal_'+uuid.uuid4().hex,'execution_claim_id':'funded_claim_'+uuid.uuid4().hex,
         'operation_id':admission.operation_id,'spend_acknowledgment':{'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}}),_PREPARATION)
 
@@ -212,6 +223,7 @@ async def _write_preparation(db,*,session,snapshot,command,operation_id,current)
     if not guard.budget_guard_runtime_available() or scope!={'user_id':snapshot.user_id,'account_id':snapshot.account_id}:
         _fail('google_funded_runtime_unavailable')
     if operation_id!=value['operation_id']:_fail('google_funded_preparation_proof_unproved')
+    if value['policy_binding']!=authority.policy_binding(snapshot):_fail('google_funded_policy_changed')
     record=await view[grants.GRANTS].find_one({**scope,'grant_key':value['grant_key']},{'_id':0})
     grants.validate_record(record)
     if (management.digest(record)!=value['record_digest'] or record.get('state')!='configured'

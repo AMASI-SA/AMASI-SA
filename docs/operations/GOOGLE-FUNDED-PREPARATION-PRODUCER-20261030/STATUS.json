@@ -1,5 +1,5 @@
 {
-  "status": "WIP_169_UNIT_PASS_REAL_AUTH_REPLICA_PENDING",
+  "status": "WIP_180_UNIT_PASS_15_AUTH_REPLICA_COLLECTED_CI_PENDING",
   "branch": "codex/google-funded-preparation-producer-wip-20261030",
   "base_remote": "aff2758e9e7b6e6eced66d7fe667dc9be48a719d",
   "scope": "Internal unattached preparation producer + narrow common guard typed command/precommit expiry + actual-reader phase adapter only; no public route/UI/worker/paid provider path/six writer or runtime flag changes.",
@@ -12,7 +12,7 @@
     "backend/integrations_control_center/google_ads_funded_creation_grants.py minimal optional reviewed acknowledgment typed projection; legacy configuration/revoke semantics preserved"
   ],
   "implemented_unverified": "Private one-shot explicit owner admission consumed before first await; actual bounded retained namespace/options/unique-index/effective-privilege reads (unknown/noauth failclosed); actual configured native/product/config/validate-only reads; mandatory common transaction creates original proposal+fence+RUNS prepared with creation_identity, consumes/activates only explicit grant, binds postTX epoch and user marker; original positive commit ACK mints initiation, unknown/readback never does. No provider sends.",
-  "verification": "169 selected units passed -W error22.21s (23new producer cases plus old funded storage, guard probe/lifecycle and standing/PAUSED floors). No real Mongo evidence for producer yet; no deploy/activation/attachment acceptance.",
+  "verification": "180 selected unit tests passed-Werror11.13s, including34 newproducerunits;15 newauth-enabledreplica tests collected only. No newproducer actualMongo result yet. Existing runtimeflag remains sourceFalse; test monkeypatch is not a readiness or production claim.",
   "remaining": [
     "Meaningful unit and actual auth-enabled replica/fault/race/namespace tests and zero-skip CI",
     "Independent budget_audit review and root immutable review",
@@ -21,7 +21,7 @@
   ],
   "production_changed": false,
   "runtime_flags_changed": false,
-  "next": "Add disposable auth-enabled real replica tests: actual privileges/index/namespace restrictions, two independent clients, user/revoke/fence/clock/commit91-close-ACKloss; meaningful zero-skip CI then immutable review.",
+  "next": "Remote candidate/DraftPR then run dedicated auth replica CI, read actual logs, fix evidenced failures and request independent immutable review. Preserve six writers/floors; no activation attachment or provider consumer.",
   "completed_unit_boundaries": [
     "Producer-positive ACK\u2192existing reserve consumes exact prepared row and no provider sends",
     "Legacy configured grants missing explicit reviewed Arabic average-spend acknowledgment digest remain inert; full version/text digest bound to review",
@@ -29,5 +29,16 @@
     "One original absolute monotonic deadline passed into retained TX, no probe/commit/ACK renewal; precommit and appliedlateACK fail without continuation",
     "Metadata serialization/unknown cursor cancellation latch and fresh second metadata audit after native awaits; latch rechecked before TX/precommit/postACK",
     "Unknown preparation applied/notapplied has no continuation/retry; configured-review/native/config readers mint private proof only"
-  ]
+  ],
+  "early_review_findings_and_tests": {
+    "reviewer": "budget_review",
+    "original_absolute_deadline": "Shared retained helper accepts bounded absolute originaldeadline; producer passes it through probe/transaction and checks synchronously after ACK. Tests afterprobe/precommit/lateACK never issue continuation.",
+    "released_fence": "Exact conditional CAS onlyreleased, then bind actual returned full fence projection (including prior released_at), not fabricated cleaned snapshot. Tests positive reserve compatibility and claimed/unknown rejection.",
+    "owner_spend_text": "Optional explicit acknowledgment text/version/digest included in canonical configured review. Missing legacy acknowledgment remains inert for preparation. Source has no financial defaults. Tests tamper each field.",
+    "metadata_freshness": "Two actual namespace/index/privilege reads around native awaits, collection UUID generation included; bounded policy authorization digest captured before native and checked inTX. Tests policy/UUID/privilege/index drift. No serialization claim after final metadata read.",
+    "cursor_cancellation": "Metadata cursor ambiguous response/cancellation closes process latch and preserves cancellation; no repeated cursor probes. Test cancellation and unknown ACK.",
+    "concurrency_resources": "Metadata audits serialized; latch checked beforeTX/precommit/postACK. Retained read cap8 holds pending operations without driver cancellation. Concurrent probes/latch and pre/postcommit tests."
+  },
+  "auth_replica_ci_plan": "Dedicated auth-enabled loopback disposable Mongo8.0.26, TEST_ONLY root and per-test read/update-without-insert/full roles.15 required cases prove original ACK\u2192reserve, namespace/index/validator failclosed, commit91/close/ACKloss one-wire/no-continuation, released fence, independent owner role/password/disable conflicts and two-client permanent slot race. Zero skip/error/failure gate. No live RBAC/DB/provider access.",
+  "process_scope_limits": "Metadata uncertainty latch and128 consumed admission slots are bounded per process; local admission includes DB object identity for worker isolation, while durable slot remains exactuser/account/request_key independent ofrevision/client. Mongo TX+unique indexes serialize independent clients; no distributed metadata-uncertainty latch or production readiness claim."
 }
