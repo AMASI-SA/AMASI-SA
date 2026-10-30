@@ -1,7 +1,7 @@
 {
   "task_id": "GOOGLE-AI-RESPONSE-RELIABILITY-20261025",
   "scope": "Google only; Snapchat owned by another conversation",
-  "updated_at": "2026-10-29T23:45:41.355Z",
+  "updated_at": "2026-10-30T13:16:15.003Z",
   "full_autonomy_complete": false,
   "production": {
     "google_reliability_1495": "delivered through TikTok1498, explicit finish 22:32 Asia/Riyadh; fresh account analysis 6 recommendations and PMax analysis 5 succeeded",
@@ -95,7 +95,7 @@
     "Complete owner section membership review and cross-platform product linkage/evidence without invented costs or attributed orders.",
     "Firstfundedlaunch/worker remains blocked on honest neverlaunched/manual-stop provenance/externalwriter exclusion plus approved ownerlimits; disclose exactsupported Search/Shopping/PMax coverage."
   ],
-  "next_safe_action": "1655DONE do notrepublish. Refreshactualguard+production622c, then1658 originalhostA exactCI, intentonlyB/allCI+pairreview/hostB/normalmerge/appbuild/prepare/prepublishONEclick/newfinish/own3closed/liveMerchantchoices+observation. ContinueisolatedUI/funded/bootstrapWIP; nofundedownerlimitsprovided.",
+  "next_safe_action": "Finish original host1658A exactCI match, create intent-onlyB then allCI/review/normalhostrehearsal/merge/guard/singlepublish/live3 and explicitread UI. No fundedactivation; root currentproduction integration of acceptedProductTestReview after1658.",
   "saved_analysis_list": "success after reload onto TikTok1503 published runtime; earlier old-page loading error not reproducible on current app",
   "evidence_screenshot": "docs/operations/GOOGLE-AI-RESPONSE-RELIABILITY-20261025/paused-creation-verified.jpg",
   "ad_read_followup": {
@@ -716,7 +716,7 @@
       "limitation": "scope unique lock prevents parallel refresh; integration with actual HTTP/writers, durable recovery and multi-doc atomic OAuth incomplete"
     }
   },
-  "last_verified_production_head": "08160c883a040f3a9fb49a165dab8074d4ef7309",
+  "last_verified_production_head": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "courier_release_coordination": {
     "pr": 1559,
     "production_merge": "d3988c0be954daecdc2335c8699d20926e1bd4a3",
@@ -2479,28 +2479,35 @@
       "limits": "Localaccountmembershipnotnativeeligibility; deadlinecleanup boundedcases only"
     },
     "funded_storage_authority": {
-      "checkpoint": "a9b4495678730bbd1516d8d778e9863165394da4",
+      "checkpoint": "eb9669e1a134db6494c4acd00d9a238298c190da",
       "contract": "279999f9becd5612eb1d580d614a1a2ab0496c1b",
       "branch": "codex/google-funded-storage-authority-wip-20261029",
-      "state": "WIP_REAL_MONGO_FIXTURES_FAILED_CORRECTION_AND_RESERVE_INITIATION_AMENDMENT",
+      "state": "FOCUSED264_ACTUAL89MONGO_PASS_WIP_NOT_RELEASE_READY",
       "limits": "Noactivation/gateway/worker/6policyrouteintegration/paidoperation. Newfundednamespacesandusersmarkerprivilegesunproved.",
       "assignment": "Conditionalusers marker permitted onlypositiveauthority reserve/floor toconflict authwriters; failclosedwithoutupdateprivilege; no new users dependencyforrevoke/cancel/release.",
-      "source": "293e56516f02397c5e5b2876e7a611b91d5e10fc",
+      "source": "62129405ba3aba94f1c5edc3001f337d4665da19",
       "pr": 1659,
       "amendment": "995504ac12878b261f661002b92f1edd99bc0455",
       "root_review": "Readall693newruntime+exposurediff e3cc. Addedownerboundedreads andstoredOAuth/accountscopeepoch fence requested; noafter-snapshotserializationclaim.",
-      "CI": "Initial293e221pass10fail; fixtureepochincludedMotorinserted_id, correctionnotaccepteduntilnewCI. Privateinitialreservationcapabilitycontractapproved/noproducer."
+      "CI": "Exact40976156447/job123804579244264pass113.17s incl89actualMongo0skip; root re-read primarylog. Readiness40976156263 fails historicalbase ancestry/oldintentComposer mismatch beforehost; no gate weakens.",
+      "runtime_source": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+      "root_latest": "Independent bounded owner/epoch/ambiguous ACK review accepted; root latest runtime delta review remains before selective integration. No initiation producer."
     },
     "product_test_review": {
       "contract": "558b96d250a8b5c813ac2c8a4b206d9175203319",
-      "state": "ROOT_AND_INDEPENDENT_BACKEND_ACCEPTED_UI_CONTRACT_ASSIGNED",
+      "state": "UI_SEALED_INDEPENDENT_ACCEPTED_PENDING_ROOT_CURRENT_PRODUCTION_COMPOSITION",
       "cost_limit": "Current cost snapshots lack trustworthy perlinecurrency/sale-timeimmutability/fullcomponent/refundproof; nohistoricprofitclaim",
       "pr": 1654,
       "source": "adf692fb4cbc90aa0e71d44e05ddd9f578f3e187",
       "ci": 40971612920,
       "tests": "Root42-Werror1.44s/independent42;exactCI40972181263job123791347843152incl30actualMongo0skip9.84s",
       "fixes": "Lateowner/passwordfence afterallawaits and crossplatformassociationmetadata explicitunknowns",
-      "remaining": "NEW coherent UI WIP direct5595+onlyacceptedadfnewblobs; explicitownerfit GET/CASPUT andreviewPOST with identityfences; nofinancialauthority"
+      "remaining": "NEW coherent UI WIP direct5595+onlyacceptedadfnewblobs; explicitownerfit GET/CASPUT andreviewPOST with identityfences; nofinancialauthority",
+      "ui_source": "e713fbb11630cf5011903721e6aaf03d4efbd637",
+      "ui_pr": 1660,
+      "ui_status_branch": "codex/google-product-test-review-ui-seal-20261030",
+      "ui_status_checkpoint": "913cb2f",
+      "ui_evidence": "Root read sharedrouter/Native auth-generation diff, fullchild and primary4CIlogs: synthetic e7154c1 into622c,153/30Mongo0skip+202UI9suites/build3.89;full1602/624build6.46. Independent63UI. Remaining fullrootservice/adversarial check and freshproductionA/B/live."
     },
     "foreign_reports1651": {
       "merge": "08160c883a040f3a9fb49a165dab8074d4ef7309",
@@ -2565,9 +2572,9 @@
     "namespace_bootstrap": {
       "pr": 1656,
       "contract": "a68d012b19410edb555eba87b4b742cba48ea288",
-      "source": "ad5dbb127a3be69d6277257ebf93ff0d630e1728",
-      "checkpoint": "09490f5ad434f6d18f7f44a2a3a43a8242fcb7e6",
-      "state": "ENGINE_CAPABILITY_VERIFIED_NEW_RUNTIME_IMPLEMENTATION_IN_PROGRESS",
+      "source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+      "checkpoint": "23e836301334bb08725275ba2b1049b515320ce6",
+      "state": "STANDALONE111_CI_PASS_INDEPENDENT_BOUNDED_REVIEW_ACCEPTED_ROOT_ATTACHMENT_REMAINING",
       "ci": 40971850976,
       "job": 123790260212,
       "limits": "Enginecapability only; rootlogs/implementationreviewpending. Fourfixedabsenttargets only; globaldurabletechnicalreceipt/noopstrict/races/failclosedunknown required; no businessdocs/flags/providerwrites.",
@@ -2575,15 +2582,16 @@
       "engine_source": "0b418ea8aad5164592970ffb72db505147f5abb6",
       "engine_ci": "40972826009job12379350158420actualMongo0skip3.62s,rootlogread",
       "guarantee": "Separateprepare(noDDL) andexecute(neverinsertsmissingreservation), positiveconsumedfencebeforeDDL; explicitlynoimpossible guarantee forlostinitialinsertneverpersisted. Transactioncreateonexistingguardfails48, no outsideTXnoopfallback.",
-      "runtime_wip": "717d536e4b9eaf865a0fa2dc197368ed6571b932",
-      "runtime_ci": "Pending93cases40unit20engine33actualMongo; initialslice notfinalacceptance"
+      "runtime_wip": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+      "runtime_ci": "Exact40976213231/job123804759846111pass18.05s,47unit20engine44runtimeactualMongo0skip; rootprimarylogread.",
+      "independent": "7747efb8796e13c08bc293f5754db98b9923e03e codex/google-namespace-bootstrap-audit-20261030. No additionalboundedfinding; no globalatomiccatalog/continuousDDLbarrier orfundednamespaceproof."
     },
     "merchant1658": {
       "source": "7f214a76ea98500d17b239d3577b43e542801374",
       "tree": "6b6989d9a55f7c84d7e1b5822883a288bc9707cd",
       "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
-      "state": "SOURCE_SEALED_25CI_SUCCESS_CANDIDATE_ROOT_VALIDATED_HOST_NOT_STARTED",
-      "checkpoint": "4573c2036f65ead85ec71a3ab346cca24be87e67",
+      "state": "HOST_RECOVERY_BUILD_IN_PROGRESS_NO_B_LEASE_OR_PUBLISH",
+      "checkpoint": "0922a414d7b5699b2b289f90855d3309a5910c07",
       "branch": "codex/google-merchant-observation-release-m622-20261029",
       "status_branch": "codex/google-merchant-observation-release-m622-status-20261029",
       "artifact": 12941855881,
@@ -2591,8 +2599,15 @@
       "intent_sha256": "8ceacb6760ec91cef5f11215282774d3863e3776bde686514ae76290eb53924e",
       "runtime": "rg5-c6da2eab2383aafe2a1f54e971a443adf5d2e61dcb5e9abf5c2442006ea6d57a",
       "root": "Exactremoteworktreeloader1053backend257control PASS;all4exactsourceCIlogs1855/689/422incl74actualMongo0skip/122read;independent24exactblobs+2triggerdeltasandCIsealPASS",
-      "host": false,
-      "publish": false
+      "host": true,
+      "publish": false,
+      "host_recovery": "Signed-in IDE verified; /app622c guardinactive/hashbc03cc same; oldtmpclone/logs/intent absent, ownoldprocess0. Freshisolated exact7f214clone+Python buildrunning; originalresultneverinferred."
+    },
+    "publisher_mapping_assessment": {
+      "source": "05e0c6c2ebba27ab5a7dfc584187935fc432ed79",
+      "branch": "codex/google-salla-merchant-mapping-assessment-20261029",
+      "state": "DOCS_ONLY_POSITIVE_PROOF_CONTRACT_OWNER_PUBLISHER_INPUT_REQUIRED",
+      "input": "Actualpublisherapp/sourceandMerchantprimarysource/account pluspublisher-authored parent/variant toexportID semantics. Root latestpositiveproofdoc reviewpending; noheuristicIDmappingaccepted."
     }
   }
 }
