@@ -67,6 +67,11 @@ class FundedGrantMutation:
 
 
 @dataclass(frozen=True)
+class FundedCreationPreparation:
+    prepared: object
+
+
+@dataclass(frozen=True)
 class FundedCreationReservation:
     grant_key: str
     proposal_id: str
@@ -408,6 +413,7 @@ def _validate_guard(row, scope):
 
 
 def _command(command):
+    if isinstance(command,FundedCreationPreparation):return command
     if isinstance(command,(FundedCreationReservation,FundedCreationDispatchFloor,FundedCreationSettlement)):
         if any(not isinstance(value,str) or not _ID.fullmatch(value) for value in
             (command.grant_key,command.execution_claim_id,getattr(command,'proposal_id','internal'))):
@@ -652,6 +658,10 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         update = {'epoch': row['epoch'] + 1, 'last_commit': {'operation_id': operation_id, 'committed_at': stamp}}
         if isinstance(command, PolicyMutation):
             result = await _policy_write(db, scope, snapshot, command, session)
+        elif isinstance(command,FundedCreationPreparation):
+            from .google_ads_funded_creation_preparation import _write_preparation
+            result=await _write_preparation(db,session=session,snapshot=snapshot,command=command,
+                operation_id=operation_id,current=datetime.fromisoformat(stamp))
         elif isinstance(command, FundedGrantMutation):
             from .google_ads_funded_creation_grants import _mutate_in_transaction
             result=await _mutate_in_transaction(db,session=session,snapshot=snapshot,
@@ -853,7 +863,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
             _fail('google_budget_guard_epoch_changed')
         if phase.get('stop_requested') or _operation_clock() >= phase['deadline']:
             _fail('google_budget_guard_request_ended_before_commit')
-        if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor, FundedCreationDispatchFloor))
+        if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor, FundedCreationDispatchFloor, FundedCreationPreparation))
             and datetime.now(timezone.utc) >= datetime.fromisoformat(result['authority_valid_until'])):
             _fail('google_budget_guard_creation_authority_expired')
         phase['commit_attempted'] = True

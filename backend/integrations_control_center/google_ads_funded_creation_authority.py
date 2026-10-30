@@ -185,6 +185,11 @@ async def _prepare(db,*,scope,grant_key,client_factory=GoogleAdsClient,allow_con
     check=deepcopy(record)
     if allow_consumed and check:check['consumed']=False
     _active(check,started)
+    return await _read_native_bundle(db,scope=scope,record=record,started=started,client_factory=client_factory)
+
+
+async def _read_native_bundle(db,*,scope,record,started,client_factory=GoogleAdsClient):
+    # Shared actual readers only; the caller must separately validate its phase.
     await grants.read_owner_auth(db,user_id=scope['user_id'],expected=record['review'].get('_owner_auth_binding'))
     intent=pure.prepare_google_funded_creation_intent(grant=record['grant'],draft=record['review']['draft'],current=started)
     product=await _products(db,record,started)
@@ -206,7 +211,7 @@ async def _prepare(db,*,scope,grant_key,client_factory=GoogleAdsClient,allow_con
             _fail('google_funded_provider_validation_unproved')
     finally:await client.close()
     if not 0<=(management.now()-started).total_seconds()<90:_fail('google_funded_native_stale')
-    payload={'grant_key':grant_key,'grant_revision':record['revision'],'review_digest':record['review_digest'],
+    payload={'grant_key':record['grant_key'],'grant_revision':record['revision'],'review_digest':record['review_digest'],
         'intent':intent,'product':product,'metadata':{key:metadata[key] for key in ('account_id','currency_code','time_zone')},
         'auth_epoch':epoch,'inventory':inventory,'settings':settings,'observed_at':started.isoformat()}
     return _Prepared(db,guard._plain(payload),_PROOF)
