@@ -1,0 +1,120 @@
+name: Google Merchant local choices
+on:
+  push:
+    branches: [codex/google-merchant-observation-choices-20261029, codex/google-merchant-observation-attachment-20261029, codex/google-merchant-observation-release-m622-20261029, codex/google-merchant-node24-release-20261030]
+  pull_request:
+    branches: [hotfix/prod-snap-meta-final]
+    paths:
+      - backend/integrations_control_center/google_merchant_observation_choices.py
+      - backend/integrations_control_center/google_merchant_product_observation.py
+      - backend/integrations_control_center/google_ads_reporting.py
+      - backend/tests/test_google_merchant_observation_choices*.py
+      - frontend/src/components/marketing/GoogleMerchantObservationSelector*
+      - frontend/src/services/googleMerchantObservationChoices*
+      - .github/workflows/google-merchant-observation-choices.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-choices:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned production-compatible dependencies
+        run: >-
+          python -m pip install fastapi==0.140.0 pydantic==2.13.4
+          motor==3.7.1 pymongo==4.18.3 httpx==0.28.1 cryptography==50.0.2
+          python-multipart==0.0.32 PyJWT==2.15.1 bcrypt==4.1.3
+          python-dotenv==1.2.4 pillow==12.3.0 openai==1.99.9 google-ads==33.0.0
+          pytest==9.1.1 pytest-asyncio==1.4.0
+      - name: Start disposable loopback replica
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name google-merchant-choices-rs -p 127.0.0.1:27489:27489 mongo:8.0.26 --port 27489 --replSet gMerchantChoicesTest --bind_ip_all --setParameter enableTestCommands=1
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-merchant-choices-rs mongosh --port 27489 --quiet --eval 'if(db.adminCommand({ping:1}).ok !== 1) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec google-merchant-choices-rs mongosh --port 27489 --quiet --eval 'if(rs.initiate({_id:"gMerchantChoicesTest",members:[{_id:0,host:"127.0.0.1:27489"}]}).ok !== 1) quit(1)'
+          ready=0
+          for attempt in $(seq 1 60); do
+            if docker exec google-merchant-choices-rs mongosh --port 27489 --quiet --eval 'const h=db.hello(); if(h.setName !== "gMerchantChoicesTest" || h.isWritablePrimary !== true) quit(1)'; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+      - name: Test owner route and real membership and credential races
+        env:
+          GOOGLE_MERCHANT_OWNER_TEST_MONGO_URI: mongodb://127.0.0.1:27489/
+          GOOGLE_BOUND_READ_TEST_MONGO_URI: mongodb://127.0.0.1:27489/
+          GOOGLE_REFRESH_CAS_TEST_MONGO_URI: mongodb://127.0.0.1:27489/
+          PYTHONPATH: backend
+          PYTHON_DOTENV_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          python -m pytest --noconftest -q -W error --junitxml=merchant-owner-results.xml backend/tests/test_google_merchant_observation_choices.py backend/tests/test_google_merchant_observation_choices_mongo.py backend/tests/test_google_merchant_observation_routes.py backend/tests/test_google_merchant_observation_routes_mongo.py backend/tests/test_google_merchant_product_observation.py backend/tests/test_google_bound_read_session.py backend/tests/test_google_bound_read_session_mongo.py backend/tests/test_google_ads_reporting_v1.py backend/tests/test_google_credential_refresh_cas.py backend/tests/test_google_credential_refresh_cas_mongo.py
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases=ET.parse('merchant-owner-results.xml').getroot().findall('.//testcase')
+          def suite(name): return [c for c in cases if c.attrib.get('classname','').endswith(name)]
+          owners=suite('test_google_merchant_observation_routes_mongo')
+          assert len(cases) == 422 and len(owners) == 21
+          assert len(suite('test_google_merchant_observation_choices_mongo')) == 22
+          assert len(suite('test_google_bound_read_session_mongo')) == 10
+          assert len(suite('test_google_credential_refresh_cas_mongo')) == 21
+          assert not [c for c in cases if any(c.find(x) is not None for x in ('skipped','failure','error'))]
+          assert any(c.attrib.get('name') == 'test_real_transaction_reads_consistent_snapshot_across_collections' for c in owners)
+          print('Verified422 tests including22 local-choice,21 owner,10 bound-read and21 CAS actual Mongo cases; zero skips')
+          PY
+      - name: Remove disposable replica
+        if: always()
+        run: docker rm -f google-merchant-choices-rs
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare governed frontend toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Install frozen frontend dependencies
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Test explicit reads and real browser API no-replay behavior
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/services/googleMerchantObservationChoices.test.js src/components/marketing/GoogleMerchantObservationSelector.test.jsx src/components/marketing/GoogleMerchantObservation.test.jsx src/lib/api.authRefresh.test.js --json --outputFile=/tmp/google-merchant-ui-results.json
+          python - <<'PY'
+          import json
+          with open('/tmp/google-merchant-ui-results.json') as stream:
+              result=json.load(stream)
+          assert result['numTotalTests'] == result['numPassedTests'] == 122
+          assert result['numPendingTests'] == result['numFailedTests'] == 0
+          own=[r for r in result['testResults'] if r['name'].endswith('/GoogleMerchantObservation.test.jsx')]
+          assert len(own) == 1 and len(own[0]['assertionResults']) == 55
+          selector=[r for r in result['testResults'] if r['name'].endswith('/GoogleMerchantObservationSelector.test.jsx')]
+          service=[r for r in result['testResults'] if r['name'].endswith('/googleMerchantObservationChoices.test.js')]
+          assert len(selector) == len(service) == 1
+          assert len(selector[0]['assertionResults']) == 30
+          assert len(service[0]['assertionResults']) == 31
+          assert all(r['status'] == 'passed' for r in own[0]['assertionResults'])
+          assert any('actual existing browser API interceptor' in r['fullName'] for r in own[0]['assertionResults'])
+          print('Verified122 tests including30 selector,31 choice-service and55 child cases, zero skips')
+          PY
+      - name: Build current reviewed CI checkout
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://mezansalla.com
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend build
+      - name: Check source whitespace
+        run: git diff --check

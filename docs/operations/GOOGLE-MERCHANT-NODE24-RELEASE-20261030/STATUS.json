@@ -1,0 +1,39 @@
+{
+  "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-merchant-node24-release-20261030",
+  "state": "SOURCE_CANDIDATE_REQUIRES_FRESH_CI_ORIGINAL_HOST_AND_INTENT_B",
+  "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
+  "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
+  "reason": "Actual recovered original host /usr/bin/node24.19.0 and Yarn1.22.22 refuse old package engines before adapter. No merge/lease/publish of1658. Fresh source is required; old pair remains immutable.",
+  "compatibility_source": "2f85dc9b9f23e9a09fb0af84a763c84a5fe88a3b",
+  "compatibility_exact_blobs": {
+    ".github/workflows/mezan-production-release.yml": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+    "frontend/package.json": "ea03e3bacd152554711ac5ca992e0806b74c724c",
+    "frontend/scripts/build-contract.test.cjs": "6204b81ea9525b5c138add4134ff35aa0aa6ca70",
+    "frontend/scripts/host-node-compatibility.test.cjs": "a9030304920eaa5d427b74e3305ef9aa66df2a0e"
+  },
+  "scope": "Accepted explicit-owner Merchant observation plus supported24.19 host entry/runtime admission. Governed builder22.23.2/Yarn1.22.22, adapter, runtime and lockfile unchanged. No ignore-engines.",
+  "changes": "Start from exact7f214 tree, replace four reviewed compatibility blobs, append this branch to two existing Google exact-source CI triggers, add only this new task STATUS. Productionintent inherited unchanged.",
+  "historical_evidence": {
+    "merchant": "Exact7f214/A +a219/B full1855/689, dedicated422 including74Mongo0skip/122, source+intent+complete manifests root/independent PASS; originalA entire8ceac intent matched.",
+    "compatibility": "Exact2f85 readiness41067412294:host24job12410235342010/10;host20job12410235360810/10;Node22job12410235312857/57+build3.80/4.14;backend156 job124102353418. Rootprior63f fullprotocol57logread; rootactualhost24 source63f25pass/1expectedsource-onlyVite skip. Not finalB runtime proof."
+  },
+  "production_changed": false,
+  "host_actions": 0,
+  "provider_writes": 0,
+  "paid_writes": 0,
+  "lease_created": false,
+  "publish_clicked": false,
+  "remaining": [
+    "Fresh direct-source and PR CI, root/independent combinedmanifest review.",
+    "Original host A reproducibility freeze matches CI; new intent-onlyB without rebase/squash.",
+    "Both20 and24 B cleanclone normaladapter/runtime JSON tests plus actualhost default24 normalbuild must pass.",
+    "Freshproduction/appguard checks, normalmerge/rehearsal, prepare/prepublish/singlepublish/newerexplicitfinish/3verify/leaseclosed.",
+    "Actual owner Merchant choices/read UI acceptance; currentGoogleUI reportedtemporaryrequestlimit withoutOAuth inference.",
+    "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
+  ],
+  "next_safe_action": "Create exactdirect622c sourceA and run freshCI; nofreeze/lease/publish before reviewedsource and originalhostproof.",
+  "updated_at": "2026-10-30T13:58:31.230Z"
+}
