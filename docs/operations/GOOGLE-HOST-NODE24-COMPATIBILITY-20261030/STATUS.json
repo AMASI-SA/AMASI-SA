@@ -1,0 +1,59 @@
+{
+  "task_id": "GOOGLE-HOST-NODE24-COMPATIBILITY-20261030",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-host-node24-compatibility-20261030",
+  "state": "WIP_IMPLEMENTED_SYNTAX_CHECKED_FUNCTIONAL_TESTS_PENDING",
+  "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "scope": [
+    "frontend/package.json",
+    "frontend/scripts/build-contract.test.cjs",
+    "frontend/scripts/host-node-compatibility.test.cjs",
+    ".github/workflows/mezan-production-release.yml",
+    "docs/operations/GOOGLE-HOST-NODE24-COMPATIBILITY-20261030/STATUS.json"
+  ],
+  "observed_blocker": {
+    "attribution": "root actual host",
+    "host_node": "24.19.0",
+    "host_yarn": "1.22.22",
+    "failure": "Project Node engine range rejects actual host before build-entry dispatcher.",
+    "guard": "inactive;app622c unchanged;no merge/lease/publish of1658."
+  },
+  "contract": {
+    "host_engine": ">=20.18.1 <21 || >=22.23.2 <23 || >=24.19.0 <25",
+    "governed_builder_node": "22.23.2",
+    "governed_yarn": "1.22.22",
+    "unchanged": [
+      "frontend/build-contract.cjs",
+      "frontend/yarn.lock",
+      "frontend/scripts/build-entry.cjs",
+      "frontend/scripts/start-governed-runtime.cjs",
+      "scripts/frontend_release_toolchain.py",
+      "scripts/emergent_deployment_adapter.py"
+    ],
+    "runtime_qualification": "Runtime Vite preview uses process.execPath, so host compatibility includes serving runtime, not just dispatch.",
+    "source_a_proof": "Actual Yarn admission and real dispatcher with only Python boundary stub, legacy24 rejection and pinned-builder rejection; no providercalls.",
+    "reviewed_b_proof": "Both20.20.2 and24.19.0 matrix must run full clean-clone normal yarn build, generated-state refusal, pinned rebuild, package proof and actual yarn start/JSON routes. Unique artifacts per host; all original gates retained."
+  },
+  "verification": {
+    "syntax": "node --check on both changed/new test files PASS; YAML parsed with exact20.20.2/24.19.0 matrices;git diff --check PASS",
+    "functional": "pending",
+    "ci": "pending",
+    "independent_review": "pending"
+  },
+  "external_sources": [
+    "https://classic.yarnpkg.com/en/docs/package-json/",
+    "https://nodejs.org/en/blog/release/v24.19.0"
+  ],
+  "production_changed": false,
+  "frozen_merchant_pair_modified": false,
+  "host_actions": 0,
+  "provider_calls": 0,
+  "paid_writes": 0,
+  "deploy_ready": false,
+  "remaining": [
+    "Run real functional tests and exactsource CI; fix verified failures only.",
+    "Root selects reviewed delta into NEW Merchant sourceA on freshproduction; do not mutate7f214/a219.",
+    "Full20/24 clean-clone compatibility is unproved until new reviewedB CI and actualhost build complete."
+  ],
+  "next_safe_action": "Save early immutableWIP/DraftPR, then run pinned22 and actualHost24 admission tests; report results and preserve unchanged source contracts."
+}
