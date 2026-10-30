@@ -137,9 +137,9 @@ jobs:
           from pathlib import Path
           report=json.loads(Path('frontend/bootstrap-ui-results.json').read_text())
           assert report['success'] is True and report['numTotalTestSuites']==4 and report['numPassedTestSuites']==4
-          assert report['numTotalTests']==66 and report['numPassedTests']==66, (report['numTotalTests'],report['numPassedTests'])
+          assert report['numTotalTests']==68 and report['numPassedTests']==68, (report['numTotalTests'],report['numPassedTests'])
           assert report['numPendingTests']==0 and report['numTodoTests']==0
-          print('Verified 66 storage-only UI/service/AuthProvider/interceptor tests; zero skips')
+          print('Verified 68 storage-only UI/service/AuthProvider/interceptor tests; zero skips')
           PYCODE
       - name: Build current source in CI
         env:

@@ -3,9 +3,10 @@ import fixture from "./__fixtures__/googleNamespaceBootstrap.json";
 import { validateBootstrapResult, bootstrapExpiry, newBootstrapNonce, readGoogleBootstrapReceipt, prepareGoogleNamespaceBootstrap, executeGoogleNamespaceBootstrap } from "./googleNamespaceBootstrap";
 jest.mock("../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() } }));
 const copy = (x) => JSON.parse(JSON.stringify(x));
+const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
 const NOW = Date.parse("2026-10-30T12:00:00Z");
-beforeEach(() => { jest.spyOn(Date, "now").mockReturnValue(NOW); api.get.mockReset(); api.post.mockReset(); });
-afterEach(() => jest.restoreAllMocks());
+beforeEach(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: { getRandomValues: jest.fn() } }); jest.spyOn(Date, "now").mockReturnValue(NOW); api.get.mockReset(); api.post.mockReset(); });
+afterEach(() => { jest.restoreAllMocks(); if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 
 test.each(["no_preparation", "prepared", "foreign", "expired", "consumed", "applied", "historical"])("actual serializer %s receipt stays storage-only", (key) => {
     expect(validateBootstrapResult(fixture[key])).toEqual(fixture[key]);
@@ -50,4 +51,10 @@ test("expired or malformed actions never POST and secure nonce uses native entro
     await expect(prepareGoogleNamespaceBootstrap("wrong")).rejects.toThrow(); expect(api.post).not.toHaveBeenCalled();
     const random = jest.spyOn(globalThis.crypto, "getRandomValues").mockImplementation((bytes) => { bytes.fill(7); return bytes; });
     expect(newBootstrapNonce()).toBe("07".repeat(16)); expect(random).toHaveBeenCalledTimes(1);
+});
+
+test("missing secure randomness has no timestamp or Math.random fallback", () => {
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: undefined });
+    const fallback = jest.spyOn(Math, "random"); expect(() => newBootstrapNonce()).toThrow("randomness_unavailable");
+    expect(fallback).not.toHaveBeenCalled(); expect(api.post).not.toHaveBeenCalled();
 });

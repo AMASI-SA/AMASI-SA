@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-UI-20261030",
-  "state": "integration_candidate_pending_first_fresh_UI_and_actualMongo_CI",
+  "state": "test_fixture_correction_pending_fresh_CI_runtime_unchanged",
   "branch": "codex/google-namespace-bootstrap-ui-wip-20261030",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "contract_source": "2feb6f741d89ea7193b6ee80ee8c225d4472e6db",
@@ -40,8 +40,21 @@
       "actualMongo_total": 74,
       "executed_actualMongo_locally": false
     },
-    "frontend": "66 written tests across four new suites; NOT executed locally; dependency install blocked, awaiting CI",
-    "preservation": "Five exact 2c6 prerequisite blobs; only two additive router and two additive Workspace lines; release intent unchanged"
+    "frontend": "68 tests across four suites; explicit synthetic Web Crypto fixture plus absent-entropy refusal cases, awaiting fresh CI",
+    "preservation": "Five exact 2c6 prerequisite blobs; only two additive router and two additive Workspace lines; release intent unchanged",
+    "prior_candidate_actual_CI": {
+      "source": "93def8efa222daa3f12519e25cfa966175cdd54e",
+      "run": 41074776816,
+      "replica_job": 124127925108,
+      "passed": 130,
+      "actual_mongo": 74,
+      "skipped": 0,
+      "seconds": 22.05,
+      "frontend_job": 124127924502,
+      "frontend_passed": 40,
+      "frontend_failed": 26,
+      "failure": "New test setup assumed global Web Crypto exists in repository JSDOM; corrected only synthetic test fixture, runtime unchanged."
+    }
   },
   "remaining": [
     "Read fresh 130-case real-Mongo CI including 74 actual cases with zero skips",
@@ -49,10 +62,11 @@
     "Run full management regression CI and independent review",
     "Later fresh production source composition and release by root"
   ],
-  "next": "Publish this candidate, create Draft PR and inspect dedicated source-bound CI; no production actions",
+  "next": "Read successor direct-source PUSH CI and full PR regression; no runtime change or live action",
   "production_changed": false,
   "live_DB_provider_or_flags_changed": false,
   "release_intent_changed": false,
   "coordination": "Root owns live production and final shared-file composition. This isolated branch remains based on 622c; do not overwrite later Merchant Workspace changes.",
-  "previous_checkpoint": "4358d54eef1cd3e24f9936f23bdc2856d79337df"
+  "previous_checkpoint": "93def8efa222daa3f12519e25cfa966175cdd54e",
+  "pr": 1667
 }

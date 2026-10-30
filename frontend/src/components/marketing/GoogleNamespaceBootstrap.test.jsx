@@ -8,6 +8,7 @@ import fixture from "../../services/__fixtures__/googleNamespaceBootstrap.json";
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn() }, formatApiErrorDetail: jest.fn() }));
 const copy = (x) => JSON.parse(JSON.stringify(x));
 let container, root, actor, receipt, post, authFailure;
+const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 function Refresh() { const { refreshUser } = useAuth(); return <button onClick={() => refreshUser().catch(() => {})}>refresh-auth</button>; }
 const button = (text) => [...container.querySelectorAll("button")].find((x) => x.textContent === text);
@@ -25,10 +26,10 @@ beforeEach(() => {
     api.get.mockImplementation((url) => url === "/auth/me" ? authFailure ? Promise.reject(authFailure) : Promise.resolve({ data: copy(actor) }) : receipt(url));
     api.post.mockImplementation((...args) => post(...args));
     jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-30T12:00:00Z"));
-    jest.spyOn(globalThis.crypto, "getRandomValues").mockImplementation((bytes) => { bytes.fill(15); return bytes; });
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: { getRandomValues: jest.fn((bytes) => { bytes.fill(15); return bytes; }) } });
     container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
 });
-afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.restoreAllMocks(); });
+afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.restoreAllMocks(); if (originalCrypto) Object.defineProperty(globalThis, "crypto", originalCrypto); else delete globalThis.crypto; });
 
 test("actual AuthProvider mounts with no bootstrap read or write; separate acknowledgements and original prepared binding are required", async () => {
     await mount(); expect(calls()).toHaveLength(0); expect(api.post).not.toHaveBeenCalled();
@@ -104,4 +105,10 @@ test("client expiry can only remove execution and invalid authority response is 
     expect(button("تنفيذ تجهيز الحفظ").disabled).toBe(true); await execute(); expect(api.post).not.toHaveBeenCalled();
     receipt = () => Promise.resolve({ data: { ...fixture.prepared, funding_ready: true } }); await read();
     expect(checkbox()).toBeNull(); expect(container.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+test("unavailable secure randomness refuses preparation locally without a fallback POST", async () => {
+    await mount(); await read(); await click(checkbox());
+    Object.defineProperty(globalThis, "crypto", { configurable: true, value: undefined }); await prepare();
+    expect(container.textContent).toContain("لم يُرسل طلب التحضير"); expect(api.post).not.toHaveBeenCalled();
 });
