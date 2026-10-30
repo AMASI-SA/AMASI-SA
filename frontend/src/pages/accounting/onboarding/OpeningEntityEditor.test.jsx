@@ -109,19 +109,105 @@ test("external person needs phone and rejects successful responses without entit
 });
 
 
-test("ad account selectors restrict explicit profile and retain accounts for blank restored profile", () => {
+test("ad account selectors use confirmed binding IDs even with unrelated external_ref", () => {
     const accounts = [
         { id: "wallet-1", name: "Wallet 1", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-1" },
         { id: "wallet-2", name: "Wallet 2", account_type: "ad_prepaid_wallet", status: "active", external_ref: "entity-2" },
         { id: "payable-1", name: "Payable 1", account_type: "ad_payable", status: "active", external_ref: "entity-1" },
         { id: "payable-2", name: "Payable 2", account_type: "ad_payable", status: "active", external_ref: "entity-2" },
     ];
-    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={entities} financialAccounts={accounts} />));
+    const bindings = entities.map((entity, index) => ({ ...entity, funding_mode: "hybrid", wallet_financial_account_id: `wallet-${index + 1}`, payable_financial_account_id: `payable-${index + 1}` }));
+    const render = row => act(() => root.render(<OpeningEntityEditor domain="advertising" value={[row]} onChange={() => {}} entities={bindings} financialAccounts={accounts.map(a => ({ ...a, external_ref: "unrelated" }))} />));
     render({ entity_id: "entity-1" });
     const options = label => [...field(label).options].map(option => option.value);
     expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1"]);
     expect(options("حساب الذمة المالي 1")).toEqual(["", "payable-1"]);
     render({ entity_id: "", prepaid_wallet_account_id: "wallet-2" });
-    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-1", "wallet-2"]);
+    expect(options("حساب المحفظة المالي 1")).toEqual(["", "wallet-2"]);
     expect(field("حساب المحفظة المالي 1").value).toBe("wallet-2");
+});
+
+test.each(["prepaid", "postpaid", "hybrid"])("%s account discovery uses native mode without inferring amounts", mode => {
+    const binding = { id: "binding", name: "حساب موثق", funding_mode: mode,
+        wallet_financial_account_id: mode === "postpaid" ? null : "wallet",
+        payable_financial_account_id: mode === "prepaid" ? null : "payable" };
+    const accounts = [{ id: "wallet", name: "المحفظة", account_type: "ad_prepaid_wallet", currency: "USD", status: "active" },
+        { id: "payable", name: "الذمة", account_type: "ad_payable", currency: "USD", status: "active" }];
+    const Capture = () => { const [rows, setRows] = useState([]); return <OpeningEntityEditor domain="advertising" entities={[binding]} financialAccounts={accounts} value={rows} onChange={setRows} />; };
+    act(() => root.render(<Capture />));
+    act(() => button("إدخال الرصيد").click());
+    expect(field("الجهة 1").value).toBe("binding");
+    expect(Boolean(field("محفظة مدفوعة مقدمًا 1"))).toBe(mode !== "postpaid");
+    expect(Boolean(field("مستحق للمنصة 1"))).toBe(mode !== "prepaid");
+    if (mode !== "postpaid") { expect(field("محفظة مدفوعة مقدمًا 1").value).toBe(""); expect(field("حساب المحفظة المالي 1").value).toBe("wallet"); }
+    if (mode !== "prepaid") { expect(field("مستحق للمنصة 1").value).toBe(""); expect(field("حساب الذمة المالي 1").value).toBe("payable"); }
+});
+
+test("bank table and search expose exact type currency and ID while preserving pending amount", () => {
+    const account = { id: "canonical-bank", name: "البنك الكويتي", account_type: "bank", currency: "KWD", status: "active" };
+    const Capture = () => { const [rows, setRows] = useState([]); return <OpeningEntityEditor domain="banks" entities={[account]} financialAccounts={[account]} value={rows} onChange={setRows} />; };
+    act(() => root.render(<Capture />));
+    expect(container.querySelector("table").textContent).toContain("canonical-bank");
+    change("بحث في الجهات الموجودة", "KWD");
+    act(() => button("إدخال الرصيد").click());
+    expect(field("الرصيد الافتتاحي 1").value).toBe("");
+    change("الرصيد الافتتاحي 1", "1.234");
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+    expect(field("الرصيد الافتتاحي 1").step).toBe("any");
+    change("بحث في الجهات الموجودة", "لا توجد نتيجة");
+    expect(field("الجهة 1").value).toBe(account.id);
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+});
+
+test("empty catalog explains unresolved setup instead of supplying defaults", () => {
+    act(() => root.render(<OpeningEntityEditor domain="banks" entities={[]} value={[]} onChange={() => {}} />));
+    expect(container.textContent).toContain("القائمة الفارغة لا تعني أن الرصيد صفر");
+    expect(container.querySelector("table")).toBeNull();
+});
+
+test("type and currency filters narrow the catalogue without clearing draft identity or original precision", () => {
+    const accounts = [
+        { id: "kwd-bank", name: "بنك كويتي", account_type: "bank", currency: "KWD", status: "active" },
+        { id: "sar-cash", name: "الصندوق", account_type: "cash", currency: "SAR", status: "active" },
+    ];
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="banks" entities={accounts} financialAccounts={accounts}
+        value={[{ entity_id: "kwd-bank", balance: "1.234", original_currency: "KWD" }]} onChange={onChange} />));
+    change("تصفية النوع", "cash");
+    expect(container.querySelector("table").textContent).toContain("sar-cash");
+    expect(container.querySelector("table").textContent).not.toContain("kwd-bank");
+    change("تصفية العملة", "KWD");
+    expect(container.querySelector("table")).toBeNull();
+    expect(container.textContent).toContain("لا توجد نتيجة لهذا البحث أو التصفية");
+    expect(field("الجهة 1").value).toBe("kwd-bank");
+    expect(field("الرصيد الافتتاحي 1").value).toBe("1.234");
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test("missing settlement banks are explained without selecting a default or changing pending amounts", () => {
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="providers" entities={entities} banks={[]}
+        value={[{ entity_id: "entity-1", balance: "" }]} onChange={onChange} />));
+    expect(container.textContent).toContain("لا يوجد بنك تسوية مؤهل");
+    expect(field("بنك التسوية 1").value).toBe("");
+    expect(field("الرصيد المستحق لنا 1").value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test("unavailable exact ad wallet reports its identity and never offers another active wallet", () => {
+    const binding = { id: "binding", funding_mode: "prepaid", wallet_financial_account_id: "expected-wallet",
+        platform: "snapchat", platform_account_id: "ad-123", integration_account_id: "integration-123" };
+    const accounts = [
+        { id: "expected-wallet", account_type: "ad_prepaid_wallet", status: "inactive", currency: "SAR" },
+        { id: "unrelated-wallet", account_type: "ad_prepaid_wallet", status: "active", currency: "SAR" },
+    ];
+    const onChange = jest.fn();
+    act(() => root.render(<OpeningEntityEditor domain="advertising" entities={[binding]} financialAccounts={accounts}
+        value={[{ entity_id: "binding" }]} onChange={onChange} />));
+    expect([...field("حساب المحفظة المالي 1").options].map(o => o.value)).toEqual([""]);
+    expect(container.textContent).toContain("الهوية المطلوبة: expected-wallet");
+    for (const value of ["snapchat", "ad-123", "integration-123"]) expect(container.textContent).toContain(value);
+    expect(field("حساب الذمة المالي 1")).toBeNull();
+    expect(field("حساب التمويل 1").value).toBe("");
+    expect(onChange).not.toHaveBeenCalled();
 });

@@ -442,15 +442,17 @@ async def test_employee_and_courier_catalogs_match_financial_ssot_without_activa
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("financial_entity_id", [None, "legacy-alias"])
-async def test_operational_employee_without_exact_financial_identity_blocks(api, financial_entity_id):
+async def test_native_employee_without_historical_alias_still_requires_explicit_opening_balances(api, financial_entity_id):
     row, _, _ = await prepare(api)
     await api.db.mezan_employees_v2.insert_one({"user_id": OWNER, "id": "native-employee",
         "financial_entity_id": financial_entity_id, "status": "active", "name": "Unbound native employee"})
     rejected = await action(api, row, "preview", status=409)
-    assert rejected["detail"]["code"] == "onboarding_employee_financial_identity_dependency"
+    # The native writer keys journals by employee.id. Historical aliases neither
+    # authorize an opening nor excuse missing salary/advance/custody facts.
+    assert rejected["detail"]["code"] == "onboarding_entity_balance_required"
     ready = await request(api, "GET", f"/sessions/{row['id']}/readiness")
     assert not ready["source_ready"]
-    assert "onboarding_employee_financial_identity_dependency" in str(ready)
+    assert "onboarding_entity_balance_required" in str(ready)
 
 
 @pytest.mark.parametrize("created,allowed", [

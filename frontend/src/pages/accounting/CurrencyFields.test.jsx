@@ -71,17 +71,24 @@ test.each(["prepaid", "obligations"])("%s editor exposes controlled currency and
 
 test("advertising accounts keep different currencies and FX snapshots separate in the existing opening-line contract", () => {
     const accounts = [{ id: "wallet", currency: "USD", account_type: "ad_prepaid_wallet", status: "active" }, { id: "debt", currency: "EUR", account_type: "ad_payable", status: "active" }];
+    const entities = [
+        { id: "usd-binding", name: "USD prepaid", funding_mode: "prepaid", currency: "USD", wallet_financial_account_id: "wallet" },
+        { id: "eur-binding", name: "EUR postpaid", funding_mode: "postpaid", currency: "EUR", payable_financial_account_id: "debt" },
+    ];
     let latest;
     function Harness() {
-        const [rows, setRows] = useState([{ entity_id: "", prepaid_wallet: "20", payable: "30", prepaid_wallet_account_id: "wallet", payable_account_id: "debt" }]); latest = rows;
-        return <OpeningEntityEditor domain="advertising" value={rows} onChange={setRows} financialAccounts={accounts} />;
+        const [rows, setRows] = useState([
+            { entity_id: "usd-binding", prepaid_wallet: "20", prepaid_wallet_account_id: "wallet" },
+            { entity_id: "eur-binding", payable: "30", payable_account_id: "debt" },
+        ]); latest = rows;
+        return <OpeningEntityEditor domain="advertising" value={rows} onChange={setRows} entities={entities} financialAccounts={accounts} />;
     }
     act(() => root.render(<Harness />));
     expect(node.querySelector('[aria-label="عملة المحفظة 1"]').textContent).toBe("USD");
-    expect(node.querySelector('[aria-label="عملة الذمة 1"]').textContent).toBe("EUR");
+    expect(node.querySelector('[aria-label="عملة الذمة 2"]').textContent).toBe("EUR");
     change("سعر التحويل عملة المحفظة 1", "3.75");
-    change("سعر التحويل عملة الذمة 1", "4.10");
-    const result = buildFinancialSection("advertising", { sections: { advertising: { rows: latest } } }, {}, { financial_accounts: accounts });
+    change("سعر التحويل عملة الذمة 2", "4.10");
+    const result = buildFinancialSection("advertising", { sections: { advertising: { rows: latest } } }, {}, { financial_accounts: accounts, entities: { ad_accounts: entities } });
     expect(result.data.lines.map(line => [line.financial_account_id, line.original_currency, line.original_amount, line.fx_rate_to_sar])).toEqual([["wallet", "USD", "20", "3.75"], ["debt", "EUR", "30", "4.10"]]);
     expect(result.data.lines.every(line => !Object.hasOwn(line, "account_fx"))).toBe(true);
 });
