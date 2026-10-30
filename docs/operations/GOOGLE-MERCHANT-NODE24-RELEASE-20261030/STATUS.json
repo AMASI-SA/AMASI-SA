@@ -35,7 +35,7 @@
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
   "next_safe_action": "Create intent-only B sole parent exactA, fresh B CI both host20/24 cleanclone normal build/runtime and actual originalhost default24 normalbuild; then review/merge/guard/publish once.",
-  "updated_at": "2026-10-30T14:12:47.337Z",
+  "updated_at": "2026-10-30T14:17:09.738Z",
   "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
   "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
   "pr": 1663,
@@ -48,7 +48,10 @@
     "intent_sha256": "7a2826c52d56a83bc929474f8680f056d93ad67ee55850d061a3c7ea03485e4a",
     "artifact_id": 12982962222,
     "artifact_zip_sha256": "54ba46ff4ad3618471020c54dc26fd07662152a37500f4a62ab68936af51f406",
-    "runtime_id": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314"
+    "runtime_id": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314",
+    "actual_host_b": "Original isolated exactB default /usr/bin/node24.19.0 and Yarn1.22.22 normal cdfrontend/yarnbuild PASS79.46s. Package-boundary proof runtime/source exact; worktree clean. No engines bypass, no lease.",
+    "b_push_ci": "41069861165 backend1855/44.44s frontend689/35suites/build4.89; 41069861573 backend422/23.02 including74realMongo0skip frontend122/build4.15. Root4primarylogsread.",
+    "b_root_loader": "ExactB loader PASS with python-B; independentcandidate/pair/manifests verified, intent-only soleparentA."
   },
   "intent_b": "6f6566168f1a52851f6ebdc629cb76e09728357e",
   "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1"
