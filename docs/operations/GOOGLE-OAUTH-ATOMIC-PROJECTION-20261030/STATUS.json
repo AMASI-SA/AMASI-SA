@@ -1,13 +1,13 @@
 {
   "task_id": "GOOGLE-OAUTH-ATOMIC-PROJECTION-20261030",
-  "state": "DESIGN_WIP_NOT_DEPLOYABLE",
+  "state": "WIP_DISCOVERY_TESTED_PUBLICATION_NOT_IMPLEMENTED",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-oauth-atomic-projection-wip-20261030",
   "base_sha": "fb12300c353cb1875f4462dc279b25360913af5c",
   "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
   "owner": "google_launch",
   "scope": "Required atomic credential/account/connection publication; complete discovery; shared Merchant fence; Google-only generic test authority refusal",
-  "source_implemented": false,
+  "source_implemented": "Complete discovery reader only; existing publication caller is not migrated and this WIP must not deploy.",
   "tests_run_on_new_code": 0,
   "prior_diagnosis": {
     "exact_source": "fb12300c353cb1875f4462dc279b25360913af5c",
@@ -31,9 +31,17 @@
     "quota retry behavior",
     "all production/host/provider state"
   ],
-  "next": "Approve exact read seam; implement bounded discovery and transaction; real replica races/unknown ACK; remote checkpoint; independent review",
+  "next": "Implement required transactional publication and callback state/operation fence; complete real Mongo race/unknownACK and legacy acceptance. Root reader seam approval pending.",
   "production_changed": false,
   "provider_calls": 0,
   "credential_access": false,
-  "publish_actions": 0
+  "publish_actions": 0,
+  "pr": 1668,
+  "design_checkpoint": "e267d6c2ce807b9f3210177af0614a70ae86a862",
+  "discovery_verification": {
+    "local": "43 passed2.97s -Werror0skip",
+    "regression_red": "Actual fb123 reader substituted in memory: both GA4 and Merchant complete-page tests fail because only1GET instead of2. Initial baseline harness Werror plugin initialization failed before tests; corrected sessionstart hook produced intended2 failures.",
+    "network": "httpx.MockTransport only; no provider calls",
+    "limitations": "Pure traversal proves endpoint scope, not atomic provider snapshot; complete private evidence not yet consumed by publication."
+  }
 }
