@@ -633,13 +633,14 @@ def _allocation(snapshot, command, operation_id, stamp):
     return {**allocations, command.allocation_id: entry}, claim
 
 
-async def _run(db, *, scope, operation_id, planner, capability, phase):
+async def _run(db, *, scope, operation_id, planner, capability, phase, require_existing_guard=False):
     _capability(db, capability)
     session = await db.client.start_session()
     try:
         _transaction(session)
         row = await db[BUDGET_GUARDS].find_one({'_id': _guard_id(scope)}, session=session)
         if row is None:
+            if require_existing_guard:_fail('google_budget_guard_existing_state_unproved')
             row = _new_guard(scope)
             await db[BUDGET_GUARDS].insert_one(row, session=session)
         _validate_guard(row, scope)
@@ -878,7 +879,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         await _end_session(session)
 
 async def run_google_budget_guard_transaction(db, *, user_id, account_id, operation_id, capability=None, planner,
-        timeout_seconds=15, original_deadline=None):
+        timeout_seconds=15, original_deadline=None, require_existing_guard=False):
     """One server-internal synchronous decision and one explicit commit attempt.
 
     Storage commit is NOT dispatch authority. Only future fully integrated
@@ -892,11 +893,12 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
             _fail('google_budget_guard_command_invalid')
         if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 15:
             _fail('google_budget_guard_timeout_invalid')
+        if type(require_existing_guard) is not bool:_fail('google_budget_guard_command_invalid')
         if original_deadline is not None and (isinstance(original_deadline,bool) or not isinstance(original_deadline,(int,float))):
             _fail('google_budget_guard_timeout_invalid')
         return await _retained_operation(db, scope, operation_id, 'write',
             lambda: _run(db, scope=scope, operation_id=operation_id, planner=planner,
-                capability=capability, phase=phase), timeout_seconds, phase, original_deadline)
+                capability=capability, phase=phase,require_existing_guard=require_existing_guard), timeout_seconds, phase, original_deadline)
     except asyncio.CancelledError as exc:
         exc.commit_attempted = phase['commit_attempted']
         exc.preserve_execution_fence = True

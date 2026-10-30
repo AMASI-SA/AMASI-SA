@@ -44,6 +44,7 @@ class _OwnerAdmission:
 class _Preparation:
     db: object
     payload: dict
+    capability: object
     proof: object
 
 
@@ -205,13 +206,14 @@ async def _read_preparation(db,admission,phase,client_factory):
     policies=authority.policy_binding(guard.BudgetGuardSnapshot(**scope,guard={},standing_policy=standing,creation_policy=creation))
     # Real read collaborators mint proof; no client-supplied booleans accepted.
     native=await authority._read_native_bundle(db,scope=scope,record=record,started=started,client_factory=client_factory)
+    capability=await guard.probe_google_budget_guard_transactions(db)
     if await _storage_contract(db)!=contract:_fail('google_funded_storage_contract_changed')
     _metadata_available()
     if phase.get('stop_requested') or guard._operation_clock()>=phase['deadline']:_fail('google_funded_preparation_expired')
     return _Preparation(db,guard._plain({'scope':scope,'grant_key':key,'record_digest':management.digest(record),
         'owner_auth':owner,'policy_binding':policies,'native':native.payload,'storage_contract_digest':contract,
         'proposal_id':'funded_proposal_'+uuid.uuid4().hex,'execution_claim_id':'funded_claim_'+uuid.uuid4().hex,
-        'operation_id':admission.operation_id,'spend_acknowledgment':{'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}}),_PREPARATION)
+        'operation_id':admission.operation_id,'spend_acknowledgment':{'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}}),capability,_PREPARATION)
 
 
 async def _write_preparation(db,*,session,snapshot,command,operation_id,current):
@@ -304,11 +306,10 @@ async def prepare_google_funded_creation(db,*,admission,client_factory=GoogleAds
         prepared=await guard._retained_operation(db,scope,admission.operation_id,'read',
             lambda:_read_preparation(db,admission,phase,client_factory),20,phase)
         if guard._operation_clock()>=phase['deadline']:_fail('google_funded_preparation_expired')
-        capability=await guard.probe_google_budget_guard_transactions(db)
         remaining=phase['deadline']-guard._operation_clock()
         if remaining<=0:_fail('google_funded_preparation_expired')
         result=await guard.run_google_budget_guard_transaction(db,**scope,operation_id=admission.operation_id,
-            capability=capability,planner=lambda snapshot:guard.FundedCreationPreparation(prepared),timeout_seconds=min(15,remaining),original_deadline=phase['deadline'])
+            capability=prepared.capability,require_existing_guard=True,planner=lambda snapshot:guard.FundedCreationPreparation(prepared),timeout_seconds=min(15,remaining),original_deadline=phase['deadline'])
         # No commit cache/readback can reach the issuer: exact original call ACK.
         if (result.get('committed') is not True or result.get('kind')!='funded_preparation'
             or result.get('operation_id')!=admission.operation_id):_fail('google_funded_preparation_ack_unproved')

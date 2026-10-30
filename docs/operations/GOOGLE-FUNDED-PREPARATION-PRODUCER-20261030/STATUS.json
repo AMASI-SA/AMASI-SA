@@ -1,5 +1,5 @@
 {
-  "status": "WIP_180_UNIT_PASS_15_AUTH_REPLICA_COLLECTED_CI_PENDING",
+  "status": "WIP_181_UNIT_PASS_INITIAL_AUTH15_PASS_FINAL_AUTH24_AND_LEGACY89_PENDING",
   "branch": "codex/google-funded-preparation-producer-wip-20261030",
   "base_remote": "aff2758e9e7b6e6eced66d7fe667dc9be48a719d",
   "scope": "Internal unattached preparation producer + narrow common guard typed command/precommit expiry + actual-reader phase adapter only; no public route/UI/worker/paid provider path/six writer or runtime flag changes.",
@@ -12,7 +12,7 @@
     "backend/integrations_control_center/google_ads_funded_creation_grants.py minimal optional reviewed acknowledgment typed projection; legacy configuration/revoke semantics preserved"
   ],
   "implemented_unverified": "Private one-shot explicit owner admission consumed before first await; actual bounded retained namespace/options/unique-index/effective-privilege reads (unknown/noauth failclosed); actual configured native/product/config/validate-only reads; mandatory common transaction creates original proposal+fence+RUNS prepared with creation_identity, consumes/activates only explicit grant, binds postTX epoch and user marker; original positive commit ACK mints initiation, unknown/readback never does. No provider sends.",
-  "verification": "180 selected unit tests passed-Werror11.13s, including34 newproducerunits;15 newauth-enabledreplica tests collected only. No newproducer actualMongo result yet. Existing runtimeflag remains sourceFalse; test monkeypatch is not a readiness or production claim.",
+  "verification": "181 selected local units passed-Werror11.83s, including35newproducer units. Initial exact2c077dc authCI49passed22.65s (34units+15authMongo/zero errors-skips) personally read. Current source has24authMongo cases collected and unaltered old264/89Mongo regression job staged; final exactCI pending.",
   "remaining": [
     "Meaningful unit and actual auth-enabled replica/fault/race/namespace tests and zero-skip CI",
     "Independent budget_audit review and root immutable review",
@@ -21,7 +21,7 @@
   ],
   "production_changed": false,
   "runtime_flags_changed": false,
-  "next": "Remote candidate/DraftPR then run dedicated auth replica CI, read actual logs, fix evidenced failures and request independent immutable review. Preserve six writers/floors; no activation attachment or provider consumer.",
+  "next": "Read final exact auth24 and old264/89 regression CI without weakening old tests, then wake independent reviewer on immutable SHA. No public attachment, live write, flags or release actions.",
   "completed_unit_boundaries": [
     "Producer-positive ACK\u2192existing reserve consumes exact prepared row and no provider sends",
     "Legacy configured grants missing explicit reviewed Arabic average-spend acknowledgment digest remain inert; full version/text digest bound to review",
@@ -40,5 +40,26 @@
     "concurrency_resources": "Metadata audits serialized; latch checked beforeTX/precommit/postACK. Retained read cap8 holds pending operations without driver cancellation. Concurrent probes/latch and pre/postcommit tests."
   },
   "auth_replica_ci_plan": "Dedicated auth-enabled loopback disposable Mongo8.0.26, TEST_ONLY root and per-test read/update-without-insert/full roles.15 required cases prove original ACK\u2192reserve, namespace/index/validator failclosed, commit91/close/ACKloss one-wire/no-continuation, released fence, independent owner role/password/disable conflicts and two-client permanent slot race. Zero skip/error/failure gate. No live RBAC/DB/provider access.",
-  "process_scope_limits": "Metadata uncertainty latch and128 consumed admission slots are bounded per process; local admission includes DB object identity for worker isolation, while durable slot remains exactuser/account/request_key independent ofrevision/client. Mongo TX+unique indexes serialize independent clients; no distributed metadata-uncertainty latch or production readiness claim."
+  "process_scope_limits": "Metadata uncertainty latch and128 consumed admission slots are bounded per process; local admission includes DB object identity for worker isolation, while durable slot remains exactuser/account/request_key independent ofrevision/client. Mongo TX+unique indexes serialize independent clients; no distributed metadata-uncertainty latch or production readiness claim.",
+  "initial_actual_auth_ci": {
+    "source": "2c077dc556a75185d5963db1a1a6ba9d329c3eb0",
+    "run_id": 41073790310,
+    "job_id": 124124454839,
+    "result": "49passed22.65s;34unit+15authenticatedMongo;0failure/error/skip",
+    "personally_read": true,
+    "commit_unknown_seconds": {
+      "server91": 9.737,
+      "connection_close": 0.496,
+      "ack_loss_after_commit": 0.04
+    },
+    "wire_attempts_each": 1,
+    "prepared_journal": [
+      "absent",
+      "absent",
+      "prepared"
+    ],
+    "provider_writes": 0
+  },
+  "no_ddl_adapter": "Removed redundant funded reserve ensure_indexes; configuration legacy ensure_indexes unchanged. Preparation/reserve/floor/settlement require existing account guard, so missing row/namespace cannot trigger synthetic guard insertion. Preparation final namespace audit occurs after native work AND engine probe inside retained read budget; source performs no index/collection creation.24auth cases include missing/changed namespace, generation/index drift and reserve missing guard, no upsert/recreate assertions.",
+  "external_metadata_limit": "Namespace UUID/index/privilege evidence is fresh bounded observation, not permanent authority. External admin DDL/privilege writers after final metadata read are not serialized by this helper; provider/OAuth/product writers retain their separate stated race limits. No production schema/readiness/migration claim from test flags."
 }

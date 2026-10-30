@@ -223,3 +223,55 @@ async def test_actual_two_clients_same_slot_contend_in_mongo_not_local_registry(
     assert await db[management.PROPOSALS].count_documents({'account_id':'123'})==1
     assert (await db[guard.BUDGET_GUARDS].find_one({'account_id':'123'}))['epoch']==2
     assert first.used and second.used and provider.writes==0
+
+@pytest.mark.asyncio
+async def test_actual_missing_account_guard_row_is_not_synthesized(monkeypatch,actual_db):
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    await db[guard.BUDGET_GUARDS].delete_many({'user_id':'owner','account_id':'123'})
+    with pytest.raises(HTTPException) as error:await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert error.value.detail['code']=='google_budget_guard_existing_state_unproved'
+    assert await db[guard.BUDGET_GUARDS].count_documents({})==0
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('collection',[grants.RUNS,management.PROPOSALS,management.FENCES,guard.BUDGET_GUARDS])
+async def test_actual_namespace_removed_after_probe_is_not_recreated(monkeypatch,actual_db,collection):
+    db,provider,key,preview=await case(monkeypatch,actual_db);original=guard.probe_google_budget_guard_transactions
+    async def removed(*args):
+        result=await original(*args);await db.drop_collection(collection);return result
+    monkeypatch.setattr(guard,'probe_google_budget_guard_transactions',removed)
+    with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert collection not in await db.list_collection_names()
+    assert (await db[grants.GRANTS].find_one({'grant_key':key}))['state']=='configured' and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('drop_collection',[False,True])
+async def test_actual_reserve_missing_guard_cannot_upsert_or_recreate(monkeypatch,actual_db,drop_collection):
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    prepared=await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    if drop_collection:await db.drop_collection(guard.BUDGET_GUARDS)
+    else:await db[guard.BUDGET_GUARDS].delete_many({'user_id':'owner','account_id':'123'})
+    with pytest.raises(HTTPException) as error:
+        await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key=key,
+            proposal_id=prepared['proposal_id'],execution_claim_id=prepared['execution_claim_id'],
+            initiation_ack=prepared['_initiation_ack'])
+    assert error.value.detail['code']=='google_budget_guard_existing_state_unproved'
+    assert await db[guard.BUDGET_GUARDS].count_documents({})==0
+    if drop_collection:assert guard.BUDGET_GUARDS not in await db.list_collection_names()
+    assert (await db[grants.RUNS].find_one({'grant_key':key}))['phase']=='prepared'
+    assert prepared['_initiation_ack'].used and provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change',['recreated_namespace','missing_index'])
+async def test_actual_changed_namespace_generation_or_index_after_probe_blocks(monkeypatch,actual_db,change):
+    db,provider,key,preview=await case(monkeypatch,actual_db);original=guard.probe_google_budget_guard_transactions
+    async def changed(*args):
+        result=await original(*args)
+        if change=='recreated_namespace':
+            await db.drop_collection(grants.RUNS);await provision_test_namespaces(db)
+        else:await db[grants.RUNS].drop_index('google_funded_run_identity')
+        return result
+    monkeypatch.setattr(guard,'probe_google_budget_guard_transactions',changed)
+    with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
+    assert (await db[grants.GRANTS].find_one({'grant_key':key}))['state']=='configured'

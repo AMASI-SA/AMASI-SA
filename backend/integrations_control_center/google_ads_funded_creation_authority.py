@@ -470,12 +470,12 @@ async def reserve_google_funded_creation(db,*,user_id,account_id,grant_key,propo
         or run.get('proposal_id')!=proposal_id or run.get('preparation_binding_digest')!=initiation_ack.preparation_binding_digest
         or run.get('preparation_operation_id')!=initiation_ack.preparation_operation_id):
         _fail('google_funded_preparation_unproved')
-    await grants.ensure_indexes(db)
+    # Provisioning is separate; a financial request never creates indexes.
     prepared=await _prepare(db,scope=scope,grant_key=grant_key,client_factory=client_factory,allow_consumed=True)
     capability=await guard.probe_google_budget_guard_transactions(db)
     operation_id='funded_reserve_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id})
     result=await guard.run_google_budget_guard_transaction(db,**scope,operation_id=operation_id,
-        capability=capability,planner=lambda snapshot:guard.FundedCreationReservation(grant_key,proposal_id,execution_claim_id,prepared))
+        capability=capability,require_existing_guard=True,planner=lambda snapshot:guard.FundedCreationReservation(grant_key,proposal_id,execution_claim_id,prepared))
     if result.get('committed') is not True or result.get('kind')!='funded_reservation' or result.get('operation_id')!=operation_id:
         _fail('google_funded_reservation_ack_unproved')
     now=management.now();grant=prepared.payload['intent']['binding']['grant']
@@ -501,7 +501,7 @@ async def floor_google_funded_creation(db,*,user_id,account_id,grant_key,proposa
     capability=await guard.probe_google_budget_guard_transactions(db)
     result=await guard.run_google_budget_guard_transaction(db,**scope,
         operation_id='funded_floor_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id}),
-        capability=capability,planner=lambda snapshot:guard.FundedCreationDispatchFloor(grant_key,proposal_id,execution_claim_id,prepared))
+        capability=capability,require_existing_guard=True,planner=lambda snapshot:guard.FundedCreationDispatchFloor(grant_key,proposal_id,execution_claim_id,prepared))
     result['authority_expired_after_commit']=not (pure._instant(result['authority_valid_from'])<=management.now()<pure._instant(result['authority_valid_until']))
     # This is storage evidence only. No live client or permission is returned.
     result['funded_dispatch_authorized']=False
@@ -514,4 +514,4 @@ async def settle_google_funded_creation(db,*,user_id,account_id,grant_key,execut
     capability=await guard.probe_google_budget_guard_transactions(db)
     return await guard.run_google_budget_guard_transaction(db,**scope,
         operation_id='funded_settle_'+management.digest({'grant_key':grant_key,'execution_claim_id':execution_claim_id}),
-        capability=capability,planner=lambda snapshot:guard.FundedCreationSettlement(grant_key,execution_claim_id,prepared))
+        capability=capability,require_existing_guard=True,planner=lambda snapshot:guard.FundedCreationSettlement(grant_key,execution_claim_id,prepared))

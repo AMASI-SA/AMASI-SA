@@ -313,3 +313,13 @@ async def test_unsupported_index_options_fail_even_when_value_is_falsey(monkeypa
     db.command=changed
     with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
     assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
+
+@pytest.mark.asyncio
+async def test_positive_prepare_and_reserve_never_invoke_provisioning_ddl(monkeypatch):
+    db,provider,key,preview=await setup(monkeypatch)
+    async def forbidden(*args,**kwargs):raise AssertionError('No index creation in funded request')
+    monkeypatch.setattr(grants,'ensure_indexes',forbidden)
+    result=await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    reserved=await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key=key,
+        proposal_id=result['proposal_id'],execution_claim_id=result['execution_claim_id'],initiation_ack=result['_initiation_ack'])
+    assert reserved['committed'] is True and provider.writes==0
