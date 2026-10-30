@@ -1,6 +1,8 @@
 # Salla ↔ Merchant identity and campaign coverage
 
-Decision: implement a bounded **candidate-evidence review**, then a separately reviewed identity-proof adapter. The available readers can establish each platform's native identity and the Ads↔Merchant account relationship. They do not establish that a Merchant offer represents a particular Salla parent or variant. SKU, title, numeric-ID coincidence, an owner-selected pair, or a shared URL must not acquire that authority.
+**2026-10-30 decision update:** the candidate-only UI below is deferred. Prioritize the publisher-backed positive proof path in [POSITIVE_PROOF_PATH.md](POSITIVE_PROOF_PATH.md). The earlier proposal is retained as historical assessment, not the next implementation assignment.
+
+Original assessment: implement a bounded **candidate-evidence review**, then a separately reviewed identity-proof adapter. The available readers can establish each platform's native identity and the Ads↔Merchant account relationship. They do not establish that a Merchant offer represents a particular Salla parent or variant. SKU, title, numeric-ID coincidence, an owner-selected pair, or a shared URL must not acquire that authority.
 
 This is a documentation-only assessment of production `622c310d8dcee13da61410bca6b3ac85134a9cfe` plus accepted Merchant source `3bbe11247b10c69a610b88bc87ba008e674924e4`. It is not a deployment, live-provider inspection, account-eligibility verdict, or authorization to change a feed/campaign/budget. Source identifiers below resolve to exact commit/path/blob records in [STATUS.json](STATUS.json). The accepted Merchant release is independently managed in PR1658; no additional release blocker is asserted here.
 

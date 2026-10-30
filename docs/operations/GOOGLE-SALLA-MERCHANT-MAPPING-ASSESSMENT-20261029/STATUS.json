@@ -6,8 +6,8 @@
   "accepted_merchant_source": "3bbe11247b10c69a610b88bc87ba008e674924e4",
   "accepted_merchant_tree": "25445dad74066d5bcc08e433712575e93752d5af",
   "branch": "codex/google-salla-merchant-mapping-assessment-20261029",
-  "scope": "Read-only source and official-doc assessment; three new documentation files only. No provider/database calls, runtime/test/workflow/intent edits, host/lease operations, plan writes, advertising or financial authorization.",
-  "decision": "Owner-triggered candidate-evidence review first; cross-provider mapping remains false until a trusted native export/binding record is established. Separate PMax destination-control contract before exclusive URL claims.",
+  "scope": "Docs-only source/official-document assessment in four documentation files; follow-up changes ASSESSMENT.md and STATUS.json and adds POSITIVE_PROOF_PATH.md. No live provider/database/connector calls, secrets/config values, runtime/test/workflow/intent edits, host/lease operations, plan/feed/campaign writes or financial authorization.",
+  "decision": "Defer candidate-only UI. Identify actual publisher and primary data source; require a reviewed publisher-authored parent/variant identity contract before implementing an adapter and positive proof verifier. An owned unpublished export manifest proves only Salla-to-local-row provenance.",
   "source_manifest": [
     {
       "id": "S01",
@@ -190,6 +190,62 @@
       "path": "backend/integrations_control_center/google_native_inventory_routes.py",
       "git_blob_sha": "a9dd1c01e4f0109211ca8c59b4097d8227f3258e",
       "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_native_inventory_routes.py"
+    },
+    {
+      "id": "S27",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_discovery.py",
+      "git_blob_sha": "0fea33b1bc01a808e7dedeb00b1b6244ec6ec06f",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_discovery.py"
+    },
+    {
+      "id": "S28",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_projection.py",
+      "git_blob_sha": "ba5576d04decfbb87b6399e67243436dc6f356f7",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_projection.py"
+    },
+    {
+      "id": "S29",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/salla_integration/service.py",
+      "git_blob_sha": "88c768f3014ec1ba367b9601a627ce29ed46fc47",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/salla_integration/service.py"
+    },
+    {
+      "id": "S30",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/salla_integration/config_store.py",
+      "git_blob_sha": "1078dc4465decc2357048bd8ba224d533261b820",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/salla_integration/config_store.py"
+    },
+    {
+      "id": "S31",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/salla_integration/easy_mode_webhook.py",
+      "git_blob_sha": "63a98bcdffb231ae57a246fbbb9f934becf8f784",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/salla_integration/easy_mode_webhook.py"
+    },
+    {
+      "id": "S32",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/product_intelligence_foundation.py",
+      "git_blob_sha": "a603443cc76d6ba5953372efb3c32df286f0399d",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/product_intelligence_foundation.py"
+    },
+    {
+      "id": "S33",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/integrations_control_center/google_oauth_security.py",
+      "git_blob_sha": "e97f8b681ce40d02e723df4a875f7db479a3ba37",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/integrations_control_center/google_oauth_security.py"
+    },
+    {
+      "id": "S34",
+      "commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+      "path": "backend/salla_integration/store_scope.py",
+      "git_blob_sha": "2cc47e32db801cb6cf8922b236f75a3e572492da",
+      "url": "https://github.com/AMASI-SA/AMASI-SA/blob/622c310d8dcee13da61410bca6b3ac85134a9cfe/backend/salla_integration/store_scope.py"
     }
   ],
   "validation": {
@@ -208,8 +264,8 @@
     "source_1658_duplicate_review": "cancelled by root after budget_audit preservation PASS; fresh CI remains with google_launch"
   },
   "continuation": {
-    "next_callable_slice": "POST /google_ads/commercial-plans/{plan_id}/merchant-mapping-review; proposed only",
-    "positive_mapping_dependency": "Trusted owner/store/Salla-parent-or-variant \u2194 full Merchant identity/data-source export or provider binding; no SKU/title/URL-only promotion.",
+    "next_callable_slice": "Publisher-specific backend adapter plus pure identity verifier, conditional on actual publisher contract. DataSource safe-metadata GET is prerequisite provenance only; no new UI assigned.",
+    "positive_mapping_dependency": "Actual publisher app name/link, Merchant account/primary data-source resource, and authoritative parent/variant-to-export-ID contract plus sanitized representative records. No guessed native IDs or owner-declared identity promotion.",
     "explicit_exclusions": [
       "provider/feed writes",
       "automatic selection",
@@ -249,6 +305,80 @@
     {
       "id": "SallaVariants",
       "url": "https://docs.salla.dev/product-variants/list"
+    },
+    {
+      "id": "P1",
+      "url": "https://apps.salla.sa/en/app/1916036203",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P2",
+      "url": "https://help.salla.sa/en/article/google-merchant-center-integration/v25sqpe3tj6f99g3y5fl6p8b",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P3",
+      "url": "https://help.salla.sa/article/أساليب-لعرض-منتجاتك-على-google-بدون-تكلفة/ia968rqbss29z4lqjqpgxy6v",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P4",
+      "url": "https://help.salla.sa/article/أسئلة-شائعة-حول-مركز-جوجل-للبيع-بالتجزئة-google-merchant-center/g2yib4kylipzp838nanmbm4r",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P5",
+      "url": "https://docs.salla.dev/5401096e0",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P6",
+      "url": "https://developers.google.com/merchant/api/guides/data-sources/view-sources",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P7",
+      "url": "https://developers.google.com/merchant/api/reference/rest/datasources_v1/accounts.dataSources",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P8",
+      "url": "https://developers.google.com/merchant/api/reference/rest/datasources_v1/accounts.dataSources.fileUploads",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P9",
+      "url": "https://developers.google.com/merchant/api/reference/rest/datasources_v1/accounts.dataSources.fileUploads/get",
+      "accessed_date": "2026-10-30"
+    },
+    {
+      "id": "P10",
+      "url": "https://docs.cloud.google.com/apis/docs/system-parameters",
+      "accessed_date": "2026-10-30"
     }
-  ]
+  ],
+  "followup_20261030": {
+    "supersedes_candidate_ui_recommendation": true,
+    "previous_remote_checkpoint": "213e47fc46a4e1d00e055e7c657110a6bb2ed930",
+    "document": "POSITIVE_PROOF_PATH.md",
+    "official_salla_publisher_exists": true,
+    "official_salla_public_app_id": "1916036203",
+    "actual_owner_publisher": "not observed",
+    "public_parent_variant_feed_id_contract": "not found in reviewed official sources; private publisher contract may exist",
+    "existing_inspected_registry_proof": "account/store provenance only; no authoritative feed-row binding found",
+    "app_settings_probe": "not performed; unknown publisher schema/access and documented credential fields",
+    "owner_input": [
+      "installed publisher app name or app-store link",
+      "Merchant account and primary data-source ID; name only as ambiguous locator if ID unavailable"
+    ],
+    "subsequent_publisher_input": [
+      "versioned authoritative parent/variant→export row ID contract",
+      "sanitized simple-product and two-sibling-variant records with full source/feed/language scope"
+    ],
+    "new_tests_run": false,
+    "validation": "34 exact source blobs, JSON/docs-only diff checks; ten earlier probes preserved, not rerun",
+    "provider_writes": 0,
+    "provider_reads": 0,
+    "host_actions": 0
+  }
 }
