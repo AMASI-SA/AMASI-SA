@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-node24-release-20261030",
-  "state": "SOURCE_CANDIDATE_REQUIRES_FRESH_CI_ORIGINAL_HOST_AND_INTENT_B",
+  "state": "SOURCE_A_ACCEPTED_ORIGINAL_HOST_AND_CI_INTENT_MATCH_READY_FOR_B",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
   "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
@@ -21,7 +21,7 @@
     "compatibility": "Exact2f85 readiness41067412294:host24job12410235342010/10;host20job12410235360810/10;Node22job12410235312857/57+build3.80/4.14;backend156 job124102353418. Rootprior63f fullprotocol57logread; rootactualhost24 source63f25pass/1expectedsource-onlyVite skip. Not finalB runtime proof."
   },
   "production_changed": false,
-  "host_actions": 0,
+  "host_actions": 1,
   "provider_writes": 0,
   "paid_writes": 0,
   "lease_created": false,
@@ -34,6 +34,20 @@
     "Actual owner Merchant choices/read UI acceptance; currentGoogleUI reportedtemporaryrequestlimit withoutOAuth inference.",
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
-  "next_safe_action": "Create exactdirect622c sourceA and run freshCI; nofreeze/lease/publish before reviewedsource and originalhostproof.",
-  "updated_at": "2026-10-30T13:58:31.230Z"
+  "next_safe_action": "Create intent-only B sole parent exactA, fresh B CI both host20/24 cleanclone normal build/runtime and actual originalhost default24 normalbuild; then review/merge/guard/publish once.",
+  "updated_at": "2026-10-30T14:12:25.035Z",
+  "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
+  "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
+  "pr": 1663,
+  "verification": {
+    "source_ci": "25/25 PR workflows success; exact push full41067784066 backend1855/29.73s frontend689/35suites build6.54; exact choices41067784108 backend422/22.68 including74 actual Mongo zero skips, frontend122 build6.46",
+    "release_ci": "41067836125 success, source Node22 57/57 zero skips and double4.01/3.68; host20/24 admission successful; final B full runtime matrix still required",
+    "root_review": "Exact source composition/diff/manifest review; primary5CI job logs read; root external candidate loader PASS at exactA/J. Initial root loader invocation generated own scripts pycache; moved own generated directory outside checkout, reran python-B successfully; no source change.",
+    "original_host": "After inactive guard, isolated /tmp/google1663-source-a-20261030 exactA; governed pinned22 install+build:release+freeze-intent completed successfully. Whole intent exactly matches fresh CI artifact.",
+    "intent_bytes": 973123,
+    "intent_sha256": "7a2826c52d56a83bc929474f8680f056d93ad67ee55850d061a3c7ea03485e4a",
+    "artifact_id": 12982962222,
+    "artifact_zip_sha256": "54ba46ff4ad3618471020c54dc26fd07662152a37500f4a62ab68936af51f406",
+    "runtime_id": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314"
+  }
 }
