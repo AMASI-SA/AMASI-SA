@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-node24-release-20261030",
-  "state": "SOURCE_A_ACCEPTED_ORIGINAL_HOST_AND_CI_INTENT_MATCH_READY_FOR_B",
+  "state": "A_B_SEALED_B_CI_AND_ACTUAL_HOST_NORMAL_BUILD_PENDING",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
   "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
@@ -35,7 +35,7 @@
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
   "next_safe_action": "Create intent-only B sole parent exactA, fresh B CI both host20/24 cleanclone normal build/runtime and actual originalhost default24 normalbuild; then review/merge/guard/publish once.",
-  "updated_at": "2026-10-30T14:12:25.035Z",
+  "updated_at": "2026-10-30T14:12:47.337Z",
   "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
   "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
   "pr": 1663,
@@ -49,5 +49,7 @@
     "artifact_id": 12982962222,
     "artifact_zip_sha256": "54ba46ff4ad3618471020c54dc26fd07662152a37500f4a62ab68936af51f406",
     "runtime_id": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314"
-  }
+  },
+  "intent_b": "6f6566168f1a52851f6ebdc629cb76e09728357e",
+  "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1"
 }
