@@ -1,7 +1,4 @@
 """Safe native data-source projection: synthetic official-v1 response shapes."""
-from copy import deepcopy
-import json
-
 import pytest
 
 from integrations_control_center.google_merchant_data_sources_proof import (
@@ -50,9 +47,12 @@ def test_all_documented_source_kinds_preserved_without_loading_whole_configurati
 @pytest.mark.parametrize("field,value", [
     ("name", "accounts/999/dataSources/18"), ("name", "accounts/123/dataSources/018"),
     ("dataSourceId", "19"), ("dataSourceId", 18), ("input", "NEW_KIND"),
-    ("input", None), ("fileInput", {"fileInputType": "FETCH", "fetchSettings": {"password": "PRIVATE"}}),
+    ("input", None), ("input", []), ("input", {}),
+    ("fileInput", {"fileInputType": []}), ("fileInput", {"fileInputType": "FILE_INPUT_TYPE_UNSPECIFIED"}),
+    ("fileInput", {"fileInputType": "FETCH", "fetchSettings": {"password": "PRIVATE"}}),
     ("displayName", "PRIVATE"), ("primaryProductDataSource", {"feedLabel": "SA"}),
     ("primaryProductDataSource", {"feedLabel": "SA", "contentLanguage": "ar", "defaultRule": {}}),
+    ("primaryProductDataSource", {"feedLabel": "SA_TEST", "contentLanguage": "ar"}),
 ])
 def test_foreign_malformed_and_unrequested_configuration_is_refused_without_echo(field, value):
     item = source(); item[field] = value
@@ -81,3 +81,10 @@ def test_empty_proto_list_and_final_empty_token_are_complete():
 @pytest.mark.parametrize("merchant", ["0", "01", "123/other", "123?fields=*", "9223372036854775808", 123, True])
 def test_canonical_account_only(merchant):
     with pytest.raises(DataSourceProofError): parse_data_source_page({}, merchant)
+
+
+def test_non_file_supplemental_scope_must_be_unset_per_native_contract():
+    item = source("supplementalProductDataSource", input_type="API")
+    with pytest.raises(DataSourceProofError): parse_data_source_page({"dataSources": [item]}, "123")
+    item["supplementalProductDataSource"] = {}
+    assert parse_data_source_page({"dataSources": [item]}, "123")[0][0]["feed_label"] is None

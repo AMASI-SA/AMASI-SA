@@ -93,7 +93,7 @@ def _source(raw, merchant_id):
     if not isinstance(detail, dict) or set(detail) - detail_keys:
         refuse()
     feed, language = detail.get("feedLabel"), detail.get("contentLanguage")
-    if "feedLabel" in detail and (type(feed) is not str or not re.fullmatch(r"[A-Z0-9_-]{1,20}", feed)):
+    if "feedLabel" in detail and (type(feed) is not str or not re.fullmatch(r"[A-Z0-9-]{1,20}", feed)):
         refuse()
     if "contentLanguage" in detail and (type(language) is not str or not re.fullmatch(r"[a-z]{2}", language)):
         refuse()
@@ -105,6 +105,8 @@ def _source(raw, merchant_id):
     if kind == "promotionDataSource" and language is None:
         refuse()
     if kind == "localInventoryDataSource" and raw["input"] != "FILE":
+        refuse()
+    if kind == "supplementalProductDataSource" and raw["input"] != "FILE" and feed is not None:
         refuse()
     file_kind = None
     if "fileInput" in raw:
