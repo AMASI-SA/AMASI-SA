@@ -96,11 +96,31 @@ async def owner(db, user):
 
 
 def attach_google_ads_management_routes(router, db, current_user, *, client_factory=GoogleAdsClient, ai_client_factory=None):
+    from .google_merchant_observation_choices import attach_google_merchant_observation_choices
+    attach_google_merchant_observation_choices(router, db, current_user)
+    from .google_merchant_observation_routes import attach_google_merchant_observation_routes
+    attach_google_merchant_observation_routes(router, db, current_user)
     root = "/google_ads"
     from .google_commercial_plan import attach_google_commercial_plan_routes
     attach_google_commercial_plan_routes(router, db, current_user)
     from .google_product_catalog_routes import attach_google_product_catalog_review_routes
     attach_google_product_catalog_review_routes(router, db, current_user)
+    from .google_plan_store_observations import attach_google_plan_store_observation_routes
+    attach_google_plan_store_observation_routes(router, db, current_user)
+    from .google_category_membership_routes import attach_google_category_membership_routes
+    attach_google_category_membership_routes(router, db, current_user)
+    from .google_linked_campaign_routes import attach_google_linked_campaign_routes
+    attach_google_linked_campaign_routes(router, db, current_user)
+    from .google_live_category_routes import attach_google_live_category_routes
+    attach_google_live_category_routes(router, db, current_user)
+    from .google_native_inventory_routes import attach_google_native_inventory_routes
+    attach_google_native_inventory_routes(router, db, current_user)
+    from .google_prior_season_routes import attach_google_prior_season_routes
+    attach_google_prior_season_routes(router, db, current_user)
+    from .google_ads_storage_commit_readiness import attach_google_ads_storage_commit_readiness_routes
+    attach_google_ads_storage_commit_readiness_routes(router, db, current_user)
+    from .google_ads_namespace_prerequisites import attach_google_ads_namespace_prerequisite_routes
+    attach_google_ads_namespace_prerequisite_routes(router, db, current_user)
     from .google_ads_budget_storage_readiness import attach_google_ads_budget_storage_readiness_routes
     attach_google_ads_budget_storage_readiness_routes(router, db, current_user)
     from .google_ads_automation_policy import attach_google_ads_automation_policy_routes

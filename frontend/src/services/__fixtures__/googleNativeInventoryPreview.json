@@ -1,0 +1,287 @@
+{
+  "generated_by": "actual_management_http_put_category_get_inventory_post",
+  "plan": {
+    "plan_id": "seasonal-focus",
+    "revision": 3,
+    "fields": {
+      "instruction": "ركز على هدايا الشتاء",
+      "season": "الشتاء",
+      "starts_on": "2026-11-01",
+      "ends_on": "2026-12-31",
+      "market": "SA",
+      "audience": "رجال يبحثون عن هدية",
+      "message": "دفء الشتاء",
+      "category_url": "https://amasi-sa.com/shawls",
+      "category_ids": [],
+      "pinned_product_ids": [
+        "123"
+      ],
+      "excluded_product_ids": [],
+      "exclusions": [],
+      "selection_mode": "pinned_only",
+      "calendar": "gregorian",
+      "prior_season_context": null,
+      "limits": null
+    },
+    "review_context": {
+      "sales_last_14_days": {
+        "from": "2026-10-15",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "sales_previous_14_days": {
+        "from": "2026-10-01",
+        "to": "2026-10-14",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_30_days": {
+        "from": "2026-09-29",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "trend_last_90_days": {
+        "from": "2026-07-31",
+        "to": "2026-10-28",
+        "timezone": "Asia/Riyadh",
+        "status": "not_collected"
+      },
+      "prior_season": {
+        "status": "not_collected",
+        "calendar": "gregorian"
+      },
+      "cost_quality": "unknown",
+      "profitability": null,
+      "inventory": "not_verified",
+      "category_membership": "not_verified",
+      "merchant_offer_mapping": "not_verified",
+      "cross_platform_results": [],
+      "attribution_rule": "Keep provider/account/currency/period separate; campaign-product associations are not order attribution; never sum provider conversions as store orders.",
+      "cross_platform_success_rule": "Candidate for a Google test only; no guarantee of Google success.",
+      "new_products": "May be proposed without sales history; execution requires separately approved test budget and eligibility proofs."
+    },
+    "created_at": "2026-10-29T12:00:00+00:00",
+    "updated_at": "2026-10-29T12:00:00+00:00",
+    "updated_by": "owner",
+    "provider_writes": 0,
+    "execution_authorized": false,
+    "status": "reviewed_context_only",
+    "natural_language_extraction_available": true
+  },
+  "category": {
+    "plan_id": "seasonal-focus",
+    "plan_revision": 3,
+    "status": "live_membership_observation_only",
+    "store_id": "9",
+    "category_id": "8",
+    "category_url": "https://amasi-sa.com/shawls",
+    "category_status": "active",
+    "observed_started_at": "2026-10-29T12:00:00+00:00",
+    "observed_finished_at": "2026-10-29T12:00:00+00:00",
+    "source": "salla_owned_category_products_fixed_get",
+    "provider_revision": null,
+    "remote_snapshot_atomic": false,
+    "pagination_traversal_complete": true,
+    "pages_read": 1,
+    "products_observed": 3,
+    "response_digest": "7dc4180ad1d5ae488951b434a7d0112683184f672db3116d5dadbbac934c07e1",
+    "stored_scope_authority": "declared_or_unknown",
+    "unresolved_exclusion_ids": [],
+    "mezan_product_mapping_verified": false,
+    "inventory_verified": false,
+    "execution_authorized": false,
+    "products": [
+      {
+        "salla_product_id": "1",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "unknown",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "2",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "hidden",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      },
+      {
+        "salla_product_id": "3",
+        "membership": "observed_category_endpoint",
+        "excluded": false,
+        "category_hidden": false,
+        "product_status": "out",
+        "inventory": "unproved",
+        "eligible_for_ad_selection": false
+      }
+    ],
+    "limitations": [
+      "Membership observation only; inventory, sizes, preparation time and catalog offer mapping unproved",
+      "Completed page traversal is not an atomic category snapshot or campaign readiness",
+      "No automatic selection, ranking, profit inference or funding authority"
+    ]
+  },
+  "response": {
+    "plan_id": "seasonal-focus",
+    "plan_revision": 3,
+    "status": "native_stock_observations_only",
+    "store_id": "9",
+    "category_id": "8",
+    "category_response_digest": "7dc4180ad1d5ae488951b434a7d0112683184f672db3116d5dadbbac934c07e1",
+    "category_traversal_complete": true,
+    "selected_product_ids": [
+      "1",
+      "2",
+      "3"
+    ],
+    "products": [
+      {
+        "salla_product_id": "1",
+        "status": "sale",
+        "is_available": true,
+        "parent_stock": {
+          "quantity": "0",
+          "unlimited": null,
+          "state": "zero_unlimited_unknown"
+        },
+        "variants": [
+          {
+            "variant_id": "7",
+            "stock": {
+              "quantity": "2",
+              "unlimited": null,
+              "state": "positive"
+            },
+            "source_option_labels": [
+              {
+                "option_id": "8",
+                "value_id": "9",
+                "option_label": "Size",
+                "value_label": "Large",
+                "is_out_of_stock": true
+              }
+            ],
+            "size_coverage_verified": false,
+            "purchasability_verified": false
+          }
+        ],
+        "variant_traversal_complete": true,
+        "simple_product_observed": false,
+        "source_digest": "469fa66f853040bf68cf49ff785d216d329698e62422398f915cefc2c9a6b963",
+        "globally_ready": false,
+        "size_coverage_verified": false,
+        "preparation_time": null,
+        "merchant_mapping_verified": false,
+        "eligible_for_ad_selection": false,
+        "execution_authorized": false,
+        "blocking_reasons": [
+          "global_stock_unproved",
+          "preparation_time_unproved",
+          "size_coverage_unproved",
+          "paid_authority_absent",
+          "native_option_value_out_of_stock"
+        ],
+        "customer_url": "https://amasi-sa.com/item-1",
+        "native_variant_page_digests": [
+          "4f3a3c85d8855324407d5f3ef46951583645ffc7b8b74cc3f2cac3fbc80bff67"
+        ],
+        "observed_at": "2026-10-29T12:00:00+00:00",
+        "provider_revision": null,
+        "remote_snapshot_atomic": false
+      },
+      {
+        "salla_product_id": "2",
+        "status": "sale",
+        "is_available": true,
+        "parent_stock": {
+          "quantity": null,
+          "unlimited": true,
+          "state": "positive"
+        },
+        "variants": [
+          {
+            "variant_id": "8",
+            "stock": {
+              "quantity": "0",
+              "unlimited": null,
+              "state": "zero_unlimited_unknown"
+            },
+            "source_option_labels": null,
+            "size_coverage_verified": false,
+            "purchasability_verified": false
+          }
+        ],
+        "variant_traversal_complete": true,
+        "simple_product_observed": false,
+        "source_digest": "df377db4239df54ff82a9ac26c7a16ecac10e844a0d2973b9923c3aa114964c8",
+        "globally_ready": false,
+        "size_coverage_verified": false,
+        "preparation_time": null,
+        "merchant_mapping_verified": false,
+        "eligible_for_ad_selection": false,
+        "execution_authorized": false,
+        "blocking_reasons": [
+          "global_stock_unproved",
+          "preparation_time_unproved",
+          "size_coverage_unproved",
+          "paid_authority_absent"
+        ],
+        "customer_url": "https://amasi-sa.com/item-2",
+        "native_variant_page_digests": [
+          "53da26fbaf025d625b7577140b3063774f9d6f81f166a6fa0b6c92d8ae9d5062"
+        ],
+        "observed_at": "2026-10-29T12:00:00+00:00",
+        "provider_revision": null,
+        "remote_snapshot_atomic": false
+      },
+      {
+        "salla_product_id": "3",
+        "status": "sale",
+        "is_available": true,
+        "parent_stock": {
+          "quantity": "0",
+          "unlimited": false,
+          "state": "zero"
+        },
+        "variants": [],
+        "variant_traversal_complete": true,
+        "simple_product_observed": true,
+        "source_digest": "f81f52d49711f53aad15ce103f85ec7e1b1a30b3ec0097f91b9c310fd4fcc9d6",
+        "globally_ready": false,
+        "size_coverage_verified": false,
+        "preparation_time": null,
+        "merchant_mapping_verified": false,
+        "eligible_for_ad_selection": false,
+        "execution_authorized": false,
+        "blocking_reasons": [
+          "global_stock_unproved",
+          "preparation_time_unproved",
+          "size_coverage_unproved",
+          "paid_authority_absent"
+        ],
+        "customer_url": "https://amasi-sa.com/item-3",
+        "native_variant_page_digests": [
+          "36178bcc8ffcc0cee86123482ea32e02e54d14eac6bc925b0deae2ea69756d15"
+        ],
+        "observed_at": "2026-10-29T12:00:00+00:00",
+        "provider_revision": null,
+        "remote_snapshot_atomic": false
+      }
+    ],
+    "observed_started_at": "2026-10-29T12:00:00+00:00",
+    "observed_finished_at": "2026-10-29T12:00:00+00:00",
+    "provider_revision": null,
+    "remote_snapshot_atomic": false,
+    "globally_ready": false,
+    "size_coverage_verified": false,
+    "preparation_time": null,
+    "merchant_mapping_verified": false,
+    "execution_authorized": false
+  }
+}

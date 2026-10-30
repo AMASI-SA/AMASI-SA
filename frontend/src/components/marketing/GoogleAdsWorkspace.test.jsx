@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import api from "../../lib/api";
 import GoogleAdsWorkspace, { GoogleCapabilityMatrix, googleCreativeEditAllowed, googleTypedCampaignContext } from "./GoogleAdsWorkspace";
 
+jest.mock("../../context/AuthContext", () => ({ useAuth: () => ({ user: { id: "owner", role: "owner" }, authStatus: "authenticated" }) }));
 jest.mock("../../lib/api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), put: jest.fn() } }));
 const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, "crypto");
 beforeAll(() => { Object.defineProperty(globalThis, "crypto", { configurable: true, value: require("crypto").webcrypto }); });

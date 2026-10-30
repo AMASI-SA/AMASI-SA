@@ -1,11 +1,45 @@
 name: Google Ads full management
 
 on:
+  push:
+    branches: [codex/google-merchant-observation-attachment-20261029, codex/google-merchant-observation-release-m622-20261029, codex/google-merchant-node24-release-20261030]
   pull_request:
     branches: [hotfix/prod-snap-meta-final]
     paths:
       - "backend/integrations_control_center/google_ads*"
+      - "backend/integrations_control_center/google_merchant_*.py"
+      - "backend/tests/test_google_merchant_*.py"
+      - "backend/tests/test_google_bound_read_session*.py"
+      - "frontend/src/services/googleMerchantObservationChoices*"
       - "backend/integrations_control_center/google_commercial_plan.py"
+      - "backend/tests/test_google_plan_ui_writer_fixtures.py"
+      - "backend/integrations_control_center/google_prior_season_*.py"
+      - "backend/tests/test_google_prior_season*.py"
+      - "frontend/src/services/googlePriorSeasonReview*"
+      - "frontend/src/services/__fixtures__/googlePriorSeasonReview.json"
+      - "frontend/src/services/__fixtures__/googleCommercialPlanPriorContext.json"
+      - "backend/integrations_control_center/google_native_inventory_*.py"
+      - "frontend/src/services/googleNativeInventoryPreview*"
+      - "frontend/src/services/__fixtures__/googleNativeInventoryPreview.json"
+      - "backend/integrations_control_center/google_live_category_*.py"
+      - "backend/tests/test_google_live_category_*.py"
+      - "frontend/src/services/googleLiveCategoryPreview*"
+      - "frontend/src/services/__fixtures__/googleLiveCategoryPreview.json"
+      - "backend/integrations_control_center/google_linked_campaign_*.py"
+      - "backend/tests/test_google_linked_campaign_*.py"
+      - "frontend/src/services/googleLinkedCampaignEvidence*"
+      - "frontend/src/services/__fixtures__/googleLinkedCampaignEvidence.json"
+      - "backend/integrations_control_center/google_category_*.py"
+      - "backend/tests/test_google_category_*.py"
+      - "frontend/src/services/googleCategoryMembershipReview*"
+      - "backend/integrations_control_center/google_store_product_observations.py"
+      - "backend/integrations_control_center/google_plan_store_observations.py"
+      - "backend/integrations_control_center/google_order_source_binding.py"
+      - "backend/integrations_control_center/google_order_timestamp_evidence.py"
+      - "backend/tests/test_google_store_product_observations.py"
+      - "backend/tests/test_google_plan_store_observations.py"
+      - "backend/tests/test_google_order_source_binding.py"
+      - "backend/tests/test_google_order_timestamp_evidence.py"
       - "backend/product_inventory_proof.py"
       - "backend/product_v2_details_routes.py"
       - "backend/ads_manager/**"
@@ -93,7 +127,34 @@ jobs:
           backend/tests/test_google_ads_verification.py
           backend/tests/test_google_ads_client.py
           backend/tests/test_google_ads_reporting_v1.py
+          backend/tests/test_google_bound_read_session.py
+          backend/tests/test_google_merchant_product_observation.py
+          backend/tests/test_google_merchant_observation_routes.py
+          backend/tests/test_google_merchant_observation_choices.py
+          backend/tests/test_google_merchant_observation_attachment.py
           backend/tests/test_google_commercial_plan.py
+          backend/tests/test_google_plan_ui_writer_fixtures.py
+          backend/tests/test_google_prior_season_context.py
+          backend/tests/test_google_prior_season_observations.py
+          backend/tests/test_google_prior_season_routes.py
+          backend/tests/test_google_prior_season_review_fixture.py
+          backend/tests/test_google_native_inventory_proof.py
+          backend/tests/test_google_native_inventory_reader.py
+          backend/tests/test_google_native_inventory_routes.py
+          backend/tests/test_google_live_category_proof.py
+          backend/tests/test_google_live_category_reader.py
+          backend/tests/test_google_live_category_routes.py
+          backend/tests/test_google_live_category_integration.py
+          backend/tests/test_google_linked_campaign_evidence.py
+          backend/tests/test_google_linked_campaign_reader.py
+          backend/tests/test_google_linked_campaign_routes.py
+          backend/tests/test_google_linked_campaign_integration.py
+          backend/tests/test_google_category_membership.py
+          backend/tests/test_google_category_membership_routes.py
+          backend/tests/test_google_store_product_observations.py
+          backend/tests/test_google_plan_store_observations.py
+          backend/tests/test_google_order_source_binding.py
+          backend/tests/test_google_order_timestamp_evidence.py
           backend/tests/test_google_ads_plan_suggestions.py
           backend/tests/test_google_ads_workspace.py
           backend/tests/test_google_ads_overview.py
@@ -121,11 +182,28 @@ jobs:
           src/services/marketingPerformance.test.js
           src/services/adsManager.test.js
           src/components/marketing/GoogleAdsWorkspace.test.jsx
+          src/components/marketing/GoogleMerchantObservation.test.jsx
+          src/components/marketing/GoogleMerchantObservationSelector.test.jsx
+          src/components/marketing/GoogleMerchantObservationAttachment.test.jsx
+          src/services/googleMerchantObservationChoices.test.js
+          src/lib/api.authRefresh.test.js
           src/components/marketing/GoogleAnalysisAttempts.test.jsx
           src/components/marketing/GoogleAutomationPolicy.test.jsx
           src/components/marketing/GoogleCreationPolicy.test.jsx
           src/components/marketing/GoogleCommercialPlan.test.jsx src/services/googleCommercialPlanSuggestion.test.js
+          src/components/marketing/GoogleCommercialPlanPriorIntegration.test.jsx
+          src/components/marketing/GoogleStoragePrerequisitesIntegration.test.jsx
+          src/components/marketing/GooglePriorSeasonReview.test.jsx
+          src/services/googlePriorSeasonReview.test.js
           src/components/marketing/GooglePinnedCatalogReview.test.jsx
+          src/components/marketing/GoogleCategoryMembershipReview.test.jsx
+          src/components/marketing/GoogleStoreProductObservations.test.jsx
+          src/components/marketing/GoogleLinkedCampaignEvidence.test.jsx
+          src/services/googleLinkedCampaignEvidence.test.js
+          src/services/googleNativeInventoryPreview.test.js
+          src/components/marketing/GoogleNativeInventoryPreview.test.jsx
+          src/services/googleLiveCategoryPreview.test.js
+          src/components/marketing/GoogleLiveCategoryPreview.test.jsx
           src/components/marketing/GoogleRecommendationAction.test.jsx
           src/components/marketing/GoogleCampaignComposer.test.jsx
           src/components/marketing/GoogleAdsIntelligenceCard.test.jsx

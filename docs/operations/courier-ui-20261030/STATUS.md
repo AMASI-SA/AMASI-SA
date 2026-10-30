@@ -11,3 +11,9 @@ Production unchanged by this task. Read-only host check observed /app HEAD61da14
 Mobile companion PR AMASI-SA/amasi-mobile#307 sourceef8ce447146818beeefd7b3938b757b8ed5faf8e produced signed1.0.15/code16 APK via local GitHub build40963633590. App35 tests, TypeScript, Expo doctor18/18 and signature/version/Firebase binary checks passed. Physical phone delivery and server outbound push enablement are still unverified.
 
 Next safe action: the other publication owner closes its lease; reread remote/host/AGENTS and preserve newer production changes; integrate this patch onto current production, rerun CI, freeze a new matching v5 intent, perform clean adapter rehearsal, prepare/prepublish and authorized publication, then require three matching probes and active=false. Do not freeze or publish a stale source based only on the old candidate artifact. No actual order, collection or ledger was modified. Issue#1006 is full; task PR and this document are the continuation record.
+
+## Resume integration — 2026-10-30
+
+Fresh authenticated host read: /app and origin production both fb12300c353cb1875f4462dc279b25360913af5c; active=false; tracked changes empty. Isolated /tmp clone merged that production into the task branch without conflicts. Diff against current production remains only the original five backend/test files and this status document. Prior runtime evidence remains historical until integrated CI passes. No production source, lease, orders or ledgers changed by this integration.
+
+Next: push the integrated task checkpoint, inspect fresh CI; freeze a NEW v5 source/intent for this integrated source, rehearse the adapter, then authorized guarded publication and three matching probes. Issue #1006 has 2500 comments; this document and PR #1641 remain the task continuation record.

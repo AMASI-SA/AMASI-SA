@@ -1,0 +1,87 @@
+{
+  "task_id": "GOOGLE-MERCHANT-OBSERVATION-RELEASE-M622-20261029",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-merchant-observation-release-m622-20261029",
+  "state": "fresh_focused_pass_remote_source_ci_pending",
+  "source_identity": "This commit is the new source checkpoint; status-only successors will record its exact SHA.",
+  "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "parent_production_tree": "c4074b70bc63d0bc44759256841319938516af20",
+  "accepted_source_sha": "3bbe11247b10c69a610b88bc87ba008e674924e4",
+  "accepted_source_tree": "25445dad74066d5bcc08e433712575e93752d5af",
+  "accepted_status_sha": "389e05d9e237488ce9517ae1c596ee1f7eeeef64",
+  "accepted_pr": 1657,
+  "accepted_nondoc_blob_manifest": {
+    ".github/workflows/google-ads-full-management.yml": "dabecf95e9d9577bb7849bb56fa4ae365ea03f7e",
+    ".github/workflows/google-merchant-observation-choices.yml": "945776ab84c3d5347140a8cbd58293cdb0c1d6e1",
+    ".github/workflows/google-merchant-observation-ui.yml": "15c5d46c42818eac5f9f2e630d5290e142329101",
+    ".github/workflows/google-merchant-observation.yml": "afceda7764f1e9de45a471b3798009850b03523a",
+    ".github/workflows/google-merchant-owner-observation.yml": "8f9725775d692e19dd182f15cebc3e766d21bcb3",
+    "backend/integrations_control_center/google_ads_reporting.py": "d3ccdc5a961ec6dd0037d880e8e0de0b6ad3cd1b",
+    "backend/integrations_control_center/google_ads_routes.py": "04bc5aa4e7a0708af5159457cb2ddb8811f0f34f",
+    "backend/integrations_control_center/google_merchant_observation_choices.py": "cc4cd33410b9f737f7fa8bc7706415b837cadc19",
+    "backend/integrations_control_center/google_merchant_observation_routes.py": "41aae137a8ea3ef03cb258decc4ea72a495acedf",
+    "backend/integrations_control_center/google_merchant_product_observation.py": "38f86c9554d76b288828ec2b69ca0cce3b61a634",
+    "backend/tests/test_google_bound_read_session.py": "e1dd609dd0118a4cc81e6c2900035c5d75727bd3",
+    "backend/tests/test_google_bound_read_session_mongo.py": "b59f16f5e25b63cdcf8bf8b040180a9418f957b1",
+    "backend/tests/test_google_merchant_observation_attachment.py": "bfc375ff32b296e44c4bea7342543a6593bab628",
+    "backend/tests/test_google_merchant_observation_choices.py": "197b897ed649addc721a0c529ffb5f2979e8be1d",
+    "backend/tests/test_google_merchant_observation_choices_mongo.py": "ff0f92a4105d0290b7d508cf95dd83cc47090389",
+    "backend/tests/test_google_merchant_observation_routes.py": "a07991513725921174534cdb2ce18463fcf3b80f",
+    "backend/tests/test_google_merchant_observation_routes_mongo.py": "eb18a84b2d9f226a2bd4bda90e782d08a482282d",
+    "backend/tests/test_google_merchant_product_observation.py": "2d0d4561a69233dabc793e1eb8261db534aa4ea2",
+    "frontend/src/components/marketing/GoogleAdsWorkspace.jsx": "e7630ee9e47f0629850c5417ce38f2ec8720c563",
+    "frontend/src/components/marketing/GoogleMerchantObservation.jsx": "531398260ddf74497e4721c378d9ed015ddfde32",
+    "frontend/src/components/marketing/GoogleMerchantObservation.test.jsx": "fcfecd7f88f542a22ce50536aaed1e66b3cc0ff6",
+    "frontend/src/components/marketing/GoogleMerchantObservationAttachment.test.jsx": "ef53d2aeee5cca395f90c4c6ea7cf5bae7062484",
+    "frontend/src/components/marketing/GoogleMerchantObservationSelector.jsx": "0de238df623ed9f7b8fc60052c2de07af9645817",
+    "frontend/src/components/marketing/GoogleMerchantObservationSelector.test.jsx": "d15d608dcabd9a596aa7cf169e0adb5b6aeb828d",
+    "frontend/src/services/googleMerchantObservationChoices.js": "e06c17a338d13580d1983174ca1df846a474fa4d",
+    "frontend/src/services/googleMerchantObservationChoices.test.js": "5aabbe38cb358f06a6ee9cb21a6c6d9d80e77b9a"
+  },
+  "allowed_delta": {
+    "copied_files": 26,
+    "byte_exact_files": 24,
+    "workflow_trigger_only_additions": [
+      ".github/workflows/google-ads-full-management.yml",
+      ".github/workflows/google-merchant-observation-choices.yml"
+    ],
+    "new_docs": "Only this release STATUS; no old task documents copied."
+  },
+  "preservation": {
+    "5595_to_current_production": [
+      "release/release-intent-v5.json"
+    ],
+    "overlap_with_accepted_nondoc_delta": [],
+    "intent": "Current622c intent preserved byte-for-byte; no Source B yet.",
+    "commercial_features": "All commercial1655 source inherited unchanged except reviewed additive Merchant router/workspace/CI hunks.",
+    "foreign_paths": "No Reports/Snap/TikTok/Meta/GA4/Search Console or unrelated modifications."
+  },
+  "accepted_evidence": {
+    "source_ci": "Exact3bbe:1855 backend,689UI/35suites/build; dedicated422 including74actualMongo0skip,122UI/build.",
+    "source_reviews": "Independent budget_audit and root accepted; each reran10actualrouter/auth+6Workspace/AuthProvider cases and inspected exact CI.",
+    "qualification": "Historical accepted source evidence; new direct-production candidate needs fresh verification and CI."
+  },
+  "verification": {
+    "fresh_focused": {
+      "backend": "358 passed4.80s,-Werror0skip",
+      "frontend": "25 passed3suites5.272s,0skip,actualWorkspace/AuthProvider/page with --runTestsByPath",
+      "parity": "24 exact accepted non-doc blobs;2 workflows differ only added release branch trigger;current production intent15a28cb68a5b9b4be653596bd16922f325b5cd69 preserved;diffcheckpass",
+      "test_invocation_correction": "Initial frontend command used a nonexistent page filename as a pattern;21 tests in2suites passed. Corrected to existing MarketingPlatformWorkspace.google.test.jsx and strict --runTestsByPath, yielding25/3. No source change."
+    },
+    "fresh_ci": "pending",
+    "fresh_review": "pending"
+  },
+  "production_changed_by_this_task": false,
+  "host_actions": 0,
+  "provider_calls": 0,
+  "paid_writes": 0,
+  "deploy_ready": false,
+  "remaining": [
+    "Fresh source CI and independent manifest/integration review.",
+    "Root must finish1655 publication, verify live identity3times and close its lease before any new host action.",
+    "Root owns actual host build, intent-only B, v5 release and explicit live behavior acceptance.",
+    "No store-offer mapping, stock/eligibility/continuous authorization or automatic paid launch claim."
+  ],
+  "next_safe_action": "Open fresh immutable SourceA DraftPR and inspect exact-source full Google and dedicated actual Mongo/UI/build CI. Root owns host/v5/live after1655 closes.",
+  "production_ref_rechecked_before_commit": "622c310d8dcee13da61410bca6b3ac85134a9cfe"
+}

@@ -54,6 +54,29 @@ jobs:
           backend.tests.test_production_release_guard
           backend.tests.test_release_identity
 
+  host-node-compatibility:
+    name: Host Node ${{ matrix.host-node }} engine and dispatcher contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        host-node: ["20.20.2", "24.19.0"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.host-node }}
+      - name: Enable the observed Yarn Classic version
+        run: corepack enable && corepack prepare yarn@1.22.22 --activate
+      - name: Test actual host engine admission and unchanged dispatch
+        run: node --test frontend/scripts/host-node-compatibility.test.cjs frontend/scripts/build-entry.test.cjs
+
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -85,6 +108,7 @@ jobs:
         run: >-
           yarn node --test
           scripts/build-entry.test.cjs
+          scripts/host-node-compatibility.test.cjs
           scripts/build-contract.test.cjs
           scripts/build-release-frontend.test.cjs
           scripts/release-intent.test.cjs
@@ -343,11 +367,15 @@ jobs:
           test -z "$worktree_status"
 
   emergent-node20-rehearsal:
-    name: Emergent Host Node 20 clean-clone adapter rehearsal
+    name: Emergent Host Node ${{ matrix.host-node }} clean-clone adapter rehearsal
     needs: frontend-build
     if: needs.frontend-build.outputs.reviewed_intent == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        host-node: ["20.20.2", "24.19.0"]
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       REACT_APP_BACKEND_URL: https://mezansalla.com
@@ -361,7 +389,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.20.2"
+          node-version: ${{ matrix.host-node }}
       - name: Select an isolated release toolchain cache
         shell: bash
         run: echo "XDG_CACHE_HOME=$RUNNER_TEMP/mezan-release-v5-toolchain-cache" >> "$GITHUB_ENV"
@@ -417,7 +445,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(node --version)" = "v20.20.2"
+          test "$(node --version)" = "v${{ matrix.host-node }}"
           test "$(yarn --version)" = "1.22.22"
           test -f "$REHEARSAL_REPO/release/release-intent-v5.json"
           test ! -e "$REHEARSAL_REPO/backend/release_identity.json"
@@ -426,7 +454,7 @@ jobs:
           test ! -e "$REHEARSAL_REPO/frontend/node_modules"
           worktree_status="$(git -C "$REHEARSAL_REPO" status --short)"
           test -z "$worktree_status"
-      - name: Record sanitized Host-20 adapter evidence
+      - name: Record sanitized Host adapter evidence
         shell: bash
         run: |
           set -euo pipefail
@@ -435,13 +463,13 @@ jobs:
           node --version
           yarn --version
           python ../scripts/emergent_deployment_adapter.py evidence | tee "$RUNNER_TEMP/mezan-adapter-environment-v5.json"
-      - name: Rehearse a conservative outer Host-20 frozen install
+      - name: Rehearse a conservative outer Host frozen install
         shell: bash
         run: |
           set -euo pipefail
           cd "$REHEARSAL_REPO/frontend"
           yarn install --frozen-lockfile --non-interactive
-          printf '%s\n' host-node20-install-must-not-be-reused > node_modules/.host-node20-sentinel
+          printf '%s\n' host-install-must-not-be-reused > node_modules/.host-install-sentinel
       - name: Emulate a Cloud Build checkout without Git metadata
         shell: bash
         run: |
@@ -449,7 +477,7 @@ jobs:
           test -d "$REHEARSAL_REPO/.git"
           mv "$REHEARSAL_REPO/.git" "$RUNNER_TEMP/mezan-rehearsal-v5.git"
           test ! -e "$REHEARSAL_REPO/.git"
-      - name: Invoke the Emergent package adapter under Host Node 20
+      - name: Invoke the Emergent package adapter under the selected Host Node
         shell: bash
         run: |
           set -euo pipefail
@@ -464,7 +492,7 @@ jobs:
           test -s "$REHEARSAL_REPO/frontend/build/build-meta.json"
           test -s "$REHEARSAL_REPO/frontend/.release/reproducible-build.json"
           test -s "$REHEARSAL_REPO/backend/release_identity.json"
-          test ! -e "$REHEARSAL_REPO/frontend/node_modules/.host-node20-sentinel"
+          test ! -e "$REHEARSAL_REPO/frontend/node_modules/.host-install-sentinel"
           cd "$REHEARSAL_REPO"
           python scripts/verify_frontend_build.py \
             --expected-git-sha "$INTENT_SOURCE_SHA" \
@@ -667,7 +695,7 @@ jobs:
       - name: Retain verified generated release outputs
         uses: actions/upload-artifact@v4
         with:
-          name: release-v5-generated-outputs
+          name: release-v5-generated-outputs-host-${{ matrix.host-node }}
           retention-days: 14
           if-no-files-found: error
           path: |
@@ -677,7 +705,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-v5-clean-clone-evidence
+          name: release-v5-clean-clone-evidence-host-${{ matrix.host-node }}
           retention-days: 14
           if-no-files-found: warn
           path: |
@@ -691,6 +719,7 @@ jobs:
     if: github.event_name == 'push'
     needs:
       - backend-preflight
+      - host-node-compatibility
       - emergent-node20-rehearsal
       - frontend-build
     runs-on: ubuntu-latest
