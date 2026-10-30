@@ -178,8 +178,8 @@
     }
   ],
   "remaining": [
-    "independent bounded source review",
-    "root approval for any attachment and later integration"
+    "root bounded review and attachment decision",
+    "later production-base integration and live verification if authorized"
   ],
   "limitations": [
     "Helper is unattached; no owner UI, live provider access or release acceptance",
@@ -196,5 +196,25 @@
     "successful_pull_request_runs": 17,
     "successful_push_runs": 1,
     "checked_at": "2026-10-30T14:51:57.752754+00:00"
+  },
+  "independent_review": {
+    "reviewer": "/root/budget_audit",
+    "source": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
+    "tree": "10a614576f5bf683b643488f8bc3c520891106dc",
+    "verdict": "bounded_read_only_review_no_blocking_finding",
+    "scope": [
+      "fixed native GET and minimal fields mask",
+      "sensitive config excluded",
+      "existing owner/native-link/credential fences reused",
+      "no store product mapping claim",
+      "actual direct-source and PR CI logs: 504 tests /66 actual Mongo /zero skips"
+    ],
+    "local_tests_rerun": false,
+    "local_test_limitation": "Reviewer reported restored /tmp virtualenv unavailable; no claim of an independent local rerun. Author local438 and exact CI evidence remain separately recorded.",
+    "not_proven": [
+      "live provider capability",
+      "router or UI attachment",
+      "production release"
+    ]
   }
 }

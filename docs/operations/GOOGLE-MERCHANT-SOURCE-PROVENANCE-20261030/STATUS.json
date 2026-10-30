@@ -1,5 +1,5 @@
 {
-  "status": "frozen_candidate_all_CI_pass_independent_review_pending",
+  "status": "frozen_candidate_all_CI_pass_bounded_independent_review_no_blocker",
   "base": "fb12300c353cb1875f4462dc279b25360913af5c",
   "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
   "branch": "codex/google-merchant-source-provenance-20261030",
@@ -32,8 +32,8 @@
     "environment_note": "Initial broad run: 424 passed, 14 legacy reporting cases failed at httpx constructor because inherited SOCKS proxy requires absent socksio. No dependencies/runtime/tests changed; rerun with proxy variables unset for synthetic tests passed all 438. No environment values read."
   },
   "remaining": [
-    "independent review",
-    "root-owned attachment decision"
+    "root bounded review and attachment decision",
+    "later production-base integration and live verification if authorized"
   ],
   "deployment_authorized": false,
   "initial_remote_wip": "d65c8e3cf95b025ddd02d602cf3b0199cb1f34b6",
@@ -56,5 +56,25 @@
     "push_success": 1,
     "failed": 0,
     "pending": 0
+  },
+  "independent_review": {
+    "reviewer": "/root/budget_audit",
+    "source": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
+    "tree": "10a614576f5bf683b643488f8bc3c520891106dc",
+    "verdict": "bounded_read_only_review_no_blocking_finding",
+    "scope": [
+      "fixed native GET and minimal fields mask",
+      "sensitive config excluded",
+      "existing owner/native-link/credential fences reused",
+      "no store product mapping claim",
+      "actual direct-source and PR CI logs: 504 tests /66 actual Mongo /zero skips"
+    ],
+    "local_tests_rerun": false,
+    "local_test_limitation": "Reviewer reported restored /tmp virtualenv unavailable; no claim of an independent local rerun. Author local438 and exact CI evidence remain separately recorded.",
+    "not_proven": [
+      "live provider capability",
+      "router or UI attachment",
+      "production release"
+    ]
   }
 }
