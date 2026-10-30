@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-node24-release-20261030",
-  "state": "ALL_B_CI_AND_ORIGINAL_HOST_REHEARSAL_PASSED_READY_FOR_NORMAL_MERGE",
+  "state": "MERGED_EXACT_B_TREE_PENDING_APP_REHEARSAL_AND_PUBLISH",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
   "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
@@ -35,7 +35,7 @@
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
   "next_safe_action": "Fresh guard status and currentproduction/PR tree check, normalmerge1663 preservingA/B, /appffmerge+normalbuild, ownprepare/prepublish, onepublish/newerfinish/3verify/closedlease/liveMerchant behavior.",
-  "updated_at": "2026-10-30T14:18:52.244Z",
+  "updated_at": "2026-10-30T14:20:13.862Z",
   "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
   "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
   "pr": 1663,
@@ -53,8 +53,12 @@
     "b_push_ci": "41069861165 backend1855/44.44s frontend689/35suites/build4.89; 41069861573 backend422/23.02 including74realMongo0skip frontend122/build4.15. Root4primarylogsread.",
     "b_root_loader": "ExactB loader PASS with python-B; independentcandidate/pair/manifests verified, intent-only soleparentA.",
     "b_all_ci": "26PRruns:25success1nonapplicableTikTokskip, no pending/failures. Readiness41069873971 allrequiredstepsPASS.",
-    "b_dual_host_runtime": "Root and independent reviewer read fullcleanclone jobs124111913605 Node20 normalbuild58.07s,double5.02/4.68;124111913534 Node24normalbuild67.18s,double6.78/6.94. Both actual yarnstart and exactJSON canonical/cachebusted/prod+previewHost passed. IsolatedBackend/Frontend identity matches. Not production proof."
+    "b_dual_host_runtime": "Root and independent reviewer read fullcleanclone jobs124111913605 Node20 normalbuild58.07s,double5.02/4.68;124111913534 Node24normalbuild67.18s,double6.78/6.94. Both actual yarnstart and exactJSON canonical/cachebusted/prod+previewHost passed. IsolatedBackend/Frontend identity matches. Not production proof.",
+    "merge": "Normal merge with parent622c andB; tree exactly58b54046. Freshactualguardinactive, /app622c trackedclean; unrelated .emergent/testing and deployer-agent-docs preserved."
   },
   "intent_b": "6f6566168f1a52851f6ebdc629cb76e09728357e",
-  "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1"
+  "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
+  "merge": "fb12300c353cb1875f4462dc279b25360913af5c",
+  "production_branch_changed": true,
+  "live_production_changed": false
 }
