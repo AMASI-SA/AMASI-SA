@@ -1,0 +1,39 @@
+{
+  "task_id": "GOOGLE-OAUTH-ATOMIC-PROJECTION-20261030",
+  "state": "DESIGN_WIP_NOT_DEPLOYABLE",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/google-oauth-atomic-projection-wip-20261030",
+  "base_sha": "fb12300c353cb1875f4462dc279b25360913af5c",
+  "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
+  "owner": "google_launch",
+  "scope": "Required atomic credential/account/connection publication; complete discovery; shared Merchant fence; Google-only generic test authority refusal",
+  "source_implemented": false,
+  "tests_run_on_new_code": 0,
+  "prior_diagnosis": {
+    "exact_source": "fb12300c353cb1875f4462dc279b25360913af5c",
+    "focused_tests": "86 passed8.19s with explicit no-outbound MockTransport; initial72pass14localSOCKS-initialization failures recorded separately",
+    "synthetic_probes": "3 quota classifications and actual readiness mapping; ownership404 before credential/client",
+    "live": "Coordinator reports generic429; no OAuth-expiry inference"
+  },
+  "root_approved_existing_paths": [
+    "backend/integrations_control_center/google_projection.py",
+    "backend/integrations_control_center/google_connections.py",
+    "backend/integrations_control_center/google_discovery.py",
+    "backend/integrations_control_center/google_oauth_security.py",
+    "backend/integrations_control_center/google_merchant_registration.py",
+    "backend/integrations_control_center/service.py::_persist_test_snapshot Google-only early refusal"
+  ],
+  "unapproved_reader_seam": "google_ads_management.py::account_client proposal pending root approval",
+  "untouched": [
+    "google_ads_reporting.py",
+    "credential refresh CAS",
+    "automation revoke routes",
+    "quota retry behavior",
+    "all production/host/provider state"
+  ],
+  "next": "Approve exact read seam; implement bounded discovery and transaction; real replica races/unknown ACK; remote checkpoint; independent review",
+  "production_changed": false,
+  "provider_calls": 0,
+  "credential_access": false,
+  "publish_actions": 0
+}
