@@ -1,6 +1,6 @@
 {
   "task": "GOOGLE-PRODUCT-REVIEW-RELEASE-20261030",
-  "state": "DIRECT_CURRENT_PRODUCTION_CANDIDATE_FRESH_CI_PENDING",
+  "state": "FROZEN_CURRENT_BASE_COMPOSITION_FRESH_CI_GREEN_ROOT_REVIEW_PENDING",
   "base": "fb12300c353cb1875f4462dc279b25360913af5c",
   "accepted_source": "e713fbb11630cf5011903721e6aaf03d4efbd637",
   "accepted_seal": "913cb2f23ede1d4e91a473eb93dd3e2a247b3637",
@@ -50,11 +50,68 @@
   "composition": "Directfb12300c; original narrowNativechild/busy/Authobjectgeneration andoneapprovedoldtestmockspread;2routerlinesonly preserveMerchant;sharedfullworkflow appendonly13paths/testargsplusnewbranchtrigger;newdedicatedworkflow triggers added. Workspace/currentintent unchanged. No oldsourcehistory imported.",
   "verification": {
     "whitespace": "git diff --check exit0",
-    "local_tests": "NOT_RUN recovered /tmp/mezan-google29-venv absent; primaryPython lacksfastapi. NoUIdependenciesavailable. AwaitfreshCI, nohistoricalcountclaimfornewsource.",
-    "historical_only": "e713 independentboundedPASS;153/30Mongo+202UI/build andfull1602/624. Doesnotprovefreshcomposition."
+    "local_tests": "43passed-Werror0skip5.81s with/tmp/google-root-acceptance-20261030 unchangeddeps; no localYarnpassclaimed",
+    "historical_only": "e713 independentboundedPASS;153/30Mongo+202UI/build andfull1602/624. Doesnotprovefreshcomposition.",
+    "direct_push": {
+      "run": 41071501756,
+      "replica_job": 124116527005,
+      "frontend_job": 124116529325,
+      "checkout": "e26d9a8ca4cf5d8fc8c8b7e443349aef56e82533",
+      "backend": 153,
+      "actual_mongo": 30,
+      "skips": 0,
+      "frontend": 202,
+      "suites": 9,
+      "build_seconds": 3.78,
+      "status": "SUCCESS"
+    },
+    "pr_dedicated": {
+      "run": 41071544642,
+      "replica_job": 124116673622,
+      "frontend_job": 124116701467,
+      "checkout": "12c0c05e0b9a1cd8b1ed13c72e8fd8398220fa81",
+      "backend": 153,
+      "actual_mongo": 30,
+      "skips": 0,
+      "frontend": 202,
+      "suites": 9,
+      "build_seconds": 5.39,
+      "status": "SUCCESS",
+      "meaning": "synthetic sourcee26d mergeintoexactparentfb123; not sourceidenticalclaim"
+    },
+    "full": {
+      "run": 41071544400,
+      "backend_job": 124116668815,
+      "frontend_job": 124116711693,
+      "backend": 1898,
+      "frontend": 752,
+      "suites": 38,
+      "build_seconds": 5.38,
+      "status": "SUCCESS"
+    },
+    "readiness": {
+      "run": 41071544933,
+      "status": "SUCCESS",
+      "frontend_job": 124116726871,
+      "host_node20_job": 124116669705,
+      "host_node24_job": 124116963026,
+      "ab_build_seconds": [
+        4.06,
+        3.86
+      ],
+      "artifact_tree": "6f0a5ff8401bf0f5355b61e38d5064308b190bb4f1efce43537184bc410844e8",
+      "candidate_artifact": 12985865486,
+      "qualification": "CIretainedcandidateonly; trackedintentunchanged, hostadapterrehearsalskipped/nohostleasepublish"
+    }
   },
   "production_changed": false,
   "provider_calls": false,
   "intent_changed": false,
-  "next": "Remoteimmutablecandidate/DraftPR thenfresh153/30Mongo+202UI/build+fullCI androotindependentreview. Root1663deploymentmustfinishbeforehostrehearsal; nolease/publish."
+  "next": "Root fullcomposition/independentreview then SourceAfreeze/intent/deploy/liveacceptance onlyafter1663publishverified. Preservefrozene26d runtime; separateSTATUSonly.",
+  "source": {
+    "sha": "e26d9a8ca4cf5d8fc8c8b7e443349aef56e82533",
+    "tree": "c87f85c33196ab2445be1b09970619e545f82342",
+    "local_equivalent": "b2c8c5e70",
+    "pr": 1664
+  }
 }
