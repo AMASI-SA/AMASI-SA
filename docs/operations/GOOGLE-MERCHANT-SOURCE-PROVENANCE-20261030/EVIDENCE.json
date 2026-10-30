@@ -77,8 +77,8 @@
     {
       "id": 41074200297,
       "name": "CodeQL",
-      "status": "in_progress",
-      "conclusion": null
+      "status": "completed",
+      "conclusion": "success"
     },
     {
       "id": 41074200321,
@@ -178,7 +178,6 @@
     }
   ],
   "remaining": [
-    "CodeQL Python still in progress at this checkpoint",
     "independent bounded source review",
     "root approval for any attachment and later integration"
   ],
@@ -191,5 +190,11 @@
   ],
   "provider_calls_performed": 0,
   "host_actions": 0,
-  "source_edits_after_freeze": 0
+  "source_edits_after_freeze": 0,
+  "ci_seal": {
+    "pull_request_runs": 17,
+    "successful_pull_request_runs": 17,
+    "successful_push_runs": 1,
+    "checked_at": "2026-10-30T14:51:57.752754+00:00"
+  }
 }

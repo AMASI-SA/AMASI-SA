@@ -1,5 +1,5 @@
 {
-  "status": "frozen_candidate_core_CI_pass_independent_review_pending",
+  "status": "frozen_candidate_all_CI_pass_independent_review_pending",
   "base": "fb12300c353cb1875f4462dc279b25360913af5c",
   "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
   "branch": "codex/google-merchant-source-provenance-20261030",
@@ -32,7 +32,6 @@
     "environment_note": "Initial broad run: 424 passed, 14 legacy reporting cases failed at httpx constructor because inherited SOCKS proxy requires absent socksio. No dependencies/runtime/tests changed; rerun with proxy variables unset for synthetic tests passed all 438. No environment values read."
   },
   "remaining": [
-    "CodeQL Python completion",
     "independent review",
     "root-owned attachment decision"
   ],
@@ -51,5 +50,11 @@
   "source": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
   "source_tree": "10a614576f5bf683b643488f8bc3c520891106dc",
   "evidence_file": "EVIDENCE.json",
-  "status_branch": "codex/google-merchant-source-provenance-status-20261030"
+  "status_branch": "codex/google-merchant-source-provenance-status-20261030",
+  "all_source_ci": {
+    "pull_request_success": 17,
+    "push_success": 1,
+    "failed": 0,
+    "pending": 0
+  }
 }
