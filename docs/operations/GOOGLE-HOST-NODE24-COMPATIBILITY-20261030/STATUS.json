@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-HOST-NODE24-COMPATIBILITY-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-host-node24-compatibility-20261030",
-  "state": "WIP_IMPLEMENTED_SYNTAX_CHECKED_FUNCTIONAL_TESTS_PENDING",
+  "state": "SOURCE_A_HOST_ADMISSION_PASS_B_FULL_RUNTIME_PROOF_PENDING",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "scope": [
     "frontend/package.json",
@@ -36,9 +36,14 @@
   },
   "verification": {
     "syntax": "node --check on both changed/new test files PASS; YAML parsed with exact20.20.2/24.19.0 matrices;git diff --check PASS",
-    "functional": "pending",
-    "ci": "pending",
-    "independent_review": "pending"
+    "functional": {
+      "actualCI": "63f8 exactsource Host20.20.2 and24.19.0 jobs pass25/1dependencyconditionedViteskip each; 5 new actualYarn cases passed.22.23.2 governedprotocol and cleanbuilds6.43/6.46 passed.",
+      "root_actual_host": "Root independently ran same63f8 tests on actual/usr/bin Node24.19.0:25pass/1Viteskip0fail1.154s. This is actualYarn+dispatcher with syntheticPython boundary, not fulladapter/runtime proof.",
+      "local_environment": "DirectlocalNode24.22.1 existingcontract suite:23pass1failuremissingVitedependency1skip. No code defect inferred; dependencies not installed in isolated worktree.",
+      "refinement": "Always-running hostadmission job now runs only5newactualYarn+5dispatcher cases with no conditional dependency skip; reviewedBfull20/24 runtime matrix unchanged."
+    },
+    "ci": "SuccessorCI pending; predecessor readiness41066907514 succeeded. New completehostrehearsal intentionally requires freshreviewedB.",
+    "independent_review": "Root andbudget_audit reviewed63f8 boundedsource andhostadmission; no finding. Successorworkflow-only refinement awaiting final review."
   },
   "external_sources": [
     "https://classic.yarnpkg.com/en/docs/package-json/",
@@ -55,5 +60,6 @@
     "Root selects reviewed delta into NEW Merchant sourceA on freshproduction; do not mutate7f214/a219.",
     "Full20/24 clean-clone compatibility is unproved until new reviewedB CI and actualhost build complete."
   ],
-  "next_safe_action": "Save early immutableWIP/DraftPR, then run pinned22 and actualHost24 admission tests; report results and preserve unchanged source contracts."
+  "next_safe_action": "Save successor then inspect10/10zero-skip hostmatrix and pinned22protocolCI. Root selects4 non-docfiles into newMerchantA; fullhost24runtime remains mandatory onnewB.",
+  "previous_checkpoint": "63f8ec4eaa21ec459768c07687c46ab526c5752d"
 }

@@ -75,7 +75,7 @@ jobs:
       - name: Enable the observed Yarn Classic version
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Test actual host engine admission and unchanged dispatch
-        run: node --test frontend/scripts/host-node-compatibility.test.cjs frontend/scripts/build-entry.test.cjs frontend/scripts/start-governed-runtime.test.cjs
+        run: node --test frontend/scripts/host-node-compatibility.test.cjs frontend/scripts/build-entry.test.cjs
 
   frontend-build:
     name: Frontend build
