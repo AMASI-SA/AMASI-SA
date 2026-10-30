@@ -1,11 +1,11 @@
 {
   "task": "GOOGLE-NAMESPACE-BOOTSTRAP-UI-20261030",
-  "state": "test_fixture_correction_pending_fresh_CI_runtime_unchanged",
+  "state": "focused_and_full_management_CI_verified_pending_independent_review_and_remaining_checks",
   "branch": "codex/google-namespace-bootstrap-ui-wip-20261030",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "contract_source": "2feb6f741d89ea7193b6ee80ee8c225d4472e6db",
   "frozen_backend_source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
-  "source_sha": "this_commit; remote full SHA recorded in subsequent checkpoint/PR",
+  "source_sha": "675b8a6f501df4dfc0b87b6e0ff0eae72495a95f",
   "completed": [
     "Exact frozen backend module, three tests and workflow copied; original 111-case CI evidence remains historical prerequisite only",
     "Two additive management-router lines and two explicitly approved Workspace import/render lines",
@@ -40,7 +40,7 @@
       "actualMongo_total": 74,
       "executed_actualMongo_locally": false
     },
-    "frontend": "68 tests across four suites; explicit synthetic Web Crypto fixture plus absent-entropy refusal cases, awaiting fresh CI",
+    "frontend": "Verified on direct source in CI; not executed locally because package installation is blocked by environment policy.",
     "preservation": "Five exact 2c6 prerequisite blobs; only two additive router and two additive Workspace lines; release intent unchanged",
     "prior_candidate_actual_CI": {
       "source": "93def8efa222daa3f12519e25cfa966175cdd54e",
@@ -54,19 +54,54 @@
       "frontend_passed": 40,
       "frontend_failed": 26,
       "failure": "New test setup assumed global Web Crypto exists in repository JSDOM; corrected only synthetic test fixture, runtime unchanged."
-    }
+    },
+    "direct_source_CI": {
+      "run": 41075327713,
+      "replica_job": 124129845742,
+      "passed": 130,
+      "actual_mongo": 74,
+      "original_frozen_cases": 111,
+      "new_management_router_actual_mongo_cases": 10,
+      "skipped": 0,
+      "seconds": 21.91,
+      "frontend_job": 124129846230,
+      "frontend_passed": 68,
+      "frontend_suites": 4,
+      "frontend_skipped": 0,
+      "build_seconds": 5.97,
+      "checkout": "675b8a6f501df4dfc0b87b6e0ff0eae72495a95f"
+    },
+    "full_management_CI": {
+      "run": 41075336891,
+      "backend_job": 124129877884,
+      "backend_passed": 1911,
+      "backend_seconds": 46.69,
+      "frontend_job": 124129877290,
+      "frontend_passed": 757,
+      "frontend_suites": 39,
+      "build_seconds": 6.63,
+      "checkout": "4a50e62205fb1c4fc2762b2853c7f64a3c11dceb",
+      "parents": [
+        "fb12300c353cb1875f4462dc279b25360913af5c",
+        "675b8a6f501df4dfc0b87b6e0ff0eae72495a95f"
+      ],
+      "source_tree_equal": false
+    },
+    "log_read": "Author fetched complete logs and checked source checkout, result counts, JUnit no-skip assertions, cleanup and build completion."
   },
   "remaining": [
-    "Read fresh 130-case real-Mongo CI including 74 actual cases with zero skips",
-    "Read fresh UI/API-interceptor tests and build CI; fix any confirmed failures",
-    "Run full management regression CI and independent review",
-    "Later fresh production source composition and release by root"
+    "Independent bounded review of exact frozen source 675b8a6",
+    "Remaining Security/Readiness/ancillary checks; old-base release readiness must not be bypassed",
+    "Root selectively composes 16 new non-doc paths plus exact 2 router/2 Workspace and append-only workflow seams onto latest production, preserving Merchant and Node24",
+    "Fresh release A/B/CI/Release Guard/live acceptance by root; this status is not deployment evidence"
   ],
-  "next": "Read successor direct-source PUSH CI and full PR regression; no runtime change or live action",
+  "next": "Review exact source and finish CI qualifications; do not change frozen runtime unless a confirmed blocker is found",
   "production_changed": false,
   "live_DB_provider_or_flags_changed": false,
   "release_intent_changed": false,
   "coordination": "Root owns live production and final shared-file composition. This isolated branch remains based on 622c; do not overwrite later Merchant Workspace changes.",
   "previous_checkpoint": "93def8efa222daa3f12519e25cfa966175cdd54e",
-  "pr": 1667
+  "pr": 1667,
+  "source_tree": "d30cefad8b1b94db4e4fd34c6844342374b0053f",
+  "status_checkpoint": "this documentation-only commit; parent is frozen source"
 }
