@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-MERCHANT-NODE24-RELEASE-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-merchant-node24-release-20261030",
-  "state": "NEW_EXPLICIT_DEPLOYMENT_FINISHED_LIVE_GUARD_VERIFY_RUNNING",
+  "state": "LIVE_IDENTITY_VERIFIED_3_LEASE_CLOSED_OWNER_UI_ACCEPTANCE_IN_PROGRESS",
   "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "merchant_source": "7f214a76ea98500d17b239d3577b43e542801374",
   "unpublished_previous_B": "a219553c0843745e6ab2ba807bc23f2e79dc0744",
@@ -20,7 +20,7 @@
     "merchant": "Exact7f214/A +a219/B full1855/689, dedicated422 including74Mongo0skip/122, source+intent+complete manifests root/independent PASS; originalA entire8ceac intent matched.",
     "compatibility": "Exact2f85 readiness41067412294:host24job12410235342010/10;host20job12410235360810/10;Node22job12410235312857/57+build3.80/4.14;backend156 job124102353418. Rootprior63f fullprotocol57logread; rootactualhost24 source63f25pass/1expectedsource-onlyVite skip. Not finalB runtime proof."
   },
-  "production_changed": false,
+  "production_changed": true,
   "host_actions": 1,
   "provider_writes": 0,
   "paid_writes": 0,
@@ -34,8 +34,8 @@
     "Actual owner Merchant choices/read UI acceptance; currentGoogleUI reportedtemporaryrequestlimit withoutOAuth inference.",
     "NoSalla-offermapping/stock/eligibility/continuousauth/paidlaunchproof fromthisslice."
   ],
-  "next_safe_action": "Guardverify already launched once via /app and stillrunning; do notrerun orpublish. Read result/status, require3PASSandleaseinactive, thenactualownerMerchantUI.",
-  "updated_at": "2026-10-30T14:42:09.634Z",
+  "next_safe_action": "CompleteactualownerMerchantUI choices andboundedread; signedGooglemanagementsinglefreshreloadalreadyrequested, inspectresultwithoutrepeatquotaqueries. Thencheckpointfinaland1664originalhostrehearsalafterfreshguardinactive.",
+  "updated_at": "2026-10-30T14:45:32.409Z",
   "source_a": "aab547507b624ff186c7789560c94a31a3406dcc",
   "source_tree": "bba29c0819263bd196e09ed3fb080d9f35d01a7a",
   "pr": 1663,
@@ -55,13 +55,24 @@
     "b_all_ci": "26PRruns:25success1nonapplicableTikTokskip, no pending/failures. Readiness41069873971 allrequiredstepsPASS.",
     "b_dual_host_runtime": "Root and independent reviewer read fullcleanclone jobs124111913605 Node20 normalbuild58.07s,double5.02/4.68;124111913534 Node24normalbuild67.18s,double6.78/6.94. Both actual yarnstart and exactJSON canonical/cachebusted/prod+previewHost passed. IsolatedBackend/Frontend identity matches. Not production proof.",
     "merge": "Normal merge with parent622c andB; tree exactly58b54046. Freshactualguardinactive, /app622c trackedclean; unrelated .emergent/testing and deployer-agent-docs preserved.",
-    "app_rehearsal": "Initialrefusal preserved; exactlyoneignoredgeneratedbackendcache with2regular.pyc files movedreversiblyto/tmp/google1663-preserved-app-bytecode-20261030. UnchangednormalNode24/yarnbuild onactual /app exactM PASS64.70s runtime/source/packageproofmatches. No source/guard weakening; unrelated untrackedfiles preserved."
+    "app_rehearsal": "Initialrefusal preserved; exactlyoneignoredgeneratedbackendcache with2regular.pyc files movedreversiblyto/tmp/google1663-preserved-app-bytecode-20261030. UnchangednormalNode24/yarnbuild onactual /app exactM PASS64.70s runtime/source/packageproofmatches. No source/guard weakening; unrelated untrackedfiles preserved.",
+    "live": {
+      "verified": true,
+      "checks": 3,
+      "source_git_sha": "aab547507b624ff186c7789560c94a31a3406dcc",
+      "deployment_git_sha": "fb12300c353cb1875f4462dc279b25360913af5c",
+      "release_id": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314",
+      "boot_started_at": "2026-10-30T14:38:07.542338+00:00",
+      "frontend_artifact_tree_sha256": "360bc3d24e065f4bbdc0c5af54d4e3da3bef8f2bea3a0eea1b615611241497ba",
+      "guard_status_active": false,
+      "meaning": "Completeguardpassedverifiedidentity/Backend/controlcriticalhashes/Frontendproof andcanonical/cachebustedexactJSON/publicassets/cache/serviceworkers all3checks."
+    }
   },
   "intent_b": "6f6566168f1a52851f6ebdc629cb76e09728357e",
   "intent_b_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
   "merge": "fb12300c353cb1875f4462dc279b25360913af5c",
   "production_branch_changed": true,
-  "live_production_changed": false,
+  "live_production_changed": true,
   "lease": {
     "actor": "codex-google-merchant-node24-20261030",
     "prepared_at": "2026-10-30T14:27:18.326525+00:00",
@@ -78,5 +89,6 @@
     "runtime": "rg5-16105712ffc223f760cae26f4eda3b5a1866352380bf3b7a5a55d3f2abf0a314"
   },
   "deployment_finished_riyadh": "2026-10-30 17:38",
-  "platform_version": "5562b66"
+  "platform_version": "5562b66",
+  "lease_closed": true
 }
