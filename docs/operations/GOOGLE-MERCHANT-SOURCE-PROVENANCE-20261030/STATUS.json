@@ -1,0 +1,16 @@
+{
+  "status": "WIP_unattached_not_release_candidate",
+  "base": "fb12300c353cb1875f4462dc279b25360913af5c",
+  "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
+  "branch": "codex/google-merchant-source-provenance-20261030",
+  "scope": "Owner-requested bounded Merchant DataSources v1 list; source identifiers and type only",
+  "shared_seam": "20 additive lines in google_ads_reporting.py: opaque list method with bound account and fixed safe fields mask",
+  "not_attached": true,
+  "provider_calls_performed": 0,
+  "provider_writes": 0,
+  "host_actions": 0,
+  "mapping_verified": false,
+  "local_tests": {"passed": 116, "skipped": 0, "seconds": 6.91, "warnings_as_errors": true},
+  "remaining": ["adversarial bounded streaming and transport tests", "real Mongo race cases in dedicated CI", "independent review", "root-owned attachment decision"],
+  "deployment_authorized": false
+}
