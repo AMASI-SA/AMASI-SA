@@ -2,7 +2,7 @@
   "task_id": "GOOGLE-HOST-NODE24-COMPATIBILITY-20261030",
   "repository": "AMASI-SA/AMASI-SA",
   "branch": "codex/google-host-node24-compatibility-20261030",
-  "state": "SOURCE_A_HOST_ADMISSION_PASS_B_FULL_RUNTIME_PROOF_PENDING",
+  "state": "HOST_ADMISSION_AND_PINNED_RELEASE_CI_PASS_B_RUNTIME_PROOF_PENDING",
   "parent_production_sha": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
   "scope": [
     "frontend/package.json",
@@ -42,8 +42,46 @@
       "local_environment": "DirectlocalNode24.22.1 existingcontract suite:23pass1failuremissingVitedependency1skip. No code defect inferred; dependencies not installed in isolated worktree.",
       "refinement": "Always-running hostadmission job now runs only5newactualYarn+5dispatcher cases with no conditional dependency skip; reviewedBfull20/24 runtime matrix unchanged."
     },
-    "ci": "SuccessorCI pending; predecessor readiness41066907514 succeeded. New completehostrehearsal intentionally requires freshreviewedB.",
-    "independent_review": "Root andbudget_audit reviewed63f8 boundedsource andhostadmission; no finding. Successorworkflow-only refinement awaiting final review."
+    "ci": "Exact source readiness and all four primary jobs passed; general workflows pending, no failure.",
+    "independent_review": "Root andbudget_audit reviewed63f8 boundedsource andhostadmission; no finding. Successorworkflow-only refinement awaiting final review.",
+    "exact_source_ci": {
+      "run": 41067412294,
+      "checkout": "2f85dc9b9f23e9a09fb0af84a763c84a5fe88a3b",
+      "conclusion": "success",
+      "host24": {
+        "job": 124102353420,
+        "node": "24.19.0",
+        "passed": 10,
+        "skipped": 0,
+        "seconds": 1.339
+      },
+      "host20": {
+        "job": 124102353608,
+        "node": "20.20.2",
+        "passed": 10,
+        "skipped": 0,
+        "seconds": 1.733
+      },
+      "governed22": {
+        "job": 124102353128,
+        "node": "22.23.2",
+        "passed": 57,
+        "skipped": 0,
+        "seconds": 1.12,
+        "build_seconds": [
+          3.8,
+          4.14
+        ]
+      },
+      "backend_protocol": {
+        "job": 124102353418,
+        "passed": 156,
+        "seconds": 6.351
+      },
+      "logs_read": true,
+      "qualification": "Reviewed-B full clean-clone20/24matrix intentionally skipped on SourceA. Admission fixture stubs only Python boundary; real complete adapter/runtime proof still required on freshB."
+    },
+    "local_cache": "Own local ensure session61766 remained waiting and was explicitly interrupted(exit130); no functional proof attributed to it and no environment changes to host. Existing source-only local missingVite result retained as environment limitation."
   },
   "external_sources": [
     "https://classic.yarnpkg.com/en/docs/package-json/",
@@ -60,6 +98,78 @@
     "Root selects reviewed delta into NEW Merchant sourceA on freshproduction; do not mutate7f214/a219.",
     "Full20/24 clean-clone compatibility is unproved until new reviewedB CI and actualhost build complete."
   ],
-  "next_safe_action": "Save successor then inspect10/10zero-skip hostmatrix and pinned22protocolCI. Root selects4 non-docfiles into newMerchantA; fullhost24runtime remains mandatory onnewB.",
-  "previous_checkpoint": "63f8ec4eaa21ec459768c07687c46ab526c5752d"
+  "next_safe_action": "Preserve frozen2f85 and complete independent final review/generalCI. Root selects exact four non-docblobs into NEW combinedMerchantA, builds/reviews freshintent-onlyB, and must run20/24 fullrehearsal and actualhost before publication.",
+  "previous_checkpoint": "63f8ec4eaa21ec459768c07687c46ab526c5752d",
+  "runtime_source_sha": "2f85dc9b9f23e9a09fb0af84a763c84a5fe88a3b",
+  "runtime_tree_sha": "29a493f2988c1d24662aa2d942cf30f2a4c3ed09",
+  "pr": "https://github.com/AMASI-SA/AMASI-SA/pull/1662",
+  "status_branch": "codex/google-host-node24-compatibility-status-20261030",
+  "nondoc_blobs": {
+    ".github/workflows/mezan-production-release.yml": "3214c4b301df9622c3e9a8c8e687e5c7415b4205",
+    "frontend/package.json": "ea03e3bacd152554711ac5ca992e0806b74c724c",
+    "frontend/scripts/build-contract.test.cjs": "6204b81ea9525b5c138add4134ff35aa0aa6ca70",
+    "frontend/scripts/host-node-compatibility.test.cjs": "a9030304920eaa5d427b74e3305ef9aa66df2a0e"
+  },
+  "ci_snapshot": [
+    {
+      "id": 41067412243,
+      "name": "G47 Focused Integration",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41067412310,
+      "name": "Security Gate",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41067412288,
+      "name": "Operational Balance Web",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41067412374,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41067412245,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41067412311,
+      "name": "CodeQL",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41067412516,
+      "name": "Public Legal Pages Noindex",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41067412273,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41067412294,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41067412296,
+      "name": "Production Campaign AI Decision V3 Extended",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
 }
