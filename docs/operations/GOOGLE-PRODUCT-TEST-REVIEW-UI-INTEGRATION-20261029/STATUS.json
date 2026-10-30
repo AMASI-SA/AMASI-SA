@@ -1,7 +1,7 @@
 {
   "task": "google-product-test-review-ui-integration-20261029",
   "branch": "codex/google-product-test-review-ui-integration-20261029",
-  "state": "COHERENT_CANDIDATE_FROZEN_LOCAL_GREEN_FRESH_CI_REVIEW_PENDING",
+  "state": "SEALED_BOUNDED_UI_ACCEPTED_RELEASE_BASE_HOLD",
   "base": "5595d196a8874d477da7276c47cc9ed7ab5d27a6",
   "base_meaning": "Accepted1655SourceA with native/category/prior UI already present; frozen1655/1657 worktrees untouched",
   "production_changed": false,
@@ -122,14 +122,53 @@
     "fixture": "JSONcontainsactualsavedplan/observedcategory/fitstatebefore/saveafter/fitstateafter/candidate responses, syntheticowneridrole, andsourcegenerationmarker. Storedfields verifiednoack/expectedrevision; parity test regeneratesfromactualHTTPanddeepcompares exactfixturebytes/JSON.",
     "frontend": "UseactualAuthProvider withsynthetic/auth/me fixture, notmockownerhook. Newtests explicitzeroauto requests, state/fit/CAS/lostack/manualreload sequence, sharedexistingcheckboxselection, status/currency/window/contextseparation andlate-owner/fields/category/selection cancellation. Existingnative/parent suites rerununchanged; backendnew152/30gate andnewUIbuildCI freshbeforeindependentreview."
   },
-  "next": "Remoteimmutablecheckpoint/DraftPR; freshdedicated/fullCIactualcounts/build andindependent review. No releaseintent/host/providercalls/publication. Rootcomposeswithgoogle_launch after1657.",
+  "next": "Root owns fresh current-production composition/source history/release intent/merge/deploy/live behavior acceptance. Frozen source unchanged. No live provider/production DB reads or paid actions performed.",
   "auth_generation_requirement": "Mandatory invalidation on ANY actualAuthContext userobject replacement, including identicalpublicid/role/shape; auth/me mayomitpasswordstamp. EachpendingGET/PUT/POST mustabort/ignorelate andclearresults; noautomaticrefresh or PUTresubmit. RealAuthProvider identical-shape refresh regressionrequired.",
   "verification": {
     "backend": "43-Werror/zero skips1.68s including42new+1actualmanagementHTTPfixtureparity",
     "frontend": "202tests/9suites PASS3.931s includingoldparent/workspace/storage/native tests, actualAuthProvider generation/lostack/reselection tests andstrictservice. Earlierfocused120/5suites PASS1.705s. Host UNDICIexperimentalwarning only.",
     "preservation": "9acceptedblobs exact; removing2routerlines restoresbase5595exact; removing1testmockspread restoresbaseexact; sharedfullworkflow13additions0deletions; nointent/oldSTATUS/globalreaders/costwriters/Workspace/Merchant edits.",
-    "ci": "Freshdedicated153/30replica+202UI/build andfullGoogleCI pendingremotefinalcheckpoint; historicalbackendadf152/30 doesnotprovecoherentintegration.",
-    "independent_review": "Roottoassignonceimmutablecandidatepublished; none claimedforcurrentUI."
+    "ci": {
+      "checkout": "e7154c1a9e3aadccd09ab22f07b396ce54c7ad1e",
+      "meaning": "Synthetic merge of frozen sourcee713 into production622c310; not identical-source claim",
+      "dedicated": {
+        "run": 40976245611,
+        "replica_job": 123804865936,
+        "frontend_job": 123804866279,
+        "backend": 153,
+        "actual_mongo": 30,
+        "skips": 0,
+        "frontend": 202,
+        "suites": 9,
+        "build_seconds": 3.89,
+        "status": "SUCCESS"
+      },
+      "full_google": {
+        "run": 40976245573,
+        "backend_job": 123804865642,
+        "frontend_job": 123804865958,
+        "backend": 1602,
+        "frontend": 624,
+        "suites": 33,
+        "build_seconds": 6.46,
+        "status": "SUCCESS"
+      },
+      "readiness": {
+        "run": 40976245583,
+        "failed_job": 123804866359,
+        "status": "FAILURE_EXPECTED_HISTORICAL_WIP_BASE_NOT_RELEASE_READY",
+        "actual_reason": "resolve_candidate_source_base git merge-base --is-ancestor current622c310 sourcee713 fails; existing reviewedintent frontend hash also differs. No gate weakened. Root must create fresh current-production release source."
+      }
+    },
+    "independent_review": {
+      "reviewer": "budget_audit",
+      "source": "e713fbb11630cf5011903721e6aaf03d4efbd637",
+      "result": "PASS_BOUNDED_NO_ADDITIONAL_FINDING",
+      "fresh_ui": "63tests/3suites passed independently",
+      "code": "8backend blobs inspected matchadf; manualGET afteruncertainPUT andauth/selection late-result isolation inspected",
+      "logs": "Independently read153/30Mongo/0skip and202UI/9suites/build3.89 on synthetic e7154c1 into622c310",
+      "limits": "Currentproduction re-source, v5 release and liveacceptance remain root work; no paid authority/profit/atomic snapshot claim"
+    }
   },
   "implemented_changes": {
     "backend": "All9acceptedadf runtime/test/workflowblobs EXACT; only2line managementrouterattachment; actualnormalHTTPfixture parity asserts realplanwriterackexcluded/noadsproviderconstruction.",
@@ -138,5 +177,11 @@
     "service": "URLSearchParams repeatedproduct_ids verifiedthroughrealAxios.getUri; strictsavedfit/state/CASnextrevision, rawstorecurrency+exactserverfrozenRiyadh4windows/prior, nativeclockinterval, contextnativezone/localday/attribution/windowmissingdatepartitions andsourceproductproofrefs. No clientclockassumption/sums/paidclaim.",
     "existing_test_exception": "ExactlyoneapprovedGoogleCommercialPlan.test.jsx AuthContextmock spreadjest.requireActual to preserveoptionalhooknullwithoutprovider; previous7failures nowgreen. No productionfallback/nootheroldtestchanges.",
     "workflow": "SharedfullGoogleworkflow13additions0deletions onlynewtrigger/testargs; dedicatedUI153backend/30Mongo exactnamednoskip and202frontend/9suites0skip+build. Originalacceptedbackendworkflowunchanged."
+  },
+  "source": {
+    "sha": "e713fbb11630cf5011903721e6aaf03d4efbd637",
+    "tree": "3ce614c452294d361ac7dcbcc27e94026e2fe33b",
+    "local_equivalent": "2c4da473ddb557efed328c4afba4247d797ad185",
+    "pr": 1660
   }
 }
