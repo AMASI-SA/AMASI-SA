@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from .models import OrderDTO
+from .mapper import OrderMappingError
+from .campaign_enrichment import _looks_like_campaign_id
 from .repository import OrderRepository
 from .service import _map_row
 
@@ -21,6 +24,7 @@ _PENDING_PAYMENT = ("payment pending", "pending payment", "بانتظار الد
 class SearchResult:
     items: list[OrderDTO]
     summary: dict[str, Any]
+    skipped_invalid: int = 0
 
 
 def _text(value: Any) -> str:
@@ -58,6 +62,12 @@ def _is_paid(order: OrderDTO) -> bool:
 
 def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | None, end: datetime | None) -> bool:
     source = order.source
+    # Match the same UTM identity displayed by campaign enrichment, without
+    # querying the campaign catalog for every scanned order.
+    campaign_id = source.campaign_id
+    raw_campaign = source.campaign_name or source.utm_campaign
+    if not campaign_id and _looks_like_campaign_id(raw_campaign):
+        campaign_id = raw_campaign
     if start and order.created_at < start:
         return False
     if end and order.created_at >= end:
@@ -75,7 +85,7 @@ def _matches(order: OrderDTO, filters: dict[str, str | None], start: datetime | 
         (skus, filters.get("sku")), (_status(order), filters.get("status")),
         (order.payment.collection_status or order.payment.status, filters.get("payment_status")),
         (source.source or source.platform, filters.get("provider")),
-        (source.campaign_name, filters.get("campaign")), (source.campaign_id, filters.get("campaign_id")),
+        (source.campaign_name, filters.get("campaign")), (campaign_id, filters.get("campaign_id")),
         (source.ad_squad_name, filters.get("ad_squad")), (source.ad_squad_id, filters.get("ad_squad_id")),
         (source.ad_name, filters.get("ad")), (source.ad_id, filters.get("ad_id")),
         (raw_utm, filters.get("utm")), (source.match_status, filters.get("attribution_status")),
@@ -133,6 +143,20 @@ async def search_orders(repository: OrderRepository, *, user_id: str, filters: d
     unique_rows = {}
     for row in rows:
         unique_rows.setdefault(str(row.order_number), row)
-    mapped = [_map_row(row.salla_raw, current_status=row.current_status) for row in unique_rows.values()]
-    items = [item for item in mapped if _matches(item, filters, start, end)]
-    return SearchResult(items=items, summary=_summary(items, cutoff))
+    items = []
+    skipped_invalid = 0
+    for index, row in enumerate(unique_rows.values()):
+        if index % 50 == 0:
+            # Large searches must yield to other requests on the API worker.
+            await asyncio.sleep(0)
+        try:
+            item = _map_row(row.salla_raw, current_status=row.current_status)
+        except OrderMappingError:
+            skipped_invalid += 1
+            continue
+        if _matches(item, filters, start, end):
+            items.append(item)
+    summary = _summary(items, cutoff)
+    summary["skipped_invalid"] = skipped_invalid
+    summary["scan_limit_reached"] = len(rows) >= SCAN_LIMIT
+    return SearchResult(items=items, summary=summary, skipped_invalid=skipped_invalid)
