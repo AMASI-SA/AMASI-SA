@@ -1,0 +1,195 @@
+{
+  "source": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
+  "tree": "10a614576f5bf683b643488f8bc3c520891106dc",
+  "base": "fb12300c353cb1875f4462dc279b25360913af5c",
+  "pr_merge": "a3afec32806b429ee5d0e5bbf2a8c2690ef9356b",
+  "pr_merge_tree_equals_source": true,
+  "source_blobs": {
+    ".github/workflows/google-merchant-data-sources.yml": "315519f4335f54e44bb5573b347002d4d8d057c1",
+    "backend/integrations_control_center/google_ads_reporting.py": "755dd7d270aba3374774ef66cc98527a5b0a6524",
+    "backend/integrations_control_center/google_merchant_data_sources_proof.py": "3744b17dc7c2ce8655627005dd0d47817e5095bf",
+    "backend/integrations_control_center/google_merchant_data_sources_reader.py": "9a3f8165c91a10efa8bf866757ad14a6ed2b0448",
+    "backend/integrations_control_center/google_merchant_data_sources_routes.py": "5a932517b549d83933c670947753a096680181fa",
+    "backend/tests/test_google_merchant_data_sources.py": "c869b2efb47243b4e3deeed7250a5b7ef86a549a",
+    "backend/tests/test_google_merchant_data_sources_mongo.py": "b47f369bfe7e772baa8ddd1b9a4afe34604aa4a3",
+    "backend/tests/test_google_merchant_data_sources_reader.py": "8be496d7289bbef167b191eb7b88fdf3242fb5e3",
+    "backend/tests/test_google_merchant_data_sources_routes.py": "2b1d6d127b7b38237d7b5aef5b04b5ab08ecf1f7",
+    "backend/tests/test_google_merchant_data_sources_transport.py": "00310a676f1842f28ab4e2688355ba150ef5d010",
+    "docs/operations/GOOGLE-MERCHANT-SOURCE-PROVENANCE-20261030/CONTRACT.md": "919bbc7f07278775cb81bdb82d3df7c251cb8b5a",
+    "docs/operations/GOOGLE-MERCHANT-SOURCE-PROVENANCE-20261030/STATUS.json": "2790ae480921e12bcb810a738e555e5af377f4d2"
+  },
+  "dedicated": {
+    "push": {
+      "run": 41074189550,
+      "job": 124125862995,
+      "checkout": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
+      "passed": 504,
+      "seconds": 17.98
+    },
+    "pull_request": {
+      "run": 41074200325,
+      "job": 124125901233,
+      "checkout": "a3afec32806b429ee5d0e5bbf2a8c2690ef9356b",
+      "passed": 504,
+      "seconds": 18.91
+    },
+    "actual_mongo": {
+      "new_sources": 14,
+      "preserved_owner": 21,
+      "preserved_bound": 10,
+      "preserved_CAS": 21
+    },
+    "zero_skips_asserted": true,
+    "logs_read": true
+  },
+  "full_google": {
+    "run": 41074200347,
+    "checkout": "a3afec32806b429ee5d0e5bbf2a8c2690ef9356b",
+    "backend": {
+      "job": 124125902045,
+      "passed": 1855,
+      "seconds": 56.33
+    },
+    "frontend": {
+      "job": 124125901505,
+      "suites": 35,
+      "passed": 689,
+      "seconds": 18.407,
+      "build_seconds": 6.58
+    },
+    "logs_read": true
+  },
+  "security_frontend": {
+    "run": 41074200304,
+    "job": 124125901844,
+    "checkout": "0cd4aef0e9d65dbaa65981bfcd6f9eb98c579050",
+    "suites": 333,
+    "passed": 2789,
+    "seconds": 94.785,
+    "audit_vulnerabilities": 0,
+    "build_seconds": [
+      6.03,
+      6.39
+    ],
+    "logs_read": true
+  },
+  "pr_workflows": [
+    {
+      "id": 41074200297,
+      "name": "CodeQL",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 41074200321,
+      "name": "MZ2 advertising V2 native accounting",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200315,
+      "name": "Snapchat Direct Active Publication",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200364,
+      "name": "Snapchat Settings Management V2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200376,
+      "name": "Google credential refresh CAS",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200294,
+      "name": "Production Dashboard Four Platform Spend V1",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200403,
+      "name": "Qoyod Payment Freshness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200411,
+      "name": "Google Merchant bounded observation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200300,
+      "name": "Google Merchant owner observation",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200325,
+      "name": "Google Merchant data source provenance",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200371,
+      "name": "Google Merchant local choices",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200354,
+      "name": "Mezan Release Readiness",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200347,
+      "name": "Google Ads full management",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200392,
+      "name": "Operational Stock Eligibility",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200304,
+      "name": "Security Gate",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200424,
+      "name": "Operational Balance Web",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 41074200636,
+      "name": "G47 Focused Integration",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "remaining": [
+    "CodeQL Python still in progress at this checkpoint",
+    "independent bounded source review",
+    "root approval for any attachment and later integration"
+  ],
+  "limitations": [
+    "Helper is unattached; no owner UI, live provider access or release acceptance",
+    "Data-source ownership/type is not Salla parent/variant mapping or publisher identity",
+    "OAuth acquisition uses the unchanged existing CAS refresh helper; no data-resource mutations",
+    "Matching bracketing authorization snapshots do not establish continuous authority",
+    "1 MiB accepted total input is not an exact peak-memory claim"
+  ],
+  "provider_calls_performed": 0,
+  "host_actions": 0,
+  "source_edits_after_freeze": 0
+}
