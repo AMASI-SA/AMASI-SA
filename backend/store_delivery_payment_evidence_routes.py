@@ -65,79 +65,65 @@ def _raw_salla_order(order: dict[str, Any]) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def _uncollected_cod_total_fallback(order: dict[str, Any]) -> float | None:
-    """Carry the same Salla COD evidence used by Order Review into delivery.
+def _salla_courier_balance(order: dict[str, Any]) -> float | None:
+    """Reuse the label's provider evidence, including partial COD payments."""
+    from store_courier_balance import CodBalanceUnavailable, cod_balance_when_salla_omits_remaining
 
-    Salla can report an uncollected COD order as:
-    remaining_action.remaining_amount = null and
-    remaining_action.has_remaining_amount = false.
-
-    Order Review already interprets that provider shape as "the full order
-    total is still due" while the order is under review.  Delivery must retain
-    the same collection fact after the operational status later moves to
-    completed/delivering; otherwise a real COD balance is silently reduced to
-    zero for the driver.
-    """
     raw = _raw_salla_order(order)
-    payment_actions = raw.get("payment_actions") if isinstance(raw.get("payment_actions"), dict) else {}
-    remaining_action = (
-        payment_actions.get("remaining_action")
-        if isinstance(payment_actions.get("remaining_action"), dict)
-        else {}
-    )
-    if not remaining_action:
+    if not raw:
         return None
+    payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+    method = _normalized_payment_method(raw.get("payment_method") or payment.get("method") or order.get("payment_method"))
+    if method not in {"cod", "cash on delivery", "الدفع عند الاستلام", "دفع عند الاستلام"}:
+        return None
+    actions = raw.get("payment_actions") if isinstance(raw.get("payment_actions"), dict) else {}
+    remaining = actions.get("remaining_action") if isinstance(actions.get("remaining_action"), dict) else {}
+    # A historical raw shipping-only snapshot carries no payment evidence.
+    # Keep a deliberately explicit canonical balance rather than treating that
+    # unrelated raw payload as a failed payment calculation.
+    if not remaining and not payment and not any(raw.get(field) is not None for field in ("paid_amount", "payment_status", "payment_collection_status")):
+        return None
+    explicit = remaining.get("remaining_amount")
+    if explicit is not None:
+        value = explicit.get("amount") if isinstance(explicit, dict) else explicit
+        if isinstance(value, bool):
+            raise StoreDeliveryRuleError("authoritative_outstanding_amount_unavailable")
+        try:
+            parsed = money(value)
+            if not parsed.is_finite():
+                raise ValueError("nonfinite balance")
+            return float(parsed)
+        except (ValueError, ArithmeticError) as exc:
+            raise StoreDeliveryRuleError("authoritative_outstanding_amount_unavailable") from exc
 
-    raw_payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
-    method = _normalized_payment_method(
-        raw.get("payment_method")
-        or raw_payment.get("method")
-        or order.get("payment_method")
-    )
-    if method not in {
-        "cod",
-        "cash on delivery",
-        "الدفع عند الاستلام",
-        "دفع عند الاستلام",
-    }:
-        return None
-
-    if remaining_action.get("remaining_amount") is not None:
-        return None
-    if remaining_action.get("has_remaining_amount") is not False:
-        return None
-
-    paid_value = money(order.get("paid_amount") or 0)
-    if paid_value != money(0):
-        return None
-
-    payment_statuses = {
-        normalize_text(order.get("payment_status")).casefold(),
-        normalize_text(raw_payment.get("status")).casefold(),
-    }
-    if payment_statuses.intersection({"paid", "completed", "refunded", "مدفوع", "مكتمل", "مسترجع"}):
-        return None
-
-    collection_status = normalize_text(order.get("payment_collection_status")).casefold()
-    if collection_status in {"paid", "partial"}:
-        return None
-
-    total = order.get("total_amount")
-    if total is None:
-        return None
-    total_value = money(total)
-    if total_value <= money(0):
-        return None
-    return float(total_value)
+    provider = dict(raw)
+    amounts = provider.get("amounts") if isinstance(provider.get("amounts"), dict) else {}
+    if amounts.get("total") is None and provider.get("total") is None:
+        # Canonical totals are permitted only with a known provider currency.
+        paid_evidence = remaining.get("paid_amount")
+        currency = order.get("currency") or provider.get("currency") or (
+            paid_evidence.get("currency") if isinstance(paid_evidence, dict) else None
+        )
+        if order.get("total_amount") is not None and currency:
+            provider["total"] = {"amount": order["total_amount"], "currency": currency}
+    # Use provider paid evidence before normalized fields, which can contain zero defaults.
+    if provider.get("paid_amount") is None and payment.get("paid_amount") is None and remaining.get("paid_amount") is None and order.get("paid_amount") is not None:
+        provider["paid_amount"] = order["paid_amount"]
+    for field in ("payment_status", "payment_collection_status"):
+        if not provider.get(field) and order.get(field):
+            provider[field] = order[field]
+    try:
+        return cod_balance_when_salla_omits_remaining(provider, remaining)["amount"]
+    except CodBalanceUnavailable as exc:
+        raise StoreDeliveryRuleError("authoritative_outstanding_amount_unavailable") from exc
 
 
 def authoritative_outstanding_amount(order: dict[str, Any]) -> float:
     """Return the current remaining amount from the order SSOT.
 
-    Positive explicit remaining values always win.  For the one known Salla
-    COD shape where a null provider balance is normalized to zero before
-    collection, reuse the same provider evidence rule as Order Review so the
-    driver still sees the amount due.  Otherwise explicit zero remains valid.
+    Positive canonical balances stay authoritative. Provider COD evidence then
+    follows the exact label calculation, including partial payments; missing or
+    contradictory evidence never becomes a zero collection.
     """
     remaining_present = (
         "remaining_amount" in order and order.get("remaining_amount") is not None
@@ -151,7 +137,7 @@ def authoritative_outstanding_amount(order: dict[str, Any]) -> float:
     if paid_status in {"paid", "مدفوع", "مكتمل", "completed", "refunded", "مسترجع"}:
         return 0.0
 
-    cod_fallback = _uncollected_cod_total_fallback(order)
+    cod_fallback = _salla_courier_balance(order)
     if cod_fallback is not None:
         return cod_fallback
 
@@ -566,3 +552,4 @@ __all__ = [
     "validate_delivery_proof_reference",
     "validate_customer_conversation_reference",
 ]
+
