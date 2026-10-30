@@ -6,6 +6,7 @@ Neither a readback nor a new process reconstructs an admission/continuation.
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+import asyncio
 import uuid
 import re
 from . import google_ads_management as management
@@ -21,7 +22,8 @@ _PREPARATION=object()
 MAX_ADMITTED_SLOTS=128  # Process resource bound, never a financial allowance.
 _admitted_slots=set()  # Never evicted/retried during this process lifetime.
 _metadata_unconfirmed=False
-_ACK_TEXT_VERSION='average-daily-commitment-v1'
+_ACK_TEXT_VERSION=grants.AVERAGE_ACK_VERSION
+_metadata_lock=asyncio.Lock()
 
 
 @dataclass
@@ -63,7 +65,7 @@ def begin_google_funded_owner_admission(db,*,authenticated_user,account_id,reque
         or not isinstance(expected_review_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',expected_review_digest)
         or type(expected_revision) is not int or expected_revision<1
         or type(expected_owner_generation) is not int or expected_owner_generation<1
-        or spend_acknowledgment!={'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION}):
+        or spend_acknowledgment!={'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}):
         _fail('google_funded_owner_admission_unproved')
     scope=guard._scope(authenticated_user['id'],account_id)
     slot=(scope['user_id'],scope['account_id'],request_key)
@@ -106,6 +108,9 @@ async def _cursor_command(db,command,*,collection=None,maximum):
             _fail('google_funded_storage_inventory_incomplete')
         if result.get('ok')!=1 or len(rows)>maximum:_fail('google_funded_storage_inventory_incomplete')
         return rows
+    except asyncio.CancelledError:
+        _metadata_unconfirmed=True
+        raise
     except Exception as error:
         # Unknown response may hide a live server cursor. No repeated probes
         # accumulate resources; recovery requires process/operator lifecycle.
@@ -127,8 +132,17 @@ def _indexes():
         management.DRAFTS:[('google_draft_identity',[('user_id',1),('draft_id',1)])]}
 
 
-async def _storage_contract(db):
+def _metadata_available():
     if _metadata_unconfirmed:_fail('google_funded_storage_metadata_pending')
+
+
+async def _storage_contract(db):
+    async with _metadata_lock:
+        _metadata_available()
+        return await _read_storage_contract(db)
+
+
+async def _read_storage_contract(db):
     required=_namespaces()
     try:
         status=await db.command({'connectionStatus':1,'showPrivileges':True})
@@ -173,17 +187,20 @@ async def _read_preparation(db,admission,phase,client_factory):
     typed=grants.validate_record(record)
     if (record.get('state')!='configured' or record.get('consumed') is not False or record.get('claim') is not None
         or (record['review_digest'],record['revision'],typed.owner_generation)!=(admission.review_digest,admission.revision,admission.owner_generation)
-        or record['review'].get('_owner_auth_binding')!=owner):_fail('google_funded_preparation_review_changed')
+        or record['review'].get('_owner_auth_binding')!=owner
+        or record['review'].get('average_daily_acknowledgment')!={'acknowledged':True,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST}):_fail('google_funded_preparation_review_changed')
     pure.prepare_google_funded_creation_intent(grant=record['grant'],draft=record['review']['draft'],current=started)
     if await db[grants.RUNS].find_one({**scope,'grant_key':key},{'_id':1}):_fail('google_funded_slot_consumed_or_pending')
     contract=await _storage_contract(db)
     # Real read collaborators mint proof; no client-supplied booleans accepted.
     native=await authority._read_native_bundle(db,scope=scope,record=record,started=started,client_factory=client_factory)
+    if await _storage_contract(db)!=contract:_fail('google_funded_storage_contract_changed')
+    _metadata_available()
     if phase.get('stop_requested') or guard._operation_clock()>=phase['deadline']:_fail('google_funded_preparation_expired')
     return _Preparation(db,guard._plain({'scope':scope,'grant_key':key,'record_digest':management.digest(record),
         'owner_auth':owner,'native':native.payload,'storage_contract_digest':contract,
         'proposal_id':'funded_proposal_'+uuid.uuid4().hex,'execution_claim_id':'funded_claim_'+uuid.uuid4().hex,
-        'operation_id':admission.operation_id,'spend_acknowledgment':{'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION}}),_PREPARATION)
+        'operation_id':admission.operation_id,'spend_acknowledgment':{'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}}),_PREPARATION)
 
 
 async def _write_preparation(db,*,session,snapshot,command,operation_id,current):
@@ -191,6 +208,7 @@ async def _write_preparation(db,*,session,snapshot,command,operation_id,current)
     if not isinstance(proof,_Preparation) or proof.db is not db or proof.proof is not _PREPARATION:
         _fail('google_funded_preparation_proof_unproved')
     value=guard._plain(proof.payload);scope=value['scope'];native=value['native'];view=SessionDatabase(db,session)
+    _metadata_available()
     if not guard.budget_guard_runtime_available() or scope!={'user_id':snapshot.user_id,'account_id':snapshot.account_id}:
         _fail('google_funded_runtime_unavailable')
     if operation_id!=value['operation_id']:_fail('google_funded_preparation_proof_unproved')
@@ -215,7 +233,8 @@ async def _write_preparation(db,*,session,snapshot,command,operation_id,current)
         _fail('google_budget_guard_allocation_pending')
     exposure=account_exposure(snapshot,native['inventory'],record['grant'],current,funded_grant=record['grant'])
     if exposure['total']+guard._money(record['grant']['budget_native'])>exposure['limit']:_fail('google_budget_guard_account_limit')
-    if await view[management.FENCES].find_one(scope):_fail('google_funded_account_fence_pending')
+    prior_fence=await view[management.FENCES].find_one(scope)
+    if prior_fence and prior_fence.get('status')!='released':_fail('google_funded_account_fence_pending')
     intent=native['intent'];until=min(pure._instant(record['grant']['expires_at']),current+management.PROPOSAL_TTL)
     proposal={**scope,'proposal_id':value['proposal_id'],'execution_claim_id':value['execution_claim_id'],
         'actor_id':'mezan_google_automation_v1','provider':'google_ads','action':'create_campaign','campaign_id':None,
@@ -229,6 +248,14 @@ async def _write_preparation(db,*,session,snapshot,command,operation_id,current)
     proposal['confirmation_digest']=management.digest(management.immutable(proposal))
     fence={**scope,'proposal_id':proposal['proposal_id'],'execution_claim_id':proposal['execution_claim_id'],
         'status':'claimed','claimed_at':current.isoformat()}
+    await view[management.PROPOSALS].insert_one(deepcopy(proposal))
+    if prior_fence:
+        changed=await view[management.FENCES].update_one(prior_fence,{'$set':fence})
+        if changed.matched_count!=1:_fail('google_funded_account_fence_changed')
+    else:await view[management.FENCES].insert_one(deepcopy(fence))
+    fence=await view[management.FENCES].find_one({**scope,'proposal_id':proposal['proposal_id'],
+        'execution_claim_id':proposal['execution_claim_id'],'status':'claimed'},{'_id':0})
+    if not fence:_fail('google_funded_account_fence_changed')
     claim={'proposal_id':proposal['proposal_id'],'execution_claim_id':proposal['execution_claim_id'],
         'preparation_operation_id':operation_id}
     binding={**scope,'grant_key':record['grant_key'],'grant_revision':record['revision'],'review_digest':record['review_digest'],
@@ -241,7 +268,6 @@ async def _write_preparation(db,*,session,snapshot,command,operation_id,current)
             'activated_at':current.isoformat(),'activation_review_digest':record['review_digest'],
             'activation_policy_binding':authority.policy_binding(snapshot)}})
     if changed.matched_count!=1:_fail('google_funded_preparation_review_changed')
-    await view[management.PROPOSALS].insert_one(proposal);await view[management.FENCES].insert_one(fence)
     await view[grants.RUNS].insert_one({**scope,'grant_key':record['grant_key'],'request_key':record['request_key'],
         **claim,'claim':claim,'consumed':True,'phase':'prepared','creation_identity':intent['creation_identity'],
         'preparation_binding':binding,'preparation_binding_digest':digest,'intent':intent,'graph_digest':intent['graph_digest'],
@@ -270,10 +296,11 @@ async def prepare_google_funded_creation(db,*,admission,client_factory=GoogleAds
         remaining=phase['deadline']-guard._operation_clock()
         if remaining<=0:_fail('google_funded_preparation_expired')
         result=await guard.run_google_budget_guard_transaction(db,**scope,operation_id=admission.operation_id,
-            capability=capability,planner=lambda snapshot:guard.FundedCreationPreparation(prepared),timeout_seconds=min(15,remaining))
+            capability=capability,planner=lambda snapshot:guard.FundedCreationPreparation(prepared),timeout_seconds=min(15,remaining),original_deadline=phase['deadline'])
         # No commit cache/readback can reach the issuer: exact original call ACK.
         if (result.get('committed') is not True or result.get('kind')!='funded_preparation'
             or result.get('operation_id')!=admission.operation_id):_fail('google_funded_preparation_ack_unproved')
+        _metadata_available()
         current=management.now()
         if (guard._operation_clock()>=phase['deadline'] or not pure._instant(result['authority_valid_from'])<=current<pure._instant(result['authority_valid_until'])
             or not 0<=(current-pure._instant(result['observed_at'])).total_seconds()<90):

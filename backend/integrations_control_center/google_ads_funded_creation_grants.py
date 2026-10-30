@@ -13,6 +13,9 @@ from .google_ads_client import GoogleAdsClient,identifier,problem
 GRANTS='mezan_google_ads_funded_creation_grants_v1'
 RUNS='mezan_google_ads_funded_creation_runs_v1'
 SEMANTICS='AVERAGE_DAILY_COMMITMENT'
+AVERAGE_ACK_VERSION='average-daily-commitment-v1'
+AVERAGE_ACK_TEXT='هذه ميزانية جوجل اليومية المتوسطة وحدود التزامات الميزانيات، وليست سقفًا صارمًا للإنفاق الفعلي يوميًا أو إجمالًا'
+AVERAGE_ACK_DIGEST=management.digest({'version':AVERAGE_ACK_VERSION,'text':AVERAGE_ACK_TEXT,'semantics':SEMANTICS})
 AUTH_FIELDS=('id','role','disabled','is_active','deleted_at','password_updated_at')
 
 
@@ -66,6 +69,9 @@ def public_google_funded_review(review):
 
 class FundedGrantReviewInput(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
+    average_daily_acknowledged: Literal[True]|None=None
+    average_daily_ack_version: str|None=None
+    average_daily_ack_digest: str|None=None
     mode: Literal['create_new_enabled_search']
     spend_semantics: Literal['AVERAGE_DAILY_COMMITMENT']
     request_key: str=Field(pattern=r'^[A-Za-z0-9_-]{8,128}$')
@@ -124,6 +130,9 @@ async def review_google_funded_grant(db,*,user,account_id,body,current=None,clie
     except ValidationError:fail('google_funded_grant_input_invalid')
     if body.mode!='create_new_enabled_search' or body.spend_semantics!=SEMANTICS:
         fail('google_funded_spend_semantics_unsupported')
+    acknowledgment=(body.average_daily_acknowledged,body.average_daily_ack_version,body.average_daily_ack_digest)
+    if acknowledgment not in ((None,None,None),(True,AVERAGE_ACK_VERSION,AVERAGE_ACK_DIGEST)):
+        fail('google_funded_spend_acknowledgment_unproved')
     scope=await _account_scope(db,actor,account_id)
     row=await db[management.DRAFTS].find_one({'user_id':actor['user_id'],'draft_id':body.draft_id,
         'revision':body.draft_revision,'account_id':scope['account_id']},{'_id':0})
@@ -163,6 +172,8 @@ async def review_google_funded_grant(db,*,user,account_id,body,current=None,clie
         'time_zone':grant['time_zone'],'budget_native':body.budget_native,
         'max_campaign_daily_budget_native':body.max_campaign_daily_budget_native,
         'max_account_daily_budget_native':body.max_account_daily_budget_native}
+    if acknowledgment[0] is True:
+        review['average_daily_acknowledgment']={'acknowledged':True,'version':AVERAGE_ACK_VERSION,'text_digest':AVERAGE_ACK_DIGEST}
     from .google_ads_funded_creation_authority import _products
     product=await _products(db,{'user_id':scope['user_id'],'review':review},started)
     review['product_review_binding']={key:product[key] for key in ('product_id','canonical_url','name','sku')}

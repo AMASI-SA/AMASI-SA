@@ -286,12 +286,12 @@ def _operation_clock():
     return asyncio.get_running_loop().time()
 
 
-async def _retained_operation(db, scope, operation_id, kind, work, seconds, phase):
+async def _retained_operation(db, scope, operation_id, kind, work, seconds, phase, original_deadline=None):
     key = (id(db), scope['user_id'], scope['account_id'], operation_id, kind)
     limit = MAX_PENDING_WRITE_TASKS if kind == 'write' else MAX_PENDING_READ_TASKS
     if key in _pending_operations or sum(item['kind'] == kind for item in _pending_operations.values()) >= limit:
         raise problem('google_budget_guard_operation_pending', 'عمل تخزين سابق لم ينتهِ؛ لا تعِد الإرسال.', 503)
-    phase['deadline'] = _operation_clock() + seconds
+    phase['deadline'] = min(_operation_clock()+seconds,original_deadline) if original_deadline is not None else _operation_clock()+seconds
     async def original_task():
         remaining = phase['deadline'] - _operation_clock()
         if remaining <= 0:
@@ -866,6 +866,9 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         if (isinstance(command, (PausedCreationDispatchFloor, StandingDispatchFloor, FundedCreationDispatchFloor, FundedCreationPreparation))
             and datetime.now(timezone.utc) >= datetime.fromisoformat(result['authority_valid_until'])):
             _fail('google_budget_guard_creation_authority_expired')
+        if isinstance(command,FundedCreationPreparation):
+            from .google_ads_funded_creation_preparation import _metadata_available
+            _metadata_available()
         phase['commit_attempted'] = True
         await _commit_once(db, session)  # Exactly one wire command; no automatic commit retry.
         return {**result, 'committed': True, 'guard_epoch': row['epoch'] + 1, 'operation_id': operation_id,
@@ -875,7 +878,7 @@ async def _run(db, *, scope, operation_id, planner, capability, phase):
         await _end_session(session)
 
 async def run_google_budget_guard_transaction(db, *, user_id, account_id, operation_id, capability=None, planner,
-        timeout_seconds=15):
+        timeout_seconds=15, original_deadline=None):
     """One server-internal synchronous decision and one explicit commit attempt.
 
     Storage commit is NOT dispatch authority. Only future fully integrated
@@ -889,9 +892,11 @@ async def run_google_budget_guard_transaction(db, *, user_id, account_id, operat
             _fail('google_budget_guard_command_invalid')
         if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not 0 < timeout_seconds <= 15:
             _fail('google_budget_guard_timeout_invalid')
+        if original_deadline is not None and (isinstance(original_deadline,bool) or not isinstance(original_deadline,(int,float))):
+            _fail('google_budget_guard_timeout_invalid')
         return await _retained_operation(db, scope, operation_id, 'write',
             lambda: _run(db, scope=scope, operation_id=operation_id, planner=planner,
-                capability=capability, phase=phase), timeout_seconds, phase)
+                capability=capability, phase=phase), timeout_seconds, phase, original_deadline)
     except asyncio.CancelledError as exc:
         exc.commit_attempted = phase['commit_attempted']
         exc.preserve_execution_fence = True
