@@ -215,6 +215,243 @@ async def _credential(db: Any, user_id: str, now: datetime) -> str:
     return await _refresh_access_token(db, row, now)
 
 
+GOOGLE_BOUND_READ_TIMEOUT_SECONDS = 90.0
+GOOGLE_BOUND_READ_CLEANUP_SECONDS = 2.0
+
+
+class GoogleBoundReadError(RuntimeError):
+    """A fixed safe code only; never attach credential or driver details."""
+
+    def __init__(self, code="google_bound_read_unproved"):
+        self.code = code
+        super().__init__(code)
+
+
+def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=None):
+    """Opaque same-credential read session; NOT tenant/account authorization.
+
+    The owner route must independently prove/recheck membership and complete
+    native Ads-to-Merchant links. Keep its result inside this async context
+    until the final credential fence succeeds. Existing refresh callers and
+    writers are unchanged. No token, ciphertext, headers or raw client escapes.
+    """
+    import asyncio
+    from contextlib import asynccontextmanager
+    from copy import deepcopy
+    import hmac
+    import re
+    import uuid
+
+    from bson import BSON
+    from pymongo import ReadPreference
+    from pymongo.read_concern import ReadConcern
+    from .google_ads_client import GoogleAdsClient
+
+    clock = clock or _utcnow
+
+    def fail(code="google_bound_read_unproved"):
+        raise GoogleBoundReadError(code) from None
+
+    def timestamp():
+        value = clock()
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            fail()
+        return value.astimezone(timezone.utc)
+
+    @asynccontextmanager
+    async def opened():
+        token, snapshot, source_bytes, ads, merchant = "", {}, b"", None, None
+        closed = False
+
+        async def cleanup():
+            nonlocal token, source_bytes, ads, merchant, closed
+            closed = True
+            snapshot.clear()
+            token = ""
+            source_bytes = b""
+            clients = tuple(client for client in (ads, merchant) if client is not None)
+            ads = merchant = None
+
+            async def close_one(client):
+                try:
+                    async with asyncio.timeout(GOOGLE_BOUND_READ_CLEANUP_SECONDS):
+                        close = getattr(client, "close", None) or client.aclose
+                        await close()
+                except Exception:
+                    pass
+
+            # The outer deadline may already have cancelled the body. Cleanup
+            # owns a separate finite deadline, and gather awaits both closes.
+            # External cancellation propagates through gather to both clients.
+            await asyncio.gather(*(close_one(client) for client in clients))
+
+        def exact_snapshot(row):
+            # BSON retains scalar types and absent/null fields. Sorting keys
+            # avoids treating harmless field order as a different credential.
+            return BSON.encode({key: row[key] for key in sorted(row)})
+
+        try:
+            if (not isinstance(user_id, str) or not user_id or len(user_id) > 128
+                or not isinstance(ads_account, dict) or not isinstance(merchant_id, str)
+                or not re.fullmatch(r"[1-9][0-9]{0,29}", merchant_id)):
+                fail()
+            account = deepcopy(ads_account)
+            customer = account.get("ad_account_id") or account.get("external_account_id")
+            if (not isinstance(customer, str) or not re.fullmatch(r"[1-9][0-9]{0,29}", customer)
+                or any(account.get(key) not in (None, customer) for key in ("ad_account_id", "external_account_id"))):
+                fail()
+            # Refresh remains inside the existing CAS-protected boundary.
+            token = await _credential(db, user_id, timestamp())
+            collection = db[GOOGLE_CREDENTIALS_COLLECTION].with_options(
+                read_concern=ReadConcern("majority"), read_preference=ReadPreference.PRIMARY)
+            rows = await collection.find({"user_id": user_id}, CREDENTIAL_REFRESH_PROJECTION).limit(2).to_list(length=2)
+            if len(rows) != 1 or rows[0].get("user_id") != user_id:
+                fail()
+            snapshot = deepcopy(rows[0])
+            current_token = decrypt_google_token(snapshot.get("access_token_ciphertext"))
+            if (not isinstance(token, str) or not token or not isinstance(current_token, str)
+                or not hmac.compare_digest(token.encode(), current_token.encode())):
+                fail("google_bound_read_credential_changed")
+            current_token = ""
+            scopes = snapshot.get("scope")
+            if (not isinstance(scopes, list) or any(not isinstance(s, str) for s in scopes)
+                or not {"https://www.googleapis.com/auth/adwords", "https://www.googleapis.com/auth/content"} <= set(scopes)
+                or not isinstance(snapshot.get("google_subject"), str) or not snapshot["google_subject"]
+                or snapshot.get("token_type") != "Bearer"):
+                fail("google_bound_read_capability_unproved")
+            expiry = _parse_datetime(snapshot.get("expires_at"))
+            if expiry is None or expiry <= timestamp() + timedelta(minutes=2):
+                fail("google_bound_read_expiry_unproved")
+            source_bytes = exact_snapshot(snapshot)
+            evidence_id = "google-bound-read-" + uuid.uuid4().hex
+
+            async def current():
+                if closed or expiry <= timestamp() + timedelta(seconds=45):
+                    fail("google_bound_read_expiry_unproved")
+                try:
+                    matched = await collection.find({"user_id": user_id}, CREDENTIAL_REFRESH_PROJECTION).limit(2).to_list(length=2)
+                    if len(matched) != 1 or not hmac.compare_digest(exact_snapshot(matched[0]), source_bytes):
+                        fail("google_bound_read_credential_changed")
+                except GoogleBoundReadError:
+                    raise
+                except Exception:
+                    fail()
+
+            await current()
+            ads = GoogleAdsClient(token, account)
+            merchant = httpx.AsyncClient(headers={"Authorization": "Bearer " + token},
+                timeout=12.0, follow_redirects=False, max_redirects=0,
+                limits=httpx.Limits(max_connections=1, max_keepalive_connections=1))
+            merchant_url = "https://merchantapi.googleapis.com/products/v1/accounts/" + merchant_id + "/products"
+
+            class SafeResponse:
+                __slots__ = ("__response",)
+
+                def __init__(self, response):
+                    self.__response = response
+
+                def __repr__(self):
+                    return "<GoogleBoundReadResponse>"
+
+                @property
+                def status_code(self):
+                    return self.__response.status_code
+
+                @property
+                def headers(self):
+                    return {key: self.__response.headers[key] for key in
+                        ("content-type", "content-encoding") if key in self.__response.headers}
+
+                async def aiter_bytes(self, chunk_size=8192):
+                    try:
+                        async for chunk in self.__response.aiter_bytes(chunk_size=chunk_size):
+                            yield chunk
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
+
+            class ReadSession:
+                __slots__ = ()
+
+                def __repr__(self):
+                    return "<GoogleBoundReadSession>"
+
+                @property
+                def evidence_id(self):
+                    return evidence_id
+
+                async def check_current(self):
+                    await current()
+
+                async def account_metadata(self):
+                    try:
+                        await current()
+                        result = await ads.account_metadata()
+                        await current()
+                        return result
+                    except GoogleBoundReadError:
+                        raise
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
+
+                async def search(self, query_text, *, max_rows=2000):
+                    try:
+                        await current()
+                        result = await ads.search(query_text, max_rows=max_rows)
+                        await current()
+                        return result
+                    except GoogleBoundReadError:
+                        raise
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
+
+                @asynccontextmanager
+                async def stream(self, method, url, *, params, headers, follow_redirects):
+                    if (method != "GET" or url != merchant_url or follow_redirects is not False
+                        or headers != {"Accept-Encoding": "identity"} or not isinstance(params, dict)
+                        or set(params) - {"pageSize", "pageToken"}
+                        or type(params.get("pageSize")) is not int or not 1 <= params["pageSize"] <= 1000
+                        or "pageToken" in params and (not isinstance(params["pageToken"], str) or not 1 <= len(params["pageToken"]) <= 4096)):
+                        fail("google_bound_read_request_refused")
+                    try:
+                        await current()
+                        async with merchant.stream("GET", merchant_url, params=dict(params),
+                                headers={"Accept-Encoding": "identity"}, follow_redirects=False) as response:
+                            yield SafeResponse(response)
+                        await current()
+                    except GoogleBoundReadError:
+                        raise
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
+
+        except asyncio.CancelledError:
+            await cleanup()
+            raise
+        except GoogleBoundReadError:
+            await cleanup()
+            raise
+        except Exception:
+            await cleanup()
+            raise GoogleBoundReadError() from None
+        try:
+            yield ReadSession()
+            await current()
+        finally:
+            # Cleanup must not leak transport exception repr or replace the
+            # result with a raw credential-bearing driver exception.
+            await cleanup()
+
+    @asynccontextmanager
+    async def bounded():
+        try:
+            async with asyncio.timeout(GOOGLE_BOUND_READ_TIMEOUT_SECONDS):
+                async with opened() as session:
+                    yield session
+        except TimeoutError:
+            raise GoogleBoundReadError("google_bound_read_timeout") from None
+
+    return bounded()
+
+
 async def _to_list(cursor: Any, length: int) -> list[dict[str, Any]]:
     if hasattr(cursor, "to_list"):
         return await cursor.to_list(length=length)
