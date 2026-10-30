@@ -1,0 +1,38 @@
+{
+  "task": "GOOGLE-NAMESPACE-BOOTSTRAP-UI-20261030",
+  "state": "material_implementation_wip_not_reviewed_or_deployable",
+  "branch": "codex/google-namespace-bootstrap-ui-wip-20261030",
+  "base": "622c310d8dcee13da61410bca6b3ac85134a9cfe",
+  "contract_source": "2feb6f741d89ea7193b6ee80ee8c225d4472e6db",
+  "frozen_backend_source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+  "source_sha": "this_commit; remote full SHA recorded in subsequent checkpoint/PR",
+  "completed": [
+    "Exact frozen backend module, three tests and workflow copied; original 111-case CI evidence remains historical prerequisite only",
+    "Two additive management-router lines and two explicitly approved Workspace import/render lines",
+    "New untested strict UI service and actual AuthContext child; explicit receipt, prepare and execute actions"
+  ],
+  "validation": {
+    "new_code_tests": "not yet run",
+    "frontend_dependencies": "local installation blocked by environment policy; use CI",
+    "frozen_backend_prior_CI": {
+      "run": 40976213231,
+      "job": 123804759846,
+      "source": "2c6aa43112019544f836f9d8e0d2464d4581f8cf",
+      "passed": 111,
+      "actual_mongo": 64,
+      "skipped": 0
+    }
+  },
+  "remaining": [
+    "Actual HTTP/auth integration and receipt serializer fixtures",
+    "Actual AuthProvider, stale response, uncertainty and real API interceptor tests",
+    "Disposable Mongo integration preserving old receipts/diagnostics",
+    "Dedicated UI workflow and append-only full-management test arguments",
+    "Fresh CI, independent review and later fresh production source composition by root"
+  ],
+  "next": "Add fixture and meaningful tests before claiming UI or integration acceptance",
+  "production_changed": false,
+  "live_DB_provider_or_flags_changed": false,
+  "release_intent_changed": false,
+  "coordination": "Root owns live production and final shared-file composition. This isolated branch remains based on 622c; do not overwrite later Merchant Workspace changes."
+}
