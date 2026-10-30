@@ -78,7 +78,7 @@ test("Emergent host compatibility does not relax governed releases", () => {
   );
   assert.equal(
     packageManifest.engines.node,
-    ">=20.18.1 <21 || >=22.23.2 <23",
+    ">=20.18.1 <21 || >=22.23.2 <23 || >=24.19.0 <25",
   );
   assert.equal(packageManifest.engines.yarn, ">=1.22.22 <2");
   assert.equal(releaseBuildContract.expectedNodeVersion, "22.23.2");
@@ -112,8 +112,12 @@ test("Emergent host compatibility does not relax governed releases", () => {
         /^\s*env -u GITHUB_ACTIONS -u GITHUB_SHA -u GITHUB_WORKSPACE \\\n\s*yarn build \| tee /gm,
       ) || [];
       assert.equal(hostAdapterInvocations.length, 1);
-      assert.match(workflow, /node-version:\s*["']?20\.20\.2["']?/);
-      assert.match(workflow, /Emergent Host Node 20 clean-clone adapter rehearsal/);
+      assert.match(workflow, /host-node: \["20\.20\.2", "24\.19\.0"\]/);
+      assert.match(workflow, /node-version: \$\{\{ matrix\.host-node \}\}/);
+      assert.match(workflow, /Emergent Host Node \$\{\{ matrix\.host-node \}\} clean-clone adapter rehearsal/);
+      assert.match(workflow, /release-v5-generated-outputs-host-\$\{\{ matrix\.host-node \}\}/);
+      assert.match(workflow, /release-v5-clean-clone-evidence-host-\$\{\{ matrix\.host-node \}\}/);
+      assert.match(workflow, /node --test frontend\/scripts\/host-node-compatibility\.test\.cjs/);
       assert.match(workflow, /MEZAN_RELEASE_USE_REVIEWED_INTENT=1/);
       assert.match(workflow, /MEZAN_RELEASE_BOOTSTRAP_INTENT=1/);
       assert.match(workflow, /release-v5-reviewed-intent-candidate/);
