@@ -1,0 +1,31 @@
+{
+  "status": "DOCS_WIP_CONTRACT_PROPOSED_NO_RUNTIME_CHANGE",
+  "branch": "codex/google-funded-initiation-contract-wip-20261030",
+  "base_remote": "eb9669e1a134db6494c4acd00d9a238298c190da",
+  "accepted_storage_source": "62129405ba3aba94f1c5edc3001f337d4665da19",
+  "frozen_runtime": "8438cee05dd6e70983f76fd94be442b3d47e2249",
+  "amendment": "995504ac12878b261f661002b92f1edd99bc0455",
+  "files": [
+    "DESIGN.md",
+    "STATUS.json"
+  ],
+  "scope": "Durable initiation producer/owner interface prerequisites contract only. No application issuer/activation/publicattach/worker/provider mutation or flag changes.",
+  "findings": [
+    "Real RUNS prepared journal must populate creation_identity before its existing unique identity index can support more than one distinct grant; minimal test fixture is not a production producer.",
+    "Do not expose standalone prepare-then-resume UI: private ACK cannot survive an HTTP round trip. First producer remains internal; later explicit owner one-shot orchestration must carry continuations directly in one process.",
+    "Preparation journal binds post-TX common epoch N+1; later epoch drift invalidates rather than rebasing the original proof.",
+    "Existing four bootstrap targets and positive engine receipt do not prove GRANTS/RUNS/management/users marker provisioning or six writer migration."
+  ],
+  "proposed_next_slice": "Internal mandatory preparation transaction only after root design approval; one positive raw ACK issues exact private initiation capability, never cached readback/restart. No money allocation or provider call.",
+  "verification": "Docs-only JSON parse/path diff; prior accepted storage264 tests/89 actualMongo evidence is baseline, not a test claim for unimplemented producer.",
+  "production_changed": false,
+  "runtime_flags_changed": false,
+  "financial_limits_saved": false,
+  "owner_financial_defaults": false,
+  "remaining": [
+    "Root contract review, resolve exact proposal/fence producer and cancellation/resolution ownership before implementation",
+    "Actual new namespace/index/validator/RBAC/legacy proof and mandatory six policy writer migration before positive issuance",
+    "Future owner UI approval, prepared paid-client gateway/no-intervening-await and end-to-end funded acceptance require separate review"
+  ],
+  "next": "Root reviews DESIGN.md; preserve old runtime and frozen pairs. No implementation until assigned."
+}
