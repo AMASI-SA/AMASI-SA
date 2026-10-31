@@ -13,7 +13,7 @@ const { version: minimatchVersion } = require("minimatch/package.json");
 const { version: redirectVersion } = require("follow-redirects/package.json");
 
 async function main() {
-  assert.equal(minimatchVersion, "11.0.1", "unexpected minimatch version");
+  assert.equal(minimatchVersion, "11.0.3", "unexpected minimatch version");
   assert.equal(redirectVersion, "1.16.2", "unexpected follow-redirects version");
   assert.equal(minimatch("file.xlsx", "*.xlsx"), true);
   const matches = glob.globSync("src/pages/operational/*.jsx", {cwd: process.cwd()});
