@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
-    shipping_charge, unique_index, usable,
+    invoice_component_amounts, shipping_charge, unique_index, usable,
 )
 
 ZERO = Decimal("0")
@@ -95,6 +95,11 @@ async def project(db, owner, state, *, as_of=None):
             continue
         if approved_at > stamp:
             continue
+        try:
+            invoice_component_amounts(invoice)
+        except (ValueError, KeyError, TypeError):
+            issues["supplier_invoice_tax_or_amount_incomplete"] += 1
+            continue
         for line in invoice.get("lines", []):
             piece_ids = line.get("piece_ids") or []
             if (line.get("product_price_authority") != "mezan_v2" or not piece_ids
@@ -154,7 +159,9 @@ async def project(db, owner, state, *, as_of=None):
         if (record.get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh"):
             issues["historical_order_refresh_required"] += 1
             continue
-        currency = str(raw.get("currency") or (raw.get("amounts") or {}).get("total", {}).get("currency") or "")
+        source_total = (raw.get("amounts") or {}).get("total")
+        total_currency = source_total.get("currency") if isinstance(source_total, dict) else None
+        currency = str(raw.get("currency") or total_currency or "")
         # The MZ2 cost profiles and delivery contracts are SAR amounts; the
         # historic Salla order currency is not permission to invent FX.
         if currency != "SAR":
@@ -253,11 +260,16 @@ async def project(db, owner, state, *, as_of=None):
         if not party_id:
             issues["historical_shipping_unassigned"] += 1
             continue
-        rates = [r for r in setup.get("contracts", [])
-                 if r.get("status") == "approved" and r.get("party_type") == party_type
-                 and str(r.get("party_id")) == party_id and r.get("context") == "delivery"
-                 and instant(r["effective_from"]) <= stamp
-                 and (not r.get("effective_to") or stamp < instant(r["effective_to"]))]
+        rates = []
+        for rate in setup.get("contracts", []):
+            if (rate.get("status") != "approved" or rate.get("party_type") != party_type
+                    or str(rate.get("party_id")) != party_id or rate.get("context") != "delivery"):
+                continue
+            try:
+                if instant(rate["effective_from"]) <= stamp and (not rate.get("effective_to") or stamp < instant(rate["effective_to"])):
+                    rates.append(rate)
+            except (ValueError, KeyError, TypeError):
+                issues["historical_shipping_contract_incomplete"] += 1
         if len(rates) != 1:
             issues["historical_shipping_contract_incomplete"] += 1
             continue
