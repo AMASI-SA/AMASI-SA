@@ -66,5 +66,6 @@
   "independent_blockers": [
     "Missing or replaced namespace after final metadata read may be implicitly created by insert; technical probe may also create inside later-aborted transaction. UUID experiment pending.",
     "Unknown-before-commit through second DB wrapper: inherited fix preserved, new real-replica regression pending."
-  ]
+  ],
+  "uuid_experiment": "Four actual Mongo8 authenticated readWrite transaction tests: exact UUID positive then abort; missing/recreated expected code361; StableAPI strict expected323. Runtime UUID binding not implemented. Regression source69c23a9 CI41211816881 running."
 }

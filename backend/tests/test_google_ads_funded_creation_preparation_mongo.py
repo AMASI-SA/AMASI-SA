@@ -358,3 +358,44 @@ async def test_actual_unknown_before_commit_blocks_new_wrapper_same_process(monk
     assert error.value.detail['code']=='google_funded_owner_admission_consumed'
     assert all(name not in {'insert','update','commitTransaction'} for name in actual_db[1].names[baseline:])
     assert provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case_name',['current','missing','recreated','api_strict'])
+async def test_actual_expected_uuid_insert_public_command_experiment(monkeypatch,actual_db,test_uri,case_name):
+    from bson.binary import Binary,UUID_SUBTYPE
+    from pymongo.errors import OperationFailure
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    target=grants.RUNS
+    metadata=await db.command({'listCollections':1,'filter':{'name':target}})
+    expected=metadata['cursor']['firstBatch'][0]['info']['uuid']
+    expected=Binary(bytes(expected),UUID_SUBTYPE)
+    await db.command({'createUser':'uuid_read_write_test','pwd':'DisposableUuidTestsOnly123',
+        'roles':[{'role':'readWrite','db':db.name}]})
+    worker=await other_client(actual_db,test_uri,user='uuid_read_write_test',password='DisposableUuidTestsOnly123',auth_source=db.name)
+    if case_name in {'missing','recreated'}:
+        await db.drop_collection(target)
+        if case_name=='recreated':await provision_test_namespaces(db)
+    session=await worker.client.start_session()
+    baseline=len(actual_db[1].insert_results)
+    try:
+        guard._transaction(session)
+        command={'insert':target,'documents':[{'_id':'TEST-ONLY-UUID-PROBE'}],
+            'ordered':True,'collectionUUID':expected}
+        if case_name=='api_strict':command.update(apiVersion='1',apiStrict=True)
+        try:
+            reply=await worker.command(command,session=session)
+            accepted=reply.get('ok')==1 and reply.get('n')==1 and not reply.get('writeErrors') and not reply.get('writeConcernError')
+            codes=[item.get('code') for item in reply.get('writeErrors',[])]
+        except OperationFailure as error:
+            accepted=False;codes=[error.code]
+        assert accepted is (case_name=='current')
+        if case_name in {'missing','recreated'}:assert codes==[361]
+        if case_name=='api_strict':assert codes==[323]
+        if accepted:await guard._abort_once(worker,session)
+    finally:await guard._end_session(session)
+    assert await db[target].count_documents({})==0
+    assert (target in await db.list_collection_names()) is (case_name!='missing')
+    inserts=actual_db[1].insert_results[baseline:]
+    assert not any(name==target and count>0 for name,identity,count in inserts) or case_name=='current'
+    assert provider.writes==0
+    print({'uuid_command_experiment':case_name,'accepted_in_transaction':accepted,'error_codes':codes,'runtime_changed':False})
