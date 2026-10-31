@@ -81,3 +81,13 @@ test('load failure offers manual reload while preserving the rest of reporting',
   expect(host.textContent).toContain('40.00 SAR');
   expect(api.costExposure).toHaveBeenCalledTimes(2);
 });
+
+test('current catalog estimates for old work are visibly marked as nonhistorical', async () => {
+  api.costExposure.mockResolvedValue({status:'preview',currencies:{
+    SAR:{prestart_supplier_unreceived:'33.50'}
+  },groups:[],issues:[{code:'historical_current_catalog_estimate_used',count:1}]});
+  await render();
+  expect(host.textContent).toContain('33.50 SAR');
+  expect(host.textContent).toContain('سعر التكلفة الحالي في كتالوج سلة');
+  expect(host.textContent).toContain('ليس سعرًا تاريخيًا معتمدًا');
+});
