@@ -160,3 +160,33 @@ def test_prestart_shipping_quote_is_independent_of_delivery_and_supplier_cost():
     assert shipping[0]["stage"] == "not_delivered"
     assert shipping[0]["amount"] == "17.25"
     assert shipping[0]["party_name"] == "إيمايل"
+
+
+def test_historical_missing_cost_can_preview_explicit_current_salla_catalog_cost_with_warning():
+    db = seeded_db()
+    db.data["mezan_product_cost_profiles_v2"] = []
+    db.data["mezan_products_v2"] = [row(salla_product_id="p1", cost_price_from_salla="33.50")]
+    result = run(project(db, "owner", operating_state(), as_of=NOW))
+    assert result["currencies"]["SAR"]["prestart_supplier_unreceived"] == "33.50"
+    assert group(result)[0]["party_name"] == "منتجات لم تُستلم من المورد"
+    assert any(item["code"] == "historical_current_catalog_estimate_used" and item["count"] == 1
+               for item in result["issues"])
+
+
+def test_historical_cost_missing_from_both_sources_stays_incomplete_not_zero():
+    db = seeded_db()
+    db.data["mezan_product_cost_profiles_v2"] = []
+    db.data["mezan_products_v2"] = [row(salla_product_id="p2", cost_price_from_salla="99.00")]
+    result = run(project(db, "owner", operating_state(), as_of=NOW))
+    assert group(result) == []
+    assert any(item["code"] == "historical_supplier_cost_incomplete"
+               for item in result["issues"])
+
+
+def test_incomplete_salla_canonical_sources_are_reported_not_guessed_as_old_orders():
+    db = seeded_db()
+    db.data["unified_orders"].append(row(order_number="LEGACY-UNKNOWN", status="in_progress"))
+    result = run(project(db, "owner", operating_state(), as_of=NOW))
+    assert result["currencies"]["SAR"]["prestart_supplier_unreceived"] == "40.00"
+    assert any(item["code"] == "canonical_salla_source_missing_for_open_cost_preview"
+               for item in result["issues"])
