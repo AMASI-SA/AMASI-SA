@@ -69,13 +69,20 @@ def supplier_totals(result, party='supplier'):
     return tuple(rows[0][k] for k in ('expected_payable', 'confirmed_payable', 'outstanding_payable'))
 
 
+def unreceived_totals(result):
+    """Assignment is not proof of physical receipt, so estimate stays unassigned."""
+    return supplier_totals(result, None)
+
+
 def test_invoice_partial_8000_to_3000_expected_5000_confirmed_and_replay():
     async def scenario(db):
         state, result = await balances(db)
-        assert supplier_totals(result) == ('8000.00', '0.00', '0.00')
+        assert supplier_totals(result) == ('0.00', '0.00', '0.00')
+        assert unreceived_totals(result) == ('8000.00', '0.00', '0.00')
         await invoice(db)
         state, result = await balances(db)
-        assert supplier_totals(result) == ('3000.00', '5000.00', '5000.00')
+        assert supplier_totals(result) == ('0.00', '5000.00', '5000.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
         assert result['summary']['actual_liquidity'] == '10000.00'
         sources = await collect_sources(db, 'owner', START, NOW)
         first = reconcile(state, sources, NOW)
@@ -96,10 +103,12 @@ def test_draft_invoice_does_not_confirm_and_requires_no_accounting_journal():
     async def scenario(db):
         await invoice(db, approved=False)
         _, result = await balances(db)
-        assert supplier_totals(result) == ('8000.00', '0.00', '0.00')
+        assert supplier_totals(result) == ('0.00', '0.00', '0.00')
+        assert unreceived_totals(result) == ('8000.00', '0.00', '0.00')
         await db.mezan_supplier_invoices_v2.update_one({'id': 'invoice'}, {'$set': {'approved_at': '2026-10-07T10:00:00+00:00'}})
         _, result = await balances(db)
-        assert supplier_totals(result) == ('3000.00', '5000.00', '5000.00')
+        assert supplier_totals(result) == ('0.00', '5000.00', '5000.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
     run(scenario)
 
 
@@ -126,14 +135,15 @@ def test_cancellation_after_invoice_preserves_confirmed():
     run(scenario)
 
 
-def test_piece_reassignment_moves_only_remaining_estimate():
+def test_piece_reassignment_keeps_unreceived_estimate_out_of_supplier_balances():
     async def scenario(db):
         await invoice(db)
         await balances(db)
         await db.mezan_preparation_pieces_v1.update_one({'id': 'piece'}, {'$set': {'supplier_id': 'other-supplier'}})
         _, result = await balances(db)
         assert supplier_totals(result) == ('0.00', '5000.00', '5000.00')
-        assert supplier_totals(result, 'other-supplier') == ('3000.00', '0.00', '0.00')
+        assert supplier_totals(result, 'other-supplier') == ('0.00', '0.00', '0.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
     run(scenario)
 
 
@@ -147,7 +157,8 @@ def test_supplier_payment_reduces_bank_and_confirmed_outstanding_once():
         item = await create_movement(db, 'owner', 'owner', payload, clock=NOW)
         assert await create_movement(db, 'owner', 'owner', payload, clock=NOW) == item
         state, result = await balances(db)
-        assert supplier_totals(result) == ('3000.00', '5000.00', '3000.00')
+        assert supplier_totals(result) == ('0.00', '5000.00', '3000.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
         assert result['summary']['actual_liquidity'] == '8000.00'
         assert len(state['movements']) == 1
         assert result['summary']['settled'] == '2000.00'
@@ -163,7 +174,8 @@ def test_accepted_supplier_return_reduces_confirmed_never_restores_estimate():
         await db[RECEIPTS].insert_one({'_id': 'accepted-return-document', 'owner_id': 'owner', 'sha256': 'returnhash'})
         await supplier_return(db, 'owner', 'owner', payload, clock=NOW)
         _, result = await balances(db)
-        assert supplier_totals(result) == ('3000.00', '4000.00', '4000.00')
+        assert supplier_totals(result) == ('0.00', '4000.00', '4000.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
         assert result['summary']['actual_liquidity'] == '10000.00'
     run(scenario)
 
@@ -181,7 +193,8 @@ def test_partial_invoice_covers_five_of_eight_native_piece_quantities():
             'quantity': 5, 'product_price_authority': 'mezan_v2', 'product_unit_price_halalas': 100000}]})
         before = {name: await db[name].find({}).to_list(100) for name in ('unified_orders', 'mezan_preparation_pieces_v1', 'mezan_supplier_invoices_v2')}
         state, result = await balances(db)
-        assert supplier_totals(result) == ('3000.00', '5000.00', '5000.00')
+        assert supplier_totals(result) == ('0.00', '5000.00', '5000.00')
+        assert unreceived_totals(result) == ('3000.00', '0.00', '0.00')
         assert len([key for key in state['engine']['facts'] if key.startswith('receipt:')]) == 5
         _, repeated = await balances(db)
         assert supplier_totals(repeated) == supplier_totals(result)
