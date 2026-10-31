@@ -133,12 +133,17 @@ jobs:
       - name: Generate patched dependency lock for isolated review
         if: github.event.pull_request.head.ref == 'fix/operational-issue-summary-20261101'
         run: yarn install --non-interactive
+      - name: Capture tracked baseline lock for exact review
+        if: github.event.pull_request.head.ref == 'fix/operational-issue-summary-20261101'
+        run: git show HEAD:frontend/yarn.lock > yarn.lock.tracked
       - name: Preserve resolved lockfile for this isolated security review
         if: github.event.pull_request.head.ref == 'fix/operational-issue-summary-20261101'
         uses: actions/upload-artifact@v4
         with:
           name: operational-security-reviewed-lock
-          path: frontend/yarn.lock
+          path: |
+            frontend/yarn.lock
+            frontend/yarn.lock.tracked
           if-no-files-found: error
       - name: Verify patched dependency runtime compatibility
         run: node scripts/verify-operational-dependency-compat.cjs
