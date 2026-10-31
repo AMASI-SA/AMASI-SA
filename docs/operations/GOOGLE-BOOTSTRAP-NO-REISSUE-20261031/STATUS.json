@@ -1,0 +1,20 @@
+{
+  "task": "GOOGLE-BOOTSTRAP-NO-REISSUE-20261031",
+  "state": "root_approved_contract_and_six_expected_red_regressions_before_runtime_changes",
+  "branch": "codex/google-bootstrap-no-reissue-contract-20261031",
+  "parent_rejected_source": "675b8a6f501df4dfc0b87b6e0ff0eae72495a95f",
+  "parent_tree": "d30cefad8b1b94db4e4fd34c6844342374b0053f",
+  "finding": "Panel uncertainty ref resets on auth/root replacement; prepared GET rediscloses token before original uncertain execution consumption, allowing second POST",
+  "scope": "NEW regression test, dedicated source-bound workflow, contract and STATUS only; all runtime unchanged",
+  "tests": {
+    "new_cases": 6,
+    "run_state": "pending first source-bound CI; tests expected to fail on unchanged rejected runtime",
+    "local_frontend": "dependencies unavailable; no local pass claim"
+  },
+  "contract": "Initial acknowledged NEW schema2 prepare response may disclose capability once. GET/repeated prepare/v1 receipts never issue it. No token persistence, no expiry release, no automatic replacement or recovery. Lost capability is retained/read-only. Root approved before runtime edits.",
+  "production_head_reported": "3bac875cfbcbc7f66849edae83c478dd194d9c12",
+  "production_changed": false,
+  "live_DB_provider_flags_changed": false,
+  "next": "Publish this checkpoint, read six actual failures, then implement approved versioned issuance contract in a new successor; coordinate budget_audit/root review",
+  "prior_evidence": "316fe715da9f51d93449a4e5acdc9bb56730c488 remains historical; PR1667 source675 unaccepted despite prior green tests"
+}

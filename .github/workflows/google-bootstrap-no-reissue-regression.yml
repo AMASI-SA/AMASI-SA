@@ -1,0 +1,26 @@
+name: Google bootstrap no-reissue regression
+on:
+  push:
+    branches: [codex/google-bootstrap-no-reissue-contract-20261031]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-auth-remount-regression:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare governed toolchain
+        run: python scripts/frontend_release_toolchain.py ensure
+      - name: Install frozen dependencies
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend install --frozen-lockfile --non-interactive
+      - name: Assert no repeat execute across real auth and full component replacement
+        env:
+          CI: "true"
+        run: python scripts/frontend_release_toolchain.py exec -- yarn --cwd frontend test --watchAll=false --runInBand --runTestsByPath src/components/marketing/GoogleNamespaceBootstrap.replay.test.jsx --json --outputFile=bootstrap-no-reissue-regression.json
