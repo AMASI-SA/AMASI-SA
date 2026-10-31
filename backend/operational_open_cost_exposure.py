@@ -16,11 +16,13 @@ from operational_balance_sources import (
 ZERO = Decimal("0")
 CLOSED = frozenset(("delivered", "تم التوصيل", "cancelled", "canceled",
                      "ملغي", "ملغى", "refunded", "مسترجع", "returned"))
-OPEN = frozenset(("waiting_review", "waiting_for_review", "pending_review",
+OPEN = frozenset(("under_review", "waiting_review", "waiting_for_review", "pending_review",
                   "pending", "waiting", "in_progress", "processing",
-                  "reviewed", "ready", "completed", "shipped", "out_for_delivery",
-                  "انتظار المراجعة", "بانتظار المراجعة", "تم المراجعة",
-                  "قيد التنفيذ", "تم التنفيذ", "جاري التوصيل"))
+                  "reviewed", "ready", "completed", "shipping", "shipped",
+                  "delivering", "out_for_delivery",
+                  "انتظار المراجعة", "بإنتظار المراجعة", "بانتظار المراجعة",
+                  "تم المراجعة", "تمت المراجعة", "قيد التنفيذ", "جاري التنفيذ",
+                  "تم التنفيذ", "جاري التوصيل", "تم الشحن"))
 RECEIVED = frozenset(("received", "supplier_received", "تم الاستلام", "مستلم"))
 READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2",
          "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
@@ -41,8 +43,9 @@ def _status(raw):
 
 
 def _cutover_group(status):
-    if status in {"waiting_review", "waiting_for_review", "pending_review",
-                  "pending", "waiting", "انتظار المراجعة", "بانتظار المراجعة"}:
+    if status in {"under_review", "waiting_review", "waiting_for_review", "pending_review",
+                  "pending", "waiting", "انتظار المراجعة",
+                  "بانتظار المراجعة", "بإنتظار المراجعة"}:
         return "awaiting_review"
     return "under_fulfillment"
 
