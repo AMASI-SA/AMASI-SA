@@ -60,10 +60,10 @@ function OperationalIssueAlerts({items}) {
       <summary><span>{feeIncomplete({code: group.code}) ? 'إعداد العمولة غير مكتمل' : issueMessage(group.code)}</span>
         <strong>{count(group.count)} {group.count === 1 ? 'تنبيه' : 'تنبيهًا'}</strong></summary>
       <div className="op-issue-detail">
-        <p>رمز التنبيه: <code dir="ltr">{group.code}</code></p>
+        {!feeIncomplete({code: group.code}) && <p>رمز التنبيه: <code dir="ltr">{group.code}</code></p>}
         {group.messages.map(message => <p key={message}>{message}</p>)}
         {group.sources.length > 0 && <p>عينات المراجع: <bdi>{group.sources.join('، ')}</bdi></p>}
-        {group.count > group.sources.length && <p>تُعرض عينات محدودة فقط هنا. تبقى جميع التنبيهات الأصلية ضمن استجابة التقارير للتدقيق.</p>}
+        {group.sources.length > 0 && group.count > group.sources.length && <p>تُعرض عينات محدودة فقط هنا. تبقى جميع التنبيهات الأصلية ضمن استجابة التقارير للتدقيق.</p>}
       </div>
     </details>)}
   </section>;
