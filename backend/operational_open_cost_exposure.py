@@ -14,8 +14,9 @@ from operational_balance_sources import (
 )
 
 ZERO = Decimal("0")
-CLOSED = frozenset(("delivered", "تم التوصيل", "cancelled", "canceled",
-                     "ملغي", "ملغى", "refunded", "مسترجع", "returned"))
+CLOSED = frozenset(("delivered", "تم التوصيل", "cancelled", "canceled", "deleted",
+                     "ملغي", "ملغى", "محذوف", "refunded", "مسترجع",
+                     "returned", "restored", "تم الاسترجاع"))
 OPEN = frozenset(("under_review", "waiting_review", "waiting_for_review", "pending_review",
                   "pending", "waiting", "in_progress", "processing",
                   "reviewed", "ready", "completed", "shipping", "shipped",
