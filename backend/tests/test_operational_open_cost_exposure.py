@@ -72,10 +72,11 @@ def test_old_assigned_unreceived_is_pooled_not_in_supplier_balance_and_is_not_ze
 
 
 def test_old_waiting_review_is_visible_and_remains_unreceived_pool():
-    db = seeded_db(order_row=native_order(status="waiting_review"))
-    result = run(project(db, "owner", operating_state(), as_of=NOW))
-    assert group(result)[0]["stage"] == "awaiting_review"
-    assert group(result)[0]["amount"] == "40.00"
+    for status in ("waiting_review", "under_review", "بانتظار المراجعة"):
+        db = seeded_db(order_row=native_order(status=status))
+        result = run(project(db, "owner", operating_state(), as_of=NOW))
+        assert group(result)[0]["stage"] == "awaiting_review"
+        assert group(result)[0]["amount"] == "40.00"
 
 
 def test_only_durable_supplier_receipt_moves_old_cost_to_supplier_bucket():
