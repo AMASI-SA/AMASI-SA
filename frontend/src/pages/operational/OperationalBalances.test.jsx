@@ -18,6 +18,7 @@ jest.mock('./api', () => ({
     finish: jest.fn(),
     addEntity: jest.fn(),
     reports: jest.fn(),
+    costExposure: jest.fn(),
     obligations: jest.fn(),
     receipt: jest.fn(),
     movement: jest.fn(),
@@ -78,6 +79,7 @@ beforeEach(() => {
     summary: {},
     issues: []
   });
+  api.costExposure.mockResolvedValue({status:'preview',currencies:{},groups:[],issues:[]});
   api.movement.mockResolvedValue({});
   api.movements.mockResolvedValue({items:[]});
   api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
