@@ -187,7 +187,9 @@ def test_raw_order_only_no_root_financial_fallback():
 def test_new_order_cost_only_from_mz2_profile():
     db = DB({'unified_orders': [order()], 'mezan_product_cost_profiles_v2': [row(salla_product_id='p1', base_cost='20')]})
     output = run(src.collect_sources(db, 'owner', START, NOW))
-    assert output['orders'][0]['items'] == [{'id': 'salla:10:line', 'supplier_id': None, 'cost': '20', 'quantity': '2'}]
+    assert output['orders'][0]['items'] == [{'id': 'salla:10:line', 'supplier_id': None,
+                                            'supplier_receipt_proven': False,
+                                            'cost': '20', 'quantity': '2'}]
     db.data['mezan_product_cost_profiles_v2'] = []
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert output['orders'][0]['items'] == []
@@ -530,3 +532,25 @@ def test_missing_display_names_never_expose_technical_identity():
     assert supplier['name'] == 'جهة — إعداد الاسم غير مكتمل' and supplier['ready'] is False
     names = [r['name'] for r in run(src.entities(db, 'owner', 'owner_withdrawal'))]
     assert names == ['المالك', 'المدير']
+
+
+def test_supplier_assignment_does_not_attribute_expected_cost_until_physical_receipt():
+    piece = row(id='piece-1', order_number='10', order_item_id='salla:10:line',
+                unit_index=1, supplier_id='supplier',
+                supplier_dispatch_status='sent', execution_status='assigned')
+    db = DB({'unified_orders': [order(items=[{'id':'line','product_id':'p1','quantity':1}])],
+        'mezan_product_cost_profiles_v2': [row(salla_product_id='p1',base_cost='40')],
+        'mezan_suppliers_v2': [row(id='supplier',name='المورد الأصلي')],
+        'mezan_preparation_pieces_v1': [piece]})
+    out = run(src.collect_sources(db,'owner',START,NOW))
+    item = out['orders'][0]['items'][0]
+    assert item['cost'] == '40' and item['supplier_id'] is None
+    assert item['supplier_receipt_proven'] is False
+    # A UI-only received status must not create a supplier obligation.
+    db.data['mezan_preparation_pieces_v1'][0].update(status='received',received_at=NOW)
+    assert run(src.collect_sources(db,'owner',START,NOW))['orders'][0]['items'][0]['supplier_id'] is None
+    db.data['mezan_preparation_pieces_v1'][0].update(
+        supplier_dispatch_status='received',execution_status='received_from_supplier')
+    proved = run(src.collect_sources(db,'owner',START,NOW))['orders'][0]['items'][0]
+    assert proved['supplier_id'] == 'supplier'
+    assert proved['supplier_receipt_proven'] is True
