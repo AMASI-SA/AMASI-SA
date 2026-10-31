@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
-    invoice_component_amounts, shipping_charge, unique_index, usable,
+    invoice_component_amounts, shipping_charge, supplier_receipt_proven,
+    unique_index, usable,
 )
 
 ZERO = Decimal("0")
@@ -215,12 +216,27 @@ async def project(db, owner, state, *, as_of=None):
                     amount = number(component["cost"]) * number(component.get("quantity", "1"))
                     if amount != amount.quantize(Decimal(".01")):
                         raise ValueError("historical_cost_rounding_incomplete")
-                    if piece and (piece.get("received_at") or str(piece.get("status") or "").lower() in RECEIVED):
+                    received = supplier_receipt_proven(piece)
+                    if received:
+                        try:
+                            received = instant(piece["received_at"]) <= stamp
+                        except (ValueError, TypeError, KeyError):
+                            received = False
+                            issues["historical_supplier_receipt_timestamp_invalid"] += 1
+                    if received:
                         product_stage = "received_without_approved_invoice"
+                        party_id = str(piece.get("supplier_id") or "")
+                        party_name = ((suppliers.get(party_id) or {}).get("name")
+                                      or "استلام دون مورد موثق")
+                        if not party_id:
+                            issues["historical_received_supplier_identity_missing"] += 1
+                        _money_group(currencies["SAR"], "prestart_supplier_received_uninvoiced", amount)
                     else:
+                        # Even if it has been assigned or sent, this remains one
+                        # unreceived-cost pool, never a payable for that supplier.
                         product_stage = stage
-                    party_id = str(component.get("supplier_id") or "")
-                    party_name = (suppliers.get(party_id) or {}).get("name") or "لم يحدد المورد"
+                        party_name = "منتجات لم تُستلم من المورد"
+                        _money_group(currencies["SAR"], "prestart_supplier_unreceived", amount)
                     key = ("prestart", "supplier", product_stage, party_name, "SAR")
                     group = values[key]
                     group["amount"] += amount
@@ -298,6 +314,26 @@ async def project(db, owner, state, *, as_of=None):
         except (ValueError, TypeError, KeyError):
             issues["historical_shipping_quote_incomplete"] += 1
 
+    # For current orders, stage classification comes from canonical order state.
+    # All amounts remain those of the existing idempotently reconciled engine.
+    current_stages = {}
+    current_count = Counter()
+    engine_at = instant((state.get("engine") or {}).get("as_of") or stamp)
+    for record in data["unified_orders"]:
+        raw = (record.get("raw_by_source") or {}).get("salla_direct")
+        if not isinstance(raw, dict):
+            continue
+        try:
+            created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+            if not started < created <= engine_at:
+                continue
+            identity = str(raw.get("id") or "")
+            if identity:
+                current_count[identity] += 1
+                current_stages[identity] = _cutover_group(_status(raw))
+        except (ValueError, TypeError):
+            continue
+
     # Current active expenses use the frozen/reconciled engine; never re-estimate
     # those orders through this separate, historical-only projection.
     for obligation in (state.get("engine", {}).get("obligations") or {}).values():
@@ -315,18 +351,32 @@ async def project(db, owner, state, *, as_of=None):
             continue
         _money_group(currencies[currency], "current_" + kind + "_expected", expected)
         _money_group(currencies[currency], "current_" + kind + "_confirmed", confirmed)
-        name = str(obligation.get("name") or ("لم يحدد المورد" if kind == "supplier" else "جهة الشحن غير مكتملة"))
-        party = str(obligation.get("party_type") or kind)
+        oid = str(obligation.get("id") or "").split(":", 2)[1:2]
+        order_id = oid[0] if oid else ""
         if expected:
-            group = values[("poststart", kind, "not_confirmed", name, currency)]
+            if kind == "supplier" and not obligation.get("party_id"):
+                stage = current_stages.get(order_id, "unreceived")
+                if current_count[order_id] != 1:
+                    stage = "unreceived"
+                name = "منتجات لم تُستلم من المورد"
+                _money_group(currencies[currency], "poststart_supplier_unreceived", expected)
+            elif kind == "supplier":
+                stage = "received_without_approved_invoice"
+                name = str(obligation.get("name") or "مورد الاستلام")
+                _money_group(currencies[currency], "poststart_supplier_received_uninvoiced", expected)
+            else:
+                stage = "not_delivered"
+                name = str(obligation.get("name") or "جهة الشحن غير مكتملة")
+            group = values[("poststart", kind, stage, name, currency)]
             group["amount"] += expected
             group["units"] += 1
-            group["orders"].add(str(obligation.get("id")))
+            group["orders"].add(order_id or str(obligation.get("id")))
         if confirmed:
-            group = values[("poststart", kind, "confirmed", name, currency)]
+            name = str(obligation.get("name") or "جهة غير مكتملة")
+            group = values[("poststart", kind, "confirmed_in_financial_balances", name, currency)]
             group["amount"] += confirmed
             group["units"] += 1
-            group["orders"].add(str(obligation.get("id")))
+            group["orders"].add(order_id or str(obligation.get("id")))
 
     summaries = {currency: {key: _fmt(value) for key, value in sorted(details.items())}
                  for currency, details in sorted(currencies.items())}
@@ -336,7 +386,7 @@ async def project(db, owner, state, *, as_of=None):
                "units": value["units"], "orders": len(value["orders"])}
               for (period, kind, stage, party_name, currency), value in values.items()]
     groups.sort(key=lambda r: (r["period"], r["kind"], r["stage"], r["party_name"]))
-    return {"status": "preview", "as_of": stamp.isoformat(), "started_at": started.isoformat(),
+    return {"status": "preview", "as_of": stamp.isoformat(), "engine_as_of": engine_at.isoformat(), "started_at": started.isoformat(),
             "currencies": summaries, "groups": groups,
             "issues": [{"code": code, "count": count} for code, count in sorted(issues.items())],
             "warning": "historical_preview_never_add_to_confirmed_or_expected_payable_without_owner_evidence"}
