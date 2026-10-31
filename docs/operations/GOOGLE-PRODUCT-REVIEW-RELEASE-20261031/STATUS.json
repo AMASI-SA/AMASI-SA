@@ -1,0 +1,17 @@
+{
+  "task": "GOOGLE-PRODUCT-REVIEW-RELEASE-20261031",
+  "state": "SOURCE_COMPOSITION_PENDING_FRESH_CI",
+  "branch": "codex/google-product-review-release-20261031",
+  "base": "3bac875cfbcbc7f66849edae83c478dd194d9c12",
+  "accepted_source": "e26d9a8ca4cf5d8fc8c8b7e443349aef56e82533",
+  "previous_pr": 1664,
+  "previous_status": "9b068da417f0475a0de8e43258f9ffc77d7837ff",
+  "scope": "Exact accepted review-only product/season UI and backend, composed on current courier production. No provider/financial/policy writes.",
+  "composition": "22 accepted non-doc paths; only3 workflow branch triggers appended. Current3bac courier changes and tracked release intent untouched. PriorA remains immutable.",
+  "historical_tests_only": "Exacte26d root43-Werror, CI153incl30actualMongo0skip/202UI and1898backend/752UI. New source CI still required.",
+  "production_changed": false,
+  "provider_calls": false,
+  "intent_changed": false,
+  "next": "Fresh targeted/full CI and independent review; originalhost inactiveguard+exactA reproducibility/wholeCI match then intentonlyB/full20+24/runtime review/normalmerge/deploy/live.",
+  "updated_at": "2026-10-31T14:47:55.626465+00:00"
+}
