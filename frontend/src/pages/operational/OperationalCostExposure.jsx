@@ -12,32 +12,41 @@ const stages = {
 };
 const kinds = {supplier: 'المنتجات', shipping: 'الشحن', courier: 'شركات الشحن', store_driver: 'المناديب'};
 const cents = amount => {
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(amount ?? '0'));
-  return m ? BigInt(m[1]) * 100n + BigInt((m[2] || '').padEnd(2, '0')) : 0n;
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(amount));
+  return match ? BigInt(match[1]) * 100n + BigInt((match[2] || '').padEnd(2, '0')) : null;
 };
-const sum = (...values) => values.reduce((total, amount) => total + cents(amount), 0n);
-const fmt = total => (total / 100n).toLocaleString('en-US') + '.' + (total % 100n).toString().padStart(2, '0');
-const value = (data, key) => data?.[key] || '0.00';
+const total = (data, keys, partial) => {
+  const supplied = keys.filter(key => Object.prototype.hasOwnProperty.call(data, key));
+  if (!supplied.length && partial) return null;
+  const parsed = supplied.map(key => cents(data[key]));
+  return parsed.some(value => value === null) ? null : parsed.reduce((sum, value) => sum + value, 0n);
+};
+const fmt = amount => amount === null ? 'غير مكتمل' :
+  (amount / 100n).toLocaleString('en-US') + '.' + (amount % 100n).toString().padStart(2, '0');
+const value = (data, key, partial) => Object.prototype.hasOwnProperty.call(data, key) ?
+  fmt(cents(data[key])) : partial ? 'غير مكتمل' : '0.00';
 
-export default function OperationalCostExposure({enabled = true}) {
-  const [state, setState] = useState({loading: true, data: null, error: ''});
+export default function OperationalCostExposure({enabled = true, scopeKey = 'default'}) {
+  const [state, setState] = useState({loading: true, data: null, error: '', scopeKey});
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    setState(old => ({...old, loading: true, error: ''}));
-    api.costExposure().then(data => {
-      if (live) setState({loading: false, data, error: ''});
+    setState({loading: true, data: null, error: '', scopeKey});
+    Promise.resolve().then(() => api.costExposure()).then(data => {
+      if (live) setState({loading: false, data, error: '', scopeKey});
     }).catch(error => {
-      if (live) setState(old => ({...old, loading: false, error: messageFor(error)}));
+      if (live) setState({loading: false, data: null, error: messageFor(error), scopeKey});
     });
     return () => { live = false; };
-  }, [enabled, revision]);
+  }, [enabled, scopeKey, revision]);
   if (!enabled) return null;
-  const {loading, data, error} = state;
+  const current = state.scopeKey === scopeKey ? state : {loading: true, data: null, error: ''};
+  const {loading, data, error} = current;
   const entries = Object.entries(data?.currencies || {});
   const gaps = data?.issues || [];
-  const incomplete = gaps.filter(item => /incomplete|ambiguous|missing|unverified|requires_review/.test(item.code || ''));
+  const incomplete = gaps.filter(item => item.code !== 'historical_current_catalog_estimate_used');
+  const partial = data?.complete === false || incomplete.length > 0;
   const catalogEstimates = gaps.find(item => item.code === 'historical_current_catalog_estimate_used')?.count || 0;
   return <section className="op-cost-exposure" aria-label="تكاليف المنتجات والشحن المفتوحة">
     <div className="op-cost-header">
@@ -50,16 +59,17 @@ export default function OperationalCostExposure({enabled = true}) {
     {loading && <p role="status">جاري قراءة التكاليف المفتوحة…</p>}
     {error && <p role="alert" className="op-error">{error}</p>}
     {!loading && !error && data?.status === 'not_started' && <p>يبدأ احتساب التكاليف بعد تفعيل الأرصدة التشغيلية.</p>}
+    {!loading && !error && data?.status === 'frozen' && <p>النظام مجمد؛ لا نعرض بيانات التكاليف الحالية على أنها جزء من لقطة الإغلاق المحفوظة.</p>}
     {!loading && !error && data?.status === 'preview' && <>
       <p className="op-muted">آخر قراءة للطلبات الجديدة: {data.engine_as_of ? new Date(data.engine_as_of).toLocaleString('ar-SA') : 'غير مكتمل'} · معاينة القديمة: {data.as_of ? new Date(data.as_of).toLocaleString('ar-SA') : 'غير مكتمل'}</p>
       {!entries.length && <p>لا توجد تكاليف مكتملة المصدر للعرض. افحص التنبيهات أدناه؛ عدم اكتمال التكلفة لا يعني أن قيمتها صفر.</p>}
       {entries.map(([currency, amounts]) => {
-        const unreceived = sum(value(amounts, 'prestart_supplier_unreceived'), value(amounts, 'poststart_supplier_unreceived'));
-        const received = sum(value(amounts, 'prestart_supplier_received_uninvoiced'), value(amounts, 'poststart_supplier_received_uninvoiced'));
-        const shipping = sum(value(amounts, 'prestart_shipping_expected'), value(amounts, 'current_shipping_expected'));
-        const totalOpen = unreceived + received + shipping;
+        const unreceived = total(amounts, ['prestart_supplier_unreceived', 'poststart_supplier_unreceived'], partial);
+        const received = total(amounts, ['prestart_supplier_received_uninvoiced', 'poststart_supplier_received_uninvoiced'], partial);
+        const shipping = total(amounts, ['prestart_shipping_expected', 'current_shipping_expected'], partial);
+        const totalOpen = [unreceived, received, shipping].some(value => value === null) ? null : unreceived + received + shipping;
         return <div className="op-cost-currency" key={currency}>
-          <h4>التكاليف بعملة {currency}</h4>
+          <h4>التكاليف بعملة {currency}{partial ? ' — المعروف من التكاليف، وقد يكون جزئيًا' : ''}</h4>
           <div className="op-cost-cards">
             <article><span>منتجات لم تُستلم من المورد — قديمة وجديدة</span><strong>{fmt(unreceived)} {currency}</strong>
               <small>تشمل المسندة للمورد ما دامت لم تُستلم فعليًا</small></article>
@@ -70,21 +80,21 @@ export default function OperationalCostExposure({enabled = true}) {
             <article><span>إجمالي التكاليف التشغيلية المفتوحة</span><strong>{fmt(totalOpen)} {currency}</strong>
               <small>منتجات لم تُستلم + استُلمت دون فاتورة + شحنات لم تُسلّم. هذا إجمالي تقديري وليس دينًا مؤكدًا.</small></article>
           </div>
-          <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived')} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived')} {currency}.</p>
+          <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived', partial)} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived', partial)} {currency}.</p>
         </div>;
       })}
       {catalogEstimates > 0 && <p role="status" className="op-cost-caution">توجد {catalogEstimates} تكلفة لطلب قديم قُدرت اعتمادًا على سعر التكلفة الحالي في كتالوج سلة، وليس سعرًا تاريخيًا معتمدًا وقت الطلب؛ تحقق منها قبل اعتماد قرار مالي.</p>}
-      {!!incomplete.length && <p role="status" className="op-cost-caution">يوجد {incomplete.reduce((n, x) => n + Number(x.count || 0), 0).toLocaleString('en-US')} تنبيهًا عن بيانات تكلفة أو هوية ناقصة؛ لذلك قد يكون الإجمالي جزئيًا.</p>}
+      {partial && <p role="status" className="op-cost-caution">يوجد {incomplete.reduce((n, item) => n + Number(item.count || 0), 0).toLocaleString('en-US')} تنبيهًا عن بيانات تكلفة أو هوية ناقصة؛ لذلك قد يكون الإجمالي جزئيًا.</p>}
       <details className="op-cost-detail"><summary>تفصيل التكاليف حسب الحالة والجهة ({(data.groups || []).length} صف)</summary>
         <div className="op-table"><table>
           <thead><tr><th>الفترة</th><th>النوع</th><th>الحالة</th><th>الجهة / التجميع</th><th>القطع أو البنود</th><th>الطلبات</th><th>التكلفة</th></tr></thead>
-          <tbody>{(data.groups || []).map((item, i) => <tr key={[i, item.period, item.kind, item.stage, item.party_name].join(':')}>
+          <tbody>{(data.groups || []).map((item, i) => <tr key={[i, item.period, item.kind, item.stage, item.party_id || item.party_name].join(':')}>
             <td>{periods[item.period] || item.period}</td><td>{kinds[item.kind] || item.kind}</td>
             <td>{stages[item.stage] || item.stage}</td><td>{item.party_name}</td><td>{item.units}</td><td>{item.orders}</td>
             <td>{item.amount} {item.currency}</td></tr>)}</tbody>
         </table>{!(data.groups || []).length && <p>لا توجد بنود تكلفة مكتملة ضمن النطاق الحالي.</p>}</div>
       </details>
-      <details className="op-cost-detail"><summary>تنبيهات جودة التكاليف ({gaps.reduce((n, x) => n + Number(x.count || 0), 0)})</summary>
+      <details className="op-cost-detail"><summary>تنبيهات جودة التكاليف ({gaps.reduce((n, item) => n + Number(item.count || 0), 0)})</summary>
         {gaps.map(item => <p key={item.code}>{item.code}: {item.count}</p>)}
         {!gaps.length && <p>لا توجد تنبيهات في معاينة التكاليف.</p>}
       </details>
