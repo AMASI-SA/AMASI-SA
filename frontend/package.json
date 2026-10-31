@@ -108,6 +108,6 @@
     "source-map-js": "1.2.2",
     "follow-redirects": "1.16.2",
     "minimatch": "11.0.1",
-    "glob": "11.1.0"
+    "glob": "14.0.3"
   }
 }
