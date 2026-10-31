@@ -578,19 +578,26 @@ def cost_components(data, product_id, item, profile):
     return product_cost, services
 
 
-def supplier_receipt_proven(piece):
-    """Match the durable physical receiving contract, not mere supplier assignment.
+def supplier_receipt_proven(piece, as_of=None):
+    """Match durable physical receiving proof, not mere supplier assignment.
 
-    Supplier receipt is committed only when all three source fields are present.
-    A generic piece status='received' or supplier_id alone is not evidence.
+    A generic status='received' or supplier_id alone is not proof; a future
+    receiving timestamp cannot establish a current payable estimate.
     """
-    return bool(piece and piece.get('supplier_dispatch_status') == 'received'
-                and piece.get('execution_status') == 'received_from_supplier'
-                and piece.get('received_at'))
+    if not (piece and piece.get('supplier_dispatch_status') == 'received'
+            and piece.get('execution_status') == 'received_from_supplier'
+            and piece.get('received_at')):
+        return False
+    if as_of is None:
+        return True
+    try:
+        return instant(piece['received_at']) <= instant(as_of)
+    except (ValueError, TypeError):
+        return False
 
 
-def append_components(order, base_id, product_cost, services, quantity, supplier_id=None, piece=None):
-    received = supplier_receipt_proven(piece)
+def append_components(order, base_id, product_cost, services, quantity, supplier_id=None, piece=None, as_of=None):
+    received = supplier_receipt_proven(piece, as_of)
     # Supplier assignment is a workflow intent, never a supplier receivable/payable.
     # Before physical receipt, all expected product costs remain one unreceived pool.
     financial_supplier = supplier_id if received else None
@@ -694,7 +701,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         if supplier and supplier not in suppliers:
                             issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
                             continue
-                        append_components(order, str(piece['id']), cost, services, 1, supplier, piece)
+                        append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
                 else:
                     append_components(order, item_id, cost, services, quantity)
             payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
