@@ -22,6 +22,20 @@ from integrations_control_center import google_ads_management as management
 ROOT='funded_test_root'
 PASSWORD='DisposablePreparationTestsOnly123'
 
+class InsertCapture(Capture):
+    def __init__(self):
+        super().__init__();self.inserts={};self.insert_results=[]
+    def started(self,event):
+        super().started(event)
+        if event.command_name=='insert':
+            self.inserts[event.request_id]=(event.command.get('insert'),event.command.get('collectionUUID'))
+    def succeeded(self,event):
+        if event.request_id in self.inserts:
+            name,identity=self.inserts.pop(event.request_id)
+            self.insert_results.append((name,identity,event.reply.get('n',0)))
+    def failed(self,event):
+        self.inserts.pop(event.request_id,None)
+
 @pytest.fixture(scope='session')
 def test_uri():
     uri=os.getenv('GOOGLE_FUNDED_PREPARATION_TEST_MONGO_URI')
@@ -38,7 +52,7 @@ def clock(monkeypatch):
 
 @pytest_asyncio.fixture
 async def actual_db(test_uri):
-    capture=Capture();client=AsyncIOMotorClient(test_uri,username=ROOT,password=PASSWORD,authSource='admin',
+    capture=InsertCapture();client=AsyncIOMotorClient(test_uri,username=ROOT,password=PASSWORD,authSource='admin',
         serverSelectionTimeoutMS=2000,retryWrites=True,event_listeners=[capture])
     db=client['g_funded_preparation_'+uuid.uuid4().hex]
     clients=[client];databases=[db]
@@ -186,7 +200,12 @@ async def test_actual_owner_write_after_snapshot_before_marker_aborts(monkeypatc
 @pytest.mark.asyncio
 async def test_actual_two_clients_same_slot_contend_in_mongo_not_local_registry(monkeypatch,actual_db,test_uri):
     db,provider,key,preview=await case(monkeypatch,actual_db);worker=await other_client(actual_db,test_uri)
-    first=await admission(db,preview);second=await admission(worker,preview)
+    first=await admission(db,preview)
+    # Model separate worker admission registries, while both real clients still
+    # contend on Mongo. A second wrapper in ONE process is tested separately.
+    with monkeypatch.context() as isolated_worker:
+        isolated_worker.setattr(preparation,'_admitted_slots',set())
+        second=await admission(worker,preview)
     assert first.db is not second.db
     original=guard._read_policy;readers=set();both=asyncio.Event()
     original_run=guard._run;ready=set();first_ready=asyncio.Event();both_ready=asyncio.Event();start=asyncio.Event()
@@ -275,3 +294,67 @@ async def test_actual_changed_namespace_generation_or_index_after_probe_blocks(m
     with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
     assert await db[grants.RUNS].find_one({'grant_key':key}) is None and provider.writes==0
     assert (await db[grants.GRANTS].find_one({'grant_key':key}))['state']=='configured'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('collection',[grants.RUNS,management.PROPOSALS,management.FENCES])
+@pytest.mark.parametrize('recreate',[False,True])
+async def test_actual_drop_after_last_metadata_cannot_recreate_or_write_new_namespace(monkeypatch,actual_db,collection,recreate):
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    original=preparation._storage_contract;audits=0
+    async def removed(database):
+        nonlocal audits
+        contract=await original(database);audits+=1
+        if audits==2:
+            await db.drop_collection(collection)
+            if recreate:await provision_test_namespaces(db)
+        return contract
+    monkeypatch.setattr(preparation,'_storage_contract',removed)
+    capture=actual_db[1];baseline=len(capture.insert_results)
+    with pytest.raises(HTTPException):
+        await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert audits==2
+    assert not any(name==collection and count>0 for name,identity,count in capture.insert_results[baseline:])
+    assert await db[grants.RUNS].count_documents({})==0
+    assert await db[management.PROPOSALS].count_documents({})==0
+    assert await db[management.FENCES].count_documents({})==0
+    assert (collection in await db.list_collection_names()) is recreate
+    assert (await db[grants.GRANTS].find_one({'grant_key':key}))['state']=='configured'
+    assert provider.writes==0
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('recreate',[False,True])
+async def test_actual_drop_after_first_metadata_rejects_probe_insert_itself(monkeypatch,actual_db,recreate):
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    original=preparation._storage_contract;audits=0
+    async def removed(database):
+        nonlocal audits
+        contract=await original(database);audits+=1
+        if audits==1:
+            await db.drop_collection(guard.TECHNICAL_PROBES)
+            if recreate:await provision_test_namespaces(db)
+        return contract
+    monkeypatch.setattr(preparation,'_storage_contract',removed)
+    capture=actual_db[1];baseline=len(capture.insert_results)
+    with pytest.raises(HTTPException):
+        await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    # Later metadata refusal is insufficient: even the aborted probe must not
+    # successfully insert into a missing or replacement collection.
+    assert not any(name==guard.TECHNICAL_PROBES and count>0 for name,identity,count in capture.insert_results[baseline:])
+    assert (guard.TECHNICAL_PROBES in await db.list_collection_names()) is recreate
+    assert await db[grants.RUNS].count_documents({})==0 and provider.writes==0
+
+@pytest.mark.asyncio
+async def test_actual_unknown_before_commit_blocks_new_wrapper_same_process(monkeypatch,actual_db,test_uri):
+    db,provider,key,preview=await case(monkeypatch,actual_db)
+    async def unknown(*args):raise TimeoutError('TEST ONLY unknown before actual commit')
+    monkeypatch.setattr(guard,'_commit_once',unknown)
+    with pytest.raises(HTTPException):
+        await preparation.prepare_google_funded_creation(db,admission=await admission(db,preview))
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None
+    worker=await other_client(actual_db,test_uri)
+    baseline=len(actual_db[1].names)
+    with pytest.raises(HTTPException) as error:await admission(worker,preview)
+    assert error.value.detail['code']=='google_funded_owner_admission_consumed'
+    assert all(name not in {'insert','update','commitTransaction'} for name in actual_db[1].names[baseline:])
+    assert provider.writes==0

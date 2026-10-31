@@ -69,7 +69,7 @@ def begin_google_funded_owner_admission(db,*,authenticated_user,account_id,reque
         or spend_acknowledgment!={'semantics':grants.SEMANTICS,'version':_ACK_TEXT_VERSION,'text_digest':grants.AVERAGE_ACK_DIGEST,'acknowledged':True}):
         _fail('google_funded_owner_admission_unproved')
     scope=guard._scope(authenticated_user['id'],account_id)
-    slot=(id(db),scope['user_id'],scope['account_id'],request_key)
+    slot=(scope['user_id'],scope['account_id'],request_key)
     if slot in _admitted_slots or len(_admitted_slots)>=MAX_ADMITTED_SLOTS:
         _fail('google_funded_owner_admission_consumed')
     _admitted_slots.add(slot) # Before any possible await; no automatic retry.

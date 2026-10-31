@@ -323,3 +323,18 @@ async def test_positive_prepare_and_reserve_never_invoke_provisioning_ddl(monkey
     reserved=await authority.reserve_google_funded_creation(db,user_id='owner',account_id='123',grant_key=key,
         proposal_id=result['proposal_id'],execution_claim_id=result['execution_claim_id'],initiation_ack=result['_initiation_ack'])
     assert reserved['committed'] is True and provider.writes==0
+
+@pytest.mark.asyncio
+async def test_unknown_attempt_cannot_be_reissued_through_another_database_wrapper(monkeypatch):
+    db,provider,key,preview=await setup(monkeypatch);cap=await admission(db,preview)
+    async def unknown(*args):raise TimeoutError('test-only unknown commit not applied')
+    monkeypatch.setattr(guard,'_commit_once',unknown)
+    with pytest.raises(HTTPException):await preparation.prepare_google_funded_creation(db,admission=cap)
+    assert await db[grants.RUNS].find_one({'grant_key':key}) is None
+    class Wrapper:
+        def __getattr__(self,name):return getattr(db,name)
+        def __getitem__(self,name):return db[name]
+    other=Wrapper()
+    with pytest.raises(HTTPException) as error:await admission(other,preview)
+    assert error.value.detail['code']=='google_funded_owner_admission_consumed'
+    assert provider.writes==0

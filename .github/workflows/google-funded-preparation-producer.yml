@@ -1,7 +1,7 @@
 name: Google funded preparation internal auth replica
 on:
   push:
-    branches: [codex/google-funded-preparation-producer-wip-20261030]
+    branches: [codex/google-funded-preparation-producer-wip-20261030, codex/google-funded-namespace-uuid-wip-20261031]
     paths:
       - backend/integrations_control_center/google_ads_funded_creation_preparation.py
       - backend/integrations_control_center/google_ads_automation_budget_guard.py
@@ -94,7 +94,7 @@ jobs:
           proof={'source_sha':(output/'source-sha.txt').read_text().strip(),'new_units':len(unit),'authenticated_replica_tests':len(mongo),'failure_error_skip':len(bad),'provider_paid_writes':0,'production_changed':False}
           (output/'summary.json').write_text(json.dumps(proof,indent=2)+'\n')
           print(json.dumps(proof,indent=2))
-          assert len(unit)==35 and len(mongo)==24
+          assert len(unit)==36 and len(mongo)==33
           assert not bad
           PY
       - uses: actions/upload-artifact@v4
