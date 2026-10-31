@@ -1,12 +1,13 @@
-"""Read-only open-work cost exposure; never imports historical orders into finance.
+"""Read-only open-work cost exposure, independent of financial recognition.
 
-Post-cutover amounts come exclusively from the reconciled operational engine.
-Pre-cutover unfinished work is an inspection-only preview, not a payable,
-opening balance, invoice, ledger, shipping delivery or stock movement.
+Historical estimates never become opening balances, invoices, bank movements or
+payables. Current amounts come from the reconciled operational engine only.
 """
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import re
+
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
     invoice_component_amounts, shipping_charge, supplier_receipt_proven,
@@ -15,21 +16,17 @@ from operational_balance_sources import (
 
 ZERO = Decimal("0")
 CLOSED = frozenset(("delivered", "تم التوصيل", "cancelled", "canceled", "deleted",
-                     "ملغي", "ملغى", "محذوف", "refunded", "مسترجع",
-                     "returned", "restored", "تم الاسترجاع"))
+    "ملغي", "ملغى", "محذوف", "refunded", "مسترجع", "returned", "restored", "تم الاسترجاع"))
 OPEN = frozenset(("under_review", "waiting_review", "waiting_for_review", "pending_review",
-                  "pending", "waiting", "in_progress", "processing",
-                  "reviewed", "ready", "completed", "shipping", "shipped",
-                  "delivering", "out_for_delivery",
-                  "انتظار المراجعة", "بإنتظار المراجعة", "بانتظار المراجعة",
-                  "تم المراجعة", "تمت المراجعة", "قيد التنفيذ", "جاري التنفيذ",
-                  "تم التنفيذ", "جاري التوصيل", "تم الشحن"))
-RECEIVED = frozenset(("received", "supplier_received", "تم الاستلام", "مستلم"))
+    "pending", "waiting", "in_progress", "processing", "reviewed", "ready", "completed",
+    "shipping", "shipped", "delivering", "out_for_delivery", "انتظار المراجعة",
+    "بإنتظار المراجعة", "بانتظار المراجعة", "تم المراجعة", "تمت المراجعة", "قيد التنفيذ",
+    "جاري التنفيذ", "تم التنفيذ", "جاري التوصيل", "تم الشحن"))
 READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2",
-         "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
-         "mezan_cost_resources_v2", "mezan_preparation_pieces_v1",
-         "mezan_supplier_invoices_v2", "mezan_suppliers_v2", "store_drivers",
-         "store_delivery_assignments", "mz2_shipping_setup_v2")
+    "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
+    "mezan_cost_resources_v2", "mezan_preparation_pieces_v1", "mezan_supplier_invoices_v2",
+    "mezan_suppliers_v2", "store_drivers", "store_delivery_assignments", "mz2_shipping_setup_v2")
+POOL_NAME = "منتجات لم تُستلم من المورد"
 
 
 def _fmt(value):
@@ -37,28 +34,83 @@ def _fmt(value):
 
 
 def _status(raw):
-    source = raw.get("status")
-    if isinstance(source, dict):
-        source = source.get("slug") or source.get("name")
-    return str(source or "").strip().lower()
+    value = raw.get("status")
+    if isinstance(value, dict):
+        value = value.get("slug") or value.get("name")
+    return str(value or "").strip().lower()
 
 
 def _cutover_group(status):
-    if status in {"under_review", "waiting_review", "waiting_for_review", "pending_review",
-                  "pending", "waiting", "انتظار المراجعة",
-                  "بانتظار المراجعة", "بإنتظار المراجعة"}:
-        return "awaiting_review"
-    return "under_fulfillment"
+    return "awaiting_review" if status in {
+        "under_review", "waiting_review", "waiting_for_review", "pending_review", "pending",
+        "waiting", "انتظار المراجعة", "بانتظار المراجعة", "بإنتظار المراجعة"
+    } else "under_fulfillment"
 
 
-def _money_group(values, key, amount):
-    values[key] += amount
+def _name(record, fallback):
+    return str(record.get("name") or record.get("company_name") or record.get("display_name") or fallback)
+
+
+def _claims(invoice):
+    claims = []
+    for line in invoice.get("lines") or []:
+        if not isinstance(line, dict):
+            continue
+        for pid in line.get("piece_ids") or []:
+            if line.get("product_charge_eligible") is not False:
+                claims.append(str(pid))
+            for service in line.get("services") or []:
+                if isinstance(service, dict) and service.get("service_id"):
+                    claims.append(str(pid) + ":service:" + str(service["service_id"]))
+    return claims
+
+
+def _coverage(data, suppliers, started, stamp, issues):
+    covered, poststart, uncertain = defaultdict(set), set(), set()
+    invoices = [r for r in data["mezan_supplier_invoices_v2"]
+        if not r.get("experiment_mode") and not r.get("experiment_run_id") and r.get("approved_at")]
+    counts = Counter(str(r.get("id") or "") for r in invoices)
+    for invoice in invoices:
+        claims = _claims(invoice)
+        try:
+            approved = instant(invoice["approved_at"])
+            if approved > stamp:
+                continue
+            if not invoice.get("id") or counts[str(invoice["id"])] != 1:
+                raise ValueError("supplier_invoice_identity_ambiguous")
+            if str(invoice.get("supplier_id") or "") not in suppliers:
+                raise ValueError("supplier_invoice_supplier_identity_incomplete")
+            if not claims or len(claims) != len(set(claims)):
+                raise ValueError("supplier_invoice_component_incomplete")
+            for line in invoice.get("lines") or []:
+                ids = line.get("piece_ids") or []
+                if line.get("product_price_authority") != "mezan_v2" or not ids:
+                    raise ValueError("supplier_invoice_component_incomplete")
+                if line.get("quantity") is not None and number(line["quantity"]) != len(ids):
+                    raise ValueError("supplier_invoice_component_incomplete")
+            try:
+                invoice_component_amounts(invoice)
+            except (ValueError, KeyError, TypeError):
+                raise ValueError("supplier_invoice_tax_or_amount_incomplete") from None
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            uncertain.update(claims)
+            code = str(exc)
+            issues[code if code.startswith("supplier_invoice_") else "supplier_invoice_date_invalid"] += 1
+            continue
+        for component in claims:
+            covered[component].add(str(invoice["id"]))
+            if approved >= started:
+                poststart.add(component)
+    return covered, poststart, uncertain
 
 
 async def project(db, owner, state, *, as_of=None):
-    """Bounded, owner-scoped read; no financial writes, silent currency conversion or fallbacks."""
+    """Owner-scoped, bounded reads. No source writes or financial side effects."""
     if state.get("status") not in {"active", "frozen"} or not state.get("started_at"):
         return {"status": "not_started", "groups": [], "currencies": {}, "issues": []}
+    if state.get("status") == "frozen":
+        # A current database read must not masquerade as the frozen historical snapshot.
+        return {"status": "frozen", "groups": [], "currencies": {}, "issues": []}
     started = instant(state["started_at"])
     stamp = instant(as_of or datetime.now(timezone.utc))
     if stamp < started:
@@ -67,241 +119,188 @@ async def project(db, owner, state, *, as_of=None):
     issues = Counter()
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
     currencies = defaultdict(lambda: defaultdict(lambda: ZERO))
+
+    def add(period, kind, stage, identity, name, currency, amount, units, oid):
+        # Names are labels, not identity: two suppliers can have the same name.
+        group = values[(period, kind, stage, identity, name, currency)]
+        group["amount"] += amount
+        group["units"] += units
+        group["orders"].add(oid)
+
     profiles = unique_index(data["mezan_product_cost_profiles_v2"], "salla_product_id")
     catalogue = unique_index(data["mezan_products_v2"], "salla_product_id")
+    profile_counts = Counter(str(r.get("salla_product_id") or "") for r in data["mezan_product_cost_profiles_v2"])
     suppliers = unique_index(data["mezan_suppliers_v2"], "id")
     drivers = unique_index(data["store_drivers"], "id")
     setups = data["mz2_shipping_setup_v2"]
     setup = setups[0] if len(setups) == 1 else {}
     if len(setups) > 1:
         issues["shipping_setup_ambiguous"] += 1
-    native_pieces = [r for r in data["mezan_preparation_pieces_v1"]
-                     if not r.get("experiment_mode") and not r.get("experiment_run_id")]
+    pieces = [r for r in data["mezan_preparation_pieces_v1"]
+        if not r.get("experiment_mode") and not r.get("experiment_run_id")]
+    piece_counts = Counter(str(r.get("id") or "") for r in pieces)
+    piece_index = unique_index(pieces, "id")
     pieces_by_item = defaultdict(list)
-    for piece in native_pieces:
+    for piece in pieces:
         pieces_by_item[(str(piece.get("order_number")), str(piece.get("order_item_id")))].append(piece)
-
-    # Only native approved invoice component identities establish coverage.
-    # An invoice approved before start may already be in the owner's opening
-    # balance; never add it to an estimated supplier payable again.
-    coverage = defaultdict(set)
-    approved_after_start = defaultdict(set)
-    uncertain_invoice_components = set()
-    invoices = [r for r in data["mezan_supplier_invoices_v2"]
-                if not r.get("experiment_mode") and not r.get("experiment_run_id")
-                and r.get("approved_at")]
-    counts = Counter(str(r.get("id") or "") for r in invoices)
-    for invoice in invoices:
-        claims = set()
-        for line in invoice.get("lines") or []:
-            for pid in line.get("piece_ids") or []:
-                if line.get("product_charge_eligible") is not False:
-                    claims.add(str(pid))
-                for service in line.get("services") or []:
-                    if service.get("service_id"):
-                        claims.add(str(pid) + ":service:" + str(service["service_id"]))
-        try:
-            approved_at = instant(invoice["approved_at"])
-        except (ValueError, TypeError):
-            uncertain_invoice_components.update(claims)
-            issues["supplier_invoice_date_invalid"] += 1
-            continue
-        if approved_at > stamp:
-            continue
-        if not invoice.get("id") or counts[str(invoice["id"])] != 1:
-            uncertain_invoice_components.update(claims)
-            issues["supplier_invoice_identity_ambiguous"] += 1
-            continue
-        if invoice.get("supplier_id") not in suppliers:
-            uncertain_invoice_components.update(claims)
-            issues["supplier_invoice_supplier_identity_incomplete"] += 1
-            continue
-        try:
-            invoice_component_amounts(invoice)
-        except (ValueError, KeyError, TypeError):
-            uncertain_invoice_components.update(claims)
-            issues["supplier_invoice_tax_or_amount_incomplete"] += 1
-            continue
-        for line in invoice.get("lines", []):
-            piece_ids = line.get("piece_ids") or []
-            if (line.get("product_price_authority") != "mezan_v2" or not piece_ids
-                    or len(piece_ids) != len(set(piece_ids))):
-                uncertain_invoice_components.update(claims)
-                issues["supplier_invoice_component_incomplete"] += 1
-                continue
-            for pid in piece_ids:
-                if line.get("product_charge_eligible") is not False:
-                    key = str(pid)
-                    coverage[key].add(str(invoice["id"]))
-                    if approved_at >= started:
-                        approved_after_start[key].add(str(invoice["id"]))
-                for service in line.get("services") or []:
-                    if not service.get("service_id"):
-                        issues["supplier_invoice_component_incomplete"] += 1
-                        continue
-                    key = str(pid) + ":service:" + str(service["service_id"])
-                    coverage[key].add(str(invoice["id"]))
-                    if approved_at >= started:
-                        approved_after_start[key].add(str(invoice["id"]))
-
+    coverage, approved_after_start, uncertain = _coverage(data, suppliers, started, stamp, issues)
     assignments = defaultdict(list)
     for entry in data["store_delivery_assignments"]:
         if entry.get("status") in {"assigned", "out_for_delivery", "delivered"}:
             assignments[str(entry.get("order_number"))].append(entry)
 
-    source_orders = []
-    canonical_ids = Counter()
-    canonical_numbers = Counter()
+    raw_orders = []
     for record in data["unified_orders"]:
-        raw = (record.get("raw_by_source") or {}).get("salla_direct")
+        source = record.get("raw_by_source")
+        raw = source.get("salla_direct") if isinstance(source, dict) else None
         if not isinstance(raw, dict):
             issues["canonical_salla_source_missing_for_open_cost_preview"] += 1
             continue
+        raw_orders.append((record, raw))
+    ids = Counter(str(r.get("id") or "") for _, r in raw_orders)
+    nums = Counter(str(r.get("reference_id") or r.get("order_number") or "") for _, r in raw_orders)
+    current_stages = {}
+    for record, raw in raw_orders:
+        oid = str(raw.get("id") or "")
+        num = str(raw.get("reference_id") or raw.get("order_number") or "")
         try:
             created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
         except (ValueError, TypeError):
             issues["order_created_at_incomplete"] += 1
             continue
-        if created > started or created > stamp:
+        if created > stamp:
             continue
         status = _status(raw)
+        if not oid or not num or ids[oid] != 1 or nums[num] != 1:
+            issues["historical_order_identity_ambiguous"] += 1
+            continue
+        if created > started:
+            current_stages[oid] = _cutover_group(status)
+            continue
         if status in CLOSED:
             continue
         if status not in OPEN:
             issues["historical_order_status_unverified"] += 1
             continue
-        oid = str(raw.get("id") or "")
-        num = str(raw.get("reference_id") or raw.get("order_number") or "")
-        canonical_ids[oid] += 1
-        canonical_numbers[num] += 1
-        source_orders.append((record, raw, oid, num, status))
-    # Duplicate current source identities are not an excuse to duplicate costs.
-    for record, raw, oid, num, status in source_orders:
-        if not oid or not num or canonical_ids[oid] != 1 or canonical_numbers[num] != 1:
-            issues["historical_order_identity_ambiguous"] += 1
-            continue
-        if (record.get("g47_salla_snapshot") or {}).get("requires_authoritative_refresh"):
+        watermark = record.get("g47_salla_snapshot")
+        if isinstance(watermark, dict) and watermark.get("requires_authoritative_refresh"):
             issues["historical_order_refresh_required"] += 1
             continue
-        source_total = (raw.get("amounts") or {}).get("total")
-        total_currency = source_total.get("currency") if isinstance(source_total, dict) else None
-        currency = str(raw.get("currency") or total_currency or "")
-        # The MZ2 cost profiles and delivery contracts are SAR amounts; the
-        # historic Salla order currency is not permission to invent FX.
+        amounts = raw.get("amounts") if isinstance(raw.get("amounts"), dict) else {}
+        total = amounts.get("total")
+        currency = raw.get("currency") or (total.get("currency") if isinstance(total, dict) else None)
         if currency != "SAR":
             issues["historical_cost_currency_requires_review"] += 1
             continue
         stage = _cutover_group(status)
-        items = raw.get("items") or []
-        if not isinstance(items, list):
+        items = raw.get("items")
+        if not isinstance(items, list) or not items:
             issues["historical_items_incomplete"] += 1
-            continue
-        seen_lines = set()
+            items = []
+        line_ids = Counter(str(i.get("id") or i.get("item_id") or i.get("order_item_id") or "")
+                           for i in items if isinstance(i, dict))
         for item in items:
+            if not isinstance(item, dict):
+                issues["historical_items_incomplete"] += 1
+                continue
             line_id = str(item.get("id") or item.get("item_id") or item.get("order_item_id") or "")
-            if not line_id or line_id in seen_lines:
+            if not line_id or line_ids[line_id] != 1:
                 issues["historical_order_item_identity_ambiguous"] += 1
                 continue
-            seen_lines.add(line_id)
             stable = "salla:" + num + ":" + line_id
-            product = item.get("product") or {}
+            product = item.get("product") if isinstance(item.get("product"), dict) else {}
             product_id = str(item.get("parent_product_id") or item.get("product_id") or product.get("id") or "")
             try:
+                if profile_counts[product_id] > 1:
+                    raise ValueError("historical_product_cost_profile_ambiguous")
                 profile = profiles.get(product_id, {})
                 variant = str(item.get("variant_id") or "")
-                base_available = (profile.get("base_cost") is not None or
-                                  variant and variant in (profile.get("variant_costs") or {}))
-                if not base_available:
-                    # Current Salla catalog cost is allowed only as a clearly
-                    # flagged historical forecast; never as payable evidence.
+                has_base = (profile.get("base_cost") is not None or
+                            variant and variant in (profile.get("variant_costs") or {}))
+                fallback_used = False
+                if not has_base:
                     catalog = catalogue.get(product_id)
                     if not catalog:
                         raise ValueError("historical_catalog_cost_missing")
                     if variant:
                         matches = [v for v in catalog.get("variants", [])
-                                   if isinstance(v, dict) and str(v.get("id") or "") == variant]
+                            if isinstance(v, dict) and str(v.get("id") or "") == variant]
                         if len(matches) != 1:
                             raise ValueError("historical_variant_catalog_cost_ambiguous")
-                        raw_price = matches[0].get("cost_price_from_salla")
+                        price = matches[0].get("cost_price_from_salla")
                     else:
-                        raw_price = catalog.get("cost_price_from_salla")
-                    fallback = number(raw_price)
+                        price = catalog.get("cost_price_from_salla")
+                    fallback = number(price)
                     if fallback <= 0:
                         raise ValueError("historical_catalog_cost_missing")
                     profile = dict(profile, base_cost=str(fallback))
-                    issues["historical_current_catalog_estimate_used"] += 1
-                per_unit, services = cost_components(data, product_id, item, profile)
-                quantity = number(item.get("quantity"))
-                if quantity <= 0 or quantity != quantity.to_integral_value():
+                    fallback_used = True
+                unit, services = cost_components(data, product_id, item, profile)
+                qty = number(item.get("quantity"))
+                if qty <= 0 or qty != qty.to_integral_value():
                     raise ValueError("historical_quantity_invalid")
+                matched = pieces_by_item.get((num, stable), [])
                 projected = []
-                pieces = pieces_by_item.get((num, stable), [])
-                if pieces:
-                    if len(pieces) != quantity or len({p.get("unit_index") for p in pieces}) != len(pieces):
+                if matched:
+                    if len(matched) != qty or len({p.get("unit_index") for p in matched}) != len(matched):
                         raise ValueError("historical_piece_coverage_incomplete")
-                    for piece in pieces:
-                        if piece.get("supplier_id") and str(piece["supplier_id"]) not in suppliers:
-                            raise ValueError("historical_supplier_identity_incomplete")
+                    for piece in matched:
+                        pid = str(piece.get("id") or "")
+                        if not pid or piece_counts[pid] != 1:
+                            raise ValueError("historical_piece_identity_ambiguous")
                         order = {"items": []}
-                        append_components(order, str(piece.get("id") or ""), per_unit, services, 1,
-                                          piece.get("supplier_id"), piece)
-                        projected.extend((component, piece) for component in order["items"])
+                        append_components(order, pid, unit, services, 1, piece.get("supplier_id"), piece, as_of=stamp)
+                        projected.extend((c, piece) for c in order["items"])
                 else:
                     order = {"items": []}
-                    append_components(order, stable, per_unit, services, quantity)
-                    projected.extend((component, None) for component in order["items"])
-                for component, piece in projected:
-                    component_key = str(component["id"])
-                    if (not component_key or component_key in uncertain_invoice_components
-                            or len(coverage[component_key]) > 1):
-                        issues["historical_supplier_component_ambiguous"] += 1
-                        continue
-                    if coverage[component_key]:
-                        if approved_after_start[component_key]:
-                            issues["prestart_order_postcutover_invoice_needs_reconciliation"] += 1
-                        continue
+                    append_components(order, stable, unit, services, qty, as_of=stamp)
+                    projected.extend((c, None) for c in order["items"])
+            except (ValueError, TypeError, KeyError, AttributeError):
+                issues["historical_supplier_cost_incomplete"] += 1
+                continue
+            included = False
+            for component, piece in projected:
+                key = str(component.get("id") or "")
+                if not key or key in uncertain or len(coverage[key]) > 1:
+                    issues["historical_supplier_component_ambiguous"] += 1
+                    continue
+                if coverage[key]:
+                    if key in approved_after_start:
+                        issues["prestart_order_postcutover_invoice_needs_reconciliation"] += 1
+                    continue
+                try:
                     amount = number(component["cost"]) * number(component.get("quantity", "1"))
                     if amount != amount.quantize(Decimal(".01")):
-                        raise ValueError("historical_cost_rounding_incomplete")
-                    received = supplier_receipt_proven(piece)
-                    if received:
-                        try:
-                            received = instant(piece["received_at"]) <= stamp
-                        except (ValueError, TypeError, KeyError):
-                            received = False
-                            issues["historical_supplier_receipt_timestamp_invalid"] += 1
-                    if received:
-                        product_stage = "received_without_approved_invoice"
-                        party_id = str(piece.get("supplier_id") or "")
-                        party_name = ((suppliers.get(party_id) or {}).get("name")
-                                      or "استلام دون مورد موثق")
-                        if not party_id:
-                            issues["historical_received_supplier_identity_missing"] += 1
-                        _money_group(currencies["SAR"], "prestart_supplier_received_uninvoiced", amount)
-                    else:
-                        # Even if it has been assigned or sent, this remains one
-                        # unreceived-cost pool, never a payable for that supplier.
-                        product_stage = stage
-                        party_name = "منتجات لم تُستلم من المورد"
-                        _money_group(currencies["SAR"], "prestart_supplier_unreceived", amount)
-                    key = ("prestart", "supplier", product_stage, party_name, "SAR")
-                    group = values[key]
-                    group["amount"] += amount
-                    group["units"] += int(number(component.get("quantity", "1")))
-                    group["orders"].add(oid)
-                    _money_group(currencies["SAR"], "prestart_supplier_expected", amount)
-            except (ValueError, TypeError, KeyError):
-                issues["historical_supplier_cost_incomplete"] += 1
+                        raise ValueError("rounding")
+                except (ValueError, TypeError, KeyError):
+                    issues["historical_supplier_cost_incomplete"] += 1
+                    continue
+                received = component.get("supplier_receipt_proven") is True
+                if received:
+                    party = str(component.get("supplier_id") or "")
+                    if party not in suppliers:
+                        issues["historical_received_supplier_identity_missing"] += 1
+                        continue
+                    label = _name(suppliers[party], "مورد الاستلام")
+                    product_stage = "received_without_approved_invoice"
+                    bucket = "prestart_supplier_received_uninvoiced"
+                else:
+                    party, label, product_stage = "", POOL_NAME, stage
+                    bucket = "prestart_supplier_unreceived"
+                add("prestart", "supplier", product_stage, party, label, "SAR", amount,
+                    int(number(component.get("quantity", "1"))), oid)
+                currencies["SAR"][bucket] += amount
+                currencies["SAR"]["prestart_supplier_expected"] += amount
+                included = True
+            if fallback_used and included:
+                issues["historical_current_catalog_estimate_used"] += 1
 
-        # Shipping remains forecast, never a confirmed debt before delivery.
+        # Shipping quote is independent from product-cost completeness.
         shipping = raw.get("salla_shipping_current") or raw.get("shipping") or {}
         if not isinstance(shipping, dict):
-            shipping = {}
-        shipping_state = shipping.get("status")
-        if isinstance(shipping_state, dict):
-            shipping_state = shipping_state.get("slug") or shipping_state.get("name")
-        if (shipping.get("delivered_at") or
-                str(shipping_state or "").strip().lower() in {"delivered", "تم التوصيل"}):
+            issues["historical_shipping_quote_incomplete"] += 1
+            continue
+        if shipping.get("delivered_at") or _status(shipping) in {"delivered", "تم التوصيل"}:
             continue
         assigned = assignments.get(num, [])
         if len(assigned) > 1:
@@ -309,87 +308,66 @@ async def project(db, owner, state, *, as_of=None):
             continue
         if assigned and assigned[0].get("status") == "delivered":
             continue
-        party_type = "courier"
-        party_id = None
-        party_name = ""
+        party_type, party, label = "courier", "", ""
         if assigned:
             party_type = "store_driver"
-            party_id = str(assigned[0].get("driver_id") or "")
-            party_name = (drivers.get(party_id) or {}).get("name") or ""
-            if not party_name:
-                party_id = None
+            party = str(assigned[0].get("driver_id") or "")
+            if party in drivers:
+                label = _name(drivers[party], "مندوب المتجر")
+            else:
+                party = ""
         else:
-            carrier_key = shipping.get("company_code") or shipping.get("company")
-            candidates = [c for c in setup.get("couriers", [])
-                          if usable(c) and c.get("confirmed_by") and c.get("confirmed_at")
-                          and carrier_key in (c.get("salla_carrier_keys") or [])]
-            if len(candidates) == 1:
-                party_id = str(candidates[0]["courier_key"])
-                party_name = str(candidates[0].get("name") or party_id)
-        if not party_id:
+            carrier = shipping.get("company_code") or shipping.get("company")
+            candidates = [c for c in setup.get("couriers", []) if usable(c)
+                and c.get("confirmed_by") and c.get("confirmed_at")
+                and carrier in (c.get("salla_carrier_keys") or [])]
+            if len(candidates) == 1 and candidates[0].get("courier_key"):
+                party = str(candidates[0]["courier_key"])
+                label = _name(candidates[0], "شركة شحن")
+        if not party:
             issues["historical_shipping_unassigned"] += 1
             continue
-        rates = []
-        for rate in setup.get("contracts", []):
-            if (rate.get("status") != "approved" or rate.get("party_type") != party_type
-                    or str(rate.get("party_id")) != party_id or rate.get("context") != "delivery"):
-                continue
-            try:
-                if instant(rate["effective_from"]) <= stamp and (not rate.get("effective_to") or stamp < instant(rate["effective_to"])):
-                    rates.append(rate)
-            except (ValueError, KeyError, TypeError):
-                issues["historical_shipping_contract_incomplete"] += 1
-        if len(rates) != 1:
-            issues["historical_shipping_contract_incomplete"] += 1
-            continue
         try:
+            rates = [r for r in setup.get("contracts", [])
+                if r.get("status") == "approved" and r.get("party_type") == party_type
+                and str(r.get("party_id")) == party and r.get("context") == "delivery"
+                and instant(r["effective_from"]) <= stamp
+                and (not r.get("effective_to") or stamp < instant(r["effective_to"]))]
+            if len(rates) != 1 or rates[0].get("currency", "SAR") != "SAR":
+                raise ValueError("historical_shipping_contract_incomplete")
             payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
             method = str(payment.get("method") or raw.get("payment_method") or "").lower()
             is_cod = method in {"cod", "cash_on_delivery", "cashondelivery", "cash on delivery",
-                                "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
-            due = None
-            if is_cod:
-                total = number((raw.get("amounts") or {}).get("total", raw.get("total")))
-                due = number(cod_facts(raw, total)["outstanding"])
-            result = shipping_charge(rates[0], owner, party_id, stamp, due, setup)
-            if not result.get("fee_complete"):
-                issues["historical_shipping_fee_component_incomplete"] += 1
-                continue
-            amount = number(result["cost"])
+                "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
+            due = number(cod_facts(raw, number(amounts.get("total", raw.get("total"))))["outstanding"]) if is_cod else None
+            quote = shipping_charge(rates[0], owner, party, stamp, due, setup)
+            if not quote.get("fee_complete"):
+                raise ValueError("historical_shipping_fee_component_incomplete")
+            amount = number(quote["cost"])
             if amount != amount.quantize(Decimal(".01")):
-                raise ValueError("historical_shipping_rounding_incomplete")
-            key = ("prestart", party_type, "not_delivered", party_name, "SAR")
-            group = values[key]
-            group["amount"] += amount
-            group["units"] += 1
-            group["orders"].add(oid)
-            _money_group(currencies["SAR"], "prestart_shipping_expected", amount)
-        except (ValueError, TypeError, KeyError):
+                raise ValueError("rounding")
+            add("prestart", party_type, "not_delivered", party, label, "SAR", amount, 1, oid)
+            currencies["SAR"]["prestart_shipping_expected"] += amount
+        except (ValueError, TypeError, KeyError, AttributeError):
             issues["historical_shipping_quote_incomplete"] += 1
 
-    # For current orders, stage classification comes from canonical order state.
-    # All amounts remain those of the existing idempotently reconciled engine.
-    current_stages = {}
-    current_count = Counter()
-    engine_at = instant((state.get("engine") or {}).get("as_of") or stamp)
-    for record in data["unified_orders"]:
-        raw = (record.get("raw_by_source") or {}).get("salla_direct")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
-            if not started < created <= engine_at:
-                continue
-            identity = str(raw.get("id") or "")
-            if identity:
-                current_count[identity] += 1
-                current_stages[identity] = _cutover_group(_status(raw))
-        except (ValueError, TypeError):
-            continue
-
-    # Current active expenses use the frozen/reconciled engine; never re-estimate
-    # those orders through this separate, historical-only projection.
-    for obligation in (state.get("engine", {}).get("obligations") or {}).values():
+    engine = state.get("engine") or {}
+    engine_at = None
+    try:
+        if engine.get("as_of"):
+            engine_at = instant(engine["as_of"])
+            if not started <= engine_at <= stamp:
+                raise ValueError("engine_time")
+        elif engine.get("obligations"):
+            raise ValueError("engine_time")
+    except (ValueError, TypeError):
+        issues["current_cost_snapshot_time_incomplete"] += 1
+        engine_at = None
+    for source_issue in engine.get("issues") or []:
+        code = source_issue if isinstance(source_issue, str) else (source_issue.get("code") if isinstance(source_issue, dict) else None)
+        if code and re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation", code):
+            issues["current_" + code] += 1
+    for obligation in (engine.get("obligations") or {}).values() if engine_at else []:
         if obligation.get("superseded") or obligation.get("derived_credit"):
             continue
         kind = obligation.get("kind")
@@ -397,49 +375,49 @@ async def project(db, owner, state, *, as_of=None):
             continue
         currency = str(obligation.get("currency") or "")
         try:
+            if not re.fullmatch(r"[A-Z]{3}", currency):
+                raise ValueError("currency")
             expected = number(obligation.get("expected", "0"))
             confirmed = number(obligation.get("confirmed", "0"))
         except ValueError:
             issues["operational_cost_obligation_incomplete"] += 1
             continue
-        _money_group(currencies[currency], "current_" + kind + "_expected", expected)
-        _money_group(currencies[currency], "current_" + kind + "_confirmed", confirmed)
-        oid = str(obligation.get("id") or "").split(":", 2)[1:2]
-        order_id = oid[0] if oid else ""
+        currencies[currency]["current_" + kind + "_expected"] += expected
+        currencies[currency]["current_" + kind + "_confirmed"] += confirmed
+        parts = str(obligation.get("id") or "").split(":", 2)
+        oid = parts[1] if len(parts) > 1 else str(obligation.get("id"))
+        party = str(obligation.get("party_id") or "")
+        name = str(obligation.get("name") or "جهة غير مكتملة")
         if expected:
-            if kind == "supplier" and not obligation.get("party_id"):
-                stage = current_stages.get(order_id, "unreceived")
-                if current_count[order_id] != 1:
-                    stage = "unreceived"
-                name = "منتجات لم تُستلم من المورد"
-                _money_group(currencies[currency], "poststart_supplier_unreceived", expected)
-            elif kind == "supplier":
-                stage = "received_without_approved_invoice"
-                name = str(obligation.get("name") or "مورد الاستلام")
-                _money_group(currencies[currency], "poststart_supplier_received_uninvoiced", expected)
+            if kind == "supplier":
+                component_id = parts[2] if len(parts) > 2 else ""
+                pid, sep, sid = component_id.partition(":service:")
+                physical = piece_index.get(pid)
+                received = supplier_receipt_proven(physical, engine_at)
+                if sep:
+                    plans = [s for s in (physical or {}).get("services", []) if str(s.get("service_id") or "") == sid]
+                    received = received and len(plans) == 1 and plans[0].get("status") == "completed"
+                if not received or not party:
+                    party, name = "", POOL_NAME
+                    stage = current_stages.get(oid, "unreceived")
+                    bucket = "poststart_supplier_unreceived"
+                else:
+                    stage, bucket = "received_without_approved_invoice", "poststart_supplier_received_uninvoiced"
+                currencies[currency][bucket] += expected
             else:
                 stage = "not_delivered"
-                name = str(obligation.get("name") or "جهة الشحن غير مكتملة")
-            group = values[("poststart", kind, stage, name, currency)]
-            group["amount"] += expected
-            group["units"] += 1
-            group["orders"].add(order_id or str(obligation.get("id")))
+            add("poststart", kind, stage, party, name, currency, expected, 1, oid)
         if confirmed:
-            name = str(obligation.get("name") or "جهة غير مكتملة")
-            group = values[("poststart", kind, "confirmed_in_financial_balances", name, currency)]
-            group["amount"] += confirmed
-            group["units"] += 1
-            group["orders"].add(order_id or str(obligation.get("id")))
-
-    summaries = {currency: {key: _fmt(value) for key, value in sorted(details.items())}
-                 for currency, details in sorted(currencies.items())}
-    groups = [{"period": period, "kind": kind, "stage": stage, "party_name": party_name,
-               "party_type": ("supplier" if kind == "supplier" else kind),
-               "currency": currency, "amount": _fmt(value["amount"]),
-               "units": value["units"], "orders": len(value["orders"])}
-              for (period, kind, stage, party_name, currency), value in values.items()]
-    groups.sort(key=lambda r: (r["period"], r["kind"], r["stage"], r["party_name"]))
-    return {"status": "preview", "as_of": stamp.isoformat(), "engine_as_of": engine_at.isoformat(), "started_at": started.isoformat(),
-            "currencies": summaries, "groups": groups,
-            "issues": [{"code": code, "count": count} for code, count in sorted(issues.items())],
-            "warning": "historical_preview_never_add_to_confirmed_or_expected_payable_without_owner_evidence"}
+            add("poststart", kind, "confirmed_in_financial_balances", str(obligation.get("party_id") or ""),
+                str(obligation.get("name") or "جهة غير مكتملة"), currency, confirmed, 1, oid)
+    groups = [{"period": period, "kind": kind, "stage": stage, "party_id": party,
+        "party_name": name, "party_type": kind, "currency": currency,
+        "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
+        for (period, kind, stage, party, name, currency), v in values.items()]
+    groups.sort(key=lambda r: (r["period"], r["kind"], r["stage"], r["party_name"], r["party_id"]))
+    return {"status": "preview", "as_of": stamp.isoformat(),
+        "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
+        "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
+        "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
+        "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),
+        "warning": "historical_preview_never_add_to_confirmed_or_expected_payable_without_owner_evidence"}
