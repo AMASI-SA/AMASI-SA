@@ -105,6 +105,20 @@ def test_prestart_invoiced_piece_not_added_as_second_estimated_debt():
                for issue in result["issues"])
 
 
+def test_old_invoice_with_invalid_tax_evidence_does_not_create_second_estimated_debt():
+    invoice = row(id="invoice-bad", supplier_id="supplier1",
+                  approved_at="2026-11-01T11:00:00+00:00",
+                  purchase_tax={"treatment": "INPUT_VAT", "amount_halalas": 600},
+                  lines=[{"piece_ids": ["physical1"], "product_price_authority": "mezan_v2",
+                          "product_unit_price_halalas": 4000}])
+    db = seeded_db(physical=piece(received=True), invoices=[invoice])
+    result = run(project(db, "owner", operating_state(), as_of=NOW))
+    assert group(result) == []
+    codes = {issue["code"] for issue in result["issues"]}
+    assert "supplier_invoice_tax_or_amount_incomplete" in codes
+    assert "historical_supplier_component_ambiguous" in codes
+
+
 def test_missing_historical_product_cost_never_silent_zero():
     db = seeded_db()
     db.data["mezan_product_cost_profiles_v2"] = []
