@@ -275,6 +275,12 @@ async def project(db, owner, state, *, as_of=None):
         shipping = raw.get("salla_shipping_current") or raw.get("shipping") or {}
         if not isinstance(shipping, dict):
             shipping = {}
+        shipping_state = shipping.get("status")
+        if isinstance(shipping_state, dict):
+            shipping_state = shipping_state.get("slug") or shipping_state.get("name")
+        if (shipping.get("delivered_at") or
+                str(shipping_state or "").strip().lower() in {"delivered", "تم التوصيل"}):
+            continue
         assigned = assignments.get(num, [])
         if len(assigned) > 1:
             issues["historical_shipping_assignment_ambiguous"] += 1
