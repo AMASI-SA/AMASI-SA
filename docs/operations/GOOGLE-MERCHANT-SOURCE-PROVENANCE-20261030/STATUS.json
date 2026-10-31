@@ -1,0 +1,51 @@
+{
+  "status": "review_candidate_unattached_CI_pending",
+  "base": "fb12300c353cb1875f4462dc279b25360913af5c",
+  "base_tree": "58b54046079e4c4891af2c54e3eeffa765dfacd1",
+  "branch": "codex/google-merchant-source-provenance-20261030",
+  "scope": "Owner-requested bounded Merchant DataSources v1 list; source identifiers and type only",
+  "shared_seam": "20 additive lines in google_ads_reporting.py: opaque list method with bound account and fixed safe fields mask",
+  "not_attached": true,
+  "provider_calls_performed": 0,
+  "provider_writes": 0,
+  "host_actions": 0,
+  "mapping_verified": false,
+  "local_tests": {
+    "passed": 438,
+    "skipped": 0,
+    "seconds": 12.78,
+    "warnings_as_errors": true,
+    "interpreter": "/tmp/google-root-acceptance-20261030/bin/python",
+    "new_tests": 140,
+    "preserved_tests": 298,
+    "test_files": [
+      "test_google_merchant_data_sources.py",
+      "test_google_merchant_data_sources_reader.py",
+      "test_google_merchant_data_sources_routes.py",
+      "test_google_merchant_data_sources_transport.py",
+      "test_google_merchant_observation_routes.py",
+      "test_google_merchant_product_observation.py",
+      "test_google_bound_read_session.py",
+      "test_google_ads_reporting_v1.py",
+      "test_google_credential_refresh_cas.py"
+    ],
+    "environment_note": "Initial broad run: 424 passed, 14 legacy reporting cases failed at httpx constructor because inherited SOCKS proxy requires absent socksio. No dependencies/runtime/tests changed; rerun with proxy variables unset for synthetic tests passed all 438. No environment values read."
+  },
+  "remaining": [
+    "read exact source CI and actual Mongo logs",
+    "independent review",
+    "root-owned attachment decision"
+  ],
+  "deployment_authorized": false,
+  "initial_remote_wip": "d65c8e3cf95b025ddd02d602cf3b0199cb1f34b6",
+  "pull_request": 1665,
+  "ci_expected": {
+    "workflow": "Google Merchant data source provenance",
+    "total_tests": 504,
+    "actual_mongo_sources": 14,
+    "actual_mongo_preserved_owner": 21,
+    "actual_mongo_preserved_bound": 10,
+    "actual_mongo_preserved_CAS": 21,
+    "zero_skips_asserted": true
+  }
+}

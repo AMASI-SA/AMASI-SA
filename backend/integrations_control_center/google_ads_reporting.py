@@ -423,6 +423,26 @@ def google_bound_read_session(db, user_id, *, ads_account, merchant_id, clock=No
                     except Exception:
                         fail("google_bound_read_provider_unavailable")
 
+                @asynccontextmanager
+                async def stream_merchant_data_sources(self, *, page_token=None):
+                    # DataSources v1 list only: the bound account, method and
+                    # minimal non-sensitive fields mask cannot be overridden.
+                    from .google_merchant_data_sources_proof import data_source_request, DataSourceProofError
+                    try:
+                        url, params = data_source_request(merchant_id, page_token)
+                    except DataSourceProofError:
+                        fail("google_bound_read_request_refused")
+                    try:
+                        await current()
+                        async with merchant.stream("GET", url, params=params,
+                                headers={"Accept-Encoding": "identity"}, follow_redirects=False) as response:
+                            yield SafeResponse(response)
+                        await current()
+                    except GoogleBoundReadError:
+                        raise
+                    except Exception:
+                        fail("google_bound_read_provider_unavailable")
+
         except asyncio.CancelledError:
             await cleanup()
             raise
