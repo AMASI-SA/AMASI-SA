@@ -57,6 +57,7 @@ export default function OperationalCostExposure({enabled = true}) {
         const unreceived = sum(value(amounts, 'prestart_supplier_unreceived'), value(amounts, 'poststart_supplier_unreceived'));
         const received = sum(value(amounts, 'prestart_supplier_received_uninvoiced'), value(amounts, 'poststart_supplier_received_uninvoiced'));
         const shipping = sum(value(amounts, 'prestart_shipping_expected'), value(amounts, 'current_shipping_expected'));
+        const totalOpen = unreceived + received + shipping;
         return <div className="op-cost-currency" key={currency}>
           <h4>التكاليف بعملة {currency}</h4>
           <div className="op-cost-cards">
@@ -66,6 +67,8 @@ export default function OperationalCostExposure({enabled = true}) {
               <small>تُعرض باسم المورد فقط بعد إثبات الاستلام</small></article>
             <article><span>تكاليف شحن لم يتم توصيله</span><strong>{fmt(shipping)} {currency}</strong>
               <small>تقدير بحسب عقد شركة الشحن أو المندوب المعتمد</small></article>
+            <article><span>إجمالي التكاليف التشغيلية المفتوحة</span><strong>{fmt(totalOpen)} {currency}</strong>
+              <small>منتجات لم تُستلم + استُلمت دون فاتورة + شحنات لم تُسلّم. هذا إجمالي تقديري وليس دينًا مؤكدًا.</small></article>
           </div>
           <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived')} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived')} {currency}.</p>
         </div>;
