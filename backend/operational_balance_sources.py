@@ -578,8 +578,25 @@ def cost_components(data, product_id, item, profile):
     return product_cost, services
 
 
+def supplier_receipt_proven(piece):
+    """Match the durable physical receiving contract, not mere supplier assignment.
+
+    Supplier receipt is committed only when all three source fields are present.
+    A generic piece status='received' or supplier_id alone is not evidence.
+    """
+    return bool(piece and piece.get('supplier_dispatch_status') == 'received'
+                and piece.get('execution_status') == 'received_from_supplier'
+                and piece.get('received_at'))
+
+
 def append_components(order, base_id, product_cost, services, quantity, supplier_id=None, piece=None):
-    order['items'].append({'id': base_id, 'supplier_id': supplier_id, 'cost': str(product_cost), 'quantity': str(quantity)})
+    received = supplier_receipt_proven(piece)
+    # Supplier assignment is a workflow intent, never a supplier receivable/payable.
+    # Before physical receipt, all expected product costs remain one unreceived pool.
+    financial_supplier = supplier_id if received else None
+    order['items'].append({'id': base_id, 'supplier_id': financial_supplier,
+                           'supplier_receipt_proven': received,
+                           'cost': str(product_cost), 'quantity': str(quantity)})
     plans = {str(r.get('service_id')): r for r in (piece or {}).get('services', [])}
     service_ids = set(services) | set(plans)
     for service_id in sorted(service_ids):
@@ -591,7 +608,10 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
                 supplier_id if service_id in (piece or {}).get('supplier_service_ids', []) else None)
         else:
             cost, party = services[service_id]['cost'], None
-        order['items'].append({'id': f'{base_id}:service:{service_id}', 'supplier_id': party,
+        service_received = bool(received and (not plan or plan.get('status') == 'completed'))
+        order['items'].append({'id': f'{base_id}:service:{service_id}',
+                               'supplier_id': party if service_received else None,
+                               'supplier_receipt_proven': service_received,
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
