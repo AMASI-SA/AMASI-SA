@@ -86,24 +86,40 @@ async def project(db, owner, state, *, as_of=None):
     # balance; never add it to an estimated supplier payable again.
     coverage = defaultdict(set)
     approved_after_start = defaultdict(set)
+    uncertain_invoice_components = set()
     invoices = [r for r in data["mezan_supplier_invoices_v2"]
                 if not r.get("experiment_mode") and not r.get("experiment_run_id")
-                and r.get("approved_at") and r.get("supplier_id") in suppliers]
+                and r.get("approved_at")]
     counts = Counter(str(r.get("id") or "") for r in invoices)
     for invoice in invoices:
-        if not invoice.get("id") or counts[str(invoice["id"])] != 1:
-            issues["supplier_invoice_identity_ambiguous"] += 1
-            continue
+        claims = set()
+        for line in invoice.get("lines") or []:
+            for pid in line.get("piece_ids") or []:
+                if line.get("product_charge_eligible") is not False:
+                    claims.add(str(pid))
+                for service in line.get("services") or []:
+                    if service.get("service_id"):
+                        claims.add(str(pid) + ":service:" + str(service["service_id"]))
         try:
             approved_at = instant(invoice["approved_at"])
         except (ValueError, TypeError):
+            uncertain_invoice_components.update(claims)
             issues["supplier_invoice_date_invalid"] += 1
             continue
         if approved_at > stamp:
             continue
+        if not invoice.get("id") or counts[str(invoice["id"])] != 1:
+            uncertain_invoice_components.update(claims)
+            issues["supplier_invoice_identity_ambiguous"] += 1
+            continue
+        if invoice.get("supplier_id") not in suppliers:
+            uncertain_invoice_components.update(claims)
+            issues["supplier_invoice_supplier_identity_incomplete"] += 1
+            continue
         try:
             invoice_component_amounts(invoice)
         except (ValueError, KeyError, TypeError):
+            uncertain_invoice_components.update(claims)
             issues["supplier_invoice_tax_or_amount_incomplete"] += 1
             continue
         for line in invoice.get("lines", []):
@@ -235,7 +251,8 @@ async def project(db, owner, state, *, as_of=None):
                     projected.extend((component, None) for component in order["items"])
                 for component, piece in projected:
                     component_key = str(component["id"])
-                    if not component_key or len(coverage[component_key]) > 1:
+                    if (not component_key or component_key in uncertain_invoice_components
+                            or len(coverage[component_key]) > 1):
                         issues["historical_supplier_component_ambiguous"] += 1
                         continue
                     if coverage[component_key]:
