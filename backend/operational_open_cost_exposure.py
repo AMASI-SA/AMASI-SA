@@ -126,6 +126,7 @@ async def project(db, owner, state, *, as_of=None):
             piece_ids = line.get("piece_ids") or []
             if (line.get("product_price_authority") != "mezan_v2" or not piece_ids
                     or len(piece_ids) != len(set(piece_ids))):
+                uncertain_invoice_components.update(claims)
                 issues["supplier_invoice_component_incomplete"] += 1
                 continue
             for pid in piece_ids:
