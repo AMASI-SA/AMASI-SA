@@ -162,6 +162,24 @@ def test_prestart_shipping_quote_is_independent_of_delivery_and_supplier_cost():
     assert shipping[0]["party_name"] == "إيمايل"
 
 
+def test_external_delivery_evidence_excludes_historical_shipping_quote_but_not_unreceived_product():
+    setup = row(couriers=[{"courier_key": "imile", "name": "إيمايل",
+                           "confirmed_by": "owner", "confirmed_at": BEFORE,
+                           "salla_carrier_keys": ["native"]}],
+                contracts=[{"id": "contract", "status": "approved", "party_type": "courier",
+                            "party_id": "imile", "context": "delivery", "effective_from": BEFORE,
+                            "confirmed_by": "owner", "confirmed_at": BEFORE,
+                            "delivery_fee": "17.25", "vat_included": True,
+                            "cod_fixed_fee": "0.00", "cod_percent": "0.00"}])
+    old = native_order(shipping={"company_code": "native",
+                                 "delivered_at": "2026-10-31T20:00:00+00:00"})
+    db = seeded_db(order_row=old, setup=[setup])
+    result = run(project(db, "owner", operating_state(), as_of=NOW))
+    assert group(result)[0]["amount"] == "40.00"
+    assert not [g for g in result["groups"] if g["kind"] in {"courier", "store_driver"}]
+    assert result["currencies"]["SAR"].get("prestart_shipping_expected", "0.00") == "0.00"
+
+
 def test_historical_missing_cost_can_preview_explicit_current_salla_catalog_cost_with_warning():
     db = seeded_db()
     db.data["mezan_product_cost_profiles_v2"] = []
