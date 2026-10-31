@@ -447,7 +447,7 @@ async def refresh(db, owner, *, clock=None):
         for obligation in result["engine"].get("obligations", {}).values():
             kind, identity = obligation["party_type"], obligation["party_id"]
             if kind == "supplier" and not identity:
-                obligation["name"] = "تكلفة منتجات غير مسندة"
+                obligation["name"] = "تكلفة منتجات لم تُستلم من المورد"
             else:
                 obligation["name"] = names.get(kind, {}).get(identity, "جهة غير مكتملة الإعداد")
                 if identity not in names.get(kind, {}):
