@@ -48,3 +48,19 @@
 .op-issue-detail{font-size:13px;line-height:1.7;padding:8px 4px 0;overflow-wrap:anywhere}
 .op-issue-detail p{margin:6px 0}
 .op-issue-detail code{font-size:12px;direction:ltr;unicode-bidi:isolate}
+
+/* Read-only operational cost exposure. Do not merge expected costs into actual debts. */
+.op-cost-exposure{margin:20px 0;padding:20px;background:#fff;border:1px solid #dce6e1;border-radius:16px}
+.op-cost-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.op-cost-header h3{font-size:19px;margin:0 0 8px}
+.op-cost-header p{margin:0 0 12px}
+.op-cost-currency{margin-top:14px}
+.op-cost-currency h4{font-size:16px;margin:12px 0}
+.op-cost-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.op-cost-cards article{display:flex;flex-direction:column;gap:10px;min-width:0;border:1px solid #dce6e1;border-radius:12px;padding:14px;background:#f9fbfa}
+.op-cost-cards span{font-weight:600;font-size:14px}
+.op-cost-cards strong{font-size:22px;overflow-wrap:anywhere}
+.op-cost-cards small{color:#617872;font-size:12px;line-height:1.6}
+.op-cost-detail{margin:14px 0;border-top:1px solid #dce6e1;padding-top:12px}
+.op-cost-caution{background:#fff1e9;color:#8a3515;padding:10px;border-radius:8px}
+@media(max-width:650px){.op-cost-exposure{padding:12px}.op-cost-cards{grid-template-columns:1fr}.op-cost-cards strong{font-size:19px}}
