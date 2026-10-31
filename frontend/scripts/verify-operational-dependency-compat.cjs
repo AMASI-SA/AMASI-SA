@@ -16,9 +16,9 @@ async function main() {
   assert.equal(minimatchVersion, "11.0.1", "unexpected minimatch version");
   assert.equal(redirectVersion, "1.16.2", "unexpected follow-redirects version");
   assert.equal(minimatch("file.xlsx", "*.xlsx"), true);
-  const matches = glob.sync("src/pages/operational/*.jsx");
+  const matches = glob.globSync("src/pages/operational/*.jsx", {cwd: process.cwd()});
   assert.ok(Array.isArray(matches) && matches.length > 0,
-    "glob 7 must work with patched minimatch 11");
+    "modern glob must match source files with patched minimatch 11");
 
   const workbook = new ExcelJS.Workbook();
   workbook.addWorksheet("Balance").addRow(["SAR", 123]);
