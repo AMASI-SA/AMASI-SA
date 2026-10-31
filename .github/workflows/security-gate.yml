@@ -130,6 +130,9 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
+      - name: Generate patched dependency lock for isolated review
+        if: github.event.pull_request.head.ref == 'fix/operational-issue-summary-20261101'
+        run: yarn install --non-interactive
       - name: Preserve resolved lockfile for this isolated security review
         if: github.event.pull_request.head.ref == 'fix/operational-issue-summary-20261101'
         uses: actions/upload-artifact@v4
