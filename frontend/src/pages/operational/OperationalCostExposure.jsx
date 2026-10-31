@@ -38,6 +38,7 @@ export default function OperationalCostExposure({enabled = true}) {
   const entries = Object.entries(data?.currencies || {});
   const gaps = data?.issues || [];
   const incomplete = gaps.filter(item => /incomplete|ambiguous|missing|unverified|requires_review/.test(item.code || ''));
+  const catalogEstimates = gaps.find(item => item.code === 'historical_current_catalog_estimate_used')?.count || 0;
   return <section className="op-cost-exposure" aria-label="تكاليف المنتجات والشحن المفتوحة">
     <div className="op-cost-header">
       <div>
@@ -69,6 +70,7 @@ export default function OperationalCostExposure({enabled = true}) {
           <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived')} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived')} {currency}.</p>
         </div>;
       })}
+      {catalogEstimates > 0 && <p role="status" className="op-cost-caution">توجد {catalogEstimates} تكلفة لطلب قديم قُدرت اعتمادًا على سعر التكلفة الحالي في كتالوج سلة، وليس سعرًا تاريخيًا معتمدًا وقت الطلب؛ تحقق منها قبل اعتماد قرار مالي.</p>}
       {!!incomplete.length && <p role="status" className="op-cost-caution">يوجد {incomplete.reduce((n, x) => n + Number(x.count || 0), 0).toLocaleString('en-US')} تنبيهًا عن بيانات تكلفة أو هوية ناقصة؛ لذلك قد يكون الإجمالي جزئيًا.</p>}
       <details className="op-cost-detail"><summary>تفصيل التكاليف حسب الحالة والجهة ({(data.groups || []).length} صف)</summary>
         <div className="op-table"><table>
