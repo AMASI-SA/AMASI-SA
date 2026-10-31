@@ -22,7 +22,7 @@ OPEN = frozenset(("waiting_review", "waiting_for_review", "pending_review",
                   "انتظار المراجعة", "بانتظار المراجعة", "تم المراجعة",
                   "قيد التنفيذ", "تم التنفيذ", "جاري التوصيل"))
 RECEIVED = frozenset(("received", "supplier_received", "تم الاستلام", "مستلم"))
-READS = ("unified_orders", "mezan_product_cost_profiles_v2",
+READS = ("unified_orders", "mezan_product_cost_profiles_v2", "mezan_products_v2",
          "mezan_product_resource_bindings_v2", "mezan_product_option_cost_bindings_v2",
          "mezan_cost_resources_v2", "mezan_preparation_pieces_v1",
          "mezan_supplier_invoices_v2", "mezan_suppliers_v2", "store_drivers",
@@ -64,6 +64,7 @@ async def project(db, owner, state, *, as_of=None):
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
     currencies = defaultdict(lambda: defaultdict(lambda: ZERO))
     profiles = unique_index(data["mezan_product_cost_profiles_v2"], "salla_product_id")
+    catalogue = unique_index(data["mezan_products_v2"], "salla_product_id")
     suppliers = unique_index(data["mezan_suppliers_v2"], "id")
     drivers = unique_index(data["store_drivers"], "id")
     setups = data["mz2_shipping_setup_v2"]
@@ -133,6 +134,7 @@ async def project(db, owner, state, *, as_of=None):
     for record in data["unified_orders"]:
         raw = (record.get("raw_by_source") or {}).get("salla_direct")
         if not isinstance(raw, dict):
+            issues["canonical_salla_source_missing_for_open_cost_preview"] += 1
             continue
         try:
             created = instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
@@ -184,7 +186,30 @@ async def project(db, owner, state, *, as_of=None):
             product = item.get("product") or {}
             product_id = str(item.get("parent_product_id") or item.get("product_id") or product.get("id") or "")
             try:
-                per_unit, services = cost_components(data, product_id, item, profiles.get(product_id, {}))
+                profile = profiles.get(product_id, {})
+                variant = str(item.get("variant_id") or "")
+                base_available = (profile.get("base_cost") is not None or
+                                  variant and variant in (profile.get("variant_costs") or {}))
+                if not base_available:
+                    # Current Salla catalog cost is allowed only as a clearly
+                    # flagged historical forecast; never as payable evidence.
+                    catalog = catalogue.get(product_id)
+                    if not catalog:
+                        raise ValueError("historical_catalog_cost_missing")
+                    if variant:
+                        matches = [v for v in catalog.get("variants", [])
+                                   if isinstance(v, dict) and str(v.get("id") or "") == variant]
+                        if len(matches) != 1:
+                            raise ValueError("historical_variant_catalog_cost_ambiguous")
+                        raw_price = matches[0].get("cost_price_from_salla")
+                    else:
+                        raw_price = catalog.get("cost_price_from_salla")
+                    fallback = number(raw_price)
+                    if fallback <= 0:
+                        raise ValueError("historical_catalog_cost_missing")
+                    profile = dict(profile, base_cost=str(fallback))
+                    issues["historical_current_catalog_estimate_used"] += 1
+                per_unit, services = cost_components(data, product_id, item, profile)
                 quantity = number(item.get("quantity"))
                 if quantity <= 0 or quantity != quantity.to_integral_value():
                     raise ValueError("historical_quantity_invalid")
