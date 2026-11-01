@@ -44,6 +44,14 @@ Required forecast table IDs: `shipping_expected`, `products_unreceived`, `produc
 
 Show per-order earned shipping fees separately from collection responsibility. Cash collected by a store driver belongs in driver custody. Bank/card receipts for the merchant must not become driver cash custody; pending review remains pending until existing approval evidence confirms it. Carrier COD stays due from the carrier until settlement. Confirmed fees require the actual delivered executor and its existing fee contract. The UI must show these conditions in Arabic and include detailed rows in export.
 
+This report does not change recognition timing. Driver delivery saves its earning and collection evidence during successful delivery. The central operational worker refreshes active owners sequentially and sleeps 30 seconds after each completed cycle; the central balance is therefore not synchronous with pressing Delivered and has no guaranteed 30-second SLA. The report refresh button reads the last saved snapshot and displays its real `as_of`.
+
+Public order references are enriched by an owner-scoped, identity-only bounded read of `unified_orders`. Missing, ambiguous, stale or truncated identity evidence leaves `order_number` null without modifying money. The screen labels a retained `order_id` explicitly as an identifier, and Excel keeps identifiers and public order numbers in separate columns.
+
+`other_balances` is an optional actual table for residual recorded obligations, including supported expense and owner-related balances. It participates once in debt totals; it must not be dropped because its party type is outside the named tables.
+
+Known optional cost-source boundary rejections with exact codes `operational_source_rejected`, `operational_source_scope_too_large` and `operational_source_owner_mismatch` preserve the saved actual report while withholding cost forecasts. Unexpected reader errors propagate; there is no general silent fallback.
+
 ## Frontend
 
 Single scrollable RTL route `/operational-balances/financial-position`, under the existing protected layout. Match approved dense bordered tables, blue actual headers, amber forecast headers, visible per-currency subtotals and separate expected profit. Reuse existing fonts, Phosphor icons, react-to-print and safeSpreadsheet. No illustrative production records. Provide refresh, currency selection, search/filter for delivery details, report-only print, and workbook export. Empty, loading, permission, missing-source, and failed-refresh states must be truthful.

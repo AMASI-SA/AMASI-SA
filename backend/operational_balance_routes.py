@@ -295,7 +295,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/suppliers", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/suppliers", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -758,6 +758,54 @@ def make_operational_balance_router(db, current_user):
                 pass
         result.update(session_scope=digest([owner, actor["id"]]),
                       permissions={"record_movements": can_record})
+        return result
+
+    @router.get("/financial-position")
+    async def financial_position(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from operational_balance_service import accounting_inactive
+        from operational_financial_position import build_financial_position
+        from operational_financial_order_labels import attach_order_numbers
+
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                state = {**state, "status": "accounting_active"}
+        cost_exposure = None
+        if state["status"] == "active" and state.get("engine", {}).get("as_of"):
+            # The separately released cost-stage reader is an explicit optional
+            # dependency. Missing coverage is visible in the report; never
+            # substitute another balance authority or refresh/write on this GET.
+            try:
+                from operational_open_cost_exposure import project as cost_project
+            except ModuleNotFoundError as exc:
+                if exc.name != "operational_open_cost_exposure":
+                    raise
+            else:
+                try:
+                    cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
+                except ValueError as exc:
+                    # The optional bounded reader can reject its source scope.
+                    # Preserve the verified balance snapshot while explicitly
+                    # withholding estimates; unexpected errors still propagate.
+                    code = str(exc)
+                    if code not in {"operational_source_rejected", "operational_source_scope_too_large",
+                                    "operational_source_owner_mismatch"}:
+                        raise
+                    cost_exposure = {
+                        "status": "preview", "as_of": state["engine"]["as_of"],
+                        "engine_as_of": state["engine"]["as_of"], "started_at": state["started_at"],
+                        "currencies": {}, "groups": [], "complete": False,
+                        "issues": [{"code": code, "count": 1, "message":
+                            "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
+                    }
+        result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
+        result = await attach_order_numbers(db, owner, result)
+        result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
         return result
 
     @router.get("/audit")
