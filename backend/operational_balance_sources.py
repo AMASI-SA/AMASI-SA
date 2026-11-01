@@ -54,11 +54,8 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'operating_recurring_invoices_v2', 'mz2_operational_owner_beneficiaries_v2',
 } | {v[1] for v in AD_SOURCES.values()}
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
-PAYMENT_METHODS = {
-    'salla': {'applepay', 'apple pay', 'checkout', 'stcpay', 'mada', 'visa', 'mastercard', 'salla', 'salla_pay'},
-    'tabby': {'tabby', 'تابي'}, 'tamara': {'tamara', 'تمارا'},
-    'emkan': {'emkaninstallment', 'emkan', 'imkan', 'إمكان', 'امكان'},
-}
+from operational_payment_evidence import PAYMENT_METHODS, normalize_payment, DIAGNOSTICS
+
 MAX_ROWS = 20000
 # Existing MZ2 daily-movement codes plus explicitly requested operational types.
 # The physical registry is shared. Only explicit operational provenance or a
@@ -725,24 +722,16 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                     order['cod_amount'] = order['cod']['outstanding']
                 except (ValueError, TypeError):
                     issue(out, 'cod_collection_contract_incomplete', identity)
-            provider = next((p for p, aliases in PAYMENT_METHODS.items() if method in aliases), None)
-            if provider:
-                # Executed refund identity/evidence is not present in generic order status.
-                refunded = payment.get('refunded_amount', raw.get('refunded_amount'))
-                if refunded is not None and number(refunded) > 0 or status in {'refunded', 'مسترجع'}:
-                    issue(out, 'provider_refund_execution_evidence_required', identity)
-                else:
-                    order['payment'] = {'provider': provider, 'gross': str(total), 'currency': order['currency'],
-                                        'cancelled': str(total if status in {'cancelled', 'canceled', 'ملغي', 'ملغى'} else 0), 'refunds': []}
-                    reference = payment.get('reference') or payment.get('transaction_reference')
-                    if payment.get('status') in {'paid', 'captured'} and reference and payment.get('paid_amount') is not None and payment.get('paid_at'):
-                        captured = number(payment['paid_amount'])
-                        captured_at = instant(payment['paid_at'])
-                        if captured > total or captured_at < created or captured_at > now:
-                            raise ValueError('provider_capture_conflict')
-                        order['payment']['captures'] = [{'id': str(reference), 'amount': str(captured), 'captured_at': captured_at.isoformat()}]
-                    elif payment.get('status') in {'paid', 'captured'}:
-                        issue(out, 'provider_capture_evidence_incomplete', identity)
+            normalized_payment, payment_issues = normalize_payment(
+                raw, order['currency'], total, created, now)
+            if normalized_payment is not None:
+                order['payment'] = normalized_payment
+            for payment_issue in payment_issues:
+                issue(out, payment_issue['code'], identity, order_number=order_number,
+                      scope='provider_payment',
+                      message=DIAGNOSTICS.get(payment_issue['code'], 'بيانات الدفع تحتاج مطابقة؛ لا يعني ذلك أن المبلغ صفر'),
+                      required_action='راجع إثبات التحصيل ومرجع العملية وتاريخها وخطة الدفع من المصدر المعتمد',
+                      **{key: value for key, value in payment_issue.items() if key != 'code'})
             try:
                 shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
                 carrier_key = shipping.get('company_code') or shipping.get('company')

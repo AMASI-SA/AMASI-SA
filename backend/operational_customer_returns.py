@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from operational_balance_store import fail, digest, read, mutate, audit, replay, remember, claim_movement, now
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, instant, number, PAYMENT_METHODS, shipping_charge
+from operational_payment_evidence import resolve_provider, PaymentEvidenceError
 
 
 def observed_salla_refund(raw):
@@ -57,7 +58,10 @@ async def order_view(db, owner, number_text):
     total = number((raw.get('amounts') or {}).get('total', raw.get('total')))
     payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}
     method = str(payment.get('method') or raw.get('payment_method') or '').lower()
-    provider = next((p for p, aliases in PAYMENT_METHODS.items() if method in aliases), None)
+    try:
+        provider = resolve_provider(raw)
+    except PaymentEvidenceError:
+        fail('customer_return_payment_identity_conflict', 'جهة الدفع الأصلية غير مكتملة أو متعارضة؛ راجع بيانات الطلب')
     total_field = (raw.get('amounts') or {}).get('total')
     currency = raw.get('currency') or (total_field.get('currency') if isinstance(total_field, dict) else None)
     if currency != 'SAR':
