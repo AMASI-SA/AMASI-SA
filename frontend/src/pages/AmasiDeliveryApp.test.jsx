@@ -1,12 +1,13 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import api from "../lib/api";
-import { DeliveryPaymentModal } from "./AmasiDeliveryApp";
+import AmasiDeliveryApp, { DeliveryPaymentModal } from "./AmasiDeliveryApp";
 import DriverPhysicalCash from "../components/driver/DriverPhysicalCash";
 jest.mock("../lib/api", () => ({ post: jest.fn(), get: jest.fn() }));
 jest.mock("../components/BarcodeCameraScanner", () => () => null);
+jest.mock("../components/driver/OperationalInstructionNotifications", () => () => null);
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({}) }));
-jest.mock("sonner", () => ({ toast: { success: jest.fn() } }));
+jest.mock("sonner", () => ({ toast: { success: jest.fn(), error: jest.fn(), warning: jest.fn() } }));
 let node, root, saved;
 beforeEach(() => {
   jest.resetAllMocks(); global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,6 +21,108 @@ async function change(label, value) { const el = node.querySelector(`[aria-label
 async function file(label) { const el = node.querySelector(`[aria-label="${label}"]`); await act(async () => { Object.defineProperty(el, "files", { configurable: true, value: [new File(["image"], "proof.png", { type: "image/png" })] }); el.dispatchEvent(new Event("change", { bubbles: true })); }); }
 async function submit() { await act(async () => node.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))); }
 const statusPayload = () => api.post.mock.calls.find(([url]) => url.endsWith("/deliveries/status"))?.[1];
+
+async function renderCurrentDeliveryApp() {
+  const state = { items: [{ id: "assignment-1", order_number: "test-order", barcode: "barcode-1", status: "out_for_delivery", outstanding_amount: 0, outstanding_amount_available: true }] };
+  api.get.mockImplementation(async url => ({ data: url.endsWith("/deliveries") ? { items: state.items } : { items: [] } }));
+  await act(async () => root.render(<AmasiDeliveryApp />));
+  await act(async () => Array.from(node.querySelectorAll("button")).find(el => el.textContent.includes("#test-order")).click());
+  return state;
+}
+
+test("current delivery refresh removes an open stale detail", async () => {
+  const state = await renderCurrentDeliveryApp();
+  expect(node.textContent).toContain("الحالة: جاري التوصيل");
+  state.items = [];
+  await click("تحديث");
+  expect(node.textContent).not.toContain("#test-order");
+  expect(node.textContent).not.toContain("الحالة: جاري التوصيل");
+});
+
+test("current delivery refresh closes an unsubmitted completion form", async () => {
+  const state = await renderCurrentDeliveryApp();
+  await click("تم التوصيل");
+  expect(node.textContent).toContain("إكمال التوصيل والتحصيل");
+  state.items = [];
+  await click("تحديث");
+  expect(node.textContent).not.toContain("إكمال التوصيل والتحصيل");
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+test("current delivery refresh updates the amount in an unsubmitted completion form", async () => {
+  const state = await renderCurrentDeliveryApp();
+  await click("تم التوصيل");
+  state.items = [{ ...state.items[0], outstanding_amount: 75 }];
+  await click("تحديث");
+  const form = node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').closest("form");
+  expect(form.textContent).toContain("75.00");
+  expect(form.textContent).toContain("كاش");
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+test("current delivery refresh preserves unresolved submission recovery", async () => {
+  const state = await renderCurrentDeliveryApp();
+  await click("تم التوصيل");
+  await file("صورة إثبات تسليم الطلب");
+  api.post.mockImplementation(async url => {
+    if (url.endsWith("delivery-proof")) return { data: { proof_reference: "original-proof" } };
+    throw Object.assign(new Error("response lost"), { response: { status: 503 } });
+  });
+  await act(async () => node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  expect(node.textContent).toContain("إعادة إرسال التأكيد نفسه");
+  state.items = [];
+  await click("تحديث");
+  expect(node.textContent).toContain("إعادة إرسال التأكيد نفسه");
+  await click("إعادة إرسال التأكيد نفسه");
+  const posts = api.post.mock.calls.filter(([url]) => url.endsWith("/deliveries/status"));
+  expect(posts).toHaveLength(2);
+  expect(posts[1][1]).toEqual(posts[0][1]);
+  expect(api.post.mock.calls.filter(([url]) => url.endsWith("delivery-proof"))).toHaveLength(1);
+});
+
+test("an older background response cannot restore a removed current delivery", async () => {
+  jest.useFakeTimers();
+  try {
+    const state = await renderCurrentDeliveryApp();
+    const oldItems = state.items;
+    let finishOld;
+    const oldResponse = new Promise(resolve => { finishOld = resolve; });
+    let deliveryReads = 0;
+    api.get.mockImplementation(async url => {
+      if (url.endsWith("/deliveries")) {
+        deliveryReads += 1;
+        if (deliveryReads === 1) return oldResponse;
+      }
+      return { data: { items: [] } };
+    });
+    await act(async () => { jest.advanceTimersByTime(60_000); });
+    await click("تحديث");
+    expect(node.textContent).not.toContain("#test-order");
+    await act(async () => { finishOld({ data: { items: oldItems } }); });
+    expect(node.textContent).not.toContain("#test-order");
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test("removal during proof upload cannot start a new delivery confirmation", async () => {
+  jest.useFakeTimers();
+  try {
+    const state = await renderCurrentDeliveryApp();
+    await click("تم التوصيل");
+    await file("صورة إثبات تسليم الطلب");
+    let finishUpload;
+    api.post.mockImplementation(() => new Promise(resolve => { finishUpload = resolve; }));
+    await act(async () => node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').closest("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    state.items = [];
+    await act(async () => { jest.advanceTimersByTime(60_000); });
+    await act(async () => { finishUpload({ data: { proof_reference: "uploaded-proof" } }); });
+    expect(statusPayload()).toBeUndefined();
+    expect(node.textContent).not.toContain("إكمال التوصيل والتحصيل");
+  } finally {
+    jest.useRealTimers();
+  }
+});
 
 test.each([["100.00", "مطابق"], ["80.25", "نقص في النقد المستلم"], ["110.00", "زيادة في النقد المستلم"], ["0.00", "نقص في النقد المستلم"]])("cash %s requires explicit driver confirmation and preserves exact input", async (value, text) => {
   await render(); await click("كاش");
