@@ -588,10 +588,20 @@ def report(state, *, as_of=None):
         amount = Decimal(movement["amount"])
         signed = amount if movement["direction"] == "incoming" else -amount
         if movement.get("bank_id"):
-            row = get(movement["bank_kind"], movement["bank_id"], movement["currency"], movement.get("bank_name"))
-            row["actual"] += signed
+            bank_amount = Decimal(movement.get("bank_amount") or movement["amount"])
+            bank_currency = movement.get("bank_currency") or movement["currency"]
+            row = get(movement["bank_kind"], movement["bank_id"], bank_currency, movement.get("bank_name"))
+            row["actual"] += bank_amount if signed > 0 else -bank_amount
             if movement["bank_kind"] == "employee_custody":
                 row["custody_spent"] += amount
+        if movement.get("bank_fee_amount") is not None:
+            bank_fee = Decimal(movement["bank_fee_amount"])
+            if bank_fee > 0:
+                # Evidence-backed separate fee; cash was debited gross once above.
+                fee_account = get("operating_expense", "advertising_bank_fx_fee", "SAR",
+                                  "عمولات البنك لتمويل الإعلانات")
+                fee_account["actual"] += bank_fee
+                fee_account["expense_paid"] += bank_fee
         party = get(movement["party_type"], movement["party_id"], movement["currency"], movement.get("name"))
         if movement["party_type"] == "ad_account" and wallet_pool_enabled(state, movement["party_id"], movement["currency"]):
             party["actual"] -= signed
@@ -778,13 +788,19 @@ def account_statement(state, account):
                     and r['party_id']==identity and r['currency']==currency), {})
     items = []
     for movement in state['movements']:
-        if movement['currency'] != currency:
+        bank_leg = (movement.get('bank_kind') == kind and movement.get('bank_id') == identity
+                    and (movement.get('bank_currency') or movement['currency']) == currency)
+        party_leg = (movement['party_type'] == kind and movement['party_id'] == identity
+                     and movement['currency'] == currency)
+        if not bank_leg and not party_leg:
             continue
-        signed = Decimal(movement['amount']) * (1 if movement['direction']=='incoming' else -1)
+        direction = 1 if movement['direction']=='incoming' else -1
         effect = Decimal(0)
-        if movement.get('bank_kind')==kind and movement.get('bank_id')==identity:
-            effect += signed
-        if movement['party_type']==kind and movement['party_id']==identity:
+        if bank_leg:
+            # A USD ad funding payment may debit a SAR bank including its fee.
+            effect += Decimal(movement.get('bank_amount') or movement['amount']) * direction
+        if party_leg:
+            signed = Decimal(movement['amount']) * direction
             if movement['kind']=='transfer':
                 effect -= signed
             elif movement['kind']=='correction' and not movement.get('bank_id'):
@@ -797,7 +813,11 @@ def account_statement(state, account):
         items.append({'id':movement['id'], 'name':movement.get('name') or account['name'],
             'amount':fmt(abs(effect)), 'currency':currency, 'direction':'incoming' if effect>0 else 'outgoing',
             'business_date':business_day, 'occurred_at':stamp, 'reference':movement.get('reference',''),
-            'note':movement.get('note',''), 'kind':movement['kind']})
+            'note':movement.get('note',''), 'kind':movement['kind'],
+            **({'ad_amount': movement['amount'], 'ad_currency': movement['currency'],
+                'bank_fee_amount': movement['bank_fee_amount'],
+                'effective_fx_rate_to_sar': movement['effective_fx_rate_to_sar']}
+               if movement.get('bank_currency') else {})})
     if kind=='bank':
         for case in state.get('customer_returns',[]):
             if (case['status']!='refunded' or case['refund_source_type']!='bank'
