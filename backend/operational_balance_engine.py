@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from hashlib import sha256
 import json
 from zoneinfo import ZoneInfo
+from operational_product_cost_policy import COST_CURRENCY, COST_BASIS, unreceived_stage
 
 
 RIYADH = timezone(timedelta(hours=3))
@@ -191,15 +192,33 @@ def reconcile(state, sources, as_of):
                 continue
             currency = order["currency"]
             cancelled = order.get("status") in CANCELLED
-            current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
+            product_stage = (order.get("product_estimate_stage") if "product_estimate_stage" in order
+                             else unreceived_stage(order.get("status")))
+            items = list(order.get("items", []))
+            known_items = {str(item["id"]) for item in items}
+            # An approved native invoice does not lose authority merely because
+            # a current cost profile/item quote is absent. Confirm it without
+            # manufacturing an unreceived estimate from the missing catalogue.
+            invoice_only = {}
+            for receipt in sources.get("supplier_receipts", []):
+                iid = str(receipt.get("item_id") or "")
+                if (str(receipt.get("order_id")) == oid and iid not in known_items
+                        and instant(receipt["accepted_at"]) <= now):
+                    invoice_only.setdefault(iid, {})[str(receipt["id"])] = money(receipt.get("net_amount", receipt["amount"]))
+            items += [{"id": iid, "cost": amount(sum(values.values(), ZERO)), "quantity": "1",
+                       "cost_currency": COST_CURRENCY, "invoice_only": True}
+                      for iid, values in invoice_only.items()]
+            current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in items}
             for old_key, old_row in obligations.items():
                 if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
                         and old_key not in current_item_keys):
                     old_row["expected"] = "0.00"
-            for item in order.get("items", []):
+            for item in items:
                 iid = str(item["id"])
                 key = "supplier:" + oid + ":" + iid
                 total = money(item["cost"]) * money(item.get("quantity", 1))
+                if item.get("cost_currency", COST_CURRENCY) != COST_CURRENCY:
+                    raise ValueError("product_cost_currency_evidence_incomplete")
                 receipts = [r for r in sources.get("supplier_receipts", [])
                             if str(r.get("order_id")) == oid and str(r.get("item_id")) == iid]
                 for receipt in receipts:
@@ -226,8 +245,18 @@ def reconcile(state, sources, as_of):
                 # remains in the unreceived-product pool until physical receipt
                 # is proven; invoice-backed confirmation stays separately evidenced.
                 expected_party = item.get("supplier_id") if item.get("supplier_receipt_proven") is True else None
-                put(key, "supplier", expected_party, "supplier", currency,
-                    expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
+                physically_received = item.get("supplier_receipt_proven") is True
+                # Only unreceived work is status-filtered. Receipt keeps the
+                # supplier's cost even after order completion/cancellation.
+                residual = max(total - received, ZERO)
+                if relevant and money(item.get("quantity", 1)) == 1:
+                    residual = ZERO  # invoice covers this unit, even at a lower final price
+                expected = residual if physically_received or product_stage is not None else ZERO
+                put(key, "supplier", expected_party, "supplier", COST_CURRENCY,
+                    expected=expected, business_date=created.date(), cost_basis=COST_BASIS,
+                    source_order_id=oid, source_item_id=iid,
+                    supplier_receipt_proven=physically_received,
+                    product_estimate_stage=product_stage, units=str(item.get("quantity", 1)))
                 for rid, receipt in relevant.items():
                     returned = ZERO
                     for ret in sources.get("supplier_returns", []):
@@ -240,11 +269,19 @@ def reconcile(state, sources, as_of):
                                     if k.startswith("return:") and v["receipt_id"] == rid), ZERO)
                     if returned > money(receipt["amount"]):
                         raise ValueError("supplier_return_exceeds_receipt")
-                    put(key + ":" + rid, "supplier", receipt["supplier_id"], "supplier", currency,
+                    receipt_key = key + ":" + rid
+                    old_receipt = obligations.get(receipt_key)
+                    if old_receipt and old_receipt.get("currency") != COST_CURRENCY:
+                        # A previously confirmed foreign-currency liability may
+                        # already have settlements. Never silently rewrite it.
+                        issue("supplier_cost_currency_reconciliation_required", receipt_key)
+                        continue
+                    put(receipt_key, "supplier", receipt["supplier_id"], "supplier", COST_CURRENCY,
                         confirmed=money(receipt["amount"]) - returned, business_date=day(receipt["accepted_at"]), evidence_ids=[rid],
                         net_amount=receipt.get("net_amount", receipt["amount"]), tax_amount=receipt.get("tax_amount", "0.00"),
                         gross_amount=receipt.get("gross_amount", receipt["amount"]), returned_amount=amount(returned),
-                        tax_evidence=deepcopy(receipt.get("tax_evidence")))
+                        tax_evidence=deepcopy(receipt.get("tax_evidence")), cost_basis=COST_BASIS,
+                        source_order_id=oid, source_item_id=iid)
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
