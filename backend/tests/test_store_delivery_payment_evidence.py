@@ -148,3 +148,27 @@ def test_explicit_zero_survives_a_raw_shipping_only_cod_snapshot():
         "shipping": {"status": "delivered"},
     }}}
     assert authoritative_outstanding_amount(order) == 0
+
+
+# The existing Store Delivery CI installs the real bank/XLSX dependencies and
+# supplies a disposable Mongo replica set. Register the operational noncash
+# acceptance here so it runs with that suite, without changing any workflow.
+from test_store_delivery_noncash_review import (
+    test_zero_refund_fields_do_not_block_valid_receipt,
+    test_contradictory_order_cannot_approve_non_cash_money,
+    test_capability_denial_is_latched_before_calling_database,
+    test_options_are_scoped_read_only_and_keep_old_order_eligible,
+    test_invalid_sources_block_approval_and_never_create_money,
+    test_current_actor_not_browser_claims_authorizes_review,
+    test_bank_requires_original_bytes_and_unambiguous_post_cutover_evidence,
+    test_invalid_money_never_becomes_zero,
+    test_scope_and_strict_revision_are_required_before_any_transaction,
+)
+from test_operational_driver_review_mongo import (
+    test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees,
+    test_real_failure_after_metadata_or_money_rolls_back_everything,
+    test_real_failures_have_no_partial_financial_or_review_effect,
+    test_real_pos_settlement_uses_existing_operational_allocation_without_second_driver_cash,
+    test_real_http_dispatch_requires_pinned_operational_scope_and_supports_retry,
+    test_real_rejection_has_no_money_and_cannot_be_replayed_as_approval,
+)

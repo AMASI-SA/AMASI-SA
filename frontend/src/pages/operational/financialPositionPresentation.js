@@ -51,6 +51,8 @@ export const COLLECTION_LABELS = {
 };
 
 export const DESTINATION_LABELS = {
+    store_bank_account: "بنك المتجر · تحصيل مثبت",
+    store_pos_receivable: "ذمة شبكة المتجر · بانتظار التسوية",
     driver_custody: "عهدة نقدية لدى المندوب",
     courier_receivable: "تحصيل مستحق لدى شركة الشحن",
     store_bank_account_unknown: "تحويل للمتجر · الحساب البنكي غير متاح",
@@ -194,7 +196,7 @@ export function buildFinancialPositionWorkbook(report, currency, filters = {}) {
         [],
         ["رقم الطلب", "معرف الطلب", "جهة التنفيذ", "نوع المنفذ", "تاريخ التسليم — الرياض", "طريقة الدفع", "جهة التحصيل", "حالة التحصيل", ...DELIVERY_MONEY_COLUMNS.map(column => column.label)],
         ...orderRows.map(row => [positionText(row.order_number), positionText(row.order_id), positionText(row.party_name), PARTY_LABELS[row.party_type] || UNAVAILABLE,
-            formatRiyadhDateTime(row.delivered_at), paymentLabel(row.payment_method), destinationLabel(row.collection_destination), collectionLabel(row.collection_status),
+            formatRiyadhDateTime(row.delivered_at), paymentLabel(row.payment_method), [destinationLabel(row.collection_destination), row.destination_name].filter(Boolean).join(" · "), collectionLabel(row.collection_status),
             ...DELIVERY_MONEY_COLUMNS.map(column => exportValue(row[column.key], "money"))]),
     ], [24, 38, 32, 24, 26, 24, 52, 32, ...DELIVERY_MONEY_COLUMNS.map(() => 26)]);
     return workbook;
