@@ -69,3 +69,35 @@ def require_sar_cost(*records):
             if code is not None and _text(code).upper() != COST_CURRENCY:
                 raise ValueError('product_cost_currency_evidence_incomplete')
     return COST_CURRENCY
+
+
+_KNOWN_EXCLUDED = frozenset(('reviewed', 'تم المراجعة', 'تمت المراجعة',
+    'completed', 'تم التنفيذ', 'shipped', 'shipping', 'تم الشحن', 'delivered',
+    'تم التوصيل', 'delivering', 'out_for_delivery', 'جاري التوصيل', 'ready',
+    'pending', 'waiting', 'processing', 'cancelled', 'canceled', 'ملغي', 'ملغى',
+    'deleted', 'محذوف', 'refunded', 'returned', 'restored', 'مسترجع', 'تم الاسترجاع'))
+
+
+def order_status_known(raw):
+    """A missing/unrecognized status is excluded AND reported as incomplete.
+
+    Known ineligible states are a real zero for the unreceived pool. A custom
+    state is checked instead of inheriting the eligibility of its parent.
+    """
+    if not isinstance(raw, Mapping):
+        return False
+    def known(value):
+        if isinstance(value, Mapping):
+            if value.get('customized'):
+                return known(value['customized'])
+            values = [value[k] for k in ('slug', 'name', 'label') if value.get(k)]
+            stages = [unreceived_stage(v) for v in values]
+            return bool(values and all(known(v) for v in values) and len(set(stages)) == 1)
+        return _stage(value) is not None or _text(value) in _KNOWN_EXCLUDED
+    if not known(raw.get('status')):
+        return False
+    if raw.get('status_slug'):
+        status = raw.get('status')
+        if not (isinstance(status, Mapping) and status.get('customized')):
+            return known(raw['status_slug']) and unreceived_stage(status) == unreceived_stage(raw['status_slug'])
+    return True
