@@ -354,6 +354,9 @@ async def add_refund_evidence(db, amount='20.00', new_total='150'):
 def test_manual_salla_refund_source_debits_once_without_reducing_net_sale():
     async def scenario(db):
         await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'},
+            {'$set':{'raw_by_source.salla_direct.total':'170'}})
+        assert (await order_view(db,'owner','1001'))['total']=='170.00'
         await add_refund_evidence(db)
         before=report(await read(db,'owner'))
         p=confirmed_compensation()
@@ -459,4 +462,44 @@ def test_record_only_compensation_cannot_be_reconfirmed_and_debited_later():
         state=await read(db,'owner')
         assert len(state.get('customer_returns',[]))==1
         assert report(state)['summaries']['SAR']['actual_liquidity']=='1000.00'
+    run(scenario)
+
+
+@pytest.mark.parametrize('chosen_provider', ['salla', 'tamara', 'tabby'])
+def test_manual_provider_selection_affects_only_chosen_payment_account(chosen_provider):
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        result = await save_case(db,'owner','staff',
+            confirmed_compensation(refund_source_id=chosen_provider),clock=NOW)
+        assert result['refund_source_id'] == chosen_provider
+        state = await read(db,'owner')
+        parties = report(state)['parties']
+        adjustments = {r['party_id']:r['customer_refunds_manual_debited']
+                       for r in parties if r['party_type']=='provider'}
+        assert adjustments[chosen_provider]=='20.00'
+        assert all(value=='0.00' for provider,value in adjustments.items()
+                   if provider!=chosen_provider)
+        assert (await order_view(db,'owner','1001'))['total']=='150.00'
+        assert (await order_view(db,'owner','1001'))['salla_refunds_confirmed_source']=='20.00'
+    run(scenario)
+
+
+def test_refresh_does_not_post_the_manual_refund_twice():
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        await save_case(db,'owner','staff',
+            confirmed_compensation(refund_source_id='tabby'),clock=NOW)
+        before=report(await read(db,'owner'))
+        account=next(r for r in before['parties']
+                     if r['party_type']=='provider' and r['party_id']=='tabby')
+        await refresh(db,'owner',clock=NOW)
+        after=report(await read(db,'owner'))
+        result=next(r for r in after['parties']
+                    if r['party_type']=='provider' and r['party_id']=='tabby')
+        assert account['customer_refunds_manual_debited']=='20.00'
+        assert result['customer_refunds_manual_debited']=='20.00'
+        assert result['actual']==account['actual']
+        assert len((await read(db,'owner'))['customer_returns'])==1
     run(scenario)
