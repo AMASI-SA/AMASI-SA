@@ -104,13 +104,13 @@ function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
         </tr></thead><tbody>{rows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
             <td><strong>{deliveryOrderLabel(row)}</strong><small>{formatRiyadhDateTime(row.delivered_at)}</small></td>
             <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small></td>
-            <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small></td>
+            <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
             <td><CollectionStatus value={row.collection_status} /></td>
             {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}
         </tr>)}</tbody></table></div>
         <div className="ofp-delivery-print">{rows.map(row => <section key={row.id} className="ofp-print-order">
             <h4>{positionText(row.order_number) !== UNAVAILABLE ? "الطلب " : ""}{deliveryOrderLabel(row)} · {positionText(row.party_name)}</h4>
-            <p>{formatRiyadhDateTime(row.delivered_at)} · {paymentLabel(row.payment_method)} · {destinationLabel(row.collection_destination)} · {collectionLabel(row.collection_status)}</p>
+            <p>{formatRiyadhDateTime(row.delivered_at)} · {paymentLabel(row.payment_method)} · {destinationLabel(row.collection_destination)} · {collectionLabel(row.collection_status)}{row.destination_name ? ` · ${row.destination_name}` : ""}</p>
             <dl>{DELIVERY_MONEY_COLUMNS.map(column => <div key={column.key}><dt>{column.label}</dt><dd><Money value={row[column.key]} role={column.role} /></dd></div>)}</dl>
         </section>)}</div>
         {!rows.length && <p className="ofp-empty-cell">{allRows.length ? "لا توجد تفاصيل تطابق الفلاتر المحددة." : delivery?.complete === true ? "لا توجد طلبات موثقة ضمن هذا القسم حتى آخر احتساب." : "لم تتوفر أدلة كافية لعرض تفاصيل الطلبات."}</p>}

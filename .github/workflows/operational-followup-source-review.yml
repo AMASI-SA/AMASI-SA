@@ -1,0 +1,50 @@
+name: Operational Follow-up Source Review
+
+on:
+  push:
+    branches: [fix/operational-financial-followup-20261101]
+
+permissions:
+  contents: read
+
+jobs:
+  source-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record exact candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/operational-followup-review"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git rev-parse HEAD > "$RUNNER_TEMP/operational-followup-review/source-sha.txt"
+          git ls-tree -r HEAD > "$RUNNER_TEMP/operational-followup-review/source-tree.txt"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/operational-followup-review/source.tar.gz" HEAD AGENTS.md backend frontend/src frontend/package.json frontend/yarn.lock docs .github
+          sha256sum "$RUNNER_TEMP/operational-followup-review/source.tar.gz" > "$RUNNER_TEMP/operational-followup-review/archive-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-followup-source-${{ github.sha }}
+          path: ${{ runner.temp }}/operational-followup-review/
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download isolated review wheels from the public package index
+        run: |
+          python -m pip download --only-binary=:all: --dest "$RUNNER_TEMP/review-wheels" motor==3.7.1 pymongo==4.18.2 dnspython==2.9.0 mongomock==4.3.0 mongomock-motor==0.0.36 PyJWT==2.15.0 pytz==2026.2 sentinels==1.1.1
+          cd "$RUNNER_TEMP/review-wheels"
+          sha256sum *.whl > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-followup-review-wheels
+          path: ${{ runner.temp }}/review-wheels/
+          if-no-files-found: error
+          retention-days: 3
+
+# Isolated review branch only. No application execution, secrets, production
+# databases, write permission, release intent, lease or deployment.
