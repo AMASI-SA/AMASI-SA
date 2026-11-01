@@ -4,6 +4,8 @@ Repository: AMASI-SA/AMASI-SA. Task branch: fix/operational-supplier-invoice-cut
 
 Previous remotely verified supplier checkpoint: `861a061fee353c329227fe9f4a0a0f604ea22ad4`. Draft task PR: https://github.com/AMASI-SA/AMASI-SA/pull/1675. The PR head is the canonical current checkpoint; this record travels with the source change, so its own commit is not embedded self-referentially.
 
+Verified report implementation checkpoint: `b0b6b8deef7a5a48f50660d7a3e0ea6e9d83e5bc`, tree `e6739fdeb82bc9877b60ac040255f6d27496e601`. The remote branch was updated with an expected-head guard, fetched back, and all 28 changed files were compared byte-for-byte with that commit. Local worktree and index matched it. The subsequent continuity record changes documentation only.
+
 ## Completed supplier correction
 
 Recognize newly approved supplier invoices independently of customer order age/current cost availability. Preserve old customer-order exclusion, immutable receipt identities, payment/return links and SAR invoice contract. Expose operational balances and invoice provenance through a read-only supplier workspace. Surface generic confirmed receipt conflicts in summary and detail.
