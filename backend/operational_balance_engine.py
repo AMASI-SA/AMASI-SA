@@ -109,6 +109,7 @@ def reconcile(state, sources, as_of):
     issues = deepcopy(sources.get("issues", []))
 
     def issue(code, identity):
+        entry = {"code": str(identity)}
         entry = {"code": str(code), "source_id": str(identity)}
         if entry not in issues:
             issues.append(entry)
@@ -314,6 +315,14 @@ def reconcile(state, sources, as_of):
                                 current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
                     payment["refunds"] = current_refunds
                     projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    # A paid gross obligation already includes settlement fee deductions.
+                    # A component refund needs the statement's actual fee-credit allocation;
+                    # do not flip that settled obligation or invent a second fee charge.
+                    if projection.get("fee_model_version") == 2 and current_refunds and any(
+                            a.get("obligation_id") == provider_key and money(a.get("amount", "0")) > ZERO
+                            for movement in result.get("movements", [])
+                            for a in movement.get("allocations", [])):
+                        raise ValueError("provider_postsettlement_refund_review_required")
                     projected = Decimal(projection["expected_receivable"])
                     for capture in payment.get("captures", []):
                         if instant(capture["captured_at"]) > now:
