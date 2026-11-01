@@ -355,7 +355,8 @@ def test_manual_salla_refund_source_debits_once_without_reducing_net_sale():
     async def scenario(db):
         await fixture(db)
         await db.unified_orders.update_one({'user_id':'owner'},
-            {'$set':{'raw_by_source.salla_direct.total':'170'}})
+            {'$set':{'raw_by_source.salla_direct.total':'170',
+                     'raw_by_source.salla_direct.payment.method':'mada'}})
         assert (await order_view(db,'owner','1001'))['total']=='170.00'
         await add_refund_evidence(db)
         before=report(await read(db,'owner'))
@@ -465,11 +466,17 @@ def test_record_only_compensation_cannot_be_reconfirmed_and_debited_later():
     run(scenario)
 
 
-@pytest.mark.parametrize('chosen_provider', ['salla', 'tamara', 'tabby'])
-def test_manual_provider_selection_affects_only_chosen_payment_account(chosen_provider):
+@pytest.mark.parametrize('original_method,chosen_provider', [
+    ('mada', 'salla'), ('tamara', 'tamara'),
+    ('tabby', 'tabby'), ('emkan', 'emkan'),
+])
+def test_manual_provider_selection_affects_only_chosen_payment_account(original_method, chosen_provider):
     async def scenario(db):
         await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'},
+            {'$set':{'raw_by_source.salla_direct.payment.method':original_method}})
         await add_refund_evidence(db)
+        assert (await order_view(db,'owner','1001'))['provider']==chosen_provider
         result = await save_case(db,'owner','staff',
             confirmed_compensation(refund_source_id=chosen_provider),clock=NOW)
         assert result['refund_source_id'] == chosen_provider
@@ -490,16 +497,63 @@ def test_refresh_does_not_post_the_manual_refund_twice():
         await fixture(db)
         await add_refund_evidence(db)
         await save_case(db,'owner','staff',
-            confirmed_compensation(refund_source_id='tabby'),clock=NOW)
+            confirmed_compensation(refund_source_id='tamara'),clock=NOW)
         before=report(await read(db,'owner'))
         account=next(r for r in before['parties']
-                     if r['party_type']=='provider' and r['party_id']=='tabby')
+                     if r['party_type']=='provider' and r['party_id']=='tamara')
         await refresh(db,'owner',clock=NOW)
         after=report(await read(db,'owner'))
         result=next(r for r in after['parties']
-                    if r['party_type']=='provider' and r['party_id']=='tabby')
+                    if r['party_type']=='provider' and r['party_id']=='tamara')
         assert account['customer_refunds_manual_debited']=='20.00'
         assert result['customer_refunds_manual_debited']=='20.00'
         assert result['actual']==account['actual']
         assert len((await read(db,'owner'))['customer_returns'])==1
+    run(scenario)
+
+
+@pytest.mark.parametrize('original_method,wrong_provider', [
+    ('mada', 'tamara'),
+    ('tamara', 'tabby'),
+    ('tabby', 'salla'),
+    ('emkan', 'tamara'),
+    ('unknown_payment_method', 'salla'),
+])
+def test_manual_platform_refund_must_match_original_payment_provider(original_method, wrong_provider):
+    async def scenario(db):
+        await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'}, {'$set':{
+            'raw_by_source.salla_direct.payment.method': original_method}})
+        await add_refund_evidence(db)
+        before = report(await read(db,'owner'))
+        original = await order_view(db,'owner','1001')
+        assert original['provider'] != wrong_provider
+        with pytest.raises(HTTPException) as failure:
+            await save_case(db,'owner','staff',
+                confirmed_compensation(refund_source_id=wrong_provider),clock=NOW)
+        assert failure.value.detail['code'] == 'customer_compensation_provider_mismatch'
+        assert failure.value.detail.get('not_applied') is True
+        state = await read(db,'owner')
+        assert state.get('customer_returns', []) == []
+        assert state['movements'] == []
+        assert report(state)['summaries'] == before['summaries']
+        assert (await order_view(db,'owner','1001'))['total'] == '150.00'
+    run(scenario)
+
+
+def test_refund_from_bank_still_allowed_when_original_order_was_paid_by_tamara():
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        order=await order_view(db,'owner','1001')
+        assert order['provider']=='tamara'
+        case=await save_case(db,'owner','staff',
+            compensation(status='salla_refund_confirmed',
+                         refund_source_type='bank', refund_source_id='bank'),clock=NOW)
+        assert case['refund_source_type']=='bank'
+        assert case['financial_effect']=='confirmed_bank_refund_debit'
+        bank=next(row for row in report(await read(db,'owner'))['parties']
+                  if row['party_type']=='bank' and row['party_id']=='bank')
+        assert bank['actual']=='980.00'
+        assert (await order_view(db,'owner','1001'))['total']=='150.00'
     run(scenario)
