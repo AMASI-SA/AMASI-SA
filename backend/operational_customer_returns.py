@@ -7,6 +7,33 @@ from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, instant, number, PAYMENT_METHODS, shipping_charge
 
 
+def observed_salla_refund(raw):
+    """Read-only Salla refund hints; never infer a payout, ledger debit or refund identity."""
+    actions = raw.get('payment_actions') if isinstance(raw.get('payment_actions'), dict) else {}
+    refund = actions.get('refund_action') if isinstance(actions.get('refund_action'), dict) else {}
+    transactions = refund.get('refunded_transactions')
+    if transactions is None:
+        return {'amount': '0.00', 'count': 0, 'status': 'not_observed'}
+    if not isinstance(transactions, list) or len(transactions) > 100:
+        return {'amount': None, 'count': 0, 'status': 'invalid_evidence'}
+    amount = Decimal(0)
+    try:
+        for row in transactions:
+            if not isinstance(row, dict):
+                raise ValueError('refund_entry_invalid')
+            raw_amount = row.get('amount')
+            if not isinstance(raw_amount, dict) or raw_amount.get('currency') != 'SAR':
+                raise ValueError('refund_currency_unverified')
+            value = number(raw_amount)
+            if value <= 0 or value != value.quantize(Decimal('.01')):
+                raise ValueError('refund_amount_unverified')
+            amount += value
+    except (ValueError, TypeError, KeyError):
+        return {'amount': None, 'count': 0, 'status': 'invalid_evidence'}
+    return {'amount': fmt(amount), 'count': len(transactions),
+            'status': 'observed_requires_execution_evidence' if transactions else 'not_observed'}
+
+
 async def order_view(db, owner, number_text):
     matches = []
     for source in await rows(db, owner, 'unified_orders'):
@@ -51,7 +78,8 @@ async def order_view(db, owner, number_text):
             'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0))),
             # Informational only. This is not subtracted from Salla's current
             # order total or recognized again as a bank/provider cash movement.
-            'salla_refunds_documented': fmt(documented)}
+            'salla_refunds_documented': fmt(documented),
+            'salla_refund_observation': observed_salla_refund(raw)}
 
 
 async def shipping_quote(db, owner, kind, identity, at, order_number):
