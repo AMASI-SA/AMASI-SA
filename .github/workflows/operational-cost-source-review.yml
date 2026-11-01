@@ -1,0 +1,29 @@
+name: Operational Cost Source Review
+on:
+  push:
+    branches: [fix/operational-product-sar-status-20261101]
+    paths: [.github/workflows/operational-cost-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  source-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive tracked review sources only (no environment or credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cost-review"
+          git rev-parse HEAD > "$RUNNER_TEMP/cost-review/COMMIT.txt"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/cost-review/review-source.tar.gz" HEAD AGENTS.md backend frontend scripts .github
+          sha256sum "$RUNNER_TEMP/cost-review/review-source.tar.gz" > "$RUNNER_TEMP/cost-review/SHA256SUMS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-cost-review-source
+          path: ${{ runner.temp }}/cost-review/
+          retention-days: 7
+          if-no-files-found: error
