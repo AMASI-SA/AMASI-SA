@@ -481,10 +481,17 @@ def reconcile(state, sources, as_of):
             issue(str(error), oid)
 
     from operational_salary_projection import candidates as salary_candidates, legacy_salary_day_matches
-    first_salary_day = start.astimezone(RIYADH).date() + timedelta(days=1)
+    from operational_salary_start import select_first_day
+    try:
+        first_salary_day = select_first_day(state, now)
+    except (ValueError, KeyError, TypeError):
+        issue("operational_salary_start_policy_invalid", "salary_start")
+        first_salary_day = None
     today = now.astimezone(RIYADH).date()
+    # An invalid policy never rewrites recorded days or silently accrues using
+    # another cutoff. Other operational sources can still reconcile.
     current_salary = {}
-    for employee in sources.get("employees", []):
+    for employee in (sources.get("employees", []) if first_salary_day is not None else []):
         eid = str(employee.get("id", ""))
         try:
             projected, missing = salary_candidates(employee, first_salary_day, today)
@@ -493,8 +500,8 @@ def reconcile(state, sources, as_of):
                 issue("salary_contract_missing", key)
         except (ValueError, KeyError, TypeError, InvalidOperation) as error:
             issue(str(error), eid)
-    conflicts = {}
-    for key, previous in engine["salary_days"].items():
+    conflicts = {} if first_salary_day is not None else deepcopy(engine.get("salary_conflicts", {}))
+    for key, previous in (engine["salary_days"].items() if first_salary_day is not None else []):
         proposed = current_salary.get(key)
         previous_currency = previous.get("currency", obligations.get(key, {}).get("currency"))
         if (proposed is None or previous.get("amount") != proposed["amount"]

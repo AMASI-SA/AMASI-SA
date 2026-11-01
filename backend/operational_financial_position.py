@@ -9,6 +9,7 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from operational_balance_service import report
+from operational_delivery_report_coverage import delivery_coverage_diagnostics
 
 
 ZERO = Decimal("0")
@@ -285,7 +286,7 @@ def _cod_table(obligations, details):
                          "مجموع التحصيل المتوقع المثبت في الصفوف المتاحة: " + _money(known) + "."])
 
 
-def _deliveries(obligations, details, currency, names, source_issues):
+def _deliveries(obligations, details, currency, names, source_issues, *, coverage_note=None):
     facts = details.get("facts") or {}
     metrics = {key: value for key, value in (details.get("cod_reports") or {}).items() if value.get("currency") == currency}
     cod_obligations = {row["id"]: row for row in obligations if row.get("kind") == "cod"}
@@ -371,7 +372,7 @@ def _deliveries(obligations, details, currency, names, source_issues):
         "عهدة المندوب هي المسؤولية المثبتة في المصدر وليست إثباتًا لمقدار النقد الفعلي في يده.",
         "التحويل البنكي والشبكة لا ينشئان عهدة نقدية للمندوب. لا يثبت اعتماد التحصيل من حالة تسليم الطلب وحدها.",
         "غير متاح: هوية البنك أو جهاز الشبكة المستقبل غير مثبتة في هذه اللقطة؛ اعتماد المستند لا يثبت قيدًا في رصيد البنك التشغيلي.",
-        "التفاصيل تخص الطلبات الممثلة في لقطة التشغيل فقط؛ تغطية طلبات أنشئت قبل التشغيل وسلمت بعده غير مكتملة.",
+        coverage_note or "التفاصيل تخص الطلبات الممثلة في لقطة التشغيل فقط؛ تغطية التسليم بعد بداية التشغيل غير مثبتة في هذه اللقطة.",
         "المبلغ المتبقي على العميل لا يضاف مرة ثانية إلى عهدة شركة الشحن أو المندوب.",
     ]}
 
@@ -403,14 +404,14 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
               "issues": [_source_issue(row) for row in projection["issues"]], "dependencies": []}
     if projection["status"] != "active":
         return result
+    delivery_coverage = delivery_coverage_diagnostics(state, projection)
     cost_ready = isinstance(cost_exposure, dict) and cost_exposure.get("status") == "preview"
     result["dependencies"] = [
         {"code": "open_cost_exposure", "status": "ready" if cost_ready and cost_exposure.get("complete") is True else "incomplete" if cost_ready else "unavailable",
          "message": "تقديرات مراحل الطلبات المفتوحة من مصدرها التشغيلي." if cost_ready else UNKNOWN + "مصدر تكاليف الطلبات المفتوحة غير متاح بعد."},
         {"code": "complete_collection_forecast", "status": "incomplete", "message": UNKNOWN + COD_SCOPE},
         {"code": "profit_period_coverage", "status": "unavailable", "message": UNKNOWN + "مصادر الربح الكامل لنفس فترة المبيعات لم تكتمل."},
-        {"code": "operational_delivery_coverage", "status": "incomplete",
-         "message": UNKNOWN + "هذه لقطة الأرصدة المسجلة فقط؛ تغطية طلبات أنشئت قبل التشغيل وسلمت بعده وربط تحصيل البنك والشبكة بالأرصدة التشغيلية غير مكتملين."},
+        *delivery_coverage["dependencies"],
     ]
     if cost_ready:
         result["issues"].extend(_source_issue(row) for row in cost_exposure.get("issues", []))
@@ -479,6 +480,8 @@ def build_financial_position(state, *, cost_exposure=None, generated_at=None):
                       "الرصيد الإعلاني المقدم والعهد يعرضان منفصلين ثم يضافان مرة واحدة إلى مجموع الأرصدة المعروضة.",
                       "التوقعات تغطي البنود المبينة فقط؛ لا تفترض مصروفات مستقبلية أو رواتب أو إعلانات أو ضرائب غير موثقة.",
                       "الربح لا يستنتج من الأرصدة أو التمويل أو سحب المالك أو مجرد اعتماد فاتورة مورد."],
-            "deliveries": _deliveries(obligations, projection["details"], currency, names, projection["issues"]),
+            "deliveries": _deliveries(obligations, projection["details"], currency, names, projection["issues"],
+                coverage_note=(delivery_coverage["event_note"] if currency == "SAR" else
+                    "تغطية تسليم الطلبات السابقة لبدء التشغيل بهذه العملة غير مثبتة؛ لا تحويل أو إعادة تسمية لمبالغ الشحن.")),
         }
     return result

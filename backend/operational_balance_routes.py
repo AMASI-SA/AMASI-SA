@@ -45,6 +45,17 @@ class Finish(Request):
     opening: Opening | None = None
 
 
+class SalaryStartPreview(Input):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class SalaryStartApproval(Request):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    opening_salaries_excluded: bool = Field(strict=True)
+
+
 class Allocation(Input):
     obligation_id: str = Field(min_length=1, max_length=300)
     amount: str = Field(min_length=1, max_length=30)
@@ -585,6 +596,18 @@ def make_operational_balance_router(db, current_user):
         if not existing or existing.get("operational_request_hash") != row["operational_request_hash"]:
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
+
+    @router.post("/salary-start/preview")
+    async def salary_start_preview(payload: SalaryStartPreview, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import preview
+        return await preview(db, owner, actor["id"], payload.first_day)
+
+    @router.post("/salary-start/approve")
+    async def salary_start_approve(payload: SalaryStartApproval, user=Depends(manage_guard)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import approve
+        return await approve(db, owner, actor["id"], payload.model_dump())
 
     @router.post("/openings")
     async def opening(payload: Opening, user=Depends(manage_guard)):
