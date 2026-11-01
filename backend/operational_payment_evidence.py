@@ -7,6 +7,7 @@ This module reads no database, writes no balances and enables no fee policy.
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
+from operational_balance_bank_orders import transfer_bank
 
 # Exact aliases only: fuzzy substring matching is unsafe for financial routing.
 PAYMENT_METHODS = {
@@ -139,11 +140,13 @@ def _method_rows(raw, provider, currency):
     return [(reference, *values) for reference, values in unique.items()]
 
 
-def resolve_provider(raw):
+def resolve_provider(raw, *, require_known=False):
     """Resolve only the payment party; do not validate an already-refunded total.
 
     Returns pages need party identity even when current total differs from the
-    original capture. Conflicting sources still fail closed.
+    original capture. Unknown routing leaves that read available with no provider.
+    Financial normalization requires known routing; contradictory sources always
+    fail closed, including read-only views.
     """
     raw = _object(raw)
     payment = _object(raw.get('payment'))
@@ -152,9 +155,10 @@ def resolve_provider(raw):
     routes = [provider_for(value) for value in methods]
     known = [route for route in routes if route is not None]
     if not known:
-        if any(not isinstance(value, str) or value.strip().lower() not in NON_PROVIDER_METHODS for value in methods):
+        if require_known and any(not isinstance(value, str) or (value.strip().lower() not in NON_PROVIDER_METHODS
+               and not transfer_bank(value)[0]) for value in methods):
             raise PaymentEvidenceError('provider_payment_method_unknown')
-        if not methods and raw.get('payment_methods'):
+        if require_known and not methods and raw.get('payment_methods'):
             raise PaymentEvidenceError('provider_payment_reference_missing')
         return None
     provider = known[0]
@@ -175,7 +179,7 @@ def normalize_payment(raw, currency, total, created_at, as_of):
     try:
         raw = _object(raw)
         payment = _object(raw.get('payment'))
-        provider = resolve_provider(raw)
+        provider = resolve_provider(raw, require_known=True)
         if provider is None:
             return None, []
         gross = _amount(total, currency)
