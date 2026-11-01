@@ -1,0 +1,21 @@
+name: Operational Cost Policy Review
+on:
+  push:
+    branches: [fix/operational-cost-status-sar-20261101]
+permissions:
+  contents: read
+jobs:
+  source-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preserve tracked source for offline review
+        run: git archive --format=tar.gz -o reviewed-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-policy-source
+          path: reviewed-source.tar.gz
+          retention-days: 3
+          if-no-files-found: error
