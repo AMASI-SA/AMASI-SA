@@ -67,7 +67,7 @@ def test_incomplete_close_does_not_finalize_zero_or_add_cumulative_observations(
     assert current["engine"]["obligations"]["advertising:a:2026-10-06"]["confirmed"] == "0.00"
 
 
-def test_supplier_net_residual_is_owner_requested_but_full_gross_is_confirmed():
+def test_fully_invoiced_piece_has_no_unreceived_residual_and_full_gross_is_confirmed():
     sources = {"orders": [{"id": "o", "created_at": "2026-10-06T08:00:00+00:00", "currency": "SAR", "status": "in_progress",
                             "items": [{"id": "piece", "cost": "100", "quantity": 1, "supplier_id": "s"}]}],
                "supplier_receipts": [{"id": "invoice:piece:product", "order_id": "o", "item_id": "piece", "supplier_id": "s",
@@ -75,7 +75,9 @@ def test_supplier_net_residual_is_owner_requested_but_full_gross_is_confirmed():
                                       "tax_evidence": {"confirmed": True, "evidence_file_id": "native-tax-proof"}}]}
     result = reconcile(state(), sources, NOW)
     rows = result["engine"]["obligations"]
-    assert rows["supplier:o:piece"]["expected"] == "20.00"
+    # The invoice covers the entire one-piece quantity. A cheaper final
+    # supplier price is not another unreceived product; gross/tax stay exact.
+    assert rows["supplier:o:piece"]["expected"] == "0.00"
     confirmed = rows["supplier:o:piece:receipt:invoice:piece:product"]
     assert (confirmed["net_amount"], confirmed["tax_amount"], confirmed["gross_amount"], confirmed["confirmed"]) == ("80.00", "12.00", "92.00", "92.00")
     assert reconcile(result, sources, NOW) == result
