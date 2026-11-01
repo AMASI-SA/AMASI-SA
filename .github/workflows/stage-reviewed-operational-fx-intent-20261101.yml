@@ -20,6 +20,7 @@ jobs:
       INTENT_ARTIFACT_ID: "13094464579"
       DEST_BRANCH: release/operational-native-fx-sar-usd-reviewed-20261101
       GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
