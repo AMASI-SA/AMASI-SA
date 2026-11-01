@@ -31,7 +31,20 @@ jobs:
           path: ${{ runner.temp }}/operational-followup-review/
           if-no-files-found: error
           retention-days: 3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download isolated review wheels from the public package index
+        run: |
+          python -m pip download --only-binary=:all: --dest "$RUNNER_TEMP/review-wheels" motor==3.7.1 pymongo==4.18.2 dnspython==2.9.0 mongomock==4.3.0 mongomock-motor==0.0.36 PyJWT==2.15.0 pytz==2026.2 sentinels==1.1.1
+          cd "$RUNNER_TEMP/review-wheels"
+          sha256sum *.whl > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-followup-review-wheels
+          path: ${{ runner.temp }}/review-wheels/
+          if-no-files-found: error
+          retention-days: 3
 
-# Isolated review branch only. This job does not install or run application
-# code, access secrets/environments/databases, grant write permissions,
-# create a lease, change release intent, or deploy anything.
+# Isolated review branch only. No application execution, secrets, production
+# databases, write permission, release intent, lease or deployment.
