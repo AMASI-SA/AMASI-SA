@@ -628,7 +628,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             continue
         try:
             created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
-            if not start < created <= now:
+            if created > now:
                 continue
             identity = str(raw.get('id') or '')
             order_number = str(raw.get('reference_id') or raw.get('order_number') or '')
@@ -639,6 +639,12 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             watermark = source.get('g47_salla_snapshot') or {}
             if watermark.get('requires_authoritative_refresh'):
                 raise ValueError('canonical_salla_refresh_required')
+            # Invoice approval has its own cutoff. Keep only the canonical
+            # order identity here; old sales/payment/shipping/estimates must
+            # never enter out['orders'] just to recognize a new supplier bill.
+            order_numbers[order_number] = identity
+            if created <= start:
+                continue
             status_obj = raw.get('status')
             status = (status_obj.get('slug') or status_obj.get('name')) if isinstance(status_obj, dict) else status_obj
             source_total = (raw.get('amounts') or {}).get('total')
@@ -648,7 +654,6 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                      'items': []}
             if not order['currency']:
                 raise ValueError('order_currency_missing')
-            order_numbers[order_number] = identity
             for item in raw.get('items', []):
                 source_item_id = item.get('id') or item.get('item_id') or item.get('order_item_id')
                 if not source_item_id:
@@ -803,8 +808,14 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     # Current piece state may have changed after invoicing and cannot revoke it.
     piece_index = unique_index(pieces, 'id')
     invoice_counts = Counter(r.get('id') for r in data['mezan_supplier_invoices_v2'])
+    coverage = {}
     for invoice in data['mezan_supplier_invoices_v2']:
-        if invoice.get('experiment_mode') or invoice.get('experiment_run_id') or not invoice.get('approved_at') or invoice.get('supplier_id') not in suppliers:
+        if invoice.get('experiment_mode') or invoice.get('experiment_run_id') or not invoice.get('approved_at'):
+            continue
+        if invoice.get('status') not in {None, 'payable_posted'}:
+            continue
+        if invoice.get('supplier_id') not in suppliers:
+            issue(out, 'supplier_invoice_supplier_identity_incomplete', invoice.get('id'))
             continue
         if not invoice.get('id') or invoice_counts[invoice.get('id')] != 1:
             issue(out, 'supplier_invoice_identity_ambiguous', invoice.get('id'))
@@ -812,6 +823,20 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         covered = [pid for line in invoice.get('lines', []) for pid in line.get('piece_ids', [])]
         if len(covered) != len(set(covered)):
             issue(out, 'supplier_invoice_piece_coverage_ambiguous', invoice.get('id'))
+            continue
+        try:
+            accepted = instant(invoice['approved_at'])
+        except (ValueError, TypeError):
+            issue(out, 'supplier_invoice_approval_time_incomplete', invoice.get('id'))
+            continue
+        if accepted > now:
+            continue
+        # Both native receiving writers denominate supplier invoices in SAR.
+        # Older compatible rows may omit the field; this is the supplier
+        # contract, never the customer's order currency or FX.
+        currency = invoice.get('currency', 'SAR')
+        if currency != 'SAR':
+            issue(out, 'supplier_invoice_currency_conflict', invoice.get('id'))
             continue
         try:
             component_amounts = invoice_component_amounts(invoice)
@@ -845,39 +870,36 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 issue(out, 'supplier_invoice_amount_or_quantity_incomplete', invoice.get('id'))
                 continue
             # Sort stable IDs so source line ordering cannot change penny allocation.
-            for index, piece_id in enumerate(sorted(ids)):
+            for piece_id in sorted(ids):
                 piece = piece_index.get(piece_id, {})
                 order_id = order_numbers.get(str(piece.get('order_number')))
                 if not order_id:
+                    issue(out, 'supplier_receipt_order_evidence_incomplete', invoice.get('id'))
                     continue
                 try:
-                    amount = number(line.get('product_unit_price_halalas')) / 100
-                    accepted = instant(invoice['approved_at'])
-                    if not start <= accepted <= now:
-                        continue
-                    if line.get('product_charge_eligible') is not False:
-                        out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:product", 'order_id': order_id,
-                            'item_id': piece_id, 'supplier_id': invoice['supplier_id'], **component_amounts[(piece_id, 'product')],
-                            'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id']})
-                    for service_id, total in service_totals.items():
-                        cumulative = (total * (index + 1) / len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-                        previous = (total * index / len(ids)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-                        amount = (cumulative - previous) / 100
-                        out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:service:{service_id}",
-                            'order_id': order_id, 'item_id': f'{piece_id}:service:{service_id}',
-                            'supplier_id': invoice['supplier_id'], **component_amounts[(piece_id, f'service:{service_id}')],
-                            'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id']})
+                    components = [('product', piece_id)] if line.get('product_charge_eligible') is not False else []
+                    components.extend((f'service:{service_id}', f'{piece_id}:service:{service_id}')
+                                      for service_id in service_totals)
+                    for component, item_id in components:
+                        # An opening-covered invoice cannot be replayed by a
+                        # second invoice. A genuinely new service has a distinct
+                        # component identity and remains eligible after startup.
+                        coverage.setdefault((order_id, item_id), set()).add(invoice['id'])
+                        if accepted < start:
+                            continue
+                        out['supplier_receipts'].append({'id': f"{invoice['id']}:{piece_id}:{component}",
+                            'order_id': order_id, 'item_id': item_id, 'supplier_id': invoice['supplier_id'],
+                            **component_amounts[(piece_id, component)], 'currency': currency,
+                            'accepted_at': accepted.isoformat(), 'invoice_id': invoice['id'],
+                            'invoice_number': invoice.get('invoice_number') or invoice.get('reference')})
                 except (ValueError, KeyError):
                     issue(out, 'supplier_receipt_evidence_incomplete', invoice.get('id'))
     # Native supplier_piece_product_charge_eligible charges a physical product
     # once, even across supplier reassignment. Completed services likewise retain
     # their original invoice. Two issued invoices claiming the same component
     # are contradictory evidence, not two independent obligations.
-    coverage = {}
-    for receipt in out['supplier_receipts']:
-        key = (receipt['order_id'], receipt['item_id'])
-        coverage.setdefault(key, set()).add(receipt['invoice_id'])
-    ambiguous = {key for key, invoices in coverage.items() if len(invoices) > 1}
+    current_components = {(receipt['order_id'], receipt['item_id']) for receipt in out['supplier_receipts']}
+    ambiguous = {key for key, invoices in coverage.items() if len(invoices) > 1 and key in current_components}
     for key in sorted(ambiguous):
         issue(out, 'supplier_cross_invoice_component_coverage_ambiguous', ':'.join(key))
     if ambiguous:

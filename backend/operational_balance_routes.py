@@ -295,7 +295,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/suppliers", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -727,6 +727,38 @@ def make_operational_balance_router(db, current_user):
     async def reports(user=Depends(current_user)):
         _, owner, _ = await scope(db, user, "reports")
         return report(await read(db, owner))
+
+    @router.get("/suppliers")
+    async def supplier_accounts(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from fulfillment_v2_routes import _actor_context, _require_permission
+        from operational_balance_service import accounting_inactive
+        from operational_supplier_workspace import supplier_workspace
+        supplier_context = await _actor_context(db, actor)
+        _require_permission(supplier_context, "suppliers.read")
+        if supplier_context["merchant_id"] != owner:
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                # Do not present two current balance authorities while the
+                # background worker is finishing the operational freeze.
+                state = {**state, "status": "accounting_active"}
+        result = supplier_workspace(state)
+        can_record = False
+        if result["active"]:
+            try:
+                await scope(db, user, "move")
+                can_record = True
+            except HTTPException:
+                pass
+        result.update(session_scope=digest([owner, actor["id"]]),
+                      permissions={"record_movements": can_record})
+        return result
 
     @router.get("/audit")
     async def audit_route(user=Depends(current_user)):

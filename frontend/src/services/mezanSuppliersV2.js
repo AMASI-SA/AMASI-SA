@@ -73,6 +73,14 @@ export async function loadMezanSupplierFinancials({ supplierId = null } = {}) {
     }
 }
 
+export async function loadOperationalSupplierAccounts() {
+    try {
+        return (await api.get("/operational-balances/suppliers")).data;
+    } catch (error) {
+        throw supplierError(error, "تعذّر تحميل حسابات الموردين التشغيلية.");
+    }
+}
+
 export async function createMezanSupplier(payload) {
     try {
         return (await api.post("/suppliers-v2", payload)).data;
