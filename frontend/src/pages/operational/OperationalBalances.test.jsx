@@ -18,6 +18,7 @@ jest.mock('./api', () => ({
     finish: jest.fn(),
     addEntity: jest.fn(),
     reports: jest.fn(),
+    costExposure: jest.fn(),
     obligations: jest.fn(),
     receipt: jest.fn(),
     movement: jest.fn(),
@@ -78,6 +79,7 @@ beforeEach(() => {
     summary: {},
     issues: []
   });
+  api.costExposure.mockResolvedValue({status:'preview',currencies:{},groups:[],issues:[]});
   api.movement.mockResolvedValue({});
   api.movements.mockResolvedValue({items:[]});
   api.inventoryPurchases.mockResolvedValue({items:[],stock:[]});
@@ -552,4 +554,50 @@ test('wallet-first account sends debt-first payment without invoice allocation',
  const account=[...host.querySelectorAll('select')].find(s=>[...s.options].some(o=>o.value==='bank1'));
  await input(account,'bank1');await input(host.querySelector('input[inputmode="decimal"]'),'80');await click('حفظ الحركة');
  expect(api.movement).toHaveBeenCalledWith(expect.objectContaining({party_id:'operational-ad:one',direction:'outgoing',kind:'payment',amount:'80',allocations:[]}));
+});
+
+test('compact thousands of report warnings without dropping counts or mutating financial totals', async () => {
+  api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',
+    permissions:{view:true,reports:true,move:false,manage:false}});
+  const issues = [
+    ...Array.from({length:4759}, (_,i) => ({code:'canonical_salla_source_missing',source_id:String(i+1)})),
+    ...Array.from({length:5}, (_,i) => ({code:'ad_start_day_partial_baseline_required',source_id:'ad-'+i})),
+    ...Array.from({length:2}, (_,i) => ({code:'ad_daily_source_incomplete',source_id:'ad-day-'+i})),
+    {code:'employee_salary_contract_incomplete',source_id:'employee-1'}
+  ];
+  api.reports.mockResolvedValue({parties:[],obligations:[],details:{},
+    summaries:{SAR:{payable:'257760.00',expected_payable:'32326.00'}},issues});
+  await render(<OperationalBalances/>);
+  expect(host.querySelectorAll('.op-issue-group')).toHaveLength(4);
+  expect(host.textContent).toContain('4,767 تنبيه');
+  expect(host.textContent).toContain('4 أنواع');
+  expect(host.querySelectorAll('.op-issue-group summary')[0].textContent).toContain('4,759');
+  expect(host.textContent).toContain('طلبات سلة تفتقد بيانات المصدر');
+  expect(host.textContent).toContain('عقد راتب موظف غير مكتمل');
+  expect(host.textContent).toContain('بيانات الصرف أو إثبات إغلاق اليوم');
+  expect(host.textContent).toContain('257760.00');
+  expect(host.textContent).toContain('32326.00');
+  expect(host.querySelectorAll('.op-issue-group')).toHaveLength(4);
+  expect(host.querySelectorAll('.op-issue-detail')).toHaveLength(4);
+  expect(api.movement).not.toHaveBeenCalled();
+  expect(api.finish).not.toHaveBeenCalled();
+  expect(api.opening).not.toHaveBeenCalled();
+});
+test('unknown source warnings and fee-policy alerts remain inspectable, not silently hidden', async () => {
+  api.context.mockResolvedValue({session_scope:'test-owner:test-actor',status:'active',
+    permissions:{view:true,reports:true,move:false,manage:false}});
+  api.reports.mockResolvedValue({parties:[],obligations:[],summary:{},issues:[
+    {code:'refund_fee_treatment_incomplete',source_id:'provider-one'},
+    {code:'unexpected_factual_source_gap',source_id:'first',message:'يحتاج مراجعة عقد المصدر'},
+    {code:'unexpected_factual_source_gap',source_id:'second'},
+    'unexpected_string_issue'
+  ]});
+  await render(<OperationalBalances/>);
+  expect(host.querySelectorAll('.op-issue-group')).toHaveLength(3);
+  expect(host.textContent).toContain('إعداد العمولة غير مكتمل');
+  expect(host.textContent).toContain('unexpected_factual_source_gap');
+  expect(host.textContent).toContain('يحتاج مراجعة عقد المصدر');
+  expect(host.textContent).toContain('unexpected_string_issue');
+  expect(host.textContent).toContain('4 تنبيه');
+  expect(api.movement).not.toHaveBeenCalled();
 });

@@ -36,3 +36,31 @@
 .op-opening-stock>.op-stock-form{border:0;padding:0}
 .op-opening-stock .op-field input,.op-opening-stock .op-field select,.op-opening-stock .op-field textarea{box-sizing:border-box;font:inherit}
 .op-opening-stock .op-stock-result-name small{text-align:start}
+
+/* Operational source warnings: one bounded disclosure per issue type, never one block per order. */
+.op-issue-summary{margin:16px 0;padding:16px;border:1px solid #e8d5c6;background:#fffaf7;border-radius:12px}
+.op-issue-summary h3{font-size:17px;line-height:1.6;margin:0 0 8px}
+.op-issue-summary>.op-muted{margin:0 0 12px}
+.op-issue-group{margin:8px 0;padding:12px 14px}
+.op-issue-group summary{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;cursor:pointer}
+.op-issue-group summary span{flex:1;min-width:170px}
+.op-issue-group summary strong{white-space:nowrap;font-size:14px}
+.op-issue-detail{font-size:13px;line-height:1.7;padding:8px 4px 0;overflow-wrap:anywhere}
+.op-issue-detail p{margin:6px 0}
+.op-issue-detail code{font-size:12px;direction:ltr;unicode-bidi:isolate}
+
+/* Read-only operational cost exposure. Do not merge expected costs into actual debts. */
+.op-cost-exposure{margin:20px 0;padding:20px;background:#fff;border:1px solid #dce6e1;border-radius:16px}
+.op-cost-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.op-cost-header h3{font-size:19px;margin:0 0 8px}
+.op-cost-header p{margin:0 0 12px}
+.op-cost-currency{margin-top:14px}
+.op-cost-currency h4{font-size:16px;margin:12px 0}
+.op-cost-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.op-cost-cards article{display:flex;flex-direction:column;gap:10px;min-width:0;border:1px solid #dce6e1;border-radius:12px;padding:14px;background:#f9fbfa}
+.op-cost-cards span{font-weight:600;font-size:14px}
+.op-cost-cards strong{font-size:22px;overflow-wrap:anywhere}
+.op-cost-cards small{color:#617872;font-size:12px;line-height:1.6}
+.op-cost-detail{margin:14px 0;border-top:1px solid #dce6e1;padding-top:12px}
+.op-cost-caution{background:#fff1e9;color:#8a3515;padding:10px;border-radius:8px}
+@media(max-width:650px){.op-cost-exposure{padding:12px}.op-cost-cards{grid-template-columns:1fr}.op-cost-cards strong{font-size:19px}}

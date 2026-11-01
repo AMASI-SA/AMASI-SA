@@ -578,8 +578,32 @@ def cost_components(data, product_id, item, profile):
     return product_cost, services
 
 
-def append_components(order, base_id, product_cost, services, quantity, supplier_id=None, piece=None):
-    order['items'].append({'id': base_id, 'supplier_id': supplier_id, 'cost': str(product_cost), 'quantity': str(quantity)})
+def supplier_receipt_proven(piece, as_of=None):
+    """Match durable physical receiving proof, not mere supplier assignment.
+
+    A generic status='received' or supplier_id alone is not proof; a future
+    receiving timestamp cannot establish a current payable estimate.
+    """
+    if not (piece and piece.get('supplier_dispatch_status') == 'received'
+            and piece.get('execution_status') == 'received_from_supplier'
+            and piece.get('received_at')):
+        return False
+    if as_of is None:
+        return True
+    try:
+        return instant(piece['received_at']) <= instant(as_of)
+    except (ValueError, TypeError):
+        return False
+
+
+def append_components(order, base_id, product_cost, services, quantity, supplier_id=None, piece=None, as_of=None):
+    received = supplier_receipt_proven(piece, as_of)
+    # Supplier assignment is a workflow intent, never a supplier receivable/payable.
+    # Before physical receipt, all expected product costs remain one unreceived pool.
+    financial_supplier = supplier_id if received else None
+    order['items'].append({'id': base_id, 'supplier_id': financial_supplier,
+                           'supplier_receipt_proven': received,
+                           'cost': str(product_cost), 'quantity': str(quantity)})
     plans = {str(r.get('service_id')): r for r in (piece or {}).get('services', [])}
     service_ids = set(services) | set(plans)
     for service_id in sorted(service_ids):
@@ -591,7 +615,10 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
                 supplier_id if service_id in (piece or {}).get('supplier_service_ids', []) else None)
         else:
             cost, party = services[service_id]['cost'], None
-        order['items'].append({'id': f'{base_id}:service:{service_id}', 'supplier_id': party,
+        service_received = bool(received and (not plan or plan.get('status') == 'completed'))
+        order['items'].append({'id': f'{base_id}:service:{service_id}',
+                               'supplier_id': party if service_received else None,
+                               'supplier_receipt_proven': service_received,
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
@@ -674,7 +701,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         if supplier and supplier not in suppliers:
                             issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
                             continue
-                        append_components(order, str(piece['id']), cost, services, 1, supplier, piece)
+                        append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
                 else:
                     append_components(order, item_id, cost, services, quantity)
             payment = raw.get('payment') if isinstance(raw.get('payment'), dict) else {}

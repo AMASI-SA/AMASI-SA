@@ -295,7 +295,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/cost-exposure", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -727,6 +727,12 @@ def make_operational_balance_router(db, current_user):
     async def reports(user=Depends(current_user)):
         _, owner, _ = await scope(db, user, "reports")
         return report(await read(db, owner))
+
+    @router.get("/cost-exposure")
+    async def cost_exposure(user=Depends(current_user)):
+        _, owner, _ = await scope(db, user, "reports")
+        from operational_open_cost_exposure import project
+        return await project(db, owner, await read(db, owner))
 
     @router.get("/audit")
     async def audit_route(user=Depends(current_user)):

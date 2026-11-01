@@ -222,7 +222,11 @@ def reconcile(state, sources, as_of):
                 if received > total:
                     issue("supplier_receipt_exceeds_estimate", key)
                 # Expected moves with the current assignment; confirmed is by actual receiver.
-                put(key, "supplier", item.get("supplier_id"), "supplier", currency,
+                # An assignment is not a supplier obligation. The expected amount
+                # remains in the unreceived-product pool until physical receipt
+                # is proven; invoice-backed confirmation stays separately evidenced.
+                expected_party = item.get("supplier_id") if item.get("supplier_receipt_proven") is True else None
+                put(key, "supplier", expected_party, "supplier", currency,
                     expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
                 for rid, receipt in relevant.items():
                     returned = ZERO

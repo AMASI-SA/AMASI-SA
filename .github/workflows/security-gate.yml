@@ -130,6 +130,8 @@ jobs:
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile --non-interactive
+      - name: Verify patched dependency runtime compatibility
+        run: node scripts/verify-operational-dependency-compat.cjs
       - name: Verify strict audit and local security backport contracts
         run: |
           node --test ../scripts/test_frontend_audit.cjs scripts/braces-security.test.cjs

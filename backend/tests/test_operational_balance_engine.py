@@ -68,14 +68,17 @@ def test_partial_supplier_receipt_and_accepted_return_are_not_customer_refunds()
     assert reconcile(third, sources, NOW) == third
 
 
-def test_assignment_moves_only_unreceived_estimate():
+def test_assignment_stays_unreceived_until_verified_supplier_receipt():
     sources = {"orders": [order(items=[{"id": "i1", "cost": "100", "supplier_id": None}])]}
     first = reconcile(initial(), sources, NOW)
     assert first["engine"]["obligations"]["supplier:o1:i1"]["party_id"] is None
     sources["orders"][0]["items"][0]["supplier_id"] = "supplier2"
     second = reconcile(first, sources, NOW)
-    assert second["engine"]["obligations"]["supplier:o1:i1"]["party_id"] == "supplier2"
-    assert len([r for r in second["engine"]["obligations"].values() if r["kind"] == "supplier"]) == 1
+    assert second["engine"]["obligations"]["supplier:o1:i1"]["party_id"] is None
+    sources["orders"][0]["items"][0]["supplier_receipt_proven"] = True
+    third = reconcile(second, sources, NOW)
+    assert third["engine"]["obligations"]["supplier:o1:i1"]["party_id"] == "supplier2"
+    assert len([r for r in third["engine"]["obligations"].values() if r["kind"] == "supplier"]) == 1
 
 
 def test_provider_fees_refunds_and_no_actual_bank_effect():

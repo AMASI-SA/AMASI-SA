@@ -8,6 +8,7 @@ import InventoryAvailability from './InventoryAvailability';
 import OpeningInventory from './OpeningInventory';
 import MovementHistory from './MovementHistory';
 import DomainDetails from './DomainDetails';
+import OperationalCostExposure from './OperationalCostExposure';
 import './operational.css';
 const labels = {
   actual_liquidity: 'السيولة الفعلية',
@@ -20,6 +21,7 @@ const labels = {
   outstanding: 'المتبقي'
 };
 function issueMessage(code = '') {
+  if (code === 'canonical_salla_source_missing') return 'طلبات سلة تفتقد بيانات المصدر الأساسية؛ يلزم تدقيق المصدر قبل اعتبارها حركات جديدة.';
   if (/salary|employee/.test(code)) return 'عقد راتب موظف غير مكتمل؛ يلزم التحقق من الراتب وتاريخ السريان في ميزان 2.';
   if (/fee|tax|refund_fee|cancellation_fee/.test(code)) return 'إعداد العمولة غير مكتمل';
   if (/fx/.test(code)) return 'سعر الصرف المعتمد غير متاح؛ يظهر الصرف بعملته الأصلية فقط.';
@@ -28,6 +30,44 @@ function issueMessage(code = '') {
   if (/ad_|advertising/.test(code)) return 'بيانات الصرف أو إثبات إغلاق اليوم الإعلاني غير مكتملة.';
   if (/supplier|invoice/.test(code)) return 'دليل فاتورة المورد غير مكتمل أو متعارض؛ يلزم مراجعة الفاتورة وبنودها.';
   return 'إعداد غير مكتمل؛ يلزم استكمال بيانات المصدر.';
+}
+function OperationalIssueAlerts({items}) {
+  // Group for display only. The API and financial reconciliation retain each original issue.
+  const groups = React.useMemo(() => {
+    const result = new Map();
+    for (const issue of Array.isArray(items) ? items : []) {
+      const original = typeof issue === 'string' ? issue : issue?.code;
+      const code = typeof original === 'string' && original.trim() ? original.trim() : 'source_issue_unknown';
+      if (!result.has(code)) result.set(code, {code, count: 0, sources: [], messages: []});
+      const group = result.get(code);
+      group.count += 1;
+      const sourceId = issue && typeof issue === 'object' ? issue.source_id : null;
+      if ((typeof sourceId === 'string' || typeof sourceId === 'number') &&
+          group.sources.length < 5 && !group.sources.includes(String(sourceId))) {
+        group.sources.push(String(sourceId));
+      }
+      const message = issue && typeof issue === 'object' && typeof issue.message === 'string' ? issue.message.trim() : '';
+      if (message && group.messages.length < 3 && !group.messages.includes(message)) group.messages.push(message);
+    }
+    return [...result.values()].sort((a, b) => b.count - a.count || a.code.localeCompare(b.code));
+  }, [items]);
+  if (!groups.length) return null;
+  const total = groups.reduce((sum, group) => sum + group.count, 0);
+  const count = value => value.toLocaleString('en-US');
+  return <section className="op-issue-summary" aria-label="تنبيهات مصادر الأرصدة">
+    <h3>تنبيهات مصادر الأرصدة: {count(total)} تنبيه في {count(groups.length)} أنواع</h3>
+    <p className="op-muted">جُمعت التنبيهات المتشابهة للعرض فقط، ولم تُحذف أو تُعتبر مكتملة. افتح كل نوع للاطلاع على السبب وعينات المراجع.</p>
+    {groups.map(group => <details className="op-error op-issue-group" key={group.code}>
+      <summary><span>{feeIncomplete({code: group.code}) ? 'إعداد العمولة غير مكتمل' : issueMessage(group.code)}</span>
+        <strong>{count(group.count)} {group.count === 1 ? 'تنبيه' : 'تنبيهًا'}</strong></summary>
+      <div className="op-issue-detail">
+        {!feeIncomplete({code: group.code}) && <p>رمز التنبيه: <code dir="ltr">{group.code}</code></p>}
+        {group.messages.map(message => <p key={message}>{message}</p>)}
+        {group.sources.length > 0 && <p>عينات المراجع: <bdi>{group.sources.join('، ')}</bdi></p>}
+        {group.sources.length > 0 && group.count > group.sources.length && <p>تُعرض عينات محدودة فقط هنا. تبقى جميع التنبيهات الأصلية ضمن استجابة التقارير للتدقيق.</p>}
+      </div>
+    </details>)}
+  </section>;
 }
 function Reports({context,source}) {
   const [report, setReport] = useState(null),
@@ -55,7 +95,7 @@ function Reports({context,source}) {
   if (!report) return <p role="status">جاري تحميل الأرصدة…</p>;
   const summaryEntries = Object.entries(report.summaries || {});
   if (!summaryEntries.length && Object.keys(report.summary || {}).length) summaryEntries.push(['SAR', report.summary]);
-  return <section><h2>الأرصدة والتقارير التشغيلية</h2><p className="op-muted">آخر تحديث: {report.as_of ? new Date(report.as_of).toLocaleString('ar-SA') : context.status === 'draft' ? 'لم يبدأ الاحتساب بعد؛ أنهِ الأرصدة الافتتاحية أولًا.' : 'لم تكتمل قراءة التقرير بعد'}</p>{(report.issues || []).map((issue, i) => <p role="alert" className="op-error" key={i}>{feeIncomplete(issue) ? 'إعداد العمولة غير مكتمل' : (typeof issue === 'string' ? issueMessage(issue) : issue.message || issueMessage(issue.code))}</p>)}<div className="op-summary">{Object.entries(labels).map(([key, label]) => <article key={key}><span>{label}</span><strong>{summaryEntries.map(([currency, summary]) => `${summary[key] ?? 'غير مكتمل'} ${currency}`).join(' / ') || (context.status === 'draft' ? 'لم يبدأ الاحتساب' : 'لا توجد بيانات محسوبة')}</strong></article>)}</div><label className="op-field">نوع الجهة<select value={kind} onChange={e => setKind(e.target.value)}><option value="">جميع الجهات</option>{entityKinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><div className="op-table"><table><thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي لنا', 'المتبقي علينا'].map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{report.parties.filter(p => !['operating_expense','owner_withdrawal'].includes(p.party_type) && (!kind || p.party_type === kind)).map(p => <tr key={`${p.party_type}:${p.party_id}:${p.currency}`}>{['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{p[key] ?? 'غير مكتمل'}</td>)}</tr>)}</tbody></table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div><DomainDetails report={report}/><InventoryPurchases mode="reports" context={context} source={source}/><details className="op-card"><summary>سجل التدقيق</summary>{audit.length ? audit.map((a, i) => <p key={i}>{a.message || a.action_label || 'تم تسجيل عملية موثقة'} · {(a.at || a.created_at) ? new Date(a.at || a.created_at).toLocaleString('ar-SA') : ''} {a.reason || ''}</p>) : <p>لا توجد عمليات مسجلة.</p>}</details></section>;
+  return <section><h2>الأرصدة والتقارير التشغيلية</h2><p className="op-muted">آخر تحديث: {report.as_of ? new Date(report.as_of).toLocaleString('ar-SA') : context.status === 'draft' ? 'لم يبدأ الاحتساب بعد؛ أنهِ الأرصدة الافتتاحية أولًا.' : 'لم تكتمل قراءة التقرير بعد'}</p><OperationalIssueAlerts items={report.issues} /><div className="op-summary">{Object.entries(labels).map(([key, label]) => <article key={key}><span>{label}</span><strong>{summaryEntries.map(([currency, summary]) => `${summary[key] ?? 'غير مكتمل'} ${currency}`).join(' / ') || (context.status === 'draft' ? 'لم يبدأ الاحتساب' : 'لا توجد بيانات محسوبة')}</strong></article>)}</div><label className="op-field">نوع الجهة<select value={kind} onChange={e => setKind(e.target.value)}><option value="">جميع الجهات</option>{entityKinds.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><div className="op-table"><table><thead><tr>{['الجهة', 'العملة', 'الابتدائي', 'التقديري لنا', 'التقديري علينا', 'المؤكد لنا', 'المؤكد علينا', 'المسدد', 'الفعلي', 'المتبقي لنا', 'المتبقي علينا'].map(l => <th key={l}>{l}</th>)}</tr></thead><tbody>{report.parties.filter(p => !['operating_expense','owner_withdrawal'].includes(p.party_type) && (!kind || p.party_type === kind)).map(p => <tr key={`${p.party_type}:${p.party_id}:${p.currency}`}>{['name', 'currency', 'opening', 'expected_receivable', 'expected_payable', 'confirmed_receivable', 'confirmed_payable', 'settled', 'actual', 'outstanding_receivable', 'outstanding_payable'].map(key => <td key={key}>{p[key] ?? 'غير مكتمل'}</td>)}</tr>)}</tbody></table>{!report.parties.length && <p>لا توجد أرصدة مسجلة بعد.</p>}</div><OperationalCostExposure scopeKey={context.session_scope} enabled={context.status !== 'draft'} /><DomainDetails report={report}/><InventoryPurchases mode="reports" context={context} source={source}/><details className="op-card"><summary>سجل التدقيق</summary>{audit.length ? audit.map((a, i) => <p key={i}>{a.message || a.action_label || 'تم تسجيل عملية موثقة'} · {(a.at || a.created_at) ? new Date(a.at || a.created_at).toLocaleString('ar-SA') : ''} {a.reason || ''}</p>) : <p>لا توجد عمليات مسجلة.</p>}</details></section>;
 }
 export default function OperationalBalances({
   source = 'mezan2'
@@ -76,5 +116,5 @@ export default function OperationalBalances({
   if (!context) return <main className="op-page" dir="rtl" role="status">جاري تحميل النظام التشغيلي…</main>;
   const permissions = context.permissions || {};
   const active = context.status === 'active';
-  return <main className="op-page" dir="rtl"><header><span className="op-eyebrow">ميزان · التشغيل اليومي</span><h1>الأرصدة التشغيلية</h1><p>{context.status === 'draft' ? 'ابدأ بإدخال الأرصدة الافتتاحية' : active ? 'بدأ النظام التشغيلي؛ الطلبات الجديدة تُحتسب تلقائيًا.' : 'النظام للقراءة والتدقيق فقط'}</p></header><nav aria-label="صفحات الأرصدة التشغيلية">{context.status === 'draft' && permissions.manage && <button aria-current={tab === 'openings' ? 'page' : undefined} onClick={() => setTab('openings')}>الأرصدة الافتتاحية</button>}{context.can_manage_inventory_opening === true && <button aria-current={tab === 'opening-stock' ? 'page' : undefined} onClick={() => setTab('opening-stock')}>المخزون الافتتاحي</button>}{permissions.move && <button aria-current={tab === 'movements' ? 'page' : undefined} onClick={() => setTab('movements')}>الحركات المالية اليومية</button>}{permissions.reports && <button aria-current={tab === 'reports' ? 'page' : undefined} onClick={() => setTab('reports')}>الأرصدة والتقارير التشغيلية</button>}{permissions.move&&<button aria-current={tab==='inventory'?'page':undefined} onClick={()=>setTab('inventory')}>شراء المخزون</button>}{permissions.reports&&<button aria-current={tab==='stock'?'page':undefined} onClick={()=>setTab('stock')}>المخزون المتاح</button>}</nav>{tab === 'openings' && context.status === 'draft' && permissions.manage && <OpeningBalances context={context} onFinished={load} />} {tab === 'movements' && permissions.move && (active ? <><DailyMovements context={context} cards canCreateCash={context.can_create_cash === true} key={context.session_scope} storageScope={context.session_scope} onScopeChanged={load} canManage={permissions.manage} source={source} onSaved={() => setVersion(v => v + 1)} /><MovementHistory key={`${context.session_scope}:${version}`} />{permissions.manage && <SupplierReturn />}</> : <p>تسجيل الحركات متاح بعد إنهاء الأرصدة الافتتاحية وأثناء تشغيل النظام.</p>)}{tab === 'reports' && permissions.reports && <Reports key={version} context={context} source={source}/>}{tab==='opening-stock'&&context.can_manage_inventory_opening === true&&<OpeningInventory key={context.session_scope} context={context}/>} {tab==='stock'&&permissions.reports&&<InventoryAvailability key={context.session_scope} context={context} onOpeningInventory={()=>setTab('opening-stock')}/ >}{tab==='inventory'&&permissions.move&&<InventoryPurchases key={context.session_scope} context={context} source={source}/>}</main>;
+  return <main className="op-page" dir="rtl"><header><span className="op-eyebrow">ميزان · التشغيل اليومي</span><h1>الأرصدة التشغيلية</h1><p>{context.status === 'draft' ? 'ابدأ بإدخال الأرصدة الافتتاحية' : active ? 'بدأ النظام التشغيلي؛ الطلبات الجديدة تُحتسب تلقائيًا.' : 'النظام للقراءة والتدقيق فقط'}</p></header><nav aria-label="صفحات الأرصدة التشغيلية">{context.status === 'draft' && permissions.manage && <button aria-current={tab === 'openings' ? 'page' : undefined} onClick={() => setTab('openings')}>الأرصدة الافتتاحية</button>}{context.can_manage_inventory_opening === true && <button aria-current={tab === 'opening-stock' ? 'page' : undefined} onClick={() => setTab('opening-stock')}>المخزون الافتتاحي</button>}{permissions.move && <button aria-current={tab === 'movements' ? 'page' : undefined} onClick={() => setTab('movements')}>الحركات المالية اليومية</button>}{permissions.reports && <button aria-current={tab === 'reports' ? 'page' : undefined} onClick={() => setTab('reports')}>الأرصدة والتقارير التشغيلية</button>}{permissions.move&&<button aria-current={tab==='inventory'?'page':undefined} onClick={()=>setTab('inventory')}>شراء المخزون</button>}{permissions.reports&&<button aria-current={tab==='stock'?'page':undefined} onClick={()=>setTab('stock')}>المخزون المتاح</button>}</nav>{tab === 'openings' && context.status === 'draft' && permissions.manage && <OpeningBalances context={context} onFinished={load} />} {tab === 'movements' && permissions.move && (active ? <><DailyMovements context={context} cards canCreateCash={context.can_create_cash === true} key={context.session_scope} storageScope={context.session_scope} onScopeChanged={load} canManage={permissions.manage} source={source} onSaved={() => setVersion(v => v + 1)} /><MovementHistory key={`${context.session_scope}:${version}`} />{permissions.manage && <SupplierReturn />}</> : <p>تسجيل الحركات متاح بعد إنهاء الأرصدة الافتتاحية وأثناء تشغيل النظام.</p>)}{tab === 'reports' && permissions.reports && <Reports key={`${context.session_scope}:${version}`} context={context} source={source}/>}{tab==='opening-stock'&&context.can_manage_inventory_opening === true&&<OpeningInventory key={context.session_scope} context={context}/>} {tab==='stock'&&permissions.reports&&<InventoryAvailability key={context.session_scope} context={context} onOpeningInventory={()=>setTab('opening-stock')}/ >}{tab==='inventory'&&permissions.move&&<InventoryPurchases key={context.session_scope} context={context} source={source}/>}</main>;
 }

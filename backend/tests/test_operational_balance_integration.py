@@ -725,7 +725,7 @@ def test_old_refresh_clock_cannot_rewind_state_and_stable_names_do_not_grow_audi
         count=len(first["engine"]["audit"])
         newer=await refresh(db,"owner",clock="2026-10-07T13:00:00+00:00")
         assert len(newer["engine"]["audit"])==count
-        assert next(iter(newer["engine"]["obligations"].values()))["name"]=="تكلفة منتجات غير مسندة"
+        assert next(iter(newer["engine"]["obligations"].values()))["name"]=="تكلفة منتجات لم تُستلم من المورد"
         older=await refresh(db,"owner",clock=NOW)
         assert older==newer
         assert (await read(db,"owner"))["revision"]==newer["revision"]
