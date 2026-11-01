@@ -14,22 +14,33 @@ from operational_balance_store import STATES, read, mutate
 from operational_salary_start import approve, preview, POLICY_KEY
 
 
-def test_real_mongo_concurrent_identical_approval_and_refresh_preserve_money_once():
+@pytest.mark.parametrize("cutover_day", [1, 15])
+def test_real_mongo_concurrent_identical_approval_and_refresh_preserve_money_once(cutover_day):
+    first_day = f"2026-11-{cutover_day:02d}"
+    cutover_at = first_day + "T00:30:01+03:00"
+
     async def scenario(db):
         await seed_state(db)
-        payload = await payload_for(db)
+        await db[STATES].update_one({'_id': 'owner'}, {'$set': {'started_at': cutover_at}})
+        check = await preview(db, 'owner', 'owner', first_day, clock=cutover_at)
+        assert check['new_days'] == 1 and check['additional_amounts'] == {'SAR': '100.00'}
+        payload = {'request_id': 'cutover-day-approval', 'first_day': first_day,
+                   'expected_preview_hash': check['preview_hash'],
+                   'expected_session_scope': check['session_scope'], 'opening_salaries_excluded': True}
         before = await read(db, 'owner')
-        first, second = await asyncio.gather(*[approve(db, 'owner', 'owner', payload, clock=NOW) for _ in range(2)])
+        first, second = await asyncio.gather(*[
+            approve(db, 'owner', 'owner', payload, clock=cutover_at) for _ in range(2)])
         assert first == second
         saved = await read(db, 'owner')
         assert len(saved['audit']) == 1 and saved['revision'] == before['revision'] + 1
         assert saved['openings'] == before['openings'] and saved['movements'] == before['movements']
         async def calculate(value):
-            calculated = reconcile(value, {'employees': [employee()]}, NOW)
+            calculated = reconcile(value, {'employees': [employee()]}, cutover_at)
             value.clear(); value.update(calculated)
         await asyncio.gather(*[mutate(db, 'owner', calculate) for _ in range(2)])
         result = await read(db, 'owner')
-        assert earned(result) == 100 and len(result['engine']['salary_days']) == 1
+        assert earned(result) == 100
+        assert set(result['engine']['salary_days']) == {'salary:employee:' + first_day}
         assert await db.general_ledger.count_documents({}) == 0
         assert await db.mz2_ledger_entries.count_documents({}) == 0
         assert result['openings'] == before['openings'] and result['movements'] == before['movements']

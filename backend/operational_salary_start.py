@@ -3,6 +3,11 @@
 An approved policy changes only the payroll cutoff. Existing daily IDs, settled
 amounts, bank movements and opening balances are never rewritten here. Candidate
 amounts still use the authoritative calendar-day proration function.
+
+The approved first day is exactly the operational cutover date in Riyadh.
+That day earns one full daily share even when startup is later than midnight;
+no earlier day in the month is added. Existing tenants require opening review
+before changing their stored payroll cutoff.
 """
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
@@ -53,7 +58,7 @@ def select_first_day(state, as_of):
                 or policy.get('approved_by') != state['owner_id']
                 or instant(policy['started_at']) != started
                 or not started <= instant(policy['approved_at']) <= instant(as_of)
-                or first != started.astimezone(RIYADH).date().replace(day=1)
+                or first != started.astimezone(RIYADH).date()
                 or policy.get('opening_salary_excluded_since') != first.isoformat()
                 or not isinstance(policy.get('request_id'), str) or not policy['request_id']
                 or policy.get('fingerprint') != fingerprint(content)):
@@ -70,8 +75,8 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
     today = clock.astimezone(RIYADH).date()
     if state.get('status') != 'active' or not state.get('owner_id') or clock < started:
         raise ValueError('operational_salary_start_not_active')
-    if first != started.astimezone(RIYADH).date().replace(day=1) or first > today:
-        raise ValueError('operational_salary_start_must_be_opening_month_first')
+    if first != started.astimezone(RIYADH).date() or first > today:
+        raise ValueError('operational_salary_start_must_equal_cutover_day')
     if state.get(POLICY_KEY) is not None:
         raise ValueError('operational_salary_start_already_approved')
     issues = deepcopy(source_issues)
@@ -114,7 +119,7 @@ def preview_from_sources(state, employees, source_issues, first_day, as_of):
             'new_days': len(additions), 'additional_amounts': {key: format(value, '.2f') for key, value in sorted(totals.items())},
             'can_approve': not issues, 'issues': issues, 'preview_hash': fingerprint(proof),
             'opening_confirmation_required': True,
-            'note': 'اعتماد البداية يؤكد أن الأرصدة الافتتاحية لا تشمل رواتب هذه الفترة؛ لا تُعدّل الأيام أو الدفعات المحفوظة.'}
+            'note': 'تبدأ الرواتب من يوم القطع التشغيلي نفسه ويُحتسب كامل استحقاق اليوم؛ لا تشمل الأيام السابقة. الاعتماد يؤكد عدم تضمين هذه الرواتب في الأرصدة الافتتاحية، ولا يُعدّل الأيام أو الدفعات المحفوظة.'}
 
 
 async def _owner(db, owner, actor):

@@ -70,8 +70,8 @@ jobs:
           cases = ET.parse('operational-followup.xml').findall('.//testcase')
           assert len(cases) >= 730, 'Operational collection unexpectedly incomplete'
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
-          assert len([c for c in cases if 'salary_start_mongo' in c.get('classname', '')]) == 4
-          print('Verified', len(cases), 'testcases without skips, including all four real Mongo payroll acceptance cases')
+          assert len([c for c in cases if 'salary_start_mongo' in c.get('classname', '')]) == 5
+          print('Verified', len(cases), 'testcases without skips, including all five real Mongo payroll acceptance cases')
           PY
       - uses: actions/upload-artifact@v4
         if: always()
