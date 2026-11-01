@@ -336,8 +336,10 @@ def test_invalid_salla_refund_observation_is_not_financial_evidence(value):
 
 
 def confirmed_compensation(**patch):
-    return compensation(status='salla_refund_confirmed', refund_source_type='provider',
-                        refund_source_id='salla', **patch)
+    values = {'status':'salla_refund_confirmed','refund_source_type':'provider',
+              'refund_source_id':'salla'}
+    values.update(patch)
+    return compensation(**values)
 
 
 async def add_refund_evidence(db, amount='20.00', new_total='150'):
