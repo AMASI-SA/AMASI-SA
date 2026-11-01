@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 import httpx
 import pytest
 
-from test_store_delivery_noncash_review import seed, NOW
+from .test_store_delivery_noncash_review import seed, NOW
 from operational_balance_store import STATES, mutate
 from operational_balance_service import report, create_movement
 from operational_driver_review_store import EVENTS, ReviewDatabase

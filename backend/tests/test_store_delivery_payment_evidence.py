@@ -153,7 +153,7 @@ def test_explicit_zero_survives_a_raw_shipping_only_cod_snapshot():
 # The existing Store Delivery CI installs the real bank/XLSX dependencies and
 # supplies a disposable Mongo replica set. Register the operational noncash
 # acceptance here so it runs with that suite, without changing any workflow.
-from test_store_delivery_noncash_review import (
+from .test_store_delivery_noncash_review import (
     test_zero_refund_fields_do_not_block_valid_receipt,
     test_contradictory_order_cannot_approve_non_cash_money,
     test_capability_denial_is_latched_before_calling_database,
@@ -164,7 +164,7 @@ from test_store_delivery_noncash_review import (
     test_invalid_money_never_becomes_zero,
     test_scope_and_strict_revision_are_required_before_any_transaction,
 )
-from test_operational_driver_review_mongo import (
+from .test_operational_driver_review_mongo import (
     test_real_concurrent_approval_is_exactly_once_and_preserves_old_order_fees,
     test_real_failure_after_metadata_or_money_rolls_back_everything,
     test_real_failures_have_no_partial_financial_or_review_effect,
