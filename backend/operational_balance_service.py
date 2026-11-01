@@ -293,7 +293,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             except ValueError:
                 fail("operational_order_ineligible", "الطلب أو حالته أو إثباته غير مؤهل لاحتساب الحركة")
         reference = payload.get("reference", "").strip()
-        if reference and any(r.get("status") == "refunded" and r.get("refund_source_type") == "bank"
+        if reference and any(r.get("status") in {"refunded", "salla_refund_confirmed"} and r.get("refund_source_type") == "bank"
                              and r.get("refund_source_id") == payload.get("bank_id") and r.get("refund_reference") == reference
                              for r in state.get("customer_returns", [])):
             fail("operational_reference_duplicate", "مرجع الاسترداد مسجل بالفعل")
@@ -542,7 +542,8 @@ def report(state, *, as_of=None):
                 "opening", "expected_receivable", "expected_payable", "confirmed_receivable",
                 "confirmed_payable", "settled", "actual", "outstanding_receivable", "outstanding_payable",
                 "custody_funded", "custody_spent", "custody_returned", "custody_remaining", "custody_adjustments",
-                "expense_paid", "owner_withdrawals", "ad_wallet_spent", "ad_wallet_balance", "ad_payable")}}
+                "expense_paid", "owner_withdrawals", "ad_wallet_spent", "ad_wallet_balance", "ad_payable",
+                "customer_refunds_manual_debited")}}
         return parties[key]
     obligations = deepcopy([row for row in (state.get("engine", {}).get("obligations") or {}).values() if not row.get("superseded")])
     for opening in state["openings"].values():
@@ -670,9 +671,20 @@ def report(state, *, as_of=None):
             row["outstanding_receivable"] -= offset
             row["outstanding_payable"] -= offset
     for case in state.get("customer_returns", []):
-        if case["status"] == "refunded" and case["refund_source_type"] == "bank":
+        status = case.get("status")
+        kind = case.get("refund_source_type")
+        if status == "refunded" and kind == "bank":
             bank = get("bank", case["refund_source_id"], case["currency"], case["refund_source_name"])
             bank["actual"] -= Decimal(case["amount"])
+        elif status == "salla_refund_confirmed" and kind in {"bank", "provider"}:
+            # This independent operational cash-source debit is authorized by
+            # the user selecting where Salla's existing refund was executed.
+            # Never subtract from provider receivables or order sales here:
+            # the Salla order may already contain the updated NET sale total.
+            account = get(kind, case["refund_source_id"], case["currency"],
+                          case["refund_source_name"])
+            account["actual"] -= Decimal(case["amount"])
+            account["customer_refunds_manual_debited"] += Decimal(case["amount"])
     summaries = {}
     for row in parties.values():
         summary = summaries.setdefault(row["currency"], {key: Decimal(0) for key in (
@@ -699,6 +711,15 @@ def report(state, *, as_of=None):
                          (movement["party_type"] == "employee_custody" and movement["party_id"] == row["party_id"])
                          or (movement.get("bank_kind") == "employee_custody" and movement.get("bank_id") == row["party_id"]))]}
         for row in parties.values() if row["party_type"] == "employee_custody"]
+    details["manual_customer_refunds"] = [{
+        "id":case["id"], "order_number":case["order_number"], "amount":case["amount"],
+        "currency":case["currency"], "status":case["status"],
+        "source_type":case.get("refund_source_type"),
+        "source_id":case.get("refund_source_id"),
+        "source_name":case.get("refund_source_name"),
+        "reference":case.get("refund_reference"), "reason":case.get("note")
+        } for case in state.get("customer_returns", [])
+        if case.get("case_type") == "order_compensation"]
     provider_metrics = deepcopy(details.get("provider_reports", {}))
     settlement_parts = {}
     for movement in state["movements"]:
@@ -820,12 +841,15 @@ def account_statement(state, account):
                if movement.get('bank_currency') else {})})
     if kind=='bank':
         for case in state.get('customer_returns',[]):
-            if (case['status']!='refunded' or case['refund_source_type']!='bank'
+            if (case['status'] not in {'refunded', 'salla_refund_confirmed'}
+                    or case['refund_source_type']!='bank'
                     or case['refund_source_id']!=identity or case['currency']!=currency):
                 continue
             stamp = case.get('refunded_at') or case.get('updated_at') or case.get('created_at','')
             business_day = datetime.fromisoformat(stamp.replace('Z','+00:00')).astimezone(ZoneInfo('Asia/Riyadh')).date().isoformat() if stamp else ''
-            items.append({'id':'customer_return:'+case['id'], 'name':'استرداد عميل',
+            items.append({'id':'customer_return:'+case['id'],
+                'name':'تعويض جزئي مسترد سابقًا في سلة' if case.get('case_type')=='order_compensation'
+                       else 'استرداد عميل',
                 'amount':case['amount'], 'currency':currency, 'direction':'outgoing',
                 'business_date':business_day, 'occurred_at':stamp, 'reference':case.get('refund_reference',''),
                 'note':case.get('note',''), 'kind':'customer_refund'})
