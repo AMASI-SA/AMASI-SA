@@ -53,7 +53,7 @@ jobs:
           done
           docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
       - name: Run operational contracts
-        run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py --tb=short --junitxml=operational-backend.xml
+        run: python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py backend/tests/test_operational_supplier_invoice_cutover.py --tb=short --junitxml=operational-backend.xml
       - name: Preserve shipping summary and calculator contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
       - name: Reject missing or skipped tests

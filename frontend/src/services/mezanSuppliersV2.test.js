@@ -1,7 +1,14 @@
 import api from "../lib/api";
-import { allocateMezanSupplierPayment, loadMezanSupplierFinancials, recordMezanSupplierPayment } from "./mezanSuppliersV2";
+import { allocateMezanSupplierPayment, loadMezanSupplierFinancials, loadOperationalSupplierAccounts, recordMezanSupplierPayment } from "./mezanSuppliersV2";
 
 jest.mock("../lib/api", () => ({ get: jest.fn(), post: jest.fn() }));
+
+test("operational supplier workspace is a read of the report projection", async () => {
+    api.get.mockResolvedValueOnce({ data: { active: true, authority: "operational_balance_report" } });
+    expect(await loadOperationalSupplierAccounts()).toEqual({ active: true, authority: "operational_balance_report" });
+    expect(api.get).toHaveBeenCalledWith("/operational-balances/suppliers");
+    expect(api.post).not.toHaveBeenCalled();
+});
 
 test("financial workspace uses only the V2 payment endpoint and supplier filter", async () => {
     api.get.mockResolvedValueOnce({ data: { financial_status: "available" } });

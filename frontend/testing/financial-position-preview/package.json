@@ -1,0 +1,9 @@
+{
+  "name": "mezan-financial-position-local-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../node_modules/vite/bin/vite.js --config vite.config.mjs",
+    "build:preview": "node build.mjs"
+  }
+}
