@@ -7,6 +7,33 @@ from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, instant, number, PAYMENT_METHODS, shipping_charge
 
 
+def observed_salla_refund(raw):
+    """Read-only Salla refund hints; never infer a payout, ledger debit or refund identity."""
+    actions = raw.get('payment_actions') if isinstance(raw.get('payment_actions'), dict) else {}
+    refund = actions.get('refund_action') if isinstance(actions.get('refund_action'), dict) else {}
+    transactions = refund.get('refunded_transactions')
+    if transactions is None:
+        return {'amount': '0.00', 'count': 0, 'status': 'not_observed'}
+    if not isinstance(transactions, list) or len(transactions) > 100:
+        return {'amount': None, 'count': 0, 'status': 'invalid_evidence'}
+    amount = Decimal(0)
+    try:
+        for row in transactions:
+            if not isinstance(row, dict):
+                raise ValueError('refund_entry_invalid')
+            raw_amount = row.get('amount')
+            if not isinstance(raw_amount, dict) or raw_amount.get('currency') != 'SAR':
+                raise ValueError('refund_currency_unverified')
+            value = number(raw_amount)
+            if value <= 0 or value != value.quantize(Decimal('.01')):
+                raise ValueError('refund_amount_unverified')
+            amount += value
+    except (ValueError, TypeError, KeyError):
+        return {'amount': None, 'count': 0, 'status': 'invalid_evidence'}
+    return {'amount': fmt(amount), 'count': len(transactions),
+            'status': 'observed_requires_execution_evidence' if transactions else 'not_observed'}
+
+
 async def order_view(db, owner, number_text):
     matches = []
     for source in await rows(db, owner, 'unified_orders'):
@@ -38,12 +65,24 @@ async def order_view(db, owner, number_text):
     state = await read(db, owner)
     cases = [r for r in state.get('customer_returns', []) if r['order_id'] == str(raw['id'])]
     for item in items:
-        item['remaining'] = item['quantity'] - sum(i['quantity'] for r in cases for i in r['items'] if i['id'] == item['id'])
+        # Documenting a Salla refund never consumes physical product quantities.
+        item['remaining'] = item['quantity'] - sum(
+            i['quantity'] for r in cases if r.get('case_type', 'item_return') == 'item_return'
+            for i in r['items'] if i['id'] == item['id'])
     shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
+    documented = sum((money(r['amount']) for r in cases
+                      if r['status'] in {'salla_refund_recorded', 'salla_refund_confirmed'}), Decimal(0))
+    booked = sum((money(r['amount']) for r in cases
+                  if r['status'] == 'salla_refund_confirmed'), Decimal(0))
     return {'id': str(raw['id']), 'order_number': number_text, 'currency': currency, 'total': fmt(total),
             'shipping_at': shipping.get('delivered_at'),
             'items': items, 'provider': provider, 'created_at': instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')).isoformat(),
-            'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0)))}
+            'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0))),
+            # Informational only. This is not subtracted from Salla's current
+            # order total or recognized again as a bank/provider cash movement.
+            'salla_refunds_documented': fmt(documented),
+            'salla_refunds_confirmed_source': fmt(booked),
+            'salla_refund_observation': observed_salla_refund(raw)}
 
 
 async def shipping_quote(db, owner, kind, identity, at, order_number):
@@ -121,6 +160,131 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
         existing = next((r for r in cases if r['id'] == case_id), None) if case_id else None
         if case_id and not existing:
             fail('customer_return_missing', 'المرتجع غير موجود')
+        if payload.get('case_type', 'item_return') == 'order_compensation':
+            if case_id is not None or payload['status'] not in {
+                    'salla_refund_recorded', 'salla_refund_confirmed'}:
+                fail('customer_compensation_mode_invalid',
+                     'تعويض الطلب يُسجّل كعملية مستقلة فقط دون مرتجع منتجات', 422)
+            confirmed = payload['status'] == 'salla_refund_confirmed'
+            if (payload.get('already_refunded_in_salla') is not True
+                    or payload.get('items') or payload.get('shipping_kind') != 'none'
+                    or payload.get('shipping_id') or payload.get('shipment_reference')
+                    or payload.get('shipment_completed') or payload.get('shipping_quote_hash')):
+                fail('customer_compensation_not_record_only',
+                     'التعويض لا يتضمن إرجاع منتج أو شحنة استرجاع', 422)
+            if confirmed:
+                if (payload.get('refund_source_type') not in {'bank', 'provider'}
+                        or not payload.get('refund_source_id')):
+                    fail('customer_compensation_source_required',
+                         'حدد الحساب الذي خُصم منه الاسترداد فعليًا ثم أكد العملية', 422)
+            elif payload.get('refund_source_type') is not None or payload.get('refund_source_id') is not None:
+                fail('customer_compensation_record_only_source',
+                     'توثيق استرداد سلة دون أثر مالي لا يختار حسابًا للخصم', 422)
+            note = (payload.get('note') or '').strip()
+            ref = (payload.get('refund_reference') or '').strip()
+            if len(note) < 5:
+                fail('customer_compensation_reason_required', 'أدخل سبب التعويض والاتفاق مع العميل', 422)
+            if len(ref) < 3:
+                fail('customer_compensation_reference_required',
+                     'أدخل مرجع الاسترداد السابق في سلة لعدم تكرار توثيقه', 422)
+            value = money(payload.get('amount'))
+            try:
+                refunded_at = instant(payload.get('refunded_at'))
+            except (ValueError, TypeError):
+                fail('customer_compensation_date_invalid', 'أدخل تاريخ تنفيذ الاسترداد في سلة', 422)
+            order = await order_view(db, owner, payload['order_number'])
+            if refunded_at > instant(stamp) or refunded_at < instant(order['created_at']):
+                fail('customer_compensation_date_invalid', 'تاريخ الاسترداد غير صحيح', 422)
+            if any((row['order_id'] == order['id']
+                    and row.get('refund_reference') == ref)
+                   for row in cases):
+                fail('customer_compensation_duplicate', 'مرجع الاسترداد مسجل على هذا الطلب مسبقًا', 409)
+            kind = payload.get('refund_source_type')
+            identity = payload.get('refund_source_id')
+            source = None
+            if confirmed:
+                observed = order['salla_refund_observation']
+                if observed['status'] != 'observed_requires_execution_evidence':
+                    fail('customer_compensation_salla_evidence_missing',
+                         'تعديل قيمة الطلب لا يثبت رد المبلغ؛ يلزم ظهور الاسترداد في بيانات سلة', 409)
+                # A platform-funded refund must debit ONLY the payment platform
+                # actually used on the Salla order. The merchant may select a
+                # different approved bank when refunding directly from a bank.
+                # Never infer the payment platform from a refund note or order total.
+                if kind == 'provider' and (
+                        not order.get('provider') or identity != order['provider']):
+                    fail('customer_compensation_provider_mismatch',
+                         'الاسترداد من منصة دفع يجب أن يطابق منصة الدفع الأصلية للطلب؛ '
+                         'إذا خرج المبلغ من البنك اختر حسابًا بنكيًا بدل المنصة', 409)
+                previously_recorded = sum((
+                    money(r['amount']) for r in cases
+                    if r['order_id'] == order['id'] and r.get('status') in {
+                        'refunded', 'salla_refund_recorded', 'salla_refund_confirmed'}
+                    and r.get('amount')), Decimal(0))
+                if previously_recorded + value > money(observed['amount']):
+                    fail('customer_compensation_amount_exceeds_salla',
+                         'المبلغ يتجاوز الاستردادات المرصودة في سلة بعد احتساب العمليات السابقة', 409)
+                source = await entity(db, owner, kind, identity, 'SAR')
+                if kind == 'bank' and any(
+                        m.get('bank_id') == identity and m.get('reference') == ref
+                        for m in state['movements']):
+                    fail('customer_compensation_duplicate',
+                         'مرجع الاسترداد سبق تسجيله كحركة بنكية', 409)
+                if any((r.get('status') in {'refunded', 'salla_refund_confirmed'}
+                        and r.get('refund_source_type') == kind
+                        and r.get('refund_source_id') == identity
+                        and r.get('refund_reference') == ref) for r in cases):
+                    fail('customer_compensation_duplicate',
+                         'مرجع الاسترداد سبق استخدامه في الحساب المحدد', 409)
+                prior_posting = await db.mz2_customer_refund_payments.find_one({
+                    'user_id': owner, 'status': 'posted',
+                    '$or': [{'provider_refund_id': ref}, {'bank_reference': ref}]})
+                if prior_posting:
+                    fail('customer_compensation_accounting_already_posted',
+                         'مرجع الاسترداد مسجل محاسبيًا؛ يلزم مطابقته بدل الخصم مرة أخرى', 409)
+                if kind == 'provider':
+                    prior_provider = await db.payment_refunds.find_one({
+                        'user_id': owner, 'provider': identity, 'provider_refund_id': ref})
+                    if prior_provider:
+                        fail('customer_compensation_provider_already_recorded',
+                             'عملية الاسترداد واردة من مزود الدفع؛ راجع مطابقتها لمنع التكرار', 409)
+            case = {
+                'id': digest([owner, actor, payload['request_id']]),
+                'case_type': 'order_compensation',
+                'order_id': order['id'],
+                'order_number': order['order_number'],
+                'order_total_after_refund_snapshot': order['total'],
+                'items': [],
+                'currency': 'SAR',
+                'status': 'salla_refund_confirmed' if confirmed else 'salla_refund_recorded',
+                'amount': fmt(value),
+                'refund_source_type': kind if confirmed else None,
+                'refund_source_id': identity if confirmed else None,
+                'refund_source_name': source['name'] if source else None,
+                'refund_reference': ref,
+                'refunded_at': refunded_at.isoformat(),
+                'note': note,
+                'shipping': {'kind': 'none', 'id': None, 'amount': '0.00',
+                             'status': 'completed', 'reference': ''},
+                'financial_effect': ('confirmed_bank_refund_debit' if kind == 'bank'
+                                     else 'confirmed_provider_refund_debit') if confirmed
+                                    else 'none_already_refunded_in_salla',
+                'manually_confirmed_source': bool(confirmed),
+                'created_by': actor,
+                'created_at': stamp,
+            }
+            cases.append(case)
+            audit(state, actor, 'salla_customer_compensation_source_confirmed'
+                  if confirmed else 'salla_customer_compensation_documented',
+                  None, case, note, 'employee_app', stamp)
+            remember(state, 'customer_return:' + actor, payload, case)
+            # A confirmed source is applied only by the operational balance
+            # projection, not by mutating the Salla order or calling a refund
+            # API. No product return, stock or VAT effect; never subtract from
+            # Salla's already-net sale total a second time.
+            return case
+        if payload.get('case_type', 'item_return') != 'item_return' or payload['status'] in {'salla_refund_recorded', 'salla_refund_confirmed'}:
+            fail('customer_return_mode_invalid', 'حالة رد المبلغ لا تطابق نوع العملية', 422)
         before = deepcopy(existing)
         if existing:
             if payload['order_number'] != existing['order_number'] or payload['items'] != existing['items']:
@@ -144,7 +308,8 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 fail('customer_return_shipment_reference_required', 'أدخل مرجع شحنة الاسترجاع')
             if shipping['kind'] != 'none' and any(r['shipping'].get('reference') == shipping['reference'] and r['shipping'].get('id') == shipping.get('id') for r in cases):
                 fail('customer_return_shipment_duplicate', 'شحنة الاسترجاع مسجلة بالفعل')
-            case = {'id': digest([owner, actor, payload['request_id']]), 'order_id': order['id'], 'order_number': order['order_number'],
+            case = {'id': digest([owner, actor, payload['request_id']]), 'case_type': 'item_return',
+                    'order_id': order['id'], 'order_number': order['order_number'],
                     'order_total': order['total'], 'order_created_at': order['created_at'], 'original_provider': order['provider'],
                     'items': deepcopy(selected), 'currency': 'SAR', 'status': 'pending', 'shipping': shipping,
                     'created_at': stamp, 'created_by': actor, 'note': payload.get('note', '')}

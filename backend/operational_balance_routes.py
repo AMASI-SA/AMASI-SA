@@ -110,8 +110,14 @@ class ReturnItem(Input):
 class CustomerReturn(Request):
     expected_session_scope: str = Field(min_length=64, max_length=64)
     order_number: str = Field(min_length=1, max_length=160)
+    # Existing returns remain item-scoped by default. A compensation is an
+    # order-level financial adjustment: no returned items or stock movement.
+    case_type: Literal["item_return", "order_compensation"] = "item_return"
     items: list[ReturnItem] = Field(default_factory=list, max_length=1000)
-    status: Literal["pending", "refunded"] = "pending"
+    status: Literal["pending", "refunded", "salla_refund_recorded", "salla_refund_confirmed"] = "pending"
+    # Explicit evidence-only declaration: Salla already processed this refund.
+    # It does not authorize a second bank/provider posting.
+    already_refunded_in_salla: bool = False
     amount: str | None = Field(default=None, max_length=30)
     refund_source_type: Literal["bank", "provider"] | None = None
     refund_source_id: str | None = Field(default=None, max_length=200)
@@ -345,7 +351,7 @@ def make_operational_balance_router(db, current_user):
                         # A supplier invoice creates debt/quantity, never a bank movement.
                         pass
                     elif "/customer-returns" in path:
-                        if bank_payload.get("status")=="refunded" and bank_payload.get("refund_source_type")=="bank":
+                        if bank_payload.get("status") in {"refunded", "salla_refund_confirmed"} and bank_payload.get("refund_source_type")=="bank":
                             await require_assigned_bank(db,owner,fresh_actor,{"source_account_type":"bank","bank_id":bank_payload.get("refund_source_id")})
                     elif "/customer-exchanges" in path:
                         contribution=bank_payload.get("contribution")
@@ -454,6 +460,8 @@ def make_operational_balance_router(db, current_user):
         # Write-only users get the minimum case state required to enter/continue
         # an operation, not invoice/contribution histories or balance summaries.
         fields=("id","order_number","items","shipping","status","purchase_status")
+        if kind=="returns":
+            fields += ("case_type","note","amount","refund_source_type","refund_source_id","refund_source_name","financial_effect")
         if kind=="returns" and case.get("status")=="refunded" and case.get("shipping",{}).get("kind")!="none" and case.get("shipping",{}).get("status")!="completed":
             fields += ("amount","refund_source_type","refund_source_id","refund_reference","refunded_at")
         return {key:case[key] for key in fields if key in case}
