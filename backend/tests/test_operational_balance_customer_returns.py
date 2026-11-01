@@ -181,3 +181,117 @@ def test_refund_and_manual_bank_movement_cannot_reuse_reference(return_first):
         with pytest.raises(HTTPException):await (manual() if return_first else refund())
         assert report(await read(db,'owner'))['summary']['actual_liquidity']=='990.00'
     run(scenario)
+
+
+def compensation(**patch):
+    return {**command(),
+            'request_id': 'salla-compensation-document-1',
+            'case_type': 'order_compensation',
+            'status': 'salla_refund_recorded',
+            'items': [],
+            'amount': '20.00',
+            'refund_source_type': None,
+            'refund_source_id': None,
+            'refund_reference': 'salla-refund-20-001',
+            'already_refunded_in_salla': True,
+            'note': 'تعويض 20 ريالًا بالاتفاق مع العميل دون إرجاع المنتج',
+            'shipping_kind': 'none', 'shipping_id': None,
+            'shipment_reference': '', 'shipment_completed': False,
+            'shipping_quote_hash': None,
+            **patch}
+
+
+def test_salla_net_150_after_20_refund_stays_150_after_documentation():
+    async def scenario(db):
+        await fixture(db)
+        # Salla already changed this order's displayed total, so our record
+        # must not turn the 150 SAR net amount into 130 SAR.
+        await db.unified_orders.update_one({'user_id':'owner'},
+            {'$set':{'raw_by_source.salla_direct.total':'150',
+                     'raw_by_source.salla_direct.payment.refunded_amount':'20'}})
+        original = await order_view(db, 'owner', '1001')
+        assert original['total'] == '150.00'
+        assert original['items'][0]['remaining'] == 2
+        before = report(await read(db, 'owner'))
+        request = compensation()
+        results = await asyncio.gather(*[save_case(db,'owner','staff',request,clock=NOW) for _ in range(4)])
+        assert all(r['id'] == results[0]['id'] for r in results)
+        case = results[0]
+        assert case['amount'] == '20.00'
+        assert case['financial_effect'] == 'none_already_refunded_in_salla'
+        assert case['order_total_after_refund_snapshot'] == '150.00'
+        assert case['items'] == [] and case['shipping']['kind'] == 'none'
+        assert case['note'] == request['note']
+        state = await read(db,'owner')
+        assert len(state['customer_returns']) == 1
+        assert not state['movements']
+        assert report(state)['summaries'] == before['summaries']
+        new_view = await order_view(db,'owner','1001')
+        assert new_view['total'] == '150.00'
+        assert new_view['salla_refunds_documented'] == '20.00'
+        assert new_view['items'][0]['remaining'] == 2
+        with pytest.raises(HTTPException) as error:
+            await save_case(db,'owner','staff',compensation(request_id='new-request-id'),clock=NOW)
+        assert error.value.detail['code'] == 'customer_compensation_duplicate'
+        assert error.value.detail['not_applied'] is True
+        assert len((await read(db,'owner'))['customer_returns']) == 1
+        for collection in ('accounting_general_ledger_v2', 'accounting_journal_groups_v2', 'general_ledger'):
+            assert await db[collection].count_documents({}) == 0
+    run(scenario)
+
+
+@pytest.mark.parametrize('patch',[
+    {'items':[{'id':'a','quantity':1}]},
+    {'status':'refunded'},
+    {'status':'pending'},
+    {'already_refunded_in_salla':False},
+    {'refund_source_type':'bank','refund_source_id':'bank'},
+    {'shipping_kind':'courier','shipping_id':'carrier'},
+    {'shipment_completed':True},
+    {'note':''},
+    {'note':'abc'},
+    {'refund_reference':''},
+    {'amount':'0'},
+    {'amount':'-0.01'},
+    {'refunded_at':'2099-01-01T00:00:00+00:00'},
+])
+def test_record_only_salla_compensation_invalid_inputs_never_book_cash(patch):
+    async def scenario(db):
+        await fixture(db)
+        with pytest.raises(HTTPException):
+            await save_case(db,'owner','staff',compensation(**patch),clock=NOW)
+        state = await read(db,'owner')
+        assert not state.get('customer_returns',[])
+        assert not state['movements']
+        assert report(state)['summaries']['SAR']['actual_liquidity'] == '1000.00'
+    run(scenario)
+
+
+def test_compensation_and_product_return_coexist_without_reducing_item_quantities():
+    async def scenario(db):
+        await fixture(db)
+        await save_case(db,'owner','staff',compensation(),clock=NOW)
+        await save_case(db,'owner','staff',
+            command(request_id='return-item-separately',status='pending'),clock=NOW)
+        view = await order_view(db,'owner','1001')
+        assert view['items'][0]['remaining'] == 1
+        assert view['salla_refunds_documented'] == '20.00'
+        assert len((await read(db,'owner')).get('customer_returns',[])) == 2
+        assert report(await read(db,'owner'))['summaries']['SAR']['actual_liquidity'] == '1000.00'
+    run(scenario)
+
+
+def test_compensation_record_via_mobile_native_endpoint_never_posts_bank():
+    async def scenario(db):
+        await fixture(db)
+        await grant(db,[WRITE])
+        async with client(db) as c:
+            response = await c.post('/api/operational-balances/customer-returns',json=compensation())
+            assert response.status_code == 200,response.text
+            assert response.json()['status'] == 'salla_refund_recorded'
+            assert response.json()['financial_effect'] == 'none_already_refunded_in_salla'
+            again = await c.post('/api/operational-balances/customer-returns',json=compensation())
+            assert again.status_code == 200 and again.json() == response.json()
+        assert len((await read(db,'owner'))['customer_returns']) == 1
+        assert not (await read(db,'owner'))['movements']
+    run(scenario)
