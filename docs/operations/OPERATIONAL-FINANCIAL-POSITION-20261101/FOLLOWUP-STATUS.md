@@ -4,7 +4,9 @@ Task: OPERATIONAL-FINANCIAL-POSITION-20261101 follow-up.
 Repository: AMASI-SA/AMASI-SA.
 Branch: fix/operational-financial-followup-20261101.
 Parent task: Draft PR #1675, source a8ffd5a81637bed8c4462f7bb4c2b059782cd520.
-This isolated branch is a child of that exact checkpoint, not a replacement for its production integration.
+Follow-up Draft PR: #1677, targeting the parent task branch, not production.
+Tested application checkpoint: `752c69b1a54e0f90ae84fc5d2cb0d0b9cbe0eeb7`.
+This isolated branch is a child of that exact parent checkpoint, not a replacement for its production integration.
 
 ## Owner requirements
 
@@ -39,7 +41,31 @@ PYTHONPATH=/mnt/data/mezan_work/testdeps:backend:backend/tests python -B -m pyte
 
 AST parsing and diff whitespace checks passed. Local Python was 3.13.5; isolated CI targets the repository's Python 3.11 test contract.
 
-Four new disposable-Mongo acceptance tests cover concurrent approval/refresh, stale-source refusal, revoked-owner refusal, and owner-only HTTP preview/approval/retry. They have been written but are pending execution at this checkpoint. The new contents-read-only candidate workflow will run the full operational suite and those tests on a localhost Mongo 8.0.12 replica set. Do not claim acceptance until its result is read back.
+## Completed isolated backend CI acceptance
+
+The exact application checkpoint `752c69b1a54e0f90ae84fc5d2cb0d0b9cbe0eeb7` passed the dedicated candidate workflow. No application or test source changed after that run; this follow-up records evidence only.
+
+- Workflow: Operational Follow-up Candidate Tests; run **41315032748**, job **124873144891**; completed **success** on 2026-11-01.
+- Result: **931 tests passed and 18 subtests passed**, zero failures, errors or skips. Five inherited Pydantic validator deprecation warnings were reported, not failures.
+- Environment: Python 3.11.17 and an isolated localhost Mongo 8.0.12 replica set. Job permissions were contents-read only; no production environment or credentials were used. Disposable Mongo cleanup completed successfully.
+- All four new real-Mongo acceptance tests ran and passed: concurrent identical policy approval and concurrent refresh; stale-source rejection without partial policy/audit; owner revocation during source read; owner-only actual HTTP preview/approval/retry including mobile/staff denial and strict Boolean validation.
+- The JUnit suite reports 949 including subtests, while its 931 testcase elements represent the primary tests. Do not add the local 308 overlapping tests to the CI count.
+- CI artifact: **13085844813**, name `operational-followup-results-752c69b1a54e0f90ae84fc5d2cb0d0b9cbe0eeb7`, ZIP SHA256 `565cd00c3f64fb68740f35796ee507de18177fe04aeae062b23579294f5fac0c`. Its recorded source SHA and XML were downloaded, hash-checked and parsed independently. The XML has zero skipped, failure or error elements and all four real-Mongo payroll cases.
+- Evidence link: https://github.com/AMASI-SA/AMASI-SA/actions/runs/41315032748
+
+```bash
+PYTHONPATH=backend:backend/tests \
+OPERATIONAL_TEST_MONGO_URI='mongodb://127.0.0.1:27305/?replicaSet=operationalprojection' \
+MZ2_TEST_MONGO_URI='mongodb://127.0.0.1:27305/?replicaSet=operationalprojection' \
+python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py \
+ backend/tests/test_operational_supplier_invoice_cutover.py \
+ backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py \
+ --tb=short --junitxml=operational-followup.xml
+```
+
+The source archive generated for the same checkpoint (run 41315032693, artifact 13086757094, ZIP SHA256 `aa4c2bf05f51a331e9ad559c0f63ee5805df70767bf0a3b2acbe35dad037db85`) was read back. All **4,549** included repository files matched their Git blob hashes, and all **eight** changed application/test files matched the locally tested bytes exactly. The local snapshot repository has its own bootstrap commit; this byte verification, not its local HEAD, establishes correspondence to the remote source.
+
+This validates the selected combined operational backend suite, not repository-wide security, frontend, production build or browser acceptance. Those remain separate gates.
 
 ## Exact candidate application blobs
 
@@ -57,4 +83,4 @@ Remaining: owner payroll preview/approval UI and actual opening-coverage review;
 
 Production changed: **no**. Production database/ledger/openings changed: **no**. `/app`, release intent, guard lease and deployment: **untouched**. Original task branch and PR #1675: **not rewritten**. Do not merge or deploy this draft as a standalone production release.
 
-Next safe action: read the exact follow-up head and candidate CI output, resolve any failures, then preserve a verified checkpoint. Continue the unfinished integration only on isolated branches. Issue #1006 is full; this record and the task PR are the continuation authority.
+Next safe action: fetch the current follow-up and parent heads and read this record. Complete the owner payroll preview/approval UI and the separate noncash review integration on isolated source branches, preserving the tested source boundary and outstanding financial warnings. Verify the cost prerequisite live before any production integration/release. Re-run combined acceptance on any changed application source. Issue #1006 is full; this record and Draft PR #1677 are the follow-up continuation authority.
