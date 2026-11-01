@@ -656,6 +656,10 @@ def make_operational_balance_router(db, current_user):
         data = payload.model_dump()
         if payload.business_date is None:
             data.pop("business_date")
+        # Preserve existing request hashes for in-flight pre-FX mobile movements.
+        for field in ("bank_currency", "bank_amount", "bank_fee_amount"):
+            if data[field] is None:
+                data.pop(field)
         if source == "employee_app":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
