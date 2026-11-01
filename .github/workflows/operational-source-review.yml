@@ -1,0 +1,53 @@
+name: Operational pinned source review
+on:
+  push:
+    branches: [chore/operational-source-review-20261101]
+    paths: [.github/workflows/operational-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  source-only:
+    if: github.repository == 'AMASI-SA/AMASI-SA'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: a8ffd5a81637bed8c4462f7bb4c2b059782cd520
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Package tracked review sources without runtime or environment data
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, subprocess, zipfile
+          expected = 'a8ffd5a81637bed8c4462f7bb4c2b059782cd520'
+          actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert actual == expected
+          entries = subprocess.check_output(['git', 'ls-tree', '-rz', 'HEAD']).split(b'\0')
+          allowed = {'.py', '.js', '.jsx', '.ts', '.tsx', '.css', '.md', '.json', '.yml', '.yaml', '.toml', '.ini', '.txt', '.lock', '.cjs', '.mjs', '.sh'}
+          manifest = {'source_commit': actual, 'files': {}}
+          with zipfile.ZipFile('operational-review-source.zip', 'w', zipfile.ZIP_DEFLATED) as out:
+              for entry in entries:
+                  if not entry:
+                      continue
+                  info, raw_path = entry.split(b'\t', 1)
+                  mode, kind, oid = info.decode().split()
+                  path = raw_path.decode('utf-8')
+                  p = pathlib.PurePosixPath(path)
+                  if kind != 'blob' or mode not in {'100644', '100755'}:
+                      continue
+                  if p.suffix not in allowed or any(part.startswith('.env') for part in p.parts):
+                      continue
+                  data = subprocess.check_output(['git', 'cat-file', 'blob', oid])
+                  out.writestr(path, data)
+                  manifest['files'][path] = {'git_blob': oid, 'sha256': hashlib.sha256(data).hexdigest(), 'mode': mode}
+              out.writestr('REVIEW_SOURCE_MANIFEST.json', json.dumps(manifest, sort_keys=True))
+          print('Pinned source:', actual, '; tracked review files:', len(manifest['files']))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-review-source-a8ffd5a8
+          path: operational-review-source.zip
+          if-no-files-found: error
+          retention-days: 3
