@@ -1,0 +1,28 @@
+name: Operational isolated test dependencies
+on:
+  push:
+    branches: [chore/operational-source-review-20261101]
+    paths: [.github/workflows/operational-offline-test-deps.yml]
+permissions:
+  contents: read
+jobs:
+  dependencies-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download public test dependencies
+        run: |
+          mkdir -p review-deps/wheels
+          python -m pip download --only-binary=:all: --dest review-deps/wheels motor==3.7.1 pymongo==4.18.2 mongomock==4.3.0 mongomock-motor==0.0.36
+          curl --fail --location --retry 2 'https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-8.0.12.tgz' -o review-deps/mongodb-8.0.12.tgz
+          cd review-deps
+          sha256sum mongodb-8.0.12.tgz wheels/* > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: operational-isolated-test-dependencies
+          path: review-deps/
+          if-no-files-found: error
+          retention-days: 3
