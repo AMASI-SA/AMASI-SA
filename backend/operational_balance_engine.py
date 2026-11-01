@@ -82,56 +82,7 @@ def reconcile_credits(state):
     return state
 
 
-def provider_projection(payment, policies, transaction_date):
-    """Expected receivable only. Actual settlement fees belong to the movement.
-
-    Explicit return-fee terms are required whenever cancellation/refund occurs;
-    historical contracts lacking these fields remain visibly incomplete.
-    """
-    gross, cancelled = money(payment["gross"]), money(payment.get("cancelled", "0"))
-    refunds, seen = ZERO, {}
-    for refund in payment.get("refunds", []):
-        if refund.get("status") not in {"executed", "settled", "Refund Executed", "Settled"}:
-            continue
-        key = str(refund["id"])
-        value = money(refund["amount"])
-        if key in seen and seen[key] != value:
-            raise ValueError("refund_identity_conflict")
-        seen[key] = value
-    refunds = sum(seen.values(), ZERO)
-    if cancelled + refunds > gross:
-        raise ValueError("cancellation_refund_overlap")
-    matches = [p for p in policies if p.get("provider") == payment["provider"]
-               and p.get("currency") == payment["currency"] and p.get("status") == "active"
-               and day(p["effective_from"]) <= transaction_date
-               and (not p.get("effective_to") or transaction_date <= day(p["effective_to"]))]
-    if len(matches) != 1:
-        raise ValueError("provider_fee_policy_incomplete_or_ambiguous")
-    policy = matches[0]
-    base = gross
-    for value, field in ((cancelled, "cancellation_fee_treatment"), (refunds, "refund_fee_treatment")):
-        if value:
-            treatment = policy.get(field)
-            if treatment not in {"retain", "recalculate"}:
-                raise ValueError(field + "_incomplete")
-            if treatment == "recalculate":
-                base -= value
-    fees = ZERO if base == 0 else base * money(policy["percentage"]) / 100 + money(policy["fixed_amount"])
-    if base and policy.get("minimum") is not None:
-        fees = max(fees, money(policy["minimum"]))
-    if base and policy.get("maximum") is not None:
-        fees = min(fees, money(policy["maximum"]))
-    vat = policy.get("vat_treatment")
-    if vat == "exclusive":
-        fees *= 1 + money(policy.get("vat_rate")) / 100
-    elif vat not in {"inclusive", "exempt", "not_applicable"}:
-        raise ValueError("fee_tax_policy_incomplete")
-    net = gross - cancelled - refunds
-    # Fees exceeding the receivable are a payable; do not silently clamp debt.
-    expected = net - Decimal(amount(fees))
-    return {"gross": amount(gross), "cancelled": amount(cancelled), "refunded": amount(refunds),
-            "net": amount(net), "estimated_fees": amount(fees), "expected_receivable": amount(expected),
-            "policy_id": policy["id"]}
+from operational_provider_fees import provider_projection
 
 
 def reconcile(state, sources, as_of):
@@ -363,6 +314,14 @@ def reconcile(state, sources, as_of):
                                 current_refunds.append({"id": rid, "amount": fv["amount"], "status": "executed"})
                     payment["refunds"] = current_refunds
                     projection = provider_projection(payment, sources.get("fee_policies", []), created.astimezone(RIYADH).date())
+                    # A paid gross obligation already includes settlement fee deductions.
+                    # A component refund needs the statement's actual fee-credit allocation;
+                    # do not flip that settled obligation or invent a second fee charge.
+                    if projection.get("fee_model_version") == 2 and current_refunds and any(
+                            a.get("obligation_id") == provider_key and money(a.get("amount", "0")) > ZERO
+                            for movement in result.get("movements", [])
+                            for a in movement.get("allocations", [])):
+                        raise ValueError("provider_postsettlement_refund_review_required")
                     projected = Decimal(projection["expected_receivable"])
                     for capture in payment.get("captures", []):
                         if instant(capture["captured_at"]) > now:

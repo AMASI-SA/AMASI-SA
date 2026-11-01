@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from operational_balance_store import fail, digest, read, mutate, audit, replay, remember, claim_movement, now
 from operational_balance_service import active_gate, entity, money, fmt
 from operational_balance_sources import rows, instant, number, PAYMENT_METHODS, shipping_charge
+from operational_provider_fees import with_recorded_refund
 
 
 async def order_view(db, owner, number_text):
@@ -40,7 +41,20 @@ async def order_view(db, owner, number_text):
     for item in items:
         item['remaining'] = item['quantity'] - sum(i['quantity'] for r in cases for i in r['items'] if i['id'] == item['id'])
     shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
-    return {'id': str(raw['id']), 'order_number': number_text, 'currency': currency, 'total': fmt(total),
+    snapshot = {'provider': provider, 'currency': currency, 'gross': fmt(total),
+                'cancelled': '0', 'refunds': []}
+    if payment.get('plan_id') not in (None, ''):
+        snapshot['plan_id'] = str(payment['plan_id'])
+    reference = payment.get('reference') or payment.get('transaction_reference')
+    if (payment.get('status') in {'paid', 'captured'} and reference
+            and payment.get('paid_amount') is not None and payment.get('paid_at')):
+        captured = number(payment['paid_amount'])
+        at = instant(payment['paid_at'])
+        created = instant(raw.get('date') or raw.get('created_at') or raw.get('order_date'))
+        if captured <= 0 or captured > total or captured != captured.quantize(Decimal('.01')) or at < created:
+            fail('customer_return_capture_invalid', 'إثبات تحصيل عملية الدفع غير متطابق')
+        snapshot['captures'] = [{'id': str(reference), 'amount': fmt(captured), 'captured_at': at.isoformat()}]
+    return {'payment_snapshot': snapshot, 'id': str(raw['id']), 'order_number': number_text, 'currency': currency, 'total': fmt(total),
             'shipping_at': shipping.get('delivered_at'),
             'items': items, 'provider': provider, 'created_at': instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')).isoformat(),
             'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0)))}
@@ -88,10 +102,9 @@ def attach_returns(state, sources):
         order = next((o for o in sources.get('orders', []) if o['id'] == case['order_id']), None)
         if order is None:
             continue
-        payment = order.setdefault('payment', deepcopy(case['payment_snapshot']))
-        refunds = payment.setdefault('refunds', [])
-        if not any(str(r['id']) == case['refund_reference'] for r in refunds):
-            refunds.append({'id': case['refund_reference'], 'amount': case['amount'], 'status': 'executed'})
+        payment = order.get('payment') or deepcopy(case['payment_snapshot'])
+        order['payment'] = with_recorded_refund(payment, case['payment_snapshot'],
+                                               case['refund_reference'], case['amount'])
     return sources
 
 
@@ -180,14 +193,24 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 from operational_balance_engine import provider_projection, RIYADH
                 policies = [p for document in await rows(db, owner, 'mz2_provider_fee_policies_v2')
                             for p in document.get('policies', []) if p.get('user_id') in (None, owner)]
-                payment = {'provider': identity, 'currency': 'SAR', 'gross': case['order_total'], 'cancelled': '0', 'refunds': [{'id':ref,'amount':fmt(value),'status':'executed'}]}
+                payment = deepcopy(current_order['payment_snapshot'])
+                payment['refunds'] = [{'id': r['refund_reference'], 'amount': r['amount'], 'status': 'executed'}
+                    for r in cases if r.get('status') == 'refunded' and r['order_id'] == case['order_id']
+                    and r.get('refund_source_type') == 'provider' and r.get('refund_source_id') == identity]
+                payment['refunds'].append({'id': ref, 'amount': fmt(value), 'status': 'executed'})
                 try:
+                    if any(instant(c['captured_at']) > instant(stamp) for c in payment.get('captures', [])):
+                        raise ValueError('provider_capture_date_invalid')
                     projection = provider_projection(payment, policies, instant(case['order_created_at']).astimezone(RIYADH).date())
                     policy = next(p for p in policies if p['id'] == projection['policy_id'])
-                    if policy.get('refund_fee_treatment') != 'retain':
+                    # Preserve legacy confirmation rules; explicitly evidenced component
+                    # policies support independent refundable/nonrefundable charges.
+                    if projection.get('fee_model_version') != 2 and policy.get('refund_fee_treatment') != 'retain':
                         raise ValueError('refund_fee_not_retained')
                 except (ValueError, KeyError, StopIteration):
-                    fail('customer_return_fee_policy_incomplete', 'إعداد العمولة غير مكتمل أو لا يثبت بقاء عمولة الدفع')
+                    fail('customer_return_fee_policy_incomplete', 'إعداد سياسة العمولة أو مكوناتها أو خطة الدفع غير مكتمل')
+                case['provider_fee_policy_id'] = projection['policy_id']
+                case['provider_fee_model_version'] = projection.get('fee_model_version', 1)
                 case['payment_snapshot'] = {k:v for k,v in payment.items() if k != 'refunds'}
             case.update(status='refunded', amount=fmt(value), refund_source_type=kind, refund_source_id=identity,
                         refund_source_name=source['name'], refund_reference=ref, refunded_at=refunded_at.isoformat(), confirmed_by=actor)

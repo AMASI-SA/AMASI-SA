@@ -1,0 +1,43 @@
+{
+  "task_id": "OP-PROVIDER-REFUND-20261101",
+  "status": "WIP_NOT_RELEASE_READY",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "fix/operational-provider-refund-components-20261101",
+  "pull_request": 1685,
+  "production_baseline": "064ba0d0af06a29d947b63cf0c72a8da157264ed",
+  "application_test_checkpoint": "ba57c813da51e99b4f6b70ed18640aab76d426b8",
+  "production_changed_by_this_task": false,
+  "live_financial_writes": false,
+  "opening_balance_writes": false,
+  "merge_or_deployment_performed": false,
+  "verification": {
+    "local_focused_tests": {"passed": 137, "exit_code": 0},
+    "previous_ci_commit": "bcaeb22e10cde5c2255d6821a643322f3287a391",
+    "previous_ci_operational_run": 41349249934,
+    "previous_ci_backend_tests": {"passed": 714, "warnings": 5, "skipped": 0},
+    "previous_ci_frontend_tests": {"passed": 197, "suites": 15, "skipped": 0},
+    "previous_ci_shipping_tests": {"passed": 16, "subtests_passed": 18},
+    "previous_ci_security_gate": "success",
+    "previous_ci_release_readiness": "success",
+    "new_settlement_guard_ci": "requires verification on final head",
+    "remote_source_readback": "application and test blobs matched locally tested bytes before final guard; final engine blob 9afa55236c0e1676c08ff2cf2422d09a75a9ed26 matches local"
+  },
+  "new_findings": [
+    "Synthetic full refund after a previously allocated provider settlement reproduced a wrong-direction derived credit in the unchanged gross-obligation reconciliation path.",
+    "Version-2 component refunds with prior allocations are now explicitly blocked with provider_postsettlement_refund_review_required. Existing confirmed facts, allocation direction, bank movements and openings are retained; this is a safety gate, not completed post-settlement reconciliation.",
+    "A pure regression and isolated Mongo atomic rollback case cover the gate. New final CI results remain required."
+  ],
+  "implemented": [
+    "Opt-in approved per-plan component fee forecasts and separate VAT; legacy policy calculation preserved.",
+    "Executed refund reference deduplication and cumulative partial/full refund validation.",
+    "Native customer-return snapshot preserves plan/capture proof and avoids double subtraction of Salla cancellation plus executed refund.",
+    "Read-only statement arithmetic and account-scoped duplicate checks; no statement posting or bank-arrival assumption."
+  ],
+  "remaining_blockers": [
+    "End-to-end actual settlement fee-credit allocation, post-settlement refunds and bank movement linking, including multiple orders and partial payouts.",
+    "Approved live policy configuration and real provider plan/void/capture/refund source mapping; no automatic rate inference or activation.",
+    "Gross-versus-net opening evidence and read-only before/after reconciliation; do not replay old orders or modify prior movements.",
+    "Full final CI and review; separate product-SAR/status/shipping/warning tasks remain outside this provider slice."
+  ],
+  "next_safe_action": "Verify final CI; then implement and independently test statement-linked settlement reconciliation and approved source/policy mapping. Keep PR Draft, no production refresh, release prepare, merge or publish."
+}
