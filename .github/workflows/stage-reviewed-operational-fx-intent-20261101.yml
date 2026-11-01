@@ -1,0 +1,98 @@
+name: Stage v5 reviewed operational FX intent (B only)
+on:
+  push:
+    branches: [ci/stage-reviewed-operational-fx-intent-20261101]
+    paths:
+      - ".github/workflows/stage-reviewed-operational-fx-intent-20261101.yml"
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: stage-reviewed-operational-fx-intent-20261101
+  cancel-in-progress: false
+jobs:
+  intent-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_A: 021a91c03dc15a16535cb65486565709bb85c07b
+      PREVIOUS_J: ffa145f22dbf4167649736336083d0d16f9fed27
+      INTENT_ARTIFACT_ID: "13094464579"
+      DEST_BRANCH: release/operational-native-fx-sar-usd-reviewed-20261101
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Download exact CI-frozen source A intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$INTENT_ARTIFACT_ID/zip" \
+            --output "$RUNNER_TEMP/reviewed-intent.zip"
+          python - <<'PY'
+          import json, os, zipfile
+          from pathlib import Path
+          source=Path(os.environ['RUNNER_TEMP'])/'reviewed-intent.zip'
+          assert source.stat().st_size < 4_000_000
+          with zipfile.ZipFile(source) as archive:
+              assert archive.namelist()==['release-intent-v5.json'], archive.namelist()
+              raw=archive.read('release-intent-v5.json')
+          assert len(raw) < 2_000_000
+          document=json.loads(raw)
+          assert document['source_git_sha']==os.environ['SOURCE_A']
+          assert document['source_base_git_sha']==os.environ['PREVIOUS_J']
+          assert document['schema_version']==2 and document['protocol_version']==5
+          assert document['branch']=='hotfix/prod-snap-meta-final'
+          assert document['kind']=='mezan_emergent_release_intent_v1'
+          assert document['runtime_identity']['source_git_sha']==document['source_git_sha']
+          assert document['runtime_identity']['source_base_git_sha']==document['source_base_git_sha']
+          (Path(os.environ['RUNNER_TEMP'])/'intent-validated.json').write_bytes(raw)
+          print('Validated exact source A/J and protocol-v5 candidate artifact')
+          PY
+      - name: Create intent-only B from exact source A, no production mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "release/operational-native-fx-sar-usd-source-20261101"
+          git checkout --detach "$SOURCE_A"
+          test "$(git rev-parse HEAD)" = "$SOURCE_A"
+          git merge-base --is-ancestor "$PREVIOUS_J" "$SOURCE_A"
+          git diff --quiet "$PREVIOUS_J" "$SOURCE_A" -- release/release-intent-v5.json
+          mkdir -p release
+          cp "$RUNNER_TEMP/intent-validated.json" release/release-intent-v5.json
+          PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import load_candidate_release_intent
+          import os
+          document = load_candidate_release_intent(
+              'release/release-intent-v5.json',
+              source_git_sha=os.environ['SOURCE_A'],
+              source_base_git_sha=os.environ['PREVIOUS_J'],
+          )
+          assert document['schema_version']==2
+          print('Candidate v5 intent passes source manifest validation')
+          PY
+          git add -- release/release-intent-v5.json
+          test "$(git diff --cached --name-only)" = 'release/release-intent-v5.json'
+          git config user.name 'Mezan Release Readiness'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'release(v5): review operational FX source A intent only'
+          test "$(git diff --name-only HEAD^ HEAD)" = 'release/release-intent-v5.json'
+          PYTHONPATH=backend:. python - <<'PY'
+          from scripts.emergent_deployment_adapter import load_release_intent, verify_release_intent_git
+          d=load_release_intent()
+          verify_release_intent_git(d)
+          print('PASS reviewed B: source A exactly parent, release intent only')
+          PY
+          if git ls-remote --exit-code --heads origin "$DEST_BRANCH" >/dev/null; then
+            echo "::error::Reviewed B branch already exists; refusing to replace it"
+            exit 1
+          fi
+          git push origin "HEAD:refs/heads/$DEST_BRANCH"
+          echo "Reviewed intent-only B commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Destination PR branch: $DEST_BRANCH" >> "$GITHUB_STEP_SUMMARY"
+          echo "No Production branch or Emergent deployment was changed" >> "$GITHUB_STEP_SUMMARY"
