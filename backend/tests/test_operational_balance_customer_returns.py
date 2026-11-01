@@ -295,3 +295,39 @@ def test_compensation_record_via_mobile_native_endpoint_never_posts_bank():
         assert len((await read(db,'owner'))['customer_returns']) == 1
         assert not (await read(db,'owner'))['movements']
     run(scenario)
+
+
+def test_salla_refund_observation_is_read_only_without_unique_execution_identity():
+    async def scenario(db):
+        await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{
+            'raw_by_source.salla_direct.payment_actions.refund_action.refunded_transactions':[
+                {'payment_method':'mada','amount':{'amount':20,'currency':'SAR'}}]}})
+        before = report(await read(db,'owner'))
+        view = await order_view(db,'owner','1001')
+        assert view['salla_refund_observation'] == {
+            'amount':'20.00','count':1,'status':'observed_requires_execution_evidence'}
+        assert view['refunded'] == '0.00'
+        assert view['salla_refunds_documented'] == '0.00'
+        assert report(await read(db,'owner')) == before
+        # Generic Salla evidence alone never creates a customer return,
+        # bank debit or provider movement.
+        assert not (await read(db,'owner')).get('customer_returns',[])
+        assert not (await read(db,'owner'))['movements']
+    run(scenario)
+
+
+@pytest.mark.parametrize('value',[{'currency':'USD','amount':20},
+                                  {'currency':'SAR','amount':'3.141'},
+                                  {'currency':'SAR','amount':-3}])
+def test_invalid_salla_refund_observation_is_not_financial_evidence(value):
+    async def scenario(db):
+        await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'},{'$set':{
+            'raw_by_source.salla_direct.payment_actions.refund_action.refunded_transactions':[
+                {'amount':value}]}})
+        view = await order_view(db,'owner','1001')
+        assert view['salla_refund_observation']['status'] == 'invalid_evidence'
+        assert view['salla_refund_observation']['amount'] is None
+        assert report(await read(db,'owner'))['summary']['actual_liquidity'] == '1000.00'
+    run(scenario)
