@@ -82,56 +82,7 @@ def reconcile_credits(state):
     return state
 
 
-def provider_projection(payment, policies, transaction_date):
-    """Expected receivable only. Actual settlement fees belong to the movement.
-
-    Explicit return-fee terms are required whenever cancellation/refund occurs;
-    historical contracts lacking these fields remain visibly incomplete.
-    """
-    gross, cancelled = money(payment["gross"]), money(payment.get("cancelled", "0"))
-    refunds, seen = ZERO, {}
-    for refund in payment.get("refunds", []):
-        if refund.get("status") not in {"executed", "settled", "Refund Executed", "Settled"}:
-            continue
-        key = str(refund["id"])
-        value = money(refund["amount"])
-        if key in seen and seen[key] != value:
-            raise ValueError("refund_identity_conflict")
-        seen[key] = value
-    refunds = sum(seen.values(), ZERO)
-    if cancelled + refunds > gross:
-        raise ValueError("cancellation_refund_overlap")
-    matches = [p for p in policies if p.get("provider") == payment["provider"]
-               and p.get("currency") == payment["currency"] and p.get("status") == "active"
-               and day(p["effective_from"]) <= transaction_date
-               and (not p.get("effective_to") or transaction_date <= day(p["effective_to"]))]
-    if len(matches) != 1:
-        raise ValueError("provider_fee_policy_incomplete_or_ambiguous")
-    policy = matches[0]
-    base = gross
-    for value, field in ((cancelled, "cancellation_fee_treatment"), (refunds, "refund_fee_treatment")):
-        if value:
-            treatment = policy.get(field)
-            if treatment not in {"retain", "recalculate"}:
-                raise ValueError(field + "_incomplete")
-            if treatment == "recalculate":
-                base -= value
-    fees = ZERO if base == 0 else base * money(policy["percentage"]) / 100 + money(policy["fixed_amount"])
-    if base and policy.get("minimum") is not None:
-        fees = max(fees, money(policy["minimum"]))
-    if base and policy.get("maximum") is not None:
-        fees = min(fees, money(policy["maximum"]))
-    vat = policy.get("vat_treatment")
-    if vat == "exclusive":
-        fees *= 1 + money(policy.get("vat_rate")) / 100
-    elif vat not in {"inclusive", "exempt", "not_applicable"}:
-        raise ValueError("fee_tax_policy_incomplete")
-    net = gross - cancelled - refunds
-    # Fees exceeding the receivable are a payable; do not silently clamp debt.
-    expected = net - Decimal(amount(fees))
-    return {"gross": amount(gross), "cancelled": amount(cancelled), "refunded": amount(refunds),
-            "net": amount(net), "estimated_fees": amount(fees), "expected_receivable": amount(expected),
-            "policy_id": policy["id"]}
+from operational_provider_fees import provider_projection
 
 
 def reconcile(state, sources, as_of):
@@ -272,8 +223,7 @@ def reconcile(state, sources, as_of):
                     proof = facts.get(proof_key)
                     # Customer payment proof can complete later while custody remains
                     # the same immutable zero for bank/card collections.
-                    if (proof is None and executor_matches and cod_evidence.get("evidence_complete") is True
-                            and cod_evidence.get("collection_confirmed") is True
+                    if (proof is None and executor_matches and cod_evidence.get("collection_confirmed") is True
                             and original.get("collection_confirmed") is False
                             and original.get("payment_method") in {"bank_transfer", "card_terminal"}
                             and cod_evidence.get("payment_method") == original.get("payment_method")
