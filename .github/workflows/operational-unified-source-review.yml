@@ -1,0 +1,50 @@
+name: Operational Unified Source Review
+on:
+  push:
+    branches: [integration/operational-balances-unified-20261102]
+    paths: [.github/workflows/operational-unified-source-review.yml]
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: production
+            source: 3d8720860fb524d729f6c83a8c56c5b4de3a2afb
+          - label: provider
+            source: 88c7872072e6e6a149a92153a732ae4c0551ae21
+          - label: followup
+            source: df17ef3ff21e2515ed24ec61d5d8019cf9cb2fe5
+          - label: ancestor
+            source: 3bac875cfbcbc7f66849edae83c478dd194d9c12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.source }}
+          persist-credentials: false
+      - name: Archive tracked sources with immutable identity
+        shell: bash
+        env:
+          REVIEW_SOURCE: ${{ matrix.source }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEW_SOURCE"
+          mkdir -p "$RUNNER_TEMP/unified-source-review"
+          git rev-parse HEAD > "$RUNNER_TEMP/unified-source-review/source-sha.txt"
+          git rev-parse HEAD^{tree} > "$RUNNER_TEMP/unified-source-review/root-tree.txt"
+          git ls-tree -r HEAD > "$RUNNER_TEMP/unified-source-review/source-tree.txt"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/unified-source-review/source.tar.gz" HEAD AGENTS.md backend frontend scripts docs .github
+          sha256sum "$RUNNER_TEMP/unified-source-review/source.tar.gz" > "$RUNNER_TEMP/unified-source-review/archive-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unified-source-${{ matrix.label }}-${{ matrix.source }}
+          path: ${{ runner.temp }}/unified-source-review/
+          retention-days: 3
+          if-no-files-found: error
+# Read-only repository snapshots. No code execution, dependency installation,
+# production environment, credentials export, financial APIs, branch writes,
+# release intent, lease, deployment or publication. Remove before final release.
