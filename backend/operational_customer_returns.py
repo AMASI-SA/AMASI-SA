@@ -38,12 +38,20 @@ async def order_view(db, owner, number_text):
     state = await read(db, owner)
     cases = [r for r in state.get('customer_returns', []) if r['order_id'] == str(raw['id'])]
     for item in items:
-        item['remaining'] = item['quantity'] - sum(i['quantity'] for r in cases for i in r['items'] if i['id'] == item['id'])
+        # Documenting a Salla refund never consumes physical product quantities.
+        item['remaining'] = item['quantity'] - sum(
+            i['quantity'] for r in cases if r.get('case_type', 'item_return') == 'item_return'
+            for i in r['items'] if i['id'] == item['id'])
     shipping = raw.get('salla_shipping_current') or raw.get('shipping') or {}
+    documented = sum((money(r['amount']) for r in cases
+                      if r['status'] == 'salla_refund_recorded'), Decimal(0))
     return {'id': str(raw['id']), 'order_number': number_text, 'currency': currency, 'total': fmt(total),
             'shipping_at': shipping.get('delivered_at'),
             'items': items, 'provider': provider, 'created_at': instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')).isoformat(),
-            'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0)))}
+            'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0))),
+            # Informational only. This is not subtracted from Salla's current
+            # order total or recognized again as a bank/provider cash movement.
+            'salla_refunds_documented': fmt(documented)}
 
 
 async def shipping_quote(db, owner, kind, identity, at, order_number):
@@ -121,6 +129,65 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
         existing = next((r for r in cases if r['id'] == case_id), None) if case_id else None
         if case_id and not existing:
             fail('customer_return_missing', 'المرتجع غير موجود')
+        if payload.get('case_type', 'item_return') == 'order_compensation':
+            if case_id is not None or payload['status'] != 'salla_refund_recorded':
+                fail('customer_compensation_mode_invalid',
+                     'التعويض الذي سبق تنفيذه بسلة يُوثق كعملية مستقلة فقط', 422)
+            if (payload.get('already_refunded_in_salla') is not True
+                    or payload.get('items') or payload.get('shipping_kind') != 'none'
+                    or payload.get('shipping_id') or payload.get('shipment_reference')
+                    or payload.get('shipment_completed') or payload.get('shipping_quote_hash')
+                    or payload.get('refund_source_type') is not None
+                    or payload.get('refund_source_id') is not None):
+                fail('customer_compensation_not_record_only',
+                     'توثيق تعويض سلة لا يتضمن منتجًا أو شحنًا أو حركة بنك أو منصة جديدة', 422)
+            note = (payload.get('note') or '').strip()
+            ref = (payload.get('refund_reference') or '').strip()
+            if len(note) < 5:
+                fail('customer_compensation_reason_required', 'أدخل سبب التعويض والاتفاق مع العميل', 422)
+            if len(ref) < 3:
+                fail('customer_compensation_reference_required',
+                     'أدخل مرجع الاسترداد السابق في سلة لعدم تكرار توثيقه', 422)
+            value = money(payload.get('amount'))
+            try:
+                refunded_at = instant(payload.get('refunded_at'))
+            except (ValueError, TypeError):
+                fail('customer_compensation_date_invalid', 'أدخل تاريخ تنفيذ الاسترداد في سلة', 422)
+            order = await order_view(db, owner, payload['order_number'])
+            if refunded_at > instant(stamp) or refunded_at < instant(order['created_at']):
+                fail('customer_compensation_date_invalid', 'تاريخ الاسترداد غير صحيح', 422)
+            if any((row['order_id'] == order['id']
+                    and row.get('refund_reference') == ref)
+                   for row in cases):
+                fail('customer_compensation_duplicate', 'مرجع الاسترداد مسجل على هذا الطلب مسبقًا', 409)
+            case = {
+                'id': digest([owner, actor, payload['request_id']]),
+                'case_type': 'order_compensation',
+                'order_id': order['id'],
+                'order_number': order['order_number'],
+                'order_total_after_refund_snapshot': order['total'],
+                'items': [],
+                'currency': 'SAR',
+                'status': 'salla_refund_recorded',
+                'amount': fmt(value),
+                'refund_reference': ref,
+                'refunded_at': refunded_at.isoformat(),
+                'note': note,
+                'shipping': {'kind': 'none', 'id': None, 'amount': '0.00',
+                             'status': 'completed', 'reference': ''},
+                'financial_effect': 'none_already_refunded_in_salla',
+                'created_by': actor,
+                'created_at': stamp,
+            }
+            cases.append(case)
+            audit(state, actor, 'salla_customer_compensation_documented',
+                  None, case, note, 'employee_app', stamp)
+            remember(state, 'customer_return:' + actor, payload, case)
+            # No bank debit, no payment-provider refund, no product return,
+            # no stock mutation, and no update to Salla's already-net total.
+            return case
+        if payload.get('case_type', 'item_return') != 'item_return' or payload['status'] == 'salla_refund_recorded':
+            fail('customer_return_mode_invalid', 'حالة رد المبلغ لا تطابق نوع العملية', 422)
         before = deepcopy(existing)
         if existing:
             if payload['order_number'] != existing['order_number'] or payload['items'] != existing['items']:
@@ -144,7 +211,8 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 fail('customer_return_shipment_reference_required', 'أدخل مرجع شحنة الاسترجاع')
             if shipping['kind'] != 'none' and any(r['shipping'].get('reference') == shipping['reference'] and r['shipping'].get('id') == shipping.get('id') for r in cases):
                 fail('customer_return_shipment_duplicate', 'شحنة الاسترجاع مسجلة بالفعل')
-            case = {'id': digest([owner, actor, payload['request_id']]), 'order_id': order['id'], 'order_number': order['order_number'],
+            case = {'id': digest([owner, actor, payload['request_id']]), 'case_type': 'item_return',
+                    'order_id': order['id'], 'order_number': order['order_number'],
                     'order_total': order['total'], 'order_created_at': order['created_at'], 'original_provider': order['provider'],
                     'items': deepcopy(selected), 'currency': 'SAR', 'status': 'pending', 'shipping': shipping,
                     'created_at': stamp, 'created_by': actor, 'note': payload.get('note', '')}
