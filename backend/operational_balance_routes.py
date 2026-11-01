@@ -268,10 +268,15 @@ async def scope(db, principal, permission):
         fail("operational_bank_owner_required", "إضافة حساب بنك أو شبكة متاحة للمالك فقط", 403)
     if permission == "ad_selection_manage" and actor.get("role") != "owner":
         fail("operational_ad_selection_owner_required", "اختيار الحسابات متاح للمالك فقط", 403)
-    if permission in {"cash_manage", "beneficiary_manage"} and actor.get("role") != "owner":
-        fail("operational_cash_owner_required" if permission == "cash_manage" else "operational_beneficiary_owner_required",
-             "إضافة الصندوق متاحة للمالك فقط" if permission == "cash_manage" else "إضافة مستفيد سحوبات متاحة للمالك فقط", 403)
-    if mobile and permission not in {"cash_manage", "beneficiary_manage", "bank_manage"}:
+    if permission in {"cash_manage", "beneficiary_manage", "external_manage"} and actor.get("role") != "owner":
+        codes = {"cash_manage": "operational_cash_owner_required",
+                 "beneficiary_manage": "operational_beneficiary_owner_required",
+                 "external_manage": "operational_external_owner_required"}
+        messages = {"cash_manage": "إضافة الصندوق متاحة للمالك فقط",
+                    "beneficiary_manage": "إضافة مستفيد سحوبات متاحة للمالك فقط",
+                    "external_manage": "إضافة شخص خارجي متاحة للمالك فقط"}
+        fail(codes[permission], messages[permission], 403)
+    if mobile and permission not in {"cash_manage", "beneficiary_manage", "bank_manage", "external_manage"}:
         access = await mobile_app_access_for_user(db, actor)
         granted = set(access.get("permissions") or []) if access.get("enabled") else set()
         required = {"view": {OPERATIONAL_APP_WRITE, OPERATIONAL_APP_READ},
@@ -307,8 +312,10 @@ def make_operational_balance_router(db, current_user):
                 or re.fullmatch(r"/customer-returns/[^/]+/confirm",path)
                 or re.fullmatch(r"/customer-exchanges/[^/]+/actions",path)):
             permission = "move"
-        elif request.method == "POST" and path in {"/entities/cash", "/entities/owner_withdrawal", "/entities/bank"}:
-            permission = "bank_manage" if path.endswith("/bank") else "cash_manage" if path.endswith("/cash") else "beneficiary_manage"
+        elif request.method == "POST" and path in {"/entities/cash", "/entities/owner_withdrawal", "/entities/bank", "/entities/external_person"}:
+            permission = {"bank": "bank_manage", "cash": "cash_manage",
+                          "owner_withdrawal": "beneficiary_manage",
+                          "external_person": "external_manage"}[path.rsplit("/", 1)[-1]]
         if permission is None:
             fail("operational_app_route_not_allowed", "هذه الوظيفة غير متاحة في التطبيق", 403)
         await scope(db, user, permission)
@@ -470,7 +477,12 @@ def make_operational_balance_router(db, current_user):
         return {"order":order,"items":[entry_case(c,"exchanges") for c in cases if c["order_number"]==order_number]}
     async def entity_guard(request: HttpRequest, user=Depends(current_user)):
         from contextlib import asynccontextmanager
-        permission = {"bank": "bank_manage", "cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(request.url.path.rstrip("/").split("/")[-1], "manage")
+        kind = request.url.path.rstrip("/").split("/")[-1]
+        permission = {"bank": "bank_manage", "cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage")
+        # The browser's existing external-person workflow remains unchanged.
+        # Only the native app gets a strictly owner-only entity-creation route.
+        if kind == "external_person" and user.get("_session_client") == "amasi_mobile":
+            permission = "external_manage"
         async with asynccontextmanager(guarded(permission))(request, user) as checked:
             yield checked
 
@@ -493,6 +505,7 @@ def make_operational_balance_router(db, current_user):
         return {"status": state["status"], "started_at": state["started_at"],
                 "operational_banks": banks,
                 "can_create_cash": actor.get("role") == "owner",
+                "can_create_external_person": actor.get("role") == "owner",
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
                 "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
                 "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
@@ -541,7 +554,11 @@ def make_operational_balance_router(db, current_user):
 
     @router.post("/entities/{kind}")
     async def add_entity(kind: Literal["bank", "cash", "external_person", "operating_expense", "owner_withdrawal"], payload: AddEntity, user=Depends(entity_guard)):
-        actor, owner, _ = await scope(db, user, {"bank": "bank_manage", "cash": "cash_manage", "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage"))
+        entity_permission = {"bank": "bank_manage", "cash": "cash_manage",
+                             "owner_withdrawal": "beneficiary_manage"}.get(kind, "manage")
+        if kind == "external_person" and user.get("_session_client") == "amasi_mobile":
+            entity_permission = "external_manage"
+        actor, owner, _ = await scope(db, user, entity_permission)
         state = await read(db, owner)
         if state["status"] not in {"draft", "active"}:
             fail("operational_setup_closed", "النظام مغلق للقراءة؛ لا يمكن إضافة جهة")

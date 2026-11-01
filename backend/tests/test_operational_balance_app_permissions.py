@@ -53,13 +53,13 @@ def test_independent_native_permission_matrix(permissions, direction):
 
 @pytest.mark.parametrize("actor", ["staff","owner"])
 @pytest.mark.parametrize("method,path", [("GET","audit"),("GET","receipts/test"),("POST","openings"),
-    ("POST","finish"),("POST","freeze"),("POST","supplier-returns"),("POST","entities/cash"),("POST","receipts")])
+    ("POST","finish"),("POST","freeze"),("POST","supplier-returns"),("POST","entities/cash"),("POST","entities/external_person"),("POST","receipts")])
 def test_no_native_opening_audit_or_administration_even_with_both_grants(actor,method,path):
     async def scenario(db):
         await started(db);await grant(db,[WRITE,READ])
         async with client(db,actor) as c:
             r=await c.request(method,"/api/operational-balances/"+path,json={})
-            assert r.status_code==(422 if actor == "owner" and path == "entities/cash" else 403),r.text
+            assert r.status_code==(422 if actor == "owner" and path in {"entities/cash", "entities/external_person"} else 403),r.text
         assert (await read(db,"owner"))["movements"]==[]
     run(scenario)
 
@@ -138,4 +138,49 @@ def test_owner_grants_and_revokes_both_permissions_independently(monkeypatch):
                 access=await mobile_app_access_for_user(db,await db.users.find_one({"id":"staff"}))
                 assert set(access["permissions"])==set(permissions)
                 assert (await db.users.find_one({"id":"staff"}))["role"]=="employee"
+    run(scenario)
+
+
+def test_mobile_owner_adds_cash_and_external_without_creating_money():
+    async def scenario(db):
+        await started(db)
+        await grant(db, [WRITE, READ])
+        for kind in ("cash", "external_person"):
+            payload = {"name": "تجربة إنشاء " + kind, "currency": "SAR", "request_id": "owner-mobile-" + kind}
+            async with client(db, "staff") as c:
+                denied = await c.post(f"/api/operational-balances/entities/{kind}", json=payload)
+                assert denied.status_code == 403, (kind, denied.text)
+            async with client(db, "owner") as c:
+                ctx = (await c.get("/api/operational-balances/context")).json()
+                assert ctx["can_create_cash"] is True
+                assert ctx["can_create_external_person"] is True
+                # General mobile "manage" remains false; owner-only creation is independent.
+                assert ctx["permissions"]["manage"] is False
+                created = await c.post(f"/api/operational-balances/entities/{kind}", json=payload)
+                assert created.status_code == 200, (kind, created.text)
+                again = await c.post(f"/api/operational-balances/entities/{kind}", json=payload)
+                assert again.status_code == 200 and again.json() == created.json()
+                listings = (await c.get(f"/api/operational-balances/entities/{kind}")).json()
+                assert created.json()["id"] in [row["id"] for row in listings["items"]]
+                changed = await c.post(f"/api/operational-balances/entities/{kind}", json={**payload, "name": "اسم مختلف"})
+                assert changed.status_code == 409, changed.text
+        from operational_balance_store import read
+        state = await read(db, "owner")
+        assert state["movements"] == []
+        assert len(state["openings"]) == 2
+        assert await db.mz2_financial_accounts.count_documents({"user_id": "owner", "name": "تجربة إنشاء cash"}) == 1
+        assert await db.mz2_external_persons_v2.count_documents({"user_id": "owner", "name": "تجربة إنشاء external_person"}) == 1
+    run(scenario)
+
+
+def test_mobile_owner_creation_stops_when_accounting_cutover_active():
+    async def scenario(db):
+        await started(db)
+        await db.mz2_atomic_owners.update_one({"_id": "owner"}, {"$set": {"ledger_backend_state": "v2_active"}}, upsert=True)
+        async with client(db, "owner") as c:
+            for kind in ("cash", "external_person"):
+                result = await c.post(f"/api/operational-balances/entities/{kind}", json={"name": "ممنوع بسبب القطع", "currency": "SAR", "request_id": "cutover-" + kind})
+                assert result.status_code in (403, 409), result.text
+        assert await db.mz2_external_persons_v2.count_documents({"name": "ممنوع بسبب القطع"}) == 0
+        assert await db.mz2_financial_accounts.count_documents({"name": "ممنوع بسبب القطع"}) == 0
     run(scenario)
