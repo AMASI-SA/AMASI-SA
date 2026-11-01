@@ -76,6 +76,12 @@ class Movement(Request):
     allocations: list[Allocation] = Field(default_factory=list, max_length=1000)
     source: Literal["mezan2", "employee_app"] = "mezan2"
     actual_fee_amount: str = Field(default="0.00", max_length=30)
+    # Optional cross-currency ad funding. The advertisement amount/currency stay
+    # in USD; the debited SAR bank leg and its actual bank fee are distinct.
+    # Presence of any FX field requires all three, validated atomically by service.
+    bank_currency: Literal["SAR"] | None = None
+    bank_amount: str | None = Field(default=None, max_length=30)
+    bank_fee_amount: str | None = Field(default=None, max_length=30)
 
 
 class AddEntity(Request):
@@ -650,6 +656,10 @@ def make_operational_balance_router(db, current_user):
         data = payload.model_dump()
         if payload.business_date is None:
             data.pop("business_date")
+        # Preserve existing request hashes for in-flight pre-FX mobile movements.
+        for field in ("bank_currency", "bank_amount", "bank_fee_amount"):
+            if data[field] is None:
+                data.pop(field)
         if source == "employee_app":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
