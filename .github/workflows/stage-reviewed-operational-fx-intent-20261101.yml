@@ -63,19 +63,20 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_A"
           git merge-base --is-ancestor "$PREVIOUS_J" "$SOURCE_A"
           git diff --quiet "$PREVIOUS_J" "$SOURCE_A" -- release/release-intent-v5.json
-          mkdir -p release
-          cp "$RUNNER_TEMP/intent-validated.json" release/release-intent-v5.json
           PYTHONPATH=backend:. python - <<'PY'
+          from pathlib import Path
           from scripts.emergent_deployment_adapter import load_candidate_release_intent
           import os
           document = load_candidate_release_intent(
-              'release/release-intent-v5.json',
+              Path(os.environ['RUNNER_TEMP']) / 'intent-validated.json',
               source_git_sha=os.environ['SOURCE_A'],
               source_base_git_sha=os.environ['PREVIOUS_J'],
           )
           assert document['schema_version']==2
-          print('Candidate v5 intent passes source manifest validation')
+          print('Candidate v5 intent passes external artifact and source manifest validation')
           PY
+          mkdir -p release
+          cp "$RUNNER_TEMP/intent-validated.json" release/release-intent-v5.json
           git add -- release/release-intent-v5.json
           test "$(git diff --cached --name-only)" = 'release/release-intent-v5.json'
           git config user.name 'Mezan Release Readiness'
