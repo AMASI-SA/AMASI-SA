@@ -114,7 +114,10 @@ class CustomerReturn(Request):
     # order-level financial adjustment: no returned items or stock movement.
     case_type: Literal["item_return", "order_compensation"] = "item_return"
     items: list[ReturnItem] = Field(default_factory=list, max_length=1000)
-    status: Literal["pending", "refunded"] = "pending"
+    status: Literal["pending", "refunded", "salla_refund_recorded"] = "pending"
+    # Explicit evidence-only declaration: Salla already processed this refund.
+    # It does not authorize a second bank/provider posting.
+    already_refunded_in_salla: bool = False
     amount: str | None = Field(default=None, max_length=30)
     refund_source_type: Literal["bank", "provider"] | None = None
     refund_source_id: str | None = Field(default=None, max_length=200)
