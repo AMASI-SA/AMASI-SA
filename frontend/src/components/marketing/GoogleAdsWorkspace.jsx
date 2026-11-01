@@ -1,5 +1,6 @@
 import GoogleStorageCommitReadiness from "./GoogleStorageCommitReadiness";
 import GoogleNamespacePrerequisites from "./GoogleNamespacePrerequisites";
+import GoogleNamespaceBootstrap from "./GoogleNamespaceBootstrap";
 import { useEffect, useMemo, useRef, useState } from "react";
 import GoogleAnalysisAttempts from "./GoogleAnalysisAttempts";
 import GoogleAutomationPolicy from "./GoogleAutomationPolicy";
@@ -311,6 +312,7 @@ export default function GoogleAdsWorkspace({ dateFrom, dateTo, query = "", onSyn
         {permissions.owner === true && <details className="rounded-2xl border bg-white p-4 text-sm leading-7" aria-label="فحوص حفظ حدود جوجل"><summary className="cursor-pointer font-bold">فحوص حفظ حدود جوجل</summary>
             <GoogleStorageCommitReadiness isOwner={permissions.owner} />
             <GoogleNamespacePrerequisites isOwner={permissions.owner} />
+            <GoogleNamespaceBootstrap />
         </details>}
         <GoogleCommercialPlan isOwner={permissions.owner} />
         <GoogleMerchantObservationSelector />
