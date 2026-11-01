@@ -12,6 +12,7 @@ import calendar
 import hashlib
 import json
 from shipping_companies import normalize_shipping_company
+from operational_product_cost_policy import COST_CURRENCY, COST_BASIS, order_unreceived_stage, require_sar_cost
 
 
 def external_courier(row):
@@ -545,7 +546,9 @@ def option_matches(binding, tokens):
 def cost_components(data, product_id, item, profile):
     """Resolve only MZ2-authoritative amounts; services retain independent identity."""
     variant = str(item.get('variant_id') or '')
-    product_cost = number((profile.get('variant_costs') or {}).get(variant, profile.get('base_cost')))
+    raw_cost = (profile.get('variant_costs') or {}).get(variant, profile.get('base_cost'))
+    require_sar_cost(profile, raw_cost)
+    product_cost = number(raw_cost)
     resources = unique_index(data['mezan_cost_resources_v2'], 'id')
     tokens = option_tokens(item)
     links = [dict(r, mode='resource') for r in data['mezan_product_resource_bindings_v2'] if str(r.get('salla_product_id')) == product_id]
@@ -560,12 +563,14 @@ def cost_components(data, product_id, item, profile):
         if quantity <= 0:
             raise ValueError('mz2_cost_binding_quantity_invalid')
         if link.get('mode') == 'direct':
+            require_sar_cost(link, link.get('direct_amount'))
             product_cost += number(link.get('direct_amount')) * quantity
             continue
         resource_id = str(link.get('resource_id') or '')
         resource = resources.get(resource_id)
         if link.get('mode') != 'resource' or not resource or not usable(resource):
             raise ValueError('mz2_cost_resource_missing')
+        require_sar_cost(resource, resource.get('unit_cost'))
         amount = number(resource.get('unit_cost')) * quantity
         if resource_id in resource_costs:
             # MZ2 forbids product+option duplicate resource binding; do not repair silently.
@@ -603,12 +608,14 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
     financial_supplier = supplier_id if received else None
     order['items'].append({'id': base_id, 'supplier_id': financial_supplier,
                            'supplier_receipt_proven': received,
+                           'cost_currency': COST_CURRENCY, 'cost_basis': COST_BASIS,
                            'cost': str(product_cost), 'quantity': str(quantity)})
     plans = {str(r.get('service_id')): r for r in (piece or {}).get('services', [])}
     service_ids = set(services) | set(plans)
     for service_id in sorted(service_ids):
         plan = plans.get(service_id)
         if plan:
+            require_sar_cost(plan, plan.get('reference_unit_cost'))
             unit = number(plan.get('reference_unit_cost'))
             cost = unit * number(plan.get('required_quantity'))
             party = plan.get('completed_by_supplier_id') if plan.get('status') == 'completed' else (
@@ -619,6 +626,7 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
         order['items'].append({'id': f'{base_id}:service:{service_id}',
                                'supplier_id': party if service_received else None,
                                'supplier_receipt_proven': service_received,
+                               'cost_currency': COST_CURRENCY, 'cost_basis': COST_BASIS,
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
@@ -672,7 +680,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             order = {'id': identity, 'order_number': order_number, 'created_at': created.isoformat(),
                      'updated_at': instant(raw.get('updated_at') or raw.get('date_updated') or created).isoformat(),
                      'status': status, 'currency': raw.get('currency') or (source_total.get('currency') if isinstance(source_total, dict) else None),
-                     'items': []}
+                     'items': [], 'product_estimate_stage': order_unreceived_stage(raw)}
             if not order['currency']:
                 raise ValueError('order_currency_missing')
             order_numbers[order_number] = identity
@@ -698,7 +706,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                         continue
                     for piece in matching:
                         supplier = piece.get('supplier_id')
-                        if supplier and supplier not in suppliers:
+                        if supplier_receipt_proven(piece, now) and supplier not in suppliers:
                             issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
                             continue
                         append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
@@ -841,6 +849,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
             issue(out, 'supplier_invoice_piece_coverage_ambiguous', invoice.get('id'))
             continue
         try:
+            require_sar_cost(invoice)
             component_amounts = invoice_component_amounts(invoice)
         except (ValueError, KeyError, TypeError):
             issue(out, 'supplier_invoice_tax_contract_incomplete', invoice.get('id'))
@@ -935,7 +944,7 @@ def _employees(data, out):
         revisions = contract.get('salary_revisions') or [{'effective_from': contract.get('effective_from'),
                                                          'monthly_amount': contract.get('monthly_amount')}]
         try:
-            starts = [date.fromisoformat(r['effective_from']).isoformat() for r in revisions]
+            starts = [date.fromisoformat(r['effective_from']) for r in revisions]
             if len(starts) != len(set(starts)):
                 raise ValueError('duplicate_salary_revision')
             suspensions = contract.get('suspension_periods') or []
