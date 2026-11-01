@@ -189,6 +189,7 @@ def test_new_order_cost_only_from_mz2_profile():
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert output['orders'][0]['items'] == [{'id': 'salla:10:line', 'supplier_id': None,
                                             'supplier_receipt_proven': False,
+                                            'cost_currency': 'SAR', 'cost_basis': 'mz2_product_service_cost_sar_v1',
                                             'cost': '20', 'quantity': '2'}]
     db.data['mezan_product_cost_profiles_v2'] = []
     output = run(src.collect_sources(db, 'owner', START, NOW))

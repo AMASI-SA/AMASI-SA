@@ -1,12 +1,14 @@
 """Read-only open-work cost exposure, independent of financial recognition.
 
-Historical estimates never become opening balances, invoices, bank movements or
-payables. Current amounts come from the reconciled operational engine only.
+Product estimates use current canonical status, per-piece receiving and original
+SAR cost sources for both old and new orders. Confirmed finance and shipping
+remain in the reconciled engine. Estimates never write openings or liabilities.
 """
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import re
+from operational_product_cost_policy import COST_CURRENCY, COST_BASIS, order_unreceived_stage, unreceived_stage, order_status_known, require_sar_cost
 
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
@@ -41,10 +43,7 @@ def _status(raw):
 
 
 def _cutover_group(status):
-    return "awaiting_review" if status in {
-        "under_review", "waiting_review", "waiting_for_review", "pending_review", "pending",
-        "waiting", "انتظار المراجعة", "بانتظار المراجعة", "بإنتظار المراجعة"
-    } else "under_fulfillment"
+    return unreceived_stage(status)
 
 
 def _name(record, fallback):
@@ -89,6 +88,7 @@ def _coverage(data, suppliers, started, stamp, issues):
                 if line.get("quantity") is not None and number(line["quantity"]) != len(ids):
                     raise ValueError("supplier_invoice_component_incomplete")
             try:
+                require_sar_cost(invoice)
                 invoice_component_amounts(invoice)
             except (ValueError, KeyError, TypeError):
                 raise ValueError("supplier_invoice_tax_or_amount_incomplete") from None
@@ -174,14 +174,13 @@ async def project(db, owner, state, *, as_of=None):
         if not oid or not num or ids[oid] != 1 or nums[num] != 1:
             issues["historical_order_identity_ambiguous"] += 1
             continue
-        if created > started:
-            current_stages[oid] = _cutover_group(status)
-            continue
-        if status in CLOSED:
-            continue
-        if status not in OPEN:
-            issues["historical_order_status_unverified"] += 1
-            continue
+        period = "poststart" if created > started else "prestart"
+        stage = order_unreceived_stage(raw)
+        if not order_status_known(raw):
+            issues["product_order_status_unverified"] += 1
+        current_stages[oid] = stage
+        # Status filters UNRECEIVED work only. Received work survives a change
+        # to completed/shipped/cancelled without becoming unreceived again.
         watermark = record.get("g47_salla_snapshot")
         if isinstance(watermark, dict) and watermark.get("requires_authoritative_refresh"):
             issues["historical_order_refresh_required"] += 1
@@ -189,10 +188,8 @@ async def project(db, owner, state, *, as_of=None):
         amounts = raw.get("amounts") if isinstance(raw.get("amounts"), dict) else {}
         total = amounts.get("total")
         currency = raw.get("currency") or (total.get("currency") if isinstance(total, dict) else None)
-        if currency != "SAR":
-            issues["historical_cost_currency_requires_review"] += 1
-            continue
-        stage = _cutover_group(status)
+        # 'currency' is only customer settlement currency; product quotes
+        # below originate in SAR cost records, not this order's sale currency.
         items = raw.get("items")
         if not isinstance(items, list) or not items:
             issues["historical_items_incomplete"] += 1
@@ -210,6 +207,11 @@ async def project(db, owner, state, *, as_of=None):
             stable = "salla:" + num + ":" + line_id
             product = item.get("product") if isinstance(item.get("product"), dict) else {}
             product_id = str(item.get("parent_product_id") or item.get("product_id") or product.get("id") or "")
+            matched = pieces_by_item.get((num, stable), [])
+            if stage is None and not any(supplier_receipt_proven(piece, stamp) for piece in matched):
+                # Explicitly out of the unreceived pool. Do not demand a price
+                # for ineligible, nonreceived products or invent an open state.
+                continue
             try:
                 if profile_counts[product_id] > 1:
                     raise ValueError("historical_product_cost_profile_ambiguous")
@@ -219,6 +221,8 @@ async def project(db, owner, state, *, as_of=None):
                             variant and variant in (profile.get("variant_costs") or {}))
                 fallback_used = False
                 if not has_base:
+                    if period != "prestart":
+                        raise ValueError("current_product_cost_profile_incomplete")
                     catalog = catalogue.get(product_id)
                     if not catalog:
                         raise ValueError("historical_catalog_cost_missing")
@@ -230,6 +234,9 @@ async def project(db, owner, state, *, as_of=None):
                         price = matches[0].get("cost_price_from_salla")
                     else:
                         price = catalog.get("cost_price_from_salla")
+                    # Catalog currency can describe the sale price; use only
+                    # explicit cost currency, and reject foreign COST evidence.
+                    require_sar_cost({"cost_currency": catalog.get("cost_currency", "SAR")}, price)
                     fallback = number(price)
                     if fallback <= 0:
                         raise ValueError("historical_catalog_cost_missing")
@@ -265,7 +272,7 @@ async def project(db, owner, state, *, as_of=None):
                     issues["historical_supplier_component_ambiguous"] += 1
                     continue
                 if coverage[key]:
-                    if key in approved_after_start:
+                    if key in approved_after_start and period == "prestart":
                         issues["prestart_order_postcutover_invoice_needs_reconciliation"] += 1
                     continue
                 try:
@@ -283,19 +290,28 @@ async def project(db, owner, state, *, as_of=None):
                         continue
                     label = _name(suppliers[party], "مورد الاستلام")
                     product_stage = "received_without_approved_invoice"
-                    bucket = "prestart_supplier_received_uninvoiced"
+                    bucket = period + "_supplier_received_uninvoiced"
                 else:
+                    if stage is None:
+                        continue
                     party, label, product_stage = "", POOL_NAME, stage
-                    bucket = "prestart_supplier_unreceived"
-                add("prestart", "supplier", product_stage, party, label, "SAR", amount,
+                    bucket = period + "_supplier_unreceived"
+                add(period, "supplier", product_stage, party, label, COST_CURRENCY, amount,
                     int(number(component.get("quantity", "1"))), oid)
-                currencies["SAR"][bucket] += amount
-                currencies["SAR"]["prestart_supplier_expected"] += amount
+                currencies[COST_CURRENCY][bucket] += amount
+                currencies[COST_CURRENCY]["prestart_supplier_expected" if period == "prestart"
+                    else "current_supplier_expected"] += amount
                 included = True
             if fallback_used and included:
                 issues["historical_current_catalog_estimate_used"] += 1
 
-        # Shipping quote is independent from product-cost completeness.
+        # Shipping has its own eligibility/currency contract, NOT the product
+        # status allowlist. Never recompute poststart shipping outside its engine.
+        if period != "prestart" or status in CLOSED:
+            continue
+        if status not in OPEN:
+            issues["historical_shipping_status_unverified"] += 1
+            continue
         shipping = raw.get("salla_shipping_current") or raw.get("shipping") or {}
         if not isinstance(shipping, dict):
             issues["historical_shipping_quote_incomplete"] += 1
@@ -339,6 +355,10 @@ async def project(db, owner, state, *, as_of=None):
             method = str(payment.get("method") or raw.get("payment_method") or "").lower()
             is_cod = method in {"cod", "cash_on_delivery", "cashondelivery", "cash on delivery",
                 "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
+            if is_cod and currency != "SAR":
+                # A percentage COD fee needs an evidenced SAR base. Do not
+                # multiply a foreign customer payment by a SAR contract rate.
+                raise ValueError("historical_shipping_cod_currency_incomplete")
             due = number(cod_facts(raw, number(amounts.get("total", raw.get("total"))))["outstanding"]) if is_cod else None
             quote = shipping_charge(rates[0], owner, party, stamp, due, setup)
             if not quote.get("fee_complete"):
@@ -365,8 +385,10 @@ async def project(db, owner, state, *, as_of=None):
         engine_at = None
     for source_issue in engine.get("issues") or []:
         code = source_issue if isinstance(source_issue, str) else (source_issue.get("code") if isinstance(source_issue, dict) else None)
-        if code and re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation", code):
+        if code and re.search(r"shipping|carrier", code):
             issues["current_" + code] += 1
+        elif code == "supplier_cost_currency_reconciliation_required":
+            issues[code] += 1
     for obligation in (engine.get("obligations") or {}).values() if engine_at else []:
         if obligation.get("superseded") or obligation.get("derived_credit"):
             continue
@@ -382,34 +404,47 @@ async def project(db, owner, state, *, as_of=None):
         except ValueError:
             issues["operational_cost_obligation_incomplete"] += 1
             continue
-        currencies[currency]["current_" + kind + "_expected"] += expected
+        if kind == "supplier":
+            expected = ZERO  # source-derived SAR estimate already included above
+            if currency != COST_CURRENCY and confirmed:
+                issues["supplier_cost_currency_reconciliation_required"] += 1
+                continue  # keep original financial record; no speculative conversion
         currencies[currency]["current_" + kind + "_confirmed"] += confirmed
+        if kind == "shipping":
+            currencies[currency]["current_shipping_expected"] += expected
         parts = str(obligation.get("id") or "").split(":", 2)
         oid = parts[1] if len(parts) > 1 else str(obligation.get("id"))
         party = str(obligation.get("party_id") or "")
         name = str(obligation.get("name") or "جهة غير مكتملة")
-        if expected:
-            if kind == "supplier":
-                component_id = parts[2] if len(parts) > 2 else ""
-                pid, sep, sid = component_id.partition(":service:")
-                physical = piece_index.get(pid)
-                received = supplier_receipt_proven(physical, engine_at)
-                if sep:
-                    plans = [s for s in (physical or {}).get("services", []) if str(s.get("service_id") or "") == sid]
-                    received = received and len(plans) == 1 and plans[0].get("status") == "completed"
-                if not received or not party:
-                    party, name = "", POOL_NAME
-                    stage = current_stages.get(oid, "unreceived")
-                    bucket = "poststart_supplier_unreceived"
-                else:
-                    stage, bucket = "received_without_approved_invoice", "poststart_supplier_received_uninvoiced"
-                currencies[currency][bucket] += expected
-            else:
-                stage = "not_delivered"
-            add("poststart", kind, stage, party, name, currency, expected, 1, oid)
+        if expected and kind == "shipping":
+            add("poststart", kind, "not_delivered", party, name, currency, expected, 1, oid)
         if confirmed:
             add("poststart", kind, "confirmed_in_financial_balances", str(obligation.get("party_id") or ""),
                 str(obligation.get("name") or "جهة غير مكتملة"), currency, confirmed, 1, oid)
+    component_complete = {"unreceived_products": True, "received_products": True, "shipping": True}
+    for code in issues:
+        if code == "historical_current_catalog_estimate_used":
+            continue
+        if "shipping" in code or "carrier" in code:
+            affected = ("shipping",)
+        elif code in {"prestart_order_postcutover_invoice_needs_reconciliation", "supplier_cost_currency_reconciliation_required"}:
+            # These are known invoiced items excluded from both open estimates.
+            # Keep a separate financial reconciliation warning, not unknown zero.
+            affected = ()
+        elif code == "product_order_status_unverified":
+            affected = ("unreceived_products",)
+        elif code == "current_cost_snapshot_time_incomplete":
+            affected = ("shipping",)  # product estimates were freshly read above
+        elif "supplier" in code or "product_cost" in code or "invoice" in code or "piece" in code:
+            affected = ("unreceived_products", "received_products")
+        else:
+            affected = tuple(component_complete)
+        for component in affected:
+            component_complete[component] = False
+    # Don't create foreign product cards from old confirmed-only order currencies.
+    currencies = {code: details for code, details in currencies.items()
+        if code == COST_CURRENCY or any(value for key, value in details.items() if "shipping_expected" in key)}
+    currencies.setdefault(COST_CURRENCY, {})  # a known empty SAR pool is still visible
     groups = [{"period": period, "kind": kind, "stage": stage, "party_id": party,
         "party_name": name, "party_type": kind, "currency": currency,
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
@@ -418,6 +453,8 @@ async def project(db, owner, state, *, as_of=None):
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
+        "product_cost_currency": COST_CURRENCY, "product_cost_basis": COST_BASIS,
+        "component_complete": component_complete,
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),
         "warning": "historical_preview_never_add_to_confirmed_or_expected_payable_without_owner_evidence"}

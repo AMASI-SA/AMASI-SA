@@ -47,6 +47,8 @@ export default function OperationalCostExposure({enabled = true, scopeKey = 'def
   const gaps = data?.issues || [];
   const incomplete = gaps.filter(item => item.code !== 'historical_current_catalog_estimate_used');
   const partial = data?.complete === false || incomplete.length > 0;
+  const componentPartial = name => data?.component_complete && typeof data.component_complete[name] === 'boolean'
+    ? !data.component_complete[name] : partial;
   const catalogEstimates = gaps.find(item => item.code === 'historical_current_catalog_estimate_used')?.count || 0;
   return <section className="op-cost-exposure" aria-label="تكاليف المنتجات والشحن المفتوحة">
     <div className="op-cost-header">
@@ -62,25 +64,26 @@ export default function OperationalCostExposure({enabled = true, scopeKey = 'def
     {!loading && !error && data?.status === 'frozen' && <p>النظام مجمد؛ لا نعرض بيانات التكاليف الحالية على أنها جزء من لقطة الإغلاق المحفوظة.</p>}
     {!loading && !error && data?.status === 'preview' && <>
       <p className="op-muted">آخر قراءة للطلبات الجديدة: {data.engine_as_of ? new Date(data.engine_as_of).toLocaleString('ar-SA') : 'غير مكتمل'} · معاينة القديمة: {data.as_of ? new Date(data.as_of).toLocaleString('ar-SA') : 'غير مكتمل'}</p>
+      {data.product_cost_currency === 'SAR' && <p className="op-muted">تكلفة المنتجات والخدمات بالريال السعودي من مصدر التكلفة، وليست بعملة دفع العميل ولا ناتجة عن تحويلها.</p>}
       {!entries.length && <p>لا توجد تكاليف مكتملة المصدر للعرض. افحص التنبيهات أدناه؛ عدم اكتمال التكلفة لا يعني أن قيمتها صفر.</p>}
       {entries.map(([currency, amounts]) => {
-        const unreceived = total(amounts, ['prestart_supplier_unreceived', 'poststart_supplier_unreceived'], partial);
-        const received = total(amounts, ['prestart_supplier_received_uninvoiced', 'poststart_supplier_received_uninvoiced'], partial);
-        const shipping = total(amounts, ['prestart_shipping_expected', 'current_shipping_expected'], partial);
+        const unreceived = total(amounts, ['prestart_supplier_unreceived', 'poststart_supplier_unreceived'], componentPartial('unreceived_products'));
+        const received = total(amounts, ['prestart_supplier_received_uninvoiced', 'poststart_supplier_received_uninvoiced'], componentPartial('received_products'));
+        const shipping = total(amounts, ['prestart_shipping_expected', 'current_shipping_expected'], componentPartial('shipping'));
         const totalOpen = [unreceived, received, shipping].some(value => value === null) ? null : unreceived + received + shipping;
         return <div className="op-cost-currency" key={currency}>
           <h4>التكاليف بعملة {currency}{partial ? ' — المعروف من التكاليف، وقد يكون جزئيًا' : ''}</h4>
           <div className="op-cost-cards">
             <article><span>منتجات لم تُستلم من المورد — قديمة وجديدة</span><strong>{fmt(unreceived)} {currency}</strong>
-              <small>تشمل المسندة للمورد ما دامت لم تُستلم فعليًا</small></article>
+              <small>غير المستلم فقط لطلبات انتظار المراجعة أو قيد التنفيذ، سواء أُسند أم لا</small></article>
             <article><span>منتجات استُلمت دون فاتورة معتمدة</span><strong>{fmt(received)} {currency}</strong>
-              <small>تُعرض باسم المورد فقط بعد إثبات الاستلام</small></article>
+              <small>تُعرض للمورد بعد إثبات الاستلام، ولا تُحتسب ثانية ضمن غير المستلم</small></article>
             <article><span>تكاليف شحن لم يتم توصيله</span><strong>{fmt(shipping)} {currency}</strong>
               <small>تقدير بحسب عقد شركة الشحن أو المندوب المعتمد</small></article>
             <article><span>إجمالي التكاليف التشغيلية المفتوحة</span><strong>{fmt(totalOpen)} {currency}</strong>
               <small>منتجات لم تُستلم + استُلمت دون فاتورة + شحنات لم تُسلّم. هذا إجمالي تقديري وليس دينًا مؤكدًا.</small></article>
           </div>
-          <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived', partial)} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived', partial)} {currency}.</p>
+          <p className="op-muted">المنتجات التي لم تُستلم: من الطلبات القديمة {value(amounts, 'prestart_supplier_unreceived', componentPartial('unreceived_products'))} {currency}، ومن الطلبات الجديدة {value(amounts, 'poststart_supplier_unreceived', componentPartial('unreceived_products'))} {currency}.</p>
         </div>;
       })}
       {catalogEstimates > 0 && <p role="status" className="op-cost-caution">توجد {catalogEstimates} تكلفة لطلب قديم قُدرت اعتمادًا على سعر التكلفة الحالي في كتالوج سلة، وليس سعرًا تاريخيًا معتمدًا وقت الطلب؛ تحقق منها قبل اعتماد قرار مالي.</p>}

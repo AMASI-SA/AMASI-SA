@@ -124,3 +124,28 @@ test('frozen financial system does not claim a live quote is a frozen balance', 
   expect(host.textContent).toContain('النظام مجمد');
   expect(host.querySelectorAll('.op-cost-cards')).toHaveLength(0);
 });
+
+test('shipping gaps do not replace complete product sections with unknown amounts', async () => {
+  api.costExposure.mockResolvedValue({status:'preview',complete:false,
+    product_cost_currency:'SAR',component_complete:{unreceived_products:true,received_products:true,shipping:false},
+    currencies:{SAR:{prestart_supplier_unreceived:'154.00',poststart_supplier_unreceived:'46.00'}},groups:[],
+    issues:[{code:'historical_shipping_unassigned',count:2}]});
+  await render();
+  const cards=host.querySelectorAll('.op-cost-cards article strong');
+  expect(cards[0].textContent).toBe('200.00 SAR');
+  expect(cards[1].textContent).toBe('0.00 SAR');
+  expect(cards[2].textContent).toBe('غير مكتمل SAR');
+  expect(cards[3].textContent).toBe('غير مكتمل SAR');
+  expect(host.textContent).toContain('ليست بعملة دفع العميل');
+  expect(host.textContent).toContain('انتظار المراجعة أو قيد التنفيذ');
+});
+
+test('product gaps do not erase an independently complete shipping zero', async () => {
+  api.costExposure.mockResolvedValue({status:'preview',complete:false,
+    component_complete:{unreceived_products:false,received_products:false,shipping:true},
+    currencies:{SAR:{}},groups:[],issues:[{code:'historical_supplier_cost_incomplete',count:1}]});
+  await render();
+  const cards=host.querySelectorAll('.op-cost-cards article strong');
+  expect(cards[0].textContent).toBe('غير مكتمل SAR');
+  expect(cards[2].textContent).toBe('0.00 SAR');
+});

@@ -142,11 +142,12 @@ def test_current_unreceived_and_historical_unreceived_are_visible_but_not_double
     db.data["unified_orders"].append(native_order(number="NEW", created="2026-11-01T07:00:00+00:00"))
     result = preview(db, operating_state(obligations))
     assert result["currencies"]["SAR"]["prestart_supplier_unreceived"] == "40.00"
-    assert result["currencies"]["SAR"]["poststart_supplier_unreceived"] == "80.00"
+    # The old engine quote is stale; recompute the native NEW item at SAR 40.
+    assert result["currencies"]["SAR"]["poststart_supplier_unreceived"] == "40.00"
     assert result["currencies"]["SAR"]["current_shipping_expected"] == "17.25"
     assert all(g["party_name"] == "منتجات لم تُستلم من المورد"
                for g in group(result) + group(result, period="poststart"))
-    assert result["currencies"]["SAR"]["current_supplier_expected"] == "80.00"
+    assert result["currencies"]["SAR"]["current_supplier_expected"] == "40.00"
 
 
 def test_prestart_shipping_quote_is_independent_of_delivery_and_supplier_cost():
@@ -269,7 +270,15 @@ def test_engine_source_gaps_mark_current_total_partial_instead_of_zero_complete(
     state["engine"]["issues"] = [{"code": "mz2_product_cost_incomplete"}]
     result = preview(seeded_db(), state)
     assert result["complete"] is False
-    assert "current_mz2_product_cost_incomplete" in codes(result)
+    # Product estimates are now freshly calculated from canonical cost sources;
+    # a stale engine warning must not invalidate a known current product quote.
+    assert "current_mz2_product_cost_incomplete" not in codes(result)
+    assert result["component_complete"]["unreceived_products"] is True
+    db = seeded_db(order_row=native_order(number="NEW", created="2026-11-01T01:00:00+00:00"))
+    db.data["mezan_product_cost_profiles_v2"] = []
+    current = preview(db, state)
+    assert "historical_supplier_cost_incomplete" in codes(current)
+    assert current["component_complete"]["unreceived_products"] is False
 
 
 def test_shipping_still_quoted_when_product_cost_is_missing():
