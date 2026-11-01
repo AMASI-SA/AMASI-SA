@@ -69,6 +69,35 @@ def test_sar_bank_debit_usd_ad_credit_and_separate_fee_are_atomic():
     run(scenario)
 
 
+
+@pytest.mark.parametrize("usd,gross,fee,net,bank_left,rate", [
+    ("100.50", "381.25", "4.38", "376.87", "618.75", "3.749950"),
+    ("0.01", "0.05", "0.01", "0.04", "999.95", "4.000000"),
+])
+def test_fractional_usd_and_sar_fees_are_exact_to_cent(usd, gross, fee, net, bank_left, rate):
+    async def scenario(db):
+        await setup(db)
+        payload = fx_payment(amount=usd, bank_amount=gross, bank_fee_amount=fee)
+        result = await create_movement(db, "owner", "owner", payload)
+        assert result["amount"] == usd
+        assert result["bank_amount"] == gross
+        assert result["bank_fee_amount"] == fee
+        assert result["bank_net_amount"] == net
+        assert result["effective_fx_rate_to_sar"] == rate
+        await create_movement(db, "owner", "owner", payload)
+        data = await read(db, "owner")
+        assert len(data["movements"]) == 1
+        report_data = report(data)
+        bank = next(row for row in report_data["parties"] if row["party_type"] == "bank")
+        ad = next(row for row in report_data["parties"] if row["party_type"] == "ad_account")
+        fees = next(row for row in report_data["parties"] if row["party_id"] == "advertising_bank_fx_fee")
+        assert bank["actual"] == bank_left
+        assert ad["outstanding_receivable"] == usd
+        assert fees["expense_paid"] == fee
+        assert report_data["summaries"]["SAR"]["actual_liquidity"] == bank_left
+    run(scenario)
+
+
 @pytest.mark.parametrize("update", [
     {"bank_currency": None},
     {"bank_amount": None},
