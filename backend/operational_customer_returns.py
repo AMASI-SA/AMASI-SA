@@ -207,6 +207,15 @@ async def save_case(db, owner, actor, payload, *, case_id=None, clock=None):
                 if observed['status'] != 'observed_requires_execution_evidence':
                     fail('customer_compensation_salla_evidence_missing',
                          'تعديل قيمة الطلب لا يثبت رد المبلغ؛ يلزم ظهور الاسترداد في بيانات سلة', 409)
+                # A platform-funded refund must debit ONLY the payment platform
+                # actually used on the Salla order. The merchant may select a
+                # different approved bank when refunding directly from a bank.
+                # Never infer the payment platform from a refund note or order total.
+                if kind == 'provider' and (
+                        not order.get('provider') or identity != order['provider']):
+                    fail('customer_compensation_provider_mismatch',
+                         'الاسترداد من منصة دفع يجب أن يطابق منصة الدفع الأصلية للطلب؛ '
+                         'إذا خرج المبلغ من البنك اختر حسابًا بنكيًا بدل المنصة', 409)
                 previously_recorded = sum((
                     money(r['amount']) for r in cases
                     if r['order_id'] == order['id'] and r.get('status') in {
