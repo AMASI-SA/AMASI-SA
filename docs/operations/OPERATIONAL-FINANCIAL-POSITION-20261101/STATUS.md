@@ -76,3 +76,24 @@ Production changed: no. Source merge: no. Release intent/build/lease/deployment:
 Issue1006 is recorded as full (2500 comments) by existing repository operational status documents. Keep this task document and its eventual task PR as the continuation record. Do not publish or clear another task's lease.
 
 Next safe action: fetch and verify the current task PR head and current production/prerequisite refs; establish prerequisite publication from release identity, then integrate its exact source into an isolated candidate. Resolve supplier/cost overlap and the financial gaps above, complete browser export/compact/print verification, rerun combined tests and CI, and only then enter the separate v5 source/intent release workflow. Until then keep PR1675 draft and unmerged. A successful source checkpoint is not production acceptance.
+
+## Continuation: old-order delivery slice
+
+The user requested continuation. The task branch was fetched and both local HEAD and FETCH_HEAD were verified as `c7bce336411aa85e6ebe9cb9df7750c19eb04010` with a clean worktree before new edits. Fresh prerequisite checks still found PR1673 and PR1674 draft/open/unmerged at the heads recorded above. Production source/release identity remained unchanged. For c7bce, the returned first CI page had 18 successes, the same inherited Security Gate dependency failure, and CodeQL/G47 still running at that read; this is not fresh CI acceptance for the new slice.
+
+Implemented in this checkpoint:
+
+- New pure `operational_delivery_evidence.py` proves an explicit post-start delivery against a unique owner-scoped assignment or current outbound shipment. It binds exact order/executor/event/time provenance, requires the native SAR contract, and rejects missing, stale, conflicting, inactive or superseded evidence. An unrelated source update is never used as a delivery time.
+- `operational_balance_sources.py` emits a separate `delivery_events` stream for old customer orders. It reuses the existing fee/COD calculation, quotes the fee at the proven delivery time, and keeps old orders out of the sales/product/provider/automatic-bank stream. It also marks source coverage for this event path.
+- `operational_balance_engine.py` independently validates the new stream, preserves existing shipping/COD obligation IDs and allocations, and freezes event provenance separately from older fact payloads. Old/exact-start delivery remains opening history.
+- Refund/cancellation signals, conflicting canonical totals, an unproved zero carrier COD, foreign fee currencies, and driver collections not bound to the same delivery instant remain visible. Invalid collection evidence cannot suppress independently proven base delivery fees or fabricate a zero commission.
+
+Fresh verification: **183 passed**, exit 0, including 65 pure event-boundary tests and 33 source-to-reducer/report cutover tests, plus existing source/supplier cutover regressions. The initial cutover regression failed for missing old-order fees/custody before the implementation. A real isolated Mongo scenario proves partial COD settlement, repeat refresh/idempotency, preservation of the fee, and absence of native ledger writes. Independent review identified four concrete gaps (refund fields, conflicting totals, collection timestamps and fee isolation), which were reproduced and fixed. Evidence: `.evidence/delivery-cutover-targeted.xml`.
+
+Command:
+
+```bash
+OPERATIONAL_TEST_MONGO_URI='mongodb://127.0.0.1:27305/?replicaSet=operationalprojection' PYTHONPATH=backend:backend/tests .venv/bin/python -B -m pytest --noconftest -q backend/tests/test_operational_balance_delivery_cutover.py backend/tests/test_operational_balance_delivery_evidence.py backend/tests/test_operational_balance_sources.py backend/tests/test_operational_balance_source_fixes.py backend/tests/test_operational_supplier_invoice_cutover.py --tb=short --junitxml=.evidence/delivery-cutover-targeted.xml
+```
+
+This is an explicitly incomplete continuation checkpoint, not a production acceptance. The report still needs its delivery-coverage presentation updated, the independent open-order COD forecast wired, and the operational bank/POS review path integrated and verified. These are being developed on separate owned surfaces; do not confuse uncommitted work with this checkpoint. Full integrated tests/CI must follow the combined freeze. The local Mongo test replica is running for those isolated tests. No production database writes, source merge, release intent, lease or deployment occurred.

@@ -264,35 +264,62 @@ def reconcile(state, sources, as_of):
             tax_evidence=deepcopy(receipt.get("tax_evidence")),
             **provenance, source_invoice_approved_at=receipt["accepted_at"])
 
-    for order in sources.get("orders", []):
+    order_inputs = [(order, False) for order in sources.get("orders", [])]
+    order_inputs.extend((order, True) for order in sources.get("delivery_events", []))
+    for order, delivery_only in order_inputs:
         oid = str(order.get("id", ""))
         checkpoint = (deepcopy(obligations), deepcopy(facts), deepcopy(engine["provider_reports"]), deepcopy(engine["cod_reports"]))
         try:
             created = instant(order["created_at"])
-            if not start <= created <= now:
+            if delivery_only:
+                event = order.get("delivery_event") or {}
+                carrier = order.get("carrier") or {}
+                delivered = instant(event.get("delivered_at"))
+                if (not oid or event.get("schema") != "operational_delivery_event_v1"
+                        or not event.get("id") or str(event.get("order_id")) != oid
+                        or event.get("order_number") != order.get("order_number")
+                        or instant(event.get("order_created_at")) != created
+                        or not created <= start < delivered <= now
+                        or instant(order.get("delivered_at")) != delivered
+                        or order.get("status") not in DELIVERED
+                        or order.get("currency") != "SAR" or event.get("currency") != "SAR"
+                        or event.get("party_type") not in {"courier", "store_driver"}
+                        or not event.get("party_id") or event.get("party_id") != carrier.get("id")
+                        or event.get("party_type") != carrier.get("party_type", carrier.get("kind"))):
+                    raise ValueError("operational_delivery_event_contract_invalid")
+                frozen_delivery = facts.get("shipping:" + oid)
+                if frozen_delivery and (frozen_delivery.get("id") != event["party_id"]
+                        or frozen_delivery.get("party_type") != event["party_type"]
+                        or instant(frozen_delivery["delivered_at"]) != delivered):
+                    raise ValueError("operational_delivery_confirmed_evidence_changed")
+                # Separate provenance preserves the payload of existing shipping
+                # facts and the obligation IDs used by recorded settlements.
+                fact("delivery_event:" + oid, deepcopy(event))
+            elif not start <= created <= now:
                 continue
             updated = instant(order.get("updated_at", order["created_at"]))
             if oid in versions and updated < instant(versions[oid]):
                 continue
             currency = order["currency"]
             cancelled = order.get("status") in CANCELLED
-            current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
-            for old_key, old_row in obligations.items():
-                if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
-                        and old_key not in current_item_keys):
-                    old_row["expected"] = "0.00"
-            for item in order.get("items", []):
-                iid = str(item["id"])
-                key = "supplier:" + oid + ":" + iid
-                total = money(item["cost"]) * money(item.get("quantity", 1))
-                relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
-                            and v["order_id"] == oid and v["item_id"] == iid}
-                received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
-                if received > total:
-                    issue("supplier_receipt_exceeds_estimate", key)
-                # Expected moves with the current assignment; confirmed is by actual receiver.
-                put(key, "supplier", item.get("supplier_id"), "supplier", currency,
-                    expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
+            if not delivery_only:
+                current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
+                for old_key, old_row in obligations.items():
+                    if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
+                            and old_key not in current_item_keys):
+                        old_row["expected"] = "0.00"
+                for item in order.get("items", []):
+                    iid = str(item["id"])
+                    key = "supplier:" + oid + ":" + iid
+                    total = money(item["cost"]) * money(item.get("quantity", 1))
+                    relevant = {k: v for k, v in facts.items() if k.startswith("receipt:")
+                                and v["order_id"] == oid and v["item_id"] == iid}
+                    received = sum((money(v.get("net_amount", v["amount"])) for v in relevant.values()), ZERO)
+                    if received > total:
+                        issue("supplier_receipt_exceeds_estimate", key)
+                    # Expected moves with the current assignment; confirmed is by actual receiver.
+                    put(key, "supplier", item.get("supplier_id"), "supplier", currency,
+                        expected=ZERO if cancelled else max(total - received, ZERO), business_date=created.date())
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)
@@ -396,7 +423,7 @@ def reconcile(state, sources, as_of):
                 for key, obligation in obligations.items():
                     if key == service_key or key.startswith(service_key + ":") or key == "cod:" + oid:
                         obligation["expected"] = "0.00"
-            if order.get("payment"):
+            if not delivery_only and order.get("payment"):
                 payment = dict(order["payment"], currency=currency)
                 provider_key = "provider:" + oid
                 provider_facts = deepcopy(facts)
@@ -589,6 +616,10 @@ def reconcile(state, sources, as_of):
     project_exchanges(result)
     from operational_balance_inventory import project_inventory
     project_inventory(result)
+    coverage = sources.get("delivery_event_coverage") or {}
+    if (coverage.get("version") == 1 and instant(coverage.get("started_at")) == start
+            and instant(coverage.get("as_of")) == now):
+        engine["delivery_event_coverage"] = deepcopy(coverage)
     engine["issues"] = issues
     reconcile_credits(result)
     before = state.get("engine", {}).get("obligations", {})
