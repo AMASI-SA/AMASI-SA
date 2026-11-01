@@ -80,6 +80,45 @@ test("current delivery refresh preserves unresolved submission recovery", async 
   expect(api.post.mock.calls.filter(([url]) => url.endsWith("delivery-proof"))).toHaveLength(1);
 });
 
+test.each([401, 409])("a rejected retry (%s) cannot discard an earlier uncertain completion after removal", async retryStatus => {
+  const state = await renderCurrentDeliveryApp();
+  await click("تم التوصيل");
+  await file("صورة إثبات تسليم الطلب");
+  let attempts = 0;
+  api.post.mockImplementation(async url => {
+    if (url.endsWith("delivery-proof")) return { data: { proof_reference: "original-proof" } };
+    attempts += 1;
+    if (attempts <= 2) throw Object.assign(new Error("result not established"), { response: { status: attempts === 1 ? 503 : retryStatus } });
+    return { data: { status: "delivered" } };
+  });
+  await click("تأكيد تم التوصيل");
+  state.items = [];
+  await click("تحديث");
+  await click("إعادة إرسال التأكيد نفسه");
+  expect(node.textContent).toContain("إعادة إرسال التأكيد نفسه");
+  expect(node.querySelector('[aria-label="إغلاق"]').disabled).toBe(true);
+  await click("إعادة إرسال التأكيد نفسه");
+  const posts = api.post.mock.calls.filter(([url]) => url.endsWith("/deliveries/status"));
+  expect(posts).toHaveLength(3);
+  expect(posts[1][1]).toEqual(posts[0][1]);
+  expect(posts[2][1]).toEqual(posts[0][1]);
+  expect(api.post.mock.calls.filter(([url]) => url.endsWith("delivery-proof"))).toHaveLength(1);
+  expect(node.textContent).not.toContain("إكمال التوصيل والتحصيل");
+});
+
+test("a definitive first validation rejection leaves completion editable", async () => {
+  await render(0);
+  await file("صورة إثبات تسليم الطلب");
+  api.post.mockImplementation(async url => {
+    if (url.endsWith("delivery-proof")) return { data: { proof_reference: "original-proof" } };
+    throw Object.assign(new Error("validation rejected"), { response: { status: 400 } });
+  });
+  await submit();
+  expect(node.textContent).not.toContain("إعادة إرسال التأكيد نفسه");
+  expect(node.querySelector('[aria-label="إغلاق"]').disabled).toBe(false);
+  expect(node.querySelector('[aria-label="صورة إثبات تسليم الطلب"]').disabled).toBe(false);
+});
+
 test("an older background response cannot restore a removed current delivery", async () => {
   jest.useFakeTimers();
   try {
@@ -184,7 +223,7 @@ test("accountant reuse reads only supplied driver endpoint and refreshes after e
   await act(async () => root.render(<DriverPhysicalCash endpoint={endpoint} refreshKey={1} />));
   expect(api.get.mock.calls).toEqual([[endpoint], [endpoint]]); expect(api.post).not.toHaveBeenCalled();
 });
-test.each([undefined, 503])("lost cash response (%s) retries identical payload without uploading another proof", async status => {
+test.each([undefined, 408, 503])("lost cash response (%s) retries identical payload without uploading another proof", async status => {
   await render(); await click("كاش"); await change("النقد المستلم فعليًا", "80.25");
   await act(async () => node.querySelector('[type="checkbox"]').click()); await file("صورة إثبات تسليم الطلب");
   let attempts = 0;

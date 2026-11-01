@@ -300,7 +300,9 @@ export function DeliveryPaymentModal({ assignment, isCurrent = true, banks, onCl
       toast.success("تم تسجيل التوصيل وبيانات التحصيل");
       await onSaved(response.data);
     } catch (failure) {
-      if (failure?.response?.status >= 400 && failure.response.status < 500) setPending(null);
+      const status = failure?.response?.status;
+      // A rejected retry does not establish the earlier uncertain write's result.
+      if (!pending && status >= 400 && status < 500 && status !== 408) setPending(null);
       setError(failure?.response?.data?.detail?.code || "تعذر إكمال التوصيل؛ تحقق من الحالة قبل إعادة المحاولة");
     } finally {
       setBusy(false);

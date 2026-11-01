@@ -14,7 +14,7 @@ Only orders whose current synchronized Salla status is **delivering / جاري �
 - Canonical identities must match unambiguously. A missing second identity is supported; an explicit contradiction is rejected.
 - GETs perform no order, assignment, receipt, earning or collection write and make no per-order Salla request. Tenant and driver scoping remain enforced.
 - The mixed web `/deliveries` surface retains locally delivered historical rows needed for late evidence and rejected receipt recovery. Native home/search contain current work only. Financial reports continue to read durable history.
-- The web UI clears removed selected details and ignores superseded refresh responses. An unsubmitted completion form receives current amounts and closes when its delivery is no longer current. Removal during proof upload prevents a new status submission. An unresolved submission retains its source snapshot, exact payload/proof and explicit retry path independently from the selected detail.
+- The web UI clears removed selected details and ignores superseded refresh responses. An unsubmitted completion form receives current amounts and closes when its delivery is no longer current. Removal during proof upload prevents a new status submission. An unresolved submission retains its source snapshot, exact payload/proof and explicit retry path independently from the selected detail. HTTP 408 and a rejected retry cannot discard an earlier uncertain attempt; a definitive first validation rejection remains editable.
 - The existing Store Delivery CI test command includes the new HTTP regression suite.
 
 ## Verification
@@ -35,13 +35,13 @@ PYTHONPATH=backend /tmp/mezan-driver-tests/bin/pytest -q \
 
 CI=true node node_modules/react-scripts/bin/react-scripts.js test \
   --watchAll=false --runInBand --runTestsByPath src/pages/AmasiDeliveryApp.test.jsx
-29 passed; exit 0
+33 passed; exit 0
 
 git diff --check
 exit 0
 ```
 
-The web regression first failed on stale selected details and an unsubmitted form; its pending-submission preservation control already passed. The final suite also checks an older background response cannot restore a removed delivery. Backend HTTP checks use a Mongo-compatible in-memory database and mocked provider boundaries. They exercise both registered home/search implementations, non-delivery statuses, conflicting/missing/sparse identities, tenant isolation and unchanged history/financial records.
+The web regression first failed on stale selected details and an unsubmitted form; its pending-submission preservation control already passed. The final suite also checks an older background response cannot restore a removed delivery. The follow-up reproduced three failures before its correction: an unknown first result followed by retry 401 or 409 discarded the form, and an initial HTTP 408 unlocked its payload. The initial validation-rejection control already passed. Backend HTTP checks use a Mongo-compatible in-memory database and mocked provider boundaries. They exercise both registered home/search implementations, non-delivery statuses, conflicting/missing/sparse identities, tenant isolation and unchanged history/financial records.
 
 The sandboxed TestClient initially stalled in the AnyIO cross-thread portal. The two stalled test processes were stopped. The same unchanged tests completed outside that namespace sandbox; they did not use production credentials, data or provider calls. A Starlette TestClient deprecation warning is unrelated to the change.
 
@@ -55,4 +55,6 @@ Production changed: **no**. No production merge, release intent, lease, deployme
 
 Issue #1006 has reached GitHub's 2,500-comment limit (confirmed in its final continuation entry). This task's PR body and this document provide the durable continuation record instead of another failed ledger write.
 
-Next: preserve exact source remotely, finish independent review and CI, link the native companion, then request the final production/native release authorization with these concrete results.
+Initial remote source checkpoint: `5569b23c1a0199a2461675ccf05fc1649eb4fde4` (tree `3a52ae8920eb6fc42738346a599e2dcd3e931db4`). The PR head records the exact follow-up checkpoint containing the additional uncertain-retry correction above.
+
+Next: preserve the follow-up remotely, finish independent review and CI, link the native companion, then request the final production/native release authorization with these concrete results.
