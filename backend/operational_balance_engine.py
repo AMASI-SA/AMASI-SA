@@ -223,7 +223,8 @@ def reconcile(state, sources, as_of):
                     proof = facts.get(proof_key)
                     # Customer payment proof can complete later while custody remains
                     # the same immutable zero for bank/card collections.
-                    if (proof is None and executor_matches and cod_evidence.get("collection_confirmed") is True
+                    if (proof is None and executor_matches and cod_evidence.get("evidence_complete") is True
+                            and cod_evidence.get("collection_confirmed") is True
                             and original.get("collection_confirmed") is False
                             and original.get("payment_method") in {"bank_transfer", "card_terminal"}
                             and cod_evidence.get("payment_method") == original.get("payment_method")
