@@ -20,6 +20,8 @@ DEFINITIVE_MOVEMENT_REJECTIONS = {
     "operational_ad_debt_priority_required",
     "operational_wallet_movement_unsupported", "operational_wallet_pool_allocation_unsupported",
     "operational_wallet_balance_invalid",
+    "operational_ad_fx_invalid", "operational_ad_fx_fields_incomplete",
+    "operational_ad_fx_reference_required", "operational_ad_fx_rate_invalid",
     "operational_custody_insufficient", "operational_bank_required",
     "operational_bank_setup_incomplete", "operational_custody_source_invalid",
     "operational_custody_movement_invalid", "operational_expense_direction_invalid",
@@ -193,6 +195,30 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         amount = money(payload["amount"])
         currency = payload["currency"]
         row = await entity(db, owner, payload["party_type"], payload["party_id"], currency)
+        # Cross-currency advertising requires two independently evidenced legs:
+        # credited USD advertising amount, and total debited SAR including bank fee.
+        fx_fields = ("bank_currency", "bank_amount", "bank_fee_amount")
+        has_fx = any(payload.get(field) is not None for field in fx_fields)
+        bank_gross = bank_fee = bank_net = fx_rate = None
+        if has_fx:
+            if any(payload.get(field) is None for field in fx_fields):
+                fail("operational_ad_fx_fields_incomplete", "أدخل قيمة الإيداع بالدولار، وخصم البنك بالريال، والعمولة بالريال", 422)
+            if (row["kind"] != "ad_account" or currency != "USD"
+                    or payload["bank_currency"] != "SAR" or payload.get("source_account_type") != "bank"
+                    or payload["direction"] != "outgoing"
+                    or payload["kind"] not in {"payment", "wallet_funding"}):
+                fail("operational_ad_fx_invalid", "تحويل الدولار متاح للدفع الإعلاني من بنك بالريال فقط", 422)
+            bank_gross = money(payload["bank_amount"])
+            bank_fee = money(payload["bank_fee_amount"], zero=True)
+            if bank_fee >= bank_gross:
+                fail("operational_ad_fx_invalid", "العمولة البنكية يجب أن تكون أقل من المبلغ المخصوم من البنك", 422)
+            bank_net = bank_gross - bank_fee
+            # This is an evidenced effective rate, not the daily advertising-spend FX rate.
+            fx_rate = (bank_net / amount).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+            if fx_rate < Decimal("2") or fx_rate > Decimal("6"):
+                fail("operational_ad_fx_rate_invalid", "تأكد من المبلغ بالدولار والريال؛ سعر التحويل المحسوب غير معقول", 422)
+            if len(str(payload.get("reference") or "").strip()) < 3:
+                fail("operational_ad_fx_reference_required", "أدخل مرجع عملية البنك لتوثيق الخصم ومنع التكرار", 422)
         wallet_pool = row["kind"] == "ad_account" and wallet_pool_enabled(state, row["id"], currency)
         if wallet_pool:
             if payload["direction"] != "outgoing" or payload["kind"] not in {"payment", "wallet_funding"}:
@@ -213,7 +239,7 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
             try:
                 account_kinds = ("bank", "cash") if account_type == "bank_auto" else (account_type,)
                 banks = [r for k in account_kinds for r in await entities(db, owner, k)
-                         if r["id"] == payload["bank_id"] and r.get("currency") == currency
+                         if r["id"] == payload["bank_id"] and r.get("currency") == ("SAR" if has_fx else currency)
                          and r.get("ready") is not False and r.get("settings_complete") is not False]
             except ValueError:
                 fail("operational_bank_setup_incomplete", "إعداد البنوك والصناديق في ميزان 2 غير مكتمل")
@@ -348,6 +374,10 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 "bank_kind": bank["kind"] if bank else None, "bank_name": bank["name"] if bank else None,
                 "funding_mode": row.get("funding_mode"),
                 "receipt_hash": receipt["sha256"] if receipt else None}
+        if has_fx:
+            item.update(bank_currency="SAR", bank_amount=fmt(bank_gross),
+                        bank_fee_amount=fmt(bank_fee), bank_net_amount=fmt(bank_net),
+                        effective_fx_rate_to_sar=f"{fx_rate:.6f}")
         if wallet_pool:
             item["funding_policy"] = "wallet_first"
             item["wallet_first_allocation"] = {
@@ -558,10 +588,20 @@ def report(state, *, as_of=None):
         amount = Decimal(movement["amount"])
         signed = amount if movement["direction"] == "incoming" else -amount
         if movement.get("bank_id"):
-            row = get(movement["bank_kind"], movement["bank_id"], movement["currency"], movement.get("bank_name"))
-            row["actual"] += signed
+            bank_amount = Decimal(movement.get("bank_amount") or movement["amount"])
+            bank_currency = movement.get("bank_currency") or movement["currency"]
+            row = get(movement["bank_kind"], movement["bank_id"], bank_currency, movement.get("bank_name"))
+            row["actual"] += bank_amount if signed > 0 else -bank_amount
             if movement["bank_kind"] == "employee_custody":
                 row["custody_spent"] += amount
+        if movement.get("bank_fee_amount") is not None:
+            bank_fee = Decimal(movement["bank_fee_amount"])
+            if bank_fee > 0:
+                # Evidence-backed separate fee; cash was debited gross once above.
+                fee_account = get("operating_expense", "advertising_bank_fx_fee", "SAR",
+                                  "عمولات البنك لتمويل الإعلانات")
+                fee_account["actual"] += bank_fee
+                fee_account["expense_paid"] += bank_fee
         party = get(movement["party_type"], movement["party_id"], movement["currency"], movement.get("name"))
         if movement["party_type"] == "ad_account" and wallet_pool_enabled(state, movement["party_id"], movement["currency"]):
             party["actual"] -= signed
@@ -748,13 +788,19 @@ def account_statement(state, account):
                     and r['party_id']==identity and r['currency']==currency), {})
     items = []
     for movement in state['movements']:
-        if movement['currency'] != currency:
+        bank_leg = (movement.get('bank_kind') == kind and movement.get('bank_id') == identity
+                    and (movement.get('bank_currency') or movement['currency']) == currency)
+        party_leg = (movement['party_type'] == kind and movement['party_id'] == identity
+                     and movement['currency'] == currency)
+        if not bank_leg and not party_leg:
             continue
-        signed = Decimal(movement['amount']) * (1 if movement['direction']=='incoming' else -1)
+        direction = 1 if movement['direction']=='incoming' else -1
         effect = Decimal(0)
-        if movement.get('bank_kind')==kind and movement.get('bank_id')==identity:
-            effect += signed
-        if movement['party_type']==kind and movement['party_id']==identity:
+        if bank_leg:
+            # A USD ad funding payment may debit a SAR bank including its fee.
+            effect += Decimal(movement.get('bank_amount') or movement['amount']) * direction
+        if party_leg:
+            signed = Decimal(movement['amount']) * direction
             if movement['kind']=='transfer':
                 effect -= signed
             elif movement['kind']=='correction' and not movement.get('bank_id'):
@@ -767,7 +813,11 @@ def account_statement(state, account):
         items.append({'id':movement['id'], 'name':movement.get('name') or account['name'],
             'amount':fmt(abs(effect)), 'currency':currency, 'direction':'incoming' if effect>0 else 'outgoing',
             'business_date':business_day, 'occurred_at':stamp, 'reference':movement.get('reference',''),
-            'note':movement.get('note',''), 'kind':movement['kind']})
+            'note':movement.get('note',''), 'kind':movement['kind'],
+            **({'ad_amount': movement['amount'], 'ad_currency': movement['currency'],
+                'bank_fee_amount': movement['bank_fee_amount'],
+                'effective_fx_rate_to_sar': movement['effective_fx_rate_to_sar']}
+               if movement.get('bank_currency') else {})})
     if kind=='bank':
         for case in state.get('customer_returns',[]):
             if (case['status']!='refunded' or case['refund_source_type']!='bank'
