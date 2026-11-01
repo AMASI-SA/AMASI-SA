@@ -110,6 +110,9 @@ class ReturnItem(Input):
 class CustomerReturn(Request):
     expected_session_scope: str = Field(min_length=64, max_length=64)
     order_number: str = Field(min_length=1, max_length=160)
+    # Existing returns remain item-scoped by default. A compensation is an
+    # order-level financial adjustment: no returned items or stock movement.
+    case_type: Literal["item_return", "order_compensation"] = "item_return"
     items: list[ReturnItem] = Field(default_factory=list, max_length=1000)
     status: Literal["pending", "refunded"] = "pending"
     amount: str | None = Field(default=None, max_length=30)
@@ -454,6 +457,8 @@ def make_operational_balance_router(db, current_user):
         # Write-only users get the minimum case state required to enter/continue
         # an operation, not invoice/contribution histories or balance summaries.
         fields=("id","order_number","items","shipping","status","purchase_status")
+        if kind=="returns":
+            fields += ("case_type","agreed_amount","note")
         if kind=="returns" and case.get("status")=="refunded" and case.get("shipping",{}).get("kind")!="none" and case.get("shipping",{}).get("status")!="completed":
             fields += ("amount","refund_source_type","refund_source_id","refund_reference","refunded_at")
         return {key:case[key] for key in fields if key in case}
