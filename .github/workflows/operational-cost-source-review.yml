@@ -8,7 +8,7 @@ permissions:
 jobs:
   source-evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,6 +21,9 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/cost-review/COMMIT.txt"
           git archive --format=tar.gz --output="$RUNNER_TEMP/cost-review/review-source.tar.gz" HEAD AGENTS.md backend frontend scripts .github
           sha256sum "$RUNNER_TEMP/cost-review/review-source.tar.gz" > "$RUNNER_TEMP/cost-review/SHA256SUMS"
+      - name: Download pinned offline test wheels only
+        run: |
+          python3 -m pip download pymongo==4.18.2 dnspython==2.9.1 --platform manylinux2014_x86_64 --python-version 313 --implementation cp --abi cp313 --only-binary=:all: --dest "$RUNNER_TEMP/cost-review/wheels"
       - uses: actions/upload-artifact@v4
         with:
           name: operational-cost-review-source
