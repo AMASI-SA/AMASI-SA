@@ -333,3 +333,127 @@ def test_invalid_salla_refund_observation_is_not_financial_evidence(value):
         assert view['salla_refund_observation']['amount'] is None
         assert report(await read(db,'owner'))['summary']['actual_liquidity'] == '1000.00'
     run(scenario)
+
+
+def confirmed_compensation(**patch):
+    return compensation(status='salla_refund_confirmed', refund_source_type='provider',
+                        refund_source_id='salla', **patch)
+
+
+async def add_refund_evidence(db, amount='20.00', new_total='150'):
+    await db.unified_orders.update_one({'user_id':'owner'}, {'$set':{
+        'raw_by_source.salla_direct.total':new_total,
+        'raw_by_source.salla_direct.payment_actions.refund_action.refunded_transactions':[
+            {'payment_method':'mada','amount':{'amount':amount,'currency':'SAR'}}
+        ]}})
+
+
+def test_manual_salla_refund_source_debits_once_without_reducing_net_sale():
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        before=report(await read(db,'owner'))
+        p=confirmed_compensation()
+        saved=await save_case(db,'owner','staff',p,clock=NOW)
+        again=await save_case(db,'owner','staff',p,clock=NOW)
+        assert saved==again and saved['financial_effect']=='confirmed_provider_refund_debit'
+        state=await read(db,'owner')
+        assert len(state['customer_returns'])==1 and len(state['movements'])==0
+        after=report(state)
+        source=next(r for r in after['parties']
+                    if r['party_type']=='provider' and r['party_id']=='salla')
+        assert source['actual']=='-20.00'
+        assert source['customer_refunds_manual_debited']=='20.00'
+        assert after['summaries']['SAR']['actual_liquidity']==before['summaries']['SAR']['actual_liquidity']
+        assert after['details']['manual_customer_refunds'][0]['source_id']=='salla'
+        assert after['details']['manual_customer_refunds'][0]['amount']=='20.00'
+        view=await order_view(db,'owner','1001')
+        assert view['total']=='150.00'
+        assert view['salla_refunds_documented']=='20.00'
+        assert view['salla_refunds_confirmed_source']=='20.00'
+        assert view['items'][0]['remaining']==2
+        with pytest.raises(HTTPException) as duplicate:
+            await save_case(db,'owner','staff',confirmed_compensation(request_id='second-request'),clock=NOW)
+        assert duplicate.value.detail['code']=='customer_compensation_duplicate'
+        assert duplicate.value.detail.get('not_applied') is True
+        assert len((await read(db,'owner'))['customer_returns'])==1
+    run(scenario)
+
+
+def test_manual_bank_refund_debits_one_bank_account_and_appears_in_statement():
+    async def scenario(db):
+        from operational_balance_service import account_statement
+        from operational_balance_sources import entities
+        await fixture(db)
+        await add_refund_evidence(db)
+        p=compensation(status='salla_refund_confirmed',refund_source_type='bank',refund_source_id='bank')
+        saved=await save_case(db,'owner','staff',p,clock=NOW)
+        assert saved['financial_effect']=='confirmed_bank_refund_debit'
+        state=await read(db,'owner')
+        summary=report(state)
+        bank=next(r for r in summary['parties'] if r['party_type']=='bank' and r['party_id']=='bank')
+        assert bank['actual']=='980.00'
+        assert bank['customer_refunds_manual_debited']=='20.00'
+        assert summary['summaries']['SAR']['actual_liquidity']=='980.00'
+        account=next(a for a in await entities(db,'owner','bank') if a['id']=='bank')
+        statement=account_statement(state,account)
+        assert len(statement['items'])==1
+        assert statement['items'][0]['amount']=='20.00'
+        assert statement['items'][0]['direction']=='outgoing'
+        assert statement['items'][0]['reference']=='salla-refund-20-001'
+        assert (await order_view(db,'owner','1001'))['total']=='150.00'
+        assert not state['movements']  # no second payment API call or automatic bank transfer
+    run(scenario)
+
+
+@pytest.mark.parametrize('patch', [
+    {'refund_source_type':None,'refund_source_id':None},
+    {'refund_source_id':'foreign'},
+    {'refund_source_type':'cash','refund_source_id':'bank'},
+    {'already_refunded_in_salla':False},
+    {'items':[{'id':'a','quantity':1}]},
+    {'status':'pending'},
+    {'amount':'21.00'},
+    {'amount':'0.001'},
+    {'note':'no'},
+    {'refund_reference':''},
+    {'shipping_kind':'courier','shipping_id':'carrier'},
+])
+def test_confirmed_source_refund_invalid_fields_do_not_debit_any_balance(patch):
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        with pytest.raises(HTTPException):
+            await save_case(db,'owner','staff',confirmed_compensation(**patch),clock=NOW)
+        state=await read(db,'owner')
+        assert not state.get('customer_returns',[])
+        assert report(state)['summaries']['SAR']['actual_liquidity']=='1000.00'
+    run(scenario)
+
+
+def test_salla_order_value_change_alone_never_triggers_refund_source_debit():
+    async def scenario(db):
+        await fixture(db)
+        await db.unified_orders.update_one({'user_id':'owner'},{
+            '$set':{'raw_by_source.salla_direct.total':'150'}})
+        with pytest.raises(HTTPException) as exc:
+            await save_case(db,'owner','staff',confirmed_compensation(),clock=NOW)
+        assert exc.value.detail['code']=='customer_compensation_salla_evidence_missing'
+        state=await read(db,'owner')
+        assert not state.get('customer_returns',[])
+        assert report(state)['summaries']['SAR']['actual_liquidity']=='1000.00'
+        assert (await order_view(db,'owner','1001'))['total']=='150.00'
+    run(scenario)
+
+
+def test_record_only_compensation_cannot_be_reconfirmed_and_debited_later():
+    async def scenario(db):
+        await fixture(db)
+        await add_refund_evidence(db)
+        await save_case(db,'owner','staff',compensation(),clock=NOW)
+        with pytest.raises(HTTPException):
+            await save_case(db,'owner','staff',confirmed_compensation(request_id='new-intent'),clock=NOW)
+        state=await read(db,'owner')
+        assert len(state.get('customer_returns',[]))==1
+        assert report(state)['summaries']['SAR']['actual_liquidity']=='1000.00'
+    run(scenario)
