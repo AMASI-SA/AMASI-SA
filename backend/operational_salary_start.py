@@ -138,6 +138,33 @@ async def _sources(db, owner):
     return out
 
 
+async def read_context(db, owner, actor, *, clock=None):
+    """Owner-only read of the exact cutoff and validated policy; no projection/write."""
+    from operational_balance_store import read, now, digest, fail
+    from operational_balance_service import active_gate
+    await _owner(db, owner, actor)
+    state = await read(db, owner)
+    await active_gate(db, owner, state)
+    stamp = clock or now()
+    try:
+        started = instant(state['started_at'])
+        if instant(stamp) < started:
+            raise ValueError('operational_salary_start_not_active')
+        first = started.astimezone(RIYADH).date().isoformat()
+        effective = select_first_day(state, stamp).isoformat()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        fail('operational_salary_start_context_invalid', 'تعذر التحقق من بداية الرواتب المحفوظة؛ يلزم مراجعة الإعدادات', 409)
+    policy = state.get(POLICY_KEY)
+    await _owner(db, owner, actor)
+    await active_gate(db, owner, state)
+    return {'source': 'operational_salary_cutover', 'read_only': True,
+            'started_at': state['started_at'], 'first_day': first,
+            'effective_first_day': effective, 'timezone': 'Asia/Riyadh',
+            'approved': policy is not None,
+            'approved_at': policy['approved_at'] if policy is not None else None,
+            'session_scope': digest([owner, actor]), 'as_of': stamp}
+
+
 async def preview(db, owner, actor, first_day, *, clock=None):
     from operational_balance_store import read, now, digest, fail
     from operational_balance_service import active_gate

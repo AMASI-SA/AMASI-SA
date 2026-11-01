@@ -2,6 +2,9 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  salaryStartContext: () => data(api.get(`${base}/salary-start/context`)),
+  previewSalaryStart: body => data(api.post(`${base}/salary-start/preview`, body)),
+  approveSalaryStart: body => data(api.post(`${base}/salary-start/approve`, body)),
   adFundingSettings: () => data(api.get(`${base}/ad-funding-settings`)),
   saveAdFundingSettings: body => data(api.post(`${base}/ad-funding-settings`, body)),
   inventoryOpeningContext: () => data(api.get(`${base}/inventory-opening/context`)),

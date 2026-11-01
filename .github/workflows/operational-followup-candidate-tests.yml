@@ -5,6 +5,7 @@ on:
     branches: [fix/operational-financial-followup-20261101]
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - '.github/workflows/operational-followup-candidate-tests.yml'
   workflow_dispatch:
 
@@ -85,6 +86,56 @@ jobs:
       - name: Remove this job's disposable database container
         if: always()
         run: docker rm --force operational-followup-rs
+
+  frontend:
+    if: github.ref == 'refs/heads/fix/operational-financial-followup-20261101'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - name: Install locked test dependencies
+        run: |
+          corepack enable && corepack prepare yarn@1.22.22 --activate
+          yarn install --frozen-lockfile --non-interactive
+      - name: Test payroll UI with existing operational and supplier pages
+        env:
+          CI: 'true'
+        run: >-
+          node node_modules/react-scripts/bin/react-scripts.js test --watchAll=false --runInBand
+          --testMatch '**/src/pages/operational/**/*.test.{js,jsx,ts,tsx}'
+          '**/MezanSuppliersV2.test.jsx' '**/OperationalSupplierAccount.test.jsx'
+          '**/mezanSuppliersV2.test.js' '**/SupplierPaymentWorkspace.test.jsx'
+          '**/MezanV2NavigationShell.test.jsx' '**/MezanV2NavigationShell.employees.test.jsx'
+          --json --outputFile=../operational-followup-frontend.json
+      - name: Require new payroll cases and reject incomplete frontend acceptance
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('../operational-followup-frontend.json', 'utf8'));
+          if (!data.success || data.numFailedTests || data.numPendingTests || data.numFailedTestSuites || data.numPendingTestSuites) throw Error('Frontend acceptance incomplete');
+          for (const name of ['SalaryStart.test.jsx', 'salaryStartApi.test.js']) {
+            const suite = data.testResults.find(r => r.name.endsWith('/' + name));
+            if (!suite || !suite.assertionResults.length || suite.assertionResults.some(r => r.status !== 'passed')) throw Error('Payroll acceptance missing: ' + name);
+          }
+          console.log('Verified', data.numPassedTests, 'frontend tests in', data.numPassedTestSuites, 'suites');
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: operational-followup-frontend-${{ github.sha }}
+          path: operational-followup-frontend.json
+          if-no-files-found: error
+          retention-days: 14
 
 # No production environment, application startup, credentials, release build,
 # financial backfill, shared workspace, lease, branch write or deployment.

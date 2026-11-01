@@ -507,6 +507,7 @@ def make_operational_balance_router(db, current_user):
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
                 "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
                 "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
+                "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
@@ -596,6 +597,12 @@ def make_operational_balance_router(db, current_user):
         if not existing or existing.get("operational_request_hash") != row["operational_request_hash"]:
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
+
+    @router.get("/salary-start/context")
+    async def salary_start_context(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import read_context
+        return await read_context(db, owner, actor["id"])
 
     @router.post("/salary-start/preview")
     async def salary_start_preview(payload: SalaryStartPreview, user=Depends(current_user)):
