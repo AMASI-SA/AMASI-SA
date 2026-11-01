@@ -90,8 +90,12 @@ jobs:
           verify_release_intent_git(d)
           print('PASS reviewed B: source A exactly parent, release intent only')
           PY
-          if git ls-remote --exit-code --heads origin "$DEST_BRANCH" >/dev/null; then
-            echo "::error::Reviewed B branch already exists; refusing to replace it"
+          # The connector pre-created B as an exact copy of A; this avoids the
+          # GitHub workflow-scope timeout when creating a new ref containing many
+          # pre-existing workflow paths. Refuse any moved or divergent target.
+          remote_source="$(git ls-remote --heads origin "refs/heads/$DEST_BRANCH" | awk '{print $1}')"
+          if test "$remote_source" != "$SOURCE_A"; then
+            echo "::error::Reviewed B target is not exactly source A; refusing overwrite"
             exit 1
           fi
           git push origin "HEAD:refs/heads/$DEST_BRANCH"
