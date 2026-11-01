@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import re
-from operational_product_cost_policy import COST_CURRENCY, COST_BASIS, order_unreceived_stage, unreceived_stage, require_sar_cost
+from operational_product_cost_policy import COST_CURRENCY, COST_BASIS, order_unreceived_stage, unreceived_stage, order_status_known, require_sar_cost
 
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
@@ -88,6 +88,7 @@ def _coverage(data, suppliers, started, stamp, issues):
                 if line.get("quantity") is not None and number(line["quantity"]) != len(ids):
                     raise ValueError("supplier_invoice_component_incomplete")
             try:
+                require_sar_cost(invoice)
                 invoice_component_amounts(invoice)
             except (ValueError, KeyError, TypeError):
                 raise ValueError("supplier_invoice_tax_or_amount_incomplete") from None
@@ -175,6 +176,8 @@ async def project(db, owner, state, *, as_of=None):
             continue
         period = "poststart" if created > started else "prestart"
         stage = order_unreceived_stage(raw)
+        if not order_status_known(raw):
+            issues["product_order_status_unverified"] += 1
         current_stages[oid] = stage
         # Status filters UNRECEIVED work only. Received work survives a change
         # to completed/shipped/cancelled without becoming unreceived again.
@@ -428,6 +431,8 @@ async def project(db, owner, state, *, as_of=None):
             # These are known invoiced items excluded from both open estimates.
             # Keep a separate financial reconciliation warning, not unknown zero.
             affected = ()
+        elif code == "product_order_status_unverified":
+            affected = ("unreceived_products",)
         elif code == "current_cost_snapshot_time_incomplete":
             affected = ("shipping",)  # product estimates were freshly read above
         elif "supplier" in code or "product_cost" in code or "invoice" in code or "piece" in code:
@@ -436,11 +441,10 @@ async def project(db, owner, state, *, as_of=None):
             affected = tuple(component_complete)
         for component in affected:
             component_complete[component] = False
-    if not currencies:
-        currencies[COST_CURRENCY]  # known empty sections can display genuine zero
     # Don't create foreign product cards from old confirmed-only order currencies.
     currencies = {code: details for code, details in currencies.items()
         if code == COST_CURRENCY or any(value for key, value in details.items() if "shipping_expected" in key)}
+    currencies.setdefault(COST_CURRENCY, {})  # a known empty SAR pool is still visible
     groups = [{"period": period, "kind": kind, "stage": stage, "party_id": party,
         "party_name": name, "party_type": kind, "currency": currency,
         "amount": _fmt(v["amount"]), "units": v["units"], "orders": len(v["orders"])}
