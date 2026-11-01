@@ -290,8 +290,9 @@ def test_compensation_record_via_mobile_native_endpoint_never_posts_bank():
             assert response.status_code == 200,response.text
             assert response.json()['status'] == 'salla_refund_recorded'
             assert response.json()['case_type'] == 'order_compensation'
-            # Write-only native users get only a minimal case view.
-            assert 'financial_effect' not in response.json()
+            # Native writers receive the scoped receipt result, including
+            # whether this was documentary only or a real source debit.
+            assert response.json()['financial_effect']=='none_already_refunded_in_salla'
             again = await c.post('/api/operational-balances/customer-returns',json=compensation())
             assert again.status_code == 200 and again.json() == response.json()
         assert len((await read(db,'owner'))['customer_returns']) == 1
