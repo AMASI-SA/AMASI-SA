@@ -109,7 +109,6 @@ def reconcile(state, sources, as_of):
     issues = deepcopy(sources.get("issues", []))
 
     def issue(code, identity):
-        entry = {"code": str(identity)}
         entry = {"code": str(code), "source_id": str(identity)}
         if entry not in issues:
             issues.append(entry)
