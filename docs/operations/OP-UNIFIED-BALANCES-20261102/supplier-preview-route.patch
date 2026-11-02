@@ -1,0 +1,41 @@
+diff --git a/backend/operational_balance_routes.py b/backend/operational_balance_routes.py
+index 8338cd9f2d23a59faa452e6544fd5ed904235adc..28e96faf069107b99d1dba92899c702bd22287a0 100644
+--- a/backend/operational_balance_routes.py
++++ b/backend/operational_balance_routes.py
+@@ -323,7 +323,7 @@ def make_operational_balance_router(db, current_user):
+                 permission = "reports"
+             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
+                 permission = "move"
+-            elif path in {"/reports", "/cost-exposure", "/suppliers", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
++            elif path in {"/reports", "/cost-exposure", "/suppliers", "/supplier-invoice-review", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+                 permission = "reports"
+             elif path in {"/customer-returns", "/customer-exchanges"}:
+                 permission = "reports"
+@@ -831,6 +831,27 @@ def make_operational_balance_router(db, current_user):
+                       permissions={"record_movements": can_record})
+         return result
+ 
++    @router.get("/supplier-invoice-review")
++    async def supplier_invoice_review(user=Depends(current_user)):
++        actor, owner, _ = await scope(db, user, "reports")
++        from fulfillment_v2_routes import _actor_context, _require_permission
++        from operational_supplier_invoice_preview import supplier_invoice_preview
++        context = await _actor_context(db, actor)
++        _require_permission(context, "suppliers.read")
++        if context["merchant_id"] != owner:
++            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
++        result = await supplier_invoice_preview(db, owner)
++        # A report may not disclose the previous owner's snapshot after an actor
++        # was disabled, reassigned or lost its read grant while sources loaded.
++        fresh, current_owner, _ = await scope(db, user, "reports")
++        latest_context = await _actor_context(db, fresh)
++        _require_permission(latest_context, "suppliers.read")
++        if current_owner != owner or latest_context["merchant_id"] != owner:
++            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
++        from operational_balance_service import accounting_inactive
++        await accounting_inactive(db, owner)
++        return result
++
+     @router.get("/financial-position")
+     async def financial_position(user=Depends(current_user)):
+         actor, owner, _ = await scope(db, user, "reports")

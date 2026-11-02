@@ -1,0 +1,41 @@
+name: Operational Supplier Preview Source Checkpoint
+on:
+  push:
+    branches: [integration/operational-balances-unified-20261102]
+    paths: [.github/workflows/operational-supplier-preview-checkpoint.yml]
+permissions:
+  contents: write
+jobs:
+  source-checkpoint:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/integration/operational-balances-unified-20261102'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: true
+      - name: Apply exactly the tested read-only route delta to this task branch
+        shell: bash
+        env:
+          EXPECTED_SOURCE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          branch=integration/operational-balances-unified-20261102
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+          test "$(git ls-remote origin "refs/heads/$branch" | cut -f1)" = "$EXPECTED_SOURCE"
+          test "$(git hash-object backend/operational_balance_routes.py)" = 8338cd9f2d23a59faa452e6544fd5ed904235adc
+          test "$(git hash-object backend/operational_supplier_invoice_preview.py)" = 25234f3669fa16e807e0876810df0f4c85648f05
+          test "$(git hash-object backend/tests/test_operational_balance_supplier_invoice_preview.py)" = ae90201cfebd9b984872d13e062e9eb6bc630cde
+          patch=docs/operations/OP-UNIFIED-BALANCES-20261102/supplier-preview-route.patch
+          test "$(sha256sum "$patch" | cut -d' ' -f1)" = 4683fe22994e2267b4433960eb71e285cd2b9a9f7321531cc8efe36be30b3b7f
+          git apply --check "$patch"
+          git apply "$patch"
+          test "$(git hash-object backend/operational_balance_routes.py)" = 28e96faf069107b99d1dba92899c702bd22287a0
+          test "$(git diff --name-only)" = backend/operational_balance_routes.py
+          git rm -- "$patch"
+          git add -- backend/operational_balance_routes.py
+          git -c user.name='mezan' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'WIP: connect owner-scoped read-only supplier invoice comparison; no financial activation'
+          git push origin "HEAD:refs/heads/$branch"
+# Source transfer only. No app execution, production branch, financial data,
+# deploy credential, /app, lease or publication. Remove after read-back.
