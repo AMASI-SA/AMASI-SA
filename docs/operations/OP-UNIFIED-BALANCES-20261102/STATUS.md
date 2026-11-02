@@ -1,64 +1,73 @@
-# OP-UNIFIED-BALANCES-20261102 — remaining-product scope and CI checkpoint
+# OP-UNIFIED-BALANCES-20261102 — remaining products source/report wired
 
-Status: DRAFT / NOT production-ready / NOT published / NO financial activation.
+**DRAFT. NOT published. NO live financial activation or reconciliation.**
 
-## Latest continuation — remaining products, not dashboard cost of sales
+## Latest recoverable source and preservation
 
-Owner clarified the required destination: the operational accounting bucket for remaining products NOT YET RECEIVED from suppliers. Include the unreceived base/child product, unconditional or selected-option bundle leaves and required independent resources once. Receiving the shawl does not imply receiving its rose. A received component leaves the unreceived estimate even when its invoice is pending; its received-uninvoiced/confirmed supplier treatment needs separate native evidence. Apply piece-level awaiting-review/in-progress eligibility to orders created both before and after saved operational startup. Already-SAR costs remain SAR, independently of customer currency. Do not change the other conversation's dashboard implementation.
+Repository AMASI-SA/AMASI-SA; Draft PR1687; branch integration/operational-balances-unified-20261102.
 
-Latest CI collection checkpoint: **7ca114df1503c687f1bf780e332b743c2a0d1fd1**, directly after a70a3a059abe3a0afed8be104c887b727035a332. This subsequent status-only commit preserves application code. The read-back commit diff contains exactly three added workflow lines and no deletions: explicitly select test_operational_bundle_cost_projection.py and require at least its67 existing testcase elements. Existing no-failure/no-error/no-skip, supplier, payroll and real-Mongo coverage guards are unchanged. No application, dashboard, release-intent or production file changed.
+- Application source checkpoint: **dc965e5bfa6a799aec5adcfc0dabff7c88be6728**; root tree **edc9ca96708af0dd78d3c164a6b05d2f01a22a39**.
+- Exact tested Backend tree: **95877afcb873dc585ae2dbdb1b436d4c81035d5a**; remotely read back and matches the local complete Backend tree, not only a selected diff. Frontend remains **2ed74cb8d188606549a3c43ff23a10a835131d06**.
+- Source was applied as a hash-locked normal fast-forward after base **86606a698648a4b4a3dfa4382e5cf3c466e94e76**. Its application source equals archive006df1d4c7a914f386ecd7777971362d5e774402 before this change; only temporary workflows differ. No older production was restored, no original task branch rewritten.
+- Latest production already incorporated in this branch: **f8235d57e90f8a1271df6350d7e7919f5621ea11**, dashboard1690. Its own published record documents sourceA dc96a12e72ba3e1e1766c44e37e494ba3b69250f, release rg5-0f3fe5bc5d7da01a5dd3c052cb36637a7a49db1536afe476d7ff862d0fac285a, verify3 and active=false. This is the other task's evidence, not a new publication by this task. Dashboard1690 still has live recipe/executor/historical-evidence gaps; do not fabricate missing frozen recipes.
+- This following checkpoint changes CI/documentation and removes temporary source/dependency/checkpoint workflows; it does not change the tested Backend/Frontend. The current HEAD must be read, not inferred from the old PR body.
 
-Verification on this continuation:
-- Re-read PR1687, canonical status, AGENTS.md, workflow, module/test blob SHAs and related PR1678/1685/1690. Actual PR1687 HEAD before the write matched a70. The old PR body still names f7 and is not the latest source authority.
-- Local bytes were checked against current remote module blob2fec6cd0fac34b60b9c9b1889004793b8d10b564 and test bloba6319a8363458c14931f2fdaf80ba4b26aaa0895 before execution.
-- `PYTHONPATH=backend python -B -m pytest --noconftest -q backend/tests/test_operational_bundle_cost_projection.py --tb=short --junitxml=bundle-tests.xml` returned exit0: **67 passed**, zero failures/errors/skips. JUnit independently parsed67 cases. These are pure synthetic tests, not runtime or database acceptance.
-- The prior a70 workflow list returned22 successful workflows, including Operational Balance Web41470760539, Security and CodeQL; Release Readiness41470760702 failed in `Classify reviewed B or source candidate A`, with final frontend build/rehearsal skipped. This is not a successful publication gate.
-- Important coverage correction: the prior operational workflow glob `test_operational_balance*.py` did NOT collect the new `test_operational_bundle_cost_projection.py`. That prior green operational run cannot substantiate bundle coverage. The three-line workflow change closes collection only, not source/reducer/report wiring.
-- Fresh combined results after7ca and this status commit must be read from their exact runs; do not infer1430 tests, retained artifact identity, or success by adding old counts.
+Prior complete handoff is preserved byte-for-byte in STATUS-PRE-REMAINING-WIRING-20261102.md (blob f56b2b5c7282fa4fe8a0f72720a3133ca1b3e50d). Earlier evidence remains in STATUS-PRE-BUNDLE-20261102.md and the COMBINED/PAYMENT/SUPPLIER documents. Do not use their old counts as new acceptance.
 
-Related task read snapshot: #1690 advanced to ready-for-review intent-onlyB f953c374239ae89a9311b3e311945ffa4e7933a5 with sourceA dc96a12e72ba3e1e1766c44e37e494ba3b69250f, still unmerged at the read. Its publication remains the other conversation's responsibility. #1678 is still d5b301506912a481196af295b0812f3759d7a27f with one review workflow, not implemented runtime product fixes. #1685 remains88c7872072e6e6a149a92153a732ae4c0551ae21; do not merge its older branch independently over the integrated code.
+## Implemented now — operational unreceived cost, not dashboard cost of sales
 
-Next safe action: finish operational remaining-product source/reducer/report wiring and ordinary-product SAR/status corrections using the final shared cost authority contract, with per-leaf partial-receipt/invoice mapping and no new payable from assignment/stock evidence. Run the explicitly expanded exact-head combined suite. Keep every business gate below, including postsettlement refunds, actual payment evidence, customers/loans, shipping, warnings, read-only opening/invoice differences and owner approval before financial recognition. No lease, /app, prepare/prepublish, production merge or publish in this continuation.
+The previously unused bundle core is now connected to collect_sources, the pure balance reducer, pre/post-cutover open-cost exposure and the financial-position table.
 
-## Earlier recoverable source — preserved history
+1. Shared frozen cost authority supplies the actual selected/unconditional expanded recipe. The adapter excludes reporting-only correction records from physical-finance interpretation. It validates owner/order/line, fingerprints, selected option IDs, variants, plan/current unit set and exact leaf identities. No current catalog repricing, parent/base double-addition, SKU join, or sale-quantity multiplication twice.
+2. Native purchase receipt/allocation evidence removes only its received fraction. Stock allocations remove already-covered procurement demand but never create another purchase/payable. Split auto sourcing validates each segment. Unknown, duplicated, cross-tenant, overallocated or future evidence remains incomplete and preserves existing valid estimates rather than silently zeroing them.
+3. Supplier-assigned-only components stay in the unreceived pool; assignment is not receipt. Normal and bundle estimates use their original SAR cost independent of SAR/QAR/KWD/AED sale currency. Explicit foreign cost requires review, not relabelling or sale-rate conversion.
+4. Unreceived estimates require exact awaiting-review/in-progress aliases. Received ordinary pieces stay separate while their invoice is pending, including closed orders. Orders before cutoff remain in read-only cost exposure; their old sale/provider capture is not replayed into operational finance.
+5. Unreceived, received-uninvoiced and shipping completeness are now scoped. Missing carrier/rate data keeps its warning and the shipping total unavailable without hiding a separately proven product total. Unknown/global issues still fail closed, and the report retains row-sum, invalid-money and coverage checks.
+6. Reads are bounded and owner-scoped, with one shared authority pass and batched native plan/unit/receipt/invoice reads. In the synthetic no-receipt cohort,1 and80 orders both used7 logical reads; this is not a production latency guarantee. No read-path index creation, DB write, stock execution or financial posting.
 
-Repository AMASI-SA/AMASI-SA; branch integration/operational-balances-unified-20261102; Draft PR1687. Application checkpoint **9919af53c6762dc2766eb2421af29932deac7955**, tree **070f53e440fddd0ecd3228bc8545b1846c938684**, directly descends from f7a2480bd3cabcf880dfe7fcb746c820551e3fad. The a70 status-only checkpoint followed that application commit. Latest incorporated production remains70576e2a06237eb193b1c927f11ced92e2229589. Read current remote state before continuing.
+Synthetic end-to-end source/reducer/report results: four(shawl15+rose40)=220SAR; all shawls received=>160; two roses received=>80; all=>0. No-rose=>60; independent embroidery10=>260. Partial nested rose quantity is reduced fractionally. Catalog repricing to999 leaves the original frozen cost unchanged. Retry reproduces identical obligations and never creates supplier confirmed facts from native inventory evidence.
 
-**No earlier work was replaced.** The complete previous canonical record is preserved byte-for-byte as STATUS-PRE-BUNDLE-20261102.md (original blob7f79d7530cdf33a3c3ce95038868da0d44823bf4). It retains exact source/merge/CI artifact identities, failed release-readiness evidence and all financial gates. Detailed prior history remains in COMBINED-REGRESSION-20261102.md, COMBINED-NATIVE-UI-20261102.md, PAYMENT-COMPATIBILITY.md and SUPPLIER-RECONCILIATION.md.
+**Important remaining native financial gate:** a proven received bundle purchase quantity exits the unreceived bucket, but linking its native purchase invoice to existing operational supplier balances/opening coverage is NOT completed. `bundle_received_purchase_financial_matching_required` remains explicit, blocks the received-cost completeness only, and never manufactures a second supplier debt. Ambiguous or unsupported receipt evidence still blocks the relevant total; this is not a complete native purchasing financial importer.
 
-## Owner scope clarification
+## Exact local verification and remote boundary
 
-The other conversation owns the dashboard bundle-cost fix and its publication (#1690). This task owns OPERATIONAL balances only. Do not modify the dashboard's files, reuse its aggregate totals as supplier debts, republish its release, or drop either task. At the original bundle-core read,1690 was Draft at3e6ea31764b194432e10027c03d82c5ccf502901; the newer read is recorded above. The owner's statement that it is being published is not a live v5 verification. Re-read its eventual final authority contract before wiring.
+Local source archive006 was verified against4803 exported Git blob identities. Changed bytes were recorded with before/after Git SHA and SHA256; a separate clean local apply rehearsal reproduced all11 application/test files. Source checkpoint run41499760086 applied those exact bytes to the task branch only, and subsequent remote Backend tree read-back equals95877afc.
 
-## New work and exact limits
+Final local combined command (Python3.13.5):
 
-Added backend/operational_bundle_cost_projection.py and backend/tests/test_operational_bundle_cost_projection.py. The new core projects frozen expanded bundle leaves once per sale unit, including unconditional and customer-selected child products and nested quantities. SAR cost does not inherit customer currency. Unreceived eligibility is restricted to awaiting-review/in-progress aliases. Missing/mismatched evidence remains unknown, not zero. Stock/receipt/consumption/segment evidence requires financial matching; supplier assignment cannot create a payable. posting_allowed=false remains intentional.
+```
+PYTHONPATH=<isolated-test-deps>:backend:backend/tests \
+OPERATIONAL_TEST_MONGO_URI='mongodb://127.0.0.1:27305/?replicaSet=operationalprojection' \
+MZ2_TEST_MONGO_URI='mongodb://127.0.0.1:27305/?replicaSet=operationalprojection' \
+python -B -m pytest --noconftest -q backend/tests/test_operational_balance*.py \
+ backend/tests/test_operational_open_cost_exposure.py \
+ backend/tests/test_operational_bundle_cost_projection.py \
+ backend/tests/test_operational_supplier_invoice_cutover.py \
+ backend/tests/test_store_delivery_noncash_review.py \
+ backend/tests/test_operational_driver_review_mongo.py --tb=short --junitxml=combined.xml
+```
 
-Synthetic checks: four(shawl15+rose40)=220SAR; four shawls without rose=60SAR; optional independent embroidery10 makes260SAR. One received rose with unmatched financial proof leaves180SAR as a known unreceived subtotal while the complete total is explicitly unavailable. No40SAR payable is invented.
+**1499 passed,0 failures/errors/skips; exit0;149.56s.** JUnit independently parsed1499 testcase elements. Includes51 new actual isolated Mongo remaining-product cases and18 scoped completeness cases, plus67 existing pure bundle tests. These are subsets, NOT additive. Existing payroll/noncash/provider real-Mongo suites were also collected. Mongo8.0.12 was bound to127.0.0.1 only, every test database UUID-named and dropped. No production credentials or tenant data were used. Five existing Pydantic deprecation warnings remain; they are not failures.
 
-Original local command: PYTHONPATH=backend python -m pytest backend/tests/test_operational_bundle_cost_projection.py -q --junitxml=tests.xml. **67 passed,0 failures/errors/skips**. These are pure synthetic Python tests, NOT Mongo/HTTP/runtime/production acceptance. Remote module blob2fec6cd0fac34b60b9c9b1889004793b8d10b564 and test bloba6319a8363458c14931f2fdaf80ba4b26aaa0895 were read back and exactly match tested local bytes.
+JUnit SHA256 c2b184d00ae83c62f7a0939d4853b29d6d68a9704a2172dd8f059214f65270dd; log SHA256 4eae9287e3d44dbedc6af21fa3d783b6c3fb5fd2d303e884c1a4fc25cc493984. Earlier intermediate1478/1497/1498 runs overlap and must not be summed. The source and financial guards were preserved; populated native cases use real Mongo, not the old empty-source mocks.
 
-**The projection is NOT wired into operational source readers, the reducer or the report.** This checkpoint does not fix live balances. Detailed contract and remaining wiring: bundle-cost/STATUS.md. The earlier1363 backend/300 frontend combined success belongs to5b16ea6b, not the new checkpoints; do not add counts or claim fresh full acceptance without new evidence.
+CI now explicitly requires at least50 real-Mongo remaining-product cases and the scoped-completeness suite in addition to existing67 bundle/no-skip/payroll/supplier coverage guards. Local application run is not the final GitHub/frontend/security/build acceptance: read fresh exact-head runs after this checkpoint. No local frontend/browser/print/download execution is claimed. Earlier866 readiness41488314233 failed; that failure is not waived or repaired by this work. A new final A/build/intent-onlyB remains required after all business gates close.
 
-## Full business scope retained
+## Full outstanding scope / activation inventory
 
-| Scope | Preserved implementation / remaining gate |
-|---|---|
-| Supplier invoices #1675/#1677 | Independent approval cutoff for old orders, final-price estimate replacement and saved payments retained. Need actual read-only invoice/opening differences and owner approval before recognizing omitted amounts. |
-| Products #1678 + bundle subtask | Pure bundle projection now tested. Need shared authority source wiring, current/precutover piece coverage, general-product SAR/status fixes and native bundle receipt/invoice mapping. Ordinary product source defects are NOT fixed by the new unused helper. |
-| Shipping/drivers/COD #1677/#1688 | Old-order postcutoff earned fees, executor proof, bank/POS/cash separation and published courier visibility retained. Need current-carrier/full coverage and actual reconciliation; never call uncollected COD cash. |
-| Providers #1685 | Opt-in component fee model and capture/refund compatibility retained. Actual dated capture/plan/void/refund sources, merchant policies, gross/net openings, postsettlement fee/tax credits and partial/multiorder bank allocation remain. Keep provider_postsettlement_refund_review_required and statement posting_allowed=false. |
-| Customers/external persons/loans #1686 | Published compensation and original-platform restrictions retained. Need all four borrowing/lending/repayment directions, before/after balances, receive-in/pay-from labels and full exchange/return/shipping dedup evidence. |
-| Payroll/openings #1677 | Inclusive saved-cutoff day and owner approval UI retained. Opening review and missing-day approval still required. No live salary backfill. |
-| Warnings #1676 | Aggregation retained. Resolve real Salla source, product, carrier/rate, payment fee, advertising start/FX and salary-contract gaps; do not blanket-hide or substitute zero. |
-| Financial report/release | Existing tables retained. Complete common-period expected position/profit and visual/mobile/actual print/download checks; business gates then fresh unified A/build/intent-onlyB and one separately coordinated v5 publish. |
+| Scope | Implemented and preserved | Remaining / activation |
+|---|---|---|
+| Remaining products #1678/#1687 | SAR/exact states, per-piece ordinary receipt, frozen selected/unconditional bundle source/reducer/report, partial quantities and scoped gaps now wired and locally tested | Actual owner data/read-only comparison, native bundle invoice-to-operational-finance matching, supported pre-invoice native receiving, fresh combined CI/UI/performance acceptance. Not activated. |
+| Supplier invoices #1675/#1677 | New approved invoices on old orders, final-component estimate replacement, prior payments/facts and account/report retained | Actual invoice/opening differences and explicit owner approval before omitted financial recognition. No backfill. |
+| Payroll #1677 | Saved-cutoff day inclusive, preview/approval and idempotence retained | Opening coverage/missing day comparison and owner activation. No day-one posting. |
+| Providers #1685 | Optional component fees, explicit plan/native aliases, original capture/refund compatibility retained | Real capture/plan/void/refund sources, merchant policy/opening gross-net evidence, postsettlement fee/tax credit allocation and multiorder bank matching. Keep provider_postsettlement_refund_review_required and statement posting_allowed=false. |
+| Shipping/drivers #1677/#1688 | Old-order postcutoff earning, actual executor proof and bank/POS/cash separation retained | Complete current carrier reassignment/coverage, actual settlement matching and expected COD. Uncollected COD is not cash; restricted old COD archive was not accessed. |
+| Customers/external loans #1686 | Published compensation/original-platform rules retained | All four loan/debt/repayment directions and before/after labels; cross-path exchange/return/shipping dedup acceptance. |
+| Warnings #1676 | Existing aggregation and truthful scoped product/shipping completeness retained | Resolve real Salla/payment/advertising start/FX/salary-contract evidence; do not hide unknown sources or replace them withzero. |
+| Financial report/release | Remaining-product table now consumes integrated exposure; other saved report work retained | Common-period full expected position/profit and visual/mobile/actual print/download tests, actual read-only financial reconciliation, all business gates, final unifiedv5 source/intent/build, inactive lease and one publication with verify3/activefalse. |
 
-## Safety / deployment state
+## Safety and next action
 
-Production changed by this task:NO. No database, opening reset, historical replay, invoice/return, stock, balance correction, payroll/policy activation, /app, lease or release intent changed. Existing branches and dashboard files untouched. Restricted COD archive remains excluded and was not accessed. Issue1006 is capped; use this record and PR1687.
+Production changed by this task:NO. No /app, lease, deployment, release intent, policy, payroll, opening, actual supplier invoice, bank/provider API, refund, stock or financial balance write. No original task branch or dashboard file changed. Temporary source-checkpoint payload was removed by the source commit; all temporary source/dependency/checkpoint workflows are removed in this following checkpoint. Issue1006 remains capped; this record and PR1687 are canonical.
 
-Earlier Release Readiness41465056371 onf7 failed source/intent classification (frontend source mismatch and sourceA changing intent); do not relabel it as success. This new unused helper does not resolve that release gate. Remove the temporary source-export workflow before final release freeze. Read actual production_release_guard.py status before touching/app or release preparation; never clear another task's lease. Publishing code is not financial reconciliation or authorization for hidden backfill.
-
-## Next safe action
-
-Read current1687/1690/production. Wire the pure core to the shared frozen cost authority using batched owner/order/line reads and fingerprint validation, never current-catalog repricing or per-component N+1 reads. Bundle parents are excluded from legacy preparation supplier handling, so map native procurement receipts/invoices explicitly rather than treating a parent invoice as every child invoice. Preserve immutable saved financial facts and calculate approved-source differences read-only. Test source+engine+preview, mixed/partial receipts, exact invoice replacement, retries, SAR and both sides of cutoff on the combined tree before activation or one final v5 release.
+Next: read current PR/source and exact new CI outcomes; preserve published1690. Close native bundle purchase financial matching with approved existing-source/opening evidence, then provider postsettlement and actual payment evidence, customers/loans and remaining shipping/report gates. Do not deploy this WIP merely because tests pass or use deployment to silently recognize missing historic financial amounts. Before any later /app/release work, read actual production_release_guard.py status and obey v5; never reuse another task's lease or old intent.

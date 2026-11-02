@@ -82,6 +82,9 @@ jobs:
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
           bundle_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_bundle_cost_projection']
           assert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'
+          remaining_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_remaining_products']
+          assert len(remaining_cases) >= 50, 'Real-Mongo remaining-product source/report cases missing'
+          assert any('test_operational_balance_cost_completeness' in c.get('classname', '') for c in cases), 'Scoped cost completeness cases missing'
           for suite in ('test_operational_supplier_invoice_cutover',
                         'test_operational_balance_invoice_flow',
                         'test_operational_balance_supplier_final_cost',
