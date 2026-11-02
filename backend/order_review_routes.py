@@ -332,6 +332,17 @@ def operational_image_preference_key(
     """
     if not linked_specs:
         return None
+    # Never learn from an order carrying a personal name, engraving, message
+    # or photo option, even if that field was not selected for this card.
+    for option in getattr(item, "options", None) or []:
+        if _is_personal_option(_text(getattr(option, "name", None))):
+            return None
+    for field in getattr(item, "custom_fields", None) or []:
+        if isinstance(field, dict):
+            label = _text(field.get("name") or field.get("label")
+                          or field.get("title") or field.get("question") or field.get("key"))
+            if _is_personal_option(label):
+                return None
     values: dict[str, str] = {}
     for row in linked_specs:
         name = _text(row.get("name"))
