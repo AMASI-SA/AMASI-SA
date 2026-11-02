@@ -25,6 +25,8 @@ const showPreview = () => click('معاينة الاستحقاق من يوم ا�
 const confirm = () => click('اعتماد بداية الرواتب من يوم القطع');
 const deferred = () => {let resolve, reject; const promise = new Promise((a, b) => {resolve = a; reject = b;}); return {promise, resolve, reject};};
 beforeEach(() => {
+  // Each scenario owns its mock calls, implementations and queued responses.
+  jest.resetAllMocks();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
   requestId.mockReturnValue('payroll-operation-1');

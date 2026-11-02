@@ -82,6 +82,13 @@ async def order_view(db, owner, number_text):
     snapshot, payment_issues = normalize_payment(
         raw, currency, total,
         raw.get('date') or raw.get('created_at') or raw.get('order_date'), now())
+    if snapshot is None:
+        from operational_refund_capture_basis import recorded_capture_for_cancelled_order
+        snapshot = recorded_capture_for_cancelled_order(
+            raw, state, str(raw['id']), provider, currency, total,
+            raw.get('date') or raw.get('created_at') or raw.get('order_date'), now())
+        if snapshot is not None:
+            payment_issues = []
     # Reading an already-reduced order must not compare its current net total
     # to the original capture. Keep the independently resolved original party;
     # a new refund still requires a valid original payment snapshot below.
@@ -90,7 +97,7 @@ async def order_view(db, owner, number_text):
             'items': items, 'provider': provider, 'created_at': instant(raw.get('date') or raw.get('created_at') or raw.get('order_date')).isoformat(),
             'refunded': fmt(sum((money(r['amount']) for r in cases if r['status'] == 'refunded'), Decimal(0))),
             # Informational only. This is not subtracted from Salla's current
-            # order total or recognized again as a bank/provider cash movement.
+    # order total or recognized again as a bank/provider cash movement.
             'salla_refunds_documented': fmt(documented),
             'salla_refunds_confirmed_source': fmt(booked),
             'salla_refund_observation': observed_salla_refund(raw)}

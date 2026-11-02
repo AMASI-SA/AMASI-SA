@@ -22,6 +22,8 @@ const deferred = () => {let resolve, reject; const promise = new Promise((a,b) =
 const render = async (strict=false) => {await act(async () => root.render(strict ? <StrictMode><Review/></StrictMode> : <Review/>));};
 const preparePos = async () => {await click('تحميل خيارات الاعتماد'); await change(field('ذمة الشبكة المختارة'), 'pos'); await change(field('مبلغ إيصال الشبكة المطابق'), '200.00');};
 beforeEach(() => {
+  // Each scenario owns its mock calls, implementations and queued responses.
+  jest.resetAllMocks();
   global.IS_REACT_ACT_ENVIRONMENT=true;
   item={assignment_id:'assignment',order_number:'123',driver_name:'Synthetic driver',payment_method:'card_terminal',amount:'200.00',receipt_reference:'receipt',receipt_url:'/synthetic-receipt'};
   context={assignment_id:'assignment',payment_method:'card_terminal',amount:'200.00',financial_source:'operational',expected_review_revision:1,session_scope:scope,can_approve:true,can_reject:true,pos_receivables:[{id:'pos',display_name:'Synthetic POS'}]};

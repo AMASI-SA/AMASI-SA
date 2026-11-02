@@ -1,6 +1,7 @@
 import http from '../../lib/api';
 import {operationalApi} from './api';
 jest.mock('../../lib/api', () => ({get: jest.fn(), post: jest.fn()}));
+beforeEach(() => { jest.resetAllMocks(); });
 test('payroll context is a read-only GET with no implicit approval', async () => {
   http.get.mockResolvedValue({data: {first_day: '2026-11-15'}});
   expect(await operationalApi.salaryStartContext()).toEqual({first_day: '2026-11-15'});
