@@ -15,6 +15,7 @@ import {
     updateOrderReviewItem,
     updateOrderReviewOperationalItemStatus,
     saveOrderReviewImageChoice,
+    uploadOrderReviewMezanImage,
 } from "../services/orderReviewEngine";
 import CustomerServiceInstructionBanner from "../components/fulfillment/CustomerServiceInstructionBanner";
 import {
@@ -467,6 +468,8 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
     const [operationalDialog, setOperationalDialog] = useState(null);
     const [operationalName, setOperationalName] = useState("كرت إهداء");
     const [linkedSpecKeys, setLinkedSpecKeys] = useState([]);
+    const [operationalImageUrl, setOperationalImageUrl] = useState("");
+    const [operationalImageUploading, setOperationalImageUploading] = useState(false);
     const [creatingOperational, setCreatingOperational] = useState(false);
 
     const load = useCallback(async ({ localOnly = true } = {}) => {
@@ -507,6 +510,45 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
         setOperationalDialog({ item, specs });
         setOperationalName("كرت إهداء");
         setLinkedSpecKeys(specs.map((spec) => spec.key));
+        setOperationalImageUrl("");
+    };
+
+    const uploadOperationalPhoto = async (file) => {
+        if (!operationalDialog || !file) return;
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            toast.error("الصيغ المسموحة JPG أو PNG أو WEBP.");
+            return;
+        }
+        if (!file.size || file.size > 5 * 1024 * 1024) {
+            toast.error("يجب ألا يزيد حجم الصورة عن 5 MB.");
+            return;
+        }
+        setOperationalImageUploading(true);
+        try {
+            const dataBase64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(new Error("تعذّر قراءة الصورة."));
+                reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+                reader.readAsDataURL(file);
+            });
+            if (!dataBase64) throw new Error("ملف الصورة غير صالح.");
+            const next = await uploadOrderReviewMezanImage(
+                orderNumber, operationalDialog.item.order_item_id,
+                { filename: file.name, content_type: file.type, data_base64: dataBase64 },
+            );
+            const nextItem = (next.items || []).find((row) => row.order_item_id === operationalDialog.item.order_item_id);
+            const previous = new Set(operationalDialog.item.mezan_images || []);
+            const added = (nextItem?.mezan_images || []).find((url) => !previous.has(url));
+            if (!added) throw new Error("حُفظت الصورة لكن رابطها لم يظهر في صور المنتج.");
+            setDetail(next);
+            setOperationalDialog({ ...operationalDialog, item: nextItem || operationalDialog.item });
+            setOperationalImageUrl(added);
+            toast.success("تم رفع الصورة إلى ميزان.");
+        } catch (error) {
+            toast.error(error.message || "تعذّر رفع الصورة.");
+        } finally {
+            setOperationalImageUploading(false);
+        }
     };
 
     const createOperational = async () => {
@@ -518,10 +560,12 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                 source_order_item_id: operationalDialog.item.order_item_id,
                 name: operationalName.trim(),
                 linked_spec_keys: linkedSpecKeys,
+                selected_image_url: operationalImageUrl || null,
             });
             setDetail(next);
             setOperationalDialog(null);
-            toast.success("تمت إضافة المنتج التشغيلي وربط بياناته.");
+            setOperationalImageUrl("");
+            toast.success("تمت إضافة المنتج التشغيلي وربط بياناته وصورته.");
         } catch (error) {
             toast.error(error.message);
         } finally {
@@ -667,8 +711,32 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                             <div className="flex items-center justify-between gap-3"><h3 className="text-xl font-extrabold">إضافة منتج تشغيلي</h3><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-lg border p-2"><X /></button></div>
                             <p className="mt-2 text-sm text-slate-500">أنشئ منتجًا داخليًا واربط به الخيارات أو النصوص المطلوبة من المنتج الأصلي.</p>
                             <label className="mt-4 block"><span className="mb-1 block text-sm font-extrabold">اسم المنتج الداخلي</span><input value={operationalName} onChange={(event) => setOperationalName(event.target.value)} maxLength={120} className="w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-amber-500" /></label>
+                            <div className="mt-4">
+                                <div className="mb-2 text-sm font-extrabold">صورة المنتج التشغيلي</div>
+                                <p className="mb-2 text-xs font-semibold text-slate-500">اختر صورة من صور المنتج أو ارفع صورة جديدة إلى ميزان. يستخدمها النظام عند تكرار نفس المنتج والخيار.</p>
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {(operationalDialog.item.gallery || []).map((url) => (
+                                        <button type="button" key={url} aria-label="اختيار صورة المنتج التشغيلي" onClick={() => setOperationalImageUrl(url)}
+                                            className={`shrink-0 rounded-xl border-2 p-1 ${operationalImageUrl === url ? "border-emerald-600" : "border-slate-200"}`}>
+                                            <img src={url} alt="صورة متاحة" className="h-20 w-20 rounded-lg object-cover" />
+                                        </button>
+                                    ))}
+                                </div>
+                                <label className="mt-2 block rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+                                    {operationalImageUploading ? "جارٍ رفع الصورة..." : "إضافة صورة للمنتج التشغيلي من الجهاز"}
+                                    <input type="file" accept="image/jpeg,image/png,image/webp"
+                                        disabled={operationalImageUploading || creatingOperational}
+                                        onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadOperationalPhoto(file); event.target.value = ""; }}
+                                        className="mt-2 block w-full text-xs" />
+                                </label>
+                                {operationalImageUrl ? (
+                                    <button type="button" className="mt-2 text-xs font-bold text-emerald-700" onClick={() => setOperationalImageUrl("")}>✓ الصورة محددة — إلغاء الاختيار</button>
+                                ) : (
+                                    <p className="mt-1 text-xs text-slate-500">إن لم تختر صورة، سيستخدم ميزان الصورة المحفوظة سابقًا لنفس المنتج والخيار إن وجدت.</p>
+                                )}
+                            </div>
                             <div className="mt-4"><div className="mb-2 text-sm font-extrabold">البيانات التي تنتقل إليه</div><div className="grid gap-2">{operationalDialog.specs.map((spec) => (<label key={spec.key} className="flex items-start gap-3 rounded-xl bg-violet-50 p-3"><input type="checkbox" checked={linkedSpecKeys.includes(spec.key)} onChange={(event) => setLinkedSpecKeys((current) => event.target.checked ? [...new Set([...current, spec.key])] : current.filter((key) => key !== spec.key))} className="mt-1" /><span><b className="text-violet-700">{spec.name}:</b> <span className="whitespace-pre-wrap break-words font-bold">{spec.value}</span></span></label>))}</div></div>
-                            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-xl border px-4 py-2 font-bold">إلغاء</button><button type="button" disabled={creatingOperational || !operationalName.trim()} onClick={createOperational} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-extrabold text-white disabled:opacity-50">{creatingOperational ? <SpinnerGap className="animate-spin" /> : <Plus />} إضافة وربط</button></div>
+                            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setOperationalDialog(null)} className="rounded-xl border px-4 py-2 font-bold">إلغاء</button><button type="button" disabled={creatingOperational || operationalImageUploading || !operationalName.trim()} onClick={createOperational} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 font-extrabold text-white disabled:opacity-50">{creatingOperational ? <SpinnerGap className="animate-spin" /> : <Plus />} إضافة وربط</button></div>
                         </div>
                     </div>
                 )}
