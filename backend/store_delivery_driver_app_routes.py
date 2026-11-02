@@ -650,7 +650,8 @@ async def driver_receive_session_views(
     if ids:
         owned = await db[ASSIGNMENTS].find(
             {"user_id": user_id, "driver_id": driver_id,
-             "id": {"$in": list(ids)}}, {"_id": 0, "id": 1},
+             "id": {"$in": list(ids)},
+             "status": {"$ne": "unassigned"}}, {"_id": 0, "id": 1},
         ).to_list(length=len(ids))
         owned_ids = {normalize_text(row.get("id")) for row in owned}
     result = []
