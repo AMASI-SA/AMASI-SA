@@ -4,16 +4,45 @@ from copy import deepcopy
 import pytest
 import operational_balance_sources as src
 
+# Separate audited native recipe reads; do not derive this from application constants.
+HARD_BUNDLE_READ_ALLOWLIST = frozenset({
+    'mezan_bundle_definitions_v2', 'mezan_order_item_cost_snapshots_v2',
+    'mezan_component_order_lifecycle_v1', 'mezan_component_consumption_plans_v1',
+    'mezan_component_consumption_units_v1', 'mezan_inventory_receipts_v2', 'purchase_invoices',
+})
+
+
+def check_bundle_query(name, query):
+    assert query.get('user_id') == 'owner'
+    if name == 'mezan_bundle_definitions_v2':
+        assert query == {'user_id': 'owner', 'product_type': 'composite'}
+        return
+    scopes = {'mezan_order_item_cost_snapshots_v2': 'order_number',
+              'mezan_component_order_lifecycle_v1': 'order_number',
+              'mezan_component_consumption_plans_v1': 'order_id',
+              'mezan_inventory_receipts_v2': 'id', 'purchase_invoices': 'id'}
+    scope = scopes.get(name, 'plan_id' if 'plan_id' in query else 'order_id')
+    assert isinstance(query.get(scope), dict) and set(query[scope]) == {'$in'}
+    assert isinstance(query[scope]['$in'], list) and len(query[scope]['$in']) <= 250
+    permitted = {'user_id', scope, 'order_item_id', 'order_line_id', 'state', 'bundle_snapshots'}
+    assert not set(query) - permitted
+
+
 START = '2026-10-05T00:00:00+00:00'
 NOW = '2026-10-07T12:00:00+00:00'
 
 class Cursor:
     def __init__(self, values): self.values = values
-    async def to_list(self, count): return deepcopy(self.values[:count])
+    async def to_list(self, count=None, *, length=None): return deepcopy(self.values[:length if length is not None else count])
 
 class Collection:
     def __init__(self, db, name): self.db, self.name = db, name
     def find(self, query, projection=None):
+        if self.name in HARD_BUNDLE_READ_ALLOWLIST:
+            check_bundle_query(self.name, query)
+            assert not self.db.data.get(self.name), 'Use a real Mongo fixture for populated native bundle sources'
+            self.db.reads.append(self.name)
+            return Cursor([])
         if self.name in {'accounts', 'mz2_operational_bank_accounts'}:
             assert projection == {'_id': 0, **{k: 1 for k in ('id', 'user_id', 'name', 'display_name', 'currency', 'account_type', 'status', 'active', 'is_active', 'archived', 'deleted', 'is_archived', 'is_deleted')}}
         if self.name == 'settings':
@@ -29,6 +58,13 @@ class Collection:
         assert query == {'user_id': 'owner'}
         self.db.reads.append(self.name)
         return Cursor([r for r in self.db.data.get(self.name, []) if r.get('user_id') == query['user_id']])
+    def aggregate(self, pipeline):
+        assert self.name in {'mezan_component_order_lifecycle_v1', 'mezan_component_consumption_plans_v1'}
+        check_bundle_query(self.name, pipeline[0]['$match'])
+        assert set(pipeline[1]) == {'$limit'} and set(pipeline[2]) == {'$project'}
+        assert not self.db.data.get(self.name), 'Use a real Mongo fixture for populated native bundle sources'
+        self.db.reads.append(self.name)
+        return Cursor([])
     def __getattr__(self, name): raise AssertionError(f'Write or unsupported operation: {name}')
 
 class DB:
@@ -188,7 +224,7 @@ def test_new_order_cost_only_from_mz2_profile():
     db = DB({'unified_orders': [order()], 'mezan_product_cost_profiles_v2': [row(salla_product_id='p1', base_cost='20')]})
     output = run(src.collect_sources(db, 'owner', START, NOW))
     assert output['orders'][0]['items'] == [{'id': 'salla:10:line', 'supplier_id': None,
-                                            'supplier_receipt_proven': False,
+                                            'supplier_receipt_proven': False, 'cost_currency': 'SAR',
                                             'cost': '20', 'quantity': '2'}]
     db.data['mezan_product_cost_profiles_v2'] = []
     output = run(src.collect_sources(db, 'owner', START, NOW))
@@ -358,7 +394,7 @@ HARD_SOURCE_ALLOWLIST = frozenset({'mz2_bank_transfer_bindings',
 
 class HardBoundaryDB(DB):
     def __getitem__(self, name):
-        assert name in HARD_SOURCE_ALLOWLIST, f'Forbidden runtime source access: {name}'
+        assert name in HARD_SOURCE_ALLOWLIST | HARD_BUNDLE_READ_ALLOWLIST, f'Forbidden runtime source access: {name}'
         return Collection(self, name)
 
 

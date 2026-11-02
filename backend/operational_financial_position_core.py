@@ -143,7 +143,10 @@ def _actual_tables(parties, complete):
 
 def _cost_table(exposure, currency, identity, title, buckets, match):
     available = isinstance(exposure, dict) and exposure.get("status") == "preview"
-    complete = available and exposure.get("complete") is True
+    scoped = (exposure.get("bucket_completeness") or {}) if available else {}
+    scoped_valid = isinstance(scoped, dict) and type(scoped.get("version")) is int and scoped["version"] == 1
+    complete = available and (scoped[identity] if scoped_valid and type(scoped.get(identity)) is bool
+                              else exposure.get("complete") is True)
     summaries = (exposure.get("currencies") or {}).get(currency, {}) if available else {}
     total = _sum(summaries.get(key, "0.00") for key in buckets) if available else None
     groups = [group for group in (exposure.get("groups") or []) if group.get("currency") == currency and match(group)] if available else []

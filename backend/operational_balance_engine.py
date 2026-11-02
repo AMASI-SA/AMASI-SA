@@ -83,6 +83,7 @@ def reconcile_credits(state):
 
 
 from operational_provider_fees import provider_projection
+from operational_product_cost_policy import unreceived_eligible
 
 
 def reconcile(state, sources, as_of):
@@ -259,7 +260,7 @@ def reconcile(state, sources, as_of):
                 current_item_keys = {"supplier:" + oid + ":" + str(item["id"]) for item in order.get("items", [])}
                 for old_key, old_row in obligations.items():
                     if (old_key.startswith("supplier:" + oid + ":") and ":receipt:" not in old_key
-                            and old_key not in current_item_keys):
+                            and old_key not in current_item_keys and order.get("items_complete") is not False):
                         old_row["expected"] = "0.00"
                 for item in order.get("items", []):
                     iid = str(item["id"])
@@ -277,9 +278,14 @@ def reconcile(state, sources, as_of):
                         issue("supplier_receipt_exceeds_estimate", key)
                     # Expected moves with the current assignment; confirmed is by actual receiver.
                     expected_party = item.get("supplier_id") if item.get("supplier_receipt_proven") is True else None
-                    put(key, "supplier", expected_party, "supplier", currency,
-                        expected=ZERO if cancelled or fully_invoiced else max(total - received, ZERO),
-                        business_date=created.date())
+                    cost_currency = item.get("cost_currency") or currency
+                    # Source currency belongs to this component, not the sale.
+                    physically_received = item.get("supplier_receipt_proven") is True
+                    eligible = physically_received or unreceived_eligible(order.get("status"))
+                    put(key, "supplier", expected_party, "supplier", cost_currency,
+                        expected=ZERO if not eligible or fully_invoiced else max(total - received, ZERO),
+                        business_date=created.date(),
+                        **({"source_cost_stage": item["source_cost_stage"]} if item.get("source_cost_stage") else {}))
             carrier = order.get("carrier")
             service_key = "shipping:" + oid
             frozen = facts.get(service_key)

@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 import re
 
+from operational_cost_completeness import cost_completeness
+from operational_product_cost_policy import unreceived_eligible
+from operational_remaining_bundle_sources import load_remaining_bundles
+
 from operational_balance_sources import (
     append_components, cod_facts, cost_components, instant, number, rows,
     invoice_component_amounts, shipping_charge, supplier_receipt_proven,
@@ -117,6 +121,7 @@ async def project(db, owner, state, *, as_of=None):
         raise ValueError("operational_work_forecast_time_invalid")
     data = {name: await rows(db, owner, name) for name in READS}
     issues = Counter()
+    declared_scopes = {}
     values = defaultdict(lambda: {"amount": ZERO, "units": 0, "orders": set()})
     currencies = defaultdict(lambda: defaultdict(lambda: ZERO))
 
@@ -159,7 +164,8 @@ async def project(db, owner, state, *, as_of=None):
         raw_orders.append((record, raw))
     ids = Counter(str(r.get("id") or "") for _, r in raw_orders)
     nums = Counter(str(r.get("reference_id") or r.get("order_number") or "") for _, r in raw_orders)
-    current_stages = {}
+    bundle_costs = await load_remaining_bundles(db, owner, [raw for _, raw in raw_orders], stamp)
+    current_stages, current_statuses = {}, {}
     for record, raw in raw_orders:
         oid = str(raw.get("id") or "")
         num = str(raw.get("reference_id") or raw.get("order_number") or "")
@@ -176,10 +182,9 @@ async def project(db, owner, state, *, as_of=None):
             continue
         if created > started:
             current_stages[oid] = _cutover_group(status)
+            current_statuses[oid] = status
             continue
-        if status in CLOSED:
-            continue
-        if status not in OPEN:
+        if status not in OPEN | CLOSED:
             issues["historical_order_status_unverified"] += 1
             continue
         watermark = record.get("g47_salla_snapshot")
@@ -189,9 +194,6 @@ async def project(db, owner, state, *, as_of=None):
         amounts = raw.get("amounts") if isinstance(raw.get("amounts"), dict) else {}
         total = amounts.get("total")
         currency = raw.get("currency") or (total.get("currency") if isinstance(total, dict) else None)
-        if currency != "SAR":
-            issues["historical_cost_currency_requires_review"] += 1
-            continue
         stage = _cutover_group(status)
         items = raw.get("items")
         if not isinstance(items, list) or not items:
@@ -208,6 +210,18 @@ async def project(db, owner, state, *, as_of=None):
                 issues["historical_order_item_identity_ambiguous"] += 1
                 continue
             stable = "salla:" + num + ":" + line_id
+            bundle = bundle_costs.get((num, stable))
+            if bundle is not None:
+                for problem in bundle["issues"]:
+                    issues[problem["code"]] += 1
+                if unreceived_eligible(status):
+                    for component in bundle["items"]:
+                        amount = number(component["cost"])
+                        if amount:
+                            add("prestart", "supplier", stage, "", POOL_NAME, "SAR", amount, 1, oid)
+                            currencies["SAR"]["prestart_supplier_unreceived"] += amount
+                            currencies["SAR"]["prestart_supplier_expected"] += amount
+                continue
             product = item.get("product") if isinstance(item.get("product"), dict) else {}
             product_id = str(item.get("parent_product_id") or item.get("product_id") or product.get("id") or "")
             try:
@@ -230,6 +244,8 @@ async def project(db, owner, state, *, as_of=None):
                         price = matches[0].get("cost_price_from_salla")
                     else:
                         price = catalog.get("cost_price_from_salla")
+                    from operational_product_cost_policy import require_sar_cost
+                    require_sar_cost(catalog)
                     fallback = number(price)
                     if fallback <= 0:
                         raise ValueError("historical_catalog_cost_missing")
@@ -285,6 +301,8 @@ async def project(db, owner, state, *, as_of=None):
                     product_stage = "received_without_approved_invoice"
                     bucket = "prestart_supplier_received_uninvoiced"
                 else:
+                    if not unreceived_eligible(status):
+                        continue
                     party, label, product_stage = "", POOL_NAME, stage
                     bucket = "prestart_supplier_unreceived"
                 add("prestart", "supplier", product_stage, party, label, "SAR", amount,
@@ -295,6 +313,9 @@ async def project(db, owner, state, *, as_of=None):
             if fallback_used and included:
                 issues["historical_current_catalog_estimate_used"] += 1
 
+        # Receipt obligations survive a closed order; unreceived estimates do not.
+        if status in CLOSED:
+            continue
         # Shipping quote is independent from product-cost completeness.
         shipping = raw.get("salla_shipping_current") or raw.get("shipping") or {}
         if not isinstance(shipping, dict):
@@ -339,6 +360,8 @@ async def project(db, owner, state, *, as_of=None):
             method = str(payment.get("method") or raw.get("payment_method") or "").lower()
             is_cod = method in {"cod", "cash_on_delivery", "cashondelivery", "cash on delivery",
                 "الدفع عند الاستلام", "دفع عند الاستلام", "دفع عند الإستلام"}
+            if is_cod and currency != "SAR":
+                raise ValueError("historical_shipping_cod_currency_requires_review")
             due = number(cod_facts(raw, number(amounts.get("total", raw.get("total"))))["outstanding"]) if is_cod else None
             quote = shipping_charge(rates[0], owner, party, stamp, due, setup)
             if not quote.get("fee_complete"):
@@ -365,8 +388,12 @@ async def project(db, owner, state, *, as_of=None):
         engine_at = None
     for source_issue in engine.get("issues") or []:
         code = source_issue if isinstance(source_issue, str) else (source_issue.get("code") if isinstance(source_issue, dict) else None)
-        if code and re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation", code):
-            issues["current_" + code] += 1
+        shipping_component = isinstance(source_issue, dict) and source_issue.get("component") in {"shipping_fee", "carrier_identity", "driver_custody"}
+        if code and (shipping_component or re.search(r"supplier|invoice|shipping|carrier|canonical|product_cost|preparation|bundle|cost_snapshot|order_cost_authority", code)):
+            current_code = "current_" + code
+            issues[current_code] += 1
+            if shipping_component:
+                declared_scopes[current_code] = {"shipping_expected"}
     for obligation in (engine.get("obligations") or {}).values() if engine_at else []:
         if obligation.get("superseded") or obligation.get("derived_credit"):
             continue
@@ -382,7 +409,6 @@ async def project(db, owner, state, *, as_of=None):
         except ValueError:
             issues["operational_cost_obligation_incomplete"] += 1
             continue
-        currencies[currency]["current_" + kind + "_expected"] += expected
         currencies[currency]["current_" + kind + "_confirmed"] += confirmed
         parts = str(obligation.get("id") or "").split(":", 2)
         oid = parts[1] if len(parts) > 1 else str(obligation.get("id"))
@@ -398,6 +424,9 @@ async def project(db, owner, state, *, as_of=None):
                     plans = [s for s in (physical or {}).get("services", []) if str(s.get("service_id") or "") == sid]
                     received = received and len(plans) == 1 and plans[0].get("status") == "completed"
                 if not received or not party:
+                    status = current_statuses.get(oid)
+                    if status is not None and not unreceived_eligible(status):
+                        expected = ZERO
                     party, name = "", POOL_NAME
                     stage = current_stages.get(oid, "unreceived")
                     bucket = "poststart_supplier_unreceived"
@@ -406,7 +435,9 @@ async def project(db, owner, state, *, as_of=None):
                 currencies[currency][bucket] += expected
             else:
                 stage = "not_delivered"
-            add("poststart", kind, stage, party, name, currency, expected, 1, oid)
+            if expected:
+                add("poststart", kind, stage, party, name, currency, expected, 1, oid)
+        currencies[currency]["current_" + kind + "_expected"] += expected
         if confirmed:
             add("poststart", kind, "confirmed_in_financial_balances", str(obligation.get("party_id") or ""),
                 str(obligation.get("name") or "جهة غير مكتملة"), currency, confirmed, 1, oid)
@@ -418,6 +449,7 @@ async def project(db, owner, state, *, as_of=None):
     return {"status": "preview", "as_of": stamp.isoformat(),
         "engine_as_of": engine_at.isoformat() if engine_at else None, "started_at": started.isoformat(),
         "currencies": {c: {k: _fmt(v) for k, v in sorted(details.items())} for c, details in sorted(currencies.items())},
+        "bucket_completeness": cost_completeness(issues, declared_scopes),
         "groups": groups, "issues": [{"code": c, "count": n} for c, n in sorted(issues.items())],
         "complete": not any(c != "historical_current_catalog_estimate_used" for c in issues),
         "warning": "historical_preview_never_add_to_confirmed_or_expected_payable_without_owner_evidence"}

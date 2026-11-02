@@ -16,12 +16,8 @@ from typing import Any
 VERSION = "operational-bundle-cost-projection-v1"
 CENT = Decimal("0.01")
 ZERO = Decimal(0)
-# Fulfilment aliases only: generic 'pending' may mean awaiting payment.
-UNRECEIVED_STATUSES = frozenset({
-    "under_review", "waiting_review", "waiting_for_review", "pending_review",
-    "in_progress", "processing", "انتظار المراجعة", "بانتظار المراجعة",
-    "بإنتظار المراجعة", "قيد التنفيذ", "جاري التنفيذ",
-})
+from operational_product_cost_policy import UNRECEIVED_STATUSES
+
 
 
 def _number(value: Any, *, positive: bool = False) -> Decimal:

@@ -53,6 +53,9 @@ ALLOWED_COLLECTIONS = frozenset(ENTITY_COLLECTIONS.values()) | {
     'mezan_employee_salary_contracts_v2', 'operating_recurring_obligations_v2',
     'operating_recurring_invoices_v2', 'mz2_operational_owner_beneficiaries_v2',
 } | {v[1] for v in AD_SOURCES.values()}
+from operational_remaining_bundle_sources import READ_COLLECTIONS as BUNDLE_READ_COLLECTIONS
+ALLOWED_COLLECTIONS = ALLOWED_COLLECTIONS | BUNDLE_READ_COLLECTIONS
+
 PROVIDERS = ('salla', 'tabby', 'tamara', 'emkan')
 from operational_payment_evidence import PAYMENT_METHODS, normalize_payment, DIAGNOSTICS
 
@@ -578,6 +581,8 @@ def option_matches(binding, tokens):
 
 def cost_components(data, product_id, item, profile):
     """Resolve only MZ2-authoritative amounts; services retain independent identity."""
+    from operational_product_cost_policy import require_sar_cost
+    require_sar_cost(profile)
     variant = str(item.get('variant_id') or '')
     product_cost = number((profile.get('variant_costs') or {}).get(variant, profile.get('base_cost')))
     resources = unique_index(data['mezan_cost_resources_v2'], 'id')
@@ -594,12 +599,14 @@ def cost_components(data, product_id, item, profile):
         if quantity <= 0:
             raise ValueError('mz2_cost_binding_quantity_invalid')
         if link.get('mode') == 'direct':
+            require_sar_cost(link)
             product_cost += number(link.get('direct_amount')) * quantity
             continue
         resource_id = str(link.get('resource_id') or '')
         resource = resources.get(resource_id)
         if link.get('mode') != 'resource' or not resource or not usable(resource):
             raise ValueError('mz2_cost_resource_missing')
+        require_sar_cost(resource)
         amount = number(resource.get('unit_cost')) * quantity
         if resource_id in resource_costs:
             # MZ2 forbids product+option duplicate resource binding; do not repair silently.
@@ -636,7 +643,7 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
     # Before physical receipt, all expected product costs remain one unreceived pool.
     financial_supplier = supplier_id if received else None
     order['items'].append({'id': base_id, 'supplier_id': financial_supplier,
-                           'supplier_receipt_proven': received,
+                           'supplier_receipt_proven': received, 'cost_currency': 'SAR',
                            'cost': str(product_cost), 'quantity': str(quantity)})
     plans = {str(r.get('service_id')): r for r in (piece or {}).get('services', [])}
     service_ids = set(services) | set(plans)
@@ -652,7 +659,7 @@ def append_components(order, base_id, product_cost, services, quantity, supplier
         service_received = bool(received and (not plan or plan.get('status') == 'completed'))
         order['items'].append({'id': f'{base_id}:service:{service_id}',
                                'supplier_id': party if service_received else None,
-                               'supplier_receipt_proven': service_received,
+                               'supplier_receipt_proven': service_received, 'cost_currency': 'SAR',
                                'cost': str(cost), 'quantity': str(quantity), 'component': 'service'})
 
 
@@ -770,7 +777,7 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     out['delivery_event_coverage'] = {'version': 1, 'started_at': start.isoformat(), 'as_of': now.isoformat()}
     # No service with side effects is called: collection access is allowlisted.
     # The inventory catalogue is read on demand, not on each financial sync.
-    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
+    data = {name: await rows(db, owner, name) for name in sorted(ALLOWED_COLLECTIONS - BUNDLE_READ_COLLECTIONS - {'users', 'settings', 'expense_categories', 'mezan_products_v2', 'mz2_opening_facts_v2', 'accounts', 'mz2_operational_bank_accounts'})}
     from operational_ad_funding import bindings as funding_bindings
     data['mz2_ad_account_bindings_v2'], conflicts = funding_bindings(
         operational_state, owner, data['mz2_ad_account_bindings_v2'])
@@ -786,6 +793,8 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     order_numbers = {}
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
+    from operational_remaining_bundle_sources import load_remaining_bundles
+    bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now)
     source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
     source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
     for source in data['unified_orders']:
@@ -868,21 +877,33 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
                 item_id = f'salla:{order_number}:{source_item_id}'
                 product = item.get('product') or {}
                 product_id = str(item.get('parent_product_id') or item.get('product_id') or product.get('id') or '')
+                bundle = bundle_costs.get((order_number, item_id))
+                if bundle is not None:
+                    order['items'].extend(bundle['items'])
+                    if not bundle['complete']:
+                        order['items_complete'] = False
+                    for problem in bundle['issues']:
+                        issue(out, problem['code'], problem['source_id'], scope=problem['scope'],
+                              order_number=order_number, required_action=problem['required_action'])
+                    continue
                 profile = profiles.get(product_id, {})
                 try:
                     cost, services = cost_components(data, product_id, item, profile)
                     quantity = number(item.get('quantity'))
                 except ValueError as exc:
-                    issue(out, 'mz2_product_cost_incomplete', item_id)
+                    order['items_complete'] = False
+                    issue(out, str(exc) if str(exc) == 'mz2_product_cost_currency_requires_review' else 'mz2_product_cost_incomplete', item_id)
                     continue
                 matching = [p for p in pieces if p.get('order_number') == order_number and p.get('order_item_id') == item_id]
                 if matching:
                     if quantity != len(matching) or len({p.get('unit_index') for p in matching}) != len(matching):
+                        order['items_complete'] = False
                         issue(out, 'preparation_piece_coverage_ambiguous', item_id)
                         continue
                     for piece in matching:
                         supplier = piece.get('supplier_id')
-                        if supplier and supplier not in suppliers:
+                        if supplier and supplier not in suppliers and supplier_receipt_proven(piece, now):
+                            order['items_complete'] = False
                             issue(out, 'mz2_supplier_identity_missing', piece.get('id'))
                             continue
                         append_components(order, str(piece['id']), cost, services, 1, supplier, piece, as_of=now)
