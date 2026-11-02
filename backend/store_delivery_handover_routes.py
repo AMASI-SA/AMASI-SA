@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from store_delivery_domain import StoreDeliveryRuleError, assignment_snapshot, normalize_text
+from store_delivery_destination import city_name, current_destination_city
 from order_tracking_notes import ORDER_TRACKING_INSTRUCTIONS, active_stage_instructions, enforce_instruction_rows
 from store_courier_domain import (
     ASSIGNED_WAITING_PICKUP,
@@ -76,12 +77,13 @@ def _require_operator(user: Any) -> dict[str, Any]:
 
 def _order_city(order: dict[str, Any]) -> str:
     candidates = [
+        current_destination_city(order),
         order.get("shipping_city"),
-        order.get("customer_city"),
         (order.get("shipping_address") or {}).get("city") if isinstance(order.get("shipping_address"), dict) else None,
+        order.get("customer_city"),
     ]
     for value in candidates:
-        text = normalize_text(value)
+        text = city_name(value)
         if text:
             return text
     return ""

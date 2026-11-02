@@ -1,0 +1,28 @@
+{
+  "task_id": "COURIER-DESTINATION-CITY-20261102",
+  "repository": "AMASI-SA/AMASI-SA",
+  "branch": "codex/courier-destination-city-20261102",
+  "base_commit": "70576e2a06237eb193b1c927f11ced92e2229589",
+  "state": "WIP: destination-source regression reproduced; provider fallback and confirmation fence pending",
+  "scope": "Use current shipment destination for courier city coverage while preserving city restrictions and historical assignment snapshots.",
+  "completed": [
+    "Reproduced a wrong rejection when the stored flat customer city differs from the current shipment destination.",
+    "Added an initial pure selector for stored current destination evidence and synthetic regression tests.",
+    "Verified that an internally normalized courier order can lack stored destination evidence and therefore needs a fresh, request-scoped provider destination read."
+  ],
+  "verification": [
+    {"command": "pytest --noconftest -p no:cacheprovider backend/tests/test_store_delivery_destination.py", "result": "52 tests passed before the final numeric-string regression was added; final numeric-string regression is red and must be fixed."},
+    {"command": "Focused existing domain and handover tests", "result": "31 baseline tests passed."}
+  ],
+  "pending": [
+    "Reject numeric-string city identifiers and newest ineligible representations before older stored city evidence.",
+    "Add a narrowly scoped, GET-only provider fallback when a Salla-backed order has no trusted stored destination; do not reactivate locally superseded labels.",
+    "Revalidate current destination at confirmation and fence concurrent destination/carrier changes.",
+    "Run the integrated regressions, independent review, and the focused CI suite."
+  ],
+  "production_changed": false,
+  "deployment_state": "No merge, release lease, or production deployment for this task.",
+  "continuity": "Issue #1006 has reached its comment limit. This task status and the task Draft PR carry the continuation record and exact remote commit SHA.",
+  "next_safe_action": "Finish the provider read fallback and confirmation validation, then run focused tests and update this checkpoint.",
+  "privacy": "Only synthetic fixtures and non-customer technical evidence are included."
+}
