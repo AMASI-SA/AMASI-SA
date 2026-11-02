@@ -1,0 +1,25 @@
+name: Operational Remaining Source Checkpoint
+on:
+  push:
+    branches: [integration/operational-balances-unified-20261102]
+    paths: [.github/workflows/operational-remaining-source-checkpoint.yml]
+permissions:
+  contents: write
+concurrency:
+  group: operational-remaining-source-checkpoint
+  cancel-in-progress: false
+jobs:
+  checkpoint:
+    if: github.repository == 'AMASI-SA/AMASI-SA' && github.ref == 'refs/heads/integration/operational-balances-unified-20261102'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply exact hash-locked application patch to this task branch only
+        run: python3 -B docs/operations/OP-UNIFIED-BALANCES-20261102/source-checkpoint/apply_checked.py
+# Temporary source-checkpoint helper. No environments, production credentials,
+# application execution, dependency install, DB/API calls, release or publish.
+# Payload is removed by its source commit. Delete this workflow after read-back.

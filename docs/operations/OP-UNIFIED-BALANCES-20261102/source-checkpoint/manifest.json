@@ -1,0 +1,18 @@
+{
+  "base_commit": "86606a698648a4b4a3dfa4382e5cf3c466e94e76",
+  "equivalent_application_archive": "006df1d4c7a914f386ecd7777971362d5e774402",
+  "files": {
+    "backend/operational_balance_engine.py": {"before": "4de6eb070bba5825490d4700335043d5152a1add", "after": "278fe8b254ff49d6bbd57f6a48f4629f70f790b4", "sha256": "325f571ca7b5dd46046d09107aa0dfcabb330a5e51112e6e341dfa1de64a437a"},
+    "backend/operational_balance_sources.py": {"before": "8e134ede40a8f80c7d442ca3bacd2ba36b1b7f95", "after": "902a468b32869780a9824933eb26fcbfef83576c", "sha256": "5d2d90a9686236cd0eca10ca1b2343da4ca8f345a415d1e9b2b00471730254d3"},
+    "backend/operational_bundle_cost_projection.py": {"before": "2fec6cd0fac34b60b9c9b1889004793b8d10b564", "after": "c4dc9dad8cc88f95dac7629b7766d227e75cdb8b", "sha256": "cc30d9cc69909bc01fcba6397ce37255d54f1e2c671c0d71baa822675af7604e"},
+    "backend/operational_cost_completeness.py": {"before": null, "after": "1031f254f0e0e80b7b99ff8eb0bf55c04f431551", "sha256": "13f9dc2797c2e5b10b323bec3983e78aa0896ff3ea63f2be7714e7c0675f7142"},
+    "backend/operational_financial_position_core.py": {"before": "56879afb81952ea1aa8e0362cfba6923926c0b0e", "after": "318f4eede17c55ecd49f20507d34d4657af9ee98", "sha256": "68b3e702b07ca5d73ce2393fbf200084febaaf715df16bc6ff2cc5223acd098f"},
+    "backend/operational_open_cost_exposure.py": {"before": "a39703b268ecedf3336ee025c47b169cec38d621", "after": "e322330bb2431b7902121907b08f155730c853b0", "sha256": "77ada992c8ff27be3e3e9ed3f8f5edeb807daf1c2397929b349f963e90887864"},
+    "backend/operational_product_cost_policy.py": {"before": null, "after": "2ccf3e925b25cfaedc5da6b87c1805aa595b0b9d", "sha256": "15ce8f61049ea3b642ec86bc0843b919a3bee925464d88dfb418c437349ea1e1"},
+    "backend/operational_remaining_bundle_sources.py": {"before": null, "after": "82d9e7eb92310e9ceb42ca2af551011a74b4abd3", "sha256": "d4b6daa3dfd0697e075844c940ab6441f31c5d488f02307eb6331dc4f56a1014"},
+    "backend/tests/test_operational_balance_cost_completeness.py": {"before": null, "after": "2782b0e5d979617cb2d10b614e32615cb7736855", "sha256": "19034d348af7083fee53789d10c840728e944ece3c3e21190287c6de0bb8310b"},
+    "backend/tests/test_operational_balance_remaining_products.py": {"before": null, "after": "0bd6422177cd40792ce84c549b4fb919a4f4cfea", "sha256": "df2df63e7859792fa3c8bdc411301e0baba9b612046d625aed7d4c4f33aa94ec"},
+    "backend/tests/test_operational_balance_sources.py": {"before": "33e3baaf0a8e71a66d7807f0c49411dc177bec6c", "after": "e08bd1279ad573474cd13b71213dd6a0437c1bbf", "sha256": "4b4217ef75ef68be40bed3a8242a66e6df2462e06908d56314dedf4054b4b621"}
+  },
+  "patch_sha256": "35d229c3675871dfe7a5a5d8815c2c9fdb274393626dd0894464a96b7da1f5e8"
+}
