@@ -13,14 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: production
-            source: 3d8720860fb524d729f6c83a8c56c5b4de3a2afb
-          - label: provider
-            source: 88c7872072e6e6a149a92153a732ae4c0551ae21
-          - label: followup
-            source: df17ef3ff21e2515ed24ec61d5d8019cf9cb2fe5
-          - label: ancestor
-            source: 3bac875cfbcbc7f66849edae83c478dd194d9c12
+          - label: integration
+            source: b96627156b522637edd2b6dbf0498a386b1abfff
     steps:
       - uses: actions/checkout@v4
         with:
