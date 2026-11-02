@@ -1,0 +1,41 @@
+import React from 'react';
+
+export const externalOperations = [
+  {value: 'borrow', label: 'استلام سلفة من الجهة — يصبح لها علينا', direction: 'incoming', kind: 'collection'},
+  {value: 'lend', label: 'إعطاء سلفة للجهة — يصبح لنا عليها', direction: 'outgoing', kind: 'payment'},
+  {value: 'repay_borrowing', label: 'سداد سلفة أو دين للجهة — ينخفض حقها علينا', direction: 'outgoing', kind: 'settlement'},
+  {value: 'collect_lending', label: 'استرجاع سلفة أو دين من الجهة — ينخفض حقنا عليها', direction: 'incoming', kind: 'settlement'},
+];
+export const externalOperationPatch = value => {
+  const action = externalOperations.find(row => row.value === value);
+  return action ? {external_operation: value, direction: action.direction, kind: action.kind}
+    : {external_operation: value};
+};
+
+export default function ExternalOperationControls({value, disabled, onChange}) {
+  const action = externalOperations.find(row => row.value === value);
+  return <div className="op-field"><label><span>عملية الجهة الخارجية</span>
+    <select aria-label="عملية الجهة الخارجية" value={value || ''} disabled={disabled} onChange={event => onChange(externalOperationPatch(event.target.value))}>
+      <option value="">اختر إنشاء السلفة أو سدادها</option>
+      {externalOperations.map(row => <option key={row.value} value={row.value}>{row.label}</option>)}
+      <option value="general">حركة أخرى — تخصيص أو تسوية يدوية</option>
+    </select></label>
+    {action && <p className="op-muted" role="status">{action.direction === 'incoming' ? 'وارد إلى الحساب المختار.' : 'صادر من الحساب المختار.'} {action.kind === 'settlement'
+      ? 'يُخفض المستحق القائم؛ لا ينشئ سلفة جديدة. دون تخصيص يدوي، يُوزع على المستحقات بنفس الاتجاه حتى مبلغ السداد.'
+      : 'ينشئ مستحقًا مستقلًا؛ لا يسدد دينًا سابقًا للجهة تلقائيًا.'}</p>}
+  </div>;
+}
+
+export function ExternalBalanceReceipt({snapshot}) {
+  if (!snapshot) return null;
+  const money = value => typeof value === 'string' && /^-?\d+\.\d{2}$/.test(value) ? value : 'غير متوفر';
+  const action = externalOperations.find(row => row.value === snapshot.operation);
+  if (!action || snapshot.currency !== 'SAR') return <p role="status">تم حفظ الحركة؛ تفاصيل الأرصدة غير متوفرة.</p>;
+  return <section className="op-card" aria-label="أثر حركة الجهة الخارجية">
+    <h3>أثر الحركة المحفوظة</h3><p>{action.label}</p>
+    <table><caption>الأرصدة قبل الحركة وبعدها بالريال السعودي</caption><thead><tr><th>البيان</th><th>قبل</th><th>بعد</th></tr></thead>
+      <tbody>{[['receivable_sar', 'لنا لدى الجهة'], ['payable_sar', 'للجهة علينا'], ['account_balance_sar', 'رصيد الحساب المختار']].map(([key, label]) =>
+        <tr key={key}><th>{label}</th><td>{money(snapshot.before?.[key])}</td><td>{money(snapshot.after?.[key])}</td></tr>)}</tbody>
+    </table><p className="op-muted">هذه نتيجة الحركة المؤكدة، وليست إعادة تسجيل لرصيد البداية.</p>
+  </section>;
+}

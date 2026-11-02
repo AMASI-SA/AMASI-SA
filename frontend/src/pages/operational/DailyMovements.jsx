@@ -4,6 +4,7 @@ import { EntityPicker, KindPicker, Field, Notice } from './OpeningBalances';
 import InventoryPurchases from './InventoryPurchases';
 import SupplierAdjustments from './SupplierAdjustments';
 import AddOperationalEntity from './AddOperationalEntity';
+import ExternalOperationControls, {externalOperations, ExternalBalanceReceipt} from './ExternalOperationControls';
 import {readPendingMovement,savePendingMovement,clearPendingMovement} from './pendingMovementStorage';
 
 // Only a recurring estimate may become payable as part of its explicit payment.
@@ -23,7 +24,7 @@ const displayCents = value => `${value / 100n}.${String(value % 100n).padStart(2
 
 
 export default function DailyMovements({context,source='mezan2',canManage=false,storageScope=null,cards=false,canCreateCash=false,onScopeChanged=()=>{},onSaved=()=>{}}) {
-  const empty={direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
+  const empty={external_operation:'',direction:'',party_type:'',party_id:'',bank_id:'',source_account_type:'bank_auto',amount:'',currency:'',kind:'payment',order_number:'',note:'',reference:'',actual_fee_amount:''};
   const [recovery] = useState(() => {
     try { return {payload:readPendingMovement(storageScope),error:''}; }
     catch { return {payload:null,error:'تعذر استعادة سجل الحركة المحفوظة. تحقق من تسجيل الدخول وإتاحة التخزين قبل المتابعة.'}; }
@@ -31,6 +32,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
   const [pendingPayload,setPendingPayload]=useState(recovery.payload);
   const restoredForm = payload => ({...Object.fromEntries(Object.entries(empty).map(([key,value])=>[key,payload?.[key] ?? value])),...(payload?.business_date?{business_date:payload.business_date}:{})});
   const [form,setForm]=useState(()=>restoredForm(recovery.payload)),[accounts,setAccounts]=useState([]),[obligations,setObligations]=useState([]),[allocations,setAllocations]=useState(()=>Object.fromEntries((recovery.payload?.allocations||[]).map(a=>[a.obligation_id,a.amount]))),[busy,setBusy]=useState(false),[error,setError]=useState(recovery.error),[message,setMessage]=useState(''),[adding,setAdding]=useState(false),[entityVersion,setEntityVersion]=useState(0);
+  const [externalResult,setExternalResult]=useState(null);
   const [stage,setStage]=useState(recovery.payload?'entry':'home'),[choices,setChoices]=useState([]),[choicesLoading,setChoicesLoading]=useState(false);
   const [entryMode,setEntryMode]=useState("normal");
   const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
@@ -53,12 +55,15 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
     api.obligations(form.party_type,form.party_id).then(r=>{if(alive)setObligations(r.items||[]);}).catch(e=>{if(alive)setError(messageFor(e));});
     return()=>{alive=false;};
   },[form.party_type,form.party_id,form.kind]);
-  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');};
+  const change=patch=>{if(pendingPayload||recovery.error)return;setForm(f=>({...f,...patch}));pending.current=null;setError('');setMessage('');setExternalResult(null);};
   const expenseOrWithdrawal=['operating_expense','owner_withdrawal'].includes(form.party_type);
   const custody=form.party_type==='employee_custody';
+  const external=form.party_type==='external_person';
+  const externalIntent=externalOperations.some(row=>row.value===form.external_operation);
+  const externalControls=<ExternalOperationControls value={form.external_operation} disabled={busy||!!pendingPayload||!!recovery.error} onChange={patch=>{change(patch);setAllocations({});}}/>;
   const walletFirst=form.party_type==='ad_account'&&choices.find(r=>r.id===form.party_id)?.funding_policy==='wallet_first';
   const chooseType=kind=>{
-    change({party_type:kind,party_id:'',currency:'',bank_id:'',source_account_type:'bank_auto',kind:kind==='employee_custody'&&form.direction==='incoming'?'collection':'payment',direction:['operating_expense','owner_withdrawal'].includes(kind)?'outgoing':form.direction});
+    change({external_operation:'',party_type:kind,party_id:'',currency:'',bank_id:'',source_account_type:'bank_auto',kind:kind==='employee_custody'&&form.direction==='incoming'?'collection':'payment',direction:['operating_expense','owner_withdrawal'].includes(kind)?'outgoing':form.direction});
     setAllocations({});setAdding(false);
   };
   const eligible=obligations.filter(o=>o.party_type===form.party_type&&o.party_id===form.party_id&&o.currency===form.currency&&(allocatable(o) ?? 0n)>0n&&o.direction===(form.direction==='incoming'?'receivable':'payable'));
@@ -68,6 +73,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
     if(lock.current||recovery.error)return;
     let payload=pendingPayload;
     if(!payload){
+      if(external&&!form.external_operation){setError('حدد هل العملية إنشاء سلفة أو سداد مستحق أو حركة أخرى.');return;}
       if(!form.direction||!form.party_id||(form.kind!=='correction'&&!form.bank_id)||!form.currency||!/^\d+(\.\d{1,2})?$/.test(form.amount)||Number(form.amount)<=0){setError('أكمل الاتجاه والجهة والحساب والمبلغ.');return;}
       if(form.kind==='correction'&&!form.note.trim()){setError('أدخل سبب التصحيح.');return;}
     }
@@ -86,6 +92,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
 
         pending.current ||= requestId();
         payload={...form,bank_id:form.kind==='correction'?null:form.bank_id,source_account_type:form.kind==='correction'?'bank_auto':form.source_account_type,actual_fee_amount:form.kind==='settlement'&&form.party_type==='provider'?(form.actual_fee_amount||'0.00'):'0.00',request_id:pending.current,expected_session_scope:storageScope,source,receipt_id:null,order_number:form.order_number||null,allocations:selected};
+        if(!external||!externalIntent)delete payload.external_operation;
         try {savePendingMovement(storageScope,payload);}
         catch {setError('تعذر حفظ الحركة بأمان على هذا الجهاز. لم تُرسل الحركة؛ أتح التخزين ثم أعد المحاولة.');return;}
         setPendingPayload(payload);
@@ -93,10 +100,10 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
       if(payload.expected_session_scope!==storageScope){setError('الحركة المحفوظة لا تطابق نطاق الجلسة؛ يلزم التحقق من نتيجتها قبل المتابعة.');return;}
       const fresh=await api.context();
       if(fresh.session_scope!==storageScope){setError('تغيّر نطاق الجلسة؛ احتفظنا بالحركة في نطاقها الأصلي.');onScopeChanged();return;}
-      await api.movement(payload);
+      const saved=await api.movement(payload);
       try {clearPendingMovement(storageScope);}
       catch {setError('تم تأكيد الحركة لكن تعذر تحديث سجل الجهاز. أعد محاولة الحركة نفسها لإكمال التحقق.');return;}
-      setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');if(cards){setStage('home');setEntryMode('normal');}onSaved();
+      setExternalResult(saved?.external_balance_snapshot||null);setPendingPayload(null);setForm(empty);setAllocations({});setObligations([]);pending.current=null;setMessage('تم حفظ الحركة');if(cards){setStage('home');setEntryMode('normal');}onSaved();
     }catch(e){
       if(e?.response?.data?.detail?.not_applied===true||([400,422].includes(e?.response?.status)&&e?.response?.data?.detail?.not_applied!==false)){
         try {clearPendingMovement(storageScope);setPendingPayload(null);pending.current=null;}
@@ -107,7 +114,7 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
   };
   if(stage==='supplier-discount'||stage==='supplier-return') return <section><button className="op-link" onClick={()=>setStage('entry')}>العودة للمورد</button><SupplierAdjustments context={context} supplierId={form.party_id} kind={stage==='supplier-return'?'return':'discount'}/></section>;
   if(stage==='inventory-payment'&&context) return <section><button className="op-link" onClick={()=>setStage(entryMode==='custody_inventory'?'custody':'entry')}>{entryMode==='custody_inventory'?'العودة للعهدة':'العودة للمورد'}</button><InventoryPurchases mode="payment" context={context} source={source} supplierId={entryMode==='custody_inventory'?'':form.party_id} fixedSource={entryMode==='custody_inventory'?`employee_custody:${form.party_id}`:null}/></section>;
-  if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/>
+  if(cards && !recovery.payload && stage!=='advanced') return <section className="op-card op-movement-cards" dir="rtl"><h2>الحركات المالية اليومية</h2><Notice error={error} message={message}/><ExternalBalanceReceipt snapshot={externalResult}/>
     {stage==='home'&&<button className="op-link" onClick={()=>setStage('advanced')}>حركات أخرى</button>}
     {pendingPayload&&<p role="status">هناك حركة محفوظة لم تُحسم نتيجتها. أعد المحاولة بالبيانات نفسها دون تكرار.</p>}
     {stage==='home'&&<div className="op-tile-grid">{[
@@ -131,9 +138,10 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
     {stage==='entry'&&<><button className="op-link" disabled={busy||!!pendingPayload||!!recovery.error} onClick={()=>setStage('entities')}>العودة للجهات</button><h3>{choices.find(r=>r.id===form.party_id)?.name}</h3>
       {form.party_type==='supplier'&&context&&<Field label="عملية المورد"><select value="payment" disabled={busy||!!pendingPayload||!!recovery.error} onChange={e=>setStage(e.target.value)}><option value="payment">سداد مبلغ للمورد</option><option value="inventory-payment">سداد فاتورة مخزون</option><option value="supplier-discount">خصم مبلغ ثابت من المورد</option><option value="supplier-return">إرجاع منتجات مقبول من المورد</option></select></Field>}
       <fieldset className="op-entry-grid" disabled={busy||!!pendingPayload||!!recovery.error}>
-      {entryMode==='normal'&&['courier','store_driver','external_person'].includes(form.party_type)&&<Field label="اتجاه الحركة"><select value={form.direction} onChange={e=>change({direction:e.target.value,kind:e.target.value==='incoming'?'collection':'payment'})}><option value="outgoing">صادر</option><option value="incoming">وارد</option></select></Field>}
+      {external&&externalControls}
+      {entryMode==='normal'&&['courier','store_driver','external_person'].includes(form.party_type)&&<Field label="اتجاه الحركة"><select disabled={external&&externalIntent} value={form.direction} onChange={e=>change({direction:e.target.value,kind:e.target.value==='incoming'?'collection':'payment'})}><option value="outgoing">صادر</option><option value="incoming">وارد</option></select></Field>}
       {entryMode==='normal'&&form.party_type==='ad_account'&&<Field label="العملية"><select value={form.kind} onChange={e=>change({kind:e.target.value})}><option value="payment">{choices.find(r=>r.id===form.party_id)?.funding_mode==='hybrid'?'سداد المستحق وشحن الزائد للمحفظة':'سداد مستحق إعلاني'}</option>{!walletFirst&&['prepaid','hybrid'].includes(choices.find(r=>r.id===form.party_id)?.funding_mode)&&<option value="wallet_funding">تمويل محفظة إعلانية</option>}</select></Field>}
-      {entryMode==='normal'&&form.party_type!=='provider'&&<Field label="السداد من"><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option>{form.party_type==='operating_expense'&&<option value="employee_custody">عهدة</option>}</select></Field>}
+      {entryMode==='normal'&&form.party_type!=='provider'&&<Field label={external?(form.direction==='incoming'?'الاستلام في':'الدفع من'):'السداد من'}><select value={form.source_account_type} onChange={e=>change({source_account_type:e.target.value,bank_id:''})}><option value="bank">بنك</option><option value="cash">صندوق</option>{form.party_type==='operating_expense'&&<option value="employee_custody">عهدة</option>}</select></Field>}
       {entryMode==='cash'&&<p>السداد كاش من الصندوق المختار.</p>}
       {entryMode==='custody_supplier'&&<p>السداد من العهدة المختارة، دون خصم جديد من البنك.</p>}
       {entryMode==='custody_cash'&&<p>تخفيض العهدة وزيادة الصندوق بنفس المبلغ، دون مصروف جديد.</p>}
@@ -144,15 +152,16 @@ export default function DailyMovements({context,source='mezan2',canManage=false,
       </fieldset><button className="op-primary" disabled={busy||!!recovery.error} onClick={submit}>{busy?'جارٍ الحفظ…':pendingPayload?'إعادة محاولة الحركة':'حفظ الحركة'}</button>
     </>}
   </section>;
-  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
-    <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={(walletFirst||(expenseOrWithdrawal&&form.kind!=='correction'))&&value==='incoming'} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
+  return <section className="op-card"><h2>الحركات المالية اليومية</h2><p className="op-muted">سجّل المبلغ والجهة والحساب.</p><Notice error={error} message={message}/><ExternalBalanceReceipt snapshot={externalResult}/>{pendingPayload&&<p role="status" className="op-muted">هناك حركة محفوظة لم تُحسم نتيجتها. المدخلات مقفلة؛ إعادة المحاولة ترسل الحركة نفسها دون تكرار أثرها.</p>}<fieldset disabled={busy||Boolean(pendingPayload)||Boolean(recovery.error)}>
+    <Field label="اتجاه الحركة"><span className="op-segment">{[['incoming','وارد'],['outgoing','صادر']].map(([value,label])=><button key={value} disabled={(external&&externalIntent)||((walletFirst||(expenseOrWithdrawal&&form.kind!=='correction'))&&value==='incoming')} aria-pressed={form.direction===value} onClick={()=>{change({direction:value,...(custody&&form.kind!=='correction'?{kind:value==='incoming'?'collection':'payment'}:{})});setAllocations({});}}>{label}</button>)}</span></Field>
     <KindPicker value={form.party_type} onChange={chooseType}/>
+    {external&&externalControls}
     <EntityPicker onItems={setChoices} key={entityVersion} kind={form.party_type} value={form.party_id} onChange={(id,item)=>{change({party_id:id,currency:item?.currency||'',bank_id:'',source_account_type:'bank_auto',...(item?.funding_policy==='wallet_first'?{kind:'payment',direction:'outgoing'}:{})});setAllocations({});}}/>
     {canManage&&['external_person','operating_expense','cash'].includes(form.party_type)&&<button type="button" className="op-link" onClick={()=>setAdding(true)}>+ إضافة {form.party_type==='external_person'?'جهة خارجية':form.party_type==='cash'?'صندوق':'نوع مصروف تشغيلي'}</button>}
     {adding&&<AddOperationalEntity kind={form.party_type} onCancel={()=>setAdding(false)} onAdded={row=>{change({party_id:row.id,currency:row.currency});setAdding(false);setEntityVersion(v=>v+1);if(row.kind==='cash')setAccounts(a=>[...a,row]);}}/>}
-    <Field label={form.party_type==='operating_expense'?'مصدر الصرف: بنك أو صندوق أو عهدة':'البنك أو الصندوق'}><select disabled={form.kind==='correction'} value={form.bank_id?`${form.source_account_type}:${form.bank_id}`:''} onChange={e=>{const chosen=availableAccounts.find(a=>`${a.kind}:${a.id}`===e.target.value);change({bank_id:chosen?.id||'',source_account_type:chosen?.kind||'bank_auto'});}}><option value="">اختر الحساب</option>{availableAccounts.map(a=><option key={`${a.kind}:${a.id}`} value={`${a.kind}:${a.id}`}>{a.kind==='employee_custody'?'عهدة · ':''}{a.name}</option>)}</select></Field>
+    <Field label={external?(form.direction==='incoming'?'الاستلام في':'الدفع من'):form.party_type==='operating_expense'?'مصدر الصرف: بنك أو صندوق أو عهدة':'البنك أو الصندوق'}><select disabled={form.kind==='correction'} value={form.bank_id?`${form.source_account_type}:${form.bank_id}`:''} onChange={e=>{const chosen=availableAccounts.find(a=>`${a.kind}:${a.id}`===e.target.value);change({bank_id:chosen?.id||'',source_account_type:chosen?.kind||'bank_auto'});}}><option value="">اختر الحساب</option>{availableAccounts.map(a=><option key={`${a.kind}:${a.id}`} value={`${a.kind}:${a.id}`}>{a.kind==='employee_custody'?'عهدة · ':''}{a.name}</option>)}</select></Field>
     {form.source_account_type==='employee_custody'&&<p className="op-muted">يُخصم المبلغ من العهدة، دون خروج جديد من البنك.</p>}
-    <Field label="نوع الحركة"><select value={form.kind} onChange={e=>{change({kind:e.target.value,...((e.target.value==='correction'||(e.target.value==='settlement'&&form.source_account_type==='employee_custody'))?{bank_id:'',source_account_type:'bank_auto'}:{})});setAllocations({});}}>{movementKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
+    <Field label="نوع الحركة"><select disabled={external&&externalIntent} value={form.kind} onChange={e=>{change({kind:e.target.value,...((e.target.value==='correction'||(e.target.value==='settlement'&&form.source_account_type==='employee_custody'))?{bank_id:'',source_account_type:'bank_auto'}:{})});setAllocations({});}}>{movementKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
     <Field label={`المبلغ${form.currency?' · '+form.currency:''}`}><input inputMode="decimal" value={form.amount} onChange={e=>change({amount:e.target.value})}/></Field>
     {form.kind==='settlement'&&<div><h3>المستحقات المراد تسويتها</h3>{eligible.length?eligible.map((o,index)=><Field key={o.id} label={`${o.label||o.name||'مستحق '+(index+1)} · ${o.kind==='recurring'&&(decimalCents(o.expected)??0n)>0n?'التزام دوري تقديري — يؤكد الجزء المدفوع عند الحفظ · المتاح '+displayCents(allocatable(o)):'المتبقي المؤكد '+o.outstanding} ${o.currency}`}><input inputMode="decimal" value={allocations[o.id]||''} onChange={e=>{setAllocations(a=>({...a,[o.id]:e.target.value}));pending.current=null;}}/></Field>):<p>لا توجد مستحقات متاحة للتسوية.</p>}</div>}
     {form.kind==='settlement'&&form.party_type==='provider'&&<Field label="العمولة الفعلية المقتطعة من التسوية"><input inputMode="decimal" value={form.actual_fee_amount} onChange={e=>change({actual_fee_amount:e.target.value})}/></Field>}

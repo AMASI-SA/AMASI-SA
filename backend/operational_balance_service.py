@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from operational_balance_store import audit, digest, fail, mutate, now, read, remember, replay, RECEIPTS, claim_movement
 from operational_balance_engine import reconcile_credits
+from operational_external_advances import ACTIONS as EXTERNAL_ACTIONS, CREATION as EXTERNAL_CREATION, REPAYMENT as EXTERNAL_REPAYMENT, advance_id, advance_obligations, balance_snapshot
 from operational_ad_wallet_pool import enabled as wallet_pool_enabled, project_pool
 
 DEFINITIVE_MOVEMENT_REJECTIONS = {
@@ -145,6 +146,8 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
 def outstanding(state, obligation_id, *, include_expected=False):
     reconcile_credits(state)
     obligation = (state.get("engine", {}).get("obligations") or {}).get(obligation_id)
+    if not obligation and obligation_id.startswith("external-advance:"):
+        obligation = advance_obligations(state).get(obligation_id)
     if not obligation:
         # Baselines can be settled without replaying old orders.
         opening = state["openings"].get(obligation_id)
@@ -195,6 +198,15 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
         amount = money(payload["amount"])
         currency = payload["currency"]
         row = await entity(db, owner, payload["party_type"], payload["party_id"], currency)
+        external_operation = payload.get("external_operation")
+        if external_operation is not None:
+            if row["kind"] != "external_person" or currency != "SAR" or external_operation not in EXTERNAL_ACTIONS:
+                fail("operational_external_operation_invalid", "اختر عملية صحيحة لجهة خارجية بالريال السعودي", 422)
+            direction, kind, _ = EXTERNAL_ACTIONS[external_operation]
+            if payload["direction"] != direction or payload["kind"] != kind:
+                fail("operational_external_operation_direction", "اتجاه الحركة ونوعها لا يطابقان عملية السلفة أو السداد", 422)
+            if external_operation in EXTERNAL_CREATION and payload.get("allocations"):
+                fail("operational_external_creation_allocation", "إنشاء سلفة مستقلة لا يسدد دينًا سابقًا تلقائيًا", 422)
         # Cross-currency advertising requires two independently evidenced legs:
         # credited USD advertising amount, and total debited SAR including bank fee.
         fx_fields = ("bank_currency", "bank_amount", "bank_fee_amount")
@@ -315,9 +327,13 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 and payload["kind"] in {"payment", "settlement"}
                 and amount > max(party_available - Decimal(balance.get("outstanding_receivable", "0")), Decimal(0))):
             fail("operational_supplier_payment_exceeds_payable", "لا يمكن سداد المورد دون مستحق، أو بأكثر من المبلغ المستحق")
-        if not wallet_pool and not requested and payload["kind"] in {"payment", "collection", "refund"} and row["kind"] not in {"bank", "cash", "employee_custody"}:
+        if (not wallet_pool and not requested and external_operation not in EXTERNAL_CREATION
+                and (payload["kind"] in {"payment", "collection", "refund"} or external_operation in EXTERNAL_REPAYMENT)
+                and row["kind"] not in {"bank", "cash", "employee_custody"}):
             left, requested = min(amount, party_available) if party_available is not None else amount, []
             candidates = list(state["openings"]) + list(state.get("engine", {}).get("obligations", {}))
+            if external_operation in EXTERNAL_REPAYMENT:
+                candidates += list(advance_obligations(state))
             for oid in candidates:
                 try:
                     obligation, remaining = outstanding(state, oid)
@@ -399,7 +415,19 @@ async def create_movement(db, owner, actor, payload, *, source="mezan2", clock=N
                 "occurred_at": stamp, "receipt_id": item.get("receipt_id")}
             audit(state, actor, "recurring_payment_confirmed", before_confirmation, deepcopy(obligation),
                   "تأكيد الجزء المدفوع من الالتزام الدوري", source, stamp)
+        if external_operation:
+            before_balances = balance_snapshot(report(state), party_id=row["id"], currency=currency,
+                                               bank_id=bank["id"], bank_kind=bank["kind"])
         state["movements"].append(item)
+        if external_operation:
+            item["external_balance_snapshot"] = {
+                "operation": external_operation, "currency": currency,
+                "account_id": bank["id"], "account_kind": bank["kind"],
+                "account_label": "الاستلام في" if payload["direction"] == "incoming" else "الدفع من",
+                "before": before_balances,
+                "after": balance_snapshot(report(state), party_id=row["id"], currency=currency,
+                                          bank_id=bank["id"], bank_kind=bank["kind"]),
+            }
         audit(state, actor, "movement_saved", None, item, payload.get("note") or "حركة معتمدة", source, stamp)
         remember(state, replay_action, payload, item)
         return item
@@ -585,6 +613,13 @@ def report(state, *, as_of=None):
         obligation.update(settled=fmt(used), outstanding=fmt(max(remaining, Decimal(0))))
         obligation["available_to_pay"] = fmt(max(remaining + (Decimal(obligation.get("expected", "0")) if obligation.get("kind") == "recurring" else Decimal(0)), Decimal(0)))
         obligation["pending_confirmation"] = obligation.get("kind") == "recurring" and Decimal(obligation.get("expected", "0")) > 0
+    external_claims = advance_obligations(state)
+    external_settled = {}
+    for movement in state["movements"]:
+        for allocation in movement.get("allocations", []):
+            key = allocation["obligation_id"]
+            if key in external_claims:
+                external_settled[key] = external_settled.get(key, Decimal(0)) + Decimal(allocation["amount"])
     for movement in state["movements"]:
         amount = Decimal(movement["amount"])
         signed = amount if movement["direction"] == "incoming" else -amount
@@ -639,6 +674,19 @@ def report(state, *, as_of=None):
                 # Unallocated cash remains an explicit advance/overcollection,
                 # never disappears or silently marks an invoice paid.
                 field = "outstanding_receivable" if signed < 0 else "outstanding_payable"
+                if movement["party_type"] == "external_person":
+                    identity = advance_id(movement)
+                    settled = external_settled.get(identity, Decimal(0))
+                    if settled > unallocated:
+                        raise ValueError("external_advance_settlement_exceeds_balance")
+                    claim = deepcopy(external_claims[identity])
+                    claim.update(settled=fmt(settled), outstanding=fmt(unallocated-settled),
+                                 available_to_pay=fmt(unallocated-settled), pending_confirmation=False)
+                    obligations.append(claim)
+                    party["settled"] += settled
+                    if movement.get("external_operation") in EXTERNAL_CREATION:
+                        party["confirmed_receivable" if signed < 0 else "confirmed_payable"] += unallocated
+                    unallocated -= settled
                 party[field] += unallocated
     # Salary accrued against a starting amount owed by an employee offsets that
     # amount first; the gross history remains available in obligations.

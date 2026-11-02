@@ -80,6 +80,7 @@ class Movement(Request):
     amount: str = Field(min_length=1, max_length=30)
     currency: str = Field(pattern="^[A-Z]{3}$")
     kind: Literal["payment", "collection", "settlement", "transfer", "refund", "wallet_funding", "correction"]
+    external_operation: Literal["borrow", "lend", "repay_borrowing", "collect_lending"] | None = None
     order_number: str | None = Field(default=None, max_length=160)
     note: str = Field(default="", max_length=1000)
     receipt_id: str | None = Field(default=None, max_length=100)
@@ -695,13 +696,22 @@ def make_operational_balance_router(db, current_user):
         if payload.business_date is None:
             data.pop("business_date")
         # Preserve existing request hashes for in-flight pre-FX mobile movements.
-        for field in ("bank_currency", "bank_amount", "bank_fee_amount"):
+        for field in ("bank_currency", "bank_amount", "bank_fee_amount", "external_operation"):
             if data[field] is None:
                 data.pop(field)
         if source == "employee_app":
             from operational_app_banks import require_assigned_bank
             await require_assigned_bank(db, owner, actor, data)
-        return await create_movement(db, owner, actor["id"], data, source=source)
+        result = await create_movement(db, owner, actor["id"], data, source=source)
+        if source == "employee_app" and result.get("external_balance_snapshot") is not None:
+            # Reporting permission is independent from recording a movement.
+            # Recheck it AFTER the commit; redact only balances on revocation,
+            # while preserving the acknowledgement of the committed operation.
+            try:
+                await scope(db, user, "reports")
+            except HTTPException:
+                result = {key: value for key, value in result.items() if key != "external_balance_snapshot"}
+        return result
 
     @router.get("/movements")
     async def movements(user=Depends(current_user)):
