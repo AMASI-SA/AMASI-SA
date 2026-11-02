@@ -255,6 +255,18 @@ def make_order_review_mezan_image_unlink_router(
             )
 
         image_url = mezan_image_url(image_id)
+        # Operational images are immutable while linked to an order or reusable
+        # product-option preference. The user must explicitly unlink the
+        # operational card and preference before deleting its underlying bytes.
+        if await db[base.WORKFLOWS].count_documents({
+            "user_id": user_id, "operational_items.selected_image_url": image_url,
+        }) or await db[base.OPERATIONAL_IMAGE_PREFERENCES].count_documents({
+            "user_id": user_id, "selected_image_url": image_url,
+        }):
+            raise HTTPException(status_code=409, detail={
+                "code": "operational_image_in_use",
+                "message": "الصورة مستخدمة بمنتج تشغيلي أو محفوظة لخيار منتج؛ لا يمكن حذفها الآن.",
+            })
         now = base._now()
 
         # Clear every order, including approved/advanced workflows, as requested.

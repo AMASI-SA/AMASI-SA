@@ -33,6 +33,7 @@ on:
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
       - "backend/order_engine/salla_refresh.py"
+      - "backend/tests/test_operational_option_image.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
@@ -154,6 +155,7 @@ on:
       - "backend/order_engine/repository.py"
       - "backend/order_engine/routes.py"
       - "backend/order_engine/salla_refresh.py"
+      - "backend/tests/test_operational_option_image.py"
       - "backend/tests/test_order_review_stage_one.py"
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
@@ -278,6 +280,7 @@ jobs:
         working-directory: backend
         run: >-
           python -m pytest
+          tests/test_operational_option_image.py
           tests/test_order_review_stage_one.py
           tests/test_order_review_export_controls.py
           tests/test_order_review_spec_replacements.py
