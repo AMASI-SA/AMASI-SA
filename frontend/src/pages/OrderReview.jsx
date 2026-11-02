@@ -5,6 +5,7 @@ import {
     FloppyDisk, MagnifyingGlass, Plus, SpinnerGap, WarningCircle, WhatsappLogo, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import api from "../lib/api";
 
 import {
     completeOrderReview,
@@ -177,6 +178,37 @@ export function PaymentReceiptCard({ receiptUrl }) {
             </a>
         </div>
     );
+}
+
+function OperationalPhoto({ url, alt = "صورة المنتج التشغيلي", className = "" }) {
+    const protectedImage = String(url || "").startsWith("/api/order-reviews-v1/mezan-images/");
+    const [source, setSource] = useState(protectedImage ? "" : url);
+
+    useEffect(() => {
+        let active = true;
+        let objectUrl = "";
+        if (!protectedImage) {
+            setSource(url);
+            return () => { active = false; };
+        }
+        setSource("");
+        const path = String(url).replace(/^\/api/, "");
+        api.get(path, { responseType: "blob" })
+            .then(({ data }) => {
+                if (!active) return;
+                objectUrl = URL.createObjectURL(data);
+                setSource(objectUrl);
+            })
+            .catch(() => { if (active) setSource(""); });
+        return () => {
+            active = false;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [url, protectedImage]);
+
+    return source
+        ? <img src={source} alt={alt} loading="lazy" className={className} />
+        : <div role="img" aria-label={alt} className={className + " bg-slate-100"} />;
 }
 
 function ProductReviewCard({ item, workflowRevision, orderNumber, onChanged, onCreateOperationalItem }) {
@@ -434,7 +466,7 @@ function OperationalItemCard({ item, workflowRevision, orderNumber, onChanged })
                         <h3 className="mt-1 text-lg font-extrabold text-slate-900">{item.name}</h3>
                         <div className="mt-1 text-xs text-slate-500">مرتبط بـ: {item.source_product_name || "منتج الطلب"}</div>
                         {item.selected_image_url ? (
-                            <img src={item.selected_image_url} alt={`صورة ${item.name}`} loading="lazy"
+                            <OperationalPhoto url={item.selected_image_url} alt={`صورة ${item.name}`}
                                 className="mt-2 h-24 w-24 rounded-xl border border-amber-200 object-cover" />
                         ) : null}
                     </div>
@@ -722,7 +754,7 @@ export function ReviewDrawer({ orderNumber, onClose, onCompleted }) {
                                     {(operationalDialog.item.gallery || []).map((url) => (
                                         <button type="button" key={url} aria-label="اختيار صورة المنتج التشغيلي" onClick={() => setOperationalImageUrl(url)}
                                             className={`shrink-0 rounded-xl border-2 p-1 ${operationalImageUrl === url ? "border-emerald-600" : "border-slate-200"}`}>
-                                            <img src={url} alt="صورة متاحة" className="h-20 w-20 rounded-lg object-cover" />
+                                            <OperationalPhoto url={url} alt="صورة متاحة" className="h-20 w-20 rounded-lg object-cover" />
                                         </button>
                                     ))}
                                 </div>
