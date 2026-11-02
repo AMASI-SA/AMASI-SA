@@ -88,6 +88,7 @@ def source_authority_evidence_hash(record: dict | None) -> str:
         "source_fingerprint": record.get("source_fingerprint"),
         "cost": record.get("cost"),
         "bundle_snapshot": {**{key: snapshot.get(key) for key in snapshot_keys},
+                            **({"reporting_cost": snapshot["reporting_cost"]} if "reporting_cost" in snapshot else {}),
                             "leaves": [{key: leaf.get(key) for key in leaf_keys} for leaf in snapshot.get("leaves") or []]},
     })
 
@@ -308,6 +309,13 @@ def _with_missing_base(item: dict, record: dict, cost: dict, owner: str) -> tupl
     root = str(snapshot.get("product_id") or "")
     if not snapshot or cost.get("cost_authority") != "bundle_snapshot":
         _refuse("historical_bundle_evidence_required")
+    if "reporting_cost" in snapshot:
+        from bundle_reporting_cost import verified_reporting_cost
+        report = verified_reporting_cost(snapshot)
+        if report is None:
+            _refuse("historical_bundle_cost_incomplete")
+        if any(str(row.get("product_id")) == root for row in report["added_bases"] + report.get("covered_bases", [])):
+            return deepcopy(cost), None, "financial_base_already_included"
     leaves = snapshot.get("leaves")
     if not isinstance(leaves, list):
         _refuse("historical_bundle_leaves_missing")

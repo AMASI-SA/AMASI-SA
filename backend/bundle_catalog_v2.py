@@ -68,7 +68,7 @@ def _public(doc):
     return {k: deepcopy(v) for k, v in doc.items() if k not in {"_id", "history", "user_id"}}
 
 
-async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_options=None, present_option_ids=None, filled_option_ids=None, option_answers=None, frozen_definitions=None, strict=True, _overrides=None):
+async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_options=None, present_option_ids=None, filled_option_ids=None, option_answers=None, frozen_definitions=None, strict=True, capture_reporting=False, _overrides=None):
     async def catalog_product(reference):
         # Frozen definitions originate from the server-owned sale snapshot.
         # Resolve their aliases before touching a subsequently edited/deleted catalog.
@@ -94,6 +94,8 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     automatic_resources = set()
     component_decisions = []
     unresolved_components = []
+    reporting_base_additions = []
+    reporting_base_coverages = []
     composition_v2 = False
 
     async def definition(key):
@@ -487,6 +489,21 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             for index, child in active:
                 if child.get("kind") == "current_product":
                     await current_units(product, {**child, "required": item.get("required", True) and child.get("required", True)}, multiplier, path + [f"{key}@{doc['revision']}:{child.get('rule_id', index)}"], pairs, local_answers)
+            # Only an active physical current_product already covers this base.
+            # An unselected conditional row must not suppress financial cost.
+            # This addition never changes a physical leaf or supplier policy.
+            if len(leaves) == current_start:
+                from bundle_reporting_cost import base_addition
+                addition = base_addition(product, metadata[key].get("profile"),
+                    product_id=key, variant_id=vid, multiplier=multiplier, path=path,
+                    repeat_policy=item.get("repeat_policy", "once"))
+                if addition is not None:
+                    reporting_base_additions.append(addition)
+            else:
+                from bundle_reporting_cost import base_coverage
+                coverage = base_coverage(metadata[key].get("profile"), product_id=key, path=path)
+                if coverage is not None:
+                    reporting_base_coverages.append(coverage)
             current_counts = {}
             for leaf in leaves[current_start:]:
                 signature = (leaf.get("slot_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), json.dumps(leaf.get("customization", {}), sort_keys=True))
@@ -697,8 +714,6 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     leaves = list(combined.values())
     if sum((quantity(leaf["quantity"]) for leaf in leaves), Decimal(0)) > LIMITS["max_total_quantity"]:
         reject("bundle_total_quantity_limit")
-    if strict and unresolved_components:
-        raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved", "components": unresolved_components})
     known = not unresolved_components and all(leaf["unit_cost"] is not None for leaf in leaves)
     total = sum((number(l["quantity"]) * number(l["unit_cost"]) for l in leaves if l["unit_cost"] is not None), Decimal(0))
     result = {"product_id": root_key, "revision": root_doc["revision"], "leaves": leaves,
@@ -713,6 +728,16 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             "units_per_selection": str(sum((quantity(l["quantity"]) for l in leaves if l["kind"] == "product"), Decimal(0))),
             "current_product_units_per_selection": str(sum((quantity(l["quantity"]) for l in leaves if l.get("current_product_reference")), Decimal(0))),
             "frozen_definitions": {k: {**(_public(v) if v else {"product_id": k, "product_type": "normal", "revision": 0, "items": []}), "catalog_metadata": metadata[k], "catalog_product": {field: deepcopy(value) for field, value in product_snapshots[k].items() if field != "_id"}} for k, v in definitions.items()}}
+    if reporting_base_additions or reporting_base_coverages:
+        from bundle_reporting_cost import freeze_reporting_cost
+        result["reporting_cost"] = freeze_reporting_cost(result, reporting_base_additions, reporting_base_coverages)
+    if strict and unresolved_components:
+        from bundle_reporting_cost import verified_reporting_cost
+        if not capture_reporting or verified_reporting_cost(result) is None:
+            raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved", "components": unresolved_components})
+        # Internal financial capture is never an executable intake. Its caller
+        # must store it separately and retain the same operational rejection.
+        result["operational_blocked"] = True
     if len(json.dumps(result, default=str).encode("utf-8")) > 8_000_000:
         reject("bundle_snapshot_size_limit")
     return result
@@ -891,6 +916,8 @@ def make_bundle_router(db, current_user):
     router = APIRouter(prefix="/products-v2", tags=["Product V2 Bundles"])
     from product_bundle_policy_routes import register_bundle_policy_routes
     register_bundle_policy_routes(router, db, current_user)
+    from bundle_reporting_cost_policy import register_bundle_reporting_cost_policy_routes
+    register_bundle_reporting_cost_policy_routes(router, db, current_user)
 
     @router.get("/{product_id}/bundle-components")
     async def get_bundle_components(product_id: str, user=Depends(current_user)):
