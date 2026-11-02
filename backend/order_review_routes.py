@@ -35,6 +35,7 @@ from salla_integration.service import SallaError, call_salla
 
 WORKFLOWS = "order_review_workflows"
 PREFERENCES = "product_option_image_preferences"
+OPERATIONAL_IMAGE_PREFERENCES = "operational_option_image_preferences"
 EVENTS = "order_review_events"
 REVIEWED_STATUS_NAMES = {"تم المراجعة", "تمت المراجعة"}
 REVIEW_COMPLETED_STAGES = {
@@ -320,12 +321,43 @@ class CompleteReviewRequest(BaseModel):
     expected_acceptance_fingerprint: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
+def operational_image_preference_key(
+    item: Any, linked_specs: list[dict[str, str]], operational_name: str,
+) -> tuple[str, str] | None:
+    """Same product, named operational item and exact non-personal option values.
+
+    Personal-name/message/photo fields must NEVER become a shared image
+    preference: a personalized gift design cannot leak into another customer's
+    otherwise matching order.
+    """
+    if not linked_specs:
+        return None
+    values: dict[str, str] = {}
+    for row in linked_specs:
+        name = _text(row.get("name"))
+        key = _normalized(row.get("key") or name)
+        value = _normalized(row.get("value"))
+        if not key or not value or _is_personal_option(name):
+            return None
+        values[key] = value
+    if not values:
+        return None
+    product_key = build_image_preference_identity(item)[0]
+    canonical = json.dumps(
+        {"name": _normalized(operational_name), "options": values},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    signature = hashlib.sha256(f"{product_key}|operational|{canonical}".encode("utf-8")).hexdigest()
+    return product_key, signature
+
+
 class OperationalItemCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=0)
     source_order_item_id: str = Field(min_length=1, max_length=300)
     name: str = Field(min_length=1, max_length=120)
     linked_spec_keys: list[str] = Field(default_factory=list, max_length=30)
+    selected_image_url: Optional[str] = Field(default=None, max_length=3000)
 
 
 class OperationalItemStatusRequest(BaseModel):
@@ -338,6 +370,9 @@ class OperationalItemStatusRequest(BaseModel):
 async def _ensure_indexes(db: Any) -> None:
     await db[WORKFLOWS].create_index([("user_id", 1), ("order_number", 1)], unique=True)
     await db[PREFERENCES].create_index(
+        [("user_id", 1), ("product_key", 1), ("option_signature", 1)], unique=True
+    )
+    await db[OPERATIONAL_IMAGE_PREFERENCES].create_index(
         [("user_id", 1), ("product_key", 1), ("option_signature", 1)], unique=True
     )
     await db[EVENTS].create_index([("user_id", 1), ("order_number", 1), ("occurred_at", -1)])
@@ -1043,6 +1078,34 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 linked_specs.append({"name": name, "value": value, "key": key})
                 seen_specs.add(key)
 
+        # The chosen picture belongs to this operational card, not the Salla
+        # source product. A later order may reuse it only for the same exact
+        # product, operational name and stable customer option values.
+        allowed_images = {
+            _text(url) for url in [
+                *(getattr(source_item, "image_urls", None) or []),
+                getattr(source_item, "image_url", None),
+            ] if _text(url)
+        }
+        selected_image = _text(payload.selected_image_url)
+        if selected_image and selected_image not in allowed_images:
+            raise HTTPException(
+                status_code=422, detail={"code": "operational_image_not_in_source_gallery"},
+            )
+        image_preference_key = operational_image_preference_key(
+            source_item, linked_specs, payload.name,
+        )
+        image_source = "manual" if selected_image else "none"
+        if not selected_image and image_preference_key:
+            remembered = await db[OPERATIONAL_IMAGE_PREFERENCES].find_one({
+                "user_id": user_id, "product_key": image_preference_key[0],
+                "option_signature": image_preference_key[1],
+            }, {"_id": 0, "selected_image_url": 1})
+            remembered_url = _text((remembered or {}).get("selected_image_url"))
+            if remembered_url in allowed_images:
+                selected_image = remembered_url
+                image_source = "learned_operational_option"
+
         now = _now()
         operational_items = list((workflow or {}).get("operational_items") or [])
         operational_item = {
@@ -1053,6 +1116,8 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
             "source_order_item_id": source_item.order_item_id,
             "source_product_name": _text(getattr(source_item, "name", None)),
             "linked_specs": linked_specs,
+            "selected_image_url": selected_image or None,
+            "selected_image_source": image_source,
             "preparation_status": "pending",
             "blocks_order_completion": True,
             "supplier_export": False,
@@ -1114,6 +1179,17 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
                 await db[WORKFLOWS].insert_one(new_doc)
             except DuplicateKeyError as exc:
                 raise HTTPException(status_code=409, detail={"code": "review_revision_conflict"}) from exc
+        if payload.selected_image_url and image_preference_key:
+            await db[OPERATIONAL_IMAGE_PREFERENCES].update_one(
+                {"user_id": user_id, "product_key": image_preference_key[0],
+                 "option_signature": image_preference_key[1]},
+                {"$set": {"selected_image_url": selected_image,
+                          "operational_name": _text(payload.name),
+                          "option_values": linked_specs,
+                          "updated_at": now, "updated_by": actor_id},
+                 "$setOnInsert": {"created_at": now}},
+                upsert=True,
+            )
         await db[EVENTS].insert_one({
             "user_id": user_id,
             "order_number": order.order_number,

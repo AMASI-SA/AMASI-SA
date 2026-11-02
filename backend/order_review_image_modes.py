@@ -240,6 +240,10 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
         url = _image_url(image_id)
         if await db[base.PREFERENCES].count_documents({"user_id": user_id, "selected_image_url": url}):
             raise HTTPException(status_code=409, detail={"code": "mezan_image_in_use", "message": "فك ارتباط الصورة من الصورة الرئيسية أو قواعد الخيارات قبل حذفها."})
+        if await db[base.WORKFLOWS].count_documents({"user_id": user_id, "operational_items.selected_image_url": url}):
+            raise HTTPException(status_code=409, detail={"code": "operational_image_in_use"})
+        if await db[base.OPERATIONAL_IMAGE_PREFERENCES].count_documents({"user_id": user_id, "selected_image_url": url}):
+            raise HTTPException(status_code=409, detail={"code": "operational_image_in_use"})
         if await db[base.WORKFLOWS].count_documents({"user_id": user_id, "items.selected_image_url": url}):
             raise HTTPException(status_code=409, detail={"code": "mezan_image_in_use", "message": "الصورة مستخدمة في طلب محفوظ ولا يمكن حذفها الآن."})
         await db[MEZAN_IMAGES].update_one({"user_id": user_id, "id": image_id}, {"$set": {"deleted_at": base._now(), "deleted_by": actor_id}, "$unset": {"data_base64": ""}})
