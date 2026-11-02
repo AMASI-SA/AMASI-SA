@@ -16,6 +16,7 @@ from mobile_app_permissions import MOBILE_APP_CLIENT
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from accounting_financial_identity import find_financial_account, list_financial_accounts
 from order_tracking_notes import enforce_stage_instructions
+from store_delivery_current_status import is_current_driver_delivery
 
 
 async def enforce_driver_instruction_gate(db, *, merchant_id, actor_id, assignment):
@@ -529,11 +530,14 @@ async def ensure_store_delivery_driver_app_indexes(db: Any) -> None:
     await db[DRIVER_RECEIVE_SESSIONS].create_index([("user_id", 1), ("driver_id", 1), ("status", 1)])
 
 
-async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def _enrich_assignments_with_order_state(
+    db: Any, user_id: str, items: list[dict[str, Any]], *, current_only: bool = False,
+) -> list[dict[str, Any]]:
     ids = sorted({normalize_text(row.get("order_id")) for row in items if normalize_text(row.get("order_id"))})
     numbers = sorted({normalize_text(row.get("order_number")) for row in items if normalize_text(row.get("order_number"))})
     if not ids and not numbers:
-        return items
+        return [dict(row) for row in items
+                if not current_only and row.get("status") == DELIVERY_STATUS_DELIVERED]
     orders = await db[ORDERS].find(
         {
             "user_id": user_id,
@@ -556,6 +560,7 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             "payment_collection_status": 1,
             "order_status": 1,
             "order_status_slug": 1,
+            "g47_salla_snapshot.requires_authoritative_refresh": 1,
             "raw_by_source.salla_direct": 1,
             "customer_name": 1,
             "customer_mobile": 1,
@@ -563,15 +568,34 @@ async def _enrich_assignments_with_order_state(db: Any, user_id: str, items: lis
             "shipping_street": 1,
         },
     ).to_list(length=5000)
-    by_key: dict[str, dict[str, Any]] = {}
+    by_key: dict[str, list[dict[str, Any]]] = {}
     for order in orders:
         for key in (normalize_text(order.get("order_id")), normalize_text(order.get("order_number"))):
             if key:
-                by_key[key] = order
+                by_key.setdefault(key, []).append(order)
     result: list[dict[str, Any]] = []
     for assignment in items:
         row = dict(assignment)
-        order = by_key.get(normalize_text(row.get("order_id"))) or by_key.get(normalize_text(row.get("order_number")))
+        keys = {normalize_text(row.get("order_id")), normalize_text(row.get("order_number"))} - {""}
+        candidates = {id(order): order for key in keys for order in by_key.get(key, [])}
+        order = next(iter(candidates.values())) if len(candidates) == 1 else None
+        if order:
+            sources = order.get("raw_by_source") or {}
+            raw = (sources.get("salla_direct") or {}) if isinstance(sources, dict) else {}
+            raw = raw if isinstance(raw, dict) else {}
+            canonical_id = normalize_text(order.get("order_id") or raw.get("id"))
+            canonical_number = normalize_text(order.get("order_number") or raw.get("reference_id"))
+            assignment_id = normalize_text(row.get("order_id"))
+            assignment_number = normalize_text(row.get("order_number"))
+            if ((assignment_number and canonical_number and assignment_number != canonical_number)
+                    or (assignment_id and canonical_id and assignment_id not in {canonical_id, canonical_number})):
+                order = None
+        historical = not current_only and row.get("status") == DELIVERY_STATUS_DELIVERED
+        if not historical and (
+            row.get("status") not in {DELIVERY_STATUS_ASSIGNED, DELIVERY_STATUS_OUT_FOR_DELIVERY}
+            or not is_current_driver_delivery(order)
+        ):
+            continue
         if order:
             try:
                 row["outstanding_amount"] = authoritative_outstanding_amount(order)
@@ -649,7 +673,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             },
             {"_id": 0, "user_id": 0},
         ).sort("assigned_at", 1).to_list(length=2000)
-        items = await _enrich_assignments_with_order_state(db, merchant_id, items)
+        items = await _enrich_assignments_with_order_state(db, merchant_id, items, current_only=True)
         district_counts: dict[str, int] = {}
         for row in items:
             district = normalize_text(row.get("shipping_district")) or "بدون حي"
@@ -688,7 +712,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not row:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
-        enriched = await _enrich_assignments_with_order_state(db, merchant_id, [row])
+        enriched = await _enrich_assignments_with_order_state(db, merchant_id, [row], current_only=True)
+        if not enriched:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
         return {"item": enriched[0]}
 
     @router.get("/deliveries/report")
@@ -1213,7 +1239,7 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
             },
             {"_id": 0, "user_id": 0},
         ).sort("assigned_at", 1).to_list(length=2000)
-        items = await _enrich_assignments_with_order_state(db, merchant_id, items)
+        items = await _enrich_assignments_with_order_state(db, merchant_id, items, current_only=True)
         district_counts: dict[str, int] = {}
         for row in items:
             district = normalize_text(row.get("shipping_district")) or "بدون حي"
@@ -1252,7 +1278,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         )
         if not row:
             raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
-        enriched = await _enrich_assignments_with_order_state(db, merchant_id, [row])
+        enriched = await _enrich_assignments_with_order_state(db, merchant_id, [row], current_only=True)
+        if not enriched:
+            raise HTTPException(status_code=404, detail={"code": "driver_assignment_not_found"})
         return {"item": enriched[0]}
 
     @router.get("/deliveries/report")
@@ -2345,8 +2373,9 @@ def make_store_delivery_driver_app_router(db: Any, current_user: Callable[..., A
         merchant_id = _merchant_id(driver)
         assignments = await db[ASSIGNMENTS].find(
             {"user_id": merchant_id, "driver_id": driver["id"], "active": True},
-            {"_id": 0, "status": 1},
+            {"_id": 0, "status": 1, "order_id": 1, "order_number": 1},
         ).to_list(length=5000)
+        assignments = await _enrich_assignments_with_order_state(db, merchant_id, assignments)
         earnings = await db[DRIVER_EARNINGS].find(
             {"user_id": merchant_id, "driver_id": driver["id"]},
             {"_id": 0, "amount": 1},
