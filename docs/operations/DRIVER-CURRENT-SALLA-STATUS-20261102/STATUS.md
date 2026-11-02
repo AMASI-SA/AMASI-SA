@@ -61,20 +61,52 @@ Initial remote source checkpoint: `5569b23c1a0199a2461675ccf05fc1649eb4fde4` (tr
 
 - Source A: `b6c6e42fce74d8900526a81e1d5a88be3cc297c4`, tree `9aac07a3b10cf8410126ef1110739ad811a25e09`.
 - Intent-only B: `98630af107939536ea630f51ef1558cf69fc1361`, tree `605545ceec21e232c88bdcd4d0c2f5937eb5621e`.
-- Conventional merge: `70576e2a06237eb193b1c927f11ced92e2229589`, tree exactly B, parents J and B. [PR1688](https://github.com/AMASI-SA/AMASI-SA/pull/1688) is merged.
-- All 12 applicable B workflows passed, including all four required branch checks and both Host Node20.20.2/24.19.0 clean-clone adapter rehearsals: [Readiness41457474046](https://github.com/AMASI-SA/AMASI-SA/actions/runs/41457474046).
-- Correct source-A proof: `01782d16b0acf04532e684364a9420225b93f5d4d33a53ae6bc483cb7f420bfb`. The candidate ZIP artifact13104709452 hash was `0dc4d66e318f948f6a404da6e0d668da2d3f910ed58b62ab9c6511f0672b9601`.
+- Conventional merge: `70576e2a06237eb193b1c927f11ced92e2229589`, tree exactly B, parents J and B. [PR #1688](https://github.com/AMASI-SA/AMASI-SA/pull/1688) is merged.
+- All 12 applicable B workflows passed, including all four required branch checks and both Host Node 20.20.2/24.19.0 clean-clone adapter rehearsals: [Readiness 41457474046](https://github.com/AMASI-SA/AMASI-SA/actions/runs/41457474046).
+- Correct source-A proof: `01782d16b0acf04532e684364a9420225b93f5d4d33a53ae6bc483cb7f420bfb`. The candidate ZIP artifact 13104709452 hash was `0dc4d66e318f948f6a404da6e0d668da2d3f910ed58b62ab9c6511f0672b9601`.
 - Full backend manifest: `9517a53b5bd18050f674ccec8a696afb866993b6df128ec43f9d02deb1e8ce85`, 1056 reviewed files. Release-control manifest: `542e5248a81ca0996b163f67a45b1d10efc953d3b40e9a86e9d0a22f540c540f`.
 - Runtime release: `rg5-cc743775a823588ac1de627e70855d9c29682ad31d1d97d2dce3d084dfce8f81`.
 - Shared `/app` fast-forwarded from J to the reviewed merge after fresh guard `active:false`. Unrelated `.emergent/testing/`, `deployer-agent-docs/`, and the unsaved editor buffer were preserved.
-- Actual host: aarch64, Node24.19.0, Yarn1.22.22, Python3.11.18. Adapter uses repository-governed Node22.23.2/Yarn1.22.22.
-- First host adapter attempt refused two ignored derived `.pyc` files. Fresh inactive guard was verified, and those two files were moved intact outside `/app` to `/tmp/mezan-driver-bytecode-20261102-9djfxy6g`. No guard or source bypass. Retry with bytecode writes disabled passed in91.99s; built=true, package-boundary and isolated backend health/frontend runtime checks passed.
-- Frontend artifact tree: `bb9024962a20bc664efec18c689927b1c5218d68fbeeb00f788bd9ecf7a393f1`; build-meta SHA256 `648165c9ae1bf408ebe700c81bf99635acfa5d4dd72adf0fa8de2944bd961934` (301685bytes).
+- Actual host: aarch64, Node 24.19.0, Yarn 1.22.22, Python 3.11.18. Adapter uses repository-governed Node 22.23.2/Yarn 1.22.22.
+- First host adapter attempt refused two ignored derived `.pyc` files. Fresh inactive guard was verified, and those two files were moved intact outside `/app` to `/tmp/mezan-driver-bytecode-20261102-9djfxy6g`. No guard or source bypass. Retry with bytecode writes disabled passed in 91.99s; built=true, package-boundary and isolated backend health/frontend runtime checks passed.
+- Frontend artifact tree: `bb9024962a20bc664efec18c689927b1c5218d68fbeeb00f788bd9ecf7a393f1`; build-meta SHA256 `648165c9ae1bf408ebe700c81bf99635acfa5d4dd72adf0fa8de2944bd961934` (301685 bytes).
 - Own v5 lease: actor `chatgpt-driver-current-salla-status-20261102`, prepared `2026-11-02T14:09:18.748838+00:00`. Prepublish returned ready_to_publish=true for exact A/merge/release.
-- One Publish changes action was accepted. UI shows **Deployment Started Nov2,05:10PM (Asia/Riyadh)**, Changes packaged, then Building your website. Input transport timed out after the click, but fresh UI proved it started; no second publish was sent.
+- One Publish changes action was accepted. UI shows **Deployment Started Nov 2, 05:10 PM (Asia/Riyadh)**, Changes packaged, then Building your website. Input transport timed out after the click, but fresh UI proved it started; no second publish was sent.
 
-Production changed: **publication in progress; runtime not yet verified**. Current own lease must be completed with the v5 verifier, not reused or cleared blindly.
+Production changed: **yes — server release published and verified**. The one owned lease closed through successful verification; subsequent status returned **active=false**.
 
-Next safe action: inspect the existing Emergent operation. Do not click Publish again. Require a newer explicit success, then run `PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com` and final `status`; record three successful probes and active=false. Complete signed native1.0.17/code18 from PR311 and verify artifact identity/certificate before delivery. Native publication is owned by the companion agent.
+## Completed server acceptance
+
+The current Emergent UI showed green **Deployment finished Nov 2, 05:19 PM (Asia/Riyadh)** and a new published version `5b4a0a6`. This is the literal observed UI label; no different success wording is claimed.
+
+Official command `PYTHONDONTWRITEBYTECODE=1 python scripts/production_release_guard.py verify --url https://mezansalla.com` completed with exit 0 and:
+
+```json
+{
+  "verified": true,
+  "checks": 3,
+  "source_git_sha": "b6c6e42fce74d8900526a81e1d5a88be3cc297c4",
+  "source_base_git_sha": "3d8720860fb524d729f6c83a8c56c5b4de3a2afb",
+  "deployment_git_sha": "70576e2a06237eb193b1c927f11ced92e2229589",
+  "release_id": "rg5-cc743775a823588ac1de627e70855d9c29682ad31d1d97d2dce3d084dfce8f81",
+  "boot_started_at": "2026-11-02T14:19:24.196869+00:00",
+  "frontend_artifact_tree_sha256": "bb9024962a20bc664efec18c689927b1c5218d68fbeeb00f788bd9ecf7a393f1",
+  "final_guard_active": false,
+  "ui_status": "Deployment finished Nov 2, 05:19 PM (Asia/Riyadh)",
+  "platform_publish_id": "5b4a0a6"
+}
+```
+
+The three probes accepted all required health/identity flags, the complete backend/control manifests, critical hashes, the exact frontend artifact/proof, canonical and cache-busted build-meta JSON bytes/MIME, public shell/assets and retirement service-worker responses. Boot identity was stable across the three probes and newer than lease preparation. Final tracked worktree was clean; the two pre-existing unrelated untracked directories and unsaved editor were preserved.
+
+Raw verifier output is 5,845 bytes at `/tmp/mezan-driver-status-20261102-verified.json` in the shared host. The durable minimum acceptance fields are above. No real driver account UI or installed-device acceptance is claimed by this identity verification.
+
+## Native build continuation
+
+Native PR #311 is merged as `d5fdda1e6a141703c56f9a0c82b971fe2a3a5ee0`, parented to courier base `c8cdc2c7891f04e111384aebd70b50b56988c966` and reviewed release head `b1af3baa8dfe984ee2879711fcbd6cd3ee3bac20`. Its tree `11c4313db19f0c54de3731be89e032a0d044432b` exactly matches the independently tested version 1.0.17/code 18 preparation.
+
+[PR validation 41460727335](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41460727335) passed all 56 tests, TypeScript and Expo Doctor 18/18 on Node 20.20.2. The only signed push build is [41461059770](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41461059770), currently compiling locally after Firebase/reference verification. No paid cloud-build quota, OTA or app-store publication is used.
+
+Next safe action: finish signature/package/version/Firebase and artifact-digest verification on that existing native build, preserve the signed APK and deliver it. The coordinator owns remote and Library writes because child connector mutations stalled; the companion owns read-only build/artifact verification. **Do not repeat the completed server publication or start a duplicate native build.**
 
 This release evidence lives on `codex/driver-current-salla-release-evidence-20261102`, separate from the frozen A/B pair and production branch. Further documentation changes must not alter the deployed tree. The page UI has shown packaging/build stages; full Cloud Build argv/cwd and snapshot timing remain unobserved unless later logs supply direct evidence.
