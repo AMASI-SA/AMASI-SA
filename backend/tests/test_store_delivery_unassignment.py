@@ -13,6 +13,7 @@ from store_delivery_reassignment_routes import (
 )
 from store_delivery_handover_routes import ASSIGNMENTS, EVENTS, ORDERS
 from store_courier_domain import WORKFLOWS, ASSIGNED_WAITING_PICKUP
+from store_delivery_driver_app_routes import driver_receive_session_views
 
 ACTOR = {"id": "merchant", "role": "owner"}
 DENIED = {"id": "driver-user", "role": "store_driver", "created_by": "merchant"}
@@ -184,3 +185,110 @@ def test_pure_gate_rejects_completed_and_inconsistent_workflows():
                     {"store_courier_assignment_state":"delivering"}):
         with pytest.raises(HTTPException):
             _assert_unassignment_safe(assignment,order,{**workflow,**changed},expected_driver_id="d")
+
+
+@pytest.mark.asyncio
+async def test_in_transit_can_unassign_only_after_confirmed_physical_return_and_reassign_later():
+    """Out-for-delivery case: physical return -> inactive former driver -> ready queue."""
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one(
+            {"id": "assignment-A"},
+            {"$set": {"status": "out_for_delivery", "out_for_delivery_at": "2026-11-02T12:00:00+00:00"}},
+        )
+        await db[ORDERS].update_one(
+            {"order_number": "101"},
+            {"$set": {"store_delivery_status": "out_for_delivery"}},
+        )
+        await db[WORKFLOWS].update_one(
+            {"order_number": "101"},
+            {"$set": {"stage": "delivering", "store_courier_assignment_state": "delivering",
+                      "store_courier_picked_up_at": "2026-11-02T12:00:00+00:00"}},
+        )
+        await db["store_delivery_driver_receive_sessions"].insert_one({
+            "user_id": "merchant", "driver_id": "driver-R", "id": "session-1",
+            "status": "open", "accepted": [{
+                "assignment_id": "assignment-A", "order_number": "101",
+                "outstanding_amount": 110, "outstanding_amount_available": True,
+            }], "accepted_count": 1, "collection_total": 110,
+        })
+        with pytest.raises(HTTPException) as error:
+            await _route(db)("assignment-A", UnassignPayload(expected_driver_id="driver-R"), user=ACTOR)
+        assert error.value.status_code == 409
+        assert error.value.detail["code"] == "assignment_physical_return_confirmation_required"
+        assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is True
+
+        result = await _route(db)(
+            "assignment-A", UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
+            user=ACTOR,
+        )
+        assert result["ok"] and result["reassignment_eligible"] and result["physical_return_confirmed"]
+        previous = await db[ASSIGNMENTS].find_one({"id": "assignment-A"})
+        assert previous["status"] == "unassigned" and previous["active"] is False
+        assert previous["prior_assignment_status"] == "out_for_delivery"
+        assert previous["delivery_fee_snapshot"] == 20.0
+        order = await db[ORDERS].find_one({"order_number": "101"})
+        workflow = await db[WORKFLOWS].find_one({"order_number": "101"})
+        assert order["store_delivery_status"] == "unassigned"
+        assert workflow["stage"] == "completed"
+        assert workflow["store_courier_assignment_state"] is None if "store_courier_assignment_state" in workflow else True
+        assert workflow.get("store_courier_assignee_id") is None
+        assert workflow.get("carrier_label_print_confirmed") is True
+        assert await db[ASSIGNMENTS].count_documents({"order_id": "salla-101", "active": True}) == 0
+        views = await driver_receive_session_views(
+            db, user_id="merchant", driver_id="driver-R",
+            sessions=[await db["store_delivery_driver_receive_sessions"].find_one({"id": "session-1"})],
+        )
+        assert views[0]["accepted_count"] == 0 and views[0]["collection_total"] == 0
+        # The audit source is retained and never zeroed or erased.
+        stored = await db["store_delivery_driver_receive_sessions"].find_one({"id": "session-1"})
+        assert stored["accepted_count"] == 1 and stored["collection_total"] == 110
+
+        # A second driver can claim via existing carrier-specific handover after
+        # an operator starts a new session; no new customer order is needed.
+        from store_courier_domain import store_courier_assignment_blocker
+        assert store_courier_assignment_blocker(workflow) is None
+        await db[ASSIGNMENTS].insert_one({
+            "id": "assignment-B", "user_id": "merchant", "driver_id": "driver-J",
+            "order_id": "salla-101", "order_number": "101", "active": True,
+            "status": "assigned", "delivery_fee_snapshot": 25,
+            "reassigned_from_unassignment_id": "assignment-A",
+        })
+        assert await db[ASSIGNMENTS].count_documents(
+            {"order_id": "salla-101", "active": True, "driver_id": "driver-J"},
+        ) == 1
+        assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["delivery_fee_snapshot"] == 20.0
+    finally:
+        await _shutdown(client, db)
+
+
+@pytest.mark.asyncio
+async def test_out_for_delivery_rejects_money_and_completed_workflows_even_with_return_confirmed():
+    client, db = await _fixture()
+    try:
+        await db[ASSIGNMENTS].update_one(
+            {"id": "assignment-A"},
+            {"$set": {"status": "out_for_delivery", "out_for_delivery_at": "now"}},
+        )
+        await db[ORDERS].update_one(
+            {"order_number": "101"}, {"$set": {"store_delivery_status": "out_for_delivery"}},
+        )
+        await db[WORKFLOWS].update_one(
+            {"order_number": "101"},
+            {"$set": {"stage": "delivering", "store_courier_assignment_state": "delivering",
+                      "store_courier_picked_up_at": "now"}},
+        )
+        await db["store_delivery_collections"].insert_one({
+            "user_id": "merchant", "assignment_id": "assignment-A", "amount": 30,
+        })
+        with pytest.raises(HTTPException) as e:
+            await _route(db)(
+                "assignment-A",
+                UnassignPayload(expected_driver_id="driver-R", physical_return_confirmed=True),
+                user=ACTOR,
+            )
+        assert e.value.status_code == 409
+        assert e.value.detail["code"] == "assignment_financial_evidence_exists"
+        assert (await db[ASSIGNMENTS].find_one({"id": "assignment-A"}))["active"] is True
+    finally:
+        await _shutdown(client, db)
