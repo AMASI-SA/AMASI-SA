@@ -175,8 +175,20 @@ def make_order_review_router(db: Any, current_user: Callable) -> APIRouter:
 
     @router.get("/order-reviews-v1/mezan-images/{image_id}")
     async def get_mezan_image(image_id: str, user: dict = Depends(current_user)) -> Response:
-        reviewer = base._require_reviewer(user)
-        user_id = base._merchant_user_id(reviewer)
+        # A native assembly worker may view their own merchant's reviewed
+        # product photos without acquiring the Pending Review edit permission.
+        # The mobile identity and page permission come from the verified
+        # server-side native bridge, never a client-provided owner ID.
+        if (isinstance(user, dict)
+                and user.get("_session_client") == "amasi_mobile"
+                and user.get("_mobile_actor_id")
+                and "app.page.assembly_shipping" in set(user.get("_mobile_app_permissions") or [])):
+            user_id = base._text(user.get("_mobile_owner_id"))
+            if not user_id:
+                raise HTTPException(status_code=403, detail={"code": "mezan_image_permission_required"})
+        else:
+            reviewer = base._require_reviewer(user)
+            user_id = base._merchant_user_id(reviewer)
         row = await db[MEZAN_IMAGES].find_one({"user_id": user_id, "id": image_id, "deleted_at": {"$exists": False}}, {"_id": 0})
         if not row:
             raise HTTPException(status_code=404, detail={"code": "mezan_image_not_found"})
