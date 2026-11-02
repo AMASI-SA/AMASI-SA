@@ -101,12 +101,22 @@ The three probes accepted all required health/identity flags, the complete backe
 
 Raw verifier output is 5,845 bytes at `/tmp/mezan-driver-status-20261102-verified.json` in the shared host. The durable minimum acceptance fields are above. No real driver account UI or installed-device acceptance is claimed by this identity verification.
 
-## Native build continuation
+## Completed native release and delivery
 
-Native PR #311 is merged as `d5fdda1e6a141703c56f9a0c82b971fe2a3a5ee0`, parented to courier base `c8cdc2c7891f04e111384aebd70b50b56988c966` and reviewed release head `b1af3baa8dfe984ee2879711fcbd6cd3ee3bac20`. Its tree `11c4313db19f0c54de3731be89e032a0d044432b` exactly matches the independently tested version 1.0.17/code 18 preparation.
+Signed local Android [run 41461059770](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41461059770) completed successfully on exact merge `d5fdda1e6a141703c56f9a0c82b971fe2a3a5ee0`, tree `11c4313db19f0c54de3731be89e032a0d044432b`. The validation job passed all 56 tests, TypeScript and Expo Doctor 18/18. Signed job 125330310589 completed at 2026-11-02 17:34:51 Asia/Riyadh (14:34:51 UTC); Gradle reported BUILD SUCCESSFUL in 10m42s.
 
-[PR validation 41460727335](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41460727335) passed all 56 tests, TypeScript and Expo Doctor 18/18 on Node 20.20.2. The only signed push build is [41461059770](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41461059770), currently compiling locally after Firebase/reference verification. No paid cloud-build quota, OTA or app-store publication is used.
+- Package: `com.amasi.sa.delivery`; version **1.0.17**, version code **18**.
+- APK: `AMASI_Delivery_1.0.17_18.apk`, **84,424,726 bytes**.
+- APK SHA-256: `438f108d2883ace40b613a015f38b0df6208903ba186ac31987d25e86a0ae94f`.
+- Original signer SHA-256: `d59891595cc2564036a2c56f7f27f77b7fc1f4d58aa3a5e09562cb873983d37f`; apksigner verification passed.
+- [Artifact 13150840921](https://github.com/AMASI-SA/amasi-mobile/actions/runs/41461059770/artifacts/13150840921): ZIP **40,459,773 bytes**, SHA-256 `ee848528bc8f6e2144b4a3f382592c7abbcf8c8dc912e00476c4e55e7fc94bb1`; download matched API and CI upload digests before extraction.
+- Exact package/version/code and existing Firebase/notification resources were verified. OTA remains disabled.
+- The signed APK was saved successfully for the user's download. No app-store submission, OTA publication, or driver message was sent.
 
-Next safe action: finish signature/package/version/Firebase and artifact-digest verification on that existing native build, preserve the signed APK and deliver it. The coordinator owns remote and Library writes because child connector mutations stalled; the companion owns read-only build/artifact verification. **Do not repeat the completed server publication or start a duplicate native build.**
+**Acceptance: server production published and verified; signed APK built, independently checked and saved for delivery.** Install this APK as an update to courier 1.0.16/17, then open/refresh the app. Current work is filtered using the current synchronized Salla status; after the accepted current-home refresh, cards/forms for orders no longer delivering are reconciled. Historical/accounting records are preserved.
 
-This release evidence lives on `codex/driver-current-salla-release-evidence-20261102`, separate from the frozen A/B pair and production branch. Further documentation changes must not alter the deployed tree. The page UI has shown packaging/build stages; full Cloud Build argv/cwd and snapshot timing remain unobserved unless later logs supply direct evidence.
+Installed-device UI, camera/layout and actual phone push delivery remain untested. Server identity verification does not establish real driver-account UI acceptance. No further deployment, merge, build or artifact upload is pending for this release. Do not repeat these operations.
+
+This evidence branch is separate from the runtime branch and frozen server A/B source. Documentation changes do not alter the published runtime.
+
+Native detailed evidence: [https://github.com/AMASI-SA/amasi-mobile/blob/codex/courier18-release-evidence-20261102/docs/operations/courier-current-status-20261102/STATUS.md](https://github.com/AMASI-SA/amasi-mobile/blob/codex/courier18-release-evidence-20261102/docs/operations/courier-current-status-20261102/STATUS.md).
