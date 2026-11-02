@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/order_review_routes.py"
       - "backend/order_review_image_modes.py"
+      - "backend/order_review_operational_images.py"
       - "backend/order_review_export_controls.py"
       - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
@@ -37,6 +38,7 @@ on:
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
+      - "backend/tests/test_order_review_operational_images.py"
       - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_reviewed_products_catalog.py"
       - "backend/tests/test_reviewed_preparation_batches.py"
@@ -126,6 +128,7 @@ on:
     paths:
       - "backend/order_review_routes.py"
       - "backend/order_review_image_modes.py"
+      - "backend/order_review_operational_images.py"
       - "backend/order_review_export_controls.py"
       - "backend/order_review_spec_replacements.py"
       - "backend/order_review_mezan_image_unlink.py"
@@ -158,6 +161,7 @@ on:
       - "backend/tests/test_order_review_export_controls.py"
       - "backend/tests/test_order_review_spec_replacements.py"
       - "backend/tests/test_order_review_mezan_image_unlink.py"
+      - "backend/tests/test_order_review_operational_images.py"
       - "backend/tests/test_order_review_customer_waiting.py"
       - "backend/tests/test_reviewed_products_catalog.py"
       - "backend/tests/test_reviewed_preparation_batches.py"
@@ -282,6 +286,7 @@ jobs:
           tests/test_order_review_export_controls.py
           tests/test_order_review_spec_replacements.py
           tests/test_order_review_mezan_image_unlink.py
+          tests/test_order_review_operational_images.py
           tests/test_order_review_customer_waiting.py
           tests/test_reviewed_products_catalog.py
           tests/test_reviewed_preparation_batches.py
