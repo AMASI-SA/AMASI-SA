@@ -3,6 +3,7 @@ from __future__ import annotations
 from order_tracking_notes import instruction_banner
 
 import io
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -1577,10 +1578,17 @@ async def reconcile_component_order_lifecycle(
             return {**previous, "snapshot_revision": watermark.get("revision")}
         generation = int(previous.get("generation") or 0) + 1
         from bundle_fulfillment_v2 import capture_intake
-        bundle_intake = await capture_intake(scoped, user_id, lines, previous.get("bundle_intake_snapshots"))
         from order_cost_authority import capture_reporting_costs
+        # The financial-only snapshot and operational intake must share this
+        # lifecycle transaction. A supplier service can be priced without
+        # masquerading as an executable component/stock reservation.
+        reporting_costs = deepcopy(previous.get("reporting_cost_snapshots") or {})
+        blocked_bundle_intakes = {}
+        bundle_intake = await capture_intake(
+            scoped, user_id, lines, previous.get("bundle_intake_snapshots"),
+            reporting_costs=reporting_costs, blocked_intakes=blocked_bundle_intakes)
         reporting_costs = await capture_reporting_costs(
-            scoped, user_id, lines, previous.get("reporting_cost_snapshots"), bundle_intake)
+            scoped, user_id, lines, reporting_costs, bundle_intake)
         new_bundle_keys = set(bundle_intake) - set(previous.get("bundle_intake_snapshots") or {})
         new_reporting_keys = set(reporting_costs) - set(previous.get("reporting_cost_snapshots") or {})
         if new_bundle_keys or new_reporting_keys:
@@ -1606,6 +1614,7 @@ async def reconcile_component_order_lifecycle(
             "updated_at": _now(), "plan_id": previous.get("plan_id"),
             "bundle_intake_snapshots": bundle_intake,
             "reporting_cost_snapshots": reporting_costs,
+            "bundle_financial_blocked": blocked_bundle_intakes,
         }
         await scoped[COMPONENT_LIFECYCLES].replace_one({"_id": identity}, row, upsert=True)
         return {**row, "snapshot_revision": watermark.get("revision")}
@@ -1637,6 +1646,11 @@ async def reconcile_component_order_lifecycle(
         elif legacy:
             result, state = {}, LEGACY_COMPONENT_COHORT
         else:
+            if current.get("bundle_financial_blocked"):
+                # A complete financial cost is *not* proof that an external
+                # supplier completed the existing embroidery/service route.
+                # Keep component acceptance and all stock writes fail-closed.
+                raise HTTPException(409, detail={"code": "bundle_component_policy_unresolved"})
             frozen_plan = await scoped[PLANS].find_one({"user_id": user_id, "order_id": order_number})
             settings = await scoped.settings.find_one({"user_id": user_id}) or {}
             cutoff = component_source_time((settings.get("g47_inventory") or {}).get("component_lifecycle_starts_at"))
