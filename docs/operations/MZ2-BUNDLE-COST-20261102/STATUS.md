@@ -2,7 +2,7 @@
 
 Status: PR1690 is merged and the user-authorized code publication completed on 2026-11-02. Release Guard verified the intended production identity in three consecutive probes and closed the matching lease.
 
-Production code changed: **yes**. Live bundle-definition save: **blocked by automatic approval review and not applied**. Historical cost repairs, approved ledgers, stock operations and supplier-policy writes: **not applied**.
+Production code changed: **yes**, verified deployment M below. The user subsequently **explicitly approved the live bundle definition** and confirmed embroidery10 is additional to shawl15 only for the name-Yes option. The existing embroidery binding's financial policy is now **saved as independent**; no second10 charge was created. The final bundle definition remains **unsaved pending the actual embroidery executor**, because an unknown assembly origin makes schema2 name-selected execution fail closed. Historical cost repairs, approved ledgers and stock operations remain **unapplied**. No new code deployment occurred during this policy update.
 
 ## Immutable source and merge record
 
@@ -59,20 +59,22 @@ The benchmark remains in `evidence/authority-benchmark.json`: six logical reads 
 - Live product metadata still distinguishes explicit Mezan base15 from Salla fallback70. The persisted bundle has the conditional rose row but lacks an explicit physical current_product.
 - A preview for quantity4, roseyes and nameno failed the existing option-visibility validator. Local inspection identifies a likely UI/backend mismatch in native Salla conditional visibility and empty-text presence. No visibility or source policy was changed to bypass this rejection.
 
-## Concrete pending definition and approval block
+## Approved definition and saved financial policy
 
 The UI draft preserves the original rose quantity1 and selection condition and adds one unconditional required current_product quantity1, with auto sourcing and no variant. Embroidery scope is `per_unit`, because it belongs to each physical shawl. The base15 itself is unchanged.
 
-Automatic approval review rejected **Save bundle definition**: publication authorization was not accepted as separate authorization for a live catalog change that affects future costing, inventory requirements and sourcing. No alternative save, CLI write or policy mutation was attempted after that rejection.
+Automatic approval review initially rejected **Save bundle definition** because publication authorization did not separately cover that live catalog change. The subsequent user message explicitly approved saving the definition and confirmed10 is additional to the shawl only when the customer selects Yes for adding a name. **This authorization blocker is resolved; do not request the same permission again.** The user's later clarification that this used to be an independent service does not authorize a duplicate charge or establish its actual executor.
 
-Read-only inspection shows that embroidery cost treatment and assembly origin are both **unknown**, its evidence reference is blank, and no supplier is selected for stock shortages. Saving schema2 must not manufacture provenance: even with a quantity scope, name-selected bundles can remain incomplete until these facts are established. Adding the current_product also makes the physical shawl a required fulfillment unit; auto uses existing stock and may return needs_source when stock is insufficient and no approved supplier exists.
+Live UI verification confirms the existing option binding: name-Yes → embroidery10; name-No → no additional cost; the text field itself → no additional cost. The Mezan base remains15 and Salla fallback70. Saved only `cost_treatment=independent` plus a truthful evidence reference to the owner's confirmation. The explicit success message was: **حُفظت سياسة المنتج. الطلبات السابقة تحتفظ بسياساتها التاريخية.** Assembly origin remains `unknown`; the shortage supplier, split setting and sourcing rules were preserved. The same live draft still has two rows, while the final recipe-save button was not used.
 
-The draft is pictured in [live-bundle-draft-pending-approval.jpg](evidence/live-bundle-draft-pending-approval.jpg). It is **not saved**.
+Local inspection and the existing focused regression demonstrate that saving a schema2 definition with this inherited shared-resource binding can succeed with unresolved provenance while strict execution returns `bundle_component_policy_unresolved` (409). Financial independence alone does not resolve an unknown executor in this model. Supplier execution also has an explicit guard and must not be represented as in-house to pass it. A separate supported direct-cost model exists, but converting to it would detach the existing shared service, its centrally updated cost and its policy key; no such conversion was authorized or performed. The persisted definition's schema version was not exposed by this UI read and is not inferred from its one-row count.
+
+The saved policy and still-unsaved current_product draft are pictured in [embroidery-policy-saved-20261102.jpg](evidence/embroidery-policy-saved-20261102.jpg). [POLICY-UPDATE.md](POLICY-UPDATE.md) records this milestone. The earlier [pending-approval image](evidence/live-bundle-draft-pending-approval.jpg) remains historical evidence of the earlier state, not the current permission status.
 
 ## Next safe actions
 
-1. Obtain explicit approval for the concrete live definition above and establish whether embroidery10 is independent of base15 and who actually performs it. Preserve or explicitly approve the source policy; never invent evidence.
-2. Re-read the current definition/revision and product policy before saving. The screenshot is a draft, not evidence of persisted state.
+1. Ask only the unresolved business fact: who actually performs embroidery (the fulfillment team or supplier/externally purchased service). Approval and the extra10 financial treatment are already established. Do not invent a supplier or executor.
+2. Re-read the current definition/revision and policy, then record the truthful execution policy. If the answer is supplier, inspect the supported supplier execution path before saving; selecting supplier alone does not satisfy the existing execution guard. Save the already-approved recipe only when name-selected execution is supported. The screenshot proves the financial-policy save, not the final recipe save.
 3. Identify the original80 order cohort and trustworthy historical snapshots. The bounded Salla sample proves customer selections only; today's catalog cannot certify old costs.
 4. Dry-run the explicit owner/order correction manifest and apply only proven historical deltas, atomically and idempotently, without approved-ledger or fulfillment-evidence writes.
 5. Resolve the preview visibility mismatch as a separately reviewed code change if needed. Verify the corrected live reports and production latency against an actual baseline.

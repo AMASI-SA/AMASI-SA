@@ -33,9 +33,11 @@ The complete sanitized summary is [production-deployment.json](evidence/producti
 
 The dashboard loaded and showed orders arriving after deployment. Its executive and top-product cost totals agreed. The target product remains cost-incomplete because the live definition/historical evidence is not yet repaired.
 
-A prospective definition draft was prepared, not saved: retain the selected-rose rule, add one required unconditional current_product quantity1 with auto sourcing, and set the embroidery resource scope to per_unit. A production save was rejected by automatic approval review because the live catalog/fulfillment mutation requires separate user approval. There was no workaround or alternative mutation after rejection.
+A prospective definition draft retains the selected-rose rule, adds one required unconditional current_product quantity1 with auto sourcing, and sets embroidery scope to per_unit. Automatic approval review initially rejected saving it without separate live-catalog authorization. The user subsequently explicitly approved this definition; that permission blocker is resolved.
 
-Read-only policy inspection found unknown embroidery cost treatment and assembly origin, no evidence reference and no shortage supplier. These must be resolved from actual business facts before adopting a complete schema2 recipe. A separate pre-existing conditional-visibility mismatch prevented the no-name live preview; it was not bypassed.
+The user confirmed that the existing name-Yes embroidery service adds10 to shawl15. Its financial policy was saved as independent with the owner's statement as evidence. The UI explicitly confirmed the policy save and preservation of historical policies. No second charge, price edit or option binding was added. Assembly origin remains unknown and sourcing settings were preserved. The final recipe is still unsaved because strict schema2 execution rejects an unresolved executor; actual supplier execution also requires its supported path. See [POLICY-UPDATE.md](POLICY-UPDATE.md) and [the saved-policy image](evidence/embroidery-policy-saved-20261102.jpg). This live policy write did not require or perform another code publication.
+
+A separate pre-existing conditional-visibility mismatch prevented the no-name live preview; it was not bypassed.
 
 Historical repairs and approved-ledger changes remain unapplied. Acceptance220 and the synthetic+140/−140 delta are tested calculations, not a claim that the original live80 cohort was repaired.
 

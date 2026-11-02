@@ -1,0 +1,197 @@
+MZ2 bundle policy: bounded independent read-only review, 2026-11-02
+
+Repository: /workspace/scratch/5b8ed9ac6494/mezan-bundle-cost
+Inspected checkout: f953c374239ae89a9311b3e311945ffa4e7933a5 (intent B).
+Its source tree is the tree already verified as identical to merge M
+f8235d57e90f8a1271df6350d7e7919f5621ea11.
+
+Scope and restrictions
+Read local source and existing tests only. No source/test edits, live access,
+lease changes, catalog writes, or code deployment. This requested /tmp note
+is the only newly written review artifact. No broader tests were run.
+The following test result is transcribed from the captured tool output;
+there was no separate full pytest log file from the original invocation.
+
+Existing focused regression executed
+CWD: /workspace/scratch/5b8ed9ac6494/mezan-bundle-cost/backend
+Command:
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.:tests /tmp/mezan-bundle-cost-venv/bin/python -m pytest --noconftest -p no:cacheprovider -q tests/test_bundle_catalog_v2.py::test_v2_current_unknown_policy_saves_then_blocks_execution --tb=short
+Process exit: 0
+Captured stdout:
+.                                                                        [100%]
+1 passed in 1.46s
+
+The test uses AsyncMongoMockClient and its own local db fixture; it did not
+connect to a live or external Mongo database. It saves a schema-2 current_product
+recipe with a native resource whose policy is unknown, verifies the saved
+revision, verifies estimated_cost=None and unresolved quantity, and verifies
+strict expansion raises bundle_component_policy_unresolved. It is not a
+production-order test and does not establish the persisted live schema version.
+
+Confirmed execution blocker
+backend/bundle_catalog_v2.py: inherited() reads cost_treatment and assembly_origin
+from composition_components. The first provenance condition rejects an unknown
+assembly_origin even if cost_treatment is independent and evidence_ref is set.
+It records component_provenance_required; final strict expansion raises HTTP409
+with bundle_component_policy_unresolved.
+
+save_bundle() deliberately expands with strict=False before persisting the
+definition. Thus a successful editor save is not proof of executable intake.
+backend/bundle_fulfillment_v2.py: capture_intake() calls expand_bundle() with its
+default strict=True. backend/fulfillment_v2_routes.py calls capture_intake()
+before persisting the new lifecycle/reporting snapshot. Existing captured line
+snapshots are reused; the newly introduced failure concerns lines requiring a
+new capture with matching unresolved resource options.
+
+Schema qualification
+composition_v2 is controlled by root_doc.schema_version == 2, not by the mere
+presence of current_product. Schema-2 inherited resource provenance is checked
+also when a composite root has no current_product. Root name-selected options
+are filtered by selected option/value pairs before their resource policy is used.
+Therefore one rose item alone does not establish that existing intake is free
+of this condition. The live schema version was not observed in this review.
+Holding a recipe save avoids adopting a new schema-2 recipe with unresolved
+policy; it cannot by itself prove the older recipe is schema 1 or healthy.
+
+Partial policy update
+backend/product_bundle_policy_routes.py: save_policy() accepts independent cost
+treatment with unknown assembly origin when a nonempty evidence_ref is supplied.
+It updates COST_PROFILES and PRODUCT_OPERATION_PROFILES; it does not update the
+bundle definition or its schema version. It writes a new policy revision and
+normalizes the submitted sourcing values, so preserving the actual existing
+sourcing payload matters. Cost treatment independent does not cure unknown
+assembly origin in the inherited-resource schema-2 execution path.
+
+Executor fact: necessary only for the inherited-resource model
+independent + inhouse passes this provenance combination.
+independent + supplier or purchased_complete with use=True instead records
+supplier_component_execution_required. Thus one executor answer is not
+universally sufficient to make the existing operational resource model ready.
+No recommendation is made to invent an inhouse origin or bypass this check.
+
+Supported cost-only service model already present
+backend/bundle_catalog_v2.py handles a selected option binding with mode=direct
+before inherited()/composition policy handling. It appends a direct_cost leaf
+with cost_only=True, track_inventory=False, the binding_id, direct_amount,
+and quantity. This branch is available in schema 2 as well as schema 1 and
+does not require assembly_origin.
+backend/bundle_fulfillment_v2.py: allocate_leaves() explicitly marks cost_only
+leaves ready with zero reserved, received and consumed quantity. It also treats
+non-stock resources with stock sourcing as cost-only at allocation time.
+
+backend/product_option_cost_routes.py exposes the normal existing option-cost
+update for mode=direct. Its owner/product/option/value upsert updates the same
+binding, preserves its id, clears resource_id, and sets direct_amount. This is
+a supported representation of a service expense, not evidence of supplier
+work, stock reservation, or service receipt. Adding a second binding or explicit
+service resource while retaining the original charge would risk double cost.
+No conversion was performed or independently approved by this review.
+
+Changing an existing resource binding to direct also requires reviewing its
+old composition_components entry: save_policy() only accepts policy keys for
+currently resource-backed bindings. A leftover resource-policy key can become
+invalid for a later policy save. Existing frozen snapshots must remain intact.
+
+Supplier distinction
+An explicit non-stock resource with sourcing_mode=supplier is rejected by
+bundle_nonstock_supplier_requires_service_receipt. A cost-only direct binding
+must not be presented as fulfillment of supplier execution/receipt obligations.
+The requirement to know an executor is therefore not a universal prerequisite
+for recording a standalone 10 SAR service expense. It is a requirement of the
+current inherited operational-resource representation; cost-only intent and
+actual resource/operational usage must be distinguished before changing it.
+
+Additional source evidence read (not executed in this review)
+test_parent_direct_option_cost_and_component_subtotal covers the direct cost
+leaf, its cost-only nature, frozen-price replay, and unchanged sale price.
+test_supplier_nonstock_service_fails_before_save covers refusal of unsupported
+non-stock supplier sourcing. No broader pytest run was made for these cases.
+
+Limits
+No live binding mode, inventory tracking flag, stored recipe schema version,
+supplier workflow, original affected order cohort, or production before/after
+cost was independently read here. Conclusions about those facts are conditional.
+
+Supplement: functional impact of converting a service resource binding to direct
+
+This is a further read-only trace, not an instruction to convert the live binding.
+Non-stock classification must not be equated with absence of preparation or
+supplier-accounting work. No additional tests were run.
+
+1. Shared cost and resource usage identity
+product_option_cost_routes._binding_view() resolves mode=resource from the shared
+resource unit_cost and binding quantity. update_component_cost() updates that
+shared resource, audits resource_cost_changed, and counts dependent bindings.
+component_workspace() lists resource-backed product usages only. A direct binding
+uses a fixed direct_amount, no longer follows that resource's future reference
+cost, and disappears from its resource-backed usage list. The shared resource
+record itself is not deleted by save_option_cost().
+
+2. Physical inventory
+stock_component_consumption_service derives demands only for mode=resource and
+skips resources with kind=service or track_inventory != True. Tracked components
+use resource_id for stock lots, reservations and movements. A direct binding
+does not participate in that path. bundle_fulfillment_v2.allocate_leaves() marks
+direct_cost leaves ready with no physical allocation; its cost_only source-change
+guard prevents converting such a leaf into a stock/supplier obligation later.
+
+3. Preparation services and supplier eligibility (material)
+preparation_piece_line_services._line_service_context_for_batch() selects only
+mode=resource option bindings, loads their resource IDs, and calls
+preparation_piece_operations.inherit_required_services(). That function inherits
+kind=service for a matching option/value and writes service_id=resource_id,
+reference_unit_cost, quantity, customer_selected=True and status=pending.
+Crucially, inherit_required_services() does NOT check requires_preparation.
+Therefore requires_preparation=False alone does not establish that removing the
+resource binding preserves all service-plan behavior. The service may still be
+inherited for a piece whose preparation was triggered by another requirement.
+build_duration_history() also keys service combinations by these service IDs.
+
+supplier_category_service_policy validates supplier service_ids against active
+kind=service/non-stock resource IDs and snapshots their costs and preparation flag.
+supplier_native_invoice_v2 validates each invoice service_id with require_source()
+and resolve_debit(..., 'service', service_id) before constructing service debits.
+These are real service identity/accounting paths. This review did not establish
+that the particular live embroidery resource is currently used by any supplier
+or posted invoice. Changing the option binding does not directly rewrite those
+stored financial entries, but removes this source for later service-plan creation.
+
+4. Quantity scope
+The direct_cost option leaf uses binding.quantity times the expansion multiplier.
+It does not use the current_product per_unit component scope branch. For one
+physical current_product per sale unit and binding quantity 1 the quantities
+align, but conversion is not a general semantic substitute if a recipe later
+contains multiple current_product units/slots.
+
+5. Historical evidence
+Existing bundle intake and frozen definition metadata retain their original
+resource/binding data and prices. capture_intake() skips already captured line
+IDs; no option-binding update directly edits stored order snapshots or journals.
+Direct conversion is not a historical repair. New or still-unfrozen estimates
+would use the changed catalog representation. capture_actual_cost() uses a ready
+cost-only leaf's frozen unit_cost; tracked resources instead use stock cost
+state or a posted receipt according to their sourcing mode.
+
+6. UI/model evidence to inspect before classifying the live service
+ProductOptionCostEditor.jsx explicitly distinguishes 'مكوّن مشترك' (mode=resource)
+and 'مبلغ مباشر' (mode=direct), and shows the selected shared resource and price.
+MezanComponentsProduction.jsx labels non-stock rows 'خدمة عمل'. Its edit form
+exposes 'تمنع شحن المنتج حتى تكتمل الخدمة' for requires_preparation; this is an
+operational flag, not the same as track_inventory. The UI says it is enabled
+automatically for newly created preparation services such as embroidery.
+mezanComponentCatalog.js sends both kind/track_inventory and requires_preparation.
+
+For the actual live row, establish mode, resource_id, kind, track_inventory,
+requires_preparation, shared product usages and relevant supplier/service-plan
+usage. A blank/false preparation flag plus non-stock type is useful evidence
+but not complete proof of cost-only use because the inheritance function above
+does not filter on that flag. Do not infer origin=inhouse from a service label.
+
+Conclusion of the supplement
+The direct path is a legitimate monetary-cost model, but conversion is not a
+semantically neutral repair for an existing shared service resource. It can
+remove central tariff propagation, service identity, preparation inheritance
+and later supplier-invoice eligibility. Keep the existing resource until the
+actual desired workflow is known; do not convert solely to avoid provenance.
+The executor question is not universal for every standalone service expense,
+but unresolved operational provenance is real for the present resource model.
