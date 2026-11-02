@@ -211,19 +211,42 @@ class BundleFinancialLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.db[stock.UNITS].count_documents({}), 0)
         self.assertTrue((await self.supplier_pairs(order))[0][0][1]["items"][0]["supplier_export"])
 
-    async def test_pre_cutover_order_drops_new_financial_capture_and_cannot_legacy_accept(self):
+    async def test_pre_cutover_order_keeps_strict_legacy_intake_rejection_atomic(self):
         order = await self.fixture(legacy=True)
         before = await self.unrelated_records()
-        result = await self.reconcile(order)
-        self.assertEqual(result["state"], "blocked")
-        self.assertFalse(result["accepted"])
-        self.assertEqual(result["error_code"], BLOCK)
-        saved = await self.intent()
-        self.assertEqual(saved["reporting_cost_snapshots"], {})
-        self.assertEqual(saved["bundle_financial_blocked"], {"line": BLOCK})
-        self.assertNotIn("line", saved["bundle_intake_snapshots"])
-        self.assertFalse((await self.historical_cost(order))["calculation_cost_available"])
+        with self.assertRaises(HTTPException) as caught:
+            await self.reconcile(order)
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertEqual(caught.exception.detail["code"], BLOCK)
+        # Pre-existing behavior: a rejected supplier intake never registers
+        # a new lifecycle or changes an old operational cohort.
+        self.assertIsNone(await self.intent())
+        self.assertEqual(await self.db[stock.PLANS].count_documents({}), 0)
+        self.assertEqual(await self.db[stock.UNITS].count_documents({}), 0)
         self.assertEqual(await self.unrelated_records(), before)
+        self.assertTrue(await lifecycle.legacy_component_cohort(
+            self.db, user_id="owner", order_number="order"))
+
+    async def test_existing_legacy_acceptance_survives_repeated_blocked_bundle_capture(self):
+        order = await self.fixture(legacy=True)
+        self.assertTrue(await lifecycle.allow_legacy_component_execution(
+            self.db, user_id="owner", order_number="order"))
+        original = await self.intent()
+        before = await self.unrelated_records()
+        self.assertEqual(original["state"], lifecycle.LEGACY_COMPONENT_COHORT)
+        for minute in (1, 2):
+            with self.assertRaises(HTTPException) as caught:
+                await self.reconcile(order, minute=minute)
+            self.assertEqual(caught.exception.detail["code"], BLOCK)
+            self.assertEqual(await self.intent(), original)
+            self.assertEqual(await self.unrelated_records(), before)
+        # Legacy ready-piece, supplier export and piece-consumption checks
+        # remain eligible; the financial-only opt-in did not revoke them.
+        self.assertTrue(await lifecycle.legacy_component_cohort(
+            self.db, user_id="owner", order_number="order"))
+        self.assertTrue(await lifecycle.allow_legacy_component_execution(
+            self.db, user_id="owner", order_number="order"))
+        self.assertTrue((await self.supplier_pairs(order))[0][0][1]["items"][0]["supplier_export"])
 
     async def test_concurrent_replay_creates_one_lifecycle_and_keeps_first_financial_proof(self):
         order = await self.fixture()
@@ -260,8 +283,15 @@ class BundleFinancialLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def assert_cancellation_allowed(self, *, legacy):
         order = await self.fixture(legacy=legacy)
-        await self.reconcile(order)
-        financial = deepcopy((await self.intent())["reporting_cost_snapshots"])
+        if legacy:
+            with self.assertRaises(HTTPException) as caught:
+                await self.reconcile(order)
+            self.assertEqual(caught.exception.detail["code"], BLOCK)
+            self.assertIsNone(await self.intent())
+            financial = {}
+        else:
+            await self.reconcile(order)
+            financial = deepcopy((await self.intent())["reporting_cost_snapshots"])
         order.status = "cancelled"
         cancelled = await self.reconcile(order, minute=2)
         self.assertEqual(cancelled["state"], "cancelled")
