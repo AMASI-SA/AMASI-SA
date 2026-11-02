@@ -2,6 +2,9 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  salaryStartContext: () => data(api.get(`${base}/salary-start/context`)),
+  previewSalaryStart: body => data(api.post(`${base}/salary-start/preview`, body)),
+  approveSalaryStart: body => data(api.post(`${base}/salary-start/approve`, body)),
   adFundingSettings: () => data(api.get(`${base}/ad-funding-settings`)),
   saveAdFundingSettings: body => data(api.post(`${base}/ad-funding-settings`, body)),
   inventoryOpeningContext: () => data(api.get(`${base}/inventory-opening/context`)),
@@ -40,6 +43,7 @@ export const operationalApi = {
   receiptContent: id => data(api.get(`${base}/receipts/${encodeURIComponent(id)}`, {responseType:"blob"})),
   reports: () => data(api.get(`${base}/reports`)),
   costExposure: () => data(api.get(`${base}/cost-exposure`)),
+  financialPosition: () => data(api.get(`${base}/financial-position`)),
   audit: () => data(api.get(`${base}/audit`))
 };
 export const entityKinds = [['employee', 'موظفين'], ['employee_custody', 'عهد الموظفين'], ['provider', 'منصات دفع'], ['pos_receivable', 'ذمم شبكة سابقة'], ['courier', 'شركات شحن'], ['store_driver', 'مناديب المتجر'], ['ad_account', 'منصات إعلانية'], ['supplier', 'موردين'], ['external_person', 'جهات خارجية'], ['bank', 'بنوك وأجهزة الشبكة'], ['cash', 'صناديق'], ['operating_expense', 'مصروفات تشغيلية'], ['owner_withdrawal', 'سحوبات المالك/المدير']];

@@ -1,0 +1,280 @@
+"""Pure proof of a delivery after the operational opening instant.
+
+The event is independent of the customer's order age and later payment state.
+It carries no price, sale, customer payment, bank effect, or opening allocation.
+Only an explicit delivery timestamp can cross the opening boundary: a source
+update clock or delivered label cannot supply a missing event time.
+"""
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from shipping_companies import normalize_shipping_company
+
+
+DELIVERED = {"delivered", "تم التوصيل"}
+INACTIVE = {"cancelled", "canceled", "void", "deleted", "archived", "superseded", "returned"}
+RETURNS = {"return", "return_shipment", "reverse"}
+
+
+def _fail(reason):
+    raise ValueError("operational_delivery_" + reason)
+
+
+def _text(value):
+    if isinstance(value, bool) or not isinstance(value, (str, int)) or isinstance(value, int) and value <= 0:
+        return None
+    value = str(value)
+    if not value or value != value.strip() or len(value) > 300 or any(ord(char) < 32 for char in value):
+        return None
+    return value
+
+
+def _status(value):
+    if isinstance(value, dict):
+        value = value.get("slug") or value.get("code") or value.get("name")
+    return str(value or "").strip().casefold()
+
+
+def _instant(value):
+    if value is None or value == "":
+        _fail("timestamp_missing")
+    zone = None
+    if isinstance(value, dict):
+        zone, value = value.get("timezone"), value.get("date")
+        if value is None or value == "":
+            _fail("timestamp_missing")
+    try:
+        if isinstance(value, datetime):
+            # Naive native BSON datetimes are UTC; naive text is not.
+            parsed = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+        else:
+            if not isinstance(value, str) or not ("T" in value or " " in value):
+                _fail("timestamp_invalid")
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None and zone:
+                parsed = parsed.replace(tzinfo=ZoneInfo(zone))
+        if parsed.utcoffset() is None:
+            _fail("timestamp_timezone_missing")
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ZoneInfoNotFoundError):
+        _fail("timestamp_invalid")
+    except ValueError as error:
+        if str(error).startswith("operational_delivery_"):
+            raise
+        _fail("timestamp_invalid")
+
+
+def _inactive(row):
+    return (any(row.get(key) for key in ("archived", "superseded", "cancelled", "returned", "deleted", "is_deleted"))
+            or _status(row.get("status") or row.get("shipment_status")) in INACTIVE
+            or _status(row.get("type")) in RETURNS)
+
+
+def _currency(raw, assignment=None):
+    amounts = raw.get("amounts") if isinstance(raw.get("amounts"), dict) else {}
+    payment = raw.get("payment") if isinstance(raw.get("payment"), dict) else {}
+    candidates = [raw, amounts, payment]
+    candidates.extend(value for value in (amounts.get("total"), raw.get("total"), assignment) if isinstance(value, dict))
+    currencies = [row["currency"] for row in candidates if row.get("currency") is not None]
+    if not currencies:
+        _fail("currency_missing")
+    # The existing delivery contracts and driver responsibility producer are
+    # native SAR. Do not relabel their fees with a foreign customer currency.
+    if any(value != "SAR" for value in currencies):
+        _fail("currency_unsupported")
+    return "SAR"
+
+
+def _window(value, created, start, end):
+    delivered = _instant(value)
+    if delivered < created:
+        _fail("timestamp_before_order")
+    if delivered > end:
+        _fail("event_in_future")
+    return delivered if delivered > start else None
+
+
+def _driver_assignment(assignments, owner, order_id, number):
+    if not isinstance(assignments, (list, tuple)):
+        _fail("assignment_scope_invalid")
+    if any(not isinstance(row, dict) or row.get("user_id") != owner for row in assignments):
+        _fail("owner_mismatch")
+    relevant = [row for row in assignments if _text(row.get("order_id")) == order_id
+                or _text(row.get("order_number")) == number]
+    if any(_text(row.get("order_id")) != order_id or _text(row.get("order_number")) != number for row in relevant):
+        _fail("assignment_order_conflict")
+    active = [row for row in relevant if row.get("active") is True and not _inactive(row)
+              and _status(row.get("status")) in {"assigned", "out_for_delivery", *DELIVERED}]
+    if len(active) > 1:
+        _fail("assignment_ambiguous")
+    if not active:
+        if any(_status(row.get("status")) in DELIVERED for row in relevant):
+            _fail("assignment_inactive")
+        return None
+    assignment = active[0]
+    identity = _text(assignment.get("id"))
+    if not identity or not _text(assignment.get("driver_id")):
+        _fail("assignment_identity_missing")
+    if sum(_text(row.get("id")) == identity for row in assignments) != 1:
+        _fail("assignment_ambiguous")
+    return assignment
+
+
+def _current_shipping(raw, source):
+    current = source.get("salla_shipping_current")
+    nested = raw.get("salla_shipping_current")
+    if current is None:
+        current = nested
+    if not isinstance(current, dict) or current.get("source_kind") not in {"order", "shipment"}:
+        _fail("current_shipment_required")
+    if nested is not None and nested is not current:
+        if not isinstance(nested, dict) or any(current.get(key) != nested.get(key) for key in (
+                "shipment_id", "tracking_number", "company_code", "company_name", "status")):
+            _fail("current_shipment_conflict")
+    shipment, waybill = _text(current.get("shipment_id")), _text(current.get("tracking_number"))
+    if not shipment or not waybill:
+        _fail("shipment_identity_missing")
+    superseded = current.get("superseded_shipment_ids") or []
+    if not isinstance(superseded, list):
+        _fail("shipment_identity_conflict")
+    if _inactive(current) or shipment in {_text(value) for value in superseded}:
+        _fail("shipment_inactive")
+    if _status(current.get("status")) not in DELIVERED:
+        _fail("shipment_not_delivered")
+    for root, field in (("salla_shipment_id", "shipment_id"), ("tracking_number", "tracking_number"),
+                        ("shipping_number", "tracking_number"), ("shipping_company_code", "company_code"),
+                        ("shipping_company", "company_name"), ("shipping_status", "status"), ("shipment_status", "status")):
+        if root in source and _text(source[root]) != _text(current.get(field)):
+            _fail("current_shipment_conflict")
+    return current, shipment, waybill
+
+
+def _courier(setup, owner, current):
+    if not isinstance(setup, dict) or setup.get("user_id") != owner:
+        _fail("shipping_setup_owner_mismatch")
+    key = _text(current.get("company_code")) or _text(current.get("company_name"))
+    if not key:
+        _fail("courier_identity_missing")
+    if any(normalize_shipping_company(str(current.get(field) or ""))[0] in {"mandoob", "mandoob_riyadh", "pickup"}
+           or _status(current.get(field)) in {"store_driver", "store-driver", "store driver", "store_delivery", "local_delivery", "pickup"}
+           for field in ("company_code", "company_name", "method")):
+        _fail("driver_assignment_required")
+    couriers = setup.get("couriers") or []
+    if not isinstance(couriers, list) or any(not isinstance(row, dict) for row in couriers):
+        _fail("courier_identity_ambiguous")
+    approved = [row for row in couriers if row.get("status") == "active" and not _inactive(row)
+                and row.get("active") is not False and row.get("is_active") is not False
+                and row.get("confirmed_by") and row.get("confirmed_at")]
+    if any(not isinstance(row.get("salla_carrier_keys"), list)
+           or any(not _text(value) for value in row["salla_carrier_keys"]) for row in approved):
+        _fail("courier_identity_ambiguous")
+    matches = [row for row in approved if key in (row.get("salla_carrier_keys") or [])]
+    if len(matches) != 1 or not _text(matches[0].get("courier_key")):
+        _fail("courier_identity_ambiguous")
+    name = _text(current.get("company_name"))
+    named = [row for row in approved if name and name in (row.get("salla_carrier_keys") or [])]
+    if named and {row.get("courier_key") for row in named} != {matches[0]["courier_key"]}:
+        _fail("courier_identity_conflict")
+    return _text(matches[0]["courier_key"]), key
+
+
+def _shipment_time(raw, current, shipment, waybill):
+    shipping = raw.get("shipping") if isinstance(raw.get("shipping"), dict) else {}
+    candidates = raw.get("shipments") or []
+    candidates = candidates if isinstance(candidates, list) else [candidates] if isinstance(candidates, dict) else []
+    if isinstance(raw.get("shipment"), dict):
+        candidates = [*candidates, raw["shipment"]]
+    nested = shipping.get("shipment") if isinstance(shipping.get("shipment"), dict) else {}
+    shipping_id = shipping.get("shipment_id") or nested.get("id")
+    if shipping_id is not None:
+        candidates = [*candidates, {**shipping, "id": shipping_id}]
+    selected = [row for row in candidates if isinstance(row, dict) and _text(row.get("id") or row.get("shipment_id")) == shipment]
+    if not selected:
+        _fail("shipment_source_missing")
+    timestamps = []
+    for row in selected:
+        if _inactive(row):
+            _fail("shipment_inactive")
+        status = _status(row.get("status") or row.get("shipment_status"))
+        if status and status not in DELIVERED:
+            _fail("shipment_status_conflict")
+        company = row.get("courier") or row.get("company")
+        code = _text(company.get("code")) if isinstance(company, dict) else _text(row.get("company_code"))
+        name = _text(company.get("name")) if isinstance(company, dict) else _text(company)
+        if (code and current.get("company_code") and code != current["company_code"]
+                or name and current.get("company_name") and name != current["company_name"]):
+            _fail("shipment_carrier_conflict")
+        tracking = row.get("tracking") if isinstance(row.get("tracking"), dict) else {}
+        references = [_text(row.get(key)) for key in ("tracking_number", "tracking_id", "shipping_number", "awb")]
+        references.append(_text(tracking.get("number")))
+        if any(value != waybill for value in references if value is not None):
+            _fail("shipment_waybill_conflict")
+        if row.get("delivered_at") is not None:
+            timestamps.append(_instant(row["delivered_at"]))
+    if not timestamps:
+        _fail("timestamp_missing")
+    if len(set(timestamps)) != 1:
+        _fail("timestamp_ambiguous")
+    return timestamps[0]
+
+
+def resolve_delivery_event(raw, *, source, owner, assignments, setup, started_at, as_of):
+    """Return a proved post-start event, None outside scope, or an exact issue.
+
+    The caller retains normal order eligibility independently and quotes the
+    existing shipping contract at ``delivered_at``. This resolver never decides
+    a fee, collection approval, refund, or how a pooled opening should settle.
+    """
+    if not _text(owner) or not isinstance(source, dict) or source.get("user_id") != owner:
+        _fail("owner_mismatch")
+    if not isinstance(raw, dict):
+        _fail("canonical_source_missing")
+    raw_sources = source.get("raw_by_source")
+    canonical = raw_sources.get("salla_direct") if isinstance(raw_sources, dict) else None
+    if not isinstance(canonical, dict):
+        _fail("canonical_source_missing")
+    order_id = _text(raw.get("id"))
+    number = _text(raw.get("reference_id") or raw.get("order_number"))
+    if not order_id or not number:
+        _fail("order_identity_missing")
+    if (_text(canonical.get("id")) != order_id
+            or _text(canonical.get("reference_id") or canonical.get("order_number")) != number):
+        _fail("order_identity_conflict")
+    watermark = source.get("g47_salla_snapshot") or {}
+    if not isinstance(watermark, dict) or watermark.get("requires_authoritative_refresh"):
+        _fail("canonical_source_stale")
+    start, end = _instant(started_at), _instant(as_of)
+    if end < start:
+        _fail("time_range_invalid")
+    created = _instant(raw.get("date") or raw.get("created_at") or raw.get("order_date"))
+    if created > end:
+        _fail("order_in_future")
+    assignment = _driver_assignment(assignments, owner, order_id, number)
+    base = {"schema": "operational_delivery_event_v1", "order_id": order_id, "order_number": number,
+            "order_created_at": created.isoformat()}
+    if assignment is not None:
+        if _status(assignment.get("status")) not in DELIVERED:
+            return None
+        delivered = _window(assignment.get("delivered_at"), created, start, end)
+        if delivered is None:
+            return None
+        assignment_id = _text(assignment["id"])
+        return {**base, "id": "store-delivery:" + assignment_id, "delivered_at": delivered.isoformat(),
+                "party_type": "store_driver", "party_id": _text(assignment["driver_id"]),
+                "currency": _currency(raw, assignment), "assignment_id": assignment_id}
+    current = source.get("salla_shipping_current") or raw.get("salla_shipping_current") or {}
+    if not isinstance(current, dict):
+        _fail("current_shipment_required")
+    if _status(raw.get("status")) not in DELIVERED and _status(current.get("status")) not in DELIVERED:
+        return None
+    current, shipment, waybill = _current_shipping(raw, source)
+    delivered = _window(_shipment_time(raw, current, shipment, waybill), created, start, end)
+    if delivered is None:
+        return None
+    party, carrier_key = _courier(setup, owner, current)
+    identity = sha256(json.dumps([order_id, shipment], ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    return {**base, "id": "courier-delivery:" + identity, "delivered_at": delivered.isoformat(),
+            "party_type": "courier", "party_id": party, "currency": _currency(raw),
+            "shipment_id": shipment, "waybill": waybill, "source_carrier_key": carrier_key}

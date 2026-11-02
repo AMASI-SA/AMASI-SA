@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -37,7 +38,8 @@ jobs:
           python -m pip install pytest==9.1.1 fastapi==0.142.2 pydantic==2.13.5
           httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
           cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2
-          bcrypt==4.1.3 PyJWT==2.15.0
+          bcrypt==4.1.3 PyJWT==2.15.0 mongomock==4.3.0
+          mongomock-motor==0.0.36 openpyxl==3.1.5
       - name: Start isolated projection Replica Set
         run: |
           set -euo pipefail
@@ -52,11 +54,21 @@ jobs:
             sleep 1
           done
           docker exec operational-projection-rs mongosh --port 27305 --quiet --eval 'if(!db.hello().isWritablePrimary){quit(1)}'
+      - name: Record exact tested source
+        env:
+          EXPECTED_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+          git rev-parse HEAD > operational-source-sha.txt
+          git rev-parse HEAD^{tree} > operational-source-tree.txt
       - name: Run operational contracts
         run: >-
           python -B -m pytest --noconftest -q
           backend/tests/test_operational_balance*.py
           backend/tests/test_operational_open_cost_exposure.py
+          backend/tests/test_operational_supplier_invoice_cutover.py
+          backend/tests/test_store_delivery_noncash_review.py
+          backend/tests/test_operational_driver_review_mongo.py
           --tb=short --junitxml=operational-backend.xml
       - name: Preserve shipping summary and calculator contracts
         run: python -B -m pytest --noconftest -q backend/tests/test_dashboard_shipping_ssot.py backend/tests/test_mz2_shipping_calculator.py --tb=short
@@ -65,15 +77,26 @@ jobs:
           python - <<'PY'
           import xml.etree.ElementTree as ET
           cases = ET.parse('operational-backend.xml').findall('.//testcase')
-          assert len(cases) >= 310, 'Operational test collection incomplete'
+          assert len(cases) >= 1000, 'Operational test collection incomplete'
           assert any('test_operational_open_cost_exposure' in c.get('classname', '') for c in cases), 'Historical open-cost tests were not collected'
+          for suite in ('test_operational_supplier_invoice_cutover',
+                        'test_operational_balance_invoice_flow',
+                        'test_operational_balance_supplier_final_cost',
+                        'test_operational_balance_unified_supplier_payment',
+                        'test_operational_balance_provider_settlement_guard'):
+              assert any(suite in c.get('classname', '') for c in cases), suite + ' not collected'
+          assert len([c for c in cases if 'test_operational_balance_salary_start_mongo' in c.get('classname', '')]) == 5
+          assert len([c for c in cases if 'test_operational_driver_review_mongo' in c.get('classname', '')]) == 13
           assert not any(c.find(tag) is not None for c in cases for tag in ('skipped', 'failure', 'error'))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: operational-backend-results
-          path: operational-backend.xml
+          path: |
+            operational-backend.xml
+            operational-source-sha.txt
+            operational-source-tree.txt
           if-no-files-found: error
 
       - name: Remove this job's isolated Mongo fixture
@@ -93,6 +116,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.2'
@@ -107,14 +131,24 @@ jobs:
           '**/MezanV2NavigationShell.employees.test.jsx'
           '**/MezanV2NavigationShell.test.jsx'
           '**/ShippingCompanySettings.test.jsx'
+          '**/MezanSuppliersV2.test.jsx'
+          '**/OperationalSupplierAccount.test.jsx'
+          '**/mezanSuppliersV2.test.js'
+          '**/SupplierPaymentWorkspace.test.jsx'
           --json --outputFile=operational-frontend.json
       - name: Reject missing or skipped tests
         run: |
           node - <<'JS'
           const r = require('./operational-frontend.json');
-          if (!r.success || r.numPassedTests < 102 || r.numPassedTestSuites < 8 ||
+          if (!r.success || r.numPassedTests < 289 || r.numPassedTestSuites < 23 ||
               r.numFailedTests || r.numFailedTestSuites || r.numPendingTests ||
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
+          for (const suffix of ['SalaryStart.test.jsx', 'OperationalSupplierAccount.test.jsx',
+                                'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx']) {
+            const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
+            if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))
+              throw Error('Combined UI suite missing or incomplete: ' + suffix);
+          }
           JS
       - uses: actions/upload-artifact@v4
         if: always()

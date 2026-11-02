@@ -17,7 +17,8 @@ from store_delivery_domain import normalize_text
 from store_delivery_driver_app_routes import DRIVER_PAYMENT_REVIEWS
 from store_delivery_driver_routes import STORE_DRIVERS
 from store_delivery_handover_routes import ASSIGNMENTS
-from accounting_driver_payment_review import DriverReviewInput as ReviewPayload, PosBankInput
+from accounting_driver_payment_review import DriverReviewInput as NativeReviewPayload, PosBankInput
+from operational_driver_payment_review import ReviewInput as ReviewPayload
 
 PAYMENT_EVENTS = "store_delivery_payment_review_events"
 
@@ -148,6 +149,11 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
     ) -> dict[str, Any]:
         actor = await _require_accountant(db, user)
         user_id = _merchant_user_id(actor)
+        from operational_driver_payment_review import financial_source, options
+        source = await financial_source(db, user_id)
+        if source == "operational":
+            return await options(db, owner=user_id, actor=normalize_text(actor.get("id")),
+                                 assignment_id=normalize_text(assignment_id))
         review = await db[DRIVER_PAYMENT_REVIEWS].find_one(
             {
                 "user_id": user_id,
@@ -163,8 +169,12 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
             )
         method = normalize_text(review.get("payment_method"))
         amount = str(review.get("amount") or "")
+        from operational_balance_store import digest
         result: dict[str, Any] = {
             "assignment_id": review.get("assignment_id"),
+            "financial_source": "native",
+            "session_scope": digest([user_id, normalize_text(actor.get("id"))]),
+            "expected_review_revision": review.get("revision", 1),
             "payment_method": method,
             "amount": review.get("amount"),
             "bank_account_id": review.get("bank_account_id"),
@@ -303,10 +313,29 @@ def make_store_delivery_payment_review_router(db: Any, current_user: Callable[..
                 detail={"code": "payment_review_rejection_reason_required"},
             )
         from accounting_driver_payment_review import review_driver_payment
+        from operational_driver_payment_review import financial_source, review_payment
         from accounting_ledger_v2 import AccountingLedgerV2Error
+        prior = await db[DRIVER_PAYMENT_REVIEWS].find_one({"user_id": user_id, "assignment_id": assignment_id}) or {}
+        source = await financial_source(db, user_id)
+        prior_operational_decision = (prior.get("financial_source") == "operational"
+            and prior.get("status") in {"approved", "rejected"}
+            and prior.get("operational_review_revision") == prior.get("revision", 1))
+        if payload.expected_financial_source == "operational" or prior_operational_decision:
+            return await review_payment(db, owner=user_id, actor=normalize_text(actor.get("id")),
+                                        assignment_id=assignment_id, payload=payload)
+        if source == "operational":
+            raise HTTPException(409, detail={"code": "operational_driver_review_scope_required"})
+        if payload.expected_financial_source == "native":
+            from operational_balance_store import digest
+            if (source != "native" or payload.expected_review_revision != prior.get("revision", 1)
+                    or payload.expected_session_scope != digest([user_id, normalize_text(actor.get("id"))])):
+                raise HTTPException(409, detail={"code": "driver_payment_review_context_changed"})
+        # Preserve the native payload/fingerprint and all its pause/P02 guards.
+        native = NativeReviewPayload.model_validate(payload.model_dump(exclude={
+            "expected_financial_source", "expected_review_revision", "expected_session_scope"}))
         try:
             return await review_driver_payment(db, owner=user_id, actor_id=normalize_text(actor.get("id")),
-                                               assignment_id=assignment_id, payload=payload)
+                                               assignment_id=assignment_id, payload=native)
         except AccountingLedgerV2Error as exc:
             raise HTTPException(409, detail={"code": exc.code}) from exc
 

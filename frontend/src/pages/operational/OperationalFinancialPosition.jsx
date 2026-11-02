@@ -1,0 +1,254 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowClockwise, CalendarBlank, Info, MagnifyingGlass, MicrosoftExcelLogo, Printer, WarningCircle } from "@phosphor-icons/react";
+import { useReactToPrint } from "react-to-print";
+import { useOptionalAuth } from "../../context/AuthContext";
+import XLSX from "../../lib/safeSpreadsheet";
+import { fileStampSA, formatRiyadhArabicLong, formatRiyadhDateTime } from "../../lib/dates";
+import { operationalApi } from "./api";
+import {
+    buildFinancialPositionWorkbook, collectionLabel, currencyCodes, DELIVERY_MONEY_COLUMNS, DELIVERY_SCOPE_NOTE,
+    deliveryOrderLabel, deliveryParties, destinationLabel, filterDeliveries, formatPositionCount, formatPositionMoney,
+    isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, UNAVAILABLE,
+} from "./financialPositionPresentation";
+import "./financialPosition.css";
+
+const emptyFilters = () => ({ order: "", party: "", payment: "" });
+const inactiveMessages = {
+    draft: "يظهر التقرير المالي التشغيلي بعد اعتماد الأرصدة الافتتاحية وبدء التشغيل.",
+    frozen: "التشغيل مجمّد حاليًا؛ التقرير الحالي غير متاح.",
+    accounting_active: "بدأ النظام المحاسبي؛ التقرير التشغيلي الحالي غير متاح ضمن هذه المرحلة.",
+};
+
+function Money({ value, role = "neutral" }) {
+    const text = formatPositionMoney(value);
+    const tone = text === UNAVAILABLE ? "unavailable" : String(value).startsWith("-") ? "negative" : role === "receivable" ? "positive" : role === "payable" ? "negative" : "neutral";
+    return <bdi dir="ltr" className={`ofp-money ofp-${tone}`} aria-label={text === UNAVAILABLE ? "المبلغ غير متاح" : undefined}>{text}</bdi>;
+}
+
+function Notes({ items, className = "" }) {
+    const notes = readableMessages(items || []);
+    return notes.length ? <div className={`ofp-notes ${className}`}>{notes.map(note => <p key={note}>{note}</p>)}</div> : null;
+}
+
+function SectionHeading({ id, number, title, children }) {
+    return <div className="ofp-section-heading"><h2 id={id}><span className="ofp-section-number">{number}</span>{title}</h2><div className="ofp-legend">{children}</div></div>;
+}
+
+function DataCell({ value, column }) {
+    if (column.type === "money") return <Money value={value} role={column.role} />;
+    if (column.type === "count") return <bdi className="ofp-count" dir="ltr">{formatPositionCount(value)}</bdi>;
+    return positionText(value);
+}
+
+function ReportTable({ table }) {
+    const columns = table.columns || [];
+    return <article className={`ofp-table-card${table.kind === "forecast" ? " ofp-table-forecast" : ""}`} data-testid={`financial-table-${table.id}`}>
+        <div className="ofp-table-title"><h3>{table.title}</h3>{table.complete !== true && <span className="ofp-status">غير مكتمل</span>}</div>
+        <div className="ofp-table-scroll"><table>
+            <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
+            <tbody>{(table.rows || []).map((row, index) => <tr key={row.id || index}>{columns.map(column =>
+                <td key={column.key} className={column.type === "text" ? "ofp-label-cell" : "ofp-value-cell"}><DataCell value={row[column.key]} column={column} /></td>)}</tr>)}
+                {!table.rows?.length && <tr><td className="ofp-empty-cell" colSpan={Math.max(columns.length, 1)}>{table.complete === true ? "لا توجد أرصدة مسجلة لهذا القسم." : "لم تتوفر بيانات مكتملة لهذا القسم."}</td></tr>}
+            </tbody>
+            {table.totals && Object.keys(table.totals).length > 0 && <tfoot><tr>{columns.map((column, index) => <td key={column.key}>
+                {index === 0 && column.type === "text" ? "الإجمالي" : <DataCell value={table.totals[column.key]} column={column} />}
+            </td>)}</tr></tfoot>}
+        </table></div>
+        <Notes items={table.notes} />
+    </article>;
+}
+
+function DebtTable({ data }) {
+    return <article className="ofp-table-card ofp-debts" data-testid="financial-debt-summary"><div className="ofp-table-title"><h3>إجمالي الديون والمستحقات</h3></div>
+        <table><thead><tr><th scope="col">الجهة</th><th scope="col">لنا</th><th scope="col">علينا</th></tr></thead>
+            <tbody>{(data.debt_rows || []).map(row => <tr key={row.id}><td className="ofp-label-cell">{row.name}</td><td><Money value={row.receivable} role="receivable" /></td><td><Money value={row.payable} role="payable" /></td></tr>)}</tbody>
+            <tfoot><tr><td>الإجمالي</td><td><Money value={data.debt_totals?.receivable} role="receivable" /></td><td><Money value={data.debt_totals?.payable} role="payable" /></td></tr></tfoot>
+        </table><Notes items={["السيولة والأرصدة الإعلانية المقدمة وعهد الموظفين تظهر مستقلة عن الديون."]} />
+    </article>;
+}
+
+function AmountTable({ title, rows = [], className = "", complete }) {
+    return <article className={`ofp-table-card ${className}`}><div className="ofp-table-title"><h3>{title}</h3>{complete === false && <span className="ofp-status">غير مكتمل</span>}</div>
+        <table><thead><tr><th scope="col">البند</th><th scope="col">المبلغ</th></tr></thead><tbody>
+            {rows.map(row => <tr key={row.id} className={["total", "positive", "negative"].includes(row.emphasis) ? `ofp-row-${row.emphasis}` : ""}>
+                <td className="ofp-label-cell">{row.label}{row.reason && <small className="ofp-row-reason">{row.reason}</small>}</td>
+                <td><Money value={row.amount} role={row.emphasis === "positive" ? "receivable" : row.emphasis === "negative" ? "payable" : "neutral"} /></td>
+            </tr>)}
+            {!rows.length && <tr><td className="ofp-empty-cell" colSpan="2">لم تتوفر بيانات مكتملة لهذا القسم.</td></tr>}
+        </tbody></table>
+    </article>;
+}
+
+function CollectionStatus({ value }) {
+    return <span className={`ofp-collection-status ${value === "confirmed" ? "ofp-confirmed" : value === "pending_review" ? "ofp-pending" : ""}`}>{collectionLabel(value)}</span>;
+}
+
+function DeliveryDetails({ delivery, filters, onFiltersChange, currency }) {
+    const allRows = Array.isArray(delivery?.rows) ? delivery.rows : [];
+    const rows = filterDeliveries(allRows, filters);
+    const parties = deliveryParties(allRows);
+    const payments = [...new Set(allRows.map(row => row.payment_method || "unavailable"))];
+    const update = patch => onFiltersChange({ ...filters, ...patch });
+    return <article className="ofp-deliveries" data-testid="financial-deliveries">
+        <div className="ofp-detail-heading"><div><h3>تفاصيل الشحن والتحصيل لكل طلب</h3><p>أجرة التنفيذ وحالة التحصيل ومكان المبلغ لكل طلب · {currency}</p></div>{delivery?.complete !== true && <span className="ofp-status">تفاصيل غير مكتملة</span>}</div>
+        <div className="ofp-delivery-filters ofp-no-print" aria-label="فلاتر تفاصيل الطلبات">
+            <label><span>رقم الطلب أو معرفه</span><div className="ofp-search"><MagnifyingGlass size={18} aria-hidden="true" /><input type="search" aria-label="البحث برقم الطلب" placeholder="ابحث برقم الطلب أو معرفه" value={filters.order} onChange={event => update({ order: event.target.value })} /></div></label>
+            <label><span>جهة التنفيذ</span><select aria-label="تصفية جهة التنفيذ" value={filters.party} onChange={event => update({ party: event.target.value })}><option value="">كل الجهات</option>{parties.map(party => <option key={party.key} value={party.key}>{party.label}</option>)}</select></label>
+            <label><span>طريقة الدفع</span><select aria-label="تصفية طريقة الدفع" value={filters.payment} onChange={event => update({ payment: event.target.value })}><option value="">كل الطرق</option>{payments.map(payment => <option key={payment} value={payment}>{paymentLabel(payment)}</option>)}</select></label>
+            <button type="button" className="ofp-button" onClick={() => onFiltersChange(emptyFilters())}>مسح الفلاتر</button>
+        </div>
+        <p className="ofp-detail-scope">السجلات المعروضة: <bdi>{rows.length}</bdi> من <bdi>{allRows.length}</bdi>. فلاتر التفاصيل لا تغيّر إجماليات التقرير، ويشمل التصدير التفاصيل المعروضة.</p>
+        <div className="ofp-table-scroll ofp-delivery-screen"><table className="ofp-delivery-table"><thead><tr>
+            <th scope="col">الطلب والتسليم</th><th scope="col">جهة التنفيذ</th><th scope="col">الدفع وجهة التحصيل</th><th scope="col">حالة التحصيل</th>
+            {DELIVERY_MONEY_COLUMNS.map(column => <th scope="col" key={column.key}>{column.label}</th>)}
+        </tr></thead><tbody>{rows.map(row => <tr key={row.id} data-testid="financial-delivery-row">
+            <td><strong>{deliveryOrderLabel(row)}</strong><small>{formatRiyadhDateTime(row.delivered_at)}</small></td>
+            <td><strong>{positionText(row.party_name)}</strong><small>{PARTY_LABELS[row.party_type] || UNAVAILABLE}</small></td>
+            <td><strong>{paymentLabel(row.payment_method)}</strong><small>{destinationLabel(row.collection_destination)}</small>{row.destination_name && <small>{row.destination_name}</small>}</td>
+            <td><CollectionStatus value={row.collection_status} /></td>
+            {DELIVERY_MONEY_COLUMNS.map(column => <td key={column.key}><Money value={row[column.key]} role={column.role} /></td>)}
+        </tr>)}</tbody></table></div>
+        <div className="ofp-delivery-print">{rows.map(row => <section key={row.id} className="ofp-print-order">
+            <h4>{positionText(row.order_number) !== UNAVAILABLE ? "الطلب " : ""}{deliveryOrderLabel(row)} · {positionText(row.party_name)}</h4>
+            <p>{formatRiyadhDateTime(row.delivered_at)} · {paymentLabel(row.payment_method)} · {destinationLabel(row.collection_destination)} · {collectionLabel(row.collection_status)}{row.destination_name ? ` · ${row.destination_name}` : ""}</p>
+            <dl>{DELIVERY_MONEY_COLUMNS.map(column => <div key={column.key}><dt>{column.label}</dt><dd><Money value={row[column.key]} role={column.role} /></dd></div>)}</dl>
+        </section>)}</div>
+        {!rows.length && <p className="ofp-empty-cell">{allRows.length ? "لا توجد تفاصيل تطابق الفلاتر المحددة." : delivery?.complete === true ? "لا توجد طلبات موثقة ضمن هذا القسم حتى آخر احتساب." : "لم تتوفر أدلة كافية لعرض تفاصيل الطلبات."}</p>}
+        <Notes items={[DELIVERY_SCOPE_NOTE, ...(delivery?.notes || [])]} />
+    </article>;
+}
+
+function ReportWarnings({ report, data }) {
+    const dependencies = (report.dependencies || []).filter(item => !["available", "ready", "complete", "active"].includes(item.status));
+    const messages = readableMessages([...(report.issues || []), ...dependencies]);
+    const incomplete = ["actual", "forecast", "profit"].some(key => data.completeness?.[key] !== true);
+    if (!messages.length && !incomplete) return null;
+    return <aside className="ofp-warning" role="status"><WarningCircle size={21} aria-hidden="true" /><div>
+        {incomplete && <strong>بعض أقسام التقرير غير مكتملة؛ المبلغ غير المتاح لا يُعرض كصفر.</strong>}
+        {messages.map(message => <p key={message}>{message}</p>)}
+    </div></aside>;
+}
+
+export default function OperationalFinancialPosition() {
+    const auth = useOptionalAuth();
+    const user = auth?.user;
+    const authLoading = Boolean(auth?.loading);
+    const authMissing = Boolean(auth && !authLoading && !user);
+    const scope = auth ? JSON.stringify([user?.id, user?.created_by, user?.owner_id, user?.merchant_id, user?.tenant_id, user?.role, user?.is_owner, auth.authStatus]) : "standalone";
+    const [revision, setRevision] = useState(0);
+    const [state, setState] = useState({ scope, phase: "loading", report: null, error: "" });
+    const [currency, setCurrency] = useState("");
+    const [filters, setFilters] = useState(emptyFilters);
+    const [exporting, setExporting] = useState(false);
+    const [exportError, setExportError] = useState("");
+    const printRef = useRef(null);
+
+    useEffect(() => {
+        let current = true;
+        setState({ scope, phase: "loading", report: null, error: "" });
+        setExportError("");
+        if (authLoading) return () => { current = false; };
+        if (authMissing) {
+            setState({ scope, phase: "denied", report: null, error: "يلزم تسجيل الدخول لعرض التقرير المالي التشغيلي." });
+            return () => { current = false; };
+        }
+        operationalApi.financialPosition().then(report => {
+            if (!current) return;
+            if (report?.permissions?.reports !== true) {
+                setState({ scope, phase: "denied", report: null, error: "ليست لديك صلاحية عرض التقرير المالي التشغيلي." });
+            } else if (!isPositionContract(report)) {
+                setState({ scope, phase: "error", report: null, error: "تعذر قراءة بيانات التقرير. أعد المحاولة." });
+            } else {
+                setState({ scope, phase: "ready", report, error: "" });
+            }
+        }).catch(error => {
+            if (!current) return;
+            const status = error?.response?.status;
+            const denied = status === 401 || status === 403;
+            setState({ scope, phase: denied ? "denied" : "error", report: null, error: status === 403
+                ? "ليست لديك صلاحية عرض التقرير المالي التشغيلي."
+                : status === 401 ? "انتهت الجلسة؛ سجّل الدخول لعرض التقرير."
+                    : "تعذر تحميل التقرير الحالي. أعد المحاولة لتحديث البيانات." });
+        });
+        return () => { current = false; };
+    }, [scope, authLoading, authMissing, revision]);
+
+    useEffect(() => { setFilters(emptyFilters()); setCurrency(""); }, [scope]);
+
+    // Hide the old scope synchronously, before the replacement request's effect.
+    const report = state.scope === scope && state.phase === "ready" ? state.report : null;
+    const codes = useMemo(() => currencyCodes(report), [report]);
+    const activeCurrency = codes.includes(currency) ? currency : codes.includes("SAR") ? "SAR" : codes[0] || "";
+    const data = report?.status === "active" ? report.currencies[activeCurrency] : null;
+    const loading = state.scope !== scope || state.phase === "loading";
+    const handlePrint = useReactToPrint({
+        contentRef: printRef,
+        documentTitle: `المركز المالي التشغيلي${activeCurrency ? ` - ${activeCurrency}` : ""}`,
+        pageStyle: "@page { size: A4 landscape; margin: 10mm; }",
+    });
+    const refresh = () => {
+        setState({ scope, phase: "loading", report: null, error: "" });
+        setRevision(value => value + 1);
+    };
+    const exportReport = async () => {
+        if (!data || exporting) return;
+        setExporting(true); setExportError("");
+        try {
+            const workbook = buildFinancialPositionWorkbook(report, activeCurrency, filters);
+            await XLSX.writeFile(workbook, `operational-financial-position-${activeCurrency}-${fileStampSA()}.xlsx`);
+        } catch {
+            setExportError("تعذر تصدير التقرير. أعد المحاولة.");
+        } finally { setExporting(false); }
+    };
+    const tables = data?.tables || [];
+
+    return <main className="ofp-page" dir="rtl" aria-label="تقرير المركز المالي التشغيلي" data-testid="operational-financial-position">
+        <div className="ofp-toolbar ofp-no-print"><div><span className="ofp-eyebrow">الأرصدة التشغيلية / التقارير</span><h1>المركز المالي التشغيلي</h1></div><div className="ofp-actions">
+            <button type="button" className="ofp-button" onClick={refresh} disabled={loading || authMissing}><ArrowClockwise size={19} aria-hidden="true" />تحديث التقرير</button>
+            <button type="button" className="ofp-button" onClick={() => handlePrint()} disabled={!data}><Printer size={20} aria-hidden="true" />طباعة التقرير</button>
+            <button type="button" className="ofp-button ofp-export" onClick={exportReport} disabled={!data || exporting}><MicrosoftExcelLogo size={20} aria-hidden="true" />{exporting ? "جارٍ التصدير…" : "تصدير Excel"}</button>
+        </div></div>
+        {loading && <div className="ofp-page-notice" role="status">جارٍ تحميل التقرير المالي التشغيلي…</div>}
+        {state.scope === scope && state.error && <div className="ofp-page-notice ofp-error" role="alert"><WarningCircle size={24} aria-hidden="true" /><p>{state.error}</p></div>}
+        {exportError && <p className="ofp-warning ofp-no-print" role="alert">{exportError}</p>}
+        {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
+        {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
+        {data && <article className="ofp-report" dir="rtl" ref={printRef} data-testid="financial-position-content">
+            <header className="ofp-report-header"><div className="ofp-brand">ميزان<span>التقرير التشغيلي</span></div><div><h2>تقرير المركز المالي التشغيلي</h2><p>الأرصدة والذمم كما في {formatRiyadhArabicLong(report.as_of)}</p></div><span className="ofp-report-kind">الأرصدة والتوقعات</span></header>
+            <div className="ofp-scope-bar"><div><CalendarBlank size={19} aria-hidden="true" /><span>آخر احتساب: <bdi>{formatRiyadhDateTime(report.as_of)}</bdi></span></div>
+                <label className="ofp-no-print">العملة<select aria-label="عملة التقرير" value={activeCurrency} onChange={event => { setCurrency(event.target.value); setFilters(emptyFilters()); }}>
+                    {codes.map(code => <option key={code} value={code}>{code === "SAR" ? "ريال سعودي · SAR" : code}</option>)}
+                </select></label><div className="ofp-print-only">العملة: {activeCurrency}</div>
+                <div>منذ بدء التشغيل: <bdi>{formatRiyadhDateTime(report.started_at)}</bdi></div>
+            </div>
+            <ReportWarnings report={report} data={data} />
+
+            <section className="ofp-section" aria-labelledby="ofp-actual-heading">
+                <SectionHeading id="ofp-actual-heading" number="01" title="الأرصدة الفعلية والحسابات"><span className="ofp-positive">لنا: مستحق للمنشأة</span><span className="ofp-negative">علينا: مستحق للغير</span></SectionHeading>
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "actual").map(table => <ReportTable key={table.id} table={table} />)}</div>
+            </section>
+
+            <section className="ofp-section" aria-labelledby="ofp-fulfillment-heading">
+                <SectionHeading id="ofp-fulfillment-heading" number="02" title="الشحن والتحصيل والمبالغ المتوقعة"><span>أزرق: أرصدة فعلية</span><span className="ofp-forecast-label">أصفر: مبالغ تقديرية</span></SectionHeading>
+                <div className="ofp-table-grid">{tables.filter(table => table.section === "fulfillment" || table.section === "forecast").map(table => <ReportTable key={table.id} table={table} />)}</div>
+                <DeliveryDetails delivery={data.deliveries} filters={filters} onFiltersChange={setFilters} currency={activeCurrency} />
+            </section>
+
+            <section className="ofp-section" aria-labelledby="ofp-summary-heading">
+                <SectionHeading id="ofp-summary-heading" number="03" title="الإجماليات والصافي والربح المتوقع"><span>العملة: {activeCurrency}</span></SectionHeading>
+                <div className="ofp-summary-grid">
+                    <DebtTable data={data} />
+                    <AmountTable title="حساب الربح المتوقع" rows={data.profit_rows} className="ofp-profit" complete={data.completeness?.profit === true} />
+                    <AmountTable title="صافي الأرصدة الحالية" rows={data.current_rows} className="ofp-current" complete={data.completeness?.actual === true} />
+                    <AmountTable title="التغير المتوقع من الطلبات المفتوحة" rows={data.forecast_rows} className="ofp-forecast-summary" complete={data.completeness?.forecast === true} />
+                </div>
+                <div className="ofp-final-metrics">
+                    <div data-testid="financial-forecast-position"><h3>صافي السيولة والمستحقات المتوقع</h3><strong><Money value={data.metrics?.forecast_monetary_position} role="receivable" /><span>{activeCurrency}</span></strong></div>
+                    <div data-testid="financial-net-profit"><h3>صافي الربح المتوقع</h3><strong><Money value={data.metrics?.net_profit} role="receivable" /><span>{activeCurrency}</span></strong></div>
+                </div>
+            </section>
+            <Notes items={data.notes} className="ofp-report-notes" />
+            <footer className="ofp-report-footer"><span>الأرصدة الحالية والتوقعات معروضة بصورة منفصلة. غير متاح يعني أن الأدلة غير مكتملة.</span><span>إعداد التقرير: <bdi>{formatRiyadhDateTime(report.generated_at)}</bdi> · الرياض</span></footer>
+        </article>}
+    </main>;
+}

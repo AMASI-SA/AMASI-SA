@@ -45,6 +45,17 @@ class Finish(Request):
     opening: Opening | None = None
 
 
+class SalaryStartPreview(Input):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class SalaryStartApproval(Request):
+    first_day: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    expected_preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    expected_session_scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    opening_salaries_excluded: bool = Field(strict=True)
+
+
 class Allocation(Input):
     obligation_id: str = Field(min_length=1, max_length=300)
     amount: str = Field(min_length=1, max_length=30)
@@ -312,7 +323,7 @@ def make_operational_balance_router(db, current_user):
                 permission = "reports"
             elif re.fullmatch(r"/(inventory-purchases|supplier-adjustments)/entry/[^/]+/.+", path):
                 permission = "move"
-            elif path in {"/reports", "/cost-exposure", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
+            elif path in {"/reports", "/cost-exposure", "/suppliers", "/financial-position", "/movements", "/obligations"} or re.fullmatch(r"/accounts/(bank|cash)/[^/]+", path):
                 permission = "reports"
             elif path in {"/customer-returns", "/customer-exchanges"}:
                 permission = "reports"
@@ -523,6 +534,7 @@ def make_operational_balance_router(db, current_user):
                 "can_select_ad_accounts": actor.get("role") == "owner" and source != "employee_app",
                 "can_configure_ad_funding": actor.get("role") == "owner" and source != "employee_app",
                 "can_manage_inventory_opening": actor.get("role") == "owner" and source != "employee_app",
+                "can_manage_salary_start": actor.get("role") == "owner" and source != "employee_app" and state["status"] == "active",
                 "can_create_owner_withdrawal": actor.get("role") == "owner",
                 "session_scope": digest([owner, actor["id"]]),
                 "opening_count": len(state["openings"]), "permissions": permissions,
@@ -616,6 +628,24 @@ def make_operational_balance_router(db, current_user):
         if not existing or existing.get("operational_request_hash") != row["operational_request_hash"]:
             fail("operational_entity_conflict", "الجهة أو رقم العملية مستخدم من قبل")
         return {"id": ("operational-bank:" + identity) if kind == "bank" else identity, "name": existing["name"], "currency": existing["currency"], "kind": kind}
+
+    @router.get("/salary-start/context")
+    async def salary_start_context(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import read_context
+        return await read_context(db, owner, actor["id"])
+
+    @router.post("/salary-start/preview")
+    async def salary_start_preview(payload: SalaryStartPreview, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import preview
+        return await preview(db, owner, actor["id"], payload.first_day)
+
+    @router.post("/salary-start/approve")
+    async def salary_start_approve(payload: SalaryStartApproval, user=Depends(manage_guard)):
+        actor, owner, _ = await scope(db, user, "manage")
+        from operational_salary_start import approve
+        return await approve(db, owner, actor["id"], payload.model_dump())
 
     @router.post("/openings")
     async def opening(payload: Opening, user=Depends(manage_guard)):
@@ -768,6 +798,86 @@ def make_operational_balance_router(db, current_user):
         _, owner, _ = await scope(db, user, "reports")
         from operational_open_cost_exposure import project
         return await project(db, owner, await read(db, owner))
+
+    @router.get("/suppliers")
+    async def supplier_accounts(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from fulfillment_v2_routes import _actor_context, _require_permission
+        from operational_balance_service import accounting_inactive
+        from operational_supplier_workspace import supplier_workspace
+        supplier_context = await _actor_context(db, actor)
+        _require_permission(supplier_context, "suppliers.read")
+        if supplier_context["merchant_id"] != owner:
+            fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                # Do not present two current balance authorities while the
+                # background worker is finishing the operational freeze.
+                state = {**state, "status": "accounting_active"}
+        result = supplier_workspace(state)
+        can_record = False
+        if result["active"]:
+            try:
+                await scope(db, user, "move")
+                can_record = True
+            except HTTPException:
+                pass
+        result.update(session_scope=digest([owner, actor["id"]]),
+                      permissions={"record_movements": can_record})
+        return result
+
+    @router.get("/financial-position")
+    async def financial_position(user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, "reports")
+        from operational_balance_service import accounting_inactive
+        from operational_financial_position import build_financial_position
+        from operational_financial_order_labels import attach_order_numbers
+
+        state = await read(db, owner)
+        if state["status"] == "active":
+            try:
+                await accounting_inactive(db, owner)
+            except HTTPException as exc:
+                if not isinstance(exc.detail, dict) or exc.detail.get("code") != "operational_accounting_active":
+                    raise
+                state = {**state, "status": "accounting_active"}
+        cost_exposure = None
+        if state["status"] == "active" and state.get("engine", {}).get("as_of"):
+            # The separately released cost-stage reader is an explicit optional
+            # dependency. Missing coverage is visible in the report; never
+            # substitute another balance authority or refresh/write on this GET.
+            try:
+                from operational_open_cost_exposure import project as cost_project
+            except ModuleNotFoundError as exc:
+                if exc.name != "operational_open_cost_exposure":
+                    raise
+            else:
+                try:
+                    cost_exposure = await cost_project(db, owner, state, as_of=state["engine"]["as_of"])
+                except ValueError as exc:
+                    # The optional bounded reader can reject its source scope.
+                    # Preserve the verified balance snapshot while explicitly
+                    # withholding estimates; unexpected errors still propagate.
+                    code = str(exc)
+                    if code not in {"operational_source_rejected", "operational_source_scope_too_large",
+                                    "operational_source_owner_mismatch"}:
+                        raise
+                    cost_exposure = {
+                        "status": "preview", "as_of": state["engine"]["as_of"],
+                        "engine_as_of": state["engine"]["as_of"], "started_at": state["started_at"],
+                        "currencies": {}, "groups": [], "complete": False,
+                        "issues": [{"code": code, "count": 1, "message":
+                            "غير متاح: تعذر التحقق من مصادر تكاليف الطلبات المفتوحة؛ الأرصدة الحالية من آخر احتساب محفوظ."}],
+                    }
+        result = build_financial_position(state, cost_exposure=cost_exposure, generated_at=now())
+        result = await attach_order_numbers(db, owner, result)
+        result.update(session_scope=digest([owner, actor["id"]]), permissions={"reports": True})
+        return result
 
     @router.get("/audit")
     async def audit_route(user=Depends(current_user)):
