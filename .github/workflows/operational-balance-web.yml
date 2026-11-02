@@ -35,7 +35,7 @@ jobs:
         # App authorization exercises existing route guards and owner management,
         # which import PDF/crypto/auth helpers even though no external API is used.
         run: >-
-          python -m pip install pytest==9.1.1 fastapi==0.142.2 pydantic==2.13.5
+          python -m pip install pytest==9.1.1 pytest-asyncio==1.3.0 fastapi==0.142.2 pydantic==2.13.5
           httpx==0.28.1 motor==3.7.1 pymongo==4.18.2 python-multipart==0.0.32
           cryptography==50.0.0 reportlab==4.5.1 PyMuPDF==1.28.2 qrcode==8.2
           bcrypt==4.1.3 PyJWT==2.15.0 mongomock==4.3.0
@@ -90,6 +90,7 @@ jobs:
               found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == required]
               assert len(found) >= minimum, required + ' mapping acceptance missing'
           assert any('test_operational_balance_cost_completeness' in c.get('classname', '') for c in cases), 'Scoped cost completeness cases missing'
+          assert len([c for c in cases if 'test_operational_balance_mapping_combined' in c.get('classname', '')]) >= 4, 'Combined R03/R05 Mongo and bounded financial reads missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_native_purchase_review']) >= 72, 'Native purchase proof cases missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_external_advances']) >= 28, 'External loan Mongo cases missing'
           for suite in ('test_operational_supplier_invoice_cutover',
