@@ -11,6 +11,7 @@ import {
     isPositionContract, PARTY_LABELS, paymentLabel, positionText, readableMessages, UNAVAILABLE,
 } from "./financialPositionPresentation";
 import "./financialPosition.css";
+import NativePurchaseReview from "./NativePurchaseReview";
 
 const emptyFilters = () => ({ order: "", party: "", payment: "" });
 const inactiveMessages = {
@@ -213,6 +214,7 @@ export default function OperationalFinancialPosition() {
         {exportError && <p className="ofp-warning ofp-no-print" role="alert">{exportError}</p>}
         {report && report.status !== "active" && <div className="ofp-page-notice" role="status"><Info size={24} aria-hidden="true" /><p>{inactiveMessages[report.status] || "التقرير التشغيلي الحالي غير متاح في هذه المرحلة."}</p></div>}
         {report?.status === "active" && !data && <div className="ofp-page-notice" role="status">لا توجد بيانات عملة جاهزة للعرض حتى آخر احتساب.</div>}
+        {data && user?.role === "owner" && <NativePurchaseReview key={scope + report.session_scope} sessionScope={report.session_scope} onRefresh={refresh} />}
         {data && <article className="ofp-report" dir="rtl" ref={printRef} data-testid="financial-position-content">
             <header className="ofp-report-header"><div className="ofp-brand">ميزان<span>التقرير التشغيلي</span></div><div><h2>تقرير المركز المالي التشغيلي</h2><p>الأرصدة والذمم كما في {formatRiyadhArabicLong(report.as_of)}</p></div><span className="ofp-report-kind">الأرصدة والتوقعات</span></header>
             <div className="ofp-scope-bar"><div><CalendarBlank size={19} aria-hidden="true" /><span>آخر احتساب: <bdi>{formatRiyadhDateTime(report.as_of)}</bdi></span></div>

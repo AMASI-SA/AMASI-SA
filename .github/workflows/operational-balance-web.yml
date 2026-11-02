@@ -84,6 +84,11 @@ jobs:
           assert len(bundle_cases) >= 67, 'Remaining-product bundle projection tests missing or incomplete'
           remaining_cases = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_remaining_products']
           assert len(remaining_cases) >= 50, 'Real-Mongo remaining-product source/report cases missing'
+          for required, minimum in (('test_operational_balance_bundle_legacy_receipts', 30),
+                                    ('test_operational_balance_native_purchase_link', 39),
+                                    ('test_operational_balance_native_purchase_link_mongo', 18)):
+              found = [c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == required]
+              assert len(found) >= minimum, required + ' mapping acceptance missing'
           assert any('test_operational_balance_cost_completeness' in c.get('classname', '') for c in cases), 'Scoped cost completeness cases missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_native_purchase_review']) >= 72, 'Native purchase proof cases missing'
           assert len([c for c in cases if c.get('classname', '').rsplit('.', 1)[-1] == 'test_operational_balance_external_advances']) >= 28, 'External loan Mongo cases missing'
@@ -153,6 +158,7 @@ jobs:
               r.numPendingTestSuites || r.numTodoTests) process.exit(1);
           for (const suffix of ['SalaryStart.test.jsx', 'OperationalSupplierAccount.test.jsx',
                                 'OperationalFinancialPosition.test.jsx', 'DriverPaymentReview.test.jsx',
+                                'NativePurchaseReview.test.jsx', 'nativePurchaseLinkApi.test.js',
                                 'ExternalOperationControls.test.jsx']) {
             const suite = r.testResults.find(s => s.name.endsWith('/' + suffix));
             if (!suite || !suite.assertionResults.length || suite.assertionResults.some(t => t.status !== 'passed'))

@@ -14,6 +14,12 @@ from operational_balance_sources import instant
 from operational_balance_store import digest
 from purchase_receiving_service import SCHEMA, purchase_amounts
 
+NATIVE_INVOICE_EVIDENCE_FIELDS = ('id', 'user_id', 'schema_version', 'state', 'supplier_entity_id',
+    'supplier_counterparty_id', 'supplier_account_id', 'supplier_id', 'currency', 'approved_at',
+    'liability_id', 'txn_group_id', 'subtotal', 'total', 'tax_amount', 'tax_treatment',
+    'tax_evidence_ref', 'tax_evidence_verified', 'inventory_account_id',
+    'input_vat_account_id', 'lines', 'invoice_number')
+
 LIMIT = 20000
 CENT = Decimal('0.01')
 ACTION = 'راجع ربط الفاتورة والسداد المسجلين بالحساب التشغيلي؛ لا تُضف الدين أو السداد مرة أخرى'
@@ -124,7 +130,7 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
         _require(indexed.owner == owner, 'native_purchase_ledger_scope_mismatch')
         groups, reversals = indexed.groups, indexed.reversals
         linked = indexed.invoices.get(iid, set()) | indexed.liabilities.get(lid, set())
-        result['source_evidence_sha256'] = digest({'invoice': invoice, 'liabilities': liabilities,
+        result['source_evidence_sha256'] = digest({'invoice': {key: invoice.get(key) for key in NATIVE_INVOICE_EVIDENCE_FIELDS}, 'liabilities': liabilities,
             'entries': sorted([row for gid in linked | {group} for row in groups.get(gid, [])], key=lambda r: r['id']),
             'reversed_entries': sorted(reversals & {row['id'] for gid in linked | {group} for row in groups.get(gid, [])})})
         purchase = groups.get(group, [])
@@ -184,7 +190,9 @@ def review_native_purchase(invoice, liabilities, entries, *, owner, started_at, 
                 _require(instant(row.get('effective_at')) == payment_at
                          and instant(m.get('accounting_at')) == payment_at, 'native_purchase_payment_date_mismatch')
             paid += amount
-            payment_rows.append(dict(txn_group_id=gid, bank_account_id=_id(bank_legs[0].get('entity_id')),
+            payment_rows.append(dict(txn_group_id=gid, payment_operation_id=op,
+                                     supplier_entry_id=supplier_legs[0]['id'], bank_entry_id=bank_legs[0]['id'],
+                                     bank_account_id=_id(bank_legs[0].get('entity_id')),
                                      amount_sar=format(amount, '.2f'), effective_at=payment_at.isoformat()))
         _require(paid == declared_paid and paid <= gross, 'native_purchase_paid_projection_mismatch')
         expected_status = 'paid' if paid == gross else 'partial' if paid else 'unpaid'

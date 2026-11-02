@@ -164,7 +164,8 @@ async def project(db, owner, state, *, as_of=None):
         raw_orders.append((record, raw))
     ids = Counter(str(r.get("id") or "") for _, r in raw_orders)
     nums = Counter(str(r.get("reference_id") or r.get("order_number") or "") for _, r in raw_orders)
-    bundle_costs = await load_remaining_bundles(db, owner, [raw for _, raw in raw_orders], stamp)
+    bundle_costs = await load_remaining_bundles(db, owner, [raw for _, raw in raw_orders], stamp,
+        preparation_pieces=pieces, operational_state=state)
     current_stages, current_statuses = {}, {}
     for record, raw in raw_orders:
         oid = str(raw.get("id") or "")
@@ -214,13 +215,30 @@ async def project(db, owner, state, *, as_of=None):
             if bundle is not None:
                 for problem in bundle["issues"]:
                     issues[problem["code"]] += 1
-                if unreceived_eligible(status):
-                    for component in bundle["items"]:
-                        amount = number(component["cost"])
-                        if amount:
-                            add("prestart", "supplier", stage, "", POOL_NAME, "SAR", amount, 1, oid)
-                            currencies["SAR"]["prestart_supplier_unreceived"] += amount
-                            currencies["SAR"]["prestart_supplier_expected"] += amount
+                for component in bundle["items"]:
+                    component_id = component["id"]
+                    if component_id in uncertain or len(coverage[component_id]) > 1:
+                        issues["historical_supplier_component_ambiguous"] += 1
+                        continue
+                    if coverage[component_id]:
+                        if component_id in approved_after_start:
+                            issues["prestart_order_postcutover_invoice_needs_reconciliation"] += 1
+                        continue
+                    received = component.get("supplier_receipt_proven") is True
+                    if not received and not unreceived_eligible(status):
+                        continue
+                    party = str(component.get("supplier_id") or "") if received else ""
+                    if received and party not in suppliers:
+                        issues["historical_received_supplier_identity_missing"] += 1
+                        continue
+                    amount = number(component["cost"])
+                    if amount:
+                        bucket = "prestart_supplier_received_uninvoiced" if received else "prestart_supplier_unreceived"
+                        label = _name(suppliers[party], "مورد الاستلام") if received else POOL_NAME
+                        product_stage = "received_without_approved_invoice" if received else stage
+                        add("prestart", "supplier", product_stage, party, label, "SAR", amount, 1, oid)
+                        currencies["SAR"][bucket] += amount
+                        currencies["SAR"]["prestart_supplier_expected"] += amount
                 continue
             product = item.get("product") if isinstance(item.get("product"), dict) else {}
             product_id = str(item.get("parent_product_id") or item.get("product_id") or product.get("id") or "")
@@ -423,6 +441,11 @@ async def project(db, owner, state, *, as_of=None):
                 if sep:
                     plans = [s for s in (physical or {}).get("services", []) if str(s.get("service_id") or "") == sid]
                     received = received and len(plans) == 1 and plans[0].get("status") == "completed"
+                if obligation.get("source_cost_stage") == "bundle_legacy_received":
+                    # Frozen by the operational source/reducer at engine_at;
+                    # a completed service stays received while its parent is
+                    # assigned elsewhere for another service.
+                    received = bool(party)
                 if not received or not party:
                     status = current_statuses.get(oid)
                     if status is not None and not unreceived_eligible(status):

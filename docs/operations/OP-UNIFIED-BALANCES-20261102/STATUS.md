@@ -1,3 +1,30 @@
+# R03/R05 implementation checkpoint — 2026-11-03
+
+**WIP: NOT deployed; no live financial action.** This section supersedes the implementation-pending description below; previous evidence is retained intact.
+
+## New source and explicit limits
+
+R03: The operational source now maps a verified frozen reporting envelope's root product base and existing external-service resource identities to the original preparation pieces/services. Product receipt is independent of service receipt, including partial service completion and old-order open exposure. Supplier history uses the first receiving event for the original product, not a later service supplier. Final preparation invoices replace the same component estimate. Physical children keep the native allocation/receipt path. No physical recipe, service binding, stock action, dashboard implementation or current catalog price is changed. Unsupported nested financial-only bases without a unique legacy receipt identity remain explicit unknowns, never omitted or treated as received. This limitation is distinct from supported nested physical components.
+
+R05: A source-verified native invoice can be explicitly matched to existing operational supplier obligations and bank movements, or its EXACT missing operational amounts can be previewed for separate owner approval. Existing source journals, bank transfers, invoices, openings and historical movements are immutable. Preview reads one Mongo snapshot; approval uses the existing operational CAS/idempotency path, rechecks fresh proof, scope, identities and expected preview hash, and requires explicit identity and unrecorded-money confirmation. No approval or live data query was executed by this task. Unallocated or partially allocated old cash and pre-start native invoices remain review-required; they are not automatically rewritten/replayed. Refresh re-verifies saved source links and surfaces later source changes without auto-importing them.
+
+A new owner-only report panel and read/candidates/preview/approve API adapters are authored. It presents supplier and bank before/after differences, preserves uncertain approval intents for exact retry, and cannot enable provider statement posting. UI tests are authored but NOT yet executed at this checkpoint. No financial activation is inferred from publishing this code.
+
+## Tests actually run in this checkpoint
+
+Exact local focused command: PYTHONPATH=/mnt/data/op_mapping_work/deps:backend:backend/tests OPERATIONAL_TEST_MONGO_URI=mongodb://127.0.0.1:27305/?replicaSet=operationalprojection MZ2_TEST_MONGO_URI=same python -B -m pytest --noconftest -q backend/tests/test_operational_balance_native_purchase_link_mongo.py backend/tests/test_operational_balance_native_purchase_review.py backend/tests/test_operational_balance_native_purchase_link.py backend/tests/test_operational_balance_bundle_legacy_receipts.py --tb=short --junitxml=mapping-focused.xml
+
+Result before the subsequent UI/schema-scope edits: **159 passed, 0 failures/errors/skips**, 18.72 seconds. Included subsets:30 legacy-bundle cases,39 native-link pure cases,18 actual isolated Mongo preview/approval cases and72 retained sealed-source cases. Do not add these to prior1642. Original fixture-option failures and a real full-versus-projected invoice evidence-hash failure were preserved; canonical financial invoice fields now give identical evidence fingerprints without weakening sealed journal checks. Final whole-tree backend/HTTP/UI/security/build acceptance remains pending.
+
+The initial temporary read-only source export workflow pins2661457a and supplied5035 SHA-verified Git blobs. Source export helper and any source-only transfer workflow MUST be removed before release. No /app, lease, production ref, release intent, native ledger, bank, refund, invoice, opening or policy/payroll activation was touched.
+
+## Next safe action
+
+Read exact remote source and finish combined acceptance, including R03 physical child receipts plus R05 mapped bank proof together, new UI, permissions/atomicity/retry. Preserve user release scope: include both mappings WITH all safely ready work, defer independent unfinished backlog. Produce included/deferred matrix; do not waive genuine included dependencies or existing release-identity failure. Real financial differences require actual owner review/approval, not automatic code-deployment backfill. Record every verified milestone in DELIVERY-REGISTER and PR1687.
+
+---
+## Preserved previous record (historical)
+
 # OP-UNIFIED-BALANCES-20261102 — ready-release scope and durable delivery register
 
 **DRAFT / NOT publication-ready / NOT published / NO live financial correction or activation.**

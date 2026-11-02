@@ -181,7 +181,7 @@ def _remaining(unit, leaf, allocations, receipts, invoices, stamp):
     return wanted - allocated, received
 
 
-async def load_remaining_bundles(db, owner, raw_orders, as_of):
+async def load_remaining_bundles(db, owner, raw_orders, as_of, *, preparation_pieces=None, operational_state=None, native_matches=None):
     """One bounded authority load, then batched units/receipts/invoices only.
 
     Reporting-only cost corrections do not constitute a physical recipe or a
@@ -194,7 +194,8 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
     orders = normalized_orders(raw_orders)
     if not orders:
         return {}
-    authority = await load_order_cost_authority(db, owner, orders, include_corrections=False)
+    authority = await load_order_cost_authority(db, owner, orders, include_corrections=False,
+        include_frozen_metadata=True)
     selected, result = {}, {}
     for order in orders:
         for item in order['items']:
@@ -204,6 +205,12 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
                 selected[key] = (order, item, record)
     if not selected:
         return result
+    if preparation_pieces is None:
+        preparation_pieces = await db['mezan_preparation_pieces_v1'].find(
+            {'user_id': owner, 'order_number': {'$in': sorted({k[0] for k in selected})}}, {'_id': 0}
+        ).to_list(length=20001)
+    if len(preparation_pieces) > 20000 or any(p.get('user_id') != owner for p in preparation_pieces):
+        raise ValueError('bundle_legacy_piece_read_scope_invalid')
     unit_rows, plan_rows = [], []
     numbers = sorted({k[0] for k in selected})
     for i in range(0, len(numbers), CHUNK):
@@ -260,6 +267,9 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
                 {'_id': 0, 'id': 1, 'user_id': 1, 'state': 1, 'supplier_counterparty_id': 1, 'supplier_id': 1}):
             key = str(row.get('id') or '')
             invoices[key] = row if key not in invoices else None
+    if native_matches is None:
+        from operational_native_purchase_link_service import verified_saved_links
+        native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
     for key, (order, item, record) in selected.items():
         problems, normalized = [], []
         result[key] = {'items': normalized, 'issues': problems, 'complete': False}
@@ -276,12 +286,29 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
             for code in cost.get('missing_cost_reasons') or ['bundle_frozen_recipe_required']:
                 problems.append(_problem(code, key[1]))
             continue
-        projected = project_bundle_costs(owner=owner, order_number=key[0], order_item_id=key[1],
-            product_id=item['product_id'], sale_quantity=item.get('quantity'), status=order['status'],
-            selected_options=selected_ids(item), snapshot=snapshot, native_units=native)
-        if not projected['rows']:
-            problems.extend(_problem(p['code'], key[1]) for p in projected['issues'])
-            continue
+        legacy_items = []
+        mapped_financial = 'reporting_cost' in snapshot
+        if mapped_financial:
+            from operational_bundle_legacy_receipts import map_financial_receipts
+            try:
+                snapshot, native, legacy_items = map_financial_receipts(
+                    owner=owner, number=key[0], item=item, snapshot=snapshot,
+                    pieces=preparation_pieces, native_units=native, as_of=as_of)
+            except (ValueError, TypeError, KeyError) as exc:
+                code = str(exc) if str(exc).startswith('bundle_') else 'bundle_financial_policy_operational_mapping_required'
+                problems.append(_problem(code, key[1]))
+                continue
+        if mapped_financial and not snapshot['leaves']:
+            # An opted-in base-only bundle has no stock leaf by design. Receipt
+            # is proved through existing preparation pieces, never fabricated.
+            projected = {'rows': [], 'issues': []}
+        else:
+            projected = project_bundle_costs(owner=owner, order_number=key[0], order_item_id=key[1],
+                product_id=item['product_id'], sale_quantity=item.get('quantity'), status=order['status'],
+                selected_options=selected_ids(item), snapshot=snapshot, native_units=native)
+            if not projected['rows']:
+                problems.extend(_problem(p['code'], key[1]) for p in projected['issues'])
+                continue
         if key in duplicate_allocations:
             problems.append(_problem('bundle_allocation_identity_ambiguous', key[1]))
             continue
@@ -300,6 +327,7 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
             except (ValueError, TypeError, KeyError):
                 problems.append(_problem('bundle_unit_selection_mismatch', key[1]))
                 continue
+        normalized.extend(legacy_items)
         by_index = {u['unit_index']: u for u in native or []}
         frozen_leaves = {_leaf_key(leaf): leaf for leaf in snapshot['leaves']}
         native_leaves = {index: {_leaf_key(leaf): leaf for leaf in unit['bundle_leaves']}
@@ -320,7 +348,12 @@ async def load_remaining_bundles(db, owner, raw_orders, as_of):
                             raise ValueError('bundle_supplier_receipt_overallocated')
                     remaining, received = _remaining(unit, actual, allocations, receipts, invoices, instant(as_of))
                 if received:
-                    problems.append(_problem('bundle_received_purchase_financial_matching_required', row['id'], scope='received_products'))
+                    modes = {_leaf_key(s): s.get('sourcing_mode') for s in actual.get('sourcing_segments') or []}
+                    supplier_allocations = [a for a in allocations if actual.get('sourcing_mode') == 'supplier'
+                        or (actual.get('sourcing_mode') == 'auto' and modes.get(a.get('sourcing_segment_id')) == 'supplier')]
+                    native_ids = {str(receipts[str(a['lot_id'])]['source_id']) for a in supplier_allocations}
+                    if not native_ids or not all(native_matches.get(i, {}).get('matched') for i in native_ids):
+                        problems.append(_problem('bundle_received_purchase_financial_matching_required', row['id'], scope='received_products'))
                 # Each row is already one sale-unit leaf. Do not multiply by
                 # the parent order quantity or add the parent's catalog cost.
                 total += _number(leaf['unit_cost']) * remaining

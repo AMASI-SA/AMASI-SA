@@ -56,6 +56,26 @@ class SalaryStartApproval(Request):
     opening_salaries_excluded: bool = Field(strict=True)
 
 
+class NativePaymentLink(Input):
+    payment_operation_id: str = Field(min_length=1, max_length=300)
+    movement_id: str | None = Field(default=None, min_length=1, max_length=300)
+
+
+class NativePurchaseSelection(Input):
+    invoice_id: str = Field(min_length=1, max_length=300)
+    existing_obligation_ids: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(default_factory=list, max_length=1000)
+    payment_links: list[NativePaymentLink] = Field(default_factory=list, max_length=1000)
+    evidence_ref: str = Field(min_length=3, max_length=300)
+
+
+class NativePurchaseApproval(Request):
+    selection: NativePurchaseSelection
+    expected_preview_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
+    expected_session_scope: str = Field(pattern=r'^[a-f0-9]{64}$')
+    confirm_reviewed_identities: bool = Field(strict=True)
+    confirm_unrecorded_money: bool = Field(default=False, strict=True)
+
+
 class Allocation(Input):
     obligation_id: str = Field(min_length=1, max_length=300)
     amount: str = Field(min_length=1, max_length=30)
@@ -845,6 +865,24 @@ def make_operational_balance_router(db, current_user):
                       permissions={"record_movements": can_record})
         return result
 
+    @router.get('/native-purchase-links/{invoice_id}/candidates')
+    async def native_purchase_candidates(invoice_id: str, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import candidates
+        return await candidates(db, owner, actor['id'], invoice_id)
+
+    @router.post('/native-purchase-links/preview')
+    async def native_purchase_preview(payload: NativePurchaseSelection, user=Depends(current_user)):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import preview
+        return await preview(db, owner, actor['id'], payload.model_dump())
+
+    @router.post('/native-purchase-links/approve')
+    async def native_purchase_approve(payload: NativePurchaseApproval, user=Depends(guarded('bank_manage'))):
+        actor, owner, _ = await scope(db, user, 'bank_manage')
+        from operational_native_purchase_link_service import approve
+        return await approve(db, owner, actor['id'], payload.model_dump())
+
     @router.get("/supplier-invoice-review")
     async def supplier_invoice_review(user=Depends(current_user)):
         actor, owner, _ = await scope(db, user, "reports")
@@ -864,6 +902,7 @@ def make_operational_balance_router(db, current_user):
             fail("operational_actor_scope_changed", "تغير ارتباط الحساب؛ أعد تسجيل الدخول", 403)
         from operational_balance_service import accounting_inactive
         await accounting_inactive(db, owner)
+        result["session_scope"] = digest([owner, actor["id"]])
         return result
 
     @router.get("/financial-position")

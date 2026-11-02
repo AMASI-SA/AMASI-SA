@@ -130,7 +130,7 @@ async def save_opening(db, owner, actor, payload, *, finish=False, clock=None):
                 fail("operational_opening_required", "أدخل الأرصدة قبل الإنهاء")
             from operational_balance_sources import start_baselines
             try:
-                options = {"operational_state": state} if state.get("ad_funding") else {}
+                options = {"operational_state": state} if state.get("ad_funding") or state.get("native_purchase_links") else {}
                 state["source_baselines"] = await start_baselines(db, owner, stamp, **options)
             except ValueError:
                 fail("operational_source_setup_incomplete", "تعذر تثبيت مصادر بداية النظام؛ أكمل إعداد ميزان 2")
@@ -464,7 +464,7 @@ async def refresh(db, owner, *, clock=None):
         try:
             from operational_balance_inventory import assert_no_source_collision
             await assert_no_source_collision(db, owner, state)
-            options = {"operational_state": state} if state.get("ad_funding") else {}
+            options = {"operational_state": state} if state.get("ad_funding") or state.get("native_purchase_links") else {}
             sources = await collect_sources(db, owner, state["started_at"], stamp, baselines=state.get("source_baselines"), **options)
         except ValueError:
             fail("operational_source_setup_incomplete", "مصادر ميزان 2 غير مكتملة أو تجاوزت حدود القراءة")

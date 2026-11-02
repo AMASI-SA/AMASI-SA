@@ -794,7 +794,15 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
     raw_orders = [(r.get('raw_by_source') or {}).get('salla_direct') for r in data['unified_orders']]
     raw_orders = [r for r in raw_orders if isinstance(r, dict)]
     from operational_remaining_bundle_sources import load_remaining_bundles
-    bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now)
+    from operational_native_purchase_link_service import verified_saved_links
+    native_matches = await verified_saved_links(db, owner, operational_state, as_of=as_of)
+    for invoice_id, match in native_matches.items():
+        if not match.get('matched'):
+            out['issues'].append({'code': 'native_purchase_operational_link_changed', 'source_id': invoice_id,
+                'scope': 'received_products', 'reasons': match.get('issues'),
+                'required_action': 'أعد معاينة مطابقة الفاتورة والسداد؛ لم تُرحّل الفروق تلقائيًا'})
+    bundle_costs = await load_remaining_bundles(db, owner, raw_orders, now, preparation_pieces=pieces,
+        operational_state=operational_state, native_matches=native_matches)
     source_ids = Counter(str(r.get('id') or '') for r in raw_orders)
     source_numbers = Counter(str(r.get('reference_id') or r.get('order_number') or '') for r in raw_orders)
     for source in data['unified_orders']:
@@ -962,6 +970,13 @@ async def collect_sources(db, owner, started_at, as_of, baselines=None, operatio
         if invoice.get('supplier_id') not in suppliers:
             issue(out, 'supplier_invoice_supplier_identity_incomplete', invoice.get('id'))
             continue
+        if operational_state:
+            from operational_native_purchase_link import collision_with_saved_link
+            if collision_with_saved_link(operational_state, invoice.get('supplier_id'),
+                    invoice.get('invoice_number'), invoice.get('id')):
+                issue(out, 'supplier_native_document_link_conflict', invoice.get('id'),
+                    scope='received_products', required_action='المستند مرتبط بفاتورة شراء مسجلة؛ طابق الهوية قبل احتساب دين ثانٍ')
+                continue
         if not invoice.get('id') or invoice_counts[invoice.get('id')] != 1:
             issue(out, 'supplier_invoice_identity_ambiguous', invoice.get('id'))
             continue

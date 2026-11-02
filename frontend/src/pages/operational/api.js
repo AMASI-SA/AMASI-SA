@@ -2,6 +2,10 @@ import api from '../../lib/api';
 const base = '/operational-balances';
 const data = promise => promise.then(response => response.data);
 export const operationalApi = {
+  supplierInvoiceReview: () => data(api.get(`${base}/supplier-invoice-review`)),
+  nativePurchaseCandidates: id => data(api.get(`${base}/native-purchase-links/${encodeURIComponent(id)}/candidates`)),
+  previewNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/preview`, body)),
+  approveNativePurchaseLink: body => data(api.post(`${base}/native-purchase-links/approve`, body)),
   salaryStartContext: () => data(api.get(`${base}/salary-start/context`)),
   previewSalaryStart: body => data(api.post(`${base}/salary-start/preview`, body)),
   approveSalaryStart: body => data(api.post(`${base}/salary-start/approve`, body)),

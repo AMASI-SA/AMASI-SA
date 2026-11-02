@@ -182,11 +182,24 @@ async def _preview(scoped, owner, as_of):
     from operational_native_purchase_review import load_native_purchase_reviews
     native_proof = await load_native_purchase_reviews(scoped.db, owner, native,
         session=scoped.session, started_at=state['started_at'], as_of=stamp)
+    from operational_native_purchase_link import validate_saved_link
+    native_by_id = {row['id']: row for row in native}
     for candidate in candidates:
         candidate['native_ledger_review'] = native_proof.get(candidate['invoice_id'])
+        match = validate_saved_link(state, native_by_id[candidate['invoice_id']], candidate['native_ledger_review'] or {})
+        candidate['operational_link_review'] = match
+        represented = {state.get('engine', {}).get('obligations', {}).get(key, {}).get('source_invoice_id')
+            or state.get('engine', {}).get('obligations', {}).get(key, {}).get('invoice_id')
+            for key in match.get('obligation_ids', [])}
+        if match.get('matched') and any(c['id'] not in represented for c in candidate['possible_existing_documents']):
+            match.update(matched=False, issues=['native_link_unresolved_document_collision'])
+        if match.get('matched'):
+            candidate['verified_native_payable_sar'] = candidate['native_ledger_review']['native_outstanding_sar']
+            candidate['difference_sar'] = '0.00'
+            candidate['issues'] = []
     result.update(read_only=True, snapshot_consistent=True, state_revision=state.get('revision', 0),
         saved_balance_as_of=state.get('engine', {}).get('as_of'), native_purchase_review=candidates,
-        native_financial_matching_complete=not candidates, source_issues=deepcopy(source_issues),
+        native_financial_matching_complete=all(c['operational_link_review']['matched'] for c in candidates), source_issues=deepcopy(source_issues),
         approval_required=True, proposed_financial_write_allowed=False,
         scope='approved_preparation_invoices; native_purchases_separate_unverified',
         review_manifest_sha256=digest({'owner': owner, 'state': state, 'receipts': sources.get('supplier_receipts', []),
