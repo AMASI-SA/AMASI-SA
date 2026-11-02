@@ -72,29 +72,68 @@ def filled_options(line):
     return sorted({k[3:] for k, v in tokens if k.startswith("id:") and v == "id:filled" and k[3:] in present})
 
 
-async def capture_intake(db, owner, lines, previous):
-    """Freeze at first ingestion, even while payment/review is pending."""
+async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, blocked_intakes=None):
+    """Freeze first ingestion without making financial evidence executable.
+
+    Optional financial sinks are for lifecycle registration only. A priced but
+    unresolved supplier service keeps its existing rejection and never enters
+    bundle_intake_snapshots, whose presence changes the legacy supplier route.
+    Callers without the sinks retain the original strict behavior.
+    """
     from bundle_catalog_v2 import BUNDLES, expand_bundle
     from product_fulfillment_routes import _product_key
+    from order_cost_authority import _bundle_cost, line_fingerprint
+    from bundle_reporting_cost import verified_reporting_cost
     snapshots = deepcopy(previous or {})
+    financial_capture = reporting_costs is not None and blocked_intakes is not None
     for line in lines:
         line_id = line["order_line_id"]
         if line_id in snapshots:
             continue
+        saved = (reporting_costs or {}).get(line_id) or {}
+        saved_bundle = saved.get("bundle_snapshot") or {}
+        frozen_financial = (saved.get("bundle_financial") is True
+                            and verified_reporting_cost(saved_bundle) is not None)
         product = await db["mezan_products_v2"].find_one({"user_id": owner, "$or": [
             {key: line["product_id"]} for key in ("id", "mezan_product_id", "salla_product_id")]})
         if not product:
+            if financial_capture and frozen_financial:
+                blocked_intakes[line_id] = "bundle_component_policy_unresolved"
             continue
         definition = await db[BUNDLES].find_one({"user_id": owner, "product_id": _product_key(product), "product_type": "composite"})
-        snapshots[line_id] = await expand_bundle(db, owner, line["product_id"],
-            variant_id=line.get("variant_id"), selected_options=selected_ids(line),
-            option_answers=option_answers(line),
-            present_option_ids=present_options(line), filled_option_ids=filled_options(line)) if definition else None
-        if snapshots[line_id] is not None:
-            from order_cost_authority import line_fingerprint
-            snapshots[line_id]["sale_quantity"] = line["quantity"]
-            snapshots[line_id]["line_fingerprint"] = line_fingerprint(line)
-    if len(json.dumps(snapshots, default=str).encode()) > 8_000_000:
+        if not definition and financial_capture and frozen_financial:
+            blocked_intakes[line_id] = "bundle_component_policy_unresolved"
+            continue
+        try:
+            snapshot = await expand_bundle(db, owner, line["product_id"],
+                variant_id=line.get("variant_id"), selected_options=selected_ids(line),
+                option_answers=option_answers(line), capture_reporting=financial_capture,
+                present_option_ids=present_options(line), filled_option_ids=filled_options(line)) if definition else None
+        except HTTPException as exc:
+            if (financial_capture and frozen_financial and isinstance(exc.detail, dict)
+                    and exc.detail.get("code") == "bundle_component_policy_unresolved"):
+                blocked_intakes[line_id] = "bundle_component_policy_unresolved"
+                continue
+            raise
+        if snapshot is not None:
+            snapshot["sale_quantity"] = line["quantity"]
+            snapshot["line_fingerprint"] = line_fingerprint(line)
+        if snapshot and snapshot.get("operational_blocked"):
+            blocked_intakes[line_id] = "bundle_component_policy_unresolved"
+            if line_id not in reporting_costs:
+                compact = {key: deepcopy(value) for key, value in snapshot.items()
+                           if key not in {"frozen_definitions", "provenance", "option_answers"}}
+                reporting_costs[line_id] = {"bundle_financial": True,
+                    "product_id": snapshot["product_id"], "quantity": line["quantity"],
+                    "line_fingerprint": snapshot["line_fingerprint"],
+                    "selected_options": deepcopy(snapshot["selected_options"]),
+                    "cost": _bundle_cost(compact, line["quantity"]), "bundle_snapshot": compact}
+            continue
+        snapshots[line_id] = snapshot
+    # Both maps share one lifecycle document. Keep the existing document budget
+    # even when every priced supplier service is stored outside executable intake.
+    captured = {"intake": snapshots, "financial": reporting_costs or {}}
+    if len(json.dumps(captured, default=str).encode()) > 8_000_000:
         fail("order_snapshot_size_limit")
     return snapshots
 

@@ -1,8 +1,9 @@
 """One read-only cost authority for order profitability, always expressed in SAR.
 
 Catalog costs are estimates for legacy ordinary lines with no historical proof.
-Frozen bundle composition replaces (never augments) that catalog estimate. A
-physical base product belongs in a composition through ``current_product``.
+Frozen bundle composition replaces (never augments) that catalog estimate.
+An explicit bundle-only financial base policy can include a missing parent
+cost without creating a physical ``current_product`` or changing fulfillment.
 Reads never reserve stock, rewrite orders, create snapshots, or post journals.
 """
 from __future__ import annotations
@@ -241,6 +242,30 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
         return _unknown(quantity, "bundle_quantity_unresolved")
     if snapshot.get("historical_cost_verified") is False:
         return _unknown(quantity, "historical_bundle_cost_unproven")
+    if "reporting_cost" in snapshot:
+        from bundle_reporting_cost import verified_reporting_cost
+        report = verified_reporting_cost(snapshot)
+        if report is None:
+            return _unknown(quantity, "bundle_reporting_cost_incomplete")
+        # The added base is captured expected evidence, not a stock allocation.
+        # Consuming the old leaves cannot remove it or prove a full actual cost.
+        # Supplier invoices and their posting workflow remain independent.
+        if units is not None:
+            indexes = [unit.get("unit_index") for unit in units]
+            if Decimal(len(units)) != q or len(set(indexes)) != len(indexes):
+                return _unknown(quantity, "bundle_unit_quantity_mismatch")
+        base, components, total = (decimal(report[key]) * q for key in (
+            "base_total_sar", "components_total_sar", "unit_total_sar"))
+        fallback = report.get("uses_salla_fallback", False)
+        result = _unknown(quantity, "")
+        result.update(base_complete=True, calculation_cost_available=True,
+            mezan_cost_complete=not fallback, mezan_cost_missing=fallback,
+            uses_salla_fallback=fallback, missing_cost_reasons=[],
+            base_total=_amount(base), components_total=_amount(components),
+            product_components_total=_amount(components), line_total=_amount(total),
+            bundle_revision=snapshot.get("revision"),
+            bundle_reporting_evidence_hash=report["evidence_hash"])
+        return _frozen_cost(result, authority="bundle_snapshot", stage="expected")
     estimate = decimal(snapshot.get("estimated_cost"))
     stage, total = "expected", estimate * q if estimate is not None else None
     if units is not None:
@@ -434,6 +459,7 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                 identity = (number, line_id(item))
                 result["lines"][identity] = ambiguous(item) if identity in stored_seen else {**row, "cost": _stored_cost(row)}
                 stored_seen.add(identity)
+        financial_first = set()
         for row in lifecycle:
             number = str(row["order_number"])
             lifecycle_seen = set()
@@ -445,6 +471,22 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     result["lines"][(number, line_id(item))] = deepcopy(snapshot)
                 if item:
                     identity = (number, line_id(item))
+                    if snapshot.get("bundle_financial") is True:
+                        # Supplier execution may still be unresolved. This is
+                        # the first complete financial bundle evidence, isolated
+                        # from executable intake and older base-only snapshots.
+                        record = deepcopy(snapshot)
+                        frozen = record.get("bundle_snapshot") or {}
+                        valid_identity = (bool(record.get("line_fingerprint"))
+                            and record.get("line_fingerprint") == frozen.get("line_fingerprint")
+                            and record.get("product_id") == frozen.get("product_id")
+                            and record.get("selected_options") == frozen.get("selected_options")
+                            and decimal(record.get("quantity")) == decimal(frozen.get("sale_quantity")))
+                        record["cost"] = (_bundle_cost(frozen, record.get("quantity")) if valid_identity
+                                          else _unknown(item.get("quantity"), "bundle_reporting_cost_incomplete"))
+                        result["lines"][identity] = record
+                        financial_first.add(identity)
+                        result["composite_products"].add(str(record.get("product_id")))
                     if identity in lifecycle_seen:
                         result["lines"][identity] = ambiguous(item)
                     lifecycle_seen.add(identity)
@@ -461,7 +503,10 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     "cost": cost, "line_fingerprint": snapshot.get("line_fingerprint"),
                     "selected_options": snapshot.get("selected_options"), "bundle_snapshot": snapshot}
                 identity = (number, line_id(item))
-                result["lines"][identity] = ambiguous(item) if identity in bundle_seen else record
+                if identity in bundle_seen:
+                    result["lines"][identity] = ambiguous(item)
+                elif identity not in financial_first:
+                    result["lines"][identity] = record
                 bundle_seen.add(identity)
         grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
         for unit in units:
@@ -483,7 +528,22 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                 if original:
                     record["line_fingerprint"] = line_fingerprint(original)
                 identity = (number, line_id(item))
-                result["lines"][identity] = ambiguous(item) if identity in plan_seen else record
+                if identity in plan_seen:
+                    result["lines"][identity] = ambiguous(item)
+                elif identity in financial_first:
+                    # A later operational plan can establish execution, never
+                    # reprice the earlier financial proof from today's catalog.
+                    frozen = result["lines"][identity]
+                    problem = ("bundle_reconciliation_required" if plan.get("reconciliation_required") else
+                               "cost_snapshot_line_changed" if record.get("line_fingerprint") != frozen.get("line_fingerprint") else
+                               "cost_snapshot_quantity_mismatch" if decimal(record.get("quantity")) != decimal(frozen.get("quantity")) else None)
+                    if problem:
+                        frozen["cost"] = _unknown(q, problem)
+                    elif frozen.get("cost", {}).get("calculation_cost_available"):
+                        frozen["cost"] = _bundle_cost(frozen["bundle_snapshot"], frozen["quantity"],
+                            grouped[(str(plan["_id"]), str(key))])
+                else:
+                    result["lines"][identity] = record
                 plan_seen.add(identity)
         correction_seen = set()
         for row in corrections:
