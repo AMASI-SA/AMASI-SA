@@ -5,6 +5,7 @@ physical product, change a service binding or prove supplier execution. The
 existing operational leaves remain the sole input to reservation/consumption.
 """
 from copy import deepcopy
+from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
@@ -41,10 +42,82 @@ def base_addition(product, profile, *, product_id, variant_id, multiplier, path,
         "cost_source": source, "cost_currency": str(evidence.get("cost_currency") or "SAR").upper(),
         "cost_fx_rate_to_sar": evidence.get("cost_fx_rate_to_sar"),
         "policy_revision": policy.get("revision"), "policy_evidence_ref": policy.get("evidence_ref"),
+        "policy_effective_at": policy.get("updated_at"),
         "unit_cost_sar": str(amount) if valid else None,
         "line_cost_sar": str(amount * q) if valid else None}
     proof["evidence_hash"] = _hash(proof)
     return proof
+
+
+def base_coverage(profile, *, product_id, path):
+    """An opted-in physical base needs SAR projection, not another expense."""
+    policy = (profile or {}).get(POLICY_FIELD) or {}
+    if not isinstance(policy, dict) or policy.get("include_parent_base") is not True:
+        return None
+    proof = {"product_id": str(product_id), "path": list(path),
+             "policy_revision": policy.get("revision"), "policy_evidence_ref": policy.get("evidence_ref"),
+             "policy_effective_at": policy.get("updated_at")}
+    proof["evidence_hash"] = _hash(proof)
+    return proof
+
+
+def canonical_sale_created_at(snapshot):
+    """Original Salla creation only, using the existing cutover date rules.
+
+    The lifecycle already read this canonical snapshot. A caller DTO, refresh
+    timestamp or inferred order_date cannot establish a future-only policy.
+    """
+    from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+    from fulfillment_v2_routes import component_source_time
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    raw = ((snapshot or {}).get("raw_by_source") or {}).get("salla_direct") or {}
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get("date") if "date" in raw else raw.get("created_at")
+    if isinstance(value, dict):
+        source = value
+        if "created" in source and any(key in source for key in ("date", "datetime", "value")):
+            return None
+        value = next((source[key] for key in ("created", "date", "datetime", "value")
+                      if source.get(key) not in (None, "")), None)
+        zone = next((source[key] for key in ("timezone", "timezone_name", "tz")
+                     if source.get(key) not in (None, "")), None)
+        if zone is not None:
+            try:
+                ZoneInfo(zone)
+            except (ZoneInfoNotFoundError, TypeError, ValueError):
+                return None
+            value = component_source_time({"date": value, "timezone": zone})
+    try:
+        return require_order_created_on_or_after_cutover(value,
+            datetime(1970, 1, 1, tzinfo=timezone.utc), source_timezone=True).isoformat()
+    except OrderCutoverError:
+        return None
+
+
+def policy_applies_to_sale(report, order_created_at):
+    """No historical certification of a sale preceding any applied policy."""
+    from accounting_order_cutover import OrderCutoverError, require_order_created_on_or_after_cutover
+
+    policies = (report or {}).get("added_bases", []) + (report or {}).get("covered_bases", [])
+    if not policies:
+        return False
+    try:
+        for policy in policies:
+            require_order_created_on_or_after_cutover(order_created_at, policy.get("policy_effective_at"))
+    except OrderCutoverError:
+        return False
+    return True
+
+
+def _valid_coverage(row, leaves):
+    return (isinstance(row, dict) and type(row.get("policy_revision")) is int
+            and row["policy_revision"] > 0 and isinstance(row.get("policy_evidence_ref"), str)
+            and bool(row["policy_evidence_ref"].strip())
+            and row.get("evidence_hash") == _hash({k: v for k, v in row.items() if k != "evidence_hash"})
+            and any(leaf.get("current_product_reference") and leaf.get("product_id") == row.get("product_id")
+                    for leaf in leaves))
 
 
 def _merge_bases(additions):
@@ -165,7 +238,7 @@ def _decision_cost(decision, definitions):
         "source_decision_hash": _hash(decision)}
 
 
-def freeze_reporting_cost(snapshot, additions):
+def freeze_reporting_cost(snapshot, additions, covered_bases=None):
     """Compact SAR projection from the metadata already frozen by expansion.
 
     It is deliberately separate from estimated_cost and leaves: those fields
@@ -174,9 +247,10 @@ def freeze_reporting_cost(snapshot, additions):
     """
     from order_cost_authority import decimal
 
-    if not additions:
+    if not additions and not covered_bases:
         return None
     additions = _merge_bases(additions)
+    covered_bases = deepcopy(covered_bases or [])
     definitions = snapshot.get("frozen_definitions") or {}
     resources, bindings = {}, {}
     for definition in definitions.values():
@@ -186,6 +260,8 @@ def freeze_reporting_cost(snapshot, additions):
         for binding in metadata.get("options") or []:
             bindings.setdefault(str(binding.get("id")), []).append(binding)
     missing, components = [], []
+    if any(not _valid_coverage(row, snapshot.get("leaves") or []) for row in covered_bases):
+        missing.append("bundle_reporting_base_policy_missing")
     base_total = Decimal(0)
     for addition in additions:
         amount = decimal(addition.get("line_cost_sar"))
@@ -224,7 +300,8 @@ def freeze_reporting_cost(snapshot, additions):
         "base_total_sar": str(base_total), "components_total_sar": str(component_total),
         "operational_evidence_hash": _hash(_operation_evidence(snapshot)),
         "uses_salla_fallback": any(str(row.get("cost_source", "")).startswith("salla_") for row in additions + snapshot.get("leaves", [])),
-        "missing_cost_reasons": missing, "added_bases": deepcopy(additions), "components": components}
+        "missing_cost_reasons": missing, "added_bases": deepcopy(additions),
+        "covered_bases": covered_bases, "components": components}
     result["evidence_hash"] = _hash(result)
     return result
 
@@ -240,7 +317,7 @@ def verified_reporting_cost(snapshot):
             or snapshot.get("needs_selection")
             or report.get("operational_evidence_hash") != _hash(_operation_evidence(snapshot))
             or report.get("cost_stage") != "expected" or report.get("complete") is not True
-            or report.get("missing_cost_reasons") or not report.get("added_bases")
+            or report.get("missing_cost_reasons") or not (report.get("added_bases") or report.get("covered_bases"))
             or report.get("evidence_hash") != _hash({k: v for k, v in report.items() if k != "evidence_hash"})):
         return None
     bases = report["added_bases"]
@@ -249,6 +326,9 @@ def verified_reporting_cost(snapshot):
     components = report.get("components")
     leaves = snapshot.get("leaves")
     if not isinstance(components, list) or any(not isinstance(row, dict) for row in components) or not isinstance(leaves, list):
+        return None
+    covered_bases = report.get("covered_bases") or []
+    if not isinstance(covered_bases, list) or any(not _valid_coverage(row, leaves) for row in covered_bases):
         return None
     physical = [row for row in components if not row.get("financial_only")]
     expenses = [row for row in components if row.get("financial_only")]

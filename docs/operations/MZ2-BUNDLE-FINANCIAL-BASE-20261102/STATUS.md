@@ -24,7 +24,10 @@ Historical corrections remain explicit, bounded and frozen-evidence-only; recogn
 
 ## Work and validation state — WIP source checkpoint
 
-Remote parent checkpoint: `d0656e329cda7ef953aef04c6d723915c3b7860f` (initial plan only).
+Initial plan checkpoint: `d0656e329cda7ef953aef04c6d723915c3b7860f`.
+First source WIP: `8a40e3ea05c2008644407e59875203ae1c893505`.
+Concurrent same-task contributions were fetched and reviewed at `1f71410386729a4f61ed8bfcdd4c74d6d387a1c3`, `31dc419fcbc5274b6ed2eeb9b64f8ac4836f091d` and `c4b435c094989ef12476b10c2648686101cc5233`. The latter is this checkpoint's expected parent. Their lifecycle capture, regression test and CI requirements are preserved, with the canonical sale-date fence and stronger pre-acceptance guard integrated. The persisted block field is `bundle_financial_blocked` and previous financial records are copied with deepcopy.
+Draft PR: https://github.com/AMASI-SA/AMASI-SA/pull/1692.
 This checkpoint preserves the implementation and current tests; it is not release approval.
 
 Implemented a permission-checked future-only financial policy editor, compact frozen SAR evidence, bundle-only report authority and repair deduplication. No new physical base leaf is created. Existing resource bindings, supplier preparation and invoice references remain unchanged. An already active physical current_product covers its own base; an unselected conditional current_product does not suppress the financial base.
@@ -39,9 +42,18 @@ Verified milestones (synthetic isolated fixtures, not live order corrections):
 - Minimum arithmetic red evidence: before the financial-base change, four selected cases returned160/200/40/0 instead of220/260/100/60 (exit1); the added base is60 for four units. These are test fixtures, not the unidentified original80 report cohort.
 - Schema2-specific red evidence: both unknown-origin and supplier-origin service cases were unavailable before the financial evidence change; strict execution remains409 after financial totals become available.
 
-Changed paths: bundle_reporting_cost.py, bundle_reporting_cost_policy.py, bundle_catalog_v2.py, bundle_fulfillment_v2.py, order_cost_authority.py, order_cost_reporting_repair.py, scoped backend tests, BundleCostPolicy/BundleEditor and their tests, this record. The lifecycle register/apply integration and its independent tests are still in progress and are not represented as a passing release gate here.
+Changed paths also include fulfillment_v2_routes.py, test_bundle_financial_lifecycle.py and the existing G47 workflow (new suites are required, with zero-skip checks). No runtime dependencies or lockfiles changed.
 
-Remaining concrete verification: integrate lifecycle financial/blocked sinks, keep existing legacy-capture historical guard, verify blocked registration cannot claim acceptance, test later-plan priority and conditional-current regression, then rerun affected historical authority/dashboard/read-budget suites. Review current source before release; current tests alone do not authorize deployment.
+Additional verified milestones:
+
+- Active physical current_product now has a covered_bases policy proof and a financial projection with zero added base. FX4USD×3.75 plus rose40SAR gives220 for quantity4 in both schemas. Pending independent supplier service gives260 without an extra base.
+- Financial acceptance after the date fence and concurrent test merge:72 passed,0 skipped,exit0,2.61s (`/tmp/mz2-bundle-reporting-financial-final.xml`). The concurrent contributor test is retained with original Salla creation evidence. SHA256 of the acceptance file: `8ccd26e06215d43f32d16ae060a9533a581c1ab19e2323e381cea96cf4a26c84`.
+- Lifecycle register/apply real Mongo:10 passed,0 skipped,exit0,16.14s after merging the block field name; all10 UUID fixtures removed. Includes original260, exact supplier export parity, four concurrent replays before/after price changes, cancellation, missing original creation, pre-policy sale and forged newer DTO date. An earlier broader lifecycle gate passed42 tests plus8 subtests with zero skips.
+- Independent review reproduced and then verified fixes for inactive current_product, active physical FX, later-plan repricing and first capture of a sale older than the financial policy. The final date review passed11 focused cases plus15 independent date assertions. Prices can be known for preview while historical certification remains false.
+- Future-only is based on original canonical Salla creation, not a DTO, order_date or refresh timestamp. Each frozen added/covered policy records policy_effective_at. Missing/invalid/pre-policy creation cannot certify a historical amount. Every opted-in financial capture keeps its first compact envelope, including executable bundles, so later plans cannot drop this restriction or reprice it.
+- The27-file integrated local cost run executed390 cases:388 passed,2 failed with the existing503 resource_pressure response. Both failures were reproduced unchanged on deployed-source-equivalent B (`f953c374239ae89a9311b3e311945ffa4e7933a5`, tree`aba404781e09f0ba58ddc43827ecff95e1848d2f`). The shared8GiB environment was95.8–96.6% occupied; the guard correctly refused admission. No guard threshold or response oracle was changed. Final exact-head CI remains required; this run is not described as green.
+
+Remaining concrete blocker: a real isolated legacy fixture proved that writing a new blocked lifecycle after dropping its financial proof can replace an old legacy audit and prevent allow_legacy_component_execution / ready-piece / consume-piece. Original strict capture raised409 before registration and left that audit unchanged. The minimal correction in progress restores the original register transaction rollback for legacy blocked captures; it must pass before this branch is release-ready. Final exact-head CI and governed release checks also remain. This WIP is not release approval. Production is still unchanged by this follow-up.
 
 Production code unchanged in this follow-up. No new production policy, recipe or historical repair has been applied. The previously saved embroidery financial treatment remains independent; no second10 charge was created. No release lease is active from PR1690 and its successful publication must not be repeated.
 

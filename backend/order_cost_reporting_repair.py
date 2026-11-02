@@ -314,7 +314,7 @@ def _with_missing_base(item: dict, record: dict, cost: dict, owner: str) -> tupl
         report = verified_reporting_cost(snapshot)
         if report is None:
             _refuse("historical_bundle_cost_incomplete")
-        if any(str(row.get("product_id")) == root for row in report["added_bases"]):
+        if any(str(row.get("product_id")) == root for row in report["added_bases"] + report.get("covered_bases", [])):
             return deepcopy(cost), None, "financial_base_already_included"
     leaves = snapshot.get("leaves")
     if not isinstance(leaves, list):

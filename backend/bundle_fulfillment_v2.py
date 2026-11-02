@@ -72,7 +72,7 @@ def filled_options(line):
     return sorted({k[3:] for k, v in tokens if k.startswith("id:") and v == "id:filled" and k[3:] in present})
 
 
-async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, blocked_intakes=None):
+async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, blocked_intakes=None, order_created_at=None):
     """Freeze first ingestion without making financial evidence executable.
 
     Optional financial sinks are for lifecycle registration only. A priced but
@@ -83,7 +83,7 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
     from bundle_catalog_v2 import BUNDLES, expand_bundle
     from product_fulfillment_routes import _product_key
     from order_cost_authority import _bundle_cost, line_fingerprint
-    from bundle_reporting_cost import verified_reporting_cost
+    from bundle_reporting_cost import verified_reporting_cost, policy_applies_to_sale
     snapshots = deepcopy(previous or {})
     financial_capture = reporting_costs is not None and blocked_intakes is not None
     for line in lines:
@@ -118,8 +118,10 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
         if snapshot is not None:
             snapshot["sale_quantity"] = line["quantity"]
             snapshot["line_fingerprint"] = line_fingerprint(line)
-        if snapshot and snapshot.get("operational_blocked"):
-            blocked_intakes[line_id] = "bundle_component_policy_unresolved"
+            if "reporting_cost" in snapshot:
+                snapshot["order_created_at"] = order_created_at
+                snapshot["historical_cost_verified"] = policy_applies_to_sale(snapshot["reporting_cost"], order_created_at)
+        if snapshot and "reporting_cost" in snapshot and financial_capture:
             if line_id not in reporting_costs:
                 compact = {key: deepcopy(value) for key, value in snapshot.items()
                            if key not in {"frozen_definitions", "provenance", "option_answers"}}
@@ -128,6 +130,8 @@ async def capture_intake(db, owner, lines, previous, *, reporting_costs=None, bl
                     "line_fingerprint": snapshot["line_fingerprint"],
                     "selected_options": deepcopy(snapshot["selected_options"]),
                     "cost": _bundle_cost(compact, line["quantity"]), "bundle_snapshot": compact}
+        if snapshot and snapshot.get("operational_blocked"):
+            blocked_intakes[line_id] = "bundle_component_policy_unresolved"
             continue
         snapshots[line_id] = snapshot
     # Both maps share one lifecycle document. Keep the existing document budget

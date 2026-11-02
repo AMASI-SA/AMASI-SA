@@ -27,7 +27,10 @@ ROOT = "fixture-shawl"
 ROSE = "fixture-rose"
 SERVICE = "fixture-external-embroidery"
 BINDING = "fixture-name-binding"
+POLICY_EFFECTIVE_AT = "2026-09-30T00:00:00+00:00"
+ORDER_CREATED_AT = "2026-10-01T00:00:00+00:00"
 POLICY = {"revision": 1, "include_parent_base": True,
+          "updated_at": POLICY_EFFECTIVE_AT,
           "evidence_ref": "owner-confirmed-fixture-base15-and-external-service10"}
 ROSE_NAME = "هل تريد باقة الورد مع الشال ؟"
 NAME_NAME = "هل تريد اضافة اسم على الشال؟"
@@ -141,7 +144,7 @@ async def test_external_service_bundle_cost_matrix(db, rose, name, expected, com
 async def test_mixed_customer_choices_remain_separate_lines(db, second_rose, expected):
     items = [sale_line(2, rose=True, name=True, key="with-name"),
              sale_line(2, rose=second_rose, name=False, key="without-name")]
-    snapshots = await fulfillment.capture_intake(db, OWNER, items, {})
+    snapshots = await fulfillment.capture_intake(db, OWNER, items, {}, order_created_at=ORDER_CREATED_AT)
     await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": "mixed",
                                     "bundle_intake_snapshots": snapshots})
     authority = await load_order_cost_authority(db, OWNER, [
@@ -270,7 +273,7 @@ async def test_ordinary_service_and_physical_component_ignore_bundle_only_policy
 @pytest.mark.asyncio
 async def test_frozen_expansion_and_intake_replay_ignore_future_catalog_and_policy_changes(db):
     item = sale_line(name=True)
-    initial = await fulfillment.capture_intake(db, OWNER, [item], {})
+    initial = await fulfillment.capture_intake(db, OWNER, [item], {}, order_created_at=ORDER_CREATED_AT)
     snapshot = initial["sale-line"]
     assert _bundle_cost(snapshot, 4)["line_total"] == 260
     await db[catalog.COST_PROFILES].update_many({"user_id": OWNER}, {"$set": {"base_cost": 999}})
@@ -280,7 +283,7 @@ async def test_frozen_expansion_and_intake_replay_ignore_future_catalog_and_poli
     assert replay["reporting_cost"] == snapshot["reporting_cost"]
     assert replay["leaves"] == snapshot["leaves"]
     assert _bundle_cost(replay, 4)["line_total"] == 260
-    assert await fulfillment.capture_intake(db, OWNER, [item], initial) == initial
+    assert await fulfillment.capture_intake(db, OWNER, [item], initial, order_created_at=ORDER_CREATED_AT) == initial
 
 
 async def seed_rose_inventory(db, quantity=20):
@@ -326,7 +329,7 @@ async def test_intake_plan_replay_and_consumption_keep_base_without_false_full_a
         "component_lifecycle_starts_at": "2026-09-01T00:00:00+00:00"}})
     await seed_rose_inventory(db)
     item = sale_line(name=True)
-    intake = await fulfillment.capture_intake(db, OWNER, [item], {})
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {}, order_created_at=ORDER_CREATED_AT)
     await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": "lifecycle-order",
                                     "bundle_intake_snapshots": intake})
     assert (await historical_cost(db, item))["line_total"] == 260
@@ -376,6 +379,43 @@ async def test_explicit_current_product_never_receives_another_financial_base(db
     assert not (snapshot.get("reporting_cost") or {}).get("added_bases")
     assert sum(Decimal(leaf["quantity"]) for leaf in snapshot["leaves"]
                if leaf.get("current_product_reference")) == current_quantity
+
+
+@pytest.mark.asyncio
+async def test_unselected_conditional_current_product_does_not_hide_missing_financial_base(db):
+    definition = await db[catalog.BUNDLES].find_one({"user_id": OWNER, "product_id": ROOT})
+    await catalog.save_bundle(db, OWNER, ROOT, {"expected_revision": definition["revision"],
+        "schema_version": 1, "product_type": "composite", "component_scopes": {SERVICE: "per_bundle"},
+        "items": [{"kind": "current_product", "quantity": "1",
+                   "condition": {"option_id": "name-choice", "value_id": "yes"}}, *definition["items"]]}, OWNER)
+    snapshot = await expand(db, sale_line(name=False))
+    assert not any(leaf.get("current_product_reference") for leaf in snapshot["leaves"])
+    assert Decimal(snapshot["estimated_cost"]) == 40
+    assert _bundle_cost(snapshot, 4)["line_total"] == 220
+    assert _bundle_cost(snapshot, 4)["base_total"] == 60
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name,expected", [(False, 220), (True, 260)])
+async def test_active_current_product_has_financial_fx_projection_without_added_base(db, name, expected):
+    await db[catalog.COST_PROFILES].update_one({"user_id": OWNER, "salla_product_id": ROOT},
+        {"$set": {"base_cost": 4, "cost_currency": "USD", "cost_fx_rate_to_sar": "3.75"}})
+    definition = await db[catalog.BUNDLES].find_one({"user_id": OWNER, "product_id": ROOT})
+    await catalog.save_bundle(db, OWNER, ROOT, {"expected_revision": definition["revision"],
+        "schema_version": 1, "product_type": "composite", "component_scopes": {SERVICE: "per_bundle"},
+        "items": [{"kind": "current_product", "quantity": "1"}, *definition["items"]]}, OWNER)
+    item = sale_line(name=name)
+    await set_policy(db, False)
+    previous = await expand(db, item)
+    await set_policy(db)
+    snapshot = await expand(db, item)
+    assert operational_snapshot(snapshot) == operational_snapshot(previous)
+    cost = _bundle_cost(snapshot, 4)
+    assert cost["line_total"] == expected
+    assert cost["components_total"] == expected and cost["base_total"] == 0
+    assert snapshot["reporting_cost"]["added_bases"] == []
+    assert snapshot["reporting_cost"]["covered_bases"]
+    assert [Decimal(leaf["unit_cost"]) for leaf in snapshot["leaves"] if leaf.get("current_product_reference")] == [Decimal(4)]
 
 
 @pytest.mark.asyncio
@@ -689,7 +729,7 @@ async def test_schema2_financial_capture_does_not_claim_operational_intake_or_le
     records = await database_records(db)
     financial, blocked = {}, {}
     intake = await fulfillment.capture_intake(db, OWNER, [item], {},
-        reporting_costs=financial, blocked_intakes=blocked)
+        reporting_costs=financial, blocked_intakes=blocked, order_created_at=ORDER_CREATED_AT)
     assert "sale-line" not in intake  # Even an explicit None would claim this intake decision.
     assert blocked["sale-line"] == "bundle_component_policy_unresolved"
     assert set(financial) == {"sale-line"}
@@ -725,7 +765,7 @@ async def test_schema2_financial_capture_does_not_claim_operational_intake_or_le
     saved = deepcopy(financial)
     replay_blocked = {}
     assert await fulfillment.capture_intake(db, OWNER, [item], intake,
-        reporting_costs=financial, blocked_intakes=replay_blocked) == intake
+        reporting_costs=financial, blocked_intakes=replay_blocked, order_created_at=ORDER_CREATED_AT) == intake
     assert financial == saved
     assert replay_blocked["sale-line"] == "bundle_component_policy_unresolved"
     assert (await historical_cost(db, item, number))["line_total"] == 260
@@ -733,12 +773,237 @@ async def test_schema2_financial_capture_does_not_claim_operational_intake_or_le
     assert await db[SNAPSHOTS].find_one({"user_id": OWNER, "order_number": number}) == manual_before
     # Callers without financial sinks still receive the unchanged strict guard.
     with pytest.raises(HTTPException) as caught:
-        await fulfillment.capture_intake(db, OWNER, [item], {})
+        await fulfillment.capture_intake(db, OWNER, [item], {}, order_created_at=ORDER_CREATED_AT)
     assert caught.value.detail["code"] == "bundle_component_policy_unresolved"
 
 
+@pytest.mark.asyncio
+async def test_schema2_active_current_product_covers_base_and_prices_blocked_service_without_duplicate(db):
+    await schema2_service_fixture(db)
+    definition = await db[catalog.BUNDLES].find_one({"user_id": OWNER, "product_id": ROOT})
+    await catalog.save_bundle(db, OWNER, ROOT, {"expected_revision": definition["revision"],
+        "schema_version": 2, "product_type": "composite", "component_scopes": {SERVICE: "per_unit"},
+        "items": [{"kind": "current_product", "quantity": "1"}, *definition["items"]]}, OWNER)
+    item = sale_line(name=True)
+    snapshot = await expand(db, item, strict=False)
+    assert len([leaf for leaf in snapshot["leaves"] if leaf.get("current_product_reference")]) == 1
+    assert not any(leaf.get("resource_id") == SERVICE for leaf in snapshot["leaves"])
+    assert snapshot["cost_complete"] is False
+    assert any(row["reason"] == "supplier_component_execution_required" for row in snapshot["unresolved_components"])
+    cost = _bundle_cost(snapshot, 4)
+    assert cost["line_total"] == 260 and cost["base_total"] == 0
+    assert cost["components_total"] == 260 and cost["cost_stage"] == "expected"
+    assert snapshot["reporting_cost"]["added_bases"] == []
+    assert snapshot["reporting_cost"]["covered_bases"]
+    with pytest.raises(HTTPException) as caught:
+        await expand(db, item)
+    assert caught.value.detail["code"] == "bundle_component_policy_unresolved"
 
- 
+
+async def financial_authority_fixture(db, number="priority-order"):
+    await schema2_service_fixture(db)
+    item = sale_line(name=True)
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {},
+        reporting_costs=financial, blocked_intakes=blocked, order_created_at=ORDER_CREATED_AT)
+    assert intake == {} and financial["sale-line"]["cost"]["line_total"] == 260
+    await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": number,
+        "bundle_intake_snapshots": {}, "reporting_cost_snapshots": deepcopy(financial)})
+    await db[SNAPSHOTS].insert_one({"user_id": OWNER, "order_number": number,
+        "order_item_id": "sale-line", "salla_product_id": ROOT, "quantity": 4,
+        "line_cost": 60, "base_unit_cost": 15, "currency": "SAR",
+        "line_fingerprint": line_fingerprint(item)})
+    return item, financial
+
+
+async def later_plan_fixture(db, item, *, change=None, number="priority-order"):
+    plan_item = sale_line(3 if change == "plan_quantity" else 4,
+                          name=False if change == "plan_fingerprint" else True)
+    leaf = {"leaf_id": "later-catalog-leaf", "kind": "product", "product_id": ROSE,
+            "quantity": "1", "unit_cost": "249.75", "cost_source": "mezan_v2_base"}
+    snapshot = {"product_id": ROOT, "revision": 99, "schema_version": 1,
+        "estimated_cost": "249.75", "known_cost": "249.75", "cost_complete": True,
+        "leaves": [leaf], "selected_options": plan_item["selected_options"],
+        "sale_quantity": plan_item["quantity"], "line_fingerprint": line_fingerprint(plan_item)}
+    await db[stock.PLANS].insert_one({"_id": "later-plan", "user_id": OWNER,
+        "order_id": number, "reconciliation_required": change == "reconciliation",
+        "lines": stock._lines([plan_item]), "bundle_snapshots": {"sale-line": snapshot}})
+    await db[stock.UNITS].insert_many([{"user_id": OWNER, "plan_id": "later-plan",
+        "order_line_id": "sale-line", "unit_index": index, "state": "reserved",
+        "bundle_leaves": [deepcopy(leaf)]} for index in range(1, 4 if change == "unit_count" else 5)])
+    return snapshot
+
+
+@pytest.mark.asyncio
+async def test_first_financial_proof_wins_over_later_plan_999_without_repricing_or_writes(db):
+    item, financial = await financial_authority_fixture(db)
+    later = await later_plan_fixture(db, item)
+    assert _bundle_cost(later, 4)["line_total"] == 999
+    before = await database_records(db)
+    cost = await historical_cost(db, item, "priority-order")
+    assert cost["calculation_cost_available"] is True
+    assert cost["line_total"] == financial["sale-line"]["cost"]["line_total"] == 260
+    assert cost["cost_stage"] == "expected"
+    assert await database_records(db) == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["reconciliation", "plan_fingerprint", "plan_quantity", "unit_count"])
+async def test_later_plan_conflicts_cannot_certify_or_replace_first_financial_proof(db, change):
+    item, _ = await financial_authority_fixture(db)
+    await later_plan_fixture(db, item, change=change)
+    cost = await historical_cost(db, item, "priority-order")
+    assert cost["calculation_cost_available"] is False
+    assert cost["historical_cost_verified"] is False
+    assert cost["cost_stage"] == "unknown"
+    assert cost["line_total"] not in {60, 260, 999}
+    assert cost["missing_cost_reasons"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["current_choice", "current_quantity"])
+async def test_changed_order_fingerprint_cannot_reuse_financial_capture(db, change):
+    await financial_authority_fixture(db)
+    current = sale_line(3 if change == "current_quantity" else 4,
+                        name=False if change == "current_choice" else True)
+    cost = await historical_cost(db, current, "priority-order")
+    assert cost["calculation_cost_available"] is False
+    assert cost["historical_cost_verified"] is False
+    assert "cost_snapshot_line_changed" in cost["missing_cost_reasons"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", ["evidence_hash", "missing_snapshot", "identity"])
+async def test_invalid_financial_proof_never_falls_back_to_old_manual_60(db, damage):
+    item, financial = await financial_authority_fixture(db)
+    record = deepcopy(financial["sale-line"])
+    if damage == "evidence_hash":
+        record["bundle_snapshot"]["reporting_cost"]["evidence_hash"] = "0" * 64
+    elif damage == "missing_snapshot":
+        record.pop("bundle_snapshot")
+    else:
+        record["bundle_snapshot"]["line_fingerprint"] = "different-source-line"
+    await db[LIFECYCLES].update_one({"user_id": OWNER, "order_number": "priority-order"},
+        {"$set": {"reporting_cost_snapshots.sale-line": record}})
+    before = await database_records(db)
+    cost = await historical_cost(db, item, "priority-order")
+    assert cost["calculation_cost_available"] is False
+    assert cost["historical_cost_verified"] is False
+    assert cost["line_total"] != 60
+    assert await database_records(db) == before
+
+
+async def executable_financial_capture(db, *, number, order_created_at):
+    item = sale_line(name=True)
+    financial, blocked = {}, {}
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {},
+        reporting_costs=financial, blocked_intakes=blocked, order_created_at=order_created_at)
+    assert "sale-line" in intake and intake["sale-line"]["cost_complete"] is True
+    assert blocked == {}
+    assert financial["sale-line"]["bundle_financial"] is True
+    await db[LIFECYCLES].insert_one({"user_id": OWNER, "order_number": number,
+        "bundle_intake_snapshots": deepcopy(intake), "reporting_cost_snapshots": deepcopy(financial)})
+    return item, intake, financial
+
+
+@pytest.mark.asyncio
+async def test_executable_opted_in_bundle_first_financial_record_survives_later_plan_prices(db):
+    item, intake, financial = await executable_financial_capture(
+        db, number="executable-first", order_created_at=ORDER_CREATED_AT)
+    snapshot = financial["sale-line"]["bundle_snapshot"]
+    assert snapshot["historical_cost_verified"] is True
+    assert snapshot["order_created_at"] == ORDER_CREATED_AT
+    assert snapshot["reporting_cost"]["added_bases"][0]["policy_effective_at"] == POLICY_EFFECTIVE_AT
+    assert financial["sale-line"]["cost"]["line_total"] == 260
+    assert "frozen_definitions" not in snapshot
+    assert (await historical_cost(db, item, "executable-first"))["line_total"] == 260
+
+    await db[catalog.COST_PROFILES].update_many({"user_id": OWNER}, {"$set": {"base_cost": 999}})
+    await db[catalog.COST_PROFILES].update_one({"user_id": OWNER, "salla_product_id": ROOT},
+        {"$set": {"bundle_reporting_cost_policy.updated_at": "2026-11-02T00:00:00+00:00"}})
+    later = await later_plan_fixture(db, item, number="executable-first")
+    assert _bundle_cost(later, 4)["line_total"] == 999
+    assert (await historical_cost(db, item, "executable-first"))["line_total"] == 260
+    saved = deepcopy(financial)
+    assert await fulfillment.capture_intake(db, OWNER, [item], intake,
+        reporting_costs=financial, blocked_intakes={}, order_created_at=ORDER_CREATED_AT) == intake
+    assert financial == saved
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("created_at,policy_at", [
+    (None, POLICY_EFFECTIVE_AT),
+    ("not-an-order-date", POLICY_EFFECTIVE_AT),
+    ("2026-09-29T23:59:59+00:00", POLICY_EFFECTIVE_AT),
+    ("2026-09-30T00:30:00+03:00", POLICY_EFFECTIVE_AT),
+    (ORDER_CREATED_AT, None),
+    (ORDER_CREATED_AT, "not-a-policy-date"),
+])
+async def test_missing_or_prepolicy_sale_cannot_be_certified_by_a_later_valid_plan(db, created_at, policy_at):
+    await db[catalog.COST_PROFILES].update_one({"user_id": OWNER, "salla_product_id": ROOT},
+        {"$set": {"bundle_reporting_cost_policy.updated_at": policy_at}})
+    item, intake, financial = await executable_financial_capture(
+        db, number="unverified-first", order_created_at=created_at)
+    first = deepcopy(financial)
+    assert intake["sale-line"]["historical_cost_verified"] is False
+    assert financial["sale-line"]["bundle_snapshot"]["historical_cost_verified"] is False
+    assert financial["sale-line"]["cost"]["historical_cost_verified"] is False
+    assert financial["sale-line"]["cost"]["calculation_cost_available"] is False
+    before = await historical_cost(db, item, "unverified-first")
+    assert before["historical_cost_verified"] is False
+    assert before["calculation_cost_available"] is False
+
+    later = await later_plan_fixture(db, item, number="unverified-first")
+    assert _bundle_cost(later, 4)["calculation_cost_available"] is True
+    after = await historical_cost(db, item, "unverified-first")
+    assert after["historical_cost_verified"] is False
+    assert after["calculation_cost_available"] is False
+    assert after["cost_stage"] == "unknown"
+    # A corrected or fabricated newer caller date cannot relabel the first capture.
+    assert await fulfillment.capture_intake(db, OWNER, [item], intake,
+        reporting_costs=financial, blocked_intakes={}, order_created_at=ORDER_CREATED_AT) == intake
+    assert financial == first
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("created_at", [
+    "2026-09-30T03:00:00+03:00",  # Exactly the UTC policy boundary.
+    "2026-09-29T23:30:00-03:00",  # Earlier calendar date, later UTC instant.
+])
+async def test_policy_boundary_uses_timezone_aware_instants(db, created_at):
+    item, _, financial = await executable_financial_capture(
+        db, number="policy-boundary", order_created_at=created_at)
+    assert financial["sale-line"]["cost"]["historical_cost_verified"] is True
+    assert (await historical_cost(db, item, "policy-boundary"))["line_total"] == 260
+
+
+@pytest.mark.asyncio
+async def test_operational_capture_without_sale_date_does_not_create_verified_financial_history(db):
+    item = sale_line(name=True)
+    intake = await fulfillment.capture_intake(db, OWNER, [item], {})
+    assert intake["sale-line"]["cost_complete"] is True
+    assert intake["sale-line"]["historical_cost_verified"] is False
+    assert _bundle_cost(intake["sale-line"], 4)["calculation_cost_available"] is False
+
+
+@pytest.mark.asyncio
+async def test_plan_only_financial_projection_without_capture_date_is_not_historical_authority(db):
+    item = sale_line(name=True)
+    preview = await expand(db, item)
+    assert _bundle_cost(preview, 4)["line_total"] == 260  # A usable preview is not sale-date evidence.
+    assert "order_created_at" not in preview
+    await db[stock.PLANS].insert_one({"_id": "undated-plan", "user_id": OWNER,
+        "order_id": "undated-order", "lines": stock._lines([item]),
+        "bundle_snapshots": {"sale-line": preview}})
+    await db[stock.UNITS].insert_many([{"user_id": OWNER, "plan_id": "undated-plan",
+        "order_line_id": "sale-line", "unit_index": index, "state": "reserved",
+        "bundle_leaves": deepcopy(preview["leaves"])} for index in range(1, 5)])
+    cost = await historical_cost(db, item, "undated-order")
+    assert cost["historical_cost_verified"] is False
+    assert cost["calculation_cost_available"] is False
+    assert "historical_bundle_cost_unproven" in cost["missing_cost_reasons"]
+
+
 @pytest.mark.asyncio
 async def test_order_lifecycle_freezes_supplier_financial_cost_but_blocks_stock_acceptance(db, monkeypatch):
     """The real order registration must pass financial sinks to capture_intake.
@@ -755,6 +1020,8 @@ async def test_order_lifecycle_freezes_supplier_financial_cost_but_blocks_stock_
     timestamp = "2026-11-02T16:00:00+00:00"
     await db.unified_orders.insert_one({
         "user_id": OWNER, "order_number": number,
+        "raw_by_source": {"salla_direct": {"date": ORDER_CREATED_AT,
+            "id": number, "reference_id": number}},
         "g47_salla_snapshot": {"revision": 4, "source_updated_at": timestamp}})
     monkeypatch.setattr(routes, "order_is_active", lambda _order: True)
     monkeypatch.setattr(routes, "payment_is_eligible", lambda _payment: True)
@@ -773,7 +1040,7 @@ async def test_order_lifecycle_freezes_supplier_financial_cost_but_blocks_stock_
     async def forbidden_stock(*_args, **_kw):
         pytest.fail("A financial-only supplier service cannot authorize stock acceptance")
     monkeypatch.setattr(stock, "reserve_component_stock", forbidden_stock)
-    order = SimpleNamespace(order_number=number, created_at=timestamp, payment={})
+    order = SimpleNamespace(order_number=number, created_at=ORDER_CREATED_AT, payment={})
     async def reconcile():
         return await routes.reconcile_component_order_lifecycle(
             db, user_id=OWNER, order=order, source_updated_at=timestamp,

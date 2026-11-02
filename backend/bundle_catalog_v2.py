@@ -95,6 +95,7 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
     component_decisions = []
     unresolved_components = []
     reporting_base_additions = []
+    reporting_base_coverages = []
     composition_v2 = False
 
     async def definition(key):
@@ -498,6 +499,11 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
                     repeat_policy=item.get("repeat_policy", "once"))
                 if addition is not None:
                     reporting_base_additions.append(addition)
+            else:
+                from bundle_reporting_cost import base_coverage
+                coverage = base_coverage(metadata[key].get("profile"), product_id=key, path=path)
+                if coverage is not None:
+                    reporting_base_coverages.append(coverage)
             current_counts = {}
             for leaf in leaves[current_start:]:
                 signature = (leaf.get("slot_id"), leaf.get("variant_id"), leaf.get("sourcing_mode"), leaf.get("supplier_id"), leaf.get("location_id"), json.dumps(leaf.get("customization", {}), sort_keys=True))
@@ -722,9 +728,9 @@ async def expand_bundle(db, owner, product_id, *, variant_id=None, selected_opti
             "units_per_selection": str(sum((quantity(l["quantity"]) for l in leaves if l["kind"] == "product"), Decimal(0))),
             "current_product_units_per_selection": str(sum((quantity(l["quantity"]) for l in leaves if l.get("current_product_reference")), Decimal(0))),
             "frozen_definitions": {k: {**(_public(v) if v else {"product_id": k, "product_type": "normal", "revision": 0, "items": []}), "catalog_metadata": metadata[k], "catalog_product": {field: deepcopy(value) for field, value in product_snapshots[k].items() if field != "_id"}} for k, v in definitions.items()}}
-    if reporting_base_additions:
+    if reporting_base_additions or reporting_base_coverages:
         from bundle_reporting_cost import freeze_reporting_cost
-        result["reporting_cost"] = freeze_reporting_cost(result, reporting_base_additions)
+        result["reporting_cost"] = freeze_reporting_cost(result, reporting_base_additions, reporting_base_coverages)
     if strict and unresolved_components:
         from bundle_reporting_cost import verified_reporting_cost
         if not capture_reporting or verified_reporting_cost(result) is None:

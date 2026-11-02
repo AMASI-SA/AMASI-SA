@@ -243,10 +243,12 @@ def _bundle_cost(snapshot: dict, quantity: Any, units: list[dict] | None = None)
     if snapshot.get("historical_cost_verified") is False:
         return _unknown(quantity, "historical_bundle_cost_unproven")
     if "reporting_cost" in snapshot:
-        from bundle_reporting_cost import verified_reporting_cost
+        from bundle_reporting_cost import verified_reporting_cost, policy_applies_to_sale
         report = verified_reporting_cost(snapshot)
         if report is None:
             return _unknown(quantity, "bundle_reporting_cost_incomplete")
+        if "order_created_at" in snapshot and not policy_applies_to_sale(report, snapshot["order_created_at"]):
+            return _unknown(quantity, "historical_bundle_cost_unproven")
         # The added base is captured expected evidence, not a stock allocation.
         # Consuming the old leaves cannot remove it or prove a full actual cost.
         # Supplier invoices and their posting workflow remain independent.
@@ -477,7 +479,8 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                         # from executable intake and older base-only snapshots.
                         record = deepcopy(snapshot)
                         frozen = record.get("bundle_snapshot") or {}
-                        valid_identity = (bool(record.get("line_fingerprint"))
+                        valid_identity = ("historical_cost_verified" in frozen and "order_created_at" in frozen
+                            and bool(record.get("line_fingerprint"))
                             and record.get("line_fingerprint") == frozen.get("line_fingerprint")
                             and record.get("product_id") == frozen.get("product_id")
                             and record.get("selected_options") == frozen.get("selected_options")
@@ -499,6 +502,8 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     continue
                 result["composite_products"].add(str(snapshot.get("product_id")))
                 cost = _bundle_cost(snapshot, snapshot.get("sale_quantity", item.get("quantity")))
+                if "reporting_cost" in snapshot and "order_created_at" not in snapshot:
+                    cost = _unknown(item.get("quantity"), "historical_bundle_cost_unproven")
                 record = {"quantity": snapshot.get("sale_quantity", item.get("quantity")), "product_id": snapshot.get("product_id"),
                     "cost": cost, "line_fingerprint": snapshot.get("line_fingerprint"),
                     "selected_options": snapshot.get("selected_options"), "bundle_snapshot": snapshot}
@@ -507,6 +512,8 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     result["lines"][identity] = ambiguous(item)
                 elif identity not in financial_first:
                     result["lines"][identity] = record
+                    if "reporting_cost" in snapshot:
+                        financial_first.add(identity)
                 bundle_seen.add(identity)
         grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
         for unit in units:
@@ -520,6 +527,10 @@ async def load_order_cost_authority(db: Any, user_id: str, orders: list[dict], *
                     continue
                 q = item.get("quantity")
                 cost = _unknown(q, "bundle_reconciliation_required") if plan.get("reconciliation_required") else _bundle_cost(snapshot, q, grouped[(str(plan["_id"]), str(key))])
+                if "reporting_cost" in snapshot and "order_created_at" not in snapshot:
+                    # A plan re-expansion alone is not proof that a future-only
+                    # financial policy existed when this sale was created.
+                    cost = _unknown(q, "historical_bundle_cost_unproven")
                 result["composite_products"].add(str(snapshot.get("product_id")))
                 original = next((entry for entry in plan.get("lines") or [] if str(entry.get("order_line_id")) == str(key)), None)
                 record = {"quantity": (original or {}).get("quantity", q), "product_id": snapshot.get("product_id"),
