@@ -199,6 +199,75 @@ def _enrich_assignment(assignment: dict[str, Any], order: dict[str, Any] | None)
     return row
 
 
+
+class UnassignPayload(BaseModel):
+    """Explicit, fenced operator cancellation of a not-yet-received assignment."""
+    model_config = ConfigDict(extra="forbid")
+    expected_driver_id: str = Field(min_length=1, max_length=80)
+    reason: str = Field(default="إلغاء الإسناد من تطبيق الموظفين", min_length=3, max_length=500)
+
+
+# Fields are a *projection* of the current assignment, not an order cancellation.
+# Keep printed carrier labels, customer order status and all fee/history evidence.
+_UNASSIGN_ORDER_FIELDS = (
+    "store_delivery_assignment_id", "store_delivery_driver_id",
+    "store_delivery_driver_name", "store_delivery_fee_snapshot",
+    "store_delivery_assigned_at",
+)
+_UNASSIGN_WORKFLOW_FIELDS = (
+    "store_delivery_assignment_id", "store_courier_driver_profile_id",
+    "store_courier_assignee_id", "store_courier_assignee_name",
+    "store_courier_assignment_state", "store_courier_assigned_at",
+    "store_courier_assigned_by_id",
+)
+_UNASSIGN_EVIDENCE_COLLECTIONS = (
+    "store_delivery_collections",
+    "store_delivery_driver_earnings",
+    "store_delivery_payment_reviews",
+    "store_delivery_driver_settlements",
+    "store_delivery_receipts",
+    "store_delivery_delivery_proofs",
+    "store_delivery_customer_conversation_evidence",
+)
+
+
+def _assert_unassignment_safe(
+    assignment: dict[str, Any],
+    order: dict[str, Any],
+    workflow: dict[str, Any],
+    *,
+    expected_driver_id: str,
+) -> None:
+    """Only a pre-pickup handover may be undone; custody and finance are immutable."""
+    if normalize_text(assignment.get("driver_id")) != expected_driver_id:
+        raise HTTPException(status_code=409, detail={"code": "assignment_driver_changed"})
+    if normalize_text(assignment.get("status")) != "assigned" or assignment.get("active") is not True:
+        raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
+    if any(normalize_text(assignment.get(field)) for field in (
+        "out_for_delivery_at", "delivered_at", "received_at",
+        "delivery_resumed_at", "collection_method", "collection_amount",
+    )):
+        raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
+    if (
+        normalize_text(order.get("store_delivery_assignment_id")) != normalize_text(assignment.get("id"))
+        or normalize_text(order.get("store_delivery_driver_id")) != expected_driver_id
+        or normalize_text(order.get("store_delivery_status")) != "assigned"
+        or normalize_text(workflow.get("store_delivery_assignment_id")) != normalize_text(assignment.get("id"))
+        or normalize_text(workflow.get("store_courier_driver_profile_id")) != expected_driver_id
+    ):
+        raise HTTPException(status_code=409, detail={"code": "assignment_projection_changed"})
+    if (
+        normalize_text(workflow.get("store_courier_assignment_state")) != ASSIGNED_WAITING_PICKUP
+        or normalize_text(workflow.get("stage")) != "completed"
+        or normalize_text(workflow.get("assembly_status")) != "completed"
+        or any(normalize_text(workflow.get(field)) for field in (
+            "store_courier_picked_up_at", "store_courier_picked_up_by_id",
+            "store_courier_delivered_at", "store_courier_delivered_by_id",
+        ))
+    ):
+        raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
+
+
 def make_store_delivery_reassignment_router(db: Any, current_user: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix="/store-delivery/assignments", tags=["Store Delivery Reassignment"])
 
@@ -287,6 +356,141 @@ def make_store_delivery_reassignment_router(db: Any, current_user: Callable[...,
             "summary": _assignment_totals(rows, orders_by_key),
             **_delivery_duration_report(rows),
         }
+
+    @router.post("/{assignment_id}/unassign")
+    async def unassign(
+        assignment_id: str, payload: UnassignPayload,
+        user: dict = Depends(current_user),
+    ) -> dict[str, Any]:
+        """Deactivate only a not-yet-collected assignment, using an atomic transaction.
+
+        Reject in-progress, delivered, settled, or inconsistent orders instead
+        of removing courier custody/financial history. The receiving app's own
+        assignments endpoint filters active=true, so the revoked row disappears.
+        """
+        actor = _require_operator(user)
+        user_id = _merchant_user_id(actor)
+        expected_driver = normalize_text(payload.expected_driver_id)
+        identifier = normalize_text(assignment_id)
+        if not identifier:
+            raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
+        now = _now()
+        try:
+            async with await db.client.start_session() as tx:
+                async with tx.start_transaction():
+                    assignment = await db[ASSIGNMENTS].find_one(
+                        {"user_id": user_id, "id": identifier, "active": True},
+                        {"_id": 0}, session=tx,
+                    )
+                    if not assignment:
+                        raise HTTPException(status_code=404, detail={"code": "store_delivery_assignment_not_found"})
+                    order = await db[ORDERS].find_one(
+                        {"user_id": user_id, "store_delivery_assignment_id": identifier,
+                         "$or": [{"order_id": assignment.get("order_id")},
+                                 {"order_number": assignment.get("order_number")}]},
+                        {"_id": 0}, session=tx,
+                    )
+                    workflow = await db[WORKFLOWS].find_one(
+                        {"user_id": user_id, "order_number": assignment.get("order_number"),
+                         "store_delivery_assignment_id": identifier},
+                        {"_id": 0}, session=tx,
+                    )
+                    if not order or not workflow:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_projection_changed"})
+                    _assert_unassignment_safe(
+                        assignment, order, workflow, expected_driver_id=expected_driver,
+                    )
+                    for collection in _UNASSIGN_EVIDENCE_COLLECTIONS:
+                        evidence = await db[collection].find_one(
+                            {"user_id": user_id, "assignment_id": identifier},
+                            {"_id": 1}, session=tx,
+                        )
+                        if evidence:
+                            raise HTTPException(status_code=409, detail={"code": "assignment_financial_evidence_exists"})
+                    session_receipt = await db["store_delivery_driver_receive_sessions"].find_one(
+                        {"user_id": user_id, "accepted.assignment_id": identifier},
+                        {"_id": 1}, session=tx,
+                    )
+                    if session_receipt:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
+                    acknowledged = await db[STORE_DELIVERY_INSTRUCTIONS].find_one(
+                        {"user_id": user_id, "order_id": assignment.get("order_id"),
+                         "driver_id": expected_driver, "status": "active",
+                         "$or": [{"acknowledged_at": {"$nin": [None, ""]}},
+                                 {"acknowledged_by_driver_id": {"$nin": [None, ""]}}]},
+                        {"_id": 1}, session=tx,
+                    )
+                    if acknowledged:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_in_custody_cannot_unassign"})
+
+                    updated = await db[ASSIGNMENTS].update_one(
+                        {"user_id": user_id, "id": identifier,
+                         "driver_id": expected_driver, "active": True,
+                         "status": "assigned", "out_for_delivery_at": {"$in": [None, ""]},
+                         "delivered_at": {"$in": [None, ""]}},
+                        {"$set": {"active": False, "status": "unassigned",
+                                  "unassigned_at": now, "unassigned_by": normalize_text(actor.get("id")),
+                                  "unassignment_reason": normalize_text(payload.reason), "updated_at": now}},
+                        session=tx,
+                    )
+                    if updated.modified_count != 1:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_unassign_conflict"})
+
+                    updated_order = await db[ORDERS].update_one(
+                        {"user_id": user_id, "store_delivery_assignment_id": identifier,
+                         "store_delivery_driver_id": expected_driver,
+                         "store_delivery_status": "assigned",
+                         "$or": [{"order_id": assignment.get("order_id")},
+                                 {"order_number": assignment.get("order_number")}]},
+                        {"$unset": {field: "" for field in _UNASSIGN_ORDER_FIELDS},
+                         "$set": {"store_delivery_status": "unassigned",
+                                  "store_delivery_updated_at": now}},
+                        session=tx,
+                    )
+                    if updated_order.modified_count != 1:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_unassign_conflict"})
+
+                    updated_workflow = await db[WORKFLOWS].update_one(
+                        {"user_id": user_id, "order_number": assignment.get("order_number"),
+                         "store_delivery_assignment_id": identifier,
+                         "store_courier_driver_profile_id": expected_driver,
+                         "store_courier_assignment_state": ASSIGNED_WAITING_PICKUP,
+                         "stage": "completed", "assembly_status": "completed",
+                         "store_courier_picked_up_at": {"$in": [None, ""]}},
+                        {"$unset": {field: "" for field in _UNASSIGN_WORKFLOW_FIELDS},
+                         "$set": {"updated_at": now}},
+                        session=tx,
+                    )
+                    if updated_workflow.modified_count != 1:
+                        raise HTTPException(status_code=409, detail={"code": "assignment_unassign_conflict"})
+
+                    await db[STORE_DELIVERY_INSTRUCTIONS].update_many(
+                        {"user_id": user_id, "order_id": assignment.get("order_id"),
+                         "driver_id": expected_driver, "status": "active"},
+                        {"$set": {"driver_id": None, "driver_name_snapshot": None,
+                                  "acknowledged_at": None, "acknowledged_by_driver_id": None,
+                                  "updated_at": now, "updated_by": normalize_text(actor.get("id"))},
+                         "$unset": {"last_reminder_code": "", "last_reminder_at": ""}},
+                        session=tx,
+                    )
+                    await db[EVENTS].insert_one({
+                        "id": str(uuid.uuid4()), "user_id": user_id,
+                        "event_type": "store_delivery_unassigned", "assignment_id": identifier,
+                        "order_id": assignment.get("order_id"),
+                        "order_number": assignment.get("order_number"),
+                        "driver_id": expected_driver,
+                        "reason": normalize_text(payload.reason),
+                        "actor_id": normalize_text(actor.get("id")), "occurred_at": now,
+                    }, session=tx)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # Never attempt to continue by issuing unprotected partial writes.
+            raise HTTPException(
+                status_code=503, detail={"code": "assignment_unassign_atomicity_unavailable"},
+            ) from exc
+        return {"ok": True, "assignment_id": identifier,
+                "driver_id": expected_driver, "order_number": assignment.get("order_number")}
 
     @router.post("/{assignment_id}/reassign")
     async def reassign(assignment_id: str, payload: ReassignPayload,
